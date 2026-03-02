@@ -182,13 +182,11 @@ fn normalize_path(s: &str) -> PathBuf {
 
 /// Expande variables de entorno como %APPDATA% en Windows.
 fn expand_env_vars(s: &str) -> String {
-    let mut result = s.to_string();
-
     #[cfg(target_os = "windows")]
     {
         use std::env;
 
-        // Buscar %VAR% y reemplazar
+        let mut result = s.to_string();
         let mut i = 0;
         while let Some(start) = result[i..].find('%') {
             let start = i + start;
@@ -205,9 +203,11 @@ fn expand_env_vars(s: &str) -> String {
                 break;
             }
         }
+        result
     }
 
-    result
+    #[cfg(not(target_os = "windows"))]
+    s.to_string()
 }
 
 /// Dado un mapa de rutas -> appid y una ruta de juego, devuelve el appid si la ruta

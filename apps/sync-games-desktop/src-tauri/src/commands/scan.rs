@@ -313,6 +313,7 @@ fn scan_base_paths(
 
 // ─── Steam ───────────────────────────────────────────────────────────────────
 
+#[cfg(target_os = "windows")]
 const DEFAULT_STEAM_PATH_WIN32: &str = "C:\\Program Files (x86)\\Steam";
 
 #[cfg(target_os = "windows")]
@@ -450,6 +451,7 @@ const CRACK_SAVE_LOCATIONS: &[(&str, &str)] = &[
     ("%USERPROFILE%\\Documents\\CPY_SAVES", "CPY (Documents)"),
 ];
 
+#[cfg(target_os = "windows")]
 fn contains_saves_at_any_depth(dir_path: &Path, depth: usize) -> bool {
     if depth > 5 || !dir_path.exists() || !dir_path.is_dir() {
         return false;
@@ -499,12 +501,6 @@ fn scan_cracks(candidates: &mut Vec<PathCandidateDto>, seen: &mut HashSet<String
         }
     }
 }
-
-#[cfg(not(target_os = "windows"))]
-fn scan_cracks(_: &mut Vec<PathCandidateDto>, _: &mut HashSet<String>) {}
-
-#[cfg(not(target_os = "windows"))]
-fn scan_steam(_: &mut Vec<PathCandidateDto>, _: &mut HashSet<String>) {}
 
 // ─── Comando principal ────────────────────────────────────────────────────────
 
