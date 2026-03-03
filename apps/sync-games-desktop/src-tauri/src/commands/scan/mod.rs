@@ -121,7 +121,10 @@ fn scan_base_paths(
 const DEFAULT_STEAM_PATH_WIN32: &str = "C:\\Program Files (x86)\\Steam";
 
 #[cfg(target_os = "windows")]
-fn find_steam_userdata_candidates(steam_path: &str) -> Vec<PathCandidateDto> {
+fn find_steam_userdata_candidates(
+    steam_path: &str,
+    manifest_index: &Option<manifest::ManifestIndex>,
+) -> Vec<PathCandidateDto> {
     let userdata = Path::new(steam_path).join("userdata");
     if !userdata.exists() || !userdata.is_dir() {
         return vec![];
@@ -147,9 +150,9 @@ fn find_steam_userdata_candidates(steam_path: &str) -> Vec<PathCandidateDto> {
             }
             if let Some(p) = path_to_check.to_str() {
                 let (folder_name, steam_app_id, paths, path_display) =
-                    if let Some(index) = manifest::load_manifest_index() {
+                    if let Some(index) = manifest_index {
                         if let Some((entry, resolved)) =
-                            manifest::get_entry_for_steam_app(&index, &app_name, None)
+                            manifest::get_entry_for_steam_app(index, &app_name, None)
                         {
                             let mut all_paths = vec![p.to_string()];
                             for r in &resolved {
@@ -260,7 +263,7 @@ fn scan_steam(
     if !Path::new(steam_path).exists() {
         return;
     }
-    for c in find_steam_userdata_candidates(steam_path) {
+    for c in find_steam_userdata_candidates(steam_path, manifest_index) {
         let key = c.path.to_lowercase();
         if !seen.contains(&key) {
             seen.insert(key);
@@ -398,8 +401,8 @@ fn scan_cracks(candidates: &mut Vec<PathCandidateDto>, seen: &mut HashSet<String
 
 // ─── Comando principal ────────────────────────────────────────────────────────
 
-#[tauri::command]
-pub fn scan_path_candidates() -> Vec<PathCandidateDto> {
+/// Lógica de escaneo (síncrona). Se ejecuta en un hilo en segundo plano.
+fn scan_path_candidates_sync() -> Vec<PathCandidateDto> {
     let cfg = config::load_config();
     let mut candidates = Vec::new();
     let mut seen = HashSet::new();
@@ -428,7 +431,7 @@ pub fn scan_path_candidates() -> Vec<PathCandidateDto> {
         }
     }
 
-    // Steam y cracks (solo Windows). Manifiesto Ludusavi para nombres y rutas precisas.
+    // Steam y cracks (solo Windows). Manifiesto cargado una sola vez.
     #[cfg(target_os = "windows")]
     {
         let path_to_appid = steam::get_steam_path_to_appid_map();
@@ -470,4 +473,11 @@ pub fn scan_path_candidates() -> Vec<PathCandidateDto> {
             .then(a.folder_name.cmp(&b.folder_name))
     });
     candidates
+}
+
+#[tauri::command]
+pub async fn scan_path_candidates() -> Result<Vec<PathCandidateDto>, String> {
+    tauri::async_runtime::spawn_blocking(scan_path_candidates_sync)
+        .await
+        .map_err(|e| e.to_string())
 }
