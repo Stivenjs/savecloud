@@ -15,6 +15,7 @@ import {
   CloudUpload,
   FolderOpen,
   Gamepad2,
+  History,
   MoreVertical,
   Trash2,
 } from "lucide-react";
@@ -45,6 +46,8 @@ export interface GameCardProps {
   isDownloading?: boolean;
   /** Callback al abrir la carpeta de guardados. Si no se pasa, no se muestra el botón. */
   onOpenFolder?: (game: ConfiguredGame) => void;
+  /** Callback para restaurar desde backup. */
+  onRestoreBackup?: (game: ConfiguredGame) => void;
 }
 
 /**
@@ -64,6 +67,7 @@ export function GameCard({
   onDownload,
   isDownloading,
   onOpenFolder,
+  onRestoreBackup,
 }: GameCardProps) {
   const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
@@ -102,7 +106,11 @@ export function GameCard({
           En ejecución
         </div>
       )}
-      {(onOpenFolder || onDownload || onSync || onRemove) && (
+      {(onOpenFolder ||
+        onDownload ||
+        onSync ||
+        onRemove ||
+        onRestoreBackup) && (
         <div
           className="absolute right-2 top-2 z-20"
           onClick={(e) => e.stopPropagation()}
@@ -126,14 +134,15 @@ export function GameCard({
                 if (key === "folder") onOpenFolder?.(game);
                 else if (key === "download") onDownload?.(game);
                 else if (key === "sync") onSync?.(game);
+                else if (key === "restore") onRestoreBackup?.(game);
                 else if (key === "remove") onRemove?.(game);
               }}
               disabledKeys={
                 isDownloading || isSyncing
-                  ? ["folder", "download", "sync"]
+                  ? ["folder", "download", "sync", "restore"]
                   : isGameRunning
-                    ? ["download", "sync"]
-                    : []
+                  ? ["download", "sync", "restore"]
+                  : []
               }
             >
               {onOpenFolder ? (
@@ -158,6 +167,16 @@ export function GameCard({
                   }
                 >
                   Descargar desde la nube
+                </DropdownItem>
+              ) : null}
+              {onRestoreBackup ? (
+                <DropdownItem
+                  key="restore"
+                  startContent={
+                    <History size={16} className="text-default-500" />
+                  }
+                >
+                  Restaurar desde backup
                 </DropdownItem>
               ) : null}
               {onSync ? (

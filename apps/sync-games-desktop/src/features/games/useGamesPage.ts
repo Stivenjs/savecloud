@@ -65,6 +65,14 @@ export function useGamesPage() {
   const [downloading, setDownloading] = useState<string | "all" | null>(null);
   const [operationResult, setOperationResult] =
     useState<OperationResult | null>(null);
+  const [syncPreviewGame, setSyncPreviewGame] = useState<ConfiguredGame | null>(
+    null
+  );
+  const [syncPreviewType, setSyncPreviewType] = useState<
+    "upload" | "download" | null
+  >(null);
+  const [gameToRestoreBackup, setGameToRestoreBackup] =
+    useState<ConfiguredGame | null>(null);
 
   const handleScanSelect = (path: string, suggestedId: string) => {
     setAddModalInitial({ path, suggestedId });
@@ -86,25 +94,52 @@ export function useGamesPage() {
     }
   };
 
-  const handleSyncOne = async (game: ConfiguredGame) => {
-    setSyncing(game.id);
-    setOperationResult(null);
-    try {
-      const result = await syncUploadGame(game.id);
-      setOperationResult({ type: "sync", gameId: game.id, result });
-      toastSyncResult(result, formatGameDisplayName(game.id));
-    } catch (e) {
-      const errResult = {
-        okCount: 0,
-        errCount: 1,
-        errors: [e instanceof Error ? e.message : String(e)],
-      };
-      setOperationResult({ type: "sync", gameId: game.id, result: errResult });
-      toastSyncResult(errResult, formatGameDisplayName(game.id));
-    } finally {
-      setSyncing(null);
-      refetchLastSync?.();
-      queryClient.invalidateQueries({ queryKey: ["game-stats"] });
+  const handleSyncOne = (game: ConfiguredGame) => {
+    setSyncPreviewGame(game);
+    setSyncPreviewType("upload");
+  };
+
+  const handleConfirmSyncPreview = async () => {
+    if (!syncPreviewGame || !syncPreviewType) return;
+    const game = syncPreviewGame;
+    if (syncPreviewType === "upload") {
+      setSyncing(game.id);
+      setOperationResult(null);
+      try {
+        const result = await syncUploadGame(game.id);
+        setOperationResult({ type: "sync", gameId: game.id, result });
+        toastSyncResult(result, formatGameDisplayName(game.id));
+        setSyncPreviewGame(null);
+        setSyncPreviewType(null);
+      } catch (e) {
+        const errResult = {
+          okCount: 0,
+          errCount: 1,
+          errors: [e instanceof Error ? e.message : String(e)],
+        };
+        setOperationResult({
+          type: "sync",
+          gameId: game.id,
+          result: errResult,
+        });
+        toastSyncResult(errResult, formatGameDisplayName(game.id));
+        setSyncPreviewGame(null);
+        setSyncPreviewType(null);
+      } finally {
+        setSyncing(null);
+        refetchLastSync?.();
+        queryClient.invalidateQueries({ queryKey: ["game-stats"] });
+      }
+    } else {
+      setDownloading(game.id);
+      try {
+        await executeDownload(game);
+        setSyncPreviewGame(null);
+        setSyncPreviewType(null);
+      } catch (e) {
+        setSyncPreviewGame(null);
+        setSyncPreviewType(null);
+      }
     }
   };
 
@@ -134,16 +169,15 @@ export function useGamesPage() {
   };
 
   const handleDownloadOne = async (game: ConfiguredGame) => {
-    setDownloading(game.id);
     try {
       const { conflicts } = await syncCheckDownloadConflicts(game.id);
       if (conflicts.length > 0) {
         setDownloadConflictGame(game);
         setDownloadConflicts(conflicts);
-        setDownloading(null);
         return;
       }
-      await executeDownload(game);
+      setSyncPreviewGame(game);
+      setSyncPreviewType("download");
     } catch (e) {
       const errResult = {
         okCount: 0,
@@ -156,7 +190,6 @@ export function useGamesPage() {
         result: errResult,
       });
       toastDownloadResult(errResult, formatGameDisplayName(game.id));
-      setDownloading(null);
     } finally {
       refetchLastSync?.();
       queryClient.invalidateQueries({ queryKey: ["game-stats"] });
@@ -249,7 +282,8 @@ export function useGamesPage() {
     setDownloading("all");
     setOperationResult(null);
     try {
-      const gamesWithConflicts: { gameId: string; conflictCount: number }[] = [];
+      const gamesWithConflicts: { gameId: string; conflictCount: number }[] =
+        [];
       for (const game of config.games) {
         try {
           const { conflicts } = await syncCheckDownloadConflicts(game.id);
@@ -298,11 +332,27 @@ export function useGamesPage() {
     setDownloadAllConflictGames([]);
   };
 
+  const handleCloseSyncPreview = () => {
+    setSyncPreviewGame(null);
+    setSyncPreviewType(null);
+  };
+
+  const handleRestoreBackup = (game: ConfiguredGame) => {
+    setGameToRestoreBackup(game);
+  };
+
+  const handleCloseRestoreBackup = () => {
+    setGameToRestoreBackup(null);
+  };
+
   const handleOpenFolder = async (game: ConfiguredGame) => {
     try {
       await openSaveFolder(game.id);
     } catch (e) {
-      toastError("No se pudo abrir", e instanceof Error ? e.message : String(e));
+      toastError(
+        "No se pudo abrir",
+        e instanceof Error ? e.message : String(e)
+      );
     }
   };
 
@@ -357,6 +407,13 @@ export function useGamesPage() {
     handleConfirmRemove,
     handleSyncOne,
     handleDownloadOne,
+    syncPreviewGame,
+    syncPreviewType,
+    handleConfirmSyncPreview,
+    handleCloseSyncPreview,
+    gameToRestoreBackup,
+    handleRestoreBackup,
+    handleCloseRestoreBackup,
     handleSyncAll,
     handleDownloadAll,
     handleOpenFolder,

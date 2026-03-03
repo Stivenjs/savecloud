@@ -153,3 +153,66 @@ export async function syncDownloadGame(gameId: string): Promise<SyncResult> {
     errors: r.errors,
   };
 }
+
+/** Información de un backup local */
+export interface BackupInfo {
+  id: string;
+  createdAt: string;
+  fileCount: number;
+}
+
+/** Lista los backups locales de un juego */
+export async function listBackups(gameId: string): Promise<BackupInfo[]> {
+  return invoke<BackupInfo[]>("list_backups", { gameId });
+}
+
+/** Restaura un backup local sobre los guardados del juego */
+export async function restoreBackup(
+  gameId: string,
+  backupId: string
+): Promise<SyncResult> {
+  const r = await invoke<{
+    okCount: number;
+    errCount: number;
+    errors: string[];
+  }>("restore_backup", { gameId, backupId });
+  return {
+    okCount: r.okCount,
+    errCount: r.errCount,
+    errors: r.errors,
+  };
+}
+
+/** Archivo en la previsualización */
+export interface PreviewFile {
+  filename: string;
+  size: number;
+  localNewer?: boolean;
+}
+
+/** Previsualización de subida */
+export interface PreviewUpload {
+  fileCount: number;
+  totalSizeBytes: number;
+  files: PreviewFile[];
+}
+
+/** Previsualización de descarga */
+export interface PreviewDownload {
+  fileCount: number;
+  totalSizeBytes: number;
+  files: PreviewFile[];
+  conflictCount: number;
+}
+
+/** Previsualiza qué archivos se subirían */
+export async function previewUpload(gameId: string): Promise<PreviewUpload> {
+  return invoke<PreviewUpload>("preview_upload", { gameId });
+}
+
+/** Previsualiza qué archivos se descargarían */
+export async function previewDownload(
+  gameId: string
+): Promise<PreviewDownload> {
+  return invoke<PreviewDownload>("preview_download", { gameId });
+}

@@ -32,7 +32,11 @@ pub fn is_game_running(game_id: &str, paths: &[String]) -> bool {
 fn get_executable_names_to_check(game_id: &str, paths: &[String]) -> Vec<String> {
     // 1. Intentar desde la configuración del juego (si añadimos el campo)
     let cfg = config::load_config();
-    if let Some(game) = cfg.games.iter().find(|g| g.id.eq_ignore_ascii_case(game_id)) {
+    if let Some(game) = cfg
+        .games
+        .iter()
+        .find(|g| g.id.eq_ignore_ascii_case(game_id))
+    {
         if let Some(ref names) = game.executable_names {
             if !names.is_empty() {
                 return names
@@ -89,9 +93,7 @@ fn ensure_exe_ext(s: &str) -> String {
 fn infer_exe_candidates(folder_name: &str, game_id: &str) -> Vec<String> {
     let mut candidates = Vec::new();
 
-    let base = folder_name
-        .replace(['\'', '"'], "")
-        .replace(' ', "");
+    let base = folder_name.replace(['\'', '"'], "").replace(' ', "");
 
     if !base.is_empty() {
         #[cfg(target_os = "windows")]

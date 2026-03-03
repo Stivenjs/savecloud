@@ -23,6 +23,8 @@ interface GamesListProps {
   downloadingId?: string | null;
   /** Callback al abrir la carpeta de guardados. */
   onOpenFolder?: (game: ConfiguredGame) => void;
+  /** Callback para restaurar desde backup. */
+  onRestoreBackup?: (game: ConfiguredGame) => void;
 }
 
 export function GamesList({
@@ -34,6 +36,7 @@ export function GamesList({
   onDownload,
   downloadingId,
   onOpenFolder,
+  onRestoreBackup,
 }: GamesListProps) {
   const resolvedSteamAppIds = useResolvedSteamAppIds(games);
   const { statsByGameId } = useGameStats(games.length > 0);
@@ -80,6 +83,7 @@ export function GamesList({
           onDownload={onDownload}
           isDownloading={downloadingId === game.id || downloadingId === "all"}
           onOpenFolder={onOpenFolder}
+          onRestoreBackup={onRestoreBackup}
         />
       ))}
     </div>

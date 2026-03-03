@@ -35,14 +35,18 @@ pub fn run() {
             commands::add_game,
             commands::remove_game,
             commands::scan_path_candidates,
-            commands::list_save_files,
-            commands::sync_upload_game,
-            commands::sync_list_remote_saves,
-            commands::sync_check_download_conflicts,
-            commands::sync_download_game,
-            commands::sync_check_unsynced_games,
+            commands::sync::list_save_files,
+            commands::sync::upload::sync_upload_game,
+            commands::sync::api::sync_list_remote_saves,
+            commands::sync::download::sync_check_download_conflicts,
+            commands::sync::download::sync_download_game,
+            commands::sync::download::sync_check_unsynced_games,
+            commands::sync::backup::list_backups,
+            commands::sync::backup::restore_backup,
+            commands::sync::preview::preview_upload,
+            commands::sync::preview::preview_download,
             commands::get_game_stats,
-            commands::check_game_running,
+            commands::sync::check_game_running,
             commands::open_save_folder,
             commands::export_config_to_file,
             commands::import_config_from_file,
@@ -82,6 +86,7 @@ pub fn run() {
                 .build(app)?;
 
             commands::watch_sync::spawn_watcher(app.handle().clone());
+            commands::game_exit_sync::spawn_exit_watcher(app.handle().clone());
 
             Ok(())
         })

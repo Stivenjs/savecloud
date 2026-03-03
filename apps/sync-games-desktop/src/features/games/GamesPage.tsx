@@ -3,6 +3,8 @@ import { RefreshCw } from "lucide-react";
 import { AddGameModal } from "@features/games/AddGameModal";
 import { DownloadAllConflictModal } from "@features/games/DownloadAllConflictModal";
 import { DownloadConflictModal } from "@features/games/DownloadConflictModal";
+import { RestoreBackupModal } from "@features/games/RestoreBackupModal";
+import { SyncPreviewModal } from "@features/games/SyncPreviewModal";
 import { GamesFilters } from "@features/games/GamesFilters";
 import { GamesList } from "@features/games/GamesList";
 import { GamesPageHeader } from "@features/games/GamesPageHeader";
@@ -53,6 +55,13 @@ export function GamesPage() {
     handleConfirmRemove,
     handleSyncOne,
     handleDownloadOne,
+    syncPreviewGame,
+    syncPreviewType,
+    handleConfirmSyncPreview,
+    handleCloseSyncPreview,
+    gameToRestoreBackup,
+    handleRestoreBackup,
+    handleCloseRestoreBackup,
     handleSyncAll,
     handleDownloadAll,
     handleOpenFolder,
@@ -139,6 +148,23 @@ export function GamesPage() {
         onConfirm={handleConfirmDownloadAllConflict}
         isLoading={downloading === "all"}
       />
+      <SyncPreviewModal
+        isOpen={!!syncPreviewGame && !!syncPreviewType}
+        onClose={handleCloseSyncPreview}
+        type={syncPreviewType ?? "upload"}
+        gameId={syncPreviewGame?.id ?? ""}
+        onConfirm={handleConfirmSyncPreview}
+        isLoading={
+          (!!syncing && syncing === syncPreviewGame?.id) ||
+          (!!downloading && downloading === syncPreviewGame?.id)
+        }
+      />
+      <RestoreBackupModal
+        isOpen={!!gameToRestoreBackup}
+        onClose={handleCloseRestoreBackup}
+        game={gameToRestoreBackup}
+        onSuccess={handleRefresh}
+      />
 
       <div className="mb-8">
         <GamesStats
@@ -169,6 +195,7 @@ export function GamesPage() {
         onDownload={hasSyncConfig ? handleDownloadOne : undefined}
         downloadingId={downloading}
         onOpenFolder={handleOpenFolder}
+        onRestoreBackup={handleRestoreBackup}
         emptyFilterMessage={emptyFilterMessage}
       />
 
