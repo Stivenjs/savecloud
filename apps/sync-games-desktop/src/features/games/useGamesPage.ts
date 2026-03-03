@@ -25,7 +25,9 @@ export function useGamesPage() {
   const queryClient = useQueryClient();
   const { config, loading, error, refetch } = useConfig();
   const hasSyncConfig = !!(
-    config?.apiBaseUrl?.trim() && config?.userId?.trim()
+    config?.apiBaseUrl?.trim() &&
+    config?.userId?.trim() &&
+    config?.apiKey?.trim()
   );
   const {
     lastSyncAt,

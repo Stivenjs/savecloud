@@ -11,7 +11,9 @@ import { formatGameDisplayName } from "@utils/gameImage";
 export function useUnsyncedSaves() {
   const { config } = useConfig();
   const hasSyncConfig = !!(
-    config?.apiBaseUrl?.trim() && config?.userId?.trim()
+    config?.apiBaseUrl?.trim() &&
+    config?.userId?.trim() &&
+    config?.apiKey?.trim()
   );
 
   const { refetch: refetchLastSync } = useLastSyncInfo(!!hasSyncConfig);

@@ -47,6 +47,19 @@ export async function exportConfigToFile(path: string): Promise<string> {
   return invoke("export_config_to_file", { path });
 }
 
+/** Crea o actualiza el archivo de configuración con apiBaseUrl, apiKey y userId. Devuelve la ruta del archivo. */
+export async function createConfigFile(
+  apiBaseUrl: string,
+  apiKey: string,
+  userId: string
+): Promise<string> {
+  return invoke<string>("create_config_file", {
+    api_base_url: apiBaseUrl.trim() || null,
+    api_key: apiKey.trim() || null,
+    user_id: userId.trim() || null,
+  });
+}
+
 /** Importa configuración desde archivo. mode: "merge" | "replace" */
 export async function importConfigFromFile(
   path: string,

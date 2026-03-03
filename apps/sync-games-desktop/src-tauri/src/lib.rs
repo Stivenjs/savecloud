@@ -31,6 +31,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
             commands::get_config_path,
+            commands::create_config_file,
             commands::get_steam_app_name,
             commands::search_steam_app_id,
             commands::add_game,

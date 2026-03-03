@@ -60,6 +60,44 @@ pub fn get_config_path() -> String {
         .unwrap_or_else(|| "".to_string())
 }
 
+/// Crea o actualiza el archivo de configuración con los datos indicados.
+/// Si el archivo ya existe, actualiza solo api_base_url, api_key y user_id (mantiene games y custom_scan_paths).
+#[tauri::command]
+pub fn create_config_file(
+    api_base_url: Option<String>,
+    api_key: Option<String>,
+    user_id: Option<String>,
+) -> Result<String, String> {
+    let path = config::config_path().ok_or_else(|| "No config path".to_string())?;
+    let path_str = path
+        .clone()
+        .into_os_string()
+        .into_string()
+        .unwrap_or_default();
+
+    let mut cfg = if path.exists() {
+        config::load_config()
+    } else {
+        config::Config::default()
+    };
+
+    if let Some(s) = api_base_url {
+        let t = s.trim().to_string();
+        cfg.api_base_url = if t.is_empty() { None } else { Some(t) };
+    }
+    if let Some(s) = api_key {
+        let t = s.trim().to_string();
+        cfg.api_key = if t.is_empty() { None } else { Some(t) };
+    }
+    if let Some(s) = user_id {
+        let t = s.trim().to_string();
+        cfg.user_id = if t.is_empty() { None } else { Some(t) };
+    }
+
+    config::save_config(&cfg)?;
+    Ok(path_str)
+}
+
 #[tauri::command]
 pub fn add_game(game_id: String, path: String) -> Result<(), String> {
     let mut cfg = config::load_config();

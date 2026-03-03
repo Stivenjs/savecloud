@@ -92,7 +92,10 @@ export function SyncPage({ onNavigateToSettings }: SyncPageProps) {
   }
 
   const games = config?.games ?? [];
-  const hasConfig = config?.apiBaseUrl?.trim() && config?.userId?.trim();
+  const hasConfig =
+    config?.apiBaseUrl?.trim() &&
+    config?.userId?.trim() &&
+    config?.apiKey?.trim();
 
   if (!hasConfig) {
     return (
@@ -103,8 +106,13 @@ export function SyncPage({ onNavigateToSettings }: SyncPageProps) {
         <Card className="border border-warning-200 bg-warning-50/50 dark:border-warning-800 dark:bg-warning-900/20">
           <CardBody className="gap-2">
             <p className="text-warning-700 dark:text-warning-400">
-              Configura apiBaseUrl y userId en la sección Configuración antes de
-              sincronizar.
+              Para usar la nube necesitas configurar <strong>apiBaseUrl</strong>,{" "}
+              <strong>userId</strong> y <strong>apiKey</strong>. El archivo{" "}
+              <code className="rounded bg-default-100 px-1">config.json</code>{" "}
+              debe estar en la carpeta de configuración de la app (en
+              Configuración puedes ver la ruta). Si te enviaron un JSON, usa{" "}
+              <strong>Importar (reemplazar)</strong> en Configuración para
+              cargarlo en el sitio correcto.
             </p>
             {onNavigateToSettings && (
               <Button
