@@ -79,7 +79,9 @@ export function ScanModal({
   const resolvedNames = useResolvedCandidateNames(candidates);
 
   const handleAdd = (candidate: PathCandidate) => {
-    onSelectCandidate(candidate.path, toGameId(candidate.folderName));
+    const resolvedName = resolvedNames[candidate.path];
+    const baseName = resolvedName?.trim() || candidate.folderName;
+    onSelectCandidate(candidate.path, toGameId(baseName));
     onClose();
   };
 
