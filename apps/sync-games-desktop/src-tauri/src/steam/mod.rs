@@ -6,3 +6,6 @@
 mod path_resolver;
 
 pub use path_resolver::resolve_app_id_for_game;
+
+#[cfg(target_os = "windows")]
+pub use path_resolver::{get_steam_path_to_appid_map, resolve_steam_app_id_from_map};

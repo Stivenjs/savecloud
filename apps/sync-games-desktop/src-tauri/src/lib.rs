@@ -1,5 +1,6 @@
 mod commands;
 mod config;
+mod manifest;
 mod process_check;
 mod steam;
 mod tray_state;

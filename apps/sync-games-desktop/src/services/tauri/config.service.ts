@@ -5,6 +5,10 @@ export interface PathCandidate {
   path: string;
   folderName: string;
   basePath: string;
+  /** Steam App ID cuando se conoce (manifiesto o ruta Steam). */
+  steamAppId?: string | null;
+  /** Varias rutas de guardado para el mismo juego; al añadir se registran todas. */
+  paths?: string[] | null;
 }
 
 /** Obtiene la configuración desde el archivo compartido con el CLI */

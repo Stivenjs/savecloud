@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  addGame,
   openSaveFolder,
   removeGame,
   syncCheckDownloadConflicts,
@@ -80,10 +81,18 @@ export function useGamesPage() {
   const [gameToRestoreBackup, setGameToRestoreBackup] =
     useState<ConfiguredGame | null>(null);
 
-  const handleScanSelect = (path: string, suggestedId: string) => {
+  const handleScanSelect = async (paths: string[], suggestedId: string) => {
     const idToUse = configureFromCloudGameId ?? suggestedId;
     if (configureFromCloudGameId) setConfigureFromCloudGameId(null);
-    setAddModalInitial({ path, suggestedId: idToUse });
+    if (paths.length > 1) {
+      for (const path of paths) {
+        await addGame(idToUse, path);
+      }
+      refetch?.();
+      setScanModalOpen(false);
+      return;
+    }
+    setAddModalInitial({ path: paths[0] ?? "", suggestedId: idToUse });
     setAddModalOpen(true);
   };
 

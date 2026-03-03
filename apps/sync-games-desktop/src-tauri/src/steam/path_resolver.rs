@@ -210,9 +210,21 @@ fn expand_env_vars(s: &str) -> String {
     s.to_string()
 }
 
+/// Construye el mapa ruta de instalación -> Steam App ID para todas las bibliotecas.
+pub fn get_steam_path_to_appid_map() -> HashMap<PathBuf, String> {
+    let Some(steam_root) = steam_path_candidates()
+        .into_iter()
+        .find(|p| p.join("steamapps").is_dir())
+    else {
+        return HashMap::new();
+    };
+    let library_paths = read_library_paths(&steam_root);
+    build_path_to_appid_map(&library_paths)
+}
+
 /// Dado un mapa de rutas -> appid y una ruta de juego, devuelve el appid si la ruta
 /// está dentro de algún directorio de instalación de Steam.
-fn resolve_steam_app_id(
+pub fn resolve_steam_app_id_from_map(
     path_to_appid: &HashMap<PathBuf, String>,
     game_path: &str,
 ) -> Option<String> {
@@ -246,7 +258,7 @@ pub fn resolve_app_id_for_game(game_paths: &[String]) -> Option<String> {
     let path_to_appid = build_path_to_appid_map(&library_paths);
 
     for path in game_paths {
-        if let Some(appid) = resolve_steam_app_id(&path_to_appid, path) {
+        if let Some(appid) = resolve_steam_app_id_from_map(&path_to_appid, path) {
             return Some(appid);
         }
     }

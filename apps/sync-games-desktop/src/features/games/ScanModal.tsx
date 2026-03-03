@@ -17,7 +17,7 @@ import { extractAppIdFromFolderName, toGameId } from "@utils/gameImage";
 interface ScanModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectCandidate: (path: string, suggestedId: string) => void;
+  onSelectCandidate: (paths: string[], suggestedId: string) => void;
 }
 
 function CandidateRow({
@@ -29,7 +29,8 @@ function CandidateRow({
   resolvedName: string | null | undefined;
   onAdd: () => void;
 }) {
-  const hasAppId = !!extractAppIdFromFolderName(candidate.folderName ?? "");
+  const hasAppId =
+    !!candidate.steamAppId || !!extractAppIdFromFolderName(candidate.folderName ?? "");
   const displayName =
     hasAppId && resolvedName ? resolvedName : candidate.folderName;
   const isLoading = hasAppId && resolvedName === undefined;
@@ -81,7 +82,9 @@ export function ScanModal({
   const handleAdd = (candidate: PathCandidate) => {
     const resolvedName = resolvedNames[candidate.path];
     const baseName = resolvedName?.trim() || candidate.folderName;
-    onSelectCandidate(candidate.path, toGameId(baseName));
+    const gameId = toGameId(baseName);
+    const pathsToAdd = candidate.paths?.length ? candidate.paths : [candidate.path];
+    onSelectCandidate(pathsToAdd, gameId);
     onClose();
   };
 

@@ -17,8 +17,10 @@ export function useResolvedCandidateNames(
 ): Record<string, string | null | undefined> {
   const toResolve = useMemo(
     () =>
-      (candidates ?? []).filter((c) =>
-        extractAppIdFromFolderName(c.folderName ?? "")
+      (candidates ?? []).filter(
+        (c) =>
+          c.steamAppId ||
+          extractAppIdFromFolderName(c.folderName ?? "")
       ),
     [candidates]
   );
@@ -33,7 +35,8 @@ export function useResolvedCandidateNames(
             setTimeout(r, index * STAGGER_MS)
           );
         }
-        const appId = extractAppIdFromFolderName(c.folderName ?? "");
+        const appId =
+          c.steamAppId ?? extractAppIdFromFolderName(c.folderName ?? "");
         if (!appId) return null;
         return getSteamAppName(appId);
       },

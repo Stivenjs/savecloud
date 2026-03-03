@@ -1,9 +1,12 @@
 //! Escaneo de rutas candidatas para guardados.
 //! Réplica de la lógica del CLI (FileSystemPathScanner).
+//! Mejorado con el manifiesto de Ludusavi para nombres y rutas precisas (Steam y otros).
 
 mod filters;
 
 use crate::config;
+use crate::manifest;
+use crate::steam;
 use filters::{folder_contains_save_like_files, is_excluded_folder};
 use regex::Regex;
 use serde::Serialize;
@@ -17,6 +20,12 @@ pub struct PathCandidateDto {
     pub path: String,
     pub folder_name: String,
     pub base_path: String,
+    /// Steam App ID cuando se conoce (p. ej. por manifiesto o por ruta Steam).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub steam_app_id: Option<String>,
+    /// Varias rutas de guardado para el mismo juego (manifiesto Ludusavi). Si está presente, al añadir se deben registrar todas.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paths: Option<Vec<String>>,
 }
 
 // ─── Expansión de rutas ──────────────────────────────────────────────────────
@@ -100,6 +109,8 @@ fn scan_base_paths(
             path: path_str,
             folder_name: name,
             base_path: base_label.to_string(),
+            steam_app_id: None,
+            paths: None,
         });
     }
 }
@@ -135,10 +146,47 @@ fn find_steam_userdata_candidates(steam_path: &str) -> Vec<PathCandidateDto> {
                 continue;
             }
             if let Some(p) = path_to_check.to_str() {
+                let (folder_name, steam_app_id, paths, path_display) =
+                    if let Some(index) = manifest::load_manifest_index() {
+                        if let Some((entry, resolved)) =
+                            manifest::get_entry_for_steam_app(&index, &app_name, None)
+                        {
+                            let mut all_paths = vec![p.to_string()];
+                            for r in &resolved {
+                                if Path::new(r).exists() && !all_paths.contains(r) {
+                                    all_paths.push(r.clone());
+                                }
+                            }
+                            let paths = if all_paths.len() > 1 {
+                                Some(all_paths.clone())
+                            } else {
+                                None
+                            };
+                            let path_display =
+                                all_paths.first().cloned().unwrap_or_else(|| p.to_string());
+                            (entry.name, Some(app_name.clone()), paths, path_display)
+                        } else {
+                            (
+                                format!("Steam App {}", app_name),
+                                Some(app_name.clone()),
+                                None,
+                                p.to_string(),
+                            )
+                        }
+                    } else {
+                        (
+                            format!("Steam App {}", app_name),
+                            Some(app_name.clone()),
+                            None,
+                            p.to_string(),
+                        )
+                    };
                 out.push(PathCandidateDto {
-                    path: p.to_string(),
-                    folder_name: format!("Steam App {}", app_name),
+                    path: path_display,
+                    folder_name,
                     base_path: format!("Steam userdata ({})", user_name),
+                    steam_app_id,
+                    paths,
                 });
             }
         }
@@ -193,6 +241,8 @@ fn find_steam_library_candidates(library_path: &str) -> Vec<PathCandidateDto> {
                 path: p.to_string(),
                 folder_name: name,
                 base_path: format!("Steam Library ({})", library_path),
+                steam_app_id: None,
+                paths: None,
             });
         }
     }
@@ -200,7 +250,12 @@ fn find_steam_library_candidates(library_path: &str) -> Vec<PathCandidateDto> {
 }
 
 #[cfg(target_os = "windows")]
-fn scan_steam(candidates: &mut Vec<PathCandidateDto>, seen: &mut HashSet<String>) {
+fn scan_steam(
+    candidates: &mut Vec<PathCandidateDto>,
+    seen: &mut HashSet<String>,
+    path_to_appid: &std::collections::HashMap<PathBuf, String>,
+    manifest_index: &Option<manifest::ManifestIndex>,
+) {
     let steam_path = DEFAULT_STEAM_PATH_WIN32;
     if !Path::new(steam_path).exists() {
         return;
@@ -212,7 +267,28 @@ fn scan_steam(candidates: &mut Vec<PathCandidateDto>, seen: &mut HashSet<String>
             candidates.push(c);
         }
     }
-    for c in find_steam_library_candidates(steam_path) {
+    for mut c in find_steam_library_candidates(steam_path) {
+        let app_id = steam::resolve_steam_app_id_from_map(path_to_appid, &c.path);
+        if let (Some(ref index), Some(app_id)) = (manifest_index, app_id) {
+            if let Some((entry, resolved)) =
+                manifest::get_entry_for_steam_app(index, &app_id, Some(&c.path))
+            {
+                let mut all_paths = vec![c.path.clone()];
+                for r in &resolved {
+                    if Path::new(r).exists() && !all_paths.contains(r) {
+                        all_paths.push(r.clone());
+                    }
+                }
+                c.folder_name = entry.name;
+                c.steam_app_id = Some(app_id);
+                if all_paths.len() > 1 {
+                    c.paths = Some(all_paths.clone());
+                    c.path = all_paths[0].clone();
+                }
+            } else {
+                c.steam_app_id = Some(app_id);
+            }
+        }
         let key = c.path.to_lowercase();
         if !seen.contains(&key) {
             seen.insert(key);
@@ -220,7 +296,28 @@ fn scan_steam(candidates: &mut Vec<PathCandidateDto>, seen: &mut HashSet<String>
         }
     }
     for lib in find_steam_library_paths(steam_path) {
-        for c in find_steam_library_candidates(&lib) {
+        for mut c in find_steam_library_candidates(&lib) {
+            let app_id = steam::resolve_steam_app_id_from_map(path_to_appid, &c.path);
+            if let (Some(ref index), Some(app_id)) = (manifest_index, app_id) {
+                if let Some((entry, resolved)) =
+                    manifest::get_entry_for_steam_app(index, &app_id, Some(&c.path))
+                {
+                    let mut all_paths = vec![c.path.clone()];
+                    for r in &resolved {
+                        if Path::new(r).exists() && !all_paths.contains(r) {
+                            all_paths.push(r.clone());
+                        }
+                    }
+                    c.folder_name = entry.name;
+                    c.steam_app_id = Some(app_id);
+                    if all_paths.len() > 1 {
+                        c.paths = Some(all_paths.clone());
+                        c.path = all_paths[0].clone();
+                    }
+                } else {
+                    c.steam_app_id = Some(app_id);
+                }
+            }
             let key = c.path.to_lowercase();
             if !seen.contains(&key) {
                 seen.insert(key);
@@ -240,6 +337,8 @@ const CRACK_SAVE_LOCATIONS: &[(&str, &str)] = &[
     ("%APPDATA%\\CODEX", "CODEX"),
     ("%APPDATA%\\CPY_SAVES", "CPY (Conspir4cy)"),
     ("%APPDATA%\\Skidrow", "Skidrow"),
+    ("%APPDATA%\\FLT", "FLT"),
+    ("%APPDATA%\\RUNE", "RUNE"),
     ("%LOCALAPPDATA%\\CODEX", "CODEX (Local)"),
     ("%USERPROFILE%\\Documents\\CPY_SAVES", "CPY (Documents)"),
 ];
@@ -288,6 +387,8 @@ fn scan_cracks(candidates: &mut Vec<PathCandidateDto>, seen: &mut HashSet<String
                         path: p.to_string(),
                         folder_name: format!("{} — {}", label, name),
                         base_path: format!("{} ({})", label, base_path),
+                        steam_app_id: None,
+                        paths: None,
                     });
                 }
             }
@@ -327,10 +428,12 @@ pub fn scan_path_candidates() -> Vec<PathCandidateDto> {
         }
     }
 
-    // Steam y cracks (solo Windows)
+    // Steam y cracks (solo Windows). Manifiesto Ludusavi para nombres y rutas precisas.
     #[cfg(target_os = "windows")]
     {
-        scan_steam(&mut candidates, &mut seen);
+        let path_to_appid = steam::get_steam_path_to_appid_map();
+        let manifest_index = manifest::load_manifest_index();
+        scan_steam(&mut candidates, &mut seen, &path_to_appid, &manifest_index);
         scan_cracks(&mut candidates, &mut seen);
     }
 
