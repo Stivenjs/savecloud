@@ -54,9 +54,9 @@ export async function createConfigFile(
   userId: string
 ): Promise<string> {
   return invoke<string>("create_config_file", {
-    api_base_url: apiBaseUrl.trim() || null,
-    api_key: apiKey.trim() || null,
-    user_id: userId.trim() || null,
+    apiBaseUrl: apiBaseUrl.trim() || null,
+    apiKey: apiKey.trim() || null,
+    userId: userId.trim() || null,
   });
 }
 
