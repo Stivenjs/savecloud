@@ -9,10 +9,10 @@ import {
   ModalHeader,
 } from "@heroui/react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FolderOpen, Search } from "lucide-react";
+import { FolderOpen, ImagePlus, Search } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { ConfiguredGame } from "@app-types/config";
-import { updateGame, searchSteamGames } from "@services/tauri";
+import { readImageAsDataUrl, updateGame, searchSteamGames } from "@services/tauri";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 
 interface EditGameModalProps {
@@ -35,6 +35,7 @@ export function EditGameModal({
   const [selectedSteamAppId, setSelectedSteamAppId] = useState<string | null>(
     null
   );
+  const [imageUrl, setImageUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,6 +46,7 @@ export function EditGameModal({
       setSourceUrl(game.sourceUrl ?? "");
       setSearchInput("");
       setSelectedSteamAppId(game.steamAppId ?? null);
+      setImageUrl(game.imageUrl ?? "");
     }
   }, [game, isOpen]);
 
@@ -68,6 +70,27 @@ export function EditGameModal({
     if (!openModal) {
       setError(null);
       onClose();
+    }
+  };
+
+  const handleSelectLocalImage = async () => {
+    setError(null);
+    try {
+      const selected = await open({
+        directory: false,
+        multiple: false,
+        title: "Seleccionar portada (imagen)",
+        filters: [
+          { name: "Imagen", extensions: ["jpg", "jpeg", "png", "gif", "webp"] },
+        ],
+      });
+      if (selected && typeof selected === "string") {
+        const dataUrl = await readImageAsDataUrl(selected);
+        setImageUrl(dataUrl);
+        setSelectedSteamAppId(null);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -97,7 +120,8 @@ export function EditGameModal({
         paths,
         editionLabel.trim() || undefined,
         sourceUrl.trim() || undefined,
-        selectedSteamAppId ?? undefined
+        selectedSteamAppId ?? undefined,
+        imageUrl.trim() || undefined
       );
       onSuccess();
       handleOpenChange(false);
@@ -159,6 +183,34 @@ export function EditGameModal({
                 variant="bordered"
                 type="url"
               />
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-default-500">
+                  Portada personalizada{" "}
+                  <span className="font-normal">
+                    (opcional; para juegos no-Steam, emuladores, etc.)
+                  </span>
+                </p>
+                <Input
+                  label="URL de la imagen o imagen local"
+                  placeholder="Pega una URL de imagen o selecciona un archivo"
+                  value={imageUrl.startsWith("data:") ? "(imagen local seleccionada)" : imageUrl}
+                  onValueChange={(v) => {
+                    if (v !== "(imagen local seleccionada)") setImageUrl(v);
+                  }}
+                  variant="bordered"
+                  endContent={
+                    <Button
+                      isIconOnly
+                      variant="flat"
+                      size="sm"
+                      aria-label="Seleccionar imagen local"
+                      onPress={handleSelectLocalImage}
+                    >
+                      <ImagePlus size={18} />
+                    </Button>
+                  }
+                />
+              </div>
               <div className="mt-2 space-y-2">
                 <p className="text-xs font-medium text-default-500">
                   Vincular con juego real (Steam){" "}

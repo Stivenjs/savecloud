@@ -52,7 +52,8 @@ export async function addGame(
   path: string,
   editionLabel?: string,
   sourceUrl?: string,
-  steamAppId?: string
+  steamAppId?: string,
+  imageUrl?: string
 ): Promise<void> {
   await invoke("add_game", {
     gameId,
@@ -60,6 +61,7 @@ export async function addGame(
     editionLabel: editionLabel?.trim() || null,
     sourceUrl: sourceUrl?.trim() || null,
     steamAppId: steamAppId?.trim() || null,
+    imageUrl: imageUrl?.trim() || null,
   });
 }
 
@@ -130,7 +132,8 @@ export async function updateGame(
   paths: string[],
   editionLabel?: string,
   sourceUrl?: string,
-  steamAppId?: string
+  steamAppId?: string,
+  imageUrl?: string
 ): Promise<void> {
   await invoke("update_game", {
     gameId,
@@ -138,7 +141,13 @@ export async function updateGame(
     editionLabel: editionLabel?.trim() || null,
     sourceUrl: sourceUrl?.trim() || null,
     steamAppId: steamAppId?.trim() || null,
+    imageUrl: imageUrl?.trim() || null,
   });
+}
+
+/** Lee un archivo de imagen y devuelve su data URL (base64). Para portadas personalizadas. */
+export async function readImageAsDataUrl(path: string): Promise<string> {
+  return invoke<string>("read_image_as_data_url", { path });
 }
 
 /** Elimina un juego (o una ruta concreta) de la configuración */

@@ -41,6 +41,7 @@ pub fn run() {
             commands::add_game,
             commands::update_game,
             commands::remove_game,
+            commands::read_image_as_data_url,
             commands::scan_path_candidates,
             commands::sync::list_save_files,
             commands::sync::upload::sync_upload_game,

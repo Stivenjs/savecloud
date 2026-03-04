@@ -1,5 +1,9 @@
 //! Comandos relacionados con la configuración.
 
+use std::fs;
+use std::path::Path;
+
+use base64::Engine;
 use crate::config;
 use crate::steam;
 use serde::Serialize;
@@ -135,6 +139,7 @@ pub fn add_game(
     edition_label: Option<String>,
     source_url: Option<String>,
     steam_app_id: Option<String>,
+    image_url: Option<String>,
 ) -> Result<(), String> {
     let mut cfg = config::load_config();
     let game_id = game_id.trim().to_string();
@@ -152,6 +157,9 @@ pub fn add_game(
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
     let steam_app_id = steam_app_id
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let image_url = image_url
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
 
@@ -172,12 +180,15 @@ pub fn add_game(
         if let Some(app_id) = steam_app_id {
             g.steam_app_id = Some(app_id);
         }
+        if let Some(ref img) = image_url {
+            g.image_url = Some(img.clone());
+        }
     } else {
         cfg.games.push(config::ConfiguredGame {
             id: game_id,
             paths: vec![path],
             steam_app_id,
-            image_url: None,
+            image_url,
             executable_names: None,
             edition_label,
             source_url,
@@ -195,6 +206,7 @@ pub fn update_game(
     edition_label: Option<String>,
     source_url: Option<String>,
     steam_app_id: Option<String>,
+    image_url: Option<String>,
 ) -> Result<(), String> {
     let mut cfg = config::load_config();
     let game_id = game_id.trim();
@@ -220,6 +232,9 @@ pub fn update_game(
     let steam_app_id = steam_app_id
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
+    let image_url = image_url
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
 
     let g = cfg
         .games
@@ -231,8 +246,45 @@ pub fn update_game(
     g.edition_label = edition_label;
     g.source_url = source_url;
     g.steam_app_id = steam_app_id;
+    g.image_url = image_url;
 
     config::save_config(&cfg)
+}
+
+/// Tamaño máximo para imagen local (2 MiB) para no hinchar el config.
+const MAX_IMAGE_BYTES: u64 = 2 * 1024 * 1024;
+
+/// Lee un archivo de imagen y lo devuelve como data URL (base64).
+/// Útil para portadas personalizadas de juegos no-Steam o emuladores.
+#[tauri::command]
+pub fn read_image_as_data_url(path: String) -> Result<String, String> {
+    let path = Path::new(path.trim());
+    if !path.exists() {
+        return Err("El archivo no existe".to_string());
+    }
+    let meta = fs::metadata(path).map_err(|e| e.to_string())?;
+    if meta.len() > MAX_IMAGE_BYTES {
+        return Err(format!(
+            "La imagen no puede superar {} MB.",
+            MAX_IMAGE_BYTES / (1024 * 1024)
+        ));
+    }
+    let bytes = fs::read(path).map_err(|e| e.to_string())?;
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_lowercase())
+        .unwrap_or_default();
+    let mime = match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        _ => "image/jpeg",
+    };
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:{};base64,{}", mime, b64))
 }
 
 #[tauri::command]
