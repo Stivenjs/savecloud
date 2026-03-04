@@ -1,5 +1,5 @@
-import { Button, Spinner } from "@heroui/react";
-import { RefreshCw } from "lucide-react";
+import { Button, Card, CardBody, Spinner } from "@heroui/react";
+import { Copy, RefreshCw, User } from "lucide-react";
 import { AddGameModal } from "@features/games/AddGameModal";
 import { DownloadAllConflictModal } from "@features/games/DownloadAllConflictModal";
 import { DownloadConflictModal } from "@features/games/DownloadConflictModal";
@@ -13,6 +13,7 @@ import { OperationErrorCard } from "@features/games/OperationErrorCard";
 import { RemoveGameModal } from "@features/games/RemoveGameModal";
 import { ScanModal } from "@features/games/ScanModal";
 import { useGamesPage } from "@features/games/useGamesPage";
+import { toastSuccess } from "@utils/toast";
 
 export function GamesPage() {
   const {
@@ -116,6 +117,41 @@ export function GamesPage() {
         onSyncAllPress={handleSyncAll}
         onRefreshPress={handleRefresh}
       />
+
+      <Card className="border border-default-200">
+        <CardBody className="flex flex-row flex-wrap items-center justify-between gap-3 py-3">
+          <div className="flex items-center gap-2">
+            <User size={18} className="text-default-500" />
+            <span className="text-sm text-default-500">Tu User ID</span>
+            {config?.userId?.trim() ? (
+              <code className="rounded bg-default-100 px-2 py-0.5 font-mono text-sm text-foreground">
+                {config.userId}
+              </code>
+            ) : (
+              <span className="text-sm text-default-400">
+                Configura tu User ID en Configuración
+              </span>
+            )}
+          </div>
+          {config?.userId?.trim() && (
+            <Button
+              size="sm"
+              variant="flat"
+              startContent={<Copy size={14} />}
+              onPress={async () => {
+                try {
+                  await navigator.clipboard.writeText(config.userId ?? "");
+                  toastSuccess("User ID copiado", "Puedes compartirlo con tus amigos.");
+                } catch {
+                  // sin clipboard, ignorar
+                }
+              }}
+            >
+              Copiar
+            </Button>
+          )}
+        </CardBody>
+      </Card>
 
       <AddGameModal
         isOpen={addModalOpen}
