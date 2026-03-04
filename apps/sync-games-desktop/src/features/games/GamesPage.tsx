@@ -98,7 +98,7 @@ export function GamesPage() {
   }
 
   return (
-    <div className="w-full max-w-5xl">
+    <div className="space-y-8">
       <GamesPageHeader
         hasSyncConfig={hasSyncConfig}
         gamesCount={config?.games?.length ?? 0}
@@ -171,27 +171,23 @@ export function GamesPage() {
         onSuccess={handleRefresh}
       />
 
-      <div className="mb-8">
-        <GamesStats
-          gamesCount={config?.games?.length ?? 0}
-          lastSyncAt={lastSyncAt}
-          lastSyncGameId={lastSyncGameId}
-          lastSyncLoading={hasSyncConfig && lastSyncLoading}
-          hasSyncConfig={hasSyncConfig}
-          cloudGames={cloudGames}
-          totalCloudSize={totalCloudSize}
-          onConfigureFromCloud={handleConfigureFromCloud}
-        />
-      </div>
+      <GamesStats
+        gamesCount={config?.games?.length ?? 0}
+        lastSyncAt={lastSyncAt}
+        lastSyncGameId={lastSyncGameId}
+        lastSyncLoading={hasSyncConfig && lastSyncLoading}
+        hasSyncConfig={hasSyncConfig}
+        cloudGames={cloudGames}
+        totalCloudSize={totalCloudSize}
+        onConfigureFromCloud={handleConfigureFromCloud}
+      />
 
-      <div className="mb-6">
-        <GamesFilters
-          searchTerm={searchTerm}
-          onSearchChange={setSearchTerm}
-          originFilter={originFilter}
-          onOriginFilterChange={setOriginFilter}
-        />
-      </div>
+      <GamesFilters
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        originFilter={originFilter}
+        onOriginFilterChange={setOriginFilter}
+      />
 
       <GamesList
         games={filteredGames}
