@@ -129,6 +129,20 @@ export async function removeGame(gameId: string, path?: string): Promise<void> {
   await invoke("remove_game", { gameId, path });
 }
 
+/** Entrada del historial de operaciones (subidas, descargas, copias de amigos) */
+export interface OperationLogEntry {
+  timestamp: string;
+  kind: "upload" | "download" | "copy_friend";
+  gameId: string;
+  fileCount: number;
+  errCount: number;
+}
+
+/** Lista el historial de operaciones */
+export async function listOperationHistory(): Promise<OperationLogEntry[]> {
+  return invoke<OperationLogEntry[]>("list_operation_history");
+}
+
 /** Escanea el sistema en busca de carpetas candidatas para guardados */
 export async function scanPathCandidates(): Promise<PathCandidate[]> {
   return invoke<PathCandidate[]>("scan_path_candidates");
@@ -165,6 +179,31 @@ export async function copyFriendSaves(
     errCount: number;
     errors: string[];
   }>("copy_friend_saves", { friendUserId, gameId });
+  return {
+    okCount: r.okCount,
+    errCount: r.errCount,
+    errors: r.errors,
+  };
+}
+
+/** Plan de copia de archivos desde un amigo (manejo avanzado de conflictos) */
+export interface CopyFriendFilePlan {
+  key: string;
+  filename: string;
+  targetFilename: string;
+}
+
+/** Copia los guardados de un amigo usando un plan detallado (permite omitir/renombrar) */
+export async function copyFriendSavesWithPlan(
+  friendUserId: string,
+  gameId: string,
+  plan: CopyFriendFilePlan[]
+): Promise<SyncResult> {
+  const r = await invoke<{
+    okCount: number;
+    errCount: number;
+    errors: string[];
+  }>("copy_friend_saves_with_plan", { friendUserId, gameId, plan });
   return {
     okCount: r.okCount,
     errCount: r.errCount,

@@ -118,10 +118,15 @@ pub(crate) async fn sync_upload_game_impl(game_id: String) -> Result<SyncResultD
         }
     }
 
-    Ok(SyncResultDto {
+    let result = SyncResultDto {
         ok_count,
         err_count,
         errors,
-    })
-}
+    };
 
+    // Registrar en historial (errores o éxito).
+    let _ =
+        crate::config::append_operation_log("upload", &game_id, result.ok_count, result.err_count);
+
+    Ok(result)
+}

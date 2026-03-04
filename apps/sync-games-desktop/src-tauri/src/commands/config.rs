@@ -25,6 +25,16 @@ pub struct GameDto {
     pub source_url: Option<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationLogEntryDto {
+    pub timestamp: String,
+    pub kind: String,
+    pub game_id: String,
+    pub file_count: u32,
+    pub err_count: u32,
+}
+
 #[tauri::command]
 pub fn get_config() -> ConfigDto {
     let cfg = config::load_config();
@@ -62,6 +72,22 @@ pub fn get_config_path() -> String {
     config::config_path()
         .and_then(|p| p.into_os_string().into_string().ok())
         .unwrap_or_else(|| "".to_string())
+}
+
+/// Devuelve el historial de operaciones (subidas, descargas, copias de amigos).
+#[tauri::command]
+pub fn list_operation_history() -> Vec<OperationLogEntryDto> {
+    let cfg = config::load_config();
+    cfg.operation_history
+        .into_iter()
+        .map(|e| OperationLogEntryDto {
+            timestamp: e.timestamp,
+            kind: e.kind,
+            game_id: e.game_id,
+            file_count: e.file_count,
+            err_count: e.err_count,
+        })
+        .collect()
 }
 
 /// Crea o actualiza el archivo de configuración con los datos indicados.

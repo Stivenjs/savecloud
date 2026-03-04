@@ -2,6 +2,7 @@
 
 use super::models::SyncResultDto;
 use super::models::{RemoteSaveDto, RemoteSaveInfoDto};
+use serde::Deserialize;
 
 pub(crate) async fn api_request(
     base_url: &str,
@@ -107,11 +108,19 @@ pub async fn sync_list_remote_saves_for_user(
     list_remote_saves_for_user(api_base, api_key, user_id).await
 }
 
-/// Copia todos los guardados de un juego desde la cuenta de un amigo a la cuenta actual.
-#[tauri::command]
-pub async fn copy_friend_saves(
-    friend_user_id: String,
-    game_id: String,
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CopyFriendFilePlanDto {
+    pub key: String,
+    pub filename: String,
+    pub target_filename: String,
+}
+
+/// Implementación común para copiar guardados de un amigo según un plan.
+async fn copy_friend_saves_with_plan_impl(
+    friend_user_id: &str,
+    game_id: &str,
+    plan: Vec<CopyFriendFilePlanDto>,
 ) -> Result<SyncResultDto, String> {
     let cfg = crate::config::load_config();
     let api_base = cfg
@@ -126,30 +135,6 @@ pub async fn copy_friend_saves(
         .ok_or("Configura userId en Configuración")?;
     let api_key = cfg.api_key.as_deref().unwrap_or("");
 
-    let friend_id = friend_user_id.trim();
-    if friend_id.is_empty() {
-        return Err("friendUserId vacío".into());
-    }
-    let game_id = game_id.trim().to_string();
-    if game_id.is_empty() {
-        return Err("gameId vacío".into());
-    }
-
-    // 1. Listar todos los saves del amigo para este juego
-    let all_saves = list_remote_saves_for_user(api_base, api_key, friend_id).await?;
-    let saves: Vec<_> = all_saves
-        .into_iter()
-        .filter(|s| s.game_id.eq_ignore_ascii_case(&game_id))
-        .collect();
-
-    if saves.is_empty() {
-        return Ok(SyncResultDto {
-            ok_count: 0,
-            err_count: 0,
-            errors: vec!["El amigo no tiene guardados para este juego".into()],
-        });
-    }
-
     let client = reqwest::Client::builder()
         .user_agent("sync-games-desktop/1.0")
         .build()
@@ -159,15 +144,23 @@ pub async fn copy_friend_saves(
     let mut err_count = 0u32;
     let mut errors = Vec::new();
 
-    for save in saves {
+    if plan.is_empty() {
+        return Ok(SyncResultDto {
+            ok_count,
+            err_count,
+            errors: vec!["No hay archivos en el plan de copia".into()],
+        });
+    }
+
+    for item in plan {
         // 2. Pedir URL de descarga usando el userId del amigo
         let body_download = serde_json::json!({
             "gameId": game_id,
-            "key": save.key
+            "key": item.key
         });
         let res_download = api_request(
             api_base,
-            friend_id,
+            friend_user_id,
             api_key,
             "POST",
             "/download-url",
@@ -179,7 +172,7 @@ pub async fn copy_friend_saves(
         if !res_download.status().is_success() {
             errors.push(format!(
                 "{}: API download-url {}",
-                save.filename,
+                item.filename,
                 res_download.status()
             ));
             err_count += 1;
@@ -191,7 +184,7 @@ pub async fn copy_friend_saves(
         let download_url = match json_download.get("downloadUrl").and_then(|v| v.as_str()) {
             Some(u) => u,
             None => {
-                errors.push(format!("{}: API no devolvió downloadUrl", save.filename));
+                errors.push(format!("{}: API no devolvió downloadUrl", item.filename));
                 err_count += 1;
                 continue;
             }
@@ -200,7 +193,7 @@ pub async fn copy_friend_saves(
         // 3. Pedir URL de subida en TU cuenta
         let body_upload = serde_json::json!({
             "gameId": game_id,
-            "filename": save.filename
+            "filename": item.target_filename
         });
         let res_upload = api_request(
             api_base,
@@ -216,7 +209,7 @@ pub async fn copy_friend_saves(
         if !res_upload.status().is_success() {
             errors.push(format!(
                 "{}: API upload-url {}",
-                save.filename,
+                item.target_filename,
                 res_upload.status()
             ));
             err_count += 1;
@@ -227,7 +220,10 @@ pub async fn copy_friend_saves(
         let upload_url = match json_upload.get("uploadUrl").and_then(|v| v.as_str()) {
             Some(u) => u,
             None => {
-                errors.push(format!("{}: API no devolvió uploadUrl", save.filename));
+                errors.push(format!(
+                    "{}: API no devolvió uploadUrl",
+                    item.target_filename
+                ));
                 err_count += 1;
                 continue;
             }
@@ -238,13 +234,13 @@ pub async fn copy_friend_saves(
             Ok(resp) => match resp.bytes().await {
                 Ok(b) => b,
                 Err(e) => {
-                    errors.push(format!("{}: error leyendo descarga: {}", save.filename, e));
+                    errors.push(format!("{}: error leyendo descarga: {}", item.filename, e));
                     err_count += 1;
                     continue;
                 }
             },
             Err(e) => {
-                errors.push(format!("{}: error HTTP descarga: {}", save.filename, e));
+                errors.push(format!("{}: error HTTP descarga: {}", item.filename, e));
                 err_count += 1;
                 continue;
             }
@@ -259,23 +255,104 @@ pub async fn copy_friend_saves(
         {
             Ok(r) => r,
             Err(e) => {
-                errors.push(format!("{}: error HTTP subida: {}", save.filename, e));
+                errors.push(format!(
+                    "{}: error HTTP subida: {}",
+                    item.target_filename, e
+                ));
                 err_count += 1;
                 continue;
             }
         };
 
         if !put_res.status().is_success() {
-            errors.push(format!("{}: S3 PUT {}", save.filename, put_res.status()));
+            errors.push(format!(
+                "{}: S3 PUT {}",
+                item.target_filename,
+                put_res.status()
+            ));
             err_count += 1;
         } else {
             ok_count += 1;
         }
     }
 
-    Ok(SyncResultDto {
+    let result = SyncResultDto {
         ok_count,
         err_count,
         errors,
-    })
+    };
+
+    let _ = crate::config::append_operation_log(
+        "copy_friend",
+        game_id,
+        result.ok_count,
+        result.err_count,
+    );
+
+    Ok(result)
+}
+
+/// Copia todos los guardados de un juego desde la cuenta de un amigo a la cuenta actual.
+#[tauri::command]
+pub async fn copy_friend_saves(
+    friend_user_id: String,
+    game_id: String,
+) -> Result<SyncResultDto, String> {
+    let cfg = crate::config::load_config();
+    let api_base = cfg
+        .api_base_url
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura apiBaseUrl en Configuración")?;
+    let api_key = cfg.api_key.as_deref().unwrap_or("");
+
+    let friend_id = friend_user_id.trim();
+    if friend_id.is_empty() {
+        return Err("friendUserId vacío".into());
+    }
+    let game_id_trimmed = game_id.trim().to_string();
+    if game_id_trimmed.is_empty() {
+        return Err("gameId vacío".into());
+    }
+
+    // 1. Listar todos los saves del amigo para este juego y construir plan por defecto (mismo nombre).
+    let all_saves = list_remote_saves_for_user(api_base, api_key, friend_id).await?;
+    let plan: Vec<CopyFriendFilePlanDto> = all_saves
+        .into_iter()
+        .filter(|s| s.game_id.eq_ignore_ascii_case(&game_id_trimmed))
+        .map(|s| CopyFriendFilePlanDto {
+            key: s.key,
+            filename: s.filename.clone(),
+            target_filename: s.filename,
+        })
+        .collect();
+
+    if plan.is_empty() {
+        return Ok(SyncResultDto {
+            ok_count: 0,
+            err_count: 0,
+            errors: vec!["El amigo no tiene guardados para este juego".into()],
+        });
+    }
+
+    copy_friend_saves_with_plan_impl(friend_id, &game_id_trimmed, plan).await
+}
+
+/// Copia guardados de un amigo usando un plan detallado (para manejo avanzado de conflictos).
+#[tauri::command]
+pub async fn copy_friend_saves_with_plan(
+    friend_user_id: String,
+    game_id: String,
+    plan: Vec<CopyFriendFilePlanDto>,
+) -> Result<SyncResultDto, String> {
+    let friend_id = friend_user_id.trim().to_string();
+    if friend_id.is_empty() {
+        return Err("friendUserId vacío".into());
+    }
+    let game_id_trimmed = game_id.trim().to_string();
+    if game_id_trimmed.is_empty() {
+        return Err("gameId vacío".into());
+    }
+
+    copy_friend_saves_with_plan_impl(&friend_id, &game_id_trimmed, plan).await
 }

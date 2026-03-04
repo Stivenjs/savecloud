@@ -62,6 +62,8 @@ pub fn run() {
             commands::sync::api::sync_list_remote_saves_for_user,
             commands::get_friend_config,
             commands::sync::api::copy_friend_saves,
+            commands::sync::api::copy_friend_saves_with_plan,
+            commands::list_operation_history,
             commands::tray_tooltip::refresh_tray_tooltip,
         ])
         .on_window_event(|window, event| {

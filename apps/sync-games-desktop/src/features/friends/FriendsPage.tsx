@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button, Card, CardBody, Input, Spinner } from "@heroui/react";
-import { Download, Users } from "lucide-react";
+import { Download, Settings2, Users } from "lucide-react";
 import type { Config, ConfiguredGame } from "@app-types/config";
 import {
   getFriendConfig,
@@ -8,11 +8,13 @@ import {
   syncListRemoteSaves,
   type RemoteSaveInfo,
 } from "@services/tauri";
+import type { CopyFriendFilePlan } from "@services/tauri";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatSize } from "@utils/format";
 import { GameCard } from "@features/games/GameCard";
-import { copyFriendSaves } from "@services/tauri";
-import { toastError, toastSyncResult } from "@utils/toast";
+import { copyFriendSavesWithPlan } from "@services/tauri";
+import { toastError, toastInfo, toastSyncResult } from "@utils/toast";
+import { FriendGameTemplateModal } from "@features/friends/FriendGameTemplateModal";
 
 interface FriendGameSummary {
   game: ConfiguredGame;
@@ -28,6 +30,8 @@ export function FriendsPage() {
   const [friendSaves, setFriendSaves] = useState<RemoteSaveInfo[]>([]);
   const [copyingGameId, setCopyingGameId] = useState<string | null>(null);
   const [mySaves, setMySaves] = useState<RemoteSaveInfo[] | null>(null);
+  const [templateGame, setTemplateGame] = useState<ConfiguredGame | null>(null);
+  const [templateOpen, setTemplateOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const handleLoadFriend = async () => {
@@ -107,15 +111,117 @@ export function FriendsPage() {
         // en caso de error, seguimos sin bloqueo; solo perderíamos la advertencia
       }
     }
+
+    // Asegurarse de tener mis guardados cargados para detectar conflictos
+    let myAllSaves = mySaves;
+    if (myAllSaves === null) {
+      try {
+        myAllSaves = await syncListRemoteSaves();
+        setMySaves(myAllSaves);
+      } catch {
+        myAllSaves = [];
+      }
+    }
+
+    const friendGameSaves = friendSaves.filter(
+      (s) => s.gameId.toLowerCase() === gameId.toLowerCase()
+    );
+    if (friendGameSaves.length === 0) {
+      toastInfo(
+        "Sin guardados de amigo",
+        "Tu amigo no tiene guardados para este juego."
+      );
+      return;
+    }
+
+    const myGameSaves = (myAllSaves ?? []).filter(
+      (s) => s.gameId.toLowerCase() === gameId.toLowerCase()
+    );
+    const myFilenames = new Set(myGameSaves.map((s) => s.filename));
+
+    const newFiles = friendGameSaves.filter(
+      (s) => !myFilenames.has(s.filename)
+    );
+    const conflictFiles = friendGameSaves.filter((s) =>
+      myFilenames.has(s.filename)
+    );
+
+    // Estrategia simple de resolución global: sobrescribir o renombrar conflictos
+    type Strategy = "overwrite" | "rename";
+    const strategy: Strategy =
+      conflictFiles.length > 0 ? "rename" : "overwrite";
+
+    const plan: CopyFriendFilePlan[] = [];
+    const usedNames = new Set<string>([
+      ...myFilenames,
+      ...friendGameSaves.map((s) => s.filename),
+    ]);
+
+    const makeUniqueName = (base: string): string => {
+      if (!usedNames.has(base)) {
+        usedNames.add(base);
+        return base;
+      }
+      const dot = base.lastIndexOf(".");
+      const name = dot === -1 ? base : base.slice(0, dot);
+      const ext = dot === -1 ? "" : base.slice(dot);
+      let i = 1;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const candidate = `${name} (amigo ${i})${ext}`;
+        if (!usedNames.has(candidate)) {
+          usedNames.add(candidate);
+          return candidate;
+        }
+        i += 1;
+      }
+    };
+
+    for (const s of newFiles) {
+      plan.push({
+        key: s.key,
+        filename: s.filename,
+        targetFilename: s.filename,
+      });
+    }
+
+    if (strategy === "overwrite") {
+      for (const s of conflictFiles) {
+        plan.push({
+          key: s.key,
+          filename: s.filename,
+          targetFilename: s.filename,
+        });
+      }
+    } else if (strategy === "rename") {
+      for (const s of conflictFiles) {
+        plan.push({
+          key: s.key,
+          filename: s.filename,
+          targetFilename: makeUniqueName(s.filename),
+        });
+      }
+    }
+
+    if (plan.length === 0) {
+      toastInfo(
+        "Nada que copiar",
+        "Todos los archivos del amigo ya existen en tu nube."
+      );
+      return;
+    }
+
     setCopyingGameId(gameId);
     try {
-      const result = await copyFriendSaves(friendId, gameId);
-      toastSyncResult(
-        result,
-        myGameIdsWithSaves.has(gameId)
-          ? `${gameId} (ya tenías guardados, se han fusionado)`
-          : gameId
-      );
+      const result = await copyFriendSavesWithPlan(friendId, gameId, plan);
+      const hadBefore = myGameIdsWithSaves.has(gameId);
+      const suffix =
+        conflictFiles.length > 0 && strategy === "rename"
+          ? " (conflictos renombrados)"
+          : hadBefore
+          ? " (ya tenías guardados, se han fusionado)"
+          : "";
+      toastSyncResult(result, `${gameId}${suffix}`);
 
       // Invalidar cache de última sync / juegos en la nube
       queryClient.invalidateQueries({ queryKey: ["last-sync-info"] });
@@ -214,26 +320,41 @@ export function FriendsPage() {
                       resolvedSteamAppId={game.steamAppId}
                       isLoading={false}
                     />
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs text-default-500">
-                        En la nube (amigo):{" "}
-                        {hasSaves
-                          ? `${fileCount} archivo${
-                              fileCount !== 1 ? "s" : ""
-                            } · ${formatSize(totalSize)}`
-                          : "sin guardados"}
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="flat"
-                        color="primary"
-                        startContent={<Download size={14} />}
-                        isDisabled={!hasSaves || !!copyingGameId}
-                        isLoading={isCopying}
-                        onPress={() => handleCopySaves(game.id)}
-                      >
-                        Copiar saves
-                      </Button>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs text-default-500">
+                          En la nube (amigo):{" "}
+                          {hasSaves
+                            ? `${fileCount} archivo${
+                                fileCount !== 1 ? "s" : ""
+                              } · ${formatSize(totalSize)}`
+                            : "sin guardados"}
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="flat"
+                          color="primary"
+                          startContent={<Download size={14} />}
+                          isDisabled={!hasSaves || !!copyingGameId}
+                          isLoading={isCopying}
+                          onPress={() => handleCopySaves(game.id)}
+                        >
+                          Copiar saves
+                        </Button>
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="light"
+                          startContent={<Settings2 size={14} />}
+                          onPress={() => {
+                            setTemplateGame(game);
+                            setTemplateOpen(true);
+                          }}
+                        >
+                          Usar config como plantilla
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -242,6 +363,11 @@ export function FriendsPage() {
           )}
         </div>
       )}
+      <FriendGameTemplateModal
+        isOpen={templateOpen}
+        game={templateGame}
+        onClose={() => setTemplateOpen(false)}
+      />
     </div>
   );
 }

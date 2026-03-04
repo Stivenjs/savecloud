@@ -1,6 +1,7 @@
 //! Lógica de rutas y lectura del archivo de configuración.
 //! Compatible con la ubicación usada por el CLI.
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -38,6 +39,8 @@ pub struct Config {
     pub games: Vec<ConfiguredGame>,
     #[serde(default)]
     pub custom_scan_paths: Vec<String>,
+    #[serde(default)]
+    pub operation_history: Vec<OperationLogEntry>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
@@ -61,6 +64,43 @@ pub struct ConfiguredGame {
     /// URL de descarga o página de la edición (ej. enlace al release).
     #[serde(default)]
     pub source_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OperationLogEntry {
+    pub timestamp: String,
+    pub kind: String,
+    pub game_id: String,
+    pub file_count: u32,
+    pub err_count: u32,
+}
+
+/// Añade una entrada al historial de operaciones y persiste el config.
+pub fn append_operation_log(
+    kind: &str,
+    game_id: &str,
+    file_count: u32,
+    err_count: u32,
+) -> Result<(), String> {
+    let mut cfg = load_config();
+    let entry = OperationLogEntry {
+        timestamp: Utc::now().to_rfc3339(),
+        kind: kind.to_string(),
+        game_id: game_id.to_string(),
+        file_count,
+        err_count,
+    };
+    cfg.operation_history.push(entry);
+
+    // Limitar a las últimas N entradas para no crecer indefinidamente.
+    const MAX_ENTRIES: usize = 200;
+    if cfg.operation_history.len() > MAX_ENTRIES {
+        let drop = cfg.operation_history.len() - MAX_ENTRIES;
+        cfg.operation_history.drain(0..drop);
+    }
+
+    save_config(&cfg)
 }
 
 /// Lee el archivo de config desde disco.

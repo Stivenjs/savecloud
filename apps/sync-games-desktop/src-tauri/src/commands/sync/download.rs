@@ -148,7 +148,7 @@ pub async fn sync_download_game(
     tray_state.0.syncing_inc();
     tray_state.0.update_tooltip();
 
-    let result = sync_download_game_impl(game_id).await;
+    let result = sync_download_game_impl(game_id.clone()).await;
 
     tray_state.0.syncing_dec();
     tray_state.0.clone().refresh_unsynced_async();
@@ -195,11 +195,18 @@ async fn sync_download_game_impl(game_id: String) -> Result<SyncResultDto, Strin
         .collect();
 
     if saves.is_empty() {
-        return Ok(SyncResultDto {
+        let result = SyncResultDto {
             ok_count: 0,
             err_count: 0,
             errors: vec!["No hay guardados de este juego en la nube".into()],
-        });
+        };
+        let _ = crate::config::append_operation_log(
+            "download",
+            &game_id,
+            result.ok_count,
+            result.err_count,
+        );
+        return Ok(result);
     }
 
     let client = reqwest::Client::builder()
@@ -278,9 +285,18 @@ async fn sync_download_game_impl(game_id: String) -> Result<SyncResultDto, Strin
         }
     }
 
-    Ok(SyncResultDto {
+    let result = SyncResultDto {
         ok_count,
         err_count,
         errors,
-    })
+    };
+
+    let _ = crate::config::append_operation_log(
+        "download",
+        &game_id,
+        result.ok_count,
+        result.err_count,
+    );
+
+    Ok(result)
 }
