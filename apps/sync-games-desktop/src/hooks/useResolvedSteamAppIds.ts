@@ -1,15 +1,15 @@
 import { useMemo } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { ConfiguredGame } from "@app-types/config";
 import { needsSteamSearch, idToSearchQuery } from "@utils/gameImage";
-import { searchSteamAppId } from "@services/tauri";
+import { searchSteamAppIdsBatch } from "@services/tauri";
 
-const STEAM_APP_ID_QUERY_KEY = ["steam-app-id"] as const;
+const STEAM_APP_ID_QUERY_KEY = ["steam-app-id", "batch"] as const;
 
 /**
  * Hook que resuelve Steam App IDs para juegos que no tienen imagen (needsSteamSearch).
- * Usa búsqueda dinámica en Steam por nombre del juego.
- * TanStack Query cachea los resultados automáticamente.
+ * Usa una sola operación batch en el backend (varias búsquedas en paralelo).
+ * TanStack Query cachea el resultado por la lista de juegos a buscar.
  */
 export function useResolvedSteamAppIds(
   games: readonly ConfiguredGame[]
@@ -19,23 +19,26 @@ export function useResolvedSteamAppIds(
     [games]
   );
 
-  const queries = useQueries({
-    queries: gamesToSearch.map((game) => ({
-      queryKey: [...STEAM_APP_ID_QUERY_KEY, game.id],
-      queryFn: async () => {
-        const query = idToSearchQuery(game.id);
-        const appId = await searchSteamAppId(query);
-        return appId ?? null;
-      },
-    })),
+  const queryKey = useMemo(
+    () => [...STEAM_APP_ID_QUERY_KEY, gamesToSearch.map((g) => g.id).sort().join(",")],
+    [gamesToSearch]
+  );
+
+  const { data: batchResults, isFetched } = useQuery({
+    queryKey,
+    queryFn: async () => {
+      const queries = gamesToSearch.map((g) => idToSearchQuery(g.id));
+      return searchSteamAppIdsBatch(queries);
+    },
+    enabled: gamesToSearch.length > 0,
   });
 
   return useMemo(() => {
     const result: Record<string, string | null | undefined> = {};
     gamesToSearch.forEach((game, i) => {
-      const { data, isFetched } = queries[i] ?? {};
-      result[game.id] = isFetched ? (data ?? null) : undefined;
+      const appId = batchResults?.[i] ?? undefined;
+      result[game.id] = isFetched ? (appId ?? null) : undefined;
     });
     return result;
-  }, [gamesToSearch, queries]);
+  }, [gamesToSearch, batchResults, isFetched]);
 }

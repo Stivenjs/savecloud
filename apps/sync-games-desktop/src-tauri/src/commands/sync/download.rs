@@ -9,12 +9,52 @@ use chrono::{DateTime, Utc};
 
 use super::api;
 use super::models::{
-    DownloadConflictDto, DownloadConflictsResultDto, RemoteSaveInfoDto, SyncResultDto,
-    UnsyncedGameDto,
+    DownloadConflictDto, DownloadConflictsResultDto, GameConflictsResultDto, GameSyncResultDto,
+    RemoteSaveInfoDto, SyncResultDto, UnsyncedGameDto,
 };
 use super::path_utils;
 use crate::tray_state::TrayState;
 use tauri::State;
+
+/// Calcula los conflictos de descarga para un juego dado su ruta base y la lista de saves remotos.
+fn check_conflicts_for_game(
+    _game_id: &str,
+    dest_base: &std::path::Path,
+    saves: &[RemoteSaveInfoDto],
+) -> Vec<DownloadConflictDto> {
+    let mut conflicts = Vec::new();
+    for save in saves {
+        let dest_path = dest_base.join(&save.filename);
+        let Ok(meta) = fs::metadata(&dest_path) else {
+            continue;
+        };
+        let Ok(local_mtime) = meta.modified() else {
+            continue;
+        };
+        let cloud_dt: DateTime<Utc> = match DateTime::parse_from_rfc3339(&save.last_modified)
+            .or_else(|_| DateTime::parse_from_rfc2822(&save.last_modified))
+        {
+            Ok(dt) => dt.with_timezone(&Utc),
+            Err(_) => continue,
+        };
+        let Ok(duration) = local_mtime.duration_since(UNIX_EPOCH) else {
+            continue;
+        };
+        let Some(local_dt) =
+            DateTime::from_timestamp(duration.as_secs() as i64, duration.subsec_nanos())
+        else {
+            continue;
+        };
+        if local_dt > cloud_dt {
+            conflicts.push(DownloadConflictDto {
+                filename: save.filename.clone(),
+                local_modified: local_dt.to_rfc3339(),
+                cloud_modified: save.last_modified.clone(),
+            });
+        }
+    }
+    conflicts
+}
 
 #[tauri::command]
 pub async fn sync_check_download_conflicts(
@@ -38,43 +78,58 @@ pub async fn sync_check_download_conflicts(
         .filter(|s| s.game_id.eq_ignore_ascii_case(&game_id))
         .collect();
 
-    let mut conflicts = Vec::new();
-
-    for save in saves {
-        let dest_path = dest_base.join(&save.filename);
-        let Ok(meta) = fs::metadata(&dest_path) else {
-            continue; // archivo no existe localmente, no hay conflicto
-        };
-        let Ok(local_mtime) = meta.modified() else {
-            continue;
-        };
-
-        let cloud_dt: DateTime<Utc> = match DateTime::parse_from_rfc3339(&save.last_modified)
-            .or_else(|_| DateTime::parse_from_rfc2822(&save.last_modified))
-        {
-            Ok(dt) => dt.with_timezone(&Utc),
-            Err(_) => continue, // no podemos parsear, asumir sin conflicto
-        };
-
-        let Ok(duration) = local_mtime.duration_since(UNIX_EPOCH) else {
-            continue;
-        };
-        let Some(local_dt) =
-            DateTime::from_timestamp(duration.as_secs() as i64, duration.subsec_nanos())
-        else {
-            continue;
-        };
-
-        if local_dt > cloud_dt {
-            conflicts.push(DownloadConflictDto {
-                filename: save.filename.clone(),
-                local_modified: local_dt.to_rfc3339(),
-                cloud_modified: save.last_modified.clone(),
-            });
-        }
-    }
-
+    let conflicts = check_conflicts_for_game(&game_id, &dest_base, &saves);
     Ok(DownloadConflictsResultDto { conflicts })
+}
+
+/// Comprueba conflictos de descarga para varios juegos en una sola llamada (una sola lista remota).
+#[tauri::command]
+pub async fn sync_check_download_conflicts_batch(
+    game_ids: Vec<String>,
+) -> Result<Vec<GameConflictsResultDto>, String> {
+    if game_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let cfg = crate::config::load_config();
+    let all = api::sync_list_remote_saves().await?;
+    let mut results = Vec::with_capacity(game_ids.len());
+    for game_id in game_ids {
+        let game = match cfg
+            .games
+            .iter()
+            .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+        {
+            Some(g) => g,
+            None => {
+                results.push(GameConflictsResultDto {
+                    game_id: game_id.clone(),
+                    conflicts: Vec::new(),
+                });
+                continue;
+            }
+        };
+        let dest_base = match path_utils::expand_path(game.paths[0].trim()) {
+            Some(p) => PathBuf::from(p),
+            None => {
+                results.push(GameConflictsResultDto {
+                    game_id: game_id.clone(),
+                    conflicts: Vec::new(),
+                });
+                continue;
+            }
+        };
+        let saves: Vec<RemoteSaveInfoDto> = all
+            .iter()
+            .filter(|s| s.game_id.eq_ignore_ascii_case(&game_id))
+            .cloned()
+            .collect();
+        let conflicts = check_conflicts_for_game(&game_id, &dest_base, &saves);
+        results.push(GameConflictsResultDto {
+            game_id: game_id.clone(),
+            conflicts,
+        });
+    }
+    Ok(results)
 }
 
 #[tauri::command]
@@ -299,4 +354,58 @@ async fn sync_download_game_impl(game_id: String) -> Result<SyncResultDto, Strin
     );
 
     Ok(result)
+}
+
+/// Descarga los guardados de todos los juegos configurados (operación batch).
+#[tauri::command]
+pub async fn sync_download_all_games(
+    tray_state: State<'_, TrayState>,
+) -> Result<Vec<GameSyncResultDto>, String> {
+    let cfg = crate::config::load_config();
+    let _ = cfg
+        .api_base_url
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura apiBaseUrl en Configuración")?;
+    let _ = cfg
+        .user_id
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura userId en Configuración")?;
+
+    tray_state.0.syncing_inc();
+    tray_state.0.update_tooltip();
+
+    let mut results = Vec::with_capacity(cfg.games.len());
+    for game in &cfg.games {
+        let game_id = game.id.clone();
+        let result = if crate::process_check::is_game_running(&game_id, &game.paths) {
+            SyncResultDto {
+                ok_count: 0,
+                err_count: 1,
+                errors: vec![format!(
+                    "{} está en ejecución. Ciérralo antes de descargar.",
+                    game_id
+                )],
+            }
+        } else {
+            match sync_download_game_impl(game_id.clone()).await {
+                Ok(r) => r,
+                Err(e) => SyncResultDto {
+                    ok_count: 0,
+                    err_count: 1,
+                    errors: vec![e],
+                },
+            }
+        };
+        results.push(GameSyncResultDto {
+            game_id: game_id.clone(),
+            result,
+        });
+    }
+
+    tray_state.0.syncing_dec();
+    tray_state.0.clone().refresh_unsynced_async();
+
+    Ok(results)
 }

@@ -17,7 +17,8 @@ import { BulkActionConfirmModal } from "@features/games/BulkActionConfirmModal";
 import { RemoveGameModal } from "@features/games/RemoveGameModal";
 import { ScanModal } from "@features/games/ScanModal";
 import { useGamesPage } from "@features/games/useGamesPage";
-import { toastSuccess } from "@utils/toast";
+import { createShareLink } from "@services/share.service";
+import { toastError, toastSuccess } from "@utils/toast";
 
 export function GamesPage() {
   const {
@@ -76,6 +77,7 @@ export function GamesPage() {
     openDownloadAllConfirm,
     handleOpenFolder,
     handleRefresh,
+    refreshing,
     refetchLastSync,
     filteredGames,
     emptyFilterMessage,
@@ -85,6 +87,32 @@ export function GamesPage() {
   } = useGamesPage();
 
   const [gameToEdit, setGameToEdit] = useState<ConfiguredGame | null>(null);
+
+  const handleShare = async (game: ConfiguredGame) => {
+    const base = config?.apiBaseUrl?.trim();
+    const uid = config?.userId?.trim();
+    const key = config?.apiKey?.trim();
+    if (!base || !uid || !key) {
+      toastError(
+        "Falta configuración",
+        "Configura API URL, User ID y API Key en Configuración para compartir."
+      );
+      return;
+    }
+    try {
+      const { shareUrl } = await createShareLink(base, uid, key, game.id);
+      await navigator.clipboard.writeText(shareUrl);
+      toastSuccess(
+        "Link copiado",
+        "El link para compartir este juego está en el portapapeles. Válido 7 días."
+      );
+    } catch (e) {
+      toastError(
+        "No se pudo crear el link",
+        e instanceof Error ? e.message : "Error inesperado"
+      );
+    }
+  };
 
   if (loading) {
     return (
@@ -112,6 +140,7 @@ export function GamesPage() {
 
   return (
     <div className="space-y-8">
+      {/* Cabecera: título, estado de conexión y acciones */}
       <GamesPageHeader
         hasSyncConfig={hasSyncConfig}
         gamesCount={config?.games?.length ?? 0}
@@ -129,42 +158,52 @@ export function GamesPage() {
         onDownloadAllPress={openDownloadAllConfirm}
         onSyncAllPress={openSyncAllConfirm}
         onRefreshPress={handleRefresh}
+        isRefreshing={refreshing}
       />
 
-      <Card className="border border-default-200">
-        <CardBody className="flex flex-row flex-wrap items-center justify-between gap-3 py-3">
-          <div className="flex items-center gap-2">
-            <User size={18} className="text-default-500" />
-            <span className="text-sm text-default-500">Tu User ID</span>
-            {config?.userId?.trim() ? (
-              <code className="rounded bg-default-100 px-2 py-0.5 font-mono text-sm text-foreground">
-                {config.userId}
-              </code>
-            ) : (
-              <span className="text-sm text-default-400">
-                Configura tu User ID en Configuración
-              </span>
+      {/* Tu User ID (para compartir con amigos) */}
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium text-default-500">
+          Tu cuenta
+        </h2>
+        <Card className="border border-default-200">
+          <CardBody className="flex flex-row flex-wrap items-center justify-between gap-3 py-3">
+            <div className="flex items-center gap-2">
+              <User size={18} className="text-default-500" />
+              <span className="text-sm text-default-500">Tu User ID</span>
+              {config?.userId?.trim() ? (
+                <code className="rounded bg-default-100 px-2 py-0.5 font-mono text-sm text-foreground">
+                  {config.userId}
+                </code>
+              ) : (
+                <span className="text-sm text-default-400">
+                  Configura tu User ID en Configuración
+                </span>
+              )}
+            </div>
+            {config?.userId?.trim() && (
+              <Button
+                size="sm"
+                variant="flat"
+                startContent={<Copy size={14} />}
+                onPress={async () => {
+                  try {
+                    await navigator.clipboard.writeText(config.userId ?? "");
+                    toastSuccess(
+                      "User ID copiado",
+                      "Puedes compartirlo con tus amigos."
+                    );
+                  } catch {
+                    // sin clipboard, ignorar
+                  }
+                }}
+              >
+                Copiar
+              </Button>
             )}
-          </div>
-          {config?.userId?.trim() && (
-            <Button
-              size="sm"
-              variant="flat"
-              startContent={<Copy size={14} />}
-              onPress={async () => {
-                try {
-                  await navigator.clipboard.writeText(config.userId ?? "");
-                  toastSuccess("User ID copiado", "Puedes compartirlo con tus amigos.");
-                } catch {
-                  // sin clipboard, ignorar
-                }
-              }}
-            >
-              Copiar
-            </Button>
-          )}
-        </CardBody>
-      </Card>
+          </CardBody>
+        </Card>
+      </section>
 
       <AddGameModal
         isOpen={addModalOpen}
@@ -236,42 +275,61 @@ export function GamesPage() {
         }}
       />
 
-      <GamesStats
-        gamesCount={config?.games?.length ?? 0}
-        lastSyncAt={lastSyncAt}
-        lastSyncGameId={lastSyncGameId}
-        lastSyncLoading={hasSyncConfig && lastSyncLoading}
-        hasSyncConfig={hasSyncConfig}
-        cloudGames={cloudGames}
-        totalCloudSize={totalCloudSize}
-        onConfigureFromCloud={handleConfigureFromCloud}
-      />
+      {/* Resumen: última sync y juegos en la nube */}
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium text-default-500">
+          Resumen y nube
+        </h2>
+        <GamesStats
+          gamesCount={config?.games?.length ?? 0}
+          lastSyncAt={lastSyncAt}
+          lastSyncGameId={lastSyncGameId}
+          lastSyncLoading={hasSyncConfig && lastSyncLoading}
+          hasSyncConfig={hasSyncConfig}
+          cloudGames={cloudGames}
+          totalCloudSize={totalCloudSize}
+          onConfigureFromCloud={handleConfigureFromCloud}
+        />
+      </section>
 
-      <GamesFilters
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        originFilter={originFilter}
-        onOriginFilterChange={setOriginFilter}
-      />
+      {/* Filtros de la lista */}
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium text-default-500">
+          Buscar y filtrar
+        </h2>
+        <GamesFilters
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          originFilter={originFilter}
+          onOriginFilterChange={setOriginFilter}
+        />
+      </section>
 
-      <GamesList
-        games={filteredGames}
-        emptyFilterMessage={emptyFilterMessage}
-        unsyncedGameIds={unsyncedGameIds}
-        onEmptyScanPress={() => setScanModalOpen(true)}
-        onEmptyAddPress={() => {
-          setAddModalInitial({ path: "", suggestedId: "" });
-          setAddModalOpen(true);
-        }}
-        onRemove={handleRemoveGame}
-        onSync={hasSyncConfig ? handleSyncOne : undefined}
-        syncingId={syncing}
-        onDownload={hasSyncConfig ? handleDownloadOne : undefined}
-        downloadingId={downloading}
-        onOpenFolder={handleOpenFolder}
-        onRestoreBackup={handleRestoreBackup}
-        onEdit={setGameToEdit}
-      />
+      {/* Lista de juegos */}
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium text-default-500">
+          Lista de juegos
+        </h2>
+        <GamesList
+          games={filteredGames}
+          emptyFilterMessage={emptyFilterMessage}
+          unsyncedGameIds={unsyncedGameIds}
+          onEmptyScanPress={() => setScanModalOpen(true)}
+          onEmptyAddPress={() => {
+            setAddModalInitial({ path: "", suggestedId: "" });
+            setAddModalOpen(true);
+          }}
+          onRemove={handleRemoveGame}
+          onSync={hasSyncConfig ? handleSyncOne : undefined}
+          syncingId={syncing}
+          onDownload={hasSyncConfig ? handleDownloadOne : undefined}
+          downloadingId={downloading}
+          onOpenFolder={handleOpenFolder}
+          onRestoreBackup={handleRestoreBackup}
+          onEdit={setGameToEdit}
+          onShare={hasSyncConfig ? handleShare : undefined}
+        />
+      </section>
 
       {operationResult && operationResult.result.errors.length > 0 && (
         <OperationErrorCard

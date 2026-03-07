@@ -58,6 +58,8 @@ interface GamesListProps {
   onRestoreBackup?: (game: ConfiguredGame) => void;
   /** Callback para editar el juego. */
   onEdit?: (game: ConfiguredGame) => void;
+  /** Callback para compartir por link. */
+  onShare?: (game: ConfiguredGame) => void;
 }
 
 export function GamesList({
@@ -74,6 +76,7 @@ export function GamesList({
   onOpenFolder,
   onRestoreBackup,
   onEdit,
+  onShare,
 }: GamesListProps) {
   const resolvedSteamAppIds = useResolvedSteamAppIds(games);
   const { statsByGameId } = useGameStats(games.length > 0);
@@ -158,6 +161,7 @@ export function GamesList({
           onOpenFolder={onOpenFolder}
           onRestoreBackup={onRestoreBackup}
           onEdit={onEdit}
+          onShare={onShare}
         />
       ))}
     </div>

@@ -24,6 +24,8 @@ interface GamesPageHeaderProps {
   onDownloadAllPress: () => void;
   onSyncAllPress: () => void;
   onRefreshPress: () => void;
+  /** Muestra spinner en el botón Actualizar. */
+  isRefreshing?: boolean;
 }
 
 export function GamesPageHeader({
@@ -40,11 +42,12 @@ export function GamesPageHeader({
   onDownloadAllPress,
   onSyncAllPress,
   onRefreshPress,
+  isRefreshing = false,
 }: GamesPageHeaderProps) {
   const isOperationRunning = !!syncing || !!downloading;
 
   return (
-    <header className="mb-6 space-y-3">
+    <header className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-3xl font-semibold text-foreground">
@@ -115,8 +118,10 @@ export function GamesPageHeader({
           )}
           <Button
             variant="solid"
-            startContent={<RefreshCw size={18} />}
+            startContent={!isRefreshing ? <RefreshCw size={18} /> : undefined}
             onPress={onRefreshPress}
+            isLoading={isRefreshing}
+            isDisabled={isRefreshing}
           >
             Actualizar
           </Button>

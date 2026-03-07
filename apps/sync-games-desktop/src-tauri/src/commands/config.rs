@@ -6,7 +6,7 @@ use std::path::Path;
 use base64::Engine;
 use crate::config;
 use crate::steam;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,7 +18,7 @@ pub struct ConfigDto {
     pub custom_scan_paths: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameDto {
     pub id: String,

@@ -4138,6 +4138,7 @@ dependencies = [
  "chrono",
  "dirs 5.0.1",
  "dotenvy",
+ "futures-util",
  "notify",
  "notify-debouncer-mini",
  "regex",

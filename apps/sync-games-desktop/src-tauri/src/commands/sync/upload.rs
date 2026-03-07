@@ -3,7 +3,7 @@
 use std::fs;
 
 use super::api;
-use super::models::SyncResultDto;
+use super::models::{GameSyncResultDto, SyncResultDto};
 use super::path_utils;
 use crate::tray_state::TrayState;
 use tauri::State;
@@ -129,4 +129,58 @@ pub(crate) async fn sync_upload_game_impl(game_id: String) -> Result<SyncResultD
         crate::config::append_operation_log("upload", &game_id, result.ok_count, result.err_count);
 
     Ok(result)
+}
+
+/// Sube los guardados de todos los juegos configurados (operación batch).
+#[tauri::command]
+pub async fn sync_upload_all_games(
+    tray_state: State<'_, TrayState>,
+) -> Result<Vec<GameSyncResultDto>, String> {
+    let cfg = crate::config::load_config();
+    let _ = cfg
+        .api_base_url
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura apiBaseUrl en Configuración")?;
+    let _ = cfg
+        .user_id
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura userId en Configuración")?;
+
+    tray_state.0.syncing_inc();
+    tray_state.0.update_tooltip();
+
+    let mut results = Vec::with_capacity(cfg.games.len());
+    for game in &cfg.games {
+        let game_id = game.id.clone();
+        let result = if crate::process_check::is_game_running(&game_id, &game.paths) {
+            SyncResultDto {
+                ok_count: 0,
+                err_count: 1,
+                errors: vec![format!(
+                    "{} está en ejecución. Ciérralo antes de sincronizar.",
+                    game_id
+                )],
+            }
+        } else {
+            match sync_upload_game_impl(game_id.clone()).await {
+                Ok(r) => r,
+                Err(e) => SyncResultDto {
+                    ok_count: 0,
+                    err_count: 1,
+                    errors: vec![e],
+                },
+            }
+        };
+        results.push(GameSyncResultDto {
+            game_id: game_id.clone(),
+            result,
+        });
+    }
+
+    tray_state.0.syncing_dec();
+    tray_state.0.clone().refresh_unsynced_async();
+
+    Ok(results)
 }

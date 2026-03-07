@@ -5,9 +5,23 @@ import { resolve } from "path";
 
 const host = process.env.TAURI_DEV_HOST;
 
+// React Compiler: memoización automática (ver https://es.react.dev/learn/react-compiler)
+const ReactCompilerConfig = {
+  target: "19" as const,
+};
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react({
+      babel: {
+        plugins: [
+          ["babel-plugin-react-compiler", ReactCompilerConfig],
+        ],
+      },
+    }),
+    tailwindcss(),
+  ],
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),

@@ -350,6 +350,46 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
     })
 }
 
+/// A?ade a la config local solo los juegos del amigo que a?n no tenemos (por id).
+/// No modifica api_key ni user_id. Las rutas del amigo se copian como referencia; el usuario puede editarlas despu?s.
+#[tauri::command]
+pub fn add_games_from_friend(friend_games: Vec<GameDto>) -> Result<usize, String> {
+    let mut cfg = config::load_config();
+    let mut existing_ids: std::collections::HashSet<String> =
+        cfg.games.iter().map(|g| g.id.to_lowercase()).collect();
+    const PLACEHOLDER_PATH: &str = "(editar ruta en Configuración)";
+    let mut added = 0usize;
+    for g in friend_games {
+        if g.id.trim().is_empty() {
+            continue;
+        }
+        if existing_ids.contains(&g.id.to_lowercase()) {
+            continue;
+        }
+        let paths: Vec<String> = if g.paths.is_empty() {
+            vec![PLACEHOLDER_PATH.to_string()]
+        } else {
+            g.paths
+        };
+        let id_lower = g.id.trim().to_lowercase();
+        cfg.games.push(config::ConfiguredGame {
+            id: g.id.trim().to_string(),
+            paths,
+            steam_app_id: g.steam_app_id,
+            image_url: g.image_url,
+            executable_names: None,
+            edition_label: g.edition_label,
+            source_url: g.source_url,
+        });
+        existing_ids.insert(id_lower);
+        added += 1;
+    }
+    if added > 0 {
+        config::save_config(&cfg)?;
+    }
+    Ok(added)
+}
+
 /// Importa configuración desde archivo. mode: "merge" fusiona juegos, "replace" reemplaza todo.
 #[tauri::command]
 pub fn import_config_from_file(path: String, mode: String) -> Result<(), String> {

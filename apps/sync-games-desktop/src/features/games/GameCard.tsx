@@ -17,6 +17,7 @@ import {
   FolderOpen,
   Gamepad2,
   History,
+  Link2,
   MoreVertical,
   Pencil,
   Trash2,
@@ -52,6 +53,8 @@ export interface GameCardProps {
   onRestoreBackup?: (game: ConfiguredGame) => void;
   /** Callback para editar el juego. Si no se pasa, no se muestra el botón. */
   onEdit?: (game: ConfiguredGame) => void;
+  /** Callback para compartir por link (genera URL y copia al portapapeles). */
+  onShare?: (game: ConfiguredGame) => void;
   /** Estado de sincronización con la nube (para mostrar badge). */
   syncStatus?: "pending_upload" | "pending_download" | "in_sync" | null;
 }
@@ -75,6 +78,7 @@ export function GameCard({
   onOpenFolder,
   onRestoreBackup,
   onEdit,
+  onShare,
   syncStatus,
 }: GameCardProps) {
   const [imgError, setImgError] = useState(false);
@@ -148,7 +152,8 @@ export function GameCard({
         onSync ||
         onRemove ||
         onRestoreBackup ||
-        onEdit) && (
+        onEdit ||
+        onShare) && (
         <div
           className="absolute right-2 top-2 z-20"
           onClick={(e) => e.stopPropagation()}
@@ -174,6 +179,7 @@ export function GameCard({
                 else if (key === "download") onDownload?.(game);
                 else if (key === "sync") onSync?.(game);
                 else if (key === "restore") onRestoreBackup?.(game);
+                else if (key === "share") onShare?.(game);
                 else if (key === "remove") onRemove?.(game);
               }}
               disabledKeys={
@@ -226,6 +232,16 @@ export function GameCard({
                   }
                 >
                   Restaurar desde backup
+                </DropdownItem>
+              ) : null}
+              {onShare ? (
+                <DropdownItem
+                  key="share"
+                  startContent={
+                    <Link2 size={16} className="text-default-500" />
+                  }
+                >
+                  Compartir por link
                 </DropdownItem>
               ) : null}
               {onSync ? (

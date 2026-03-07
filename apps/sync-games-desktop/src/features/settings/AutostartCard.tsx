@@ -1,4 +1,5 @@
 import { Card, CardBody, Switch } from "@heroui/react";
+import { Power } from "lucide-react";
 
 interface AutostartCardProps {
   autostart: boolean;
@@ -14,20 +15,24 @@ export function AutostartCard({
   return (
     <Card>
       <CardBody className="gap-4">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <Power size={20} className="mt-0.5 shrink-0 text-default-500" />
             <div>
-              <p className="font-medium">Iniciar con Windows</p>
-              <p className="text-sm text-default-500">
-                Abrir sync-games automáticamente al iniciar sesión en el equipo
+              <h2 className="text-base font-semibold text-foreground">
+                Iniciar con Windows
+              </h2>
+              <p className="mt-0.5 text-sm text-default-500">
+                Abre la app automáticamente al iniciar sesión en el equipo, para
+                que los guardados se sincronicen en segundo plano.
               </p>
             </div>
-            <Switch
-              isSelected={autostart}
-              onValueChange={onChange}
-              isDisabled={loading}
-            />
           </div>
+          <Switch
+            isSelected={autostart}
+            onValueChange={onChange}
+            isDisabled={loading}
+          />
         </div>
       </CardBody>
     </Card>

@@ -22,10 +22,19 @@ export async function handler(event: {
   type?: string;
   rawPath?: string;
   headers?: Record<string, string | string[] | undefined>;
-  requestContext?: { http?: { path?: string } };
+  requestContext?: { http?: { path?: string; method?: string } };
 }): Promise<{ isAuthorized: boolean }> {
   const rawPath = event.rawPath ?? event.requestContext?.http?.path ?? "";
+  const method = (event.requestContext?.http?.method ?? "").toUpperCase();
   if (rawPath === "/health") {
+    return { isAuthorized: true };
+  }
+  // CORS preflight: el navegador no envía x-api-key en OPTIONS
+  if (method === "OPTIONS") {
+    return { isAuthorized: true };
+  }
+  // GET /share/:token es público (resolver link compartido sin auth)
+  if (method === "GET" && rawPath.startsWith("/share/") && rawPath.length > "/share/".length) {
     return { isAuthorized: true };
   }
 

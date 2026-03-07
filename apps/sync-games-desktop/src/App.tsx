@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { AnimatePresence, motion } from "framer-motion";
 import { Gamepad2, History, Info, Settings, Users } from "lucide-react";
 import { AppLayout, type NavItem } from "@components/layout";
 import { GamesPage } from "@features/games";
@@ -12,6 +13,7 @@ import { checkForUpdatesWithPrompt } from "@services/tauri";
 import { toastSyncResult } from "@utils/toast";
 import { notifySyncComplete, notifySyncError } from "@utils/notification";
 import { formatGameDisplayName } from "@utils/gameImage";
+
 import "./App.css";
 
 const NAV_ITEMS: NavItem[] = [
@@ -21,6 +23,13 @@ const NAV_ITEMS: NavItem[] = [
   { id: "settings", label: "Configuración", icon: <Settings size={18} /> },
   { id: "about", label: "Acerca de", icon: <Info size={18} /> },
 ];
+
+const pageTransition = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 },
+  transition: { duration: 0.2, ease: "easeOut" as const },
+};
 
 function PageContent({ activeId }: { activeId: string }) {
   switch (activeId) {
@@ -51,8 +60,9 @@ function App() {
     isUploading,
   } = useUnsyncedSaves();
 
-  // Evitar menú contextual (clic derecho) y F5/Ctrl+R para que se comporte como app de escritorio
+  // Evitar menú contextual (clic derecho) y F5/Ctrl+R para que se comporte como app de escritorio solo en producción
   useEffect(() => {
+    if (!import.meta.env.PROD) return;
     const preventContextMenu = (e: MouseEvent) => e.preventDefault();
     const preventRefresh = (e: KeyboardEvent) => {
       if (
@@ -131,7 +141,18 @@ function App() {
         activeNavId={activeNavId}
         onNavSelect={setActiveNavId}
       >
-        <PageContent activeId={activeNavId} />
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={activeNavId}
+            initial={pageTransition.initial}
+            animate={pageTransition.animate}
+            exit={pageTransition.exit}
+            transition={pageTransition.transition}
+            className="min-h-[50vh]"
+          >
+            <PageContent activeId={activeNavId} />
+          </motion.div>
+        </AnimatePresence>
       </AppLayout>
     </>
   );

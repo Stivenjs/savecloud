@@ -1,5 +1,6 @@
 //! Búsqueda dinámica de Steam App ID por nombre y resolución de App ID a nombre.
 
+use futures_util::FutureExt;
 use regex::{Regex, RegexBuilder};
 use std::sync::OnceLock;
 
@@ -53,14 +54,8 @@ async fn fetch_steam_app_name_impl(app_id: &str) -> Option<String> {
     entry.get("data")?.get("name")?.as_str().map(String::from)
 }
 
-/// Busca el Steam App ID por nombre usando el endpoint de sugerencias de Steam.
-#[tauri::command]
-pub async fn search_steam_app_id(query: String) -> Option<String> {
-    let query = query.trim();
-    if query.is_empty() {
-        return None;
-    }
-
+/// Lógica interna: busca Steam App ID por texto de búsqueda (una petición HTTP).
+async fn search_steam_app_id_impl(query: String) -> Option<String> {
     let term = query.replace('-', " ");
     let url = format!(
         "https://store.steampowered.com/search/suggest?term={}&f=games&cc=US&l=english",
@@ -80,6 +75,40 @@ pub async fn search_steam_app_id(query: String) -> Option<String> {
         .next()
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().to_string())
+}
+
+/// Busca el Steam App ID por nombre usando el endpoint de sugerencias de Steam.
+#[tauri::command]
+pub async fn search_steam_app_id(query: String) -> Option<String> {
+    let query = query.trim();
+    if query.is_empty() {
+        return None;
+    }
+    search_steam_app_id_impl(query.to_string()).await
+}
+
+/// Busca Steam App IDs para varias consultas en paralelo (una sola operación batch).
+/// Devuelve un resultado por cada query, en el mismo orden (query vacía → None).
+#[tauri::command]
+pub async fn search_steam_app_ids_batch(queries: Vec<String>) -> Vec<Option<String>> {
+    if queries.is_empty() {
+        return Vec::new();
+    }
+    let trimmed: Vec<String> = queries.into_iter().map(|q| q.trim().to_string()).collect();
+    let futures: Vec<_> = trimmed
+        .into_iter()
+        .map(|q| {
+            async move {
+                if q.is_empty() {
+                    None
+                } else {
+                    search_steam_app_id_impl(q).await
+                }
+            }
+            .boxed()
+        })
+        .collect();
+    futures_util::future::join_all(futures).await
 }
 
 #[derive(serde::Serialize)]
@@ -135,8 +164,8 @@ pub async fn search_steam_games(query: String) -> Vec<SteamSearchResult> {
     let mut results = Vec::new();
     // El HTML de Steam puede tener clases adicionales en el span/div de nombre,
     // así que buscamos cualquier tag con class que contenga "match_name".
-    let name_re = Regex::new(r#"class="[^"]*match_name[^"]*"[^>]*>([^<]+)<"#)
-        .expect("regex nombre Steam");
+    let name_re =
+        Regex::new(r#"class="[^"]*match_name[^"]*"[^>]*>([^<]+)<"#).expect("regex nombre Steam");
     for cap in re.captures_iter(&body) {
         let app_id = match cap.get(1) {
             Some(m) => m.as_str().to_string(),
@@ -153,7 +182,10 @@ pub async fn search_steam_games(query: String) -> Vec<SteamSearchResult> {
         if name.is_empty() {
             continue;
         }
-        results.push(SteamSearchResult { steam_app_id: app_id, name });
+        results.push(SteamSearchResult {
+            steam_app_id: app_id,
+            name,
+        });
     }
 
     results

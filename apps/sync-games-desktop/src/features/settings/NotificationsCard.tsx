@@ -1,4 +1,5 @@
 import { Button, Card, CardBody } from "@heroui/react";
+import { Bell } from "lucide-react";
 
 interface NotificationsCardProps {
   testingNotification: boolean;
@@ -12,10 +13,16 @@ export function NotificationsCard({
   return (
     <Card>
       <CardBody className="gap-4">
-        <p className="font-medium">Notificaciones</p>
+        <div className="flex items-center gap-2">
+          <Bell size={20} className="text-default-500" />
+          <h2 className="text-base font-semibold text-foreground">
+            Notificaciones
+          </h2>
+        </div>
         <p className="text-sm text-default-500">
-          Se muestran notificaciones cuando se suben guardados automáticamente
-          (por ejemplo, con la app en la bandeja).
+          La app muestra notificaciones cuando sube guardados automáticamente
+          (por ejemplo con la app minimizada en la bandeja). Usa el botón para
+          comprobar que tienes permisos.
         </p>
         <Button
           size="sm"

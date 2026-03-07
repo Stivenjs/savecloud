@@ -26,6 +26,17 @@ export async function searchSteamAppId(query: string): Promise<string | null> {
   return invoke<string | null>("search_steam_app_id", { query });
 }
 
+/** Busca Steam App IDs para varias consultas en una sola operación batch (en paralelo en el backend). */
+export async function searchSteamAppIdsBatch(
+  queries: string[]
+): Promise<(string | null)[]> {
+  if (!queries.length) return [];
+  const raw = await invoke<(string | null)[]>("search_steam_app_ids_batch", {
+    queries,
+  });
+  return raw.map((v) => v ?? null);
+}
+
 /** Obtiene el nombre del juego a partir del Steam App ID (API appdetails) */
 export async function getSteamAppName(appId: string): Promise<string | null> {
   return invoke<string | null>("get_steam_app_name", { appId });
@@ -103,6 +114,15 @@ export async function getFriendConfig(
   friendUserId: string
 ): Promise<Config> {
   return invoke<Config>("get_friend_config", { friendUserId });
+}
+
+/** Añade a tu config solo los juegos del amigo que no tienes (por id). No modifica apiKey ni userId. */
+export async function addGamesFromFriend(
+  friendGames: readonly { id: string; paths: string[]; steamAppId?: string; imageUrl?: string; editionLabel?: string; sourceUrl?: string }[]
+): Promise<number> {
+  return invoke<number>("add_games_from_friend", {
+    friendGames: [...friendGames],
+  });
 }
 
 /** Crea o actualiza el archivo de configuración con apiBaseUrl, apiKey y userId. Devuelve la ruta del archivo. */
@@ -195,6 +215,27 @@ export async function syncUploadGame(gameId: string): Promise<SyncResult> {
   };
 }
 
+/** Resultado por juego de una operación batch (subir/descargar todos). */
+export interface GameSyncResult {
+  gameId: string;
+  result: SyncResult;
+}
+
+/** Sube los guardados de todos los juegos a la nube (operación batch). */
+export async function syncUploadAllGames(): Promise<GameSyncResult[]> {
+  const list = await invoke<{ gameId: string; result: SyncResult }[]>(
+    "sync_upload_all_games"
+  );
+  return list.map(({ gameId, result }) => ({
+    gameId,
+    result: {
+      okCount: result.okCount,
+      errCount: result.errCount,
+      errors: result.errors,
+    },
+  }));
+}
+
 /** Copia los guardados de un amigo para un juego concreto a tu cuenta */
 export async function copyFriendSaves(
   friendUserId: string,
@@ -277,6 +318,17 @@ export async function syncCheckDownloadConflicts(
   );
 }
 
+/** Comprueba conflictos de descarga para varios juegos en una sola llamada */
+export async function syncCheckDownloadConflictsBatch(
+  gameIds: string[]
+): Promise<{ gameId: string; conflicts: DownloadConflict[] }[]> {
+  if (gameIds.length === 0) return [];
+  return invoke<{ gameId: string; conflicts: DownloadConflict[] }[]>(
+    "sync_check_download_conflicts_batch",
+    { gameIds }
+  );
+}
+
 /** Juegos con guardados locales no subidos a la nube */
 export interface UnsyncedGame {
   gameId: string;
@@ -312,6 +364,21 @@ export async function syncDownloadGame(gameId: string): Promise<SyncResult> {
     errCount: r.errCount,
     errors: r.errors,
   };
+}
+
+/** Descarga los guardados de todos los juegos desde la nube (operación batch). */
+export async function syncDownloadAllGames(): Promise<GameSyncResult[]> {
+  const list = await invoke<{ gameId: string; result: SyncResult }[]>(
+    "sync_download_all_games"
+  );
+  return list.map(({ gameId, result }) => ({
+    gameId,
+    result: {
+      okCount: result.okCount,
+      errCount: result.errCount,
+      errors: result.errors,
+    },
+  }));
 }
 
 /** Información de un backup local */

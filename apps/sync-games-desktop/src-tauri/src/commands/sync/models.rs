@@ -19,7 +19,7 @@ pub(crate) struct RemoteSaveDto {
     pub size: Option<u64>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncResultDto {
     pub ok_count: u32,
@@ -27,7 +27,15 @@ pub struct SyncResultDto {
     pub errors: Vec<String>,
 }
 
+/// Resultado de un juego dentro de una operación batch (subir/descargar todos).
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameSyncResultDto {
+    pub game_id: String,
+    pub result: SyncResultDto,
+}
+
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSaveInfoDto {
     pub game_id: String,
@@ -87,5 +95,13 @@ pub struct DownloadConflictDto {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadConflictsResultDto {
+    pub conflicts: Vec<DownloadConflictDto>,
+}
+
+/// Resultado de conflictos de descarga para un juego (usado en batch).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameConflictsResultDto {
+    pub game_id: String,
     pub conflicts: Vec<DownloadConflictDto>,
 }
