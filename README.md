@@ -1,16 +1,27 @@
 # SaveCloud
 
-Servidor de guardado en la nube para juegos (S3 + Lambda). Clean Architecture + Clean Code.
+Servidor de guardado en la nube para juegos (S3 + Lambda) y app de escritorio para sincronizar guardados. Clean Architecture en backend y CLI.
 
-## Stack
+## Contenido del repositorio
+
+- **Backend (API + CLI):** raíz del repo — Fastify, TypeScript, despliegue en AWS Lambda + API Gateway, almacenamiento en S3.
+- **App de escritorio:** `apps/sync-games-desktop` — Tauri 2 (React + Vite + Rust), interfaz gráfica para gestionar juegos, subir/descargar guardados, amigos y configuración.
+
+## Stack del backend
 
 - **Runtime:** Bun (local) / Node.js 20 (Lambda)
 - **Lenguaje:** TypeScript
 - **API:** Fastify
 - **Deploy:** Serverless Framework → AWS Lambda + API Gateway
-- **Almacenamiento:** AWS S3 (sin DynamoDB por ahora)
+- **Almacenamiento:** AWS S3
 
-## Estructura (Clean Architecture)
+## Stack de la app de escritorio
+
+- **Frontend:** React 19, Vite, HeroUI, TanStack Query, Framer Motion
+- **Backend local:** Tauri 2 (Rust) — comandos para config, sincronización, Steam, etc.
+- **Plugins Tauri:** dialog, autostart, notification, updater, opener
+
+## Estructura del backend (Clean Architecture)
 
 ```
 src/
@@ -28,93 +39,73 @@ src/
 
 Las dependencias apuntan hacia dentro: `interfaces` → `application` → `domain`; `infrastructure` implementa los puertos definidos en `domain`.
 
-## Scripts
+## Scripts (raíz del repo)
 
-- `bun run build` — Compila TypeScript
-- `bun run dev` — Ejecuta la API en local con hot-reload (Fastify en puerto 3000)
-- `bun run deploy` — Despliega a AWS (Serverless)
-- `bun run deploy:dev` — Despliega al stage `dev`
-- `bun run invoke:local` — Invoca la función Lambda en local
-- `bun run cli` — Ejecuta el CLI (ej.: `bun run cli -- add elden-ring "%APPDATA%/EldenRing"`)
-- `bun run build:cli` — Genera un ejecutable en `dist/savecloud` (o `savecloud.exe` en Windows). Si existe `assets/icon.ico`, se usa como icono del .exe.
+| Script                           | Descripción                                         |
+| -------------------------------- | --------------------------------------------------- |
+| `bun run build`                  | Compila TypeScript del backend                      |
+| `bun run dev`                    | API en local con hot-reload (puerto 3000)           |
+| `bun run deploy:dev`             | Despliega a AWS (stage `dev`)                       |
+| `bun run deploy:live`            | Despliega a AWS (stage `live`)                      |
+| `bun run invoke:local`           | Invoca la función Lambda en local                   |
+| `bun run cli`                    | Ejecuta el CLI (menú interactivo)                   |
+| `bun run cli -- add <id> <ruta>` | Añade un juego desde la CLI                         |
+| `bun run build:cli`              | Genera ejecutable en `dist/` (ej. `savecloud.exe`)  |
+| `bun run desktop`                | App de escritorio en modo desarrollo (Tauri + Vite) |
+| `bun run desktop:dev`            | Solo frontend (Vite)                                |
+| `bun run desktop:build`          | Build de instalador de la app de escritorio         |
 
-Instalación: `bun install`
+Instalación: `bun install` en la raíz.
 
 ## Cómo ejecutar el CLI
 
-- **Menú interactivo:** ejecuta `savecloud` (o `bun run cli`) **sin argumentos** → se abre un menú con flechas para elegir: añadir juego, listar, analizar rutas, subir/descargar guardados, ver config, salir. Usa **@inquirer/prompts** (select, input, confirm).
-
-- **Modo comando (scripting):**  
-  `savecloud <comando> [opciones]`  
-  Ejemplo: `savecloud add elden-ring "%APPDATA%/EldenRing"` o `savecloud upload`
-
-1. **Desde el repo:** `bun run cli` (menú) o `bun run cli -- add ...` (comando).
-2. **Comando global:** `bun link` → en cualquier sitio: `savecloud` (menú) o `savecloud list`.
-3. **Ejecutable único:** `bun run build:cli` → `dist/savecloud.exe`; al ejecutarlo sin args se abre el menú.
-
-**Nota:** Si el ejecutable compilado (`savecloud.exe`) provoca «Segmentation fault» al subir guardados (error conocido de Bun en Windows con ejecutables empaquetados), usa `bun run cli` en su lugar.
-
-## Estructura del CLI (Clean Architecture)
-
-```
-src/cli/
-├── index.ts                # Composition root + despacho de comandos
-├── domain/
-│   ├── entities/           # Config, ConfiguredGame
-│   └── ports/              # ConfigRepository
-├── application/
-│   └── use-cases/          # AddGame, ListGames, GetConfigPath
-└── infrastructure/
-    └── FileConfigRepository.ts   # Persistencia en JSON (APPDATA / ~/.config)
-```
+- **Menú interactivo:** `bun run cli` (o `savecloud` si hiciste `bun link`) → menú para añadir juego, listar, subir/descargar, config, etc.
+- **Modo comando:** `bun run cli -- add elden-ring "%APPDATA%/EldenRing"` o `bun run cli -- upload`
 
 Config por defecto: `%APPDATA%/savecloud/config.json` (Windows) o `~/.config/savecloud/config.json` (Linux/macOS).
 
-## Variables de entorno
+## App de escritorio
 
-- `BUCKET_NAME` — Nombre del bucket S3 (en Lambda lo inyecta Serverless).
-- Para desarrollo local: `BUCKET_NAME`, `AWS_REGION`, `PORT` (opcional).
+Desde la raíz: `bun run desktop`. Requiere Rust y dependencias de Tauri instaladas.
 
-## API (ejemplo)
+- **Juegos:** listado, añadir/editar/eliminar, subir a la nube, descargar, “Subir todos” / “Descargar todos” (con operaciones batch y paralelismo).
+- **Amigos:** importar por link compartido, ver perfil por User ID, copiar guardados de un amigo.
+- **Configuración:** API URL, User ID, API Key, autostart, notificaciones, respaldo/restauración del config en la nube (con subida automática tras cambios).
+- **Historial:** operaciones de sync recientes.
 
-- `GET /health` — Health check
-- `GET /saves` — Lista guardados del usuario (header: `x-user-id`)
-- `POST /saves/upload-url` — Body: `{ "gameId", "filename" }` → devuelve `uploadUrl` y `key`
-- `POST /saves/download-url` — Body: `{ "gameId", "key" }` → devuelve `downloadUrl`
+## Variables de entorno (backend / Lambda)
 
-El cliente sube/descarga los archivos directamente a S3 usando las URLs firmadas.
+- `BUCKET_NAME` — Nombre del bucket S3 (Serverless lo inyecta en Lambda).
+- `API_KEY` — (opcional) Si está definido, la API exige header `x-api-key`.
+- Desarrollo local: `BUCKET_NAME`, `AWS_REGION`, `PORT` (opcional).
+
+## API
+
+| Método y ruta               | Descripción                                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `GET /health`               | Health check                                                                                                 |
+| `GET /saves`                | Lista guardados del usuario (headers: `x-user-id`, `x-api-key` si aplica)                                    |
+| `POST /saves/upload-url`    | Una URL de subida. Body: `{ "gameId", "filename" }` → `{ "uploadUrl", "key" }`                               |
+| `POST /saves/upload-urls`   | **Batch:** varias URLs de subida. Body: `{ "items": [{ "gameId", "filename" }, ...] }` → `{ "urls": [...] }` |
+| `POST /saves/download-url`  | Una URL de descarga. Body: `{ "gameId", "key" }` → `{ "downloadUrl" }`                                       |
+| `POST /saves/download-urls` | **Batch:** varias URLs de descarga. Body: `{ "items": [{ "gameId", "key" }, ...] }` → `{ "urls": [...] }`    |
+
+El cliente sube/descarga los archivos directamente a S3 usando las URLs firmadas. La app de escritorio usa los endpoints batch para reducir llamadas e invocaciones Lambda.
 
 ## Probar que los guardados se suben a S3
 
-1. **API en local** (necesitas AWS con un bucket S3 y credenciales configuradas):
+1. **API en local:**
+
    ```bash
-   export BUCKET_NAME=tu-bucket-savecloud   # o el que uses en dev
+   export BUCKET_NAME=tu-bucket-savecloud
    export AWS_REGION=us-east-2
    bun run dev
    ```
-   La API queda en `http://localhost:3000`.
 
-2. **Configurar el CLI** con la URL de la API y un `userId`:
-   - Ejecuta `savecloud config` (o `bun run cli -- config`) para ver la ruta del archivo de config.
-   - Edita ese JSON y añade:
-     ```json
-     {
-       "apiBaseUrl": "http://localhost:3000",
-       "userId": "test-user",
-       "games": []
-     }
-     ```
-   - Añade un juego con una ruta donde tengas archivos de guardado (o una carpeta de prueba con un `.sav` o `.json`):
-     ```bash
-     bun run cli -- add mi-juego "./ruta/a/tus/guardados"
-     ```
+   API en `http://localhost:3000`.
 
-3. **Subir**:
-   ```bash
-   bun run cli -- upload mi-juego
-   ```
-   O abre el menú (`bun run cli`) y elige «Subir guardados a la nube». Deberías ver algo como `✓ archivo.sav` por cada archivo subido.
+2. **Configurar el CLI** (o la app de escritorio) con la URL de la API y un `userId` en el JSON de config. Añade un juego con una ruta con archivos de guardado.
 
-4. **Comprobar en S3**: en la consola de AWS S3, entra al bucket y revisa que exista la clave `test-user/mi-juego/<nombre-del-archivo>`.
+3. **Subir:** `bun run cli -- upload <game-id>` o desde la app de escritorio. Comprueba en S3 la clave `userId/gameId/<archivo>`.
 
-Si desplegaste la API en AWS (`bun run deploy:dev`), pon en el config `apiBaseUrl` con la URL del API Gateway (ej. `https://xxxx.execute-api.us-east-2.amazonaws.com`) y repite los pasos 2–4.
+Si desplegaste en AWS (`bun run deploy:dev`), usa en config la URL del API Gateway (ej. `https://xxxx.execute-api.us-east-2.amazonaws.com`).
