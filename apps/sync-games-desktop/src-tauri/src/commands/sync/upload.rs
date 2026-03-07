@@ -1,11 +1,13 @@
 //! Subida de guardados a la nube.
 
+use std::collections::HashMap;
 use std::fs;
 
 use super::api;
 use super::models::{GameSyncResultDto, SyncResultDto};
 use super::path_utils;
 use crate::tray_state::TrayState;
+use futures_util::stream::{self, StreamExt};
 use tauri::State;
 
 #[tauri::command]
@@ -60,6 +62,18 @@ pub(crate) async fn sync_upload_game_impl(game_id: String) -> Result<SyncResultD
         });
     }
 
+    let filenames: Vec<String> = files.iter().map(|(_, r)| r.clone()).collect();
+    let upload_urls = api::get_upload_urls(api_base, user_id, api_key, &game_id, &filenames)
+        .await
+        .map_err(|e| format!("upload-urls: {}", e))?;
+    if upload_urls.len() != files.len() {
+        return Err(format!(
+            "API devolvió {} URLs para {} archivos",
+            upload_urls.len(),
+            files.len()
+        ));
+    }
+
     let client = reqwest::Client::builder()
         .user_agent("sync-games-desktop/1.0")
         .build()
@@ -69,41 +83,10 @@ pub(crate) async fn sync_upload_game_impl(game_id: String) -> Result<SyncResultD
     let mut err_count = 0u32;
     let mut errors = Vec::new();
 
-    for (absolute, relative) in files {
-        // 1. Obtener URL de subida
-        let body = serde_json::json!({
-            "gameId": game_id,
-            "filename": relative
-        });
-        let res = api::api_request(
-            api_base,
-            user_id,
-            api_key,
-            "POST",
-            "/upload-url",
-            Some(body.to_string().as_bytes()),
-        )
-        .await
-        .map_err(|e| format!("upload-url: {}", e))?;
-
-        if !res.status().is_success() {
-            let status = res.status();
-            let text = res.text().await.unwrap_or_default();
-            errors.push(format!("{}: {} ({})", relative, status, text));
-            err_count += 1;
-            continue;
-        }
-
-        let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
-        let upload_url = json
-            .get("uploadUrl")
-            .and_then(|v| v.as_str())
-            .ok_or("API no devolvió uploadUrl")?;
-
-        // 2. Leer archivo y subir
+    for ((absolute, relative), (upload_url, _)) in files.into_iter().zip(upload_urls) {
         let bytes = fs::read(&absolute).map_err(|e| format!("{}: {}", relative, e))?;
         let put_res = client
-            .put(upload_url)
+            .put(&upload_url)
             .body(bytes)
             .header("Content-Type", "application/octet-stream")
             .send()
@@ -131,7 +114,10 @@ pub(crate) async fn sync_upload_game_impl(game_id: String) -> Result<SyncResultD
     Ok(result)
 }
 
-/// Sube los guardados de todos los juegos configurados (operación batch).
+/// Número de juegos que se suben en paralelo en "subir todos".
+const UPLOAD_BATCH_CONCURRENCY: usize = 4;
+
+/// Sube los guardados de todos los juegos configurados (operación batch, varios juegos en paralelo).
 #[tauri::command]
 pub async fn sync_upload_all_games(
     tray_state: State<'_, TrayState>,
@@ -151,33 +137,60 @@ pub async fn sync_upload_all_games(
     tray_state.0.syncing_inc();
     tray_state.0.update_tooltip();
 
-    let mut results = Vec::with_capacity(cfg.games.len());
+    let mut results_by_id: HashMap<String, GameSyncResultDto> = HashMap::new();
     for game in &cfg.games {
-        let game_id = game.id.clone();
-        let result = if crate::process_check::is_game_running(&game_id, &game.paths) {
-            SyncResultDto {
+        if crate::process_check::is_game_running(&game.id, &game.paths) {
+            let game_id = game.id.clone();
+            results_by_id.insert(
+                game_id.clone(),
+                GameSyncResultDto {
+                    game_id,
+                    result: SyncResultDto {
+                        ok_count: 0,
+                        err_count: 1,
+                        errors: vec![format!(
+                            "{} está en ejecución. Ciérralo antes de sincronizar.",
+                            game.id
+                        )],
+                    },
+                },
+            );
+        }
+    }
+
+    let to_sync: Vec<String> = cfg
+        .games
+        .iter()
+        .filter(|g| !results_by_id.contains_key(&g.id))
+        .map(|g| g.id.clone())
+        .collect();
+
+    let completed: Vec<(String, Result<SyncResultDto, String>)> = stream::iter(to_sync)
+        .map(|game_id| async move {
+            let r = sync_upload_game_impl(game_id.clone()).await;
+            (game_id, r)
+        })
+        .buffer_unordered(UPLOAD_BATCH_CONCURRENCY)
+        .collect()
+        .await;
+
+    for (game_id, r) in completed {
+        let result = match r {
+            Ok(x) => x,
+            Err(e) => SyncResultDto {
                 ok_count: 0,
                 err_count: 1,
-                errors: vec![format!(
-                    "{} está en ejecución. Ciérralo antes de sincronizar.",
-                    game_id
-                )],
-            }
-        } else {
-            match sync_upload_game_impl(game_id.clone()).await {
-                Ok(r) => r,
-                Err(e) => SyncResultDto {
-                    ok_count: 0,
-                    err_count: 1,
-                    errors: vec![e],
-                },
-            }
+                errors: vec![e],
+            },
         };
-        results.push(GameSyncResultDto {
-            game_id: game_id.clone(),
-            result,
-        });
+        results_by_id.insert(game_id.clone(), GameSyncResultDto { game_id, result });
     }
+
+    let results: Vec<GameSyncResultDto> = cfg
+        .games
+        .iter()
+        .map(|g| results_by_id.get(&g.id).cloned().expect("result per game"))
+        .collect();
 
     tray_state.0.syncing_dec();
     tray_state.0.clone().refresh_unsynced_async();

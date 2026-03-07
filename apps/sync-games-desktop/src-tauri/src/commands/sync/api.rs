@@ -2,7 +2,7 @@
 
 use super::models::SyncResultDto;
 use super::models::{RemoteSaveDto, RemoteSaveInfoDto};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub(crate) async fn api_request(
     base_url: &str,
@@ -31,6 +31,138 @@ pub(crate) async fn api_request(
 
     let res = req.send().await.map_err(|e| e.to_string())?;
     Ok(res)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UploadUrlItemRequest {
+    game_id: String,
+    filename: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UploadUrlResultItem {
+    upload_url: String,
+    #[serde(rename = "key")]
+    _key: String,
+    #[serde(rename = "gameId")]
+    _game_id: String,
+    filename: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UploadUrlsResponse {
+    urls: Vec<UploadUrlResultItem>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DownloadUrlItemRequest {
+    game_id: String,
+    key: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DownloadUrlResultItem {
+    download_url: String,
+    #[serde(rename = "gameId")]
+    _game_id: String,
+    #[serde(rename = "key")]
+    _key: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DownloadUrlsResponse {
+    urls: Vec<DownloadUrlResultItem>,
+}
+
+/// Obtiene varias URLs de subida en una sola petición (batch).
+pub(crate) async fn get_upload_urls(
+    base_url: &str,
+    user_id: &str,
+    api_key: &str,
+    game_id: &str,
+    filenames: &[String],
+) -> Result<Vec<(String, String)>, String> {
+    if filenames.is_empty() {
+        return Ok(Vec::new());
+    }
+    let items: Vec<UploadUrlItemRequest> = filenames
+        .iter()
+        .map(|f| UploadUrlItemRequest {
+            game_id: game_id.to_string(),
+            filename: f.clone(),
+        })
+        .collect();
+    let body = serde_json::json!({ "items": items });
+    let body_bytes = body.to_string().into_bytes();
+    let res = api_request(
+        base_url,
+        user_id,
+        api_key,
+        "POST",
+        "/upload-urls",
+        Some(&body_bytes),
+    )
+    .await
+    .map_err(|e| format!("upload-urls: {}", e))?;
+    if !res.status().is_success() {
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        return Err(format!("API upload-urls: {} {}", status, text));
+    }
+    let parsed: UploadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
+    Ok(parsed
+        .urls
+        .into_iter()
+        .map(|u| (u.upload_url, u.filename))
+        .collect())
+}
+
+/// Obtiene varias URLs de descarga en una sola petición (batch).
+pub(crate) async fn get_download_urls(
+    base_url: &str,
+    user_id: &str,
+    api_key: &str,
+    items: &[(String, String)],
+) -> Result<Vec<(String, String)>, String> {
+    if items.is_empty() {
+        return Ok(Vec::new());
+    }
+    let req_items: Vec<DownloadUrlItemRequest> = items
+        .iter()
+        .map(|(game_id, key)| DownloadUrlItemRequest {
+            game_id: game_id.clone(),
+            key: key.clone(),
+        })
+        .collect();
+    let body = serde_json::json!({ "items": req_items });
+    let body_bytes = body.to_string().into_bytes();
+    let res = api_request(
+        base_url,
+        user_id,
+        api_key,
+        "POST",
+        "/download-urls",
+        Some(&body_bytes),
+    )
+    .await
+    .map_err(|e| format!("download-urls: {}", e))?;
+    if !res.status().is_success() {
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        return Err(format!("API download-urls: {} {}", status, text));
+    }
+    let parsed: DownloadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
+    Ok(parsed
+        .urls
+        .into_iter()
+        .map(|u| (u.download_url, u._key))
+        .collect())
 }
 
 async fn list_remote_saves_for_user(

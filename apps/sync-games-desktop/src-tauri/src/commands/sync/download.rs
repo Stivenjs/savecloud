@@ -1,11 +1,13 @@
 //! Descarga de guardados desde la nube.
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
 use chrono::{DateTime, Utc};
+use futures_util::stream::{self, StreamExt};
 
 use super::api;
 use super::models::{
@@ -264,6 +266,21 @@ async fn sync_download_game_impl(game_id: String) -> Result<SyncResultDto, Strin
         return Ok(result);
     }
 
+    let items: Vec<(String, String)> = saves
+        .iter()
+        .map(|s| (game_id.clone(), s.key.clone()))
+        .collect();
+    let download_urls = api::get_download_urls(api_base, user_id, api_key, &items)
+        .await
+        .map_err(|e| format!("download-urls: {}", e))?;
+    if download_urls.len() != saves.len() {
+        return Err(format!(
+            "API devolvió {} URLs para {} archivos",
+            download_urls.len(),
+            saves.len()
+        ));
+    }
+
     let client = reqwest::Client::builder()
         .user_agent("sync-games-desktop/1.0")
         .build()
@@ -278,36 +295,9 @@ async fn sync_download_game_impl(game_id: String) -> Result<SyncResultDto, Strin
         root.join("backups").join(&game_id).join(ts.to_string())
     });
 
-    for save in saves {
-        let body = serde_json::json!({
-            "gameId": game_id,
-            "key": save.key
-        });
-        let res = api::api_request(
-            api_base,
-            user_id,
-            api_key,
-            "POST",
-            "/download-url",
-            Some(body.to_string().as_bytes()),
-        )
-        .await
-        .map_err(|e| format!("download-url: {}", e))?;
-
-        if !res.status().is_success() {
-            errors.push(format!("{}: {}", save.filename, res.status()));
-            err_count += 1;
-            continue;
-        }
-
-        let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
-        let download_url = json
-            .get("downloadUrl")
-            .and_then(|v| v.as_str())
-            .ok_or("API no devolvió downloadUrl")?;
-
+    for (save, (download_url, _)) in saves.into_iter().zip(download_urls) {
         let bytes = client
-            .get(download_url)
+            .get(&download_url)
             .send()
             .await
             .map_err(|e| format!("{}: {}", save.filename, e))?
@@ -319,7 +309,6 @@ async fn sync_download_game_impl(game_id: String) -> Result<SyncResultDto, Strin
         if let Some(parent) = dest_path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        // Respaldo local antes de sobrescribir
         if dest_path.exists() {
             if let Some(ref backup_base) = backup_dir {
                 if let Ok(rel) = dest_path.strip_prefix(&dest_base) {
@@ -356,7 +345,10 @@ async fn sync_download_game_impl(game_id: String) -> Result<SyncResultDto, Strin
     Ok(result)
 }
 
-/// Descarga los guardados de todos los juegos configurados (operación batch).
+/// Número de juegos que se descargan en paralelo en "descargar todos".
+const DOWNLOAD_BATCH_CONCURRENCY: usize = 4;
+
+/// Descarga los guardados de todos los juegos configurados (operación batch, varios juegos en paralelo).
 #[tauri::command]
 pub async fn sync_download_all_games(
     tray_state: State<'_, TrayState>,
@@ -376,33 +368,60 @@ pub async fn sync_download_all_games(
     tray_state.0.syncing_inc();
     tray_state.0.update_tooltip();
 
-    let mut results = Vec::with_capacity(cfg.games.len());
+    let mut results_by_id: HashMap<String, GameSyncResultDto> = HashMap::new();
     for game in &cfg.games {
-        let game_id = game.id.clone();
-        let result = if crate::process_check::is_game_running(&game_id, &game.paths) {
-            SyncResultDto {
+        if crate::process_check::is_game_running(&game.id, &game.paths) {
+            let game_id = game.id.clone();
+            results_by_id.insert(
+                game_id.clone(),
+                GameSyncResultDto {
+                    game_id,
+                    result: SyncResultDto {
+                        ok_count: 0,
+                        err_count: 1,
+                        errors: vec![format!(
+                            "{} está en ejecución. Ciérralo antes de descargar.",
+                            game.id
+                        )],
+                    },
+                },
+            );
+        }
+    }
+
+    let to_download: Vec<String> = cfg
+        .games
+        .iter()
+        .filter(|g| !results_by_id.contains_key(&g.id))
+        .map(|g| g.id.clone())
+        .collect();
+
+    let completed: Vec<(String, Result<SyncResultDto, String>)> = stream::iter(to_download)
+        .map(|game_id| async move {
+            let r = sync_download_game_impl(game_id.clone()).await;
+            (game_id, r)
+        })
+        .buffer_unordered(DOWNLOAD_BATCH_CONCURRENCY)
+        .collect()
+        .await;
+
+    for (game_id, r) in completed {
+        let result = match r {
+            Ok(x) => x,
+            Err(e) => SyncResultDto {
                 ok_count: 0,
                 err_count: 1,
-                errors: vec![format!(
-                    "{} está en ejecución. Ciérralo antes de descargar.",
-                    game_id
-                )],
-            }
-        } else {
-            match sync_download_game_impl(game_id.clone()).await {
-                Ok(r) => r,
-                Err(e) => SyncResultDto {
-                    ok_count: 0,
-                    err_count: 1,
-                    errors: vec![e],
-                },
-            }
+                errors: vec![e],
+            },
         };
-        results.push(GameSyncResultDto {
-            game_id: game_id.clone(),
-            result,
-        });
+        results_by_id.insert(game_id.clone(), GameSyncResultDto { game_id, result });
     }
+
+    let results: Vec<GameSyncResultDto> = cfg
+        .games
+        .iter()
+        .map(|g| results_by_id.get(&g.id).cloned().expect("result per game"))
+        .collect();
 
     tray_state.0.syncing_dec();
     tray_state.0.clone().refresh_unsynced_async();

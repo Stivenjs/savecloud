@@ -3,7 +3,9 @@ import cors from "@fastify/cors";
 import type { SaveRepository } from "@domain/ports/SaveRepository";
 import type { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
 import { GetUploadUrlUseCase } from "@application/use-cases/GetUploadUrlUseCase";
+import { GetUploadUrlsUseCase } from "@application/use-cases/GetUploadUrlsUseCase";
 import { GetDownloadUrlUseCase } from "@application/use-cases/GetDownloadUrlUseCase";
+import { GetDownloadUrlsUseCase } from "@application/use-cases/GetDownloadUrlsUseCase";
 import { ListSavesUseCase } from "@application/use-cases/ListSavesUseCase";
 import { registerSavesRoutes } from "@interfaces/http/routes/saves.routes";
 import { registerShareRoutes } from "@interfaces/http/routes/share.routes";
@@ -39,12 +41,18 @@ export async function buildApp(
   }
 
   const getUploadUrlUseCase = new GetUploadUrlUseCase(deps.saveRepository);
+  const getUploadUrlsUseCase = new GetUploadUrlsUseCase(deps.saveRepository);
   const getDownloadUrlUseCase = new GetDownloadUrlUseCase(deps.saveRepository);
+  const getDownloadUrlsUseCase = new GetDownloadUrlsUseCase(
+    deps.saveRepository
+  );
   const listSavesUseCase = new ListSavesUseCase(deps.saveRepository);
 
   await registerSavesRoutes(app, {
     getUploadUrlUseCase,
+    getUploadUrlsUseCase,
     getDownloadUrlUseCase,
+    getDownloadUrlsUseCase,
     listSavesUseCase,
   });
 

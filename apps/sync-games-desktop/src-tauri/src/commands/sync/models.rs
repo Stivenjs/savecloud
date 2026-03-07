@@ -28,7 +28,7 @@ pub struct SyncResultDto {
 }
 
 /// Resultado de un juego dentro de una operación batch (subir/descargar todos).
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameSyncResultDto {
     pub game_id: String,
