@@ -3,6 +3,7 @@ import {
   addGame,
   openSaveFolder,
   removeGame,
+  scheduleConfigBackupToCloud,
   syncCheckDownloadConflicts,
   syncCheckDownloadConflictsBatch,
   syncCheckUnsyncedGames,
@@ -264,6 +265,7 @@ export function useGamesPage() {
       for (const path of paths) {
         await addGame(idToUse, path);
       }
+      scheduleConfigBackupToCloud();
       refetch?.();
       dispatch({ type: "SET_SCAN_MODAL", open: false });
       return;
@@ -287,6 +289,7 @@ export function useGamesPage() {
   const handleConfirmRemove = async (gameId: string) => {
     try {
       await removeGame(gameId);
+      scheduleConfigBackupToCloud();
       refetch?.();
       dispatch({ type: "SET_GAME_TO_REMOVE", game: null });
     } catch (e) {

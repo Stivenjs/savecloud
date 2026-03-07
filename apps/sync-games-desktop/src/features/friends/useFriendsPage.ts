@@ -4,6 +4,7 @@ import type { CopyFriendFilePlan } from "@services/tauri";
 import type { RemoteSaveInfo } from "@services/tauri";
 import {
   addGamesFromFriend,
+  scheduleConfigBackupToCloud,
   copyFriendSaves,
   copyFriendSavesWithPlan,
   getFriendConfig,
@@ -300,6 +301,7 @@ export function useFriendsPage() {
             };
         await addGamesFromFriend([gameToAdd]);
       }
+      scheduleConfigBackupToCloud();
       toastSyncResult(result, gameId);
       dispatch({ type: "SET_SHARE_LINK_INPUT", payload: "" });
       dispatch({ type: "SET_SHARE_LINK_PREVIEW", payload: null });

@@ -9,7 +9,10 @@ import { HistoryPage } from "@features/history/HistoryPage";
 import { UnsyncedSavesModal } from "@features/games/UnsyncedSavesModal";
 import { SettingsPage } from "@features/settings";
 import { useUnsyncedSaves } from "@hooks/useUnsyncedSaves";
-import { checkForUpdatesWithPrompt } from "@services/tauri";
+import {
+  backupConfigToCloud,
+  checkForUpdatesWithPrompt,
+} from "@services/tauri";
 import { toastSyncResult } from "@utils/toast";
 import { notifySyncComplete, notifySyncError } from "@utils/notification";
 import { formatGameDisplayName } from "@utils/gameImage";
@@ -59,6 +62,14 @@ function App() {
     uploadAll,
     isUploading,
   } = useUnsyncedSaves();
+
+  // Respaldo periódico del config a la nube (cada 5 min) para mantenerlo actualizado
+  useEffect(() => {
+    const interval = setInterval(() => {
+      backupConfigToCloud().catch(() => {});
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Evitar menú contextual (clic derecho) y F5/Ctrl+R para que se comporte como app de escritorio solo en producción
   useEffect(() => {

@@ -104,6 +104,24 @@ export async function backupConfigToCloud(): Promise<void> {
   await invoke("backup_config_to_cloud");
 }
 
+const CONFIG_BACKUP_DEBOUNCE_MS = 2500;
+let configBackupTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Programa un respaldo del config a la nube tras un breve retraso.
+ * Si se vuelve a llamar antes de que se ejecute, se reinicia el temporizador.
+ * Útil para mantener la nube actualizada tras añadir/editar/eliminar juegos o cambiar configuración.
+ */
+export function scheduleConfigBackupToCloud(): void {
+  if (configBackupTimeoutId) clearTimeout(configBackupTimeoutId);
+  configBackupTimeoutId = setTimeout(() => {
+    configBackupTimeoutId = null;
+    backupConfigToCloud().catch(() => {
+      // Fallo silencioso para no molestar; el usuario puede usar "Subir a la nube" manual.
+    });
+  }, CONFIG_BACKUP_DEBOUNCE_MS);
+}
+
 /** Restaura config.json desde la nube (última versión) */
 export async function restoreConfigFromCloud(): Promise<void> {
   await invoke("restore_config_from_cloud");

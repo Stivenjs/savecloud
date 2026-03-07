@@ -8,6 +8,7 @@ import {
   getConfigPath,
   importConfigFromFile,
   restoreConfigFromCloud,
+  scheduleConfigBackupToCloud,
   checkForUpdatesWithPrompt,
 } from "@services/tauri";
 import { useConfig } from "@hooks/useConfig";
@@ -294,6 +295,7 @@ export function useSettingsPage() {
       );
       toastSuccess("Archivo de configuración creado", path);
       dispatch({ type: "SET_CREATE_MODAL", open: false });
+      scheduleConfigBackupToCloud();
       refetchConfig?.();
       queryClient.invalidateQueries({ queryKey: ["config"] });
       const newPath = await getConfigPath();

@@ -17,6 +17,7 @@ import { BulkActionConfirmModal } from "@features/games/BulkActionConfirmModal";
 import { RemoveGameModal } from "@features/games/RemoveGameModal";
 import { ScanModal } from "@features/games/ScanModal";
 import { useGamesPage } from "@features/games/useGamesPage";
+import { scheduleConfigBackupToCloud } from "@services/tauri";
 import { createShareLink } from "@services/share.service";
 import { toastError, toastSuccess } from "@utils/toast";
 
@@ -208,7 +209,10 @@ export function GamesPage() {
       <AddGameModal
         isOpen={addModalOpen}
         onClose={() => setAddModalOpen(false)}
-        onSuccess={() => refetch?.()}
+        onSuccess={() => {
+          scheduleConfigBackupToCloud();
+          refetch?.();
+        }}
         initialPath={addModalInitial.path}
         suggestedId={addModalInitial.suggestedId}
       />
@@ -270,6 +274,7 @@ export function GamesPage() {
         game={gameToEdit}
         onClose={() => setGameToEdit(null)}
         onSuccess={() => {
+          scheduleConfigBackupToCloud();
           handleRefresh();
           setGameToEdit(null);
         }}
