@@ -6,7 +6,6 @@ import {
   ModalFooter,
   ModalHeader,
   ScrollShadow,
-  Spinner,
 } from "@heroui/react";
 import { CloudDownload, FileText } from "lucide-react";
 import { formatGameDisplayName } from "@utils/gameImage";
@@ -117,13 +116,7 @@ export function CopyFriendSavesConfirmModal({
             color="primary"
             onPress={handleConfirm}
             isLoading={isLoading}
-            startContent={
-              isLoading ? (
-                <Spinner size="sm" color="current" />
-              ) : (
-                <CloudDownload size={18} />
-              )
-            }
+            startContent={!isLoading ? <CloudDownload size={18} /> : undefined}
           >
             Copiar a mi nube
           </Button>

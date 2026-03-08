@@ -6,7 +6,6 @@ import {
   ModalFooter,
   ModalHeader,
   ScrollShadow,
-  Spinner,
 } from "@heroui/react";
 import { CloudDownload, FileText } from "lucide-react";
 import { formatSize } from "@utils/format";
@@ -114,13 +113,7 @@ export function ShareLinkImportConfirmModal({
             color="primary"
             onPress={handleConfirm}
             isLoading={isLoading}
-            startContent={
-              isLoading ? (
-                <Spinner size="sm" color="current" />
-              ) : (
-                <CloudDownload size={18} />
-              )
-            }
+            startContent={!isLoading ? <CloudDownload size={18} /> : undefined}
           >
             Importar a mi nube
           </Button>
