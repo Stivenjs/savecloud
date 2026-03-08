@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, UNIX_EPOCH};
+
+use std::io::ErrorKind;
 
 use chrono::{DateTime, Utc};
 use futures_util::stream::{self, StreamExt};
@@ -203,6 +205,20 @@ const DOWNLOAD_PROGRESS_EMIT_BYTES: u64 = 256 * 1024;
 /// 8–16 suele ser óptimo; más puede saturar la conexión o el disco y empeorar.
 const DOWNLOAD_FILE_CONCURRENCY: usize = 16;
 
+/// Mensaje claro cuando no se puede escribir (archivo en uso o sin permisos).
+fn file_write_error_message(filename: &str, e: &std::io::Error) -> String {
+    let is_access_denied = e.kind() == ErrorKind::PermissionDenied
+        || e.raw_os_error() == Some(5); // ERROR_ACCESS_DENIED on Windows
+    if is_access_denied {
+        format!(
+            "{}: archivo en uso o sin permisos (cierra el juego u otra app que lo use)",
+            filename
+        )
+    } else {
+        format!("{}: {}", filename, e)
+    }
+}
+
 /// Descarga un solo archivo (para ejecutar en paralelo con otros).
 async fn download_one_file(
     client: &reqwest::Client,
@@ -238,7 +254,26 @@ async fn download_one_file(
     let mut loaded: u64 = 0;
     let mut last_emit: u64 = 0;
 
-    let mut file = fs::File::create(&dest_path).map_err(|e| format!("{}: {}", save.filename, e))?;
+    let mut file = match fs::File::create(&dest_path) {
+        Ok(f) => f,
+        Err(e) => {
+            if (e.kind() == ErrorKind::PermissionDenied || e.raw_os_error() == Some(5))
+                && dest_path.exists()
+            {
+                tokio::time::sleep(Duration::from_millis(400)).await;
+                match fs::File::create(&dest_path) {
+                    Ok(f) => f,
+                    Err(e2) => {
+                        let msg = file_write_error_message(&save.filename, &e2);
+                        return Err(msg);
+                    }
+                }
+            } else {
+                let msg = file_write_error_message(&save.filename, &e);
+                return Err(msg);
+            }
+        }
+    };
 
     let mut stream = res.bytes_stream();
     let mut write_err: Option<String> = None;
@@ -261,8 +296,8 @@ async fn download_one_file(
                         },
                     );
                 }
-                if file.write_all(&chunk).is_err() {
-                    write_err = Some(format!("{}: error al escribir", save.filename));
+                if let Err(e) = file.write_all(&chunk) {
+                    write_err = Some(file_write_error_message(&save.filename, &e));
                     break;
                 }
             }
