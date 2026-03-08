@@ -91,7 +91,7 @@ const CONNECT_TIMEOUT_SECS: u64 = 30;
 const REQUEST_TIMEOUT_SECS: u64 = 600;
 
 /// Cuántas partes se suben en paralelo (acelera mucho archivos grandes).
-const MULTIPART_PUT_CONCURRENCY: usize = 6;
+const MULTIPART_PUT_CONCURRENCY: usize = 8;
 
 /// Ejecuta una operación async con reintentos y backoff. Devuelve el último error si todos fallan.
 async fn with_retry<F, Fut, T>(mut op: F) -> Result<T, String>

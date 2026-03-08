@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 const PROGRESS_CHUNK_BYTES: usize = 256 * 1024;
 
 /// Cuántos PUTs simples se ejecutan en paralelo (acelera mucho cuando hay miles de archivos).
-const SIMPLE_PUT_CONCURRENCY: usize = 20;
+const SIMPLE_PUT_CONCURRENCY: usize = 24;
 
 /// Stream que recibe chunks de un canal (llenado por un hilo que lee el archivo).
 #[allow(dead_code)]
