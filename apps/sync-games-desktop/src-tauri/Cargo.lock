@@ -4144,6 +4144,7 @@ dependencies = [
  "futures-util",
  "notify",
  "notify-debouncer-mini",
+ "rayon",
  "regex",
  "reqwest 0.12.28",
  "serde",

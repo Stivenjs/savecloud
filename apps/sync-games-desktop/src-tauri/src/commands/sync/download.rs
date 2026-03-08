@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
 
@@ -10,6 +9,7 @@ use std::io::ErrorKind;
 
 use chrono::{DateTime, Utc};
 use futures_util::stream::{self, StreamExt};
+use tokio::io::{AsyncWriteExt, BufWriter};
 
 use super::api;
 use super::backup;
@@ -207,8 +207,7 @@ const DOWNLOAD_FILE_CONCURRENCY: usize = 16;
 
 /// Mensaje claro cuando no se puede escribir (archivo en uso o sin permisos).
 fn file_write_error_message(filename: &str, e: &std::io::Error) -> String {
-    let is_access_denied = e.kind() == ErrorKind::PermissionDenied
-        || e.raw_os_error() == Some(5); // ERROR_ACCESS_DENIED on Windows
+    let is_access_denied = e.kind() == ErrorKind::PermissionDenied || e.raw_os_error() == Some(5); // ERROR_ACCESS_DENIED on Windows
     if is_access_denied {
         format!(
             "{}: archivo en uso o sin permisos (cierra el juego u otra app que lo use)",
@@ -254,17 +253,19 @@ async fn download_one_file(
     let mut loaded: u64 = 0;
     let mut last_emit: u64 = 0;
 
-    let mut file = match fs::File::create(&dest_path) {
+    let file = match tokio::fs::File::create(&dest_path).await {
         Ok(f) => f,
         Err(e) => {
+            let e = std::io::Error::from(e);
             if (e.kind() == ErrorKind::PermissionDenied || e.raw_os_error() == Some(5))
                 && dest_path.exists()
             {
                 tokio::time::sleep(Duration::from_millis(400)).await;
-                match fs::File::create(&dest_path) {
+                match tokio::fs::File::create(&dest_path).await {
                     Ok(f) => f,
                     Err(e2) => {
-                        let msg = file_write_error_message(&save.filename, &e2);
+                        let msg =
+                            file_write_error_message(&save.filename, &std::io::Error::from(e2));
                         return Err(msg);
                     }
                 }
@@ -274,6 +275,9 @@ async fn download_one_file(
             }
         }
     };
+
+    const WRITE_BUF_SIZE: usize = 512 * 1024;
+    let mut writer = BufWriter::with_capacity(WRITE_BUF_SIZE, file);
 
     let mut stream = res.bytes_stream();
     let mut write_err: Option<String> = None;
@@ -296,8 +300,11 @@ async fn download_one_file(
                         },
                     );
                 }
-                if let Err(e) = file.write_all(&chunk) {
-                    write_err = Some(file_write_error_message(&save.filename, &e));
+                if let Err(e) = writer.write_all(&chunk).await {
+                    write_err = Some(file_write_error_message(
+                        &save.filename,
+                        &std::io::Error::from(e),
+                    ));
                     break;
                 }
             }
@@ -317,6 +324,14 @@ async fn download_one_file(
                 total,
             },
         );
+    }
+    if write_err.is_none() {
+        if let Err(e) = writer.flush().await {
+            write_err = Some(file_write_error_message(
+                &save.filename,
+                &std::io::Error::from(e),
+            ));
+        }
     }
     match write_err {
         Some(e) => Err(e),

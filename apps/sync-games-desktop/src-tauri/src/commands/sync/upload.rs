@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::Read;
+use std::io::{BufReader, Read};
 
 use super::api;
 use super::models::{GameSyncResultDto, SyncProgressPayload, SyncResultDto};
@@ -57,7 +57,8 @@ fn file_stream_with_progress(
                 return;
             }
         };
-        let mut reader = file;
+        const READ_BUF_SIZE: usize = 256 * 1024;
+        let mut reader = BufReader::with_capacity(READ_BUF_SIZE, file);
         let mut loaded: u64 = 0;
         let mut last_emit: u64 = 0;
         let mut buf = vec![0u8; PROGRESS_CHUNK_BYTES];

@@ -18,24 +18,32 @@ fn log_path() -> Option<std::path::PathBuf> {
 
 static LOG_LOCK: Mutex<()> = Mutex::new(());
 
-/// Escribe una línea en el log (timestamp + mensaje). No hace panic si falla el write.
-fn write_line(line: &str) {
+fn do_write_line(path: std::path::PathBuf, full: String) {
     let _guard = match LOG_LOCK.lock() {
         Ok(g) => g,
         Err(_) => return,
     };
-    let path = match log_path() {
-        Some(p) => p,
-        None => return,
-    };
-    let ts = Utc::now().format("%Y-%m-%d %H:%M:%S%.3f UTC");
-    let full = format!("[{}] {}\n", ts, line);
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&path)
     {
         let _ = std::io::Write::write_all(&mut f, full.as_bytes());
+    }
+}
+
+/// Escribe una línea en el log (timestamp + mensaje). En contexto async no bloquea el runtime.
+fn write_line(line: &str) {
+    let path = match log_path() {
+        Some(p) => p,
+        None => return,
+    };
+    let ts = Utc::now().format("%Y-%m-%d %H:%M:%S%.3f UTC");
+    let full = format!("[{}] {}\n", ts, line);
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        let _ = handle.spawn_blocking(move || do_write_line(path, full));
+    } else {
+        do_write_line(path, full);
     }
 }
 

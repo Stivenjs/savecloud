@@ -7,17 +7,16 @@
 //! (init, part-urls, PUT, complete), timeouts de conexión y de request en el cliente HTTP.
 
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::SeekFrom;
 use std::path::Path;
 
 use super::api;
-use futures_util::stream::{self, StreamExt};
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use super::models::SyncProgressPayload;
 use super::sync_logger;
+use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 /// Mensaje de error cuando la subida se pausó (el caller puede emitir evento y no contar como error).
 pub const PAUSED_ERR_MSG: &str = "PAUSED";
@@ -288,7 +287,12 @@ async fn multipart_part_urls(
     if !res.status().is_success() {
         let status = res.status();
         let text = res.text().await.unwrap_or_default();
-        sync_logger::log_api("multipart/part-urls", "/multipart/part-urls", status.as_u16(), &text);
+        sync_logger::log_api(
+            "multipart/part-urls",
+            "/multipart/part-urls",
+            status.as_u16(),
+            &text,
+        );
         return Err(format!("API multipart/part-urls: {} {}", status, text));
     }
 
@@ -370,7 +374,12 @@ async fn multipart_complete(
     if !res.status().is_success() && res.status().as_u16() != 204 {
         let status = res.status();
         let text = res.text().await.unwrap_or_default();
-        sync_logger::log_api("multipart/complete", "/multipart/complete", status.as_u16(), &text);
+        sync_logger::log_api(
+            "multipart/complete",
+            "/multipart/complete",
+            status.as_u16(),
+            &text,
+        );
         return Err(format!("API multipart/complete: {} {}", status, text));
     }
     Ok(())
@@ -398,7 +407,12 @@ async fn multipart_abort(
     if !res.status().is_success() && res.status().as_u16() != 204 {
         let status = res.status();
         let text = res.text().await.unwrap_or_default();
-        sync_logger::log_api("multipart/abort", "/multipart/abort", status.as_u16(), &text);
+        sync_logger::log_api(
+            "multipart/abort",
+            "/multipart/abort",
+            status.as_u16(),
+            &text,
+        );
         return Err(format!("API multipart/abort: {} {}", status, text));
     }
     Ok(())
@@ -418,11 +432,8 @@ pub(crate) async fn upload_one_file_multipart(
     app: tauri::AppHandle,
     cancel: Option<std::sync::Arc<crate::tray_state::TrayStateInner>>,
 ) -> Result<(), String> {
-    let ctx = sync_logger::upload_context(
-        game_id,
-        relative_filename,
-        &absolute_path.to_string_lossy(),
-    );
+    let ctx =
+        sync_logger::upload_context(game_id, relative_filename, &absolute_path.to_string_lossy());
     sync_logger::log_operation("upload_multipart_start", &ctx);
 
     let num_parts = if total_size == 0 {
@@ -526,39 +537,41 @@ pub(crate) async fn upload_one_file_multipart(
     let mut completed_parts: Vec<(u32, String)> = Vec::with_capacity(num_parts as usize);
     let mut loaded: u64 = 0;
 
-    let mut stream = stream::iter(jobs).map(|(part_number, start, part_len, url)| {
-        let client = client.clone();
-        let path = path_buf.clone();
-        async move {
-            let mut f = tokio::fs::File::open(&path)
-                .await
-                .map_err(|e| format!("abrir parte {}: {}", part_number, e))?;
-            f.seek(SeekFrom::Start(start))
-                .await
-                .map_err(|e| format!("seek parte {}: {}", part_number, e))?;
-            let mut buf = vec![0u8; part_len as usize];
-            AsyncReadExt::read_exact(&mut f, &mut buf)
-                .await
-                .map_err(|e| format!("leer parte {}: {}", part_number, e))?;
-            let res = client
-                .put(&url)
-                .body(buf)
-                .header("Content-Type", "application/octet-stream")
-                .send()
-                .await
-                .map_err(|e| format!("PUT parte {}: {}", part_number, e))?;
-            if !res.status().is_success() {
-                return Err(format!("parte {}: S3 PUT {}", part_number, res.status()));
+    let mut stream = stream::iter(jobs)
+        .map(|(part_number, start, part_len, url)| {
+            let client = client.clone();
+            let path = path_buf.clone();
+            async move {
+                let mut f = tokio::fs::File::open(&path)
+                    .await
+                    .map_err(|e| format!("abrir parte {}: {}", part_number, e))?;
+                f.seek(SeekFrom::Start(start))
+                    .await
+                    .map_err(|e| format!("seek parte {}: {}", part_number, e))?;
+                let mut buf = vec![0u8; part_len as usize];
+                AsyncReadExt::read_exact(&mut f, &mut buf)
+                    .await
+                    .map_err(|e| format!("leer parte {}: {}", part_number, e))?;
+                let res = client
+                    .put(&url)
+                    .body(buf)
+                    .header("Content-Type", "application/octet-stream")
+                    .send()
+                    .await
+                    .map_err(|e| format!("PUT parte {}: {}", part_number, e))?;
+                if !res.status().is_success() {
+                    return Err(format!("parte {}: S3 PUT {}", part_number, res.status()));
+                }
+                let etag = res
+                    .headers()
+                    .get("etag")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_string();
+                Ok((part_number, etag, part_len))
             }
-            let etag = res
-                .headers()
-                .get("etag")
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("")
-                .to_string();
-            Ok((part_number, etag, part_len))
-        }
-    }).buffer_unordered(MULTIPART_PUT_CONCURRENCY);
+        })
+        .buffer_unordered(MULTIPART_PUT_CONCURRENCY);
 
     while let Some(result) = stream.next().await {
         if let Some(ref t) = cancel {
@@ -713,7 +726,8 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
         map
     };
 
-    let mut file = File::open(&state.absolute_path)
+    let mut file = tokio::fs::File::open(&state.absolute_path)
+        .await
         .map_err(|e| format!("abrir archivo para reanudar: {}", e))?;
     let mut all_parts: Vec<(u32, String)> = state
         .completed_parts
@@ -725,9 +739,11 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
         let start = (*part_number - 1) as u64 * PART_SIZE;
         let part_len = std::cmp::min(PART_SIZE, state.total_size.saturating_sub(start));
         file.seek(SeekFrom::Start(start))
+            .await
             .map_err(|e| format!("seek parte {}: {}", part_number, e))?;
         let mut buf = vec![0u8; part_len as usize];
         file.read_exact(&mut buf)
+            .await
             .map_err(|e| format!("leer parte {}: {}", part_number, e))?;
 
         let url = part_urls

@@ -12,6 +12,7 @@ use crate::manifest;
 #[cfg(target_os = "windows")]
 use crate::steam;
 use filters::{folder_contains_save_like_files, is_excluded_folder};
+use rayon::prelude::*;
 use regex::Regex;
 use serde::Serialize;
 use std::collections::HashSet;
@@ -97,18 +98,13 @@ fn list_subdirs(dir_path: &Path) -> Vec<(PathBuf, String)> {
         .collect()
 }
 
-fn scan_base_paths(
-    base_path: &str,
-    base_label: &str,
-    candidates: &mut Vec<PathCandidateDto>,
-    seen: &mut HashSet<String>,
-) {
+/// Escanea una ruta base y devuelve candidatos (sin dedup; se hace al fusionar).
+fn scan_base_paths_into_vec(base_path: &str, base_label: &str) -> Vec<PathCandidateDto> {
     let base = Path::new(base_path);
     if !base.exists() || !base.is_dir() {
-        return;
+        return vec![];
     }
-    // Solo un nivel: evita añadir Config, SaveGames, etc. por separado.
-    // collect_files ya busca recursivamente para detectar guardados en subcarpetas.
+    let mut out = Vec::new();
     for (full_path, name) in list_subdirs(base) {
         if is_excluded_folder(&name) {
             continue;
@@ -117,18 +113,31 @@ fn scan_base_paths(
             continue;
         }
         let path_str = full_path.to_string_lossy().to_string();
-        let key = path_str.to_lowercase();
-        if seen.contains(&key) {
-            continue;
-        }
-        seen.insert(key);
-        candidates.push(PathCandidateDto {
+        out.push(PathCandidateDto {
             path: path_str,
             folder_name: name,
             base_path: base_label.to_string(),
             steam_app_id: None,
             paths: None,
         });
+    }
+    out
+}
+
+#[allow(dead_code)]
+fn scan_base_paths(
+    base_path: &str,
+    base_label: &str,
+    candidates: &mut Vec<PathCandidateDto>,
+    seen: &mut HashSet<String>,
+) {
+    for c in scan_base_paths_into_vec(base_path, base_label) {
+        let key = c.path.to_lowercase();
+        if seen.contains(&key) {
+            continue;
+        }
+        seen.insert(key);
+        candidates.push(c);
     }
 }
 
@@ -479,38 +488,24 @@ fn scan_cracks(
 
 // ─── Comando principal ────────────────────────────────────────────────────────
 
-/// Lógica de escaneo (síncrona). Se ejecuta en un hilo en segundo plano.
-fn scan_path_candidates_sync() -> Vec<PathCandidateDto> {
-    let cfg = config::load_config();
-    let mut candidates = Vec::new();
-    let mut seen = HashSet::new();
+/// Trabajo de escaneo base para paralelizar: (ruta, etiqueta).
+fn base_scan_jobs(cfg: &config::Config) -> Vec<(String, String)> {
+    let mut jobs = Vec::new();
 
-    // Rutas base (templates del CLI)
     for (tpl, label) in paths::BASE_SCAN_TEMPLATES {
         if let Some(expanded) = expand_path(tpl) {
-            scan_base_paths(&expanded, label, &mut candidates, &mut seen);
+            jobs.push((expanded, label.to_string()));
         }
     }
 
-    // Steam y cracks (solo Windows). Manifiesto cargado una sola vez.
     #[cfg(target_os = "windows")]
     {
-        let path_to_appid = steam::get_steam_path_to_appid_map();
-        let manifest_index = manifest::load_manifest_index();
-        scan_steam(&mut candidates, &mut seen, &path_to_appid, &manifest_index);
-        scan_cracks(&mut candidates, &mut seen, &manifest_index);
-
-        // Todas las unidades: escanear la raíz de cada disco (D:\, E:\, ...)
         for root in logical_drives() {
-            let label = format!(
-                "Disco {}",
-                root.trim_end_matches(&['\\', ':'])
-            );
-            scan_base_paths(&root, &label, &mut candidates, &mut seen);
+            let label = format!("Disco {}", root.trim_end_matches(&['\\', ':']));
+            jobs.push((root, label));
         }
     }
 
-    // Rutas personalizadas del config
     for extra in &cfg.custom_scan_paths {
         let trimmed = extra.trim();
         if trimmed.is_empty() {
@@ -534,7 +529,42 @@ fn scan_path_candidates_sync() -> Vec<PathCandidateDto> {
                 continue;
             }
         }
-        scan_base_paths(&path, "Personalizada", &mut candidates, &mut seen);
+        jobs.push((path, "Personalizada".to_string()));
+    }
+
+    jobs
+}
+
+/// Lógica de escaneo (síncrona). Rutas base en paralelo con Rayon; Steam/cracks secuenciales.
+fn scan_path_candidates_sync() -> Vec<PathCandidateDto> {
+    let cfg = config::load_config();
+    let mut seen = HashSet::new();
+
+    // Rutas base + discos + personalizadas: escaneo en paralelo
+    let jobs = base_scan_jobs(&cfg);
+    let mut candidates: Vec<PathCandidateDto> = jobs
+        .par_iter()
+        .flat_map(|(base_path, label)| scan_base_paths_into_vec(base_path, label))
+        .collect();
+
+    // Dedup por path (primera ocurrencia gana)
+    candidates.retain(|c| {
+        let key = c.path.to_lowercase();
+        if seen.contains(&key) {
+            false
+        } else {
+            seen.insert(key);
+            true
+        }
+    });
+
+    // Steam y cracks (solo Windows); requieren manifiesto y son más complejos
+    #[cfg(target_os = "windows")]
+    {
+        let path_to_appid = steam::get_steam_path_to_appid_map();
+        let manifest_index = manifest::load_manifest_index();
+        scan_steam(&mut candidates, &mut seen, &path_to_appid, &manifest_index);
+        scan_cracks(&mut candidates, &mut seen, &manifest_index);
     }
 
     candidates.sort_by(|a, b| {

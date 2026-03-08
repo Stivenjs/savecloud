@@ -40,6 +40,7 @@ sysinfo = "0.31"
 base64 = "0.22"
 bytes = "1"
 tokio = { version = "1", features = ["sync", "time", "fs", "io-util"] }
+rayon = "1"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
