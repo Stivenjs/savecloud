@@ -192,25 +192,33 @@ export class S3SaveRepository implements SaveRepository {
 
   async listByUser(userId: string): Promise<GameSave[]> {
     const prefix = `${userId}/`;
-    const command = new ListObjectsV2Command({
-      Bucket: this.bucketName,
-      Prefix: prefix,
-    });
+    const allContents: { Key: string; LastModified?: Date; Size?: number }[] =
+      [];
+    let continuationToken: string | undefined;
 
-    const response = await this.s3.send(command);
-    const contents = response.Contents ?? [];
-
-    const saves: GameSave[] = contents
-      .filter(
+    do {
+      const command = new ListObjectsV2Command({
+        Bucket: this.bucketName,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      });
+      const response = await this.s3.send(command);
+      const contents = (response.Contents ?? []).filter(
         (obj): obj is { Key: string; LastModified?: Date; Size?: number } =>
           !!obj.Key
-      )
-      .map((obj) => ({
-        gameId: obj.Key!.split("/")[1] ?? "",
-        key: obj.Key!,
-        lastModified: obj.LastModified ?? new Date(0),
-        size: obj.Size,
-      }));
+      );
+      allContents.push(...contents);
+      continuationToken = response.IsTruncated
+        ? response.NextContinuationToken
+        : undefined;
+    } while (continuationToken);
+
+    const saves: GameSave[] = allContents.map((obj) => ({
+      gameId: obj.Key.split("/")[1] ?? "",
+      key: obj.Key,
+      lastModified: obj.LastModified ?? new Date(0),
+      size: obj.Size,
+    }));
 
     return saves;
   }

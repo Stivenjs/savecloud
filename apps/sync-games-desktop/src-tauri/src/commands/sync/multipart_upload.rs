@@ -12,6 +12,8 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 use super::api;
+use futures_util::stream::{self, StreamExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use super::models::SyncProgressPayload;
 use super::sync_logger;
 use serde::{Deserialize, Serialize};
@@ -87,6 +89,9 @@ const RETRY_DELAY_SECS: u64 = 1;
 const CONNECT_TIMEOUT_SECS: u64 = 30;
 /// Timeout por solicitud (p. ej. PUT de una parte): subidas lentas pueden tardar minutos.
 const REQUEST_TIMEOUT_SECS: u64 = 600;
+
+/// Cuántas partes se suben en paralelo (acelera mucho archivos grandes).
+const MULTIPART_PUT_CONCURRENCY: usize = 6;
 
 /// Ejecuta una operación async con reintentos y backoff. Devuelve el último error si todos fallan.
 async fn with_retry<F, Fut, T>(mut op: F) -> Result<T, String>
@@ -502,10 +507,60 @@ pub(crate) async fn upload_one_file_multipart(
         .build()
         .map_err(|e| e.to_string())?;
 
-    let mut file = File::open(absolute_path).map_err(|e| format!("abrir archivo: {}", e))?;
-    let mut completed_parts: Vec<(u32, String)> = Vec::with_capacity(num_parts as usize);
+    let path_buf = absolute_path.to_path_buf();
+    let game_id_owned = game_id.to_string();
+    let filename_owned = relative_filename.to_string();
 
-    for part_number in 1..=num_parts {
+    let jobs: Vec<(u32, u64, u64, String)> = (1..=num_parts)
+        .map(|part_number| {
+            let start = (part_number - 1) as u64 * PART_SIZE;
+            let part_len = std::cmp::min(PART_SIZE, total_size.saturating_sub(start));
+            let url = part_urls
+                .get(&part_number)
+                .cloned()
+                .ok_or_else(|| format!("Falta URL para parte {}", part_number))?;
+            Ok((part_number, start, part_len, url))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+
+    let mut completed_parts: Vec<(u32, String)> = Vec::with_capacity(num_parts as usize);
+    let mut loaded: u64 = 0;
+
+    let mut stream = stream::iter(jobs).map(|(part_number, start, part_len, url)| {
+        let client = client.clone();
+        let path = path_buf.clone();
+        async move {
+            let mut f = tokio::fs::File::open(&path)
+                .await
+                .map_err(|e| format!("abrir parte {}: {}", part_number, e))?;
+            f.seek(SeekFrom::Start(start))
+                .await
+                .map_err(|e| format!("seek parte {}: {}", part_number, e))?;
+            let mut buf = vec![0u8; part_len as usize];
+            AsyncReadExt::read_exact(&mut f, &mut buf)
+                .await
+                .map_err(|e| format!("leer parte {}: {}", part_number, e))?;
+            let res = client
+                .put(&url)
+                .body(buf)
+                .header("Content-Type", "application/octet-stream")
+                .send()
+                .await
+                .map_err(|e| format!("PUT parte {}: {}", part_number, e))?;
+            if !res.status().is_success() {
+                return Err(format!("parte {}: S3 PUT {}", part_number, res.status()));
+            }
+            let etag = res
+                .headers()
+                .get("etag")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("")
+                .to_string();
+            Ok((part_number, etag, part_len))
+        }
+    }).buffer_unordered(MULTIPART_PUT_CONCURRENCY);
+
+    while let Some(result) = stream.next().await {
         if let Some(ref t) = cancel {
             if t.upload_cancel_requested() {
                 let _ = multipart_abort(api_base, user_id, api_key, &key, &upload_id).await;
@@ -515,8 +570,8 @@ pub(crate) async fn upload_one_file_multipart(
                 let state = PausedUploadState {
                     upload_id: upload_id.clone(),
                     key: key.clone(),
-                    game_id: game_id.to_string(),
-                    filename: relative_filename.to_string(),
+                    game_id: game_id_owned.clone(),
+                    filename: filename_owned.clone(),
                     absolute_path: absolute_path.to_string_lossy().to_string(),
                     total_size,
                     completed_parts: completed_parts
@@ -532,86 +587,27 @@ pub(crate) async fn upload_one_file_multipart(
             }
         }
 
-        let start = (part_number - 1) as u64 * PART_SIZE;
-        let part_len = std::cmp::min(PART_SIZE, total_size.saturating_sub(start));
-        let mut buf = vec![0u8; part_len as usize];
-        file.read_exact(&mut buf)
-            .map_err(|e| format!("leer parte {}: {}", part_number, e))?;
-
-        let url = part_urls
-            .get(&part_number)
-            .ok_or_else(|| format!("Falta URL para parte {}", part_number))?
-            .clone();
-
-        let put_res = match with_retry(|| {
-            let body = buf.clone();
-            let c = client.clone();
-            let u = url.clone();
-            async move {
-                let res = c
-                    .put(&u)
-                    .body(body)
-                    .header("Content-Type", "application/octet-stream")
-                    .send()
-                    .await
-                    .map_err(|e| format!("PUT parte {}: {}", part_number, e))?;
-                if !res.status().is_success() {
-                    return Err(format!("parte {}: S3 PUT {}", part_number, res.status()));
-                }
-                Ok(res)
-            }
-        })
-        .await
-        {
-            Ok(r) => r,
+        let (part_number, etag, part_len) = match result {
+            Ok(x) => x,
             Err(e) => {
                 let _ = multipart_abort(api_base, user_id, api_key, &key, &upload_id).await;
                 return Err(e);
             }
         };
-
-        let etag = put_res
-            .headers()
-            .get("etag")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("")
-            .to_string();
-
         completed_parts.push((part_number, etag));
-
-        let loaded = std::cmp::min(start + part_len, total_size);
+        loaded = std::cmp::min(loaded + part_len, total_size);
         let _ = app.emit(
             "sync-upload-progress",
             SyncProgressPayload {
-                game_id: game_id.to_string(),
-                filename: relative_filename.to_string(),
+                game_id: game_id_owned.clone(),
+                filename: filename_owned.clone(),
                 loaded,
                 total: total_size,
             },
         );
-
-        if let Some(ref t) = cancel {
-            if t.upload_pause_requested() {
-                let state = PausedUploadState {
-                    upload_id: upload_id.clone(),
-                    key: key.clone(),
-                    game_id: game_id.to_string(),
-                    filename: relative_filename.to_string(),
-                    absolute_path: absolute_path.to_string_lossy().to_string(),
-                    total_size,
-                    completed_parts: completed_parts
-                        .iter()
-                        .map(|(n, e)| CompletedPartState {
-                            part_number: *n,
-                            etag: e.clone(),
-                        })
-                        .collect(),
-                };
-                save_paused_state(&state).map_err(|e| format!("guardar pausa: {}", e))?;
-                return Err(PAUSED_ERR_MSG.to_string());
-            }
-        }
     }
+
+    completed_parts.sort_by_key(|p| p.0);
 
     with_retry(|| {
         multipart_complete(

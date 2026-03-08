@@ -14,10 +14,15 @@ use futures_util::stream::{self, Stream, StreamExt};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::mpsc;
 
-/// Emitir progreso cada N bytes para no saturar el frontend.
+/// Emitir progreso cada N bytes para no saturar el frontend (usado por `file_stream_with_progress`).
+#[allow(dead_code)]
 const PROGRESS_CHUNK_BYTES: usize = 256 * 1024;
 
+/// Cuántos PUTs simples se ejecutan en paralelo (acelera mucho cuando hay miles de archivos).
+const SIMPLE_PUT_CONCURRENCY: usize = 20;
+
 /// Stream que recibe chunks de un canal (llenado por un hilo que lee el archivo).
+#[allow(dead_code)]
 struct FileProgressStream {
     rx: mpsc::Receiver<Result<Bytes, std::io::Error>>,
 }
@@ -34,6 +39,7 @@ impl Stream for FileProgressStream {
 }
 
 /// Crea un stream que lee el archivo en chunks y emite progreso. El stream se consume al hacer el PUT.
+#[allow(dead_code)]
 fn file_stream_with_progress(
     absolute: &std::path::Path,
     total: u64,
@@ -319,10 +325,55 @@ pub(crate) async fn sync_upload_game_impl(
             .build()
             .map_err(|e| e.to_string())?;
 
+        let items: Vec<_> = simple_files
+            .into_iter()
+            .zip(upload_urls)
+            .map(|(((abs, rel), total), (url, _))| (abs, rel, total, url))
+            .collect();
+
         let mut put_count: usize = 0;
-        for (((absolute, relative), total), (upload_url, _)) in
-            simple_files.into_iter().zip(upload_urls)
-        {
+        let mut stream = stream::iter(items)
+            .map(|(absolute, relative, total, upload_url)| {
+                let client = client.clone();
+                async move {
+                    let body = match tokio::fs::read(&absolute).await {
+                        Ok(b) => b,
+                        Err(e) => {
+                            return Err((
+                                relative.clone(),
+                                absolute,
+                                format!("{}: {}", relative, e),
+                            ));
+                        }
+                    };
+                    let put_res = match client
+                        .put(&upload_url)
+                        .body(body)
+                        .header("Content-Type", "application/octet-stream")
+                        .header("Content-Length", total.to_string())
+                        .send()
+                        .await
+                    {
+                        Ok(r) => r,
+                        Err(e) => {
+                            return Err((
+                                relative.clone(),
+                                absolute,
+                                format!("{}: {}", relative, e),
+                            ));
+                        }
+                    };
+                    if put_res.status().is_success() {
+                        Ok(())
+                    } else {
+                        let msg = format!("{}: S3 PUT {}", relative, put_res.status());
+                        Err((relative, absolute, msg))
+                    }
+                }
+            })
+            .buffer_unordered(SIMPLE_PUT_CONCURRENCY);
+
+        while let Some(result) = stream.next().await {
             if let Some(ref t) = tray_inner {
                 if t.upload_pause_requested() || t.upload_cancel_requested() {
                     break;
@@ -335,38 +386,17 @@ pub(crate) async fn sync_upload_game_impl(
                     &format!("gameId={} done={}/{}", game_id, put_count, total_simple),
                 );
             }
-            let body_stream = file_stream_with_progress(
-                std::path::Path::new(absolute.as_str()),
-                total,
-                app.clone(),
-                game_id.clone(),
-                relative.clone(),
-            )?;
-            let body = reqwest::Body::wrap_stream(body_stream);
-            let put_res = client
-                .put(&upload_url)
-                .body(body)
-                .header("Content-Type", "application/octet-stream")
-                .header("Content-Length", total.to_string())
-                .send()
-                .await
-                .map_err(|e| format!("{}: {}", relative, e))?;
-
-            if !put_res.status().is_success() {
-                let err_msg = format!("{}: S3 PUT {}", relative, put_res.status());
-                super::sync_logger::log_error(
-                    "upload_put",
-                    &super::sync_logger::upload_context(
-                        game_id.as_str(),
-                        relative.as_str(),
-                        absolute.as_str(),
-                    ),
-                    &err_msg,
-                );
-                errors.push(err_msg);
-                err_count += 1;
-            } else {
-                ok_count += 1;
+            match result {
+                Ok(()) => ok_count += 1,
+                Err((relative, absolute, err_msg)) => {
+                    super::sync_logger::log_error(
+                        "upload_put",
+                        &super::sync_logger::upload_context(game_id.as_str(), &relative, &absolute),
+                        &err_msg,
+                    );
+                    errors.push(err_msg);
+                    err_count += 1;
+                }
             }
         }
 

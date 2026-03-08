@@ -39,7 +39,7 @@ tauri-plugin-process = "2"
 sysinfo = "0.31"
 base64 = "0.22"
 bytes = "1"
-tokio = { version = "1", features = ["sync", "time"] }
+tokio = { version = "1", features = ["sync", "time", "fs", "io-util"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
