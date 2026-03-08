@@ -7,6 +7,7 @@ import type { DeleteGameFromCloudUseCase } from "@application/use-cases/DeleteGa
 import type { RenameGameInCloudUseCase } from "@application/use-cases/RenameGameInCloudUseCase";
 import type { ListSavesUseCase } from "@application/use-cases/ListSavesUseCase";
 import type { CreateMultipartUploadUseCase } from "@application/use-cases/CreateMultipartUploadUseCase";
+import type { CreateMultipartUploadWithPartUrlsUseCase } from "@application/use-cases/CreateMultipartUploadWithPartUrlsUseCase";
 import type { GetUploadPartUrlsUseCase } from "@application/use-cases/GetUploadPartUrlsUseCase";
 import type { CompleteMultipartUploadUseCase } from "@application/use-cases/CompleteMultipartUploadUseCase";
 import type { AbortMultipartUploadUseCase } from "@application/use-cases/AbortMultipartUploadUseCase";
@@ -47,6 +48,7 @@ export async function registerSavesRoutes(
     renameGameInCloudUseCase: RenameGameInCloudUseCase;
     listSavesUseCase: ListSavesUseCase;
     createMultipartUploadUseCase: CreateMultipartUploadUseCase;
+    createMultipartUploadWithPartUrlsUseCase: CreateMultipartUploadWithPartUrlsUseCase;
     getUploadPartUrlsUseCase: GetUploadPartUrlsUseCase;
     completeMultipartUploadUseCase: CompleteMultipartUploadUseCase;
     abortMultipartUploadUseCase: AbortMultipartUploadUseCase;
@@ -201,6 +203,35 @@ export async function registerSavesRoutes(
       userId,
       gameId: gameId.trim(),
       filename: filename.trim(),
+    });
+    return reply.send(result);
+  });
+
+  app.post<{
+    Body: { gameId: string; filename: string; partCount: number };
+  }>("/saves/multipart/init-with-part-urls", async (request, reply) => {
+    const userId = getUserId(request);
+    const body = request.body as {
+      gameId?: string;
+      filename?: string;
+      partCount?: number;
+    };
+    const { gameId, filename, partCount } = body ?? {};
+    if (!gameId?.trim() || !filename?.trim()) {
+      return reply.status(400).send({
+        error: "Bad Request",
+        message: "gameId and filename are required",
+      });
+    }
+    const count =
+      typeof partCount === "number" && partCount >= 1
+        ? Math.min(Math.floor(partCount), 2000)
+        : 1;
+    const result = await deps.createMultipartUploadWithPartUrlsUseCase.execute({
+      userId,
+      gameId: gameId.trim(),
+      filename: filename.trim(),
+      partCount: count,
     });
     return reply.send(result);
   });

@@ -125,6 +125,25 @@ export class S3SaveRepository implements SaveRepository {
     return { uploadId: UploadId, key };
   }
 
+  async createMultipartUploadWithPartUrls(
+    userId: string,
+    gameId: string,
+    filename: string,
+    partCount: number
+  ): Promise<CreateMultipartUploadResult & { partUrls: UploadPartUrl[] }> {
+    const result = await this.createMultipartUpload(userId, gameId, filename);
+    const partNumbers = Array.from(
+      { length: partCount },
+      (_, i) => i + 1
+    );
+    const partUrls = await this.getUploadPartUrls(
+      result.key,
+      result.uploadId,
+      partNumbers
+    );
+    return { ...result, partUrls };
+  }
+
   async getUploadPartUrls(
     key: string,
     uploadId: string,

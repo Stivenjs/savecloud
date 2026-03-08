@@ -10,6 +10,7 @@ import { DeleteGameFromCloudUseCase } from "@application/use-cases/DeleteGameFro
 import { RenameGameInCloudUseCase } from "@application/use-cases/RenameGameInCloudUseCase";
 import { ListSavesUseCase } from "@application/use-cases/ListSavesUseCase";
 import { CreateMultipartUploadUseCase } from "@application/use-cases/CreateMultipartUploadUseCase";
+import { CreateMultipartUploadWithPartUrlsUseCase } from "@application/use-cases/CreateMultipartUploadWithPartUrlsUseCase";
 import { GetUploadPartUrlsUseCase } from "@application/use-cases/GetUploadPartUrlsUseCase";
 import { CompleteMultipartUploadUseCase } from "@application/use-cases/CompleteMultipartUploadUseCase";
 import { AbortMultipartUploadUseCase } from "@application/use-cases/AbortMultipartUploadUseCase";
@@ -62,6 +63,8 @@ export async function buildApp(
   const createMultipartUploadUseCase = new CreateMultipartUploadUseCase(
     deps.saveRepository
   );
+  const createMultipartUploadWithPartUrlsUseCase =
+    new CreateMultipartUploadWithPartUrlsUseCase(deps.saveRepository);
   const getUploadPartUrlsUseCase = new GetUploadPartUrlsUseCase(
     deps.saveRepository
   );
@@ -81,6 +84,7 @@ export async function buildApp(
     renameGameInCloudUseCase,
     listSavesUseCase,
     createMultipartUploadUseCase,
+    createMultipartUploadWithPartUrlsUseCase,
     getUploadPartUrlsUseCase,
     completeMultipartUploadUseCase,
     abortMultipartUploadUseCase,
