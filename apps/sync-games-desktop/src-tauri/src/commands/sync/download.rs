@@ -199,6 +199,95 @@ pub async fn sync_check_unsynced_games() -> Result<Vec<UnsyncedGameDto>, String>
 }
 
 const DOWNLOAD_PROGRESS_EMIT_BYTES: u64 = 256 * 1024;
+/// Archivos descargados en paralelo por juego.
+/// 8–16 suele ser óptimo; más puede saturar la conexión o el disco y empeorar.
+const DOWNLOAD_FILE_CONCURRENCY: usize = 16;
+
+/// Descarga un solo archivo (para ejecutar en paralelo con otros).
+async fn download_one_file(
+    client: &reqwest::Client,
+    dest_base: &std::path::Path,
+    backup_dir: Option<&std::path::Path>,
+    save: &RemoteSaveInfoDto,
+    download_url: &str,
+    game_id: &str,
+    app: &AppHandle,
+) -> Result<(), String> {
+    let dest_path = dest_base.join(&save.filename);
+    if let Some(parent) = dest_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if dest_path.exists() {
+        if let Some(backup_base) = backup_dir {
+            if let Ok(rel) = dest_path.strip_prefix(dest_base) {
+                let backup_path = backup_base.join(rel);
+                if let Some(bp) = backup_path.parent() {
+                    let _ = fs::create_dir_all(bp);
+                }
+                let _ = fs::copy(&dest_path, &backup_path);
+            }
+        }
+    }
+
+    let res = client
+        .get(download_url)
+        .send()
+        .await
+        .map_err(|e| format!("{}: {}", save.filename, e))?;
+    let total = res.content_length().or(save.size).unwrap_or(0);
+    let mut loaded: u64 = 0;
+    let mut last_emit: u64 = 0;
+
+    let mut file = fs::File::create(&dest_path).map_err(|e| format!("{}: {}", save.filename, e))?;
+
+    let mut stream = res.bytes_stream();
+    let mut write_err: Option<String> = None;
+    while let Some(chunk_result) = stream.next().await {
+        match chunk_result {
+            Ok(chunk) => {
+                let n = chunk.len() as u64;
+                loaded += n;
+                if loaded - last_emit >= DOWNLOAD_PROGRESS_EMIT_BYTES
+                    || (total > 0 && loaded >= total)
+                {
+                    last_emit = loaded;
+                    let _ = app.emit(
+                        "sync-download-progress",
+                        SyncProgressPayload {
+                            game_id: game_id.to_string(),
+                            filename: save.filename.clone(),
+                            loaded,
+                            total,
+                        },
+                    );
+                }
+                if file.write_all(&chunk).is_err() {
+                    write_err = Some(format!("{}: error al escribir", save.filename));
+                    break;
+                }
+            }
+            Err(e) => {
+                write_err = Some(format!("{}: {}", save.filename, e));
+                break;
+            }
+        }
+    }
+    if total > 0 && loaded < total {
+        let _ = app.emit(
+            "sync-download-progress",
+            SyncProgressPayload {
+                game_id: game_id.to_string(),
+                filename: save.filename.clone(),
+                loaded: total,
+                total,
+            },
+        );
+    }
+    match write_err {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
+}
 
 #[tauri::command]
 pub async fn sync_download_game(
@@ -297,101 +386,43 @@ async fn sync_download_game_impl(game_id: String, app: AppHandle) -> Result<Sync
         .build()
         .map_err(|e| e.to_string())?;
 
-    let mut ok_count = 0u32;
-    let mut err_count = 0u32;
-    let mut errors = Vec::new();
-
     let backup_dir = crate::config::config_dir().map(|root| {
         let ts = chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S");
         root.join("backups").join(&game_id).join(ts.to_string())
     });
 
-    for (save, (download_url, _)) in saves.into_iter().zip(download_urls) {
-        let dest_path = dest_base.join(&save.filename);
-        if let Some(parent) = dest_path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        if dest_path.exists() {
-            if let Some(ref backup_base) = backup_dir {
-                if let Ok(rel) = dest_path.strip_prefix(&dest_base) {
-                    let backup_path = backup_base.join(rel);
-                    if let Some(bp) = backup_path.parent() {
-                        let _ = fs::create_dir_all(bp);
-                    }
-                    let _ = fs::copy(&dest_path, &backup_path);
-                }
-            }
-        }
-
-        let res = client
-            .get(&download_url)
-            .send()
+    let results: Vec<Result<(), String>> = stream::iter(
+        saves
+            .into_iter()
+            .zip(download_urls)
+            .map(|(save, (download_url, _))| (save, download_url)),
+    )
+    .map(|(save, download_url)| {
+        let client = client.clone();
+        let dest_base = dest_base.clone();
+        let backup_dir = backup_dir.clone();
+        let game_id = game_id.clone();
+        let app = app.clone();
+        async move {
+            download_one_file(
+                &client,
+                &dest_base,
+                backup_dir.as_deref(),
+                &save,
+                &download_url,
+                &game_id,
+                &app,
+            )
             .await
-            .map_err(|e| format!("{}: {}", save.filename, e))?;
-        let total = res.content_length().or(save.size).unwrap_or(0);
-        let mut loaded: u64 = 0;
-        let mut last_emit: u64 = 0;
+        }
+    })
+    .buffer_unordered(DOWNLOAD_FILE_CONCURRENCY)
+    .collect()
+    .await;
 
-        let mut file = match fs::File::create(&dest_path) {
-            Ok(f) => f,
-            Err(e) => {
-                errors.push(format!("{}: {}", save.filename, e));
-                err_count += 1;
-                continue;
-            }
-        };
-
-        let mut stream = res.bytes_stream();
-        let mut write_err: Option<String> = None;
-        while let Some(chunk_result) = stream.next().await {
-            match chunk_result {
-                Ok(chunk) => {
-                    let n = chunk.len() as u64;
-                    loaded += n;
-                    if loaded - last_emit >= DOWNLOAD_PROGRESS_EMIT_BYTES
-                        || (total > 0 && loaded >= total)
-                    {
-                        last_emit = loaded;
-                        let _ = app.emit(
-                            "sync-download-progress",
-                            SyncProgressPayload {
-                                game_id: game_id.clone(),
-                                filename: save.filename.clone(),
-                                loaded,
-                                total,
-                            },
-                        );
-                    }
-                    if file.write_all(&chunk).is_err() {
-                        write_err = Some(format!("{}: error al escribir", save.filename));
-                        break;
-                    }
-                }
-                Err(e) => {
-                    write_err = Some(format!("{}: {}", save.filename, e));
-                    break;
-                }
-            }
-        }
-        if total > 0 && loaded < total {
-            let _ = app.emit(
-                "sync-download-progress",
-                SyncProgressPayload {
-                    game_id: game_id.clone(),
-                    filename: save.filename.clone(),
-                    loaded: total,
-                    total,
-                },
-            );
-        }
-        match write_err {
-            Some(e) => {
-                errors.push(e);
-                err_count += 1;
-            }
-            None => ok_count += 1,
-        }
-    }
+    let ok_count = results.iter().filter(|r| r.is_ok()).count() as u32;
+    let errors: Vec<String> = results.into_iter().filter_map(|r| r.err()).collect();
+    let err_count = errors.len() as u32;
 
     let result = SyncResultDto {
         ok_count,

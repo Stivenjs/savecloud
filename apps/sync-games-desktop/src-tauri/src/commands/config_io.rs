@@ -2,7 +2,7 @@
 
 use crate::commands::config::{ConfigDto, GameDto};
 use crate::commands::sync::api::{
-    api_request, log_transfer_endpoint, sync_list_remote_saves, sync_list_remote_saves_for_user,
+    api_request, sync_list_remote_saves, sync_list_remote_saves_for_user,
 };
 use crate::config;
 use chrono::Utc;
@@ -141,7 +141,6 @@ pub async fn backup_config_to_cloud() -> Result<(), String> {
         .get("uploadUrl")
         .and_then(|v| v.as_str())
         .ok_or("API no devolvió uploadUrl")?;
-    log_transfer_endpoint("Subida (config)", upload_url);
 
     // 2. Subir config.json a S3
     let client = reqwest::Client::builder()
@@ -222,7 +221,6 @@ pub async fn restore_config_from_cloud() -> Result<(), String> {
         .get("downloadUrl")
         .and_then(|v| v.as_str())
         .ok_or("API no devolvió downloadUrl")?;
-    log_transfer_endpoint("Descarga (config)", download_url);
 
     let client = reqwest::Client::builder()
         .user_agent("sync-games-desktop/1.0")
@@ -313,7 +311,6 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
         .get("downloadUrl")
         .and_then(|v| v.as_str())
         .ok_or("API no devolvió downloadUrl")?;
-    log_transfer_endpoint("Descarga (config)", download_url);
 
     let client = reqwest::Client::builder()
         .user_agent("sync-games-desktop/1.0")

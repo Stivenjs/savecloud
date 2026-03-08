@@ -6,20 +6,6 @@ use serde::{Deserialize, Serialize};
 
 const S3_ACCELERATE_HOST: &str = "s3-accelerate.amazonaws.com";
 
-/// Escribe en stderr si la URL usa el endpoint acelerado (para verlo al ejecutar con `cargo tauri dev`).
-pub(crate) fn log_transfer_endpoint(kind: &str, url: &str) {
-    let accelerated = url.contains(S3_ACCELERATE_HOST);
-    eprintln!(
-        "[savecloud] {}: endpoint {}",
-        kind,
-        if accelerated {
-            "acelerado (s3-accelerate.amazonaws.com)"
-        } else {
-            "estándar"
-        }
-    );
-}
-
 pub(crate) async fn api_request(
     base_url: &str,
     user_id: &str,
@@ -132,9 +118,6 @@ pub(crate) async fn get_upload_urls(
         return Err(format!("API upload-urls: {} {}", status, text));
     }
     let parsed: UploadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
-    if let Some(first) = parsed.urls.first() {
-        log_transfer_endpoint("Subida", &first.upload_url);
-    }
     Ok(parsed
         .urls
         .into_iter()
@@ -177,9 +160,6 @@ pub(crate) async fn get_download_urls(
         return Err(format!("API download-urls: {} {}", status, text));
     }
     let parsed: DownloadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
-    if let Some(first) = parsed.urls.first() {
-        log_transfer_endpoint("Descarga", &first.download_url);
-    }
     Ok(parsed
         .urls
         .into_iter()
