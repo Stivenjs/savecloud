@@ -127,6 +127,15 @@ export async function restoreConfigFromCloud(): Promise<void> {
   await invoke("restore_config_from_cloud");
 }
 
+/** Indica si la API devuelve URLs con S3 Transfer Acceleration ("accelerated" | "standard" | "unknown"). */
+export async function getS3TransferEndpointType(): Promise<
+  "accelerated" | "standard" | "unknown"
+> {
+  const result = await invoke<string>("get_s3_transfer_endpoint_type");
+  if (result === "accelerated" || result === "standard") return result;
+  return "unknown";
+}
+
 /** Obtiene la configuración de un amigo desde la nube (solo lectura) */
 export async function getFriendConfig(
   friendUserId: string

@@ -80,6 +80,7 @@ pub fn run() {
             commands::add_games_from_friend,
             commands::sync::api::copy_friend_saves,
             commands::sync::api::copy_friend_saves_with_plan,
+            commands::sync::api::get_s3_transfer_endpoint_type,
             commands::list_operation_history,
             commands::tray_tooltip::refresh_tray_tooltip,
         ])

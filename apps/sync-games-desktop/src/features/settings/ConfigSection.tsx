@@ -1,5 +1,5 @@
 import { Button, Card, CardBody } from "@heroui/react";
-import { FileJson, Cloud, HardDrive, FolderOpen } from "lucide-react";
+import { FileJson, Cloud, HardDrive, FolderOpen, Zap } from "lucide-react";
 
 interface ConfigSectionProps {
   exporting: boolean;
@@ -8,6 +8,8 @@ interface ConfigSectionProps {
   restoringConfig: boolean;
   configPath: string;
   userId?: string | null;
+  /** "accelerated" = S3 Transfer Acceleration activo; "standard" = endpoint estándar; "unknown" o null = no comprobado. */
+  s3TransferEndpointType?: "accelerated" | "standard" | "unknown" | null;
   onCreateConfig: () => void;
   onExport: () => void | Promise<void>;
   onImportMerge: () => void | Promise<void>;
@@ -23,6 +25,7 @@ export function ConfigSection({
   restoringConfig,
   configPath,
   userId,
+  s3TransferEndpointType,
   onCreateConfig,
   onExport,
   onImportMerge,
@@ -43,6 +46,20 @@ export function ConfigSection({
           Aquí se gestiona tu <strong>config.json</strong>: ruta, crear/editar,
           exportar e importar en tu PC, y respaldar o restaurar desde la nube.
         </p>
+
+        {s3TransferEndpointType != null && s3TransferEndpointType !== "unknown" ? (
+          <div className="flex items-center gap-2 rounded-lg border border-default-200 bg-default-50/50 px-3 py-2">
+            <Zap size={18} className="text-warning" />
+            <span className="text-sm text-default-700">
+              Transferencia S3:{" "}
+              <strong>
+                {s3TransferEndpointType === "accelerated"
+                  ? "Acelerada"
+                  : "Estándar"}
+              </strong>
+            </span>
+          </div>
+        ) : null}
 
         {/* Ruta y User ID */}
         {configPath ? (

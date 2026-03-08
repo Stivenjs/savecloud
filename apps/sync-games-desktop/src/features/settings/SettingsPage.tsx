@@ -17,6 +17,7 @@ export function SettingsPage() {
     checkingUpdate,
     configPath,
     config,
+    s3TransferEndpointType,
     createConfigModalOpen,
     createApiBaseUrl,
     createApiKey,
@@ -59,6 +60,7 @@ export function SettingsPage() {
         restoringConfig={restoringConfig}
         configPath={configPath}
         userId={config?.userId}
+        s3TransferEndpointType={s3TransferEndpointType}
         onCreateConfig={openCreateConfigModal}
         onExport={handleExportConfig}
         onImportMerge={() => handleImportConfig("merge")}

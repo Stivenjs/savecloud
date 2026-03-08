@@ -4,6 +4,22 @@ use super::models::SyncResultDto;
 use super::models::{RemoteSaveDto, RemoteSaveInfoDto};
 use serde::{Deserialize, Serialize};
 
+const S3_ACCELERATE_HOST: &str = "s3-accelerate.amazonaws.com";
+
+/// Escribe en stderr si la URL usa el endpoint acelerado (para verlo al ejecutar con `cargo tauri dev`).
+pub(crate) fn log_transfer_endpoint(kind: &str, url: &str) {
+    let accelerated = url.contains(S3_ACCELERATE_HOST);
+    eprintln!(
+        "[savecloud] {}: endpoint {}",
+        kind,
+        if accelerated {
+            "acelerado (s3-accelerate.amazonaws.com)"
+        } else {
+            "estándar"
+        }
+    );
+}
+
 pub(crate) async fn api_request(
     base_url: &str,
     user_id: &str,
@@ -116,6 +132,9 @@ pub(crate) async fn get_upload_urls(
         return Err(format!("API upload-urls: {} {}", status, text));
     }
     let parsed: UploadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
+    if let Some(first) = parsed.urls.first() {
+        log_transfer_endpoint("Subida", &first.upload_url);
+    }
     Ok(parsed
         .urls
         .into_iter()
@@ -158,6 +177,9 @@ pub(crate) async fn get_download_urls(
         return Err(format!("API download-urls: {} {}", status, text));
     }
     let parsed: DownloadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
+    if let Some(first) = parsed.urls.first() {
+        log_transfer_endpoint("Descarga", &first.download_url);
+    }
     Ok(parsed
         .urls
         .into_iter()
@@ -565,4 +587,53 @@ pub async fn copy_friend_saves_with_plan(
     }
 
     copy_friend_saves_with_plan_impl(&friend_id, &game_id_trimmed, plan).await
+}
+
+/// Devuelve si la API está dando URLs con S3 Transfer Acceleration ("accelerated" | "standard" | "unknown").
+/// Sirve para mostrarlo en Configuración.
+#[tauri::command]
+pub async fn get_s3_transfer_endpoint_type() -> Result<String, String> {
+    let cfg = crate::config::load_config();
+    let api_base = match cfg.api_base_url.as_deref().filter(|s| !s.trim().is_empty()) {
+        Some(b) => b,
+        None => return Ok("unknown".to_string()),
+    };
+    let user_id = match cfg.user_id.as_deref().filter(|s| !s.trim().is_empty()) {
+        Some(u) => u,
+        None => return Ok("unknown".to_string()),
+    };
+    let api_key = cfg.api_key.as_deref().unwrap_or("");
+
+    let body = serde_json::json!({
+        "gameId": "__check__",
+        "filename": "__check__.tmp"
+    });
+    let body_bytes = body.to_string().into_bytes();
+    let res = match api_request(
+        api_base,
+        user_id,
+        api_key,
+        "POST",
+        "/upload-url",
+        Some(&body_bytes),
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(_) => return Ok("unknown".to_string()),
+    };
+
+    if !res.status().is_success() {
+        return Ok("unknown".to_string());
+    }
+    let json: serde_json::Value = match res.json().await {
+        Ok(j) => j,
+        Err(_) => return Ok("unknown".to_string()),
+    };
+    let upload_url = json.get("uploadUrl").and_then(|v| v.as_str()).unwrap_or("");
+    Ok(if upload_url.contains(S3_ACCELERATE_HOST) {
+        "accelerated".to_string()
+    } else {
+        "standard".to_string()
+    })
 }

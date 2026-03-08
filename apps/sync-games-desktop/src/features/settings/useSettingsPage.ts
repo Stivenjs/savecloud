@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { isEnabled, enable, disable } from "@tauri-apps/plugin-autostart";
 import {
@@ -6,6 +6,7 @@ import {
   createConfigFile,
   exportConfigToFile,
   getConfigPath,
+  getS3TransferEndpointType,
   importConfigFromFile,
   restoreConfigFromCloud,
   scheduleConfigBackupToCloud,
@@ -328,9 +329,23 @@ export function useSettingsPage() {
     dispatch({ type: "SET_CREATE_MODAL", open: true });
   };
 
+  const [s3TransferEndpointType, setS3TransferEndpointType] = useState<
+    "accelerated" | "standard" | "unknown" | null
+  >(null);
+  useEffect(() => {
+    if (!config?.apiBaseUrl?.trim() || !config?.userId?.trim()) {
+      setS3TransferEndpointType(null);
+      return;
+    }
+    getS3TransferEndpointType()
+      .then(setS3TransferEndpointType)
+      .catch(() => setS3TransferEndpointType("unknown"));
+  }, [config?.apiBaseUrl, config?.userId]);
+
   return {
     ...state,
     config,
+    s3TransferEndpointType,
     handleExportConfig,
     handleImportConfig,
     handleCheckUpdates,
