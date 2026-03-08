@@ -80,6 +80,7 @@ export async function registerSavesRoutes(
   });
 
   const UPLOAD_URLS_MAX_ITEMS = 500;
+  const DOWNLOAD_URLS_MAX_ITEMS = 500;
 
   app.post<{
     Body: { items: Array<{ gameId: string; filename: string }> };
@@ -131,32 +132,50 @@ export async function registerSavesRoutes(
   app.post<{
     Body: { items: Array<{ gameId: string; key: string }> };
   }>("/saves/download-urls", async (request, reply) => {
-    const userId = getUserId(request);
-    const body = request.body as {
-      items?: Array<{ gameId?: string; key?: string }>;
-    };
-    const raw = body?.items ?? [];
-    if (!Array.isArray(raw) || raw.length === 0) {
-      return reply.status(400).send({
-        error: "Bad Request",
-        message: "items (non-empty array of { gameId, key }) is required",
+    try {
+      const userId = getUserId(request);
+      const body = request.body as {
+        items?: Array<{ gameId?: string; key?: string }>;
+      };
+      const raw = body?.items ?? [];
+      if (!Array.isArray(raw) || raw.length === 0) {
+        return reply.status(400).send({
+          error: "Bad Request",
+          message: "items (non-empty array of { gameId, key }) is required",
+        });
+      }
+      const items = raw
+        .map((x) =>
+          x?.gameId?.trim() && x?.key?.trim()
+            ? { gameId: x.gameId.trim(), key: x.key.trim() }
+            : null
+        )
+        .filter((x): x is { gameId: string; key: string } => x !== null);
+      if (items.length === 0) {
+        return reply.status(400).send({
+          error: "Bad Request",
+          message: "Every item must have gameId and key",
+        });
+      }
+      if (items.length > DOWNLOAD_URLS_MAX_ITEMS) {
+        return reply.status(400).send({
+          error: "Bad Request",
+          message: `Maximum ${DOWNLOAD_URLS_MAX_ITEMS} items per request. Split into batches.`,
+        });
+      }
+      const result = await deps.getDownloadUrlsUseCase.execute({
+        userId,
+        items,
+      });
+      return reply.send(result);
+    } catch (err) {
+      const message = getErrorMessage(err);
+      request.log.error({ err, message }, "download-urls failed");
+      return reply.status(500).send({
+        error: "Internal Server Error",
+        message,
       });
     }
-    const items = raw
-      .map((x) =>
-        x?.gameId?.trim() && x?.key?.trim()
-          ? { gameId: x.gameId.trim(), key: x.key.trim() }
-          : null
-      )
-      .filter((x): x is { gameId: string; key: string } => x !== null);
-    if (items.length === 0) {
-      return reply.status(400).send({
-        error: "Bad Request",
-        message: "Every item must have gameId and key",
-      });
-    }
-    const result = await deps.getDownloadUrlsUseCase.execute({ userId, items });
-    return reply.send(result);
   });
 
   app.post<{

@@ -275,9 +275,15 @@ async fn sync_download_game_impl(game_id: String, app: AppHandle) -> Result<Sync
         .iter()
         .map(|s| (game_id.clone(), s.key.clone()))
         .collect();
-    let download_urls = api::get_download_urls(api_base, user_id, api_key, &items)
-        .await
-        .map_err(|e| format!("download-urls: {}", e))?;
+
+    const DOWNLOAD_URLS_BATCH_SIZE: usize = 500;
+    let mut download_urls = Vec::with_capacity(saves.len());
+    for chunk in items.chunks(DOWNLOAD_URLS_BATCH_SIZE) {
+        let batch = api::get_download_urls(api_base, user_id, api_key, chunk)
+            .await
+            .map_err(|e| format!("download-urls: {}", e))?;
+        download_urls.extend(batch);
+    }
     if download_urls.len() != saves.len() {
         return Err(format!(
             "API devolvió {} URLs para {} archivos",
