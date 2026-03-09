@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
+import { Spinner } from "@heroui/react";
 import { useCallback, useState } from "react";
 import { useSyncProgress } from "@contexts/SyncProgressContext";
 import {
@@ -110,21 +111,20 @@ export function SyncProgressBar() {
               </span>
             )}
           </div>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-default-200">
-            {isIndeterminate ? (
-              <motion.div
-                className="h-full rounded-full bg-primary"
-                initial={false}
-                animate={{
-                  width: ["30%", "70%", "30%"],
-                }}
-                transition={{
-                  duration: 1.2,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                }}
+          {isIndeterminate ? (
+            <div className="mt-2 flex items-center gap-2">
+              <Spinner
+                size="sm"
+                color="primary"
+                aria-label="Preparando datos"
               />
-            ) : (
+              <p className="text-xs text-default-500">
+                Preparando datos… esto puede tardar unos minutos en juegos
+                grandes.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-default-200">
               <motion.div
                 className="h-full rounded-full bg-primary"
                 initial={false}
@@ -133,8 +133,8 @@ export function SyncProgressBar() {
                 }}
                 transition={{ type: "tween", duration: 0.25, ease: "easeOut" }}
               />
-            )}
-          </div>
+            </div>
+          )}
         </motion.div>
       )}
 

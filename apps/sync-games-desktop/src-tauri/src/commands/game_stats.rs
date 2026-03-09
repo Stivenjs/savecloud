@@ -2,6 +2,7 @@
 
 use crate::commands::sync;
 use crate::config;
+use futures_util::future::join_all;
 use regex::Regex;
 use serde::Serialize;
 use std::fs;
@@ -144,9 +145,23 @@ pub async fn get_game_stats() -> Result<Vec<GameStatsDto>, String> {
             Err(_) => std::collections::HashMap::new(),
         };
 
-    let mut result = Vec::new();
+    // Calcular estadísticas locales en hilos bloqueantes en paralelo (uno por juego).
+    let mut handles = Vec::with_capacity(cfg.games.len());
     for game in &cfg.games {
-        let (local_size, local_mtime) = local_stats_for_paths(&game.paths);
+        let id = game.id.clone();
+        let paths = game.paths.clone();
+        handles.push(tokio::task::spawn_blocking(move || {
+            let (local_size, local_mtime) = local_stats_for_paths(&paths);
+            (id, local_size, local_mtime)
+        }));
+    }
+
+    let joined = join_all(handles).await;
+    let mut result = Vec::with_capacity(joined.len());
+
+    for join_res in joined {
+        let (game_id, local_size, local_mtime) =
+            join_res.map_err(|e| format!("join game stats task: {}", e))?;
 
         let local_last_modified = local_mtime.and_then(|mtime| {
             let Ok(duration) = mtime.duration_since(UNIX_EPOCH) else {
@@ -157,12 +172,12 @@ pub async fn get_game_stats() -> Result<Vec<GameStatsDto>, String> {
         });
 
         let cloud_last_modified = cloud_by_game
-            .get(&game.id.to_lowercase())
+            .get(&game_id.to_lowercase())
             .cloned()
             .flatten();
 
         result.push(GameStatsDto {
-            game_id: game.id.clone(),
+            game_id,
             local_size_bytes: local_size,
             local_last_modified,
             cloud_last_modified,
