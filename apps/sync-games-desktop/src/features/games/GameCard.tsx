@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownTrigger,
   Skeleton,
+  Tooltip,
 } from "@heroui/react";
 import {
   Archive,
@@ -28,6 +29,7 @@ import { formatGameDisplayName, getGameImageUrl } from "@utils/gameImage";
 import { formatBytes, formatRelativeDate } from "@utils/format";
 import { GameCardStatusBar } from "@features/games/GameCardStatusBar";
 import { GameCardSyncProgress } from "@features/games/GameCardSyncProgress";
+import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";
 
 export interface GameCardProps {
   game: ConfiguredGame;
@@ -101,6 +103,10 @@ export function GameCard({
   const showImage = imageUrl && !imgError;
   const imageLoading = showImage && !imgLoaded;
   const isLoading = externalLoading ?? imageLoading;
+  const isUploadTooLarge =
+    (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
+  const showPackageRequiredChip = isUploadTooLarge && !!onFullBackupUpload;
+  const uploadTooLargeTooltip = "Demasiado grande: usa Empaquetar y subir.";
 
   if (isLoading) {
     return (
@@ -153,8 +159,10 @@ export function GameCard({
                 if (key === "edit") onEdit?.(game);
                 else if (key === "folder") onOpenFolder?.(game);
                 else if (key === "download") onDownload?.(game);
-                else if (key === "sync") onSync?.(game);
-                else if (key === "fullBackup") onFullBackupUpload?.(game);
+                else if (key === "sync") {
+                  if (isUploadTooLarge) return;
+                  onSync?.(game);
+                } else if (key === "fullBackup") onFullBackupUpload?.(game);
                 else if (key === "restore") onRestoreBackup?.(game);
                 else if (key === "share") onShare?.(game);
                 else if (key === "remove") onRemove?.(game);
@@ -221,32 +229,56 @@ export function GameCard({
                   Compartir por link
                 </DropdownItem>
               ) : null}
-              {onSync ? (
-                <DropdownItem
-                  key="sync"
-                  startContent={
-                    isSyncing ? (
-                      <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    ) : (
-                      <CloudUpload size={16} className="text-default-500" />
-                    )
-                  }
-                >
-                  Subir a la nube
-                </DropdownItem>
-              ) : null}
               {onFullBackupUpload ? (
                 <DropdownItem
                   key="fullBackup"
+                  className={isUploadTooLarge ? "text-warning" : undefined}
                   startContent={
                     isFullBackupUploading ? (
                       <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                     ) : (
-                      <Archive size={16} className="text-default-500" />
+                      <Archive
+                        size={16}
+                        className={
+                          isUploadTooLarge ? "text-warning" : "text-default-500"
+                        }
+                      />
                     )
                   }
                 >
-                  Empaquetar y subir (backup completo)
+                  {isUploadTooLarge
+                    ? "Empaquetar y subir (obligatorio)"
+                    : "Empaquetar y subir (backup completo)"}
+                </DropdownItem>
+              ) : null}
+              {onSync ? (
+                <DropdownItem
+                  key="sync"
+                  className={
+                    isUploadTooLarge
+                      ? "cursor-not-allowed opacity-60"
+                      : undefined
+                  }
+                  startContent={
+                    isSyncing ? (
+                      <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    ) : (
+                      <CloudUpload
+                        size={16}
+                        className={
+                          isUploadTooLarge ? "text-warning" : "text-default-500"
+                        }
+                      />
+                    )
+                  }
+                >
+                  {isUploadTooLarge ? (
+                    <Tooltip content={uploadTooLargeTooltip} placement="left">
+                      <span>Subir a la nube (no disponible)</span>
+                    </Tooltip>
+                  ) : (
+                    "Subir a la nube"
+                  )}
                 </DropdownItem>
               ) : null}
               {onRemove ? (
@@ -291,6 +323,13 @@ export function GameCard({
           syncStatus={syncStatus}
           cloudBackupCount={cloudBackupCount}
         />
+        {showPackageRequiredChip && (
+          <Tooltip content={uploadTooLargeTooltip} placement="top">
+            <span className="mt-0.5 inline-flex items-center rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[10px] font-medium text-warning">
+              Requiere empaquetar
+            </span>
+          </Tooltip>
+        )}
         {stats && (
           <p className="w-full truncate text-center text-[10px] text-default-600">
             {formatBytes(stats.localSizeBytes)}

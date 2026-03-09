@@ -1,6 +1,6 @@
 # Notas de versión
 
-## v1.3.0 (actual)
+## v1.3.1 (actual)
 
 ### API (backend)
 
