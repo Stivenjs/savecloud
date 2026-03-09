@@ -1,0 +1,17 @@
+Resources:
+  # Transfer Acceleration: subidas/descargas más rápidas vía edge de CloudFront.
+  # Tras el deploy puede tardar ~20 min en activarse. Coste extra por transferencia (ver S3 pricing).
+  SavesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccelerateConfiguration:
+        AccelerationStatus: Suspended
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ["Content-Type", "x-user-id", "x-api-key"]
+            AllowedMethods: [GET, PUT, HEAD]
+            AllowedOrigins: ["*"]

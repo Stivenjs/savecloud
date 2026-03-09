@@ -37,6 +37,21 @@ export class S3SaveRepository implements SaveRepository {
     private readonly bucketName: string
   ) {}
 
+  /**
+   * Construye URL de CloudFront solo para backups (prefijo /backups/).
+   * Los guardados "rápidos" siguen yendo directos a S3 con URL presignada
+   * para evitar costes extra por versión y problemas de caché agresiva.
+   */
+  private static buildCloudFrontUrl(key: string): string | null {
+    // Solo usar CloudFront para backups (userId/gameId/backups/...)
+    if (!key.includes("/backups/")) return null;
+    const base = process.env.DOWNLOAD_BASE_URL;
+    if (!base) return null;
+    const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
+    const encodedKey = encodeURIComponent(key).replace(/%2F/g, "/");
+    return `${normalizedBase}/${encodedKey}`;
+  }
+
   async getUploadUrl(
     userId: string,
     gameId: string,
@@ -58,6 +73,11 @@ export class S3SaveRepository implements SaveRepository {
     key: string,
     range?: { start: number; end: number }
   ): Promise<string> {
+    const cloudFrontUrl =
+      range == null ? S3SaveRepository.buildCloudFrontUrl(key) : null;
+    if (cloudFrontUrl) {
+      return cloudFrontUrl;
+    }
     const command = new GetObjectCommand({
       Bucket: this.bucketName,
       Key: key,
@@ -98,14 +118,19 @@ export class S3SaveRepository implements SaveRepository {
     items: DownloadUrlItem[]
   ): Promise<DownloadUrlResult[]> {
     if (items.length === 0) return [];
-    const options = { expiresIn: PRESIGN_EXPIRES_IN_SECONDS };
     const results = await Promise.all(
       items.map(async ({ gameId, key }) => {
+        const cloudFrontUrl = S3SaveRepository.buildCloudFrontUrl(key);
+        if (cloudFrontUrl) {
+          return { downloadUrl: cloudFrontUrl, gameId, key };
+        }
         const command = new GetObjectCommand({
           Bucket: this.bucketName,
           Key: key,
         });
-        const downloadUrl = await getSignedUrl(this.s3, command, options);
+        const downloadUrl = await getSignedUrl(this.s3, command, {
+          expiresIn: PRESIGN_EXPIRES_IN_SECONDS,
+        });
         return { downloadUrl, gameId, key };
       })
     );

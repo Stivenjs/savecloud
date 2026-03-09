@@ -1,0 +1,81 @@
+Resources:
+  # Transfer Acceleration: subidas/descargas más rápidas vía edge de CloudFront.
+  # Tras el deploy puede tardar ~20 min en activarse. Coste extra por transferencia (ver S3 pricing).
+  SavesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccelerateConfiguration:
+        AccelerationStatus: Suspended
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ["Content-Type", "x-user-id", "x-api-key"]
+            AllowedMethods: [GET, PUT, HEAD]
+            AllowedOrigins: ["*"]
+
+  CloudFrontOriginAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment:
+          Fn::Sub: "Access identity for CloudFront to reach ${SavesBucket}"
+
+  SavesBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: { Ref: SavesBucket }
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontAccess
+            Effect: Allow
+            Principal:
+              CanonicalUser:
+                Fn::GetAtt:
+                  - CloudFrontOriginAccessIdentity
+                  - S3CanonicalUserId
+            Action: "s3:GetObject"
+            Resource:
+              - Fn::Sub: "arn:aws:s3:::${SavesBucket}/*"
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment:
+          Fn::Sub: "CloudFront distribution for SaveCloud - ${sls:stage, 'dev'}"
+        DefaultRootObject: ""
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: SavesBucketOrigin
+            DomainName:
+              Fn::GetAtt:
+                - SavesBucket
+                - RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity:
+                Fn::Sub: "origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}"
+        DefaultCacheBehavior:
+          TargetOriginId: SavesBucketOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          MinTTL: 31536000
+          DefaultTTL: 31536000
+          MaxTTL: 31536000
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
