@@ -9,6 +9,8 @@ import { GetDownloadUrlsUseCase } from "@application/use-cases/GetDownloadUrlsUs
 import { DeleteGameFromCloudUseCase } from "@application/use-cases/DeleteGameFromCloudUseCase";
 import { RenameGameInCloudUseCase } from "@application/use-cases/RenameGameInCloudUseCase";
 import { ListBackupsUseCase } from "@application/use-cases/ListBackupsUseCase";
+import { DeleteBackupUseCase } from "@application/use-cases/DeleteBackupUseCase";
+import { RenameBackupUseCase } from "@application/use-cases/RenameBackupUseCase";
 import { ListSavesUseCase } from "@application/use-cases/ListSavesUseCase";
 import { CreateMultipartUploadUseCase } from "@application/use-cases/CreateMultipartUploadUseCase";
 import { CreateMultipartUploadWithPartUrlsUseCase } from "@application/use-cases/CreateMultipartUploadWithPartUrlsUseCase";
@@ -62,6 +64,8 @@ export async function buildApp(
   );
   const listSavesUseCase = new ListSavesUseCase(deps.saveRepository);
   const listBackupsUseCase = new ListBackupsUseCase(deps.saveRepository);
+  const deleteBackupUseCase = new DeleteBackupUseCase(deps.saveRepository);
+  const renameBackupUseCase = new RenameBackupUseCase(deps.saveRepository);
   const createMultipartUploadUseCase = new CreateMultipartUploadUseCase(
     deps.saveRepository
   );
@@ -86,6 +90,8 @@ export async function buildApp(
     renameGameInCloudUseCase,
     listSavesUseCase,
     listBackupsUseCase,
+    deleteBackupUseCase,
+    renameBackupUseCase,
     createMultipartUploadUseCase,
     createMultipartUploadWithPartUrlsUseCase,
     getUploadPartUrlsUseCase,

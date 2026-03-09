@@ -3,6 +3,7 @@ import {
   CompleteMultipartUploadCommand,
   CopyObjectCommand,
   CreateMultipartUploadCommand,
+  DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
   ListObjectsV2Command,
@@ -226,7 +227,8 @@ export class S3SaveRepository implements SaveRepository {
 
   async listBackups(userId: string, gameId: string): Promise<BackupMetadata[]> {
     const prefix = `${userId}/${gameId}/backups/`;
-    const allContents: { Key: string; LastModified?: Date; Size?: number }[] = [];
+    const allContents: { Key: string; LastModified?: Date; Size?: number }[] =
+      [];
     let continuationToken: string | undefined;
     do {
       const response = await this.s3.send(
@@ -252,6 +254,70 @@ export class S3SaveRepository implements SaveRepository {
       size: obj.Size,
       filename: obj.Key.slice(prefix.length) || obj.Key,
     }));
+  }
+
+  private static backupKeyPrefix(userId: string, gameId: string): string {
+    return `${userId}/${gameId}/backups/`;
+  }
+
+  private static assertValidBackupKey(
+    userId: string,
+    gameId: string,
+    key: string
+  ): void {
+    const prefix = S3SaveRepository.backupKeyPrefix(userId, gameId);
+    if (!key.startsWith(prefix) || key.includes("..")) {
+      throw new Error("Invalid key: must be a backup of this user and game");
+    }
+  }
+
+  async deleteBackup(
+    userId: string,
+    gameId: string,
+    key: string
+  ): Promise<void> {
+    S3SaveRepository.assertValidBackupKey(userId, gameId, key);
+    await this.s3.send(
+      new DeleteObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      })
+    );
+  }
+
+  async renameBackup(
+    userId: string,
+    gameId: string,
+    oldKey: string,
+    newFilename: string
+  ): Promise<void> {
+    S3SaveRepository.assertValidBackupKey(userId, gameId, oldKey);
+    const prefix = S3SaveRepository.backupKeyPrefix(userId, gameId);
+    if (
+      !newFilename ||
+      newFilename.includes("/") ||
+      newFilename.includes("..") ||
+      !newFilename.endsWith(".tar")
+    ) {
+      throw new Error(
+        "newFilename must be a .tar filename without path (e.g. mi-backup.tar)"
+      );
+    }
+    const newKey = `${prefix}${newFilename}`;
+    if (newKey === oldKey) return;
+    await this.s3.send(
+      new CopyObjectCommand({
+        Bucket: this.bucketName,
+        CopySource: `${this.bucketName}/${encodeURIComponent(oldKey)}`,
+        Key: newKey,
+      })
+    );
+    await this.s3.send(
+      new DeleteObjectCommand({
+        Bucket: this.bucketName,
+        Key: oldKey,
+      })
+    );
   }
 
   async deleteGame(userId: string, gameId: string): Promise<void> {

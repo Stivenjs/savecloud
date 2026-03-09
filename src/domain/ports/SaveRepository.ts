@@ -79,6 +79,15 @@ export interface SaveRepository {
   listByUser(userId: string): Promise<GameSave[]>;
   /** Lista backups (archivos .tar) del juego bajo userId/gameId/backups/ */
   listBackups(userId: string, gameId: string): Promise<BackupMetadata[]>;
+  /** Borra un backup por key (debe estar bajo userId/gameId/backups/). */
+  deleteBackup(userId: string, gameId: string, key: string): Promise<void>;
+  /** Renombra un backup: copia a userId/gameId/backups/newFilename y borra el antiguo. */
+  renameBackup(
+    userId: string,
+    gameId: string,
+    oldKey: string,
+    newFilename: string
+  ): Promise<void>;
   /** Borra todos los objetos en S3 bajo userId/gameId/ */
   deleteGame(userId: string, gameId: string): Promise<void>;
   /** Copia todos los objetos de userId/oldGameId/ a userId/newGameId/ y borra los antiguos */

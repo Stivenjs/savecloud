@@ -67,6 +67,8 @@ pub fn run() {
             commands::sync::full_backup::create_and_upload_full_backup,
             commands::sync::full_backup::list_full_backups,
             commands::sync::full_backup::download_and_restore_full_backup,
+            commands::sync::full_backup::delete_cloud_backup,
+            commands::sync::full_backup::rename_cloud_backup,
             commands::sync::preview::preview_upload,
             commands::sync::preview::preview_download,
             commands::get_game_stats,

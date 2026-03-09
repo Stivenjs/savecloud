@@ -523,6 +523,27 @@ export async function downloadAndRestoreFullBackup(
   });
 }
 
+/** Elimina un backup empaquetado de la nube por key. */
+export async function deleteFullBackup(
+  gameId: string,
+  backupKey: string
+): Promise<void> {
+  await invoke("delete_cloud_backup", { gameId, backupKey });
+}
+
+/** Renombra un backup empaquetado en la nube. newFilename debe ser solo el nombre .tar (ej. "mi-backup.tar"). */
+export async function renameFullBackup(
+  gameId: string,
+  backupKey: string,
+  newFilename: string
+): Promise<void> {
+  await invoke("rename_cloud_backup", {
+    gameId,
+    backupKey,
+    newFilename,
+  });
+}
+
 /** Resultado de la limpieza de backups antiguos */
 export interface CleanupBackupsResult {
   backupsDeleted: number;

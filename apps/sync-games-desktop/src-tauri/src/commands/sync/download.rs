@@ -137,6 +137,11 @@ pub async fn sync_check_download_conflicts_batch(
     Ok(results)
 }
 
+/// Tolerancia (segundos) al comparar local vs nube: solo consideramos "pendiente subir" si
+/// el archivo local es claramente más reciente. Evita falsos positivos por precisión (S3 en
+/// segundos, FS con subsegundos) o por desfase de reloj tras subir/descargar.
+const UNSYNCED_LOCAL_NEWER_TOLERANCE_SECS: i64 = 2;
+
 #[tauri::command]
 pub async fn sync_check_unsynced_games() -> Result<Vec<UnsyncedGameDto>, String> {
     let cfg = crate::config::load_config();
@@ -166,6 +171,7 @@ pub async fn sync_check_unsynced_games() -> Result<Vec<UnsyncedGameDto>, String>
         .collect();
 
     let mut unsynced = Vec::new();
+    let tolerance = chrono::Duration::seconds(UNSYNCED_LOCAL_NEWER_TOLERANCE_SECS);
 
     for game in &cfg.games {
         let local_files = path_utils::list_all_files_with_mtime(&game.paths);
@@ -185,8 +191,12 @@ pub async fn sync_check_unsynced_games() -> Result<Vec<UnsyncedGameDto>, String>
             let key = (game.id.to_lowercase(), rel.clone());
             match remote_map.get(&key) {
                 None => has_unsynced = true,
-                Some(&cloud_dt) if local_dt > cloud_dt => has_unsynced = true,
-                _ => {}
+                Some(&cloud_dt) => {
+                    // Solo "pendiente subir" si local es claramente más reciente (por encima de tolerancia).
+                    if local_dt > cloud_dt + tolerance {
+                        has_unsynced = true;
+                    }
+                }
             }
         }
 

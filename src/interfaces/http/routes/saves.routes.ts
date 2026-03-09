@@ -6,6 +6,8 @@ import type { GetDownloadUrlsUseCase } from "@application/use-cases/GetDownloadU
 import type { DeleteGameFromCloudUseCase } from "@application/use-cases/DeleteGameFromCloudUseCase";
 import type { RenameGameInCloudUseCase } from "@application/use-cases/RenameGameInCloudUseCase";
 import type { ListBackupsUseCase } from "@application/use-cases/ListBackupsUseCase";
+import type { DeleteBackupUseCase } from "@application/use-cases/DeleteBackupUseCase";
+import type { RenameBackupUseCase } from "@application/use-cases/RenameBackupUseCase";
 import type { ListSavesUseCase } from "@application/use-cases/ListSavesUseCase";
 import type { CreateMultipartUploadUseCase } from "@application/use-cases/CreateMultipartUploadUseCase";
 import type { CreateMultipartUploadWithPartUrlsUseCase } from "@application/use-cases/CreateMultipartUploadWithPartUrlsUseCase";
@@ -49,6 +51,8 @@ export async function registerSavesRoutes(
     renameGameInCloudUseCase: RenameGameInCloudUseCase;
     listSavesUseCase: ListSavesUseCase;
     listBackupsUseCase: ListBackupsUseCase;
+    deleteBackupUseCase: DeleteBackupUseCase;
+    renameBackupUseCase: RenameBackupUseCase;
     createMultipartUploadUseCase: CreateMultipartUploadUseCase;
     createMultipartUploadWithPartUrlsUseCase: CreateMultipartUploadWithPartUrlsUseCase;
     getUploadPartUrlsUseCase: GetUploadPartUrlsUseCase;
@@ -62,17 +66,91 @@ export async function registerSavesRoutes(
     return reply.send(saves);
   });
 
-  app.get("/saves/backups", async (request: FastifyRequest, reply: FastifyReply) => {
-    const userId = getUserId(request);
-    const gameId = (request.query as { gameId?: string })?.gameId?.trim();
-    if (!gameId) {
-      return reply.status(400).send({
-        error: "Bad Request",
-        message: "query gameId is required",
+  app.get(
+    "/saves/backups",
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const userId = getUserId(request);
+      const gameId = (request.query as { gameId?: string })?.gameId?.trim();
+      if (!gameId) {
+        return reply.status(400).send({
+          error: "Bad Request",
+          message: "query gameId is required",
+        });
+      }
+      const result = await deps.listBackupsUseCase.execute({ userId, gameId });
+      return reply.send(result);
+    }
+  );
+
+  app.delete<{
+    Body: { gameId: string; key: string };
+  }>("/saves/backup", async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+      const body = request.body as { gameId?: string; key?: string };
+      const gameId = body?.gameId?.trim();
+      const key = body?.key?.trim();
+      if (!gameId || !key) {
+        return reply.status(400).send({
+          error: "Bad Request",
+          message: "gameId and key are required",
+        });
+      }
+      await deps.deleteBackupUseCase.execute({ userId, gameId, key });
+      return reply.status(204).send();
+    } catch (err) {
+      const message = getErrorMessage(err);
+      if (message.startsWith("Invalid key:")) {
+        return reply.status(400).send({ error: "Bad Request", message });
+      }
+      request.log.error({ err, message }, "delete backup failed");
+      return reply.status(500).send({
+        error: "Internal Server Error",
+        message,
       });
     }
-    const result = await deps.listBackupsUseCase.execute({ userId, gameId });
-    return reply.send(result);
+  });
+
+  app.patch<{
+    Body: { gameId: string; key: string; newFilename: string };
+  }>("/saves/backup", async (request, reply) => {
+    try {
+      const userId = getUserId(request);
+      const body = request.body as {
+        gameId?: string;
+        key?: string;
+        newFilename?: string;
+      };
+      const gameId = body?.gameId?.trim();
+      const key = body?.key?.trim();
+      const newFilename = body?.newFilename?.trim();
+      if (!gameId || !key || !newFilename) {
+        return reply.status(400).send({
+          error: "Bad Request",
+          message: "gameId, key and newFilename are required",
+        });
+      }
+      await deps.renameBackupUseCase.execute({
+        userId,
+        gameId,
+        key,
+        newFilename,
+      });
+      return reply.status(204).send();
+    } catch (err) {
+      const message = getErrorMessage(err);
+      if (
+        message.startsWith("Invalid key:") ||
+        message.includes("newFilename must")
+      ) {
+        return reply.status(400).send({ error: "Bad Request", message });
+      }
+      request.log.error({ err, message }, "rename backup failed");
+      return reply.status(500).send({
+        error: "Internal Server Error",
+        message,
+      });
+    }
   });
 
   app.post<{

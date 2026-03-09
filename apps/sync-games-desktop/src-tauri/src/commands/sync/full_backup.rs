@@ -273,3 +273,91 @@ pub async fn download_and_restore_full_backup(
 
     Ok(())
 }
+
+/// Elimina un backup empaquetado de la nube por key.
+#[tauri::command]
+pub async fn delete_cloud_backup(game_id: String, backup_key: String) -> Result<(), String> {
+    let cfg = config::load_config();
+    let api_base = cfg
+        .api_base_url
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura apiBaseUrl en Configuración")?;
+    let user_id = cfg
+        .user_id
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura userId en Configuración")?;
+    let api_key = cfg.api_key.as_deref().unwrap_or("");
+
+    let body = serde_json::json!({ "gameId": game_id, "key": backup_key });
+    let body_bytes = body.to_string().into_bytes();
+    let res = api::api_request(
+        api_base,
+        user_id,
+        api_key,
+        "DELETE",
+        "/backup",
+        Some(&body_bytes),
+    )
+    .await
+    .map_err(|e| format!("delete backup: {}", e))?;
+    if !res.status().is_success() && res.status() != reqwest::StatusCode::NO_CONTENT {
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        return Err(format!("API delete backup: {} {}", status, text));
+    }
+    Ok(())
+}
+
+/// Renombra un backup empaquetado en la nube. new_filename debe ser solo el nombre .tar (ej. "mi-backup.tar").
+#[tauri::command]
+pub async fn rename_cloud_backup(
+    game_id: String,
+    backup_key: String,
+    new_filename: String,
+) -> Result<(), String> {
+    let cfg = config::load_config();
+    let api_base = cfg
+        .api_base_url
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura apiBaseUrl en Configuración")?;
+    let user_id = cfg
+        .user_id
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura userId en Configuración")?;
+    let api_key = cfg.api_key.as_deref().unwrap_or("");
+
+    let new_filename = new_filename.trim();
+    if new_filename.is_empty() || !new_filename.ends_with(".tar") {
+        return Err("El nuevo nombre debe terminar en .tar (ej. mi-backup.tar)".to_string());
+    }
+    if new_filename.contains('/') || new_filename.contains("..") {
+        return Err("El nombre no puede contener rutas.".to_string());
+    }
+
+    let body = serde_json::json!({
+        "gameId": game_id,
+        "key": backup_key,
+        "newFilename": new_filename
+    });
+    let body_bytes = body.to_string().into_bytes();
+    let res = api::api_request(
+        api_base,
+        user_id,
+        api_key,
+        "PATCH",
+        "/backup",
+        Some(&body_bytes),
+    )
+    .await
+    .map_err(|e| format!("rename backup: {}", e))?;
+    if !res.status().is_success() && res.status() != reqwest::StatusCode::NO_CONTENT {
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        return Err(format!("API rename backup: {} {}", status, text));
+    }
+    Ok(())
+}

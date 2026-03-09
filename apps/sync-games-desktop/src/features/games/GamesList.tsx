@@ -12,8 +12,11 @@ import { GameCard } from "@features/games/GameCard";
 
 type SyncStatus = "pending_upload" | "pending_download" | "in_sync" | null;
 
-/** Diferencia en ms por debajo de la cual consideramos local y nube "en sync" (precisión, reloj, etc.). */
+/** Diferencia en ms por debajo de la cual consideramos local y nube "en sync" (precisión, reloj). */
 const SYNC_TOLERANCE_MS = 15_000; // 15 segundos
+/** Si la nube es más reciente que local pero por menos de esto, lo tratamos como "en sync":
+ *  tras subir, S3 pone LastModified = ahora, así que cloud > local; no queremos mostrar "Pendiente descargar". */
+const CLOUD_NEWER_AS_SYNC_MS = 120_000; // 2 minutos
 
 function getSyncStatus(
   gameId: string,
@@ -27,10 +30,11 @@ function getSyncStatus(
     ? new Date(stats.localLastModified).getTime()
     : 0;
   const diff = cloud - local;
-  // Solo "pendiente descargar" si la nube es claramente más reciente (evita falsos positivos por precisión/reloj).
-  if (diff > SYNC_TOLERANCE_MS) return "pending_download";
-  // Local más reciente o diferencia dentro de tolerancia → en sync.
-  if (local > 0 || Math.abs(diff) <= SYNC_TOLERANCE_MS) return "in_sync";
+  // Solo "pendiente descargar" si la nube es claramente más reciente (p. ej. otro dispositivo subió).
+  // Si la diferencia es pequeña (p. ej. tras subir nosotros, S3 = ahora, local = antes) → in_sync.
+  if (diff > CLOUD_NEWER_AS_SYNC_MS) return "pending_download";
+  // Local más reciente, o diferencia dentro de tolerancia, o nube un poco más reciente (subida reciente) → en sync.
+  if (local > 0 || Math.abs(diff) <= SYNC_TOLERANCE_MS || (diff > 0 && diff <= CLOUD_NEWER_AS_SYNC_MS)) return "in_sync";
   return null;
 }
 

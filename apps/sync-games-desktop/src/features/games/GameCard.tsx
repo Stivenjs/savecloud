@@ -10,9 +10,7 @@ import {
   Skeleton,
 } from "@heroui/react";
 import {
-  AlertTriangle,
   Archive,
-  Check,
   CloudDownload,
   CloudUpload,
   FolderOpen,
@@ -28,6 +26,7 @@ import type { GameStats } from "@services/tauri";
 import type { SyncProgressState } from "@components/layout";
 import { formatGameDisplayName, getGameImageUrl } from "@utils/gameImage";
 import { formatBytes, formatRelativeDate } from "@utils/format";
+import { GameCardStatusBar } from "@features/games/GameCardStatusBar";
 import { GameCardSyncProgress } from "@features/games/GameCardSyncProgress";
 
 export interface GameCardProps {
@@ -120,57 +119,9 @@ export function GameCard({
 
   return (
     <Card
-      isFooterBlurred
       className="group relative overflow-hidden border-none shadow-md transition-all duration-200 ease-out hover:-translate-y-2 hover:shadow-xl"
       radius="lg"
     >
-      <div className="absolute left-2 top-2 z-20 flex flex-col gap-1.5">
-        {isGameRunning && (
-          <div
-            className="flex items-center gap-1 rounded-md bg-warning/90 px-2 py-1 text-xs font-medium text-warning-foreground backdrop-blur-sm"
-            title="El juego está en ejecución. Cierra el juego antes de sincronizar."
-          >
-            <AlertTriangle size={14} />
-            En ejecución
-          </div>
-        )}
-        {syncStatus === "pending_upload" && (
-          <div
-            className="flex items-center gap-1 rounded-md bg-warning/90 px-2 py-1 text-xs font-medium text-warning-foreground backdrop-blur-sm"
-            title="Hay guardados locales sin subir a la nube."
-          >
-            <CloudUpload size={12} />
-            Pendiente subir
-          </div>
-        )}
-        {syncStatus === "pending_download" && (
-          <div
-            className="flex items-center gap-1 rounded-md bg-primary/90 px-2 py-1 text-xs font-medium text-primary-foreground backdrop-blur-sm"
-            title="Hay guardados en la nube más recientes."
-          >
-            <CloudDownload size={12} />
-            Pendiente descargar
-          </div>
-        )}
-        {syncStatus === "in_sync" && (
-          <div
-            className="flex items-center gap-1 rounded-md bg-success/90 px-2 py-1 text-xs font-medium text-success-foreground backdrop-blur-sm"
-            title="Sincronizado con la nube."
-          >
-            <Check size={12} />
-            Sincronizado
-          </div>
-        )}
-        {cloudBackupCount > 0 && (
-          <div
-            className="flex items-center gap-1 rounded-md bg-secondary/90 px-2 py-1 text-xs font-medium text-secondary-foreground backdrop-blur-sm"
-            title={`${cloudBackupCount} backup${cloudBackupCount !== 1 ? "s" : ""} empaquetado${cloudBackupCount !== 1 ? "s" : ""} en la nube. Restaurar desde backup → En la nube.`}
-          >
-            <Archive size={12} />
-            {cloudBackupCount} empaquetado{cloudBackupCount !== 1 ? "s" : ""}
-          </div>
-        )}
-      </div>
       {(onOpenFolder ||
         onDownload ||
         onSync ||
@@ -331,31 +282,36 @@ export function GameCard({
           <Gamepad2 size={48} className="text-default-400" strokeWidth={1.5} />
         </div>
       )}
-      <CardFooter className="absolute bottom-0 left-0 right-0 flex flex-col items-center justify-center gap-0.5 overflow-hidden rounded-b-large border-0 bg-black/60 px-3 py-2 backdrop-blur-sm shadow-[0_-4px_20px_rgba(0,0,0,0.4)] z-10">
-        <p className="truncate w-full text-center text-xs font-bold uppercase tracking-wider text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+      <CardFooter className="flex flex-col items-center justify-center gap-0.5 overflow-hidden rounded-b-large rounded-t-none border-0 border-t border-default-200/80 bg-default-100 px-3 py-2 dark:bg-default-50/80">
+        <p className="truncate w-full text-center text-xs font-bold uppercase tracking-wider text-foreground">
           {formatGameDisplayName(game.id)}
         </p>
+        <GameCardStatusBar
+          isGameRunning={isGameRunning}
+          syncStatus={syncStatus}
+          cloudBackupCount={cloudBackupCount}
+        />
         {stats && (
-          <p className="w-full truncate text-center text-[10px] text-white/80 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+          <p className="w-full truncate text-center text-[10px] text-default-600">
             {formatBytes(stats.localSizeBytes)}
             {stats.localLastModified != null && (
-              <> • Local: {formatRelativeDate(stats.localLastModified)}</>
+              <> · Local: {formatRelativeDate(stats.localLastModified)}</>
             )}
             {stats.cloudLastModified != null && (
-              <> • Nube: {formatRelativeDate(stats.cloudLastModified)}</>
+              <> · Nube: {formatRelativeDate(stats.cloudLastModified)}</>
             )}
           </p>
         )}
         {(game.editionLabel || game.sourceUrl) && (
-          <p className="w-full truncate text-center text-[10px] text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+          <p className="w-full truncate text-center text-[10px] text-default-500">
             {game.editionLabel && <>Origen: {game.editionLabel}</>}
-            {game.editionLabel && game.sourceUrl && " • "}
+            {game.editionLabel && game.sourceUrl && " · "}
             {game.sourceUrl && (
               <a
                 href={game.sourceUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="underline"
+                className="underline hover:opacity-80"
               >
                 Ver enlace
               </a>

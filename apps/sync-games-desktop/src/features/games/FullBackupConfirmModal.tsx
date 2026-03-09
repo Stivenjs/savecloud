@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Button,
   Modal,
@@ -14,8 +15,8 @@ interface FullBackupConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
   game: ConfiguredGame | null;
-  onConfirm: () => void;
-  isLoading?: boolean;
+  /** Debe ser async; el modal muestra spinner hasta que termine y luego se cierra. */
+  onConfirm: () => void | Promise<void>;
 }
 
 export function FullBackupConfirmModal({
@@ -23,9 +24,19 @@ export function FullBackupConfirmModal({
   onClose,
   game,
   onConfirm,
-  isLoading = false,
 }: FullBackupConfirmModalProps) {
   const gameName = game ? formatGameDisplayName(game.id) : "";
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleConfirm = async () => {
+    setIsSubmitting(true);
+    try {
+      await Promise.resolve(onConfirm());
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <Modal
@@ -75,15 +86,15 @@ export function FullBackupConfirmModal({
           </p>
         </ModalBody>
         <ModalFooter>
-          <Button variant="flat" onPress={onClose} isDisabled={isLoading}>
+          <Button variant="flat" onPress={onClose} isDisabled={isSubmitting}>
             Cancelar
           </Button>
           <Button
             color="primary"
-            onPress={onConfirm}
-            isLoading={isLoading}
-            isDisabled={isLoading}
-            startContent={!isLoading ? <Archive size={18} /> : undefined}
+            onPress={handleConfirm}
+            isLoading={isSubmitting}
+            isDisabled={isSubmitting}
+            startContent={!isSubmitting ? <Archive size={18} /> : undefined}
           >
             Sí, empaquetar y subir
           </Button>

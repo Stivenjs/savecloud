@@ -290,12 +290,11 @@ export function GamesPage() {
         isOpen={!!gameToFullBackupConfirm}
         onClose={() => setGameToFullBackupConfirm(null)}
         game={gameToFullBackupConfirm}
-        onConfirm={() => {
-          const g = gameToFullBackupConfirm;
-          setGameToFullBackupConfirm(null);
-          if (g) handleFullBackupUpload(g);
+        onConfirm={async () => {
+          if (gameToFullBackupConfirm) {
+            await handleFullBackupUpload(gameToFullBackupConfirm);
+          }
         }}
-        isLoading={fullBackupUploadingGameId === gameToFullBackupConfirm?.id}
       />
       <RestoreBackupModal
         isOpen={!!gameToRestoreBackup}
