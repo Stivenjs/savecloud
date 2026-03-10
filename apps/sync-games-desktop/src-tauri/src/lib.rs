@@ -8,7 +8,7 @@ mod tray_state;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// Carga .env desde el directorio de trabajo o directorios padres (como hace la CLI).
 fn load_dotenv() {
@@ -106,22 +106,49 @@ pub fn run() {
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
             let show_item = MenuItem::with_id(app, "show", "Mostrar", true, None::<&str>)?;
+            let upload_all_item =
+                MenuItem::with_id(app, "upload_all", "Subir todo ahora", true, None::<&str>)?;
+            let download_all_item =
+                MenuItem::with_id(app, "download_all", "Descargar todo ahora", true, None::<&str>)?;
+            let backup_first_item = MenuItem::with_id(
+                app,
+                "backup_first",
+                "Backup completo (primer juego)",
+                true,
+                None::<&str>,
+            )?;
             let quit_item = MenuItem::with_id(app, "quit", "Salir", true, None::<&str>)?;
 
-            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+            let menu = Menu::with_items(
+                app,
+                &[
+                    &show_item,
+                    &upload_all_item,
+                    &download_all_item,
+                    &backup_first_item,
+                    &quit_item,
+                ],
+            )?;
 
             let tray = TrayIconBuilder::new()
                 .icon(icon)
                 .menu(&menu)
                 .tooltip("Listo")
                 .on_menu_event(move |app, event| {
-                    if event.id.as_ref() == "show" {
+                    let id = event.id.as_ref();
+                    if id == "show" {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
-                    } else if event.id.as_ref() == "quit" {
+                    } else if id == "quit" {
                         app.exit(0);
+                    } else if id == "upload_all" {
+                        let _ = app.emit("tray-action-upload-all", ());
+                    } else if id == "download_all" {
+                        let _ = app.emit("tray-action-download-all", ());
+                    } else if id == "backup_first" {
+                        let _ = app.emit("tray-action-backup-first", ());
                     }
                 })
                 .build(app)?;

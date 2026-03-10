@@ -16,16 +16,28 @@ import {
   backupConfigToCloud,
   checkForUpdatesWithPrompt,
   createAndUploadFullBackup,
+  getConfig,
+  syncDownloadAllGames,
   syncUploadGame,
+  syncUploadAllGames,
 } from "@services/tauri";
-import { toastError, toastSuccess, toastSyncResult } from "@utils/toast";
 import {
+  toastDownloadResult,
+  toastError,
+  toastSuccess,
+  toastSyncResult,
+} from "@utils/toast";
+import {
+  notifyBatchDownloadDone,
+  notifyBatchUploadDone,
+  notifyFullBackupDone,
   notifyFullBackupError,
   notifySyncComplete,
   notifySyncError,
   notifyUploadError,
 } from "@utils/notification";
 import { formatGameDisplayName } from "@utils/gameImage";
+import { useQueryClient } from "@tanstack/react-query";
 
 import "./App.css";
 
@@ -61,6 +73,121 @@ function PageContent({ activeId }: { activeId: string }) {
         </div>
       );
   }
+}
+
+/** Ejecuta subir todo, descargar todo o backup del primer juego al elegir la acción en la bandeja. */
+function TrayActionsListener() {
+  const { setSyncOperation } = useSyncProgress();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const unsubUpload = listen("tray-action-upload-all", async () => {
+      setSyncOperation({ type: "upload", mode: "batch", gameId: null });
+      let totalResult = { okCount: 0, errCount: 0, errors: [] as string[] };
+      try {
+        const results = await syncUploadAllGames();
+        totalResult = {
+          okCount: results.reduce((s, r) => s + r.result.okCount, 0),
+          errCount: results.reduce((s, r) => s + r.result.errCount, 0),
+          errors: results.flatMap((r) => r.result.errors),
+        };
+        toastSyncResult(totalResult);
+      } catch (e) {
+        totalResult = {
+          okCount: 0,
+          errCount: 1,
+          errors: [e instanceof Error ? e.message : String(e)],
+        };
+        toastSyncResult(totalResult);
+      } finally {
+        setSyncOperation(null);
+        notifyBatchUploadDone(totalResult.okCount, totalResult.errCount).catch(
+          () => {}
+        );
+        queryClient.invalidateQueries({ queryKey: ["game-stats"] });
+      }
+    });
+
+    const unsubDownload = listen("tray-action-download-all", async () => {
+      setSyncOperation({ type: "download", mode: "batch", gameId: null });
+      let totalResult = { okCount: 0, errCount: 0, errors: [] as string[] };
+      try {
+        const results = await syncDownloadAllGames();
+        totalResult = {
+          okCount: results.reduce((s, r) => s + r.result.okCount, 0),
+          errCount: results.reduce((s, r) => s + r.result.errCount, 0),
+          errors: results.flatMap((r) => r.result.errors),
+        };
+        toastDownloadResult(totalResult);
+      } catch (e) {
+        totalResult = {
+          okCount: 0,
+          errCount: 1,
+          errors: [e instanceof Error ? e.message : String(e)],
+        };
+        toastDownloadResult(totalResult);
+      } finally {
+        setSyncOperation(null);
+        notifyBatchDownloadDone(
+          totalResult.okCount,
+          totalResult.errCount
+        ).catch(() => {});
+        queryClient.invalidateQueries({ queryKey: ["game-stats"] });
+      }
+    });
+
+    const unsubBackup = listen("tray-action-backup-first", async () => {
+      let config;
+      try {
+        config = await getConfig();
+      } catch {
+        toastError("Error", "No se pudo leer la configuración.");
+        return;
+      }
+      const firstGameId = config?.games?.[0]?.id;
+      if (!firstGameId) {
+        toastError(
+          "Sin juegos",
+          "Añade al menos un juego para hacer backup desde la bandeja."
+        );
+        return;
+      }
+      setSyncOperation({ type: "upload", mode: "single", gameId: firstGameId });
+      try {
+        await createAndUploadFullBackup(firstGameId);
+        toastSuccess(
+          "Backup completo subido",
+          `${formatGameDisplayName(
+            firstGameId
+          )}: empaquetado subido desde la bandeja.`
+        );
+        notifyFullBackupDone(formatGameDisplayName(firstGameId)).catch(
+          () => {}
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        toastError("Error al empaquetar y subir", msg);
+        notifyFullBackupError(formatGameDisplayName(firstGameId), msg).catch(
+          () => {}
+        );
+      } finally {
+        setSyncOperation(null);
+        queryClient.invalidateQueries({ queryKey: ["game-stats"] });
+        queryClient.invalidateQueries({
+          queryKey: ["cloud-backups", firstGameId],
+        });
+        queryClient.invalidateQueries({ queryKey: ["cloud-backup-counts"] });
+      }
+    });
+
+    return () => {
+      unsubUpload.then((f) => f());
+      unsubDownload.then((f) => f());
+      unsubBackup.then((f) => f());
+    };
+  }, [setSyncOperation, queryClient]);
+
+  return null;
 }
 
 function UnsyncedSavesModalWithProgress() {
@@ -230,6 +357,7 @@ function App() {
 
   return (
     <SyncProgressProvider>
+      <TrayActionsListener />
       <UnsyncedSavesModalWithProgress />
       <AppLayout
         navItems={NAV_ITEMS}
