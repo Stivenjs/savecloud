@@ -42,6 +42,7 @@ export function GamesPage() {
     setSearchTerm,
     originFilter,
     setOriginFilter,
+    debouncedSearchTerm,
     addModalOpen,
     setAddModalOpen,
     scanModalOpen,
@@ -348,6 +349,7 @@ export function GamesPage() {
         </h2>
         <GamesList
           games={filteredGames}
+          animationKey={`${originFilter}|${debouncedSearchTerm}`}
           emptyFilterMessage={emptyFilterMessage}
           unsyncedGameIds={unsyncedGameIds}
           onEmptyScanPress={() => setScanModalOpen(true)}

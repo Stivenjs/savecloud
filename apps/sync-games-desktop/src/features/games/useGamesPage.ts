@@ -701,6 +701,7 @@ export function useGamesPage() {
     setSearchTerm,
     originFilter,
     setOriginFilter,
+    debouncedSearchTerm,
     addModalOpen,
     setAddModalOpen,
     scanModalOpen,

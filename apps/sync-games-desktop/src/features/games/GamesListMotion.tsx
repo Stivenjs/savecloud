@@ -56,6 +56,7 @@ export function GamesListMotionContainer({
   const [shouldAnimate, setShouldAnimate] = useState(false);
 
   useEffect(() => {
+    setShouldAnimate(false);
     const id = requestAnimationFrame(() => {
       setShouldAnimate(true);
     });

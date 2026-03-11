@@ -52,6 +52,8 @@ function getSyncStatus(
 
 interface GamesListProps {
   games: readonly ConfiguredGame[];
+  /** Clave para re-ejecutar la animación de entrada al filtrar/buscar, incluso si los IDs no cambian. */
+  animationKey?: string;
   /** Mensaje cuando la lista está vacía por filtros (en lugar del mensaje por defecto). */
   emptyFilterMessage?: string;
   /** Juegos con guardados locales sin subir (para badge). */
@@ -88,6 +90,7 @@ interface GamesListProps {
 
 export function GamesList({
   games,
+  animationKey,
   emptyFilterMessage,
   unsyncedGameIds = [],
   onEmptyScanPress,
@@ -186,7 +189,7 @@ export function GamesList({
   return (
     <GamesListMotionContainer
       className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5"
-      listKey={games.map((g) => g.id).join(",")}
+      listKey={[animationKey ?? "", games.map((g) => g.id).join(",")].join("|")}
     >
       {games.map((game) => (
         <GamesListMotionItem key={game.id}>
