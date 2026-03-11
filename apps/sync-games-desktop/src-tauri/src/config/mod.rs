@@ -136,43 +136,49 @@ pub fn load_config() -> Config {
 /// (si SYNC_GAMES_API_URL / SYNC_GAMES_API_KEY / SYNC_GAMES_USER_ID están definidas, se usan).
 /// Si no hay env, se usa el valor del archivo o vacío.
 fn config_with_env_defaults(mut cfg: Config) -> Config {
-    let url = option_env!("SYNC_GAMES_API_URL")
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .or_else(|| {
-            std::env::var("SYNC_GAMES_API_URL")
-                .ok()
-                .filter(|s| !s.trim().is_empty())
-        });
-    if let Some(u) = url {
-        cfg.api_base_url = Some(u);
+    if cfg.api_base_url.is_none() || cfg.api_base_url.as_deref().unwrap_or_default().is_empty() {
+        let url = option_env!("SYNC_GAMES_API_URL")
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .or_else(|| {
+                std::env::var("SYNC_GAMES_API_URL")
+                    .ok()
+                    .filter(|s| !s.trim().is_empty())
+            });
+        if let Some(u) = url {
+            cfg.api_base_url = Some(u);
+        }
     }
 
-    let key = option_env!("SYNC_GAMES_API_KEY")
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .or_else(|| {
-            std::env::var("SYNC_GAMES_API_KEY")
-                .ok()
-                .filter(|s| !s.trim().is_empty())
-        });
-    if let Some(k) = key {
-        cfg.api_key = Some(k);
+    if cfg.api_key.is_none() || cfg.api_key.as_deref().unwrap_or_default().is_empty() {
+        let key = option_env!("SYNC_GAMES_API_KEY")
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .or_else(|| {
+                std::env::var("SYNC_GAMES_API_KEY")
+                    .ok()
+                    .filter(|s| !s.trim().is_empty())
+            });
+        if let Some(k) = key {
+            cfg.api_key = Some(k);
+        }
     }
 
-    let uid = option_env!("SYNC_GAMES_USER_ID")
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .or_else(|| {
-            std::env::var("SYNC_GAMES_USER_ID")
-                .ok()
-                .filter(|s| !s.trim().is_empty())
-        });
-    if let Some(u) = uid {
-        cfg.user_id = Some(u);
+    if cfg.user_id.is_none() || cfg.user_id.as_deref().unwrap_or_default().is_empty() {
+        let uid = option_env!("SYNC_GAMES_USER_ID")
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .or_else(|| {
+                std::env::var("SYNC_GAMES_USER_ID")
+                    .ok()
+                    .filter(|s| !s.trim().is_empty())
+            });
+        if let Some(u) = uid {
+            cfg.user_id = Some(u);
+        }
     }
 
     cfg
