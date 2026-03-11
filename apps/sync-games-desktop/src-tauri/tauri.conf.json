@@ -19,7 +19,7 @@
     ],
     "security": {
       "csp": {
-        "img-src": "'self' data: blob: https://cdn.cloudflare.steamstatic.com https://steamcdn-a.akamaihd.net"
+        "img-src": "'self' data: blob: https://cdn.cloudflare.steamstatic.com https://shared.cloudflare.steamstatic.com https://steamcdn-a.akamaihd.net https://cdn.akamai.steamstatic.com"
       }
     }
   },
