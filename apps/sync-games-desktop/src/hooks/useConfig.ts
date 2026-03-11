@@ -13,6 +13,8 @@ export function useConfig() {
   } = useQuery({
     queryKey: CONFIG_QUERY_KEY,
     queryFn: getConfig,
+    /** Cache: no refetch automático hasta 2 min; la config cambia al guardar y se invalida desde ahí. */
+    staleTime: 2 * 60 * 1000,
   });
 
   return {

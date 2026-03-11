@@ -32,6 +32,7 @@ import {
 } from "@utils/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConfig } from "@hooks/useConfig";
+import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
 import { useSyncProgress } from "@contexts/SyncProgressContext";
 import { filterGames, type OriginFilter } from "@features/games/GamesFilters";
@@ -237,6 +238,7 @@ export function useGamesPage() {
       await Promise.all([
         refetch?.(),
         refetchLastSync?.(),
+        queryClient.invalidateQueries({ queryKey: ["config"] }),
         queryClient.invalidateQueries({ queryKey: ["game-stats"] }),
         queryClient.invalidateQueries({ queryKey: ["unsynced-games"] }),
       ]);
@@ -289,6 +291,7 @@ export function useGamesPage() {
         await addGame(idToUse, path);
       }
       scheduleConfigBackupToCloud();
+      queryClient.invalidateQueries({ queryKey: ["config"] });
       refetch?.();
       dispatch({ type: "SET_SCAN_MODAL", open: false });
       return;
@@ -321,6 +324,7 @@ export function useGamesPage() {
       }
       await removeGame(gameId);
       scheduleConfigBackupToCloud();
+      queryClient.invalidateQueries({ queryKey: ["config"] });
       refetch?.();
       dispatch({ type: "SET_GAME_TO_REMOVE", game: null });
     } catch (e) {
@@ -665,15 +669,16 @@ export function useGamesPage() {
     }
   };
 
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
   const filteredGames = filterGames(
     config?.games ?? [],
-    searchTerm,
+    debouncedSearchTerm,
     originFilter
   );
   const hasConfiguredGames = (config?.games?.length ?? 0) > 0;
   const hasCloudGames = cloudGames.length > 0;
   const emptyFilterMessage =
-    hasConfiguredGames && (searchTerm !== "" || originFilter !== "all")
+    hasConfiguredGames && (debouncedSearchTerm !== "" || originFilter !== "all")
       ? "No se encontraron juegos con los filtros aplicados."
       : !hasConfiguredGames && hasCloudGames
       ? "No hay juegos configurados, pero tienes guardados en la nube. Añade de nuevo cada juego con el mismo identificador y la ruta local para poder descargar sus backups."

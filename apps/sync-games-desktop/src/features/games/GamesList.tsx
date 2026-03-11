@@ -1,14 +1,21 @@
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button, Card, CardBody, Code } from "@heroui/react";
 import { FolderSearch, Gamepad2, PlusCircle } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import type { GameStats } from "@services/tauri";
+import { getSteamAppdetailsMediaBatch } from "@services/tauri";
 import { useCloudBackupCounts } from "@hooks/useCloudBackupCounts";
 import { useGameStats } from "@hooks/useGameStats";
 import { useGameRunningStatus } from "@hooks/useGameRunningStatus";
 import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
 import { useSyncProgress } from "@contexts/SyncProgressContext";
-import { needsSteamSearch } from "@utils/gameImage";
+import { getSteamAppId, needsSteamSearch } from "@utils/gameImage";
 import { GameCard } from "@features/games/GameCard";
+import {
+  GamesListMotionContainer,
+  GamesListMotionItem,
+} from "@features/games/GamesListMotion";
 
 type SyncStatus = "pending_upload" | "pending_download" | "in_sync" | null;
 
@@ -34,7 +41,12 @@ function getSyncStatus(
   // Si la diferencia es pequeña (p. ej. tras subir nosotros, S3 = ahora, local = antes) → in_sync.
   if (diff > CLOUD_NEWER_AS_SYNC_MS) return "pending_download";
   // Local más reciente, o diferencia dentro de tolerancia, o nube un poco más reciente (subida reciente) → en sync.
-  if (local > 0 || Math.abs(diff) <= SYNC_TOLERANCE_MS || (diff > 0 && diff <= CLOUD_NEWER_AS_SYNC_MS)) return "in_sync";
+  if (
+    local > 0 ||
+    Math.abs(diff) <= SYNC_TOLERANCE_MS ||
+    (diff > 0 && diff <= CLOUD_NEWER_AS_SYNC_MS)
+  )
+    return "in_sync";
   return null;
 }
 
@@ -94,14 +106,29 @@ export function GamesList({
   hasSyncConfig = false,
 }: GamesListProps) {
   const resolvedSteamAppIds = useResolvedSteamAppIds(games);
+  const steamAppIdsForBatch = useMemo(() => {
+    const ids = games
+      .map((g) => getSteamAppId(g, resolvedSteamAppIds[g.id]))
+      .filter((id): id is string => !!id);
+    return [...new Set(ids)];
+  }, [games, resolvedSteamAppIds]);
+
+  const { data: mediaBySteamAppId } = useQuery({
+    queryKey: [
+      "steam-appdetails-media-batch",
+      [...steamAppIdsForBatch].sort().join(","),
+    ],
+    queryFn: () => getSteamAppdetailsMediaBatch(steamAppIdsForBatch),
+    enabled: steamAppIdsForBatch.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { statsByGameId } = useGameStats(games.length > 0);
   const { countByGameId: cloudBackupCountByGameId } = useCloudBackupCounts(
     games.map((g) => g.id),
     hasSyncConfig && games.length > 0
   );
-  const gameRunningStatus = useGameRunningStatus(
-    games.map((g) => g.id)
-  );
+  const gameRunningStatus = useGameRunningStatus(games.map((g) => g.id));
   const { syncOperation, progress } = useSyncProgress();
 
   if (games.length === 0) {
@@ -157,47 +184,55 @@ export function GamesList({
   }
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5">
+    <GamesListMotionContainer
+      className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5"
+      listKey={games.map((g) => g.id).join(",")}
+    >
       {games.map((game) => (
-        <GameCard
-          game={game}
-          key={game.id}
-          stats={statsByGameId.get(game.id)}
-          resolvedSteamAppId={resolvedSteamAppIds[game.id]}
-          isGameRunning={gameRunningStatus[game.id]}
-          syncStatus={(() => {
-            const status = getSyncStatus(
-              game.id,
-              statsByGameId.get(game.id),
-              unsyncedGameIds
-            );
-            // Si tiene backup empaquetado en la nube, no mostrar "Pendiente subir"
-            const cloudBackups = cloudBackupCountByGameId[game.id] ?? 0;
-            if (status === "pending_upload" && cloudBackups > 0) return null;
-            return status;
-          })()}
-          cloudBackupCount={cloudBackupCountByGameId[game.id] ?? 0}
-          isLoading={
-            needsSteamSearch(game) && resolvedSteamAppIds[game.id] === undefined
-          }
-          onRemove={onRemove}
-          onSync={onSync}
-          isSyncing={syncingId === game.id || syncingId === "all"}
-          onDownload={onDownload}
-          isDownloading={downloadingId === game.id || downloadingId === "all"}
-          onOpenFolder={onOpenFolder}
-          onRestoreBackup={onRestoreBackup}
-          onFullBackupUpload={onFullBackupUpload}
-          isFullBackupUploading={fullBackupUploadingGameId === game.id}
-          onEdit={onEdit}
-          onShare={onShare}
-          syncProgress={
-            syncOperation?.mode === "single" && syncOperation.gameId === game.id
-              ? progress ?? null
-              : undefined
-          }
-        />
+        <GamesListMotionItem key={game.id}>
+          <GameCard
+            game={game}
+            stats={statsByGameId.get(game.id)}
+            resolvedSteamAppId={resolvedSteamAppIds[game.id]}
+            mediaBySteamAppId={mediaBySteamAppId ?? null}
+            mediaFromBatch
+            isGameRunning={gameRunningStatus[game.id]}
+            syncStatus={(() => {
+              const status = getSyncStatus(
+                game.id,
+                statsByGameId.get(game.id),
+                unsyncedGameIds
+              );
+              // Si tiene backup empaquetado en la nube, no mostrar "Pendiente subir"
+              const cloudBackups = cloudBackupCountByGameId[game.id] ?? 0;
+              if (status === "pending_upload" && cloudBackups > 0) return null;
+              return status;
+            })()}
+            cloudBackupCount={cloudBackupCountByGameId[game.id] ?? 0}
+            isLoading={
+              needsSteamSearch(game) &&
+              resolvedSteamAppIds[game.id] === undefined
+            }
+            onRemove={onRemove}
+            onSync={onSync}
+            isSyncing={syncingId === game.id || syncingId === "all"}
+            onDownload={onDownload}
+            isDownloading={downloadingId === game.id || downloadingId === "all"}
+            onOpenFolder={onOpenFolder}
+            onRestoreBackup={onRestoreBackup}
+            onFullBackupUpload={onFullBackupUpload}
+            isFullBackupUploading={fullBackupUploadingGameId === game.id}
+            onEdit={onEdit}
+            onShare={onShare}
+            syncProgress={
+              syncOperation?.mode === "single" &&
+              syncOperation.gameId === game.id
+                ? progress ?? null
+                : undefined
+            }
+          />
+        </GamesListMotionItem>
       ))}
-    </div>
+    </GamesListMotionContainer>
   );
 }

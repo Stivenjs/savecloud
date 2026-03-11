@@ -62,7 +62,7 @@ struct BackupDto {
     filename: String,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CloudBackupInfo {
     pub key: String,
@@ -295,6 +295,60 @@ pub async fn list_full_backups(game_id: String) -> Result<Vec<CloudBackupInfo>, 
     let api_key = cfg.api_key.as_deref().unwrap_or("");
 
     list_cloud_backups(api_base, user_id, api_key, &game_id).await
+}
+
+/// Lista los backups en la nube para varios juegos en una sola invocación (peticiones en paralelo).
+#[tauri::command]
+pub async fn list_full_backups_batch(
+    game_ids: Vec<String>,
+) -> Result<std::collections::HashMap<String, Vec<CloudBackupInfo>>, String> {
+    use futures_util::FutureExt;
+
+    let game_ids: Vec<String> = game_ids
+        .into_iter()
+        .filter(|id| !id.trim().is_empty())
+        .collect();
+    if game_ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+
+    let cfg = config::load_config();
+    let api_base = cfg
+        .api_base_url
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura apiBaseUrl en Configuración")?
+        .to_string();
+    let user_id = cfg
+        .user_id
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura userId en Configuración")?
+        .to_string();
+    let api_key = cfg.api_key.as_deref().unwrap_or("").to_string();
+
+    let empty: Vec<CloudBackupInfo> = Vec::new();
+    let futures: Vec<_> = game_ids
+        .iter()
+        .map(|game_id| {
+            let game_id = game_id.clone();
+            let api_base = api_base.clone();
+            let user_id = user_id.clone();
+            let api_key = api_key.clone();
+            let fallback = empty.clone();
+            async move {
+                let result = list_cloud_backups(&api_base, &user_id, &api_key, &game_id).await;
+                (game_id, result.unwrap_or(fallback))
+            }
+            .boxed()
+        })
+        .collect();
+
+    let results = futures_util::future::join_all(futures).await;
+    let map: std::collections::HashMap<String, Vec<CloudBackupInfo>> =
+        results.into_iter().collect();
+
+    Ok(map)
 }
 
 /// Cada cuántos bytes emitimos progreso de descarga del empaquetado.

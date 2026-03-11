@@ -1,30 +1,36 @@
-import { useQueries } from "@tanstack/react-query";
-import { listFullBackups } from "@services/tauri";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { listFullBackupsBatch } from "@services/tauri";
 
 const CLOUD_BACKUP_COUNTS_QUERY_KEY = ["cloud-backup-counts"] as const;
 
 /**
  * Obtiene el número de backups completos (empaquetados) en la nube por juego.
- * Usa una petición por gameId; útil para mostrar en la lista qué juegos tienen backups empaquetados.
+ * Una sola petición batch para todos los gameIds.
  */
 export function useCloudBackupCounts(gameIds: string[], enabled: boolean) {
-  const results = useQueries({
-    queries: gameIds.map((gameId) => ({
-      queryKey: [...CLOUD_BACKUP_COUNTS_QUERY_KEY, gameId],
-      queryFn: () => listFullBackups(gameId),
-      enabled: enabled && !!gameId,
-    })),
+  const sortedKey = useMemo(
+    () => [...gameIds].filter(Boolean).sort().join(","),
+    [gameIds]
+  );
+
+  const { data: backupsByGameId, isLoading } = useQuery({
+    queryKey: [...CLOUD_BACKUP_COUNTS_QUERY_KEY, sortedKey],
+    queryFn: () => listFullBackupsBatch(gameIds.filter((id) => !!id)),
+    enabled: enabled && gameIds.filter(Boolean).length > 0,
+    staleTime: 2 * 60 * 1000,
   });
 
-  const countByGameId: Record<string, number> = {};
-  results.forEach((result, index) => {
-    const gameId = gameIds[index];
-    if (gameId && result.data) {
-      countByGameId[gameId] = result.data.length;
+  const countByGameId = useMemo(() => {
+    const out: Record<string, number> = {};
+    if (!backupsByGameId) return out;
+    for (const gameId of gameIds) {
+      if (gameId) {
+        out[gameId] = backupsByGameId[gameId]?.length ?? 0;
+      }
     }
-  });
-
-  const isLoading = results.some((r) => r.isLoading);
+    return out;
+  }, [gameIds, backupsByGameId]);
 
   return {
     countByGameId,

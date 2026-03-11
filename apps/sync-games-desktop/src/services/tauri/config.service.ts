@@ -42,6 +42,33 @@ export async function getSteamAppName(appId: string): Promise<string | null> {
   return invoke<string | null>("get_steam_app_name", { appId });
 }
 
+/** Medios para hovercard: portada, capturas, thumbnails y opcionalmente URL de vídeo (Store API appdetails) */
+export interface SteamAppdetailsMediaResult {
+  mediaUrls: string[];
+  videoUrl?: string | null;
+}
+
+/** Obtiene URLs de medios (portada, capturas, thumbnails de vídeos) desde la Store API para el hovercard. */
+export async function getSteamAppdetailsMedia(
+  appId: string
+): Promise<SteamAppdetailsMediaResult> {
+  return invoke<SteamAppdetailsMediaResult>("get_steam_appdetails_media", {
+    appId,
+  });
+}
+
+/** Obtiene medios para varios Steam App IDs en una sola invocación (backend hace las peticiones en paralelo). */
+export async function getSteamAppdetailsMediaBatch(
+  appIds: string[]
+): Promise<Record<string, SteamAppdetailsMediaResult>> {
+  const ids = appIds.filter((id) => id?.trim());
+  if (!ids.length) return {};
+  return invoke<Record<string, SteamAppdetailsMediaResult>>(
+    "get_steam_appdetails_media_batch",
+    { appIds: ids }
+  );
+}
+
 /** Comprueba si un único juego está en ejecución (para mostrar advertencia) */
 export function checkGameRunning(gameId: string): Promise<boolean> {
   return invoke<boolean>("check_game_running", { gameId });
@@ -137,15 +164,20 @@ export async function getS3TransferEndpointType(): Promise<
 }
 
 /** Obtiene la configuración de un amigo desde la nube (solo lectura) */
-export async function getFriendConfig(
-  friendUserId: string
-): Promise<Config> {
+export async function getFriendConfig(friendUserId: string): Promise<Config> {
   return invoke<Config>("get_friend_config", { friendUserId });
 }
 
 /** Añade a tu config solo los juegos del amigo que no tienes (por id). No modifica apiKey ni userId. */
 export async function addGamesFromFriend(
-  friendGames: readonly { id: string; paths: string[]; steamAppId?: string; imageUrl?: string; editionLabel?: string; sourceUrl?: string }[]
+  friendGames: readonly {
+    id: string;
+    paths: string[];
+    steamAppId?: string;
+    imageUrl?: string;
+    editionLabel?: string;
+    sourceUrl?: string;
+  }[]
 ): Promise<number> {
   return invoke<number>("add_games_from_friend", {
     friendGames: [...friendGames],
@@ -501,7 +533,9 @@ export interface CloudBackupInfo {
 }
 
 /** Crea un .tar de la carpeta del juego y lo sube a la nube (recomendado para juegos grandes). */
-export async function createAndUploadFullBackup(gameId: string): Promise<string> {
+export async function createAndUploadFullBackup(
+  gameId: string
+): Promise<string> {
   return invoke<string>("create_and_upload_full_backup", { gameId });
 }
 
@@ -510,6 +544,17 @@ export async function listFullBackups(
   gameId: string
 ): Promise<CloudBackupInfo[]> {
   return invoke<CloudBackupInfo[]>("list_full_backups", { gameId });
+}
+
+/** Lista los backups en la nube para varios juegos en una sola invocación. */
+export async function listFullBackupsBatch(
+  gameIds: string[]
+): Promise<Record<string, CloudBackupInfo[]>> {
+  const ids = gameIds.filter((id) => id?.trim());
+  if (!ids.length) return {};
+  return invoke<Record<string, CloudBackupInfo[]>>("list_full_backups_batch", {
+    gameIds: ids,
+  });
 }
 
 /** Descarga un backup completo por key y lo extrae en la carpeta del juego. */

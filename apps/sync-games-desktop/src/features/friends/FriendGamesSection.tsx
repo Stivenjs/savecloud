@@ -1,8 +1,12 @@
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button, Card, CardBody } from "@heroui/react";
 import { Download, Settings2, UserPlus } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
+import { getSteamAppdetailsMediaBatch } from "@services/tauri";
 import { GameCard } from "@features/games/GameCard";
 import { formatSize } from "@utils/format";
+import { getSteamAppId } from "@utils/gameImage";
 import type { FriendGameSummary } from "./useFriendsPage";
 
 interface FriendGamesSectionProps {
@@ -22,6 +26,23 @@ export function FriendGamesSection({
   onCopySaves,
   onUseAsTemplate,
 }: FriendGamesSectionProps) {
+  const steamAppIdsForBatch = useMemo(() => {
+    const ids = summaries
+      .map((s) => getSteamAppId(s.game, s.game.steamAppId))
+      .filter((id): id is string => !!id);
+    return [...new Set(ids)];
+  }, [summaries]);
+
+  const { data: mediaBySteamAppId } = useQuery({
+    queryKey: [
+      "steam-appdetails-media-batch",
+      [...steamAppIdsForBatch].sort().join(","),
+    ],
+    queryFn: () => getSteamAppdetailsMediaBatch(steamAppIdsForBatch),
+    enabled: steamAppIdsForBatch.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
   if (summaries.length === 0) {
     return (
       <Card>
@@ -60,6 +81,8 @@ export function FriendGamesSection({
                 game={game}
                 resolvedSteamAppId={game.steamAppId}
                 isLoading={false}
+                mediaBySteamAppId={mediaBySteamAppId ?? null}
+                mediaFromBatch
               />
               <div className="space-y-1">
                 <div className="flex items-center justify-between gap-2">

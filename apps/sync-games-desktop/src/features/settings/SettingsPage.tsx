@@ -1,14 +1,18 @@
+import { useState } from "react";
 import { AutostartCard } from "@features/settings/AutostartCard";
 import { ConfigSection } from "@features/settings/ConfigSection";
 import { CreateConfigModal } from "@features/settings/CreateConfigModal";
 import { ExperimentalFeaturesCard } from "@features/settings/ExperimentalFeaturesCard";
 import { LocalBackupInfoCard } from "@features/settings/LocalBackupInfoCard";
 import { NotificationsCard } from "@features/settings/NotificationsCard";
+import { ReleaseNotesCard } from "@features/settings/ReleaseNotesCard";
+import { ReleaseNotesDialog } from "@features/settings/ReleaseNotesDialog";
 import { RestoreConfigModal } from "@features/settings/RestoreConfigModal";
 import { UpdatesCard } from "@features/settings/UpdatesCard";
 import { useSettingsPage } from "@features/settings/useSettingsPage";
 
 export function SettingsPage() {
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const {
     autostart,
     loading,
@@ -81,6 +85,7 @@ export function SettingsPage() {
         checkingUpdate={checkingUpdate}
         onCheckUpdates={handleCheckUpdates}
       />
+      <ReleaseNotesCard onOpenNotes={() => setReleaseNotesOpen(true)} />
       <NotificationsCard
         testingNotification={testingNotification}
         onTestNotification={handleTestNotification}
@@ -115,6 +120,10 @@ export function SettingsPage() {
           await performRestoreConfigFromCloud();
           setRestoreConfirmOpen(false);
         }}
+      />
+      <ReleaseNotesDialog
+        isOpen={releaseNotesOpen}
+        onClose={() => setReleaseNotesOpen(false)}
       />
     </div>
   );

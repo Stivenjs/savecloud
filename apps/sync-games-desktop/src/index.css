@@ -18,5 +18,18 @@
   .sg-animate-fade-in-up {
     animation: sg-fade-in-up 0.16s ease-out both;
   }
+
+  @keyframes sg-shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .sg-animate-shimmer {
+    animation: sg-shimmer 1.5s ease-in-out infinite;
+  }
 }
 

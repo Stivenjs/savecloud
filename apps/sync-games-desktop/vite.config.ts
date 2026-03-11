@@ -51,6 +51,10 @@ export default defineConfig(async () => ({
           port: 1421,
         }
       : undefined,
+    fs: {
+      // Permite importar archivos del root del repo (ej. RELEASE_NOTES.md)
+      allow: [resolve(__dirname, "..", "..")],
+    },
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],

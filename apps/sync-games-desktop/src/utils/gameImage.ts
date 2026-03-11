@@ -33,6 +33,39 @@ export function getGameImageUrl(
   return null;
 }
 
+/** Devuelve el Steam App ID si existe (config o resuelto o extraído del id). */
+export function getSteamAppId(
+  game: ConfiguredGame,
+  resolvedSteamAppId?: string | null
+): string | null {
+  if (
+    game.imageUrl?.trim() &&
+    !game.steamAppId?.trim() &&
+    !resolvedSteamAppId?.trim()
+  ) {
+    return null;
+  }
+  return (
+    game.steamAppId?.trim() ??
+    resolvedSteamAppId?.trim() ??
+    extractAppIdFromId(game.id) ??
+    (isSteamAppId(game.id) ? game.id : null)
+  );
+}
+
+/**
+ * URL de imagen extra para hovercard (library hero de Steam).
+ * Muchos juegos tienen esta imagen; si no existe devolverá 404.
+ */
+export function getGameLibraryHeroUrl(
+  game: ConfiguredGame,
+  resolvedSteamAppId?: string | null
+): string | null {
+  const appId = getSteamAppId(game, resolvedSteamAppId);
+  if (!appId) return null;
+  return `${STEAM_CDN_BASE}/${appId}/library_hero.jpg`;
+}
+
 /**
  * Extrae Steam App ID del id cuando sigue convenciones de cracks (ej. -2050650).
  */

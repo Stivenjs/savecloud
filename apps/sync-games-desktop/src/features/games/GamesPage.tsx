@@ -218,7 +218,7 @@ export function GamesPage() {
         onClose={() => setAddModalOpen(false)}
         onSuccess={() => {
           scheduleConfigBackupToCloud();
-          refetch?.();
+          handleRefresh?.();
         }}
         initialPath={addModalInitial.path}
         suggestedId={addModalInitial.suggestedId}

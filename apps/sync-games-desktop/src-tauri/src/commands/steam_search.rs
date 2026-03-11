@@ -190,3 +190,190 @@ pub async fn search_steam_games(query: String) -> Vec<SteamSearchResult> {
 
     results
 }
+
+/// URLs de medios para el hovercard (portada, capturas, thumbnails de vídeos).
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteamAppdetailsMedia {
+    pub media_urls: Vec<String>,
+    /// URL del primer vídeo (webm) si existe, para reproducir en el hovercard.
+    pub video_url: Option<String>,
+}
+
+/// Implementación interna: obtiene medios de la Store API para un app_id (asume id válido).
+async fn fetch_steam_appdetails_media_impl(
+    client: &reqwest::Client,
+    app_id: &str,
+) -> Result<SteamAppdetailsMedia, String> {
+    let url = format!(
+        "https://store.steampowered.com/api/appdetails?appids={}&l=english",
+        app_id
+    );
+
+    let res = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Request: {}", e))?;
+    let data: serde_json::Value = res.json().await.map_err(|e| format!("JSON: {}", e))?;
+
+    let entry = data.get(app_id).and_then(|e| e.get("success"));
+    let success = entry.and_then(|e| e.as_bool()).unwrap_or(false);
+    if !success {
+        return Ok(SteamAppdetailsMedia {
+            media_urls: Vec::new(),
+            video_url: None,
+        });
+    }
+
+    let data_obj = match data.get(app_id).and_then(|e| e.get("data")) {
+        Some(d) => d,
+        None => {
+            return Ok(SteamAppdetailsMedia {
+                media_urls: Vec::new(),
+                video_url: None,
+            });
+        }
+    };
+
+    let mut media_urls = Vec::new();
+    let mut video_url: Option<String> = None;
+
+    if let Some(s) = data_obj.get("header_image").and_then(|v| v.as_str()) {
+        if !s.is_empty() {
+            media_urls.push(s.to_string());
+        }
+    }
+
+    if let Some(arr) = data_obj.get("screenshots").and_then(|v| v.as_array()) {
+        for item in arr {
+            if let Some(path) = item.get("path_full").and_then(|v| v.as_str()) {
+                if !path.is_empty() && !media_urls.contains(&path.to_string()) {
+                    media_urls.push(path.to_string());
+                }
+            }
+        }
+    }
+
+    if let Some(arr) = data_obj.get("movies").and_then(|v| v.as_array()) {
+        for item in arr {
+            if let Some(thumb) = item.get("thumbnail").and_then(|v| v.as_str()) {
+                if !thumb.is_empty() && !media_urls.contains(&thumb.to_string()) {
+                    media_urls.push(thumb.to_string());
+                }
+            }
+            if video_url.is_none() {
+                let u = item
+                    .get("hls_h264")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                    .or_else(|| {
+                        item.get("dash_h264")
+                            .and_then(|v| v.as_str())
+                            .map(String::from)
+                    })
+                    .or_else(|| {
+                        item.get("webm").and_then(|webm| {
+                            webm.get("max")
+                                .or_else(|| webm.get("480"))
+                                .and_then(|v| v.as_str())
+                                .map(String::from)
+                        })
+                    })
+                    .or_else(|| {
+                        item.get("mp4").and_then(|mp4| {
+                            mp4.get("max")
+                                .or_else(|| mp4.get("480"))
+                                .and_then(|v| v.as_str())
+                                .map(String::from)
+                        })
+                    });
+                if let Some(url) = u {
+                    if !url.is_empty() {
+                        video_url = Some(url);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(SteamAppdetailsMedia {
+        media_urls,
+        video_url,
+    })
+}
+
+/// Obtiene portada, capturas y thumbnails de vídeos desde la Store API (appdetails).
+/// Útil para el carrusel del hovercard. Devuelve lista vacía si falla o no es un juego.
+#[tauri::command]
+pub async fn get_steam_appdetails_media(app_id: String) -> Result<SteamAppdetailsMedia, String> {
+    let app_id = app_id.trim().to_string();
+    if app_id.is_empty() || !app_id.chars().all(|c| c.is_ascii_digit()) {
+        return Err("App ID inválido".to_string());
+    }
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    fetch_steam_appdetails_media_impl(&client, &app_id).await
+}
+
+/// Obtiene medios (portada, capturas, vídeo) para varios app IDs en una sola invocación.
+/// Hace una petición HTTP por app ID en paralelo. Devuelve un mapa app_id → medios.
+#[tauri::command]
+pub async fn get_steam_appdetails_media_batch(
+    app_ids: Vec<String>,
+) -> Result<std::collections::HashMap<String, SteamAppdetailsMedia>, String> {
+    use std::collections::HashSet;
+
+    let mut seen = HashSet::new();
+    let valid: Vec<String> = app_ids
+        .into_iter()
+        .filter_map(|id| {
+            let id = id.trim().to_string();
+            if id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) {
+                return None;
+            }
+            if seen.insert(id.clone()) {
+                Some(id)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if valid.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let empty = SteamAppdetailsMedia {
+        media_urls: Vec::new(),
+        video_url: None,
+    };
+    let futures: Vec<_> = valid
+        .iter()
+        .map(|app_id| {
+            let app_id = app_id.clone();
+            let client = client.clone();
+            let fallback = empty.clone();
+            async move {
+                let result = fetch_steam_appdetails_media_impl(&client, &app_id).await;
+                (app_id, result.unwrap_or(fallback))
+            }
+            .boxed()
+        })
+        .collect();
+
+    let results = futures_util::future::join_all(futures).await;
+    let map: std::collections::HashMap<String, SteamAppdetailsMedia> =
+        results.into_iter().collect();
+
+    Ok(map)
+}

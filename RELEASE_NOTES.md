@@ -1,6 +1,6 @@
 # Notas de versión
 
-## v1.5.0 (actual)
+## v1.5.4
 
 ### API (backend)
 
@@ -33,3 +33,25 @@
 - Se corrigieron problemas de plantilla en `serverless.yml` (errores de YAML y uso incorrecto de `Condition`) siguiendo la documentación oficial de Serverless Framework v4.
 - Se refactorizó el cálculo de estadísticas y el flujo de backup completo para mejorar rendimiento y evitar bloqueos de la UI.
 
+---
+
+## v1.5.5 (actual)
+
+### App de escritorio (Tauri)
+
+- **Menos peticiones al cargar la lista de juegos:**
+  - Medios de Steam (portada, capturas, vídeo) se piden en una sola invocación `get_steam_appdetails_media_batch`; el backend hace las peticiones HTTP en paralelo. GamesList y FriendGamesSection usan este batch; las tarjetas ya no disparan una petición por juego.
+  - Conteo de backups completos en la nube: una sola llamada `list_full_backups_batch` en lugar de una por juego (`useCloudBackupCounts`).
+- **Modal de vídeo:** tamaño más grande (92vh), sin botón de silenciar en el modal; el reproductor usa sus controles nativos (volumen, etc.).
+- **Barra de búsqueda de juegos:** debounce de 300 ms para no filtrar en cada tecla; la lista y el mensaje de “sin resultados” usan el término debounced.
+- **Caché de configuración:** `useConfig` con `staleTime` de 2 minutos. Se invalida la query `["config"]` al añadir, editar o eliminar juego, al refrescar y en los flujos de amigos y ajustes, para que la UI vea siempre la config actualizada.
+
+### UI y animaciones
+
+- **Tarjetas de juego (hover):** animación 3D que sigue el cursor (tilt suave), elevación y sombra al pasar el ratón; archivo `GameCardHoverMotion.tsx`. Corregido el bug de animación infinita usando un rect fijo al entrar.
+- **Lista de juegos:** animación de aparición en escalonado (stagger) al cargar o al cambiar filtros/búsqueda; archivo `GamesListMotion.tsx`. Activación retrasada un frame para que la animación se vea correctamente.
+
+### Próxima versión
+
+- Se intentara mejorar el rendimiento de la app de escritorio al hacer menos peticiones a la api.
+- Se intentara mejorar la concurrencia en el streaming de backups.
