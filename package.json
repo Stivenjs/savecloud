@@ -1,6 +1,6 @@
 {
   "name": "sync-games",
-  "version": "1.5.4",
+  "version": "1.5.5",
   "private": true,
   "bin": {
     "sync-games": "./src/cli/index.ts"
