@@ -287,7 +287,7 @@ export function useSettingsPage() {
     }
   };
 
-  const handleCreateConfigFile = async () => {
+  const handleCreateConfigFile = async (restoreAfter: boolean = false) => {
     dispatch({ type: "SET_CREATING_CONFIG", payload: true });
     dispatch({ type: "SET_CREATE_CONFIG_ERROR", payload: null });
     try {
@@ -296,12 +296,18 @@ export function useSettingsPage() {
         state.createApiKey,
         state.createUserId
       );
-      toastSuccess("Archivo de configuración creado", path);
       dispatch({ type: "SET_CREATE_MODAL", open: false });
       refetchConfig?.();
       queryClient.invalidateQueries({ queryKey: ["config"] });
       const newPath = await getConfigPath();
       dispatch({ type: "SET_CONFIG_PATH", payload: newPath });
+
+      if (restoreAfter) {
+        toastSuccess("Conexión configurada", "Iniciando recuperación desde la nube...");
+        await performRestoreConfigFromCloud();
+      } else {
+        toastSuccess("Conexión guardada", path);
+      }
     } catch (e) {
       dispatch({
         type: "SET_CREATE_CONFIG_ERROR",

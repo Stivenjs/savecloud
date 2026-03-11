@@ -19,7 +19,7 @@ interface CreateConfigModalProps {
   onApiKeyChange: (value: string) => void;
   onUserIdChange: (value: string) => void;
   onClose: () => void;
-  onSubmit: () => void | Promise<void>;
+  onSubmit: (restoreAfter: boolean) => void | Promise<void>;
 }
 
 export function CreateConfigModal({
@@ -45,12 +45,13 @@ export function CreateConfigModal({
       size="lg"
     >
       <ModalContent>
-        <ModalHeader>Crear archivo de configuración</ModalHeader>
+        <ModalHeader>Configurar conexión a la nube</ModalHeader>
         <ModalBody className="gap-4">
           <p className="text-sm text-default-500">
-            Introduce los datos de tu API. El archivo se creará en la carpeta de
-            configuración de la app. Si ya existe, solo se actualizarán estos
-            campos (se mantienen juegos y rutas).
+            Introduce los datos de acceso para conectarte a tu servidor de
+            SaveCloud. Si estás configurando un PC nuevo, elige &quot;Guardar y
+            recuperar de la nube&quot; al terminar para descargar tu
+            configuración respaldada.
           </p>
           <Input
             label="URL de la API (apiBaseUrl)"
@@ -80,8 +81,11 @@ export function CreateConfigModal({
           <Button variant="flat" onPress={onClose}>
             Cancelar
           </Button>
-          <Button color="primary" onPress={onSubmit} isLoading={creating}>
-            Crear archivo
+          <Button color="primary" variant="flat" onPress={() => onSubmit(false)} isLoading={creating}>
+            Solo guardar
+          </Button>
+          <Button color="secondary" onPress={() => onSubmit(true)} isLoading={creating}>
+            Guardar y recuperar de la nube
           </Button>
         </ModalFooter>
       </ModalContent>

@@ -95,24 +95,23 @@ export function ConfigSection({
           </div>
         ) : null}
 
-        {/* Crear archivo */}
+        {/* Configurar Conexión */}
         <div className="space-y-2">
           <p className="text-sm font-medium text-default-700">
-            Crear o editar archivo
+            Configurar conexión a la nube
           </p>
           <p className="text-xs text-default-500">
-            Si no tienes config.json, créalo con la URL de la API, tu API Key y
-            tu User ID. Así podrás usar la nube y que otros te encuentren por
-            User ID.
+            Ingresa tu URL de API, API Key y User ID para habilitar las
+            funciones en la nube, o para recuperar tu configuración previa al estar en un PC nuevo.
           </p>
           <Button
             size="sm"
             variant="flat"
             color="primary"
             onPress={onCreateConfig}
-            startContent={<FileJson size={16} />}
+            startContent={<Cloud size={16} />}
           >
-            Crear archivo de configuración
+            Configurar conexión
           </Button>
         </div>
 
