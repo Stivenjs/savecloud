@@ -75,6 +75,9 @@ pub struct ConfiguredGame {
     /// URL de descarga o página de la edición (ej. enlace al release).
     #[serde(default)]
     pub source_url: Option<String>,
+    /// Magnet link o ruta a archivo .torrent para descargar contenido del juego.
+    #[serde(default)]
+    pub magnet_link: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

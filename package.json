@@ -19,7 +19,8 @@
     "lint": "eslint src --ext .ts",
     "desktop": "bun run --cwd apps/sync-games-desktop tauri dev",
     "desktop:dev": "bun run --cwd apps/sync-games-desktop dev",
-    "desktop:build": "bun run --cwd apps/sync-games-desktop tauri build"
+    "desktop:build": "bun run --cwd apps/sync-games-desktop tauri build",
+    "cargo:check": "bun run --cwd apps/sync-games-desktop/src-tauri cargo check"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1000.0",

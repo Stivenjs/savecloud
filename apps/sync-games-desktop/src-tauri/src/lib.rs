@@ -4,15 +4,14 @@ mod config;
 mod manifest;
 mod process_check;
 mod steam;
+mod torrent;
 mod tray_state;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager};
 
-/// Carga .env desde el directorio de trabajo o directorios padres (como hace la CLI).
 fn load_dotenv() {
-    // Buscar .env ascendiendo desde el cwd (ej. raíz del repo al ejecutar `bun run desktop`)
     let _ = dotenvy::dotenv();
 }
 
@@ -31,6 +30,9 @@ pub fn run() {
             None,
         ))
         .invoke_handler(tauri::generate_handler![
+            torrent::commands::start_torrent_download,
+            torrent::commands::start_torrent_file_download,
+            torrent::commands::cancel_torrent,
             commands::get_config,
             commands::get_config_path,
             commands::create_config_file,
@@ -98,13 +100,11 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Minimizar a bandeja en lugar de cerrar
                 let _ = window.hide();
                 api.prevent_close();
             }
         })
         .setup(|app| {
-            // Crear icono desde bytes embebido (funciona en dev y producción)
             let icon_bytes = include_bytes!("../icons/icon.ico");
             let icon = tauri::image::Image::from_bytes(icon_bytes)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
@@ -112,8 +112,13 @@ pub fn run() {
             let show_item = MenuItem::with_id(app, "show", "Mostrar", true, None::<&str>)?;
             let upload_all_item =
                 MenuItem::with_id(app, "upload_all", "Subir todo ahora", true, None::<&str>)?;
-            let download_all_item =
-                MenuItem::with_id(app, "download_all", "Descargar todo ahora", true, None::<&str>)?;
+            let download_all_item = MenuItem::with_id(
+                app,
+                "download_all",
+                "Descargar todo ahora",
+                true,
+                None::<&str>,
+            )?;
             let backup_first_item = MenuItem::with_id(
                 app,
                 "backup_first",
@@ -159,6 +164,16 @@ pub fn run() {
 
             let tray_state = tray_state::TrayState::new(tray);
             app.manage(tray_state.clone());
+
+            app.manage(torrent::state::TorrentState {
+                engine: std::sync::Arc::new(tokio::sync::Mutex::new(
+                    tauri::async_runtime::block_on(torrent::engine::TorrentEngine::new(
+                        std::env::temp_dir().join("sync-games-torrents"),
+                    )),
+                )),
+                app_handle: app.handle().clone(),
+            });
+
             // Auto-sync al cambiar archivos deshabilitado por ahora (no subir tras restaurar empaquetado).
             // commands::watch_sync::spawn_watcher(app.handle().clone(), tray_state.0.clone());
             commands::game_exit_sync::spawn_exit_watcher(

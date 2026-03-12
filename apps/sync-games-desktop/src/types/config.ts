@@ -16,6 +16,8 @@ export interface ConfiguredGame {
   readonly editionLabel?: string;
   /** URL de descarga o página de la edición (ej. enlace al release). */
   readonly sourceUrl?: string;
+  /** Magnet link o ruta a archivo .torrent para descargar contenido. */
+  readonly magnetLink?: string;
 }
 
 export interface Config {

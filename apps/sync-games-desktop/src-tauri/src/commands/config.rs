@@ -30,6 +30,7 @@ pub struct GameDto {
     pub image_url: Option<String>,
     pub edition_label: Option<String>,
     pub source_url: Option<String>,
+    pub magnet_link: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -67,6 +68,7 @@ pub fn get_config() -> ConfigDto {
                     image_url: g.image_url,
                     edition_label: g.edition_label,
                     source_url: g.source_url,
+                    magnet_link: g.magnet_link,
                 }
             })
             .collect(),
@@ -222,6 +224,7 @@ pub fn add_game(
             executable_names: None,
             edition_label,
             source_url,
+            magnet_link: None,
         });
     }
 

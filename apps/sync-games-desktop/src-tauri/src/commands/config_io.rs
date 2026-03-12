@@ -340,6 +340,7 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
             image_url: g.image_url,
             edition_label: g.edition_label,
             source_url: g.source_url,
+            magnet_link: g.magnet_link,
         })
         .collect();
 
@@ -385,6 +386,7 @@ pub fn add_games_from_friend(friend_games: Vec<GameDto>) -> Result<usize, String
             executable_names: None,
             edition_label: g.edition_label,
             source_url: g.source_url,
+            magnet_link: None,
         });
         existing_ids.insert(id_lower);
         added += 1;
