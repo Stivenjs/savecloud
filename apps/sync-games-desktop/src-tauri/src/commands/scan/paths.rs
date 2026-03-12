@@ -1,7 +1,7 @@
+#![allow(dead_code)]
 use serde::Deserialize;
 use std::sync::OnceLock;
 
-#[allow(dead_code)]
 #[derive(Deserialize, Debug)]
 
 pub struct ConfigPaths {
@@ -17,7 +17,6 @@ pub struct WindowsPaths {
 }
 
 #[derive(Deserialize, Debug)]
-#[allow(dead_code)]
 pub struct UnixPaths {
     pub base_scan_templates: Vec<PathEntry>,
 }
