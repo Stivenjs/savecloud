@@ -13,10 +13,11 @@ pub const DEFAULT_STEAM_PATH_WIN32: &str = "C:\\Program Files (x86)\\Steam";
 pub const BASE_SCAN_TEMPLATES: &[(&str, &str)] = &[
     ("%USERPROFILE%\\Documents\\My Games", "Documents/My Games"),
     ("%USERPROFILE%\\Documents", "Documents"),
-    ("%APPDATA%", "AppData"),
-    ("%LOCALAPPDATA%", "LocalAppData"),
+    ("%USERPROFILE%\\AppData\\LocalLow", "LocalLow"),
     ("%USERPROFILE%\\Saved Games", "Saved Games"),
+    ("%LOCALAPPDATA%", "LocalAppData"),
     ("%LOCALAPPDATA%\\Low", "LocalAppData/Low"),
+    ("%APPDATA%", "AppData"),
 ];
 
 #[cfg(not(target_os = "windows"))]

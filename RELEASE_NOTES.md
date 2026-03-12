@@ -11,6 +11,9 @@
 - **Infra por stage organizada:**
   - Recursos de CloudFormation movidos a `resources.dev.yml` y `resources.live.yml`, cargados desde `serverless.yml` con `${file(./resources.${sls:stage}.yml)}`.
   - CloudFront y su OAI/policy solo existen en `resources.live.yml`.
+- **Rutas de guardados de Steam y cracks:**
+  - Se añadieron las rutas de guardados de Steam y cracks para el manifiesto de Ludusavi.
+  - Se añadieron las rutas de guardados de Steam y cracks para el escaneo de guardados.
 
 ### App de escritorio (Tauri)
 
