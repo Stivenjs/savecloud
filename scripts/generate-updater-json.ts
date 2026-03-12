@@ -4,10 +4,7 @@
  * Solo debe ejecutarse en la GitHub Action de release, después de descargar los artifacts.
  *
  * Uso:
- *   VERSION=0.1.7 GITHUB_REPOSITORY=Stivenjs/savecloud bun run scripts/generate-updater-json.ts
- *
- * Espera la estructura:
- *   desktop-windows/nsis/*.exe.sig
+ * VERSION=0.1.7 GITHUB_REPOSITORY=Stivenjs/savecloud bun run scripts/generate-updater-json.ts
  */
 
 import { readdirSync, readFileSync, existsSync } from "fs";
@@ -17,14 +14,16 @@ const raw =
   process.env.VERSION ||
   process.env.GITHUB_REF?.replace(/^refs\/tags\/v?/, "") ||
   "0.0.0";
-const VERSION = raw.replace(/^v/, ""); // semver sin "v"
+const VERSION = raw.replace(/^v/, "");
 const REPO = process.env.GITHUB_REPOSITORY || "Stivenjs/savecloud";
 const BASE_URL = `https://github.com/${REPO}/releases/download/v${VERSION}`;
 
 const cwd = process.cwd();
 
-const ARTIFACT_PLATFORM: Record<string, string> = {
-  "desktop-windows": "windows-x86_64",
+const ARTIFACT_PLATFORM: Record<string, string[]> = {
+  "desktop-windows": ["windows-x86_64"],
+  "desktop-linux": ["linux-x86_64"],
+  "desktop-macos-universal": ["darwin-x86_64", "darwin-aarch64"],
 };
 
 function findFirstSig(
@@ -45,13 +44,18 @@ function findFirstSig(
 
 const platforms: Record<string, { signature: string; url: string }> = {};
 
-for (const [artifact, platform] of Object.entries(ARTIFACT_PLATFORM)) {
+for (const [artifact, tauriPlatforms] of Object.entries(ARTIFACT_PLATFORM)) {
   const artifactDir = resolve(cwd, artifact);
   const found = findFirstSig(artifactDir);
   if (found) {
     const sigContent = readFileSync(found.sigPath, "utf-8").trim();
     const url = `${BASE_URL}/${found.installerName}`;
-    platforms[platform] = { signature: sigContent, url };
+
+    for (const platform of tauriPlatforms) {
+      platforms[platform] = { signature: sigContent, url };
+    }
+  } else {
+    console.warn(`No se encontró firma (.sig) para el artifact: ${artifact}`);
   }
 }
 
@@ -62,7 +66,6 @@ if (Object.keys(platforms).length === 0) {
   process.exit(1);
 }
 
-// Notas del release: RELEASE_NOTES.md, env RELEASE_NOTES, o vacío
 let notes = process.env.RELEASE_NOTES?.trim() ?? "";
 const notesFile = resolve(cwd, "RELEASE_NOTES.md");
 if (!notes && existsSync(notesFile)) {
@@ -81,4 +84,4 @@ const { mkdir } = await import("fs/promises");
 await mkdir(resolve(cwd, "release"), { recursive: true });
 await Bun.write(outputPath, JSON.stringify(latest, null, 2));
 console.log("latest.json generado:", outputPath);
-console.log("Plataformas:", Object.keys(platforms).join(", "));
+console.log("Plataformas incluidas:", Object.keys(platforms).join(", "));
