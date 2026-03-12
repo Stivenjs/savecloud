@@ -1,211 +1,61 @@
 //! Extensiones, patrones y exclusiones para detectar carpetas de guardados.
 //! Réplica la lógica del CLI (FileSystemPathScanner).
 
+use serde::Deserialize;
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::LazyLock;
 
 use super::extensions::{
-    SAVE_FOLDER_NAMES, SAVE_NAME_HINTS, STRONG_SAVE_EXTENSIONS, WEAK_SAVE_EXTENSIONS,
+    save_folder_names, save_name_hints, strong_save_extensions, weak_save_extensions,
 };
 
-// ─── Carpetas excluidas del escaneo ───────────────────────────────────────────
+#[derive(Deserialize)]
+struct ExclusionsData {
+    excluded_folder_names: Vec<String>,
+    excluded_partial_patterns: Vec<String>,
+}
 
-pub(super) static EXCLUDED_FOLDER_NAMES: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
-    [
-        "windows",
-        "users",
-        "program files",
-        "program files (x86)",
-        "programdata",
-        "recovery",
-        "perflogs",
-        "$recycle.bin",
-        "system volume information",
-        "msocache",
-        "boot",
-        "intel",
-        "amd",
-        "code",
-        "cursor",
-        "visual studio setup",
-        "git extensions",
-        "gitextensions",
-        "github-copilot",
-        "cmaketools",
-        "visualstudiodiscordrpc",
-        "jetbrains",
-        "discord",
-        "spotify",
-        "zoom",
-        "slack",
-        "telegram desktop",
-        "whatsapp",
-        "google",
-        "microsoft",
-        "nvidia corporation",
-        "connecteddevicesplatform",
-        "mozilla",
-        "chrome",
-        "firefox",
-        "edge",
-        "opera",
-        "brave",
-        "npm",
-        "pnpm",
-        "pnpm-state",
-        "pnpm-cache",
-        "npm-cache",
-        "node_modules",
-        "packages",
-        "amplify",
-        "turborepo",
-        "nextjs-nodejs",
-        "theme-liquid-docs-nodejs",
-        ".bun",
-        ".npm",
-        ".cache",
-        ".local",
-        ".config",
-        "obs-studio",
-        "qbittorrent",
-        "utorrent web",
-        "winrar",
-        "7-zip",
-        "process hacker 2",
-        "xdg.config",
-        "ccleaner",
-        "steam",
-        "steamlibrary",
-        "sklauncher",
-        "riot-client-ux",
-        "riot games",
-        "firestorm launcher",
-        "launcher-updater",
-        "overwolf",
-        "overframe-ow-app-updater",
-        "overframe",
-        "wago-app",
-        "wago-app-updater",
-        "battleye",
-        "epic games",
-        "epicgameslauncher",
-        "ea games",
-        "ubisoft",
-        "gog galaxy",
-        "battle.net",
-        "roblox",
-        "robloxpcgdk",
-        "temp",
-        "tmp",
-        "crashdumps",
-        "squirreltemp",
-        "programs",
-        "logs",
-        "cache",
-        "sync-games",
-        // Carpetas de configuración (no guardados)
-        "config",
-        "configs",
-        "crashreportclient",
-        "windowsclient",
-        "windowseditor",
-        "windowsnoeditor",
-        "glcache",
-        "graphicscache",
-        "telemetry",
-        "ebwebview",
-        "trusttokenkeycommitments",
-        // Herramientas y apps no-juegos
-        "nuget",
-        "playwright",
-        "ms-playwright-go",
-        "tauri",
-        "betterdiscord",
-        "bravesoftware",
-        "nvidia",
-        "go",
-        "dlx",
-        "_npx",
-        "metadata-v1.3",
-        "registry.npmjs.org",
-        "v3-cache",
-        "com.savecloud.app",
-        "scratch",
-        "examples",
-        "installoptions",
-        "user data",
-        "default",
-        // Carpetas de sistema Windows / desarrollo (no juegos)
-        "$windows.~ws",
-        "$SysReset",
-        "Windows.old",
-        "msys64",
-        "publishers",
-    ]
-    .into_iter()
-    .collect()
+static EXCLUSIONS_DATA: LazyLock<ExclusionsData> = LazyLock::new(|| {
+    let json_data = include_str!("data/exclusions.json");
+    serde_json::from_str(json_data).expect("Error al parsear data/exclusions.json")
 });
 
-/// Patrones parciales: si el nombre los contiene, la carpeta se excluye.
-pub(super) const EXCLUDED_PARTIAL_PATTERNS: &[&str] = &[
-    "server_pack",
-    "server pack",
-    "_server",
-    "backup",
-    "driver",
-    "installer",
-    "setup",
-    "redistributable",
-    "redist",
-    "runtime",
-    "sdk",
-    "dotnet",
-    ".net",
-    "visual c++",
-    "vcredist",
-    "directx",
-    "pnpm",
-    "npm-cache",
-    "-cache",
-    "playwright",
-    "nuget",
-    "nvidia",
-    "brave",
-    "betterdiscord",
-    "ebwebview",
-    "telemetry",
-    "savecloud",
-    "language-servers",
-    "aws",
-    "toolkits",
-    "launcher",
-    "social club",
-];
+pub(super) static EXCLUDED_FOLDER_NAMES: LazyLock<HashSet<String>> = LazyLock::new(|| {
+    EXCLUSIONS_DATA
+        .excluded_folder_names
+        .iter()
+        .cloned()
+        .collect()
+});
 
-// ─── Funciones de detección ──────────────────────────────────────────────────
+pub(super) fn excluded_partial_patterns() -> &'static [String] {
+    &EXCLUSIONS_DATA.excluded_partial_patterns
+}
 
 pub(super) fn is_strong_save_file(name: &str) -> bool {
     let lower = name.to_lowercase();
-    STRONG_SAVE_EXTENSIONS
+    strong_save_extensions()
         .iter()
         .any(|ext| lower.ends_with(ext) || lower.contains(&format!("{}.", ext)))
 }
 
 pub(super) fn is_weak_save_file(name: &str) -> bool {
-    let lower = name.to_lowercase();
-    WEAK_SAVE_EXTENSIONS.iter().any(|ext| lower.ends_with(ext))
+    let lower = name.to_lowercase();    
+    weak_save_extensions()
+        .iter()
+        .any(|ext| lower.ends_with(ext))
 }
 
 pub(super) fn name_hints_save(name: &str) -> bool {
     let lower = name.to_lowercase();
-    SAVE_NAME_HINTS.iter().any(|h| lower.contains(h))
+    save_name_hints().iter().any(|h| lower.contains(h))
 }
 
 /// Si el nombre de la carpeta sugiere que contiene guardados (ej. "Saves", "SaveGames").
 pub(super) fn folder_name_hints_save(folder_name: &str) -> bool {
     let lower = folder_name.to_lowercase().trim().to_string();
-    SAVE_FOLDER_NAMES.iter().any(|n| *n == lower)
+    save_folder_names().iter().any(|n| *n == lower)
 }
 
 pub(super) fn folder_contains_save_like_files(dir_path: &Path) -> bool {
@@ -274,13 +124,13 @@ fn is_likely_id_or_hash(name: &str) -> bool {
 
 pub(super) fn is_excluded_folder(name: &str) -> bool {
     let lower = name.to_lowercase().trim().to_string();
-    if EXCLUDED_FOLDER_NAMES.contains(lower.as_str()) {
+    if EXCLUDED_FOLDER_NAMES.contains(&lower) {
         return true;
     }
     if is_likely_id_or_hash(name) {
         return true;
     }
-    EXCLUDED_PARTIAL_PATTERNS.iter().any(|p| lower.contains(p))
+    excluded_partial_patterns().iter().any(|p| lower.contains(p))
 }
 
 /// Profundidad máxima al buscar archivos recursivamente (ej. GameName/Saved/SaveGames).

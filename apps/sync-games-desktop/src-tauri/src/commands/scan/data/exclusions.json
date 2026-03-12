@@ -1,0 +1,33 @@
+{
+    "excluded_folder_names": [
+      "windows", "users", "program files", "program files (x86)", "programdata", "recovery", 
+      "perflogs", "$recycle.bin", "system volume information", "msocache", "boot", "intel", 
+      "amd", "code", "cursor", "visual studio setup", "git extensions", "gitextensions", 
+      "github-copilot", "cmaketools", "visualstudiodiscordrpc", "jetbrains", "discord", 
+      "spotify", "zoom", "slack", "telegram desktop", "whatsapp", "google", "microsoft", 
+      "nvidia corporation", "connecteddevicesplatform", "mozilla", "chrome", "firefox", 
+      "edge", "opera", "brave", "npm", "pnpm", "pnpm-state", "pnpm-cache", "npm-cache", 
+      "node_modules", "packages", "amplify", "turborepo", "nextjs-nodejs", 
+      "theme-liquid-docs-nodejs", ".bun", ".npm", ".cache", ".local", ".config", 
+      "obs-studio", "qbittorrent", "utorrent web", "winrar", "7-zip", "process hacker 2", 
+      "xdg.config", "ccleaner", "steam", "steamlibrary", "sklauncher", "riot-client-ux", 
+      "riot games", "firestorm launcher", "launcher-updater", "overwolf", 
+      "overframe-ow-app-updater", "overframe", "wago-app", "wago-app-updater", "battleye", 
+      "epic games", "epicgameslauncher", "ea games", "ubisoft", "gog galaxy", "battle.net", 
+      "roblox", "robloxpcgdk", "temp", "tmp", "crashdumps", "squirreltemp", "programs", 
+      "logs", "cache", "sync-games", "config", "configs", "crashreportclient", 
+      "windowsclient", "windowseditor", "windowsnoeditor", "glcache", "graphicscache", 
+      "telemetry", "ebwebview", "trusttokenkeycommitments", "nuget", "playwright", 
+      "ms-playwright-go", "tauri", "betterdiscord", "bravesoftware", "nvidia", "go", "dlx", 
+      "_npx", "metadata-v1.3", "registry.npmjs.org", "v3-cache", "com.savecloud.app", 
+      "scratch", "examples", "installoptions", "user data", "default", "$windows.~ws", 
+      "$SysReset", "Windows.old", "msys64", "publishers"
+    ],
+    "excluded_partial_patterns": [
+      "server_pack", "server pack", "_server", "backup", "driver", "installer", "setup", 
+      "redistributable", "redist", "runtime", "sdk", "dotnet", ".net", "visual c++", 
+      "vcredist", "directx", "pnpm", "npm-cache", "-cache", "playwright", "nuget", "nvidia", 
+      "brave", "betterdiscord", "ebwebview", "telemetry", "savecloud", "language-servers", 
+      "aws", "toolkits", "launcher", "social club"
+    ]
+  }

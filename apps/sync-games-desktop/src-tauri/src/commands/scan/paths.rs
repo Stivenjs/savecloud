@@ -1,45 +1,49 @@
-//! Rutas base y ubicaciones de guardados usadas en el escaneo.
-//! Aquí se centralizan todas las rutas hardcodeadas; el módulo `mod` solo contiene lógica.
+use serde::Deserialize;
+use std::sync::OnceLock;
 
-// ─── Steam (Windows) ─────────────────────────────────────────────────────────
+#[derive(Deserialize, Debug)]
+pub struct ConfigPaths {
+    pub windows: WindowsPaths,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct WindowsPaths {
+    pub default_steam_path: String,
+    pub base_scan_templates: Vec<PathEntry>,
+    pub crack_save_locations: Vec<PathEntry>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct PathEntry {
+    pub path: String,
+    pub label: String,
+}
+
+pub fn get_config() -> &'static ConfigPaths {
+    static CONFIG: OnceLock<ConfigPaths> = OnceLock::new();
+
+    CONFIG.get_or_init(|| {
+        let json_data = include_str!("data/paths.json");
+        serde_json::from_str(json_data).expect("Error al parsear paths.json")
+    })
+}
 
 #[cfg(target_os = "windows")]
-pub const DEFAULT_STEAM_PATH_WIN32: &str = "C:\\Program Files (x86)\\Steam";
+pub fn default_steam_path() -> &'static str {
+    &get_config().windows.default_steam_path
+}
 
-// ─── Rutas base para escaneo (Documents, AppData, etc.) ─────────────────────
-
-/// Plantillas (ruta, etiqueta) para el escaneo base. Definición según plataforma.
 #[cfg(target_os = "windows")]
-pub const BASE_SCAN_TEMPLATES: &[(&str, &str)] = &[
-    ("%USERPROFILE%\\Documents\\My Games", "Documents/My Games"),
-    ("%USERPROFILE%\\Documents", "Documents"),
-    ("%USERPROFILE%\\AppData\\LocalLow", "LocalLow"),
-    ("%USERPROFILE%\\Saved Games", "Saved Games"),
-    ("%LOCALAPPDATA%", "LocalAppData"),
-    ("%LOCALAPPDATA%\\Low", "LocalAppData/Low"),
-    ("%APPDATA%", "AppData"),
-];
+pub fn base_scan_templates() -> &'static [PathEntry] {
+    &get_config().windows.base_scan_templates
+}
 
 #[cfg(not(target_os = "windows"))]
-pub const BASE_SCAN_TEMPLATES: &[(&str, &str)] = &[
-    ("~/.local/share", "Local Share"),
-    ("~/.config", "Config"),
-    ("~/Documents", "Documents"),
-];
-
-// ─── Ubicaciones de guardados de cracks / emuladores Steam ───────────────────
-// (ruta con posibles %VAR%, etiqueta para mostrar)
+pub fn base_scan_templates() -> &'static [PathEntry] {
+    &get_config().unix.base_scan_templates
+}
 
 #[cfg(target_os = "windows")]
-pub const CRACK_SAVE_LOCATIONS: &[(&str, &str)] = &[
-    ("C:\\Users\\Public\\Documents\\EMPRESS", "EMPRESS"),
-    ("C:\\Users\\Public\\Documents\\Steam", "CODEX/Steam emu"),
-    ("%APPDATA%\\Goldberg SteamEmu Saves", "Goldberg"),
-    ("%APPDATA%\\CODEX", "CODEX"),
-    ("%APPDATA%\\CPY_SAVES", "CPY (Conspir4cy)"),
-    ("%APPDATA%\\Skidrow", "Skidrow"),
-    ("%APPDATA%\\FLT", "FLT"),
-    ("%APPDATA%\\RUNE", "RUNE"),
-    ("%LOCALAPPDATA%\\CODEX", "CODEX (Local)"),
-    ("%USERPROFILE%\\Documents\\CPY_SAVES", "CPY (Documents)"),
-];
+pub fn crack_save_locations() -> &'static [PathEntry] {
+    &get_config().windows.crack_save_locations
+}

@@ -282,7 +282,7 @@ fn scan_steam(
     path_to_appid: &std::collections::HashMap<PathBuf, String>,
     manifest_index: &Option<manifest::ManifestIndex>,
 ) {
-    let steam_path = paths::DEFAULT_STEAM_PATH_WIN32;
+    let steam_path = paths::default_steam_path();
     if !Path::new(steam_path).exists() {
         return;
     }
@@ -386,7 +386,9 @@ fn scan_cracks(
     seen: &mut HashSet<String>,
     manifest_index: &Option<manifest::ManifestIndex>,
 ) {
-    for (path_tpl, label) in paths::CRACK_SAVE_LOCATIONS {
+    for entry in paths::crack_save_locations() {
+        let path_tpl = &entry.path;
+        let label = &entry.label;
         let Some(base_path) = expand_path(path_tpl) else {
             continue;
         };
@@ -492,7 +494,10 @@ fn scan_cracks(
 fn base_scan_jobs(cfg: &config::Config) -> Vec<(String, String)> {
     let mut jobs = Vec::new();
 
-    for (tpl, label) in paths::BASE_SCAN_TEMPLATES {
+    for entry in paths::base_scan_templates() {
+        let tpl = &entry.path;
+        let label = &entry.label;
+
         if let Some(expanded) = expand_path(tpl) {
             jobs.push((expanded, label.to_string()));
         }

@@ -1,0 +1,24 @@
+{
+    "strong_save_extensions": [
+      ".sav", ".savx", ".save", ".sl2", ".state", ".sr", ".ess", ".fos", ".bsb", 
+      ".dsg", ".zds", ".lsd", ".rvdata", ".rvdata2", ".lsw", ".srm", ".sgm", 
+      ".fcs", ".frz", ".svs", ".sta", ".ns1", ".jst", ".zs3", ".zs4", ".zs5", 
+      ".zs6", ".zs7", ".zs8", ".zs9", ".zst", ".001", ".002", ".003", ".004", 
+      ".005", ".006", ".007", ".008", ".009", ".010", ".sc2save", ".w3z", 
+      ".sims3", ".age3sav", ".age3ysav", ".age3xsav", ".plr", ".wld", ".mcworld", 
+      ".mcr", ".mca", ".schematic", ".schem", ".rgd", ".gms", ".pcsav", 
+      ".masseffectsave", ".vdf", ".sii", ".sc4", ".scs", ".psv", ".ps2", ".xnb", 
+      ".sg0", ".ldw", ".pqhero", ".dun", ".escape", ".usa", ".bls", ".rgss3a"
+    ],
+    "weak_save_extensions": [
+      ".dat", ".bin", ".bak", ".json", ".ini"
+    ],
+    "save_folder_names": [
+      "saves", "save", "saved games", "savedgames", "savegames", "save data", 
+      "savedata", "profiles", "player", "characters", "checkpoints", "slots"
+    ],
+    "save_name_hints": [
+      "save", "slot", "profile", "progress", "checkpoint", "autosave", 
+      "quicksave", "player", "game", "backup", "world", "character"
+    ]
+  }

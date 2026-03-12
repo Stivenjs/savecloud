@@ -1,0 +1,33 @@
+{
+    "windows": {
+      "default_steam_path": "C:\\Program Files (x86)\\Steam",
+      "base_scan_templates": [
+        { "path": "%USERPROFILE%\\Documents\\My Games", "label": "Documents/My Games" },
+        { "path": "%USERPROFILE%\\Documents", "label": "Documents" },
+        { "path": "%USERPROFILE%\\AppData\\LocalLow", "label": "LocalLow" },
+        { "path": "%USERPROFILE%\\Saved Games", "label": "Saved Games" },
+        { "path": "%LOCALAPPDATA%", "label": "LocalAppData" },
+        { "path": "%LOCALAPPDATA%\\Low", "label": "LocalAppData/Low" },
+        { "path": "%APPDATA%", "label": "AppData" }
+      ],
+      "crack_save_locations": [
+        { "path": "C:\\Users\\Public\\Documents\\EMPRESS", "label": "EMPRESS" },
+        { "path": "C:\\Users\\Public\\Documents\\Steam", "label": "CODEX/Steam emu" },
+        { "path": "%APPDATA%\\Goldberg SteamEmu Saves", "label": "Goldberg" },
+        { "path": "%APPDATA%\\CODEX", "label": "CODEX" },
+        { "path": "%APPDATA%\\CPY_SAVES", "label": "CPY (Conspir4cy)" },
+        { "path": "%APPDATA%\\Skidrow", "label": "Skidrow" },
+        { "path": "%APPDATA%\\FLT", "label": "FLT" },
+        { "path": "%APPDATA%\\RUNE", "label": "RUNE" },
+        { "path": "%LOCALAPPDATA%\\CODEX", "label": "CODEX (Local)" },
+        { "path": "%USERPROFILE%\\Documents\\CPY_SAVES", "label": "CPY (Documents)" }
+      ]
+    },
+    "unix": {
+      "base_scan_templates": [
+        { "path": "~/.local/share", "label": "Local Share" },
+        { "path": "~/.config", "label": "Config" },
+        { "path": "~/Documents", "label": "Documents" }
+      ]
+    }
+  }
