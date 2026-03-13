@@ -227,4 +227,4 @@ Si los archivos no se descargan correctamente en `live`:
 
 ## Licencia
 
-[Licencia](./LICENSE)
+Este proyecto está licenciado bajo.[**MIT**](./LICENSE)
