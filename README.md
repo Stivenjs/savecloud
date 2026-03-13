@@ -1,5 +1,15 @@
 # SaveCloud
 
+![Bun](https://img.shields.io/badge/runtime-bun-black)
+![Node](https://img.shields.io/badge/node-20-green)
+![TypeScript](https://img.shields.io/badge/language-typescript-blue)
+![Fastify](https://img.shields.io/badge/api-fastify-black)
+![AWS](https://img.shields.io/badge/deploy-AWS-orange)
+![S3](https://img.shields.io/badge/storage-S3-red)
+![Tauri](https://img.shields.io/badge/desktop-tauri-blue)
+![React](https://img.shields.io/badge/frontend-react-61dafb)
+![Rust](https://img.shields.io/badge/backend-rust-orange)
+
 Servidor de guardado en la nube para juegos (S3 + Lambda) y app de escritorio para sincronizar guardados. Clean Architecture en backend y CLI.
 
 ## Guía de despliegue
@@ -94,38 +104,50 @@ Desde la raíz: `bun run desktop`. Requiere Rust y dependencias de Tauri instala
 
 ## API
 
-| Método y ruta                               | Descripción                                                                                                                                               |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /health`                               | Health check                                                                                                                                              |
-| `GET /saves`                                | Lista guardados del usuario (headers: `x-user-id`, `x-api-key` si aplica)                                                                                 |
-| `POST /saves/upload-url`                    | Una URL de subida. Body: `{ "gameId", "filename" }` → `{ "uploadUrl", "key" }`                                                                            |
-| `POST /saves/upload-urls`                   | **Batch:** varias URLs de subida (máx. 500 ítems por petición). Body: `{ "items": [{ "gameId", "filename" }, ...] }` → `{ "urls": [...] }`                |
-| `POST /saves/download-url`                  | Una URL de descarga. Body: `{ "gameId", "key" }` (opcional `range: { start, end }`) → `{ "downloadUrl" }`                                                 |
-| `POST /saves/download-urls`                 | **Batch:** varias URLs de descarga. Body: `{ "items": [{ "gameId", "key" }, ...] }` → `{ "urls": [...] }`                                                 |
-| `POST /saves/multipart/init`                | Inicia subida multipart (archivos grandes). Body: `{ "gameId", "filename" }` → `{ "uploadId", "key" }`                                                    |
-| `POST /saves/multipart/init-with-part-urls` | Init + todas las URLs de partes en una llamada. Body: `{ "gameId", "filename", "partCount" }` → `{ "uploadId", "key", "partUrls" }` (partCount máx. 2000) |
-| `POST /saves/multipart/part-urls`           | URLs firmadas para partes. Body: `{ "key", "uploadId", "partNumbers": [1,2,...] }` → `{ "partUrls" }`                                                     |
-| `POST /saves/multipart/complete`            | Completa subida multipart. Body: `{ "key", "uploadId", "parts": [{ "partNumber", "etag" }, ...] }` → 204                                                  |
-| `POST /saves/multipart/abort`               | Aborta subida multipart. Body: `{ "key", "uploadId" }` → 204                                                                                              |
-| `POST /saves/delete-game`                   | Borra todos los guardados del juego en S3. Body: `{ "gameId" }` → 204.                                                                                    |
-| `POST /saves/rename-game`                   | Renombra un juego en S3 (copia a nuevo prefijo y borra el antiguo). Body: `{ "oldGameId", "newGameId" }` → 204.                                           |
+| Método y ruta                               | Descripción                                                                    |
+| ------------------------------------------- | ------------------------------------------------------------------------------ |
+| `GET /health`                               | Health check                                                                   |
+| `GET /saves`                                | Lista guardados del usuario (headers: `x-user-id`, `x-api-key` si aplica)      |
+| `POST /saves/upload-url`                    | Una URL de subida. Body: `{ "gameId", "filename" }` → `{ "uploadUrl", "key" }` |
+| `POST /saves/upload-urls`                   | Batch: varias URLs de subida (máx. 500 ítems por petición).                    |
+| `POST /saves/download-url`                  | Una URL de descarga. Body: `{ "gameId", "key" }`                               |
+| `POST /saves/download-urls`                 | Batch: varias URLs de descarga.                                                |
+| `POST /saves/multipart/init`                | Inicia subida multipart (archivos grandes).                                    |
+| `POST /saves/multipart/init-with-part-urls` | Init + todas las URLs de partes en una llamada.                                |
+| `POST /saves/multipart/part-urls`           | URLs firmadas para partes.                                                     |
+| `POST /saves/multipart/complete`            | Completa subida multipart.                                                     |
+| `POST /saves/multipart/abort`               | Aborta subida multipart.                                                       |
+| `POST /saves/delete-game`                   | Borra todos los guardados del juego en S3.                                     |
+| `POST /saves/rename-game`                   | Renombra un juego en S3 (copia a nuevo prefijo y borra el antiguo).            |
 
-El cliente sube/descarga los archivos directamente a S3 usando las URLs firmadas. La app de escritorio usa los endpoints batch y multipart para reducir llamadas e invocaciones Lambda. `GET /saves` pagina en S3 (más de 1000 objetos); `upload-urls` está limitado a 500 ítems por petición. Eliminar y renombrar requieren que el Lambda tenga permiso `s3:DeleteObject` (incluido en el `serverless.yml`).
+El cliente sube y descarga archivos directamente desde S3 utilizando URLs firmadas. La app de escritorio usa endpoints batch y multipart para reducir llamadas a la API.
 
 ## Probar que los guardados se suben a S3
 
-1. **API en local:**
+1. **API en local**
 
-   ```bash
-   export BUCKET_NAME=tu-bucket-savecloud
-   export AWS_REGION=us-east-2
-   bun run dev
-   ```
+```bash
+export BUCKET_NAME=tu-bucket-savecloud
+export AWS_REGION=us-east-2
+bun run dev
+```
 
-   API en `http://localhost:3000`.
+La API quedará disponible en `http://localhost:3000`.
 
-2. **Configurar el CLI** (o la app de escritorio) con la URL de la API y un `userId` en el JSON de config. Añade un juego con una ruta con archivos de guardado.
+2. **Configurar el CLI o la app de escritorio** con la URL de la API y un `userId` en el archivo de configuración.
 
-3. **Subir:** `bun run cli -- upload <game-id>` o desde la app de escritorio. Comprueba en S3 la clave `userId/gameId/<archivo>`.
+3. **Subir guardados**
 
-Si desplegaste en AWS (`bun run deploy:dev`), usa en config la URL del API Gateway (ej. `https://xxxx.execute-api.us-east-2.amazonaws.com`).
+```
+bun run cli -- upload <game-id>
+```
+
+También puede hacerse desde la app de escritorio.
+
+Luego verifica en S3 la ruta:
+
+```
+userId/gameId/<archivo>
+```
+
+Si desplegaste en AWS (`bun run deploy:dev`), usa en la configuración la URL del API Gateway (por ejemplo `https://xxxx.execute-api.us-east-2.amazonaws.com`).
