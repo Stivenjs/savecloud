@@ -100,11 +100,9 @@ jobs:
           - platform: windows-latest
             artifactName: desktop-windows
             args: ""
-            rustTargets: ""
           - platform: ubuntu-22.04
             artifactName: desktop-linux
             args: ""
-            rustTargets: ""
           - platform: macos-latest
             artifactName: desktop-macos-universal
             args: "--target universal-apple-darwin"
@@ -127,7 +125,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.rustTargets }}
+          targets: ${{ matrix.rustTargets || '' }}
 
       - name: Sync version from tag
         run: bun run scripts/sync-version.ts
