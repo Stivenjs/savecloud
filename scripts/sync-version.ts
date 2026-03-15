@@ -27,6 +27,8 @@ const jsonFiles = [
 
 const tomlFiles = ["apps/savecloud-desktop/src-tauri/Cargo.toml"];
 
+const changelogFiles = ["RELEASE_NOTES.md"];
+
 let updatedCount = 0;
 
 for (const relPath of jsonFiles) {
@@ -57,6 +59,25 @@ for (const relPath of tomlFiles) {
   let content = await file.text();
 
   content = content.replace(/version\s*=\s*".*?"/, `version = "${version}"`);
+
+  await Bun.write(fullPath, content);
+  updatedCount++;
+}
+
+for (const relPath of changelogFiles) {
+  const fullPath = resolve(root, relPath);
+  const file = Bun.file(fullPath);
+
+  if (!(await file.exists())) {
+    console.warn(`[Advertencia] Archivo no encontrado: ${relPath}`);
+    continue;
+  }
+
+  let content = await file.text();
+
+  const releaseVersionRegex = /(?<=^(?:##\s+|###\s+|- Versión\s+|Version\s+))v?\d+\.\d+\.\d+/gim;
+
+  content = content.replace(releaseVersionRegex, version);
 
   await Bun.write(fullPath, content);
   updatedCount++;
