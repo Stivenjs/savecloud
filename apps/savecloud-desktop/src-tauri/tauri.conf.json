@@ -1,16 +1,14 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "SaveCloud",
-  "version": "1.6.8",
+  "version": "1.6.9",
   "identifier": "com.savecloud.app",
-
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "bun run build",
     "frontendDist": "../dist"
   },
-
   "app": {
     "withGlobalTauri": false,
     "windows": [
@@ -24,7 +22,6 @@
         "resizable": false
       }
     ],
-
     "security": {
       "csp": {
         "default-src": "'self'",
@@ -34,20 +31,18 @@
       }
     }
   },
-
   "bundle": {
-  "active": true,
-  "targets": "all",
-  "createUpdaterArtifacts": true,
-  "icon": [
-    "icons/32x32.png",
-    "icons/128x128.png",
-    "icons/128x128@2x.png",
-    "icons/icon.icns",
-    "icons/icon.ico"
-  ]
-},
-
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM2MzZEOUM0OTJEOTc1NDUKUldSRmRkbVN4TmsyTnJEQ2NOYUZVZzRyajNFbWo3eWdmSllJcCtxb0RxcE1MMXFIbFZqTzNYdEwK",
