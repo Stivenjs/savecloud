@@ -2,13 +2,85 @@
 
 use futures_util::FutureExt;
 use regex::{Regex, RegexBuilder};
+use std::collections::HashMap;
 use std::sync::OnceLock;
 
 static APP_ID_REGEX: OnceLock<Regex> = OnceLock::new();
 static SUGGEST_REGEX: OnceLock<Regex> = OnceLock::new();
 
+/// Función interna para buscar el nombre de un solo juego.
+async fn fetch_single_app_name(client: &reqwest::Client, app_id: &str) -> Option<(String, String)> {
+    let url = format!(
+        "https://store.steampowered.com/api/appdetails?appids={}",
+        app_id
+    );
+
+    let res = client.get(&url).send().await.ok()?;
+    let data: serde_json::Value = res.json().await.ok()?;
+
+    let entry = data.get(app_id)?;
+    if entry.get("success")?.as_bool()? {
+        let name = entry.get("data")?.get("name")?.as_str()?;
+        return Some((app_id.to_string(), name.to_string()));
+    }
+
+    None
+}
+
+/// Obtiene los nombres de varios juegos a partir de sus Steam App IDs.
+/// Hace peticiones individuales en paralelo para evitar que un ID inválido arruine el lote.
+#[tauri::command]
+pub async fn get_steam_app_names_batch(app_ids: Vec<String>) -> HashMap<String, String> {
+    let mut valid_ids: Vec<String> = app_ids
+        .into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit()))
+        .collect();
+
+    valid_ids.sort_unstable();
+    valid_ids.dedup();
+
+    if valid_ids.is_empty() {
+        return HashMap::new();
+    }
+
+    let client = match reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return HashMap::new(),
+    };
+
+    // Disparamos todas las peticiones concurrentemente desde Rust
+    let futures: Vec<_> = valid_ids
+        .into_iter()
+        .map(|app_id| {
+            let client_clone = client.clone();
+            async move {
+                for _ in 0..2 {
+                    if let Some(result) = fetch_single_app_name(&client_clone, &app_id).await {
+                        return Some(result);
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                }
+                None
+            }
+            .boxed()
+        })
+        .collect();
+
+    let results = futures_util::future::join_all(futures).await;
+
+    let mut final_map = HashMap::new();
+    for (id, name) in results.into_iter().flatten() {
+        final_map.insert(id, name);
+    }
+
+    final_map
+}
+
 /// Obtiene el nombre del juego a partir del Steam App ID (API appdetails).
-/// Reintenta hasta 3 veces ante fallos transitorios (red, rate limit).
 #[tauri::command]
 pub async fn get_steam_app_name(app_id: String) -> Option<String> {
     let app_id = app_id.trim().to_string();
@@ -16,42 +88,8 @@ pub async fn get_steam_app_name(app_id: String) -> Option<String> {
         return None;
     }
 
-    const MAX_RETRIES: u32 = 3;
-    const RETRY_DELAY_MS: u64 = 800;
-
-    for attempt in 0..MAX_RETRIES {
-        if attempt > 0 {
-            std::thread::sleep(std::time::Duration::from_millis(
-                RETRY_DELAY_MS * attempt as u64,
-            ));
-        }
-
-        if let Some(name) = fetch_steam_app_name_impl(&app_id).await {
-            return Some(name);
-        }
-    }
-    None
-}
-
-async fn fetch_steam_app_name_impl(app_id: &str) -> Option<String> {
-    let url = format!(
-        "https://store.steampowered.com/api/appdetails?appids={}",
-        app_id
-    );
-
-    let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        .build()
-        .ok()?;
-
-    let res = client.get(&url).send().await.ok()?;
-    let data: serde_json::Value = res.json().await.ok()?;
-    let entry = data.get(app_id)?;
-    let success = entry.get("success")?.as_bool()?;
-    if !success {
-        return None;
-    }
-    entry.get("data")?.get("name")?.as_str().map(String::from)
+    let mut results = get_steam_app_names_batch(vec![app_id.clone()]).await;
+    results.remove(&app_id)
 }
 
 /// Lógica interna: busca Steam App ID por texto de búsqueda (una petición HTTP).
@@ -153,8 +191,6 @@ pub async fn search_steam_games(query: String) -> Vec<SteamSearchResult> {
     };
 
     let re = SUGGEST_REGEX.get_or_init(|| {
-        // Captura cada bloque <a ... data-ds-appid="ID"...> ... </a>
-        // y dejamos el nombre para un segundo regex dentro del bloque.
         RegexBuilder::new(r#"<a[^>]+data-ds-appid="(\d{4,10})"[^>]*>(.*?)</a>"#)
             .dot_matches_new_line(true)
             .build()
@@ -162,8 +198,6 @@ pub async fn search_steam_games(query: String) -> Vec<SteamSearchResult> {
     });
 
     let mut results = Vec::new();
-    // El HTML de Steam puede tener clases adicionales en el span/div de nombre,
-    // así que buscamos cualquier tag con class que contenga "match_name".
     let name_re =
         Regex::new(r#"class="[^"]*match_name[^"]*"[^>]*>([^<]+)<"#).expect("regex nombre Steam");
     for cap in re.captures_iter(&body) {

@@ -71,5 +71,6 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::commands::sync::api::get_s3_transfer_endpoint_type,
         crate::commands::list_operation_history,
         crate::commands::tray_tooltip::refresh_tray_tooltip,
+        crate::commands::get_steam_app_names_batch,
     ])
 }

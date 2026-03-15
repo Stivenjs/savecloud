@@ -2,7 +2,7 @@
 //! de juegos (Steam y otros). Fuente: https://github.com/mtkennerly/ludusavi-manifest
 //! Licencia del manifiesto: MIT (mtkennerly).
 
-use serde_yaml::Value;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -11,6 +11,7 @@ const MANIFEST_URL: &str =
     "https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/refs/heads/master/data/manifest.yaml";
 
 /// Entrada del manifiesto para un juego: nombre y rutas de guardado (templates).
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct GameManifestEntry {
     pub name: String,
@@ -31,6 +32,48 @@ pub enum PathTemplate {
 /// Índice: Steam App ID (string) -> entrada del manifiesto.
 pub type ManifestIndex = HashMap<String, GameManifestEntry>;
 
+#[derive(Deserialize, Debug)]
+struct ManifestGame {
+    files: Option<HashMap<String, FileEntry>>,
+    steam: Option<SteamEntry>,
+    #[serde(rename = "steamExtra")]
+    steam_extra: Option<Vec<SteamId>>,
+    registry: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct FileEntry {
+    tags: Option<Vec<String>>,
+    when: Option<Vec<WhenCondition>>,
+}
+
+#[derive(Deserialize, Debug)]
+struct SteamEntry {
+    id: Option<SteamId>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+enum SteamId {
+    Num(u64),
+    Str(String),
+}
+
+impl SteamId {
+    fn into_string(self) -> String {
+        match self {
+            SteamId::Num(n) => n.to_string(),
+            SteamId::Str(s) => s,
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
+struct WhenCondition {
+    os: Option<String>,
+    // store: Option<String>, // Por si necesito saber el launcher de donde es el juego
+}
+
 /// Descarga el manifiesto y lo guarda en cache_dir/manifest.yaml. Devuelve la ruta del archivo.
 fn ensure_manifest_cached(cache_path: &Path) -> Result<(), String> {
     if cache_path.exists() {
@@ -45,177 +88,106 @@ fn ensure_manifest_cached(cache_path: &Path) -> Result<(), String> {
         .timeout(std::time::Duration::from_secs(60))
         .build()
         .map_err(|e| e.to_string())?;
+
     let body = client
         .get(MANIFEST_URL)
         .send()
         .map_err(|e| e.to_string())?
         .bytes()
         .map_err(|e| e.to_string())?;
+
     fs::write(cache_path, &body).map_err(|e| e.to_string())?;
     Ok(())
 }
 
-/// Comprueba si un bloque "when" aplica a Windows + Steam (o solo Windows para cracks).
-#[allow(dead_code)]
-fn when_applies_windows(when: &Value) -> bool {
-    let arr = match when.as_sequence() {
-        Some(a) => a,
-        None => return true,
-    };
-    for cond in arr {
-        let map = match cond.as_mapping() {
-            Some(m) => m,
-            None => continue,
-        };
-        let os = map
-            .get(&Value::String("os".into()))
-            .and_then(|v| v.as_str())
-            .map(str::to_lowercase);
-        let store = map
-            .get(&Value::String("store".into()))
-            .and_then(|v| v.as_str())
-            .map(str::to_lowercase);
-        // Aceptar: os windows (o sin os) y store steam (o sin store para genérico)
-        let ok_os = os.as_deref().map_or(true, |o| o == "windows");
-        let ok_store = store.as_deref().map_or(true, |s| s == "steam");
-        if ok_os && ok_store {
-            return true;
-        }
-    }
-    false
-}
-
 /// Comprueba si en el bloque "when" hay alguna condición que aplique a Windows.
-fn when_has_windows(when: &Value) -> bool {
-    let arr = match when.as_sequence() {
-        Some(a) => a,
+fn when_has_windows(when_list: &Option<Vec<WhenCondition>>) -> bool {
+    let conditions = match when_list {
+        Some(c) => c,
         None => return true,
     };
-    for cond in arr {
-        let map = match cond.as_mapping() {
-            Some(m) => m,
-            None => continue,
-        };
-        let os = map
-            .get(&Value::String("os".into()))
-            .and_then(|v| v.as_str())
-            .map(str::to_lowercase);
-        if os.as_deref().map_or(true, |o| o == "windows") {
-            return true;
-        }
+
+    if conditions.is_empty() {
+        return true;
     }
-    false
+
+    conditions.iter().any(|cond| {
+        cond.os
+            .as_deref()
+            .map_or(true, |o| o.eq_ignore_ascii_case("windows"))
+    })
 }
 
-/// Extrae rutas de "files" que tengan tag "save" y when aplicable a Windows.
-fn extract_save_paths_from_files(files: &serde_yaml::Mapping) -> Vec<PathTemplate> {
-    let mut out = Vec::new();
-    for (path_val, entry_val) in files {
-        let path_str = path_val.as_str().map(str::trim).unwrap_or("");
-        if path_str.is_empty() {
-            continue;
-        }
-        let entry = match entry_val.as_mapping() {
-            Some(m) => m,
-            None => continue,
-        };
-        let tags = entry
-            .get(&Value::String("tags".into()))
-            .and_then(|v| v.as_sequence());
-        let has_save = tags.map_or(false, |t| {
-            t.iter()
-                .any(|v| v.as_str().map_or(false, |s| s.eq_ignore_ascii_case("save")))
-        });
-        if !has_save {
-            continue;
-        }
-        let when = entry.get(&Value::String("when".into()));
-        if !when_has_windows(when.unwrap_or(&Value::Null)) {
-            continue;
-        }
-        let template = if path_str.starts_with(" /") || path_str.starts_with('/') {
-            PathTemplate::RelativeToInstall(path_str.trim_start().to_string())
-        } else {
-            PathTemplate::Absolute(path_str.to_string())
-        };
-        out.push(template);
-    }
-    out
-}
-
-/// Extrae steam id (principal) y steamExtra del bloque del juego.
-fn extract_steam_ids(game_block: &serde_yaml::Mapping) -> Vec<String> {
-    let mut ids = Vec::new();
-    if let Some(steam) = game_block.get(&Value::String("steam".into())) {
-        if let Some(m) = steam.as_mapping() {
-            if let Some(id) = m.get(&Value::String("id".into())) {
-                if let Some(s) = id.as_str().filter(|s| !s.is_empty()) {
-                    ids.push(s.to_string());
-                } else if let Some(n) = id.as_u64() {
-                    ids.push(n.to_string());
-                }
-            }
-        }
-    }
-    if let Some(extra) = game_block.get(&Value::String("steamExtra".into())) {
-        if let Some(arr) = extra.as_sequence() {
-            for v in arr {
-                if let Some(s) = v.as_str().filter(|s| !s.is_empty()) {
-                    ids.push(s.to_string());
-                } else if let Some(n) = v.as_u64() {
-                    ids.push(n.to_string());
-                }
-            }
-        }
-    }
-    ids
-}
-
-/// Parsea el YAML del manifiesto y construye el índice por Steam App ID.
+/// Parsea el YAML del manifiesto usando deserialización tipada y construye el índice.
 fn parse_manifest_yaml(content: &str) -> Result<ManifestIndex, String> {
-    let root: Value = serde_yaml::from_str(content).map_err(|e| e.to_string())?;
-    let games = root
-        .as_mapping()
-        .ok_or_else(|| "Manifest root is not a map".to_string())?;
+    let root: HashMap<String, ManifestGame> =
+        serde_yaml::from_str(content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
 
-    let mut index = ManifestIndex::new();
-    for (name_val, game_val) in games {
-        let game_name = name_val.as_str().unwrap_or("").trim().to_string();
-        if game_name.is_empty() {
+    let mut index = ManifestIndex::with_capacity(root.len());
+
+    for (game_name, game_data) in root {
+        if game_name.trim().is_empty() {
             continue;
         }
-        let game_block = match game_val.as_mapping() {
-            Some(m) => m,
-            None => continue,
-        };
 
-        let steam_ids = extract_steam_ids(game_block);
+        let mut steam_ids = Vec::new();
+        if let Some(steam) = game_data.steam.and_then(|s| s.id) {
+            let id_str = steam.into_string();
+            if !id_str.is_empty() {
+                steam_ids.push(id_str);
+            }
+        }
+
+        if let Some(extra_ids) = game_data.steam_extra {
+            for id in extra_ids {
+                let id_str = id.into_string();
+                if !id_str.is_empty() {
+                    steam_ids.push(id_str);
+                }
+            }
+        }
+
         if steam_ids.is_empty() {
             continue;
         }
 
         let mut save_paths = Vec::new();
+        if let Some(files) = game_data.files {
+            for (path_str, entry) in files {
+                let path_str = path_str.trim();
+                if path_str.is_empty() {
+                    continue;
+                }
 
-        if let Some(files) = game_block.get(&Value::String("files".into())) {
-            if let Some(files_map) = files.as_mapping() {
-                save_paths.extend(extract_save_paths_from_files(files_map));
+                let has_save = entry.tags.as_ref().map_or(false, |tags| {
+                    tags.iter().any(|t| t.eq_ignore_ascii_case("save"))
+                });
+
+                if !has_save || !when_has_windows(&entry.when) {
+                    continue;
+                }
+
+                let template = if path_str.starts_with(" /") || path_str.starts_with('/') {
+                    PathTemplate::RelativeToInstall(path_str.trim_start().to_string())
+                } else {
+                    PathTemplate::Absolute(path_str.to_string())
+                };
+
+                save_paths.push(template);
             }
         }
-
-        let registry_path = game_block
-            .get(&Value::String("registry".into()))
-            .and_then(|v| v.as_str())
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
 
         let entry = GameManifestEntry {
             name: game_name,
             save_paths,
-            registry_path,
+            registry_path: game_data
+                .registry
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
         };
 
         for id in steam_ids {
-            index.entry(id).or_insert(entry.clone());
+            index.insert(id, entry.clone());
         }
     }
 
@@ -234,13 +206,29 @@ pub fn load_manifest_index() -> Option<ManifestIndex> {
 fn expand_env_path(s: &str) -> String {
     #[cfg(target_os = "windows")]
     {
-        let mut result = s.to_string();
-        for (var, val) in std::env::vars() {
-            let placeholder = format!("%{}%", var);
-            if result.contains(&placeholder) {
-                result = result.replace(&placeholder, &val);
+        let mut result = String::with_capacity(s.len() + 32);
+        let mut remaining = s;
+
+        while let Some(start) = remaining.find('%') {
+            result.push_str(&remaining[..start]);
+            remaining = &remaining[start + 1..];
+
+            if let Some(end) = remaining.find('%') {
+                let var_name = &remaining[..end];
+                if let Ok(val) = std::env::var(var_name) {
+                    result.push_str(&val);
+                } else {
+                    result.push('%');
+                    result.push_str(var_name);
+                    result.push('%');
+                }
+                remaining = &remaining[end + 1..];
+            } else {
+                result.push('%');
+                break;
             }
         }
+        result.push_str(remaining);
         result
     }
 
@@ -284,9 +272,6 @@ pub fn get_entry_for_steam_app(
             resolved.push(path);
         }
     }
-    if entry.registry_path.is_some() {
-        // Por ahora no añadimos rutas de registro como carpetas; Ludusavi las trata aparte.
-    }
     Some((entry.clone(), resolved))
 }
 
@@ -298,7 +283,10 @@ mod tests {
     fn test_expand_env_path() {
         std::env::set_var("TEST_VAR", "C:\\Test");
         let r = expand_env_path("%TEST_VAR%\\saves");
-        assert!(r.contains("saves"));
+        assert_eq!(r, "C:\\Test\\saves");
         std::env::remove_var("TEST_VAR");
+
+        let missing = expand_env_path("C:\\Ruta\\%FALSA%\\save");
+        assert_eq!(missing, "C:\\Ruta\\%FALSA%\\save");
     }
 }

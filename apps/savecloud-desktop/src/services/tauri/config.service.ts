@@ -611,3 +611,7 @@ export async function startTorrentFileDownload(file: string, savePath: string): 
 export async function cancelTorrent(infoHash: string): Promise<void> {
   await invoke("cancel_torrent", { infoHash });
 }
+
+export async function getSteamAppNamesBatch(appIds: string[]): Promise<Record<string, string>> {
+  return invoke<Record<string, string>>("get_steam_app_names_batch", { appIds });
+}
