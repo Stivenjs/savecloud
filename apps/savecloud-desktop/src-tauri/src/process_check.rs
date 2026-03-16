@@ -8,11 +8,9 @@ use std::sync::OnceLock;
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tauri::{AppHandle, Emitter};
 
-/// Mantener una única instancia de System globalmente para evitar el alto coste
-/// de crear una nueva en cada comprobación (polling).
 static GLOBAL_SYS: OnceLock<Mutex<System>> = OnceLock::new();
 
-fn get_sys() -> std::sync::MutexGuard<'static, System> {
+pub(crate) fn get_sys() -> std::sync::MutexGuard<'static, System> {
     GLOBAL_SYS
         .get_or_init(|| Mutex::new(System::new()))
         .lock()
