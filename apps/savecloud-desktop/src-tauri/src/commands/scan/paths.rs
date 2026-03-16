@@ -1,3 +1,4 @@
+//! Rutas de guardados.
 #![allow(dead_code)]
 use serde::Deserialize;
 use std::sync::OnceLock;
