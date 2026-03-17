@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, CardBody, Spinner } from "@heroui/react";
+import { Button, Spinner } from "@heroui/react";
 import { Copy, RefreshCw, User } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import { AddGameModal } from "@features/games/AddGameModal";
@@ -12,11 +12,12 @@ import { SyncPreviewModal } from "@features/games/SyncPreviewModal";
 import { GamesFilters } from "@features/games/GamesFilters";
 import { GamesList } from "@features/games/GamesList";
 import { GamesPageHeader } from "@features/games/GamesPageHeader";
-import { GamesStats } from "@features/games/GamesStats";
+import { GamesStatsCompact } from "@features/games/GamesStatsCompact";
 import { OperationErrorCard } from "@features/games/OperationErrorCard";
 import { BulkActionConfirmModal } from "@features/games/BulkActionConfirmModal";
 import { RemoveGameModal } from "@features/games/RemoveGameModal";
 import { ScanModal } from "@features/games/ScanModal";
+import { ConnectionStatusIndicator } from "@features/games/ConnectionStatusIndicator";
 import { useGamesPage } from "@features/games/useGamesPage";
 import { useGameStats } from "@hooks/useGameStats";
 import { scheduleConfigBackupToCloud } from "@services/tauri";
@@ -37,7 +38,6 @@ export function GamesPage() {
     totalCloudSize,
     lastSyncLoading,
     connectionStatus,
-    connectionError,
     searchTerm,
     setSearchTerm,
     originFilter,
@@ -85,7 +85,6 @@ export function GamesPage() {
     handleOpenFolder,
     handleRefresh,
     refreshing,
-    refetchLastSync,
     filteredGames,
     emptyFilterMessage,
     unsyncedGameIds,
@@ -137,48 +136,35 @@ export function GamesPage() {
 
   return (
     <div className="space-y-8">
-      {/* Cabecera: título, estado de conexión y acciones */}
-      <GamesPageHeader
-        hasSyncConfig={hasSyncConfig}
-        gamesCount={config?.games?.length ?? 0}
-        unsyncedCount={unsyncedGameIds.length}
-        syncing={syncing}
-        downloading={downloading}
-        connectionStatus={connectionStatus}
-        connectionError={connectionError}
-        onConnectionRetry={() => refetchLastSync?.()}
-        onScanPress={() => setScanModalOpen(true)}
-        onAddPress={() => {
-          setAddModalInitial({ path: "", suggestedId: "" });
-          setAddModalOpen(true);
-        }}
-        onDownloadAllPress={openDownloadAllConfirm}
-        onSyncAllPress={openSyncAllConfirm}
-        onRefreshPress={handleRefresh}
-        isRefreshing={refreshing}
-      />
+      {/* Cabecera: título, estado de conexión, acciones y cuenta */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-semibold text-foreground">Juegos configurados</h1>
+            {hasSyncConfig && unsyncedGameIds.length > 0 && (
+              <span className="rounded-full bg-warning/20 px-3 py-1 text-sm font-medium text-warning">
+                {unsyncedGameIds.length} con cambios sin subir
+              </span>
+            )}
+          </div>
 
-      {/* Tu User ID (para compartir con amigos) */}
-      <section className="space-y-2">
-        <h2 className="text-sm font-medium text-default-500">Tu cuenta</h2>
-        <Card className="border border-default-200">
-          <CardBody className="flex flex-row flex-wrap items-center justify-between gap-3 py-3">
-            <div className="flex items-center gap-2">
-              <User size={18} className="text-default-500" />
-              <span className="text-sm text-default-500">Tu User ID</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <User size={14} className="text-default-400" />
+              <span className="text-xs text-default-400">ID:</span>
               {config?.userId?.trim() ? (
-                <code className="rounded bg-default-100 px-2 py-0.5 font-mono text-sm text-foreground">
-                  {config.userId}
-                </code>
+                <code className="font-mono text-xs text-default-500">{config.userId}</code>
               ) : (
-                <span className="text-sm text-default-400">Configura tu User ID en Configuración</span>
+                <span className="text-xs text-default-400">Sin configurar</span>
               )}
             </div>
+
             {config?.userId?.trim() && (
               <Button
                 size="sm"
-                variant="flat"
-                startContent={<Copy size={14} />}
+                variant="light"
+                isIconOnly
+                aria-label="Copiar User ID"
                 onPress={async () => {
                   try {
                     await navigator.clipboard.writeText(config.userId ?? "");
@@ -187,12 +173,43 @@ export function GamesPage() {
                     // sin clipboard, ignorar
                   }
                 }}>
-                Copiar
+                <Copy size={14} />
               </Button>
             )}
-          </CardBody>
-        </Card>
-      </section>
+            {hasSyncConfig && <ConnectionStatusIndicator status={connectionStatus} />}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <GamesPageHeader
+            hasSyncConfig={hasSyncConfig}
+            gamesCount={config?.games?.length ?? 0}
+            syncing={syncing}
+            downloading={downloading}
+            onScanPress={() => setScanModalOpen(true)}
+            onAddPress={() => {
+              setAddModalInitial({ path: "", suggestedId: "" });
+              setAddModalOpen(true);
+            }}
+            onDownloadAllPress={openDownloadAllConfirm}
+            onSyncAllPress={openSyncAllConfirm}
+            onRefreshPress={handleRefresh}
+            isRefreshing={refreshing}
+          />
+          <div className="shrink-0">
+            <GamesStatsCompact
+              gamesCount={config?.games?.length ?? 0}
+              lastSyncAt={lastSyncAt}
+              lastSyncGameId={lastSyncGameId}
+              lastSyncLoading={hasSyncConfig && lastSyncLoading}
+              hasSyncConfig={hasSyncConfig}
+              cloudGames={cloudGames}
+              totalCloudSize={totalCloudSize}
+              onConfigureFromCloud={handleConfigureFromCloud}
+            />
+          </div>
+        </div>
+      </div>
 
       <AddGameModal
         isOpen={addModalOpen}
@@ -292,21 +309,6 @@ export function GamesPage() {
           setGameToEdit(null);
         }}
       />
-
-      {/* Resumen: última sync y juegos en la nube */}
-      <section className="space-y-2">
-        <h2 className="text-sm font-medium text-default-500">Resumen y nube</h2>
-        <GamesStats
-          gamesCount={config?.games?.length ?? 0}
-          lastSyncAt={lastSyncAt}
-          lastSyncGameId={lastSyncGameId}
-          lastSyncLoading={hasSyncConfig && lastSyncLoading}
-          hasSyncConfig={hasSyncConfig}
-          cloudGames={cloudGames}
-          totalCloudSize={totalCloudSize}
-          onConfigureFromCloud={handleConfigureFromCloud}
-        />
-      </section>
 
       {/* Filtros de la lista */}
       <section className="space-y-2">

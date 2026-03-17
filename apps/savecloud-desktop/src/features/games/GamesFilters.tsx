@@ -1,4 +1,4 @@
-import { Button, Input } from "@heroui/react";
+import { Input, Tabs, Tab } from "@heroui/react";
 import { Search } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import { filterGamesBySearch, isSteamGame } from "@utils/gameImage";
@@ -42,24 +42,17 @@ export function GamesFilters({ searchTerm, onSearchChange, originFilter, onOrigi
         isClearable
         onClear={() => onSearchChange("")}
       />
-      <div className="flex flex-wrap gap-2">
-        {(
-          [
-            { value: "all" as const, label: "Todos" },
-            { value: "steam" as const, label: "Steam" },
-            { value: "other" as const, label: "Otros" },
-          ] as const
-        ).map(({ value, label }) => (
-          <Button
-            key={value}
-            size="sm"
-            variant={originFilter === value ? "solid" : "bordered"}
-            color={originFilter === value ? "primary" : "default"}
-            onPress={() => onOriginFilterChange(value)}>
-            {label}
-          </Button>
-        ))}
-      </div>
+      <Tabs
+        selectedKey={originFilter}
+        onSelectionChange={(key) => onOriginFilterChange(key as OriginFilter)}
+        variant="solid"
+        color="primary"
+        size="sm"
+        aria-label="Filtros de origen">
+        <Tab key="all" title="Todos" />
+        <Tab key="steam" title="Steam" />
+        <Tab key="other" title="Otros" />
+      </Tabs>
     </div>
   );
 }

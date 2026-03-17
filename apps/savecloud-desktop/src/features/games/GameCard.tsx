@@ -151,16 +151,18 @@ export function GameCard(props: GameCardProps) {
               </Tooltip>
             )}
 
-            {stats && (
-              <p className="w-full truncate text-center text-[10px] text-default-600">
-                {formatBytes(stats.localSizeBytes)}
-                {stats.localLastModified != null && <> · Local: {formatRelativeDate(stats.localLastModified)}</>}
-              </p>
-            )}
+            <div className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-center gap-1 bg-black/40 px-3 py-2 backdrop-blur-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+              {stats && (
+                <p className="w-full truncate text-center text-[10px] text-white">
+                  {formatBytes(stats.localSizeBytes)}
+                  {stats.localLastModified != null && <> · Local: {formatRelativeDate(stats.localLastModified)}</>}
+                </p>
+              )}
 
-            {game.editionLabel && (
-              <p className="w-full truncate text-center text-[10px] text-default-500">Origen: {game.editionLabel}</p>
-            )}
+              {game.editionLabel && (
+                <p className="w-full truncate text-center text-[10px] text-white/80">Origen: {game.editionLabel}</p>
+              )}
+            </div>
           </CardFooter>
         </Card>
       </GameCardHoverMotion>
