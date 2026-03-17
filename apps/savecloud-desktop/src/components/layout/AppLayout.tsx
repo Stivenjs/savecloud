@@ -32,16 +32,17 @@ export function AppLayout({ navItems, activeNavId: _activeNavId, onNavSelect, ch
       <main className="min-h-screen overflow-auto pt-16 px-6 pb-6">{children}</main>
       <StaggeredMenu
         isFixed
+        logoUrl="/src/assets/128x128.png"
         position="left"
         items={menuItemsFromNav(navItems)}
-        displaySocials={false}
+        displaySocials={true}
         displayItemNumbering
         menuButtonColor={isDark ? "#e4e4e7" : "#18181b"}
         openMenuButtonColor="#18181b"
         changeMenuColorOnOpen
         colors={["#18181b", "#27272a", "#3f3f46"]}
         accentColor="#6366f1"
-        showLogo={false}
+        showLogo={true}
         closeOnClickAway
         onItemClick={(item) => item.id && onNavSelect(item.id)}
         panelFooter={
