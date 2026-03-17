@@ -9,6 +9,7 @@ mod steam;
 mod torrent;
 mod tray;
 mod tray_state;
+mod controller;
 use tauri::Manager;
 
 fn load_dotenv() {

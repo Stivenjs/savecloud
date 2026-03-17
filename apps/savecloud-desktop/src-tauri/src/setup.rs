@@ -1,5 +1,6 @@
 //! Módulo para inicializar los estados y las tareas en segundo plano.
 use crate::commands::game_exit_sync;
+use crate::controller::start_gamepad_loop;
 use crate::process_check::start_process_watcher;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray_state::TrayState;
@@ -25,4 +26,5 @@ pub fn init_states_and_background_tasks(app: &mut App) {
 
     game_exit_sync::spawn_exit_watcher(app.handle().clone(), tray_state.inner().0.clone());
     start_process_watcher(app.handle().clone());
+    start_gamepad_loop(app.handle().clone());
 }
