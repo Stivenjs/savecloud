@@ -17,7 +17,7 @@ import { OperationErrorCard } from "@features/games/OperationErrorCard";
 import { BulkActionConfirmModal } from "@features/games/BulkActionConfirmModal";
 import { RemoveGameModal } from "@features/games/RemoveGameModal";
 import { ScanModal } from "@features/games/ScanModal";
-import { ConnectionIndicator } from "@features/games/ConnectionIndicator";
+import { ConnectionStatusIndicator } from "@features/games/ConnectionStatusIndicator";
 import { useGamesPage } from "@features/games/useGamesPage";
 import { useGameStats } from "@hooks/useGameStats";
 import { scheduleConfigBackupToCloud } from "@services/tauri";
@@ -38,7 +38,6 @@ export function GamesPage() {
     totalCloudSize,
     lastSyncLoading,
     connectionStatus,
-    connectionError,
     searchTerm,
     setSearchTerm,
     originFilter,
@@ -86,7 +85,6 @@ export function GamesPage() {
     handleOpenFolder,
     handleRefresh,
     refreshing,
-    refetchLastSync,
     filteredGames,
     emptyFilterMessage,
     unsyncedGameIds,
@@ -140,34 +138,27 @@ export function GamesPage() {
     <div className="space-y-8">
       {/* Cabecera: título, estado de conexión, acciones y cuenta */}
       <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
             <h1 className="text-3xl font-semibold text-foreground">Juegos configurados</h1>
             {hasSyncConfig && unsyncedGameIds.length > 0 && (
               <span className="rounded-full bg-warning/20 px-3 py-1 text-sm font-medium text-warning">
                 {unsyncedGameIds.length} con cambios sin subir
               </span>
             )}
-            {hasSyncConfig && (
-              <ConnectionIndicator
-                status={connectionStatus}
-                error={connectionError}
-                onRetry={() => refetchLastSync?.()}
-              />
-            )}
           </div>
 
-          {/* Tu cuenta - compacto en la esquina superior derecha */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2">
-              <User size={16} className="text-default-500" />
-              <span className="text-xs text-default-500">ID:</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <User size={14} className="text-default-400" />
+              <span className="text-xs text-default-400">ID:</span>
               {config?.userId?.trim() ? (
-                <code className="font-mono text-xs text-foreground">{config.userId}</code>
+                <code className="font-mono text-xs text-default-500">{config.userId}</code>
               ) : (
                 <span className="text-xs text-default-400">Sin configurar</span>
               )}
             </div>
+
             {config?.userId?.trim() && (
               <Button
                 size="sm"
@@ -185,24 +176,39 @@ export function GamesPage() {
                 <Copy size={14} />
               </Button>
             )}
+            {hasSyncConfig && <ConnectionStatusIndicator status={connectionStatus} />}
           </div>
         </div>
 
-        <GamesPageHeader
-          hasSyncConfig={hasSyncConfig}
-          gamesCount={config?.games?.length ?? 0}
-          syncing={syncing}
-          downloading={downloading}
-          onScanPress={() => setScanModalOpen(true)}
-          onAddPress={() => {
-            setAddModalInitial({ path: "", suggestedId: "" });
-            setAddModalOpen(true);
-          }}
-          onDownloadAllPress={openDownloadAllConfirm}
-          onSyncAllPress={openSyncAllConfirm}
-          onRefreshPress={handleRefresh}
-          isRefreshing={refreshing}
-        />
+        <div className="flex items-center justify-between gap-4">
+          <GamesPageHeader
+            hasSyncConfig={hasSyncConfig}
+            gamesCount={config?.games?.length ?? 0}
+            syncing={syncing}
+            downloading={downloading}
+            onScanPress={() => setScanModalOpen(true)}
+            onAddPress={() => {
+              setAddModalInitial({ path: "", suggestedId: "" });
+              setAddModalOpen(true);
+            }}
+            onDownloadAllPress={openDownloadAllConfirm}
+            onSyncAllPress={openSyncAllConfirm}
+            onRefreshPress={handleRefresh}
+            isRefreshing={refreshing}
+          />
+          <div className="shrink-0">
+            <GamesStatsCompact
+              gamesCount={config?.games?.length ?? 0}
+              lastSyncAt={lastSyncAt}
+              lastSyncGameId={lastSyncGameId}
+              lastSyncLoading={hasSyncConfig && lastSyncLoading}
+              hasSyncConfig={hasSyncConfig}
+              cloudGames={cloudGames}
+              totalCloudSize={totalCloudSize}
+              onConfigureFromCloud={handleConfigureFromCloud}
+            />
+          </div>
+        </div>
       </div>
 
       <AddGameModal
@@ -303,20 +309,6 @@ export function GamesPage() {
           setGameToEdit(null);
         }}
       />
-
-      {/* Resumen: última sync y juegos en la nube - versión compacta */}
-      <section className="space-y-2">
-        <GamesStatsCompact
-          gamesCount={config?.games?.length ?? 0}
-          lastSyncAt={lastSyncAt}
-          lastSyncGameId={lastSyncGameId}
-          lastSyncLoading={hasSyncConfig && lastSyncLoading}
-          hasSyncConfig={hasSyncConfig}
-          cloudGames={cloudGames}
-          totalCloudSize={totalCloudSize}
-          onConfigureFromCloud={handleConfigureFromCloud}
-        />
-      </section>
 
       {/* Filtros de la lista */}
       <section className="space-y-2">

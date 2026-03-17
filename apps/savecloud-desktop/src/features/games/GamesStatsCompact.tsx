@@ -94,70 +94,63 @@ export function GamesStatsCompact({
   );
 
   return (
-    <div className="rounded-lg border border-default-200 bg-default-50 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="mx-auto max-w-fit rounded-lg border border-default-200 bg-default-50 px-4 py-4">
+      <div className="flex items-center justify-center gap-8 text-sm">
         {/* Juegos configurados */}
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-            <Gamepad2 size={20} className="text-primary" />
-          </div>
-          <div>
-            <p className="text-xs text-default-500">Juegos configurados</p>
-            <p className="text-lg font-semibold text-foreground">{gamesCount}</p>
-          </div>
+        <div className="flex items-center gap-2">
+          <Gamepad2 size={16} className="text-primary" />
+          <span className="font-semibold text-foreground">{gamesCount}</span>
+          <span className="text-xs text-default-500">
+            juego{gamesCount !== 1 ? "s" : ""} configurado{gamesCount !== 1 ? "s" : ""}
+          </span>
         </div>
 
         {/* Última sincronización */}
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-default-100">
-            {lastSyncLoading ? (
-              <Spinner size="sm" color="primary" />
-            ) : lastSyncAt ? (
-              <Cloud size={20} className="text-primary" />
-            ) : (
-              <CloudOff size={20} className="text-default-500" />
-            )}
-          </div>
-          <div>
-            <p className="text-xs text-default-500">Última sincronización</p>
-            <p className="text-sm font-medium text-foreground">
-              {lastSyncLoading ? "Cargando..." : lastSyncAt ? formatLastSync(lastSyncAt) : "Nunca"}
-            </p>
-            {lastSyncAt && lastSyncGameId && (
-              <p className="text-xs text-default-400">{formatGameDisplayName(lastSyncGameId)}</p>
-            )}
-          </div>
+        <div className="flex items-center gap-2">
+          {lastSyncLoading ? (
+            <Spinner size="sm" color="primary" />
+          ) : lastSyncAt ? (
+            <Cloud size={16} className="text-primary" />
+          ) : (
+            <CloudOff size={16} className="text-default-500" />
+          )}
+          <span className="font-semibold text-foreground">
+            {lastSyncLoading ? "cargando..." : lastSyncAt ? formatLastSync(lastSyncAt) : "nunca"}
+          </span>
+          <span className="text-xs text-default-500">última sincronización</span>
+          {lastSyncAt && lastSyncGameId && (
+            <span className="text-xs text-default-400">({formatGameDisplayName(lastSyncGameId)})</span>
+          )}
         </div>
 
         {/* En la nube */}
         {showCloudSection && (
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary/10">
-              {lastSyncLoading ? (
-                <Spinner size="sm" color="primary" />
-              ) : (
-                <HardDrive size={20} className="text-secondary" />
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs text-default-500">En la nube</p>
-              <p className="text-sm font-medium text-foreground">
-                {lastSyncLoading
-                  ? "Cargando..."
-                  : hasCloudGames
-                    ? `${cloudGames.length} juego${cloudGames.length !== 1 ? "s" : ""} · ${formatSize(totalCloudSize)}`
-                    : "Vacío"}
-              </p>
-            </div>
+          <div className="flex items-center gap-2">
+            {lastSyncLoading ? (
+              <Spinner size="sm" color="primary" />
+            ) : (
+              <HardDrive size={16} className="text-secondary" />
+            )}
+            <span className="font-semibold text-foreground">
+              {lastSyncLoading ? "cargando..." : hasCloudGames ? formatSize(totalCloudSize) : "vacío"}
+            </span>
+            <span className="text-xs text-default-500">
+              {lastSyncLoading
+                ? ""
+                : hasCloudGames
+                  ? `en la nube (${cloudGames.length} juego${cloudGames.length !== 1 ? "s" : ""})`
+                  : "en la nube"}
+            </span>
             {hasCloudGames &&
               (useModal ? (
                 <>
                   <button
                     type="button"
                     onClick={onOpen}
-                    className="flex size-8 shrink-0 items-center justify-center rounded-lg text-default-400 transition-colors hover:bg-default-100 hover:text-foreground"
-                    aria-label="Ver detalle de guardados en la nube">
-                    <Info size={18} />
+                    className="flex size-6 shrink-0 items-center justify-center rounded-full bg-default-100 text-default-600 transition-all hover:bg-default-200 hover:text-foreground hover:scale-105"
+                    aria-label="Ver detalle de guardados en la nube"
+                    title="Ver detalles de juegos en la nube">
+                    <Info size={14} />
                   </button>
                   <Modal isOpen={isOpen} onOpenChange={onOpenChange} size="3xl" scrollBehavior="inside">
                     <ModalContent>
@@ -180,9 +173,10 @@ export function GamesStatsCompact({
                   <PopoverTrigger>
                     <button
                       type="button"
-                      className="flex size-8 shrink-0 items-center justify-center rounded-lg text-default-400 transition-colors hover:bg-default-100 hover:text-foreground"
-                      aria-label="Ver detalle de guardados en la nube">
-                      <Info size={18} />
+                      className="flex size-6 shrink-0 items-center justify-center rounded-full bg-default-100 text-default-600 transition-all hover:bg-default-200 hover:text-foreground hover:scale-105"
+                      aria-label="Ver detalle de guardados en la nube"
+                      title="Ver detalles de juegos en la nube">
+                      <Info size={14} />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent className="w-104 p-0">

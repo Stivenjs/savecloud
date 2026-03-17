@@ -1,5 +1,5 @@
 import { Button, Dropdown, DropdownItem, DropdownMenu, DropdownTrigger, Spinner } from "@heroui/react";
-import { ChevronDown, CloudDownload, CloudUpload, FolderSearch, PlusCircle, RefreshCw } from "lucide-react";
+import { ChevronDown, CloudDownload, CloudUpload, Search, Plus, Zap, RefreshCw } from "lucide-react";
 
 interface GamesPageHeaderProps {
   hasSyncConfig: boolean;
@@ -31,21 +31,26 @@ export function GamesPageHeader({
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="bordered" startContent={<FolderSearch size={18} />} onPress={onScanPress}>
+      <div className="flex items-center gap-3">
+        <Button
+          variant="bordered"
+          startContent={<Search size={18} />}
+          onPress={onScanPress}
+          className="h-10 min-w-[120px]">
           Analizar rutas
         </Button>
-        <Button variant="flat" color="primary" startContent={<PlusCircle size={18} />} onPress={onAddPress}>
+        <Button color="primary" startContent={<Plus size={18} />} onPress={onAddPress} className="h-10 min-w-[120px]">
           Añadir juego
         </Button>
         {hasSyncConfig && (
           <Dropdown placement="bottom-end">
             <DropdownTrigger>
               <Button
-                variant="solid"
-                color="secondary"
+                variant="bordered"
                 endContent={<ChevronDown size={16} />}
-                isDisabled={!gamesCount || isOperationRunning}>
+                isDisabled={!gamesCount || isOperationRunning}
+                className="h-10 min-w-[140px]">
+                <Zap size={18} className="mr-1" />
                 Acciones rápidas
               </Button>
             </DropdownTrigger>
@@ -70,11 +75,12 @@ export function GamesPageHeader({
           </Dropdown>
         )}
         <Button
-          variant="solid"
+          variant="bordered"
           startContent={!isRefreshing ? <RefreshCw size={18} /> : undefined}
           onPress={onRefreshPress}
           isLoading={isRefreshing}
-          isDisabled={isRefreshing}>
+          isDisabled={isRefreshing}
+          className="h-10 min-w-[120px]">
           Actualizar
         </Button>
       </div>
