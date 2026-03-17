@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use tauri::Emitter;
 
@@ -13,6 +14,18 @@ const PART_SIZE: usize = 32 * 1024 * 1024;
 const PART_URL_BATCH: u32 = 100;
 const MAX_RETRIES: u32 = 3;
 const RETRY_DELAY_SECS: u64 = 1;
+/// Límite de partes subiéndose al mismo tiempo.
+/// 4 partes de 32MB = ~128MB de RAM en uso. Evita agotar la memoria en PCs con internet lento.
+const MAX_CONCURRENT_PARTS: usize = 4;
+
+static S3_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .user_agent("SaveCloud-desktop/1.0")
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(600))
+        .build()
+        .expect("Fallo al construir cliente HTTP S3")
+});
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -234,13 +247,13 @@ async fn ensure_part_urls_cached(
 }
 
 async fn put_part(
-    client: &reqwest::Client,
-    url: &str,
+    url: String,
     part_number: u32,
     bytes: bytes::Bytes,
-) -> Result<(u32, String), String> {
-    let res = client
-        .put(url)
+) -> Result<(u32, String, u64), String> {
+    let len = bytes.len() as u64;
+    let res = S3_CLIENT
+        .put(&url)
         .body(bytes)
         .header("Content-Type", "application/octet-stream")
         .send()
@@ -255,13 +268,12 @@ async fn put_part(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .to_string();
-    Ok((part_number, etag))
+    Ok((part_number, etag, len))
 }
 
 /// Sube un backup completo en modo streaming:
 /// - genera TAR por canal
-/// - hace multipart sin guardar .tar en disco
-///
+/// - hace multipart sin guardar .tar en disco de forma CONCURRENTE
 pub(crate) async fn upload_tar_stream_multipart(
     mut rx: tokio::sync::mpsc::Receiver<TarStreamMsg>,
     game_id: &str,
@@ -282,20 +294,16 @@ pub(crate) async fn upload_tar_stream_multipart(
     );
     sync_logger::log_operation("full_backup_streaming_start", &ctx);
 
-    let client = reqwest::Client::builder()
-        .user_agent("SaveCloud-desktop/1.0")
-        .connect_timeout(std::time::Duration::from_secs(30))
-        .timeout(std::time::Duration::from_secs(600))
-        .build()
-        .map_err(|e| e.to_string())?;
-
     let mut part_urls_cache: HashMap<u32, String> = HashMap::new();
     let mut part_number: u32 = 1;
     let mut part_buf: Vec<u8> = Vec::with_capacity(PART_SIZE);
+
     let mut completed_parts: Vec<(u32, String)> = Vec::new();
     let mut loaded: u64 = 0;
 
-    // Emitir un estado inicial "subiendo" (sin total conocido).
+    // JoinSet para manejar subidas concurrentes
+    let mut upload_tasks = tokio::task::JoinSet::new();
+
     let _ = app.emit(
         "sync-upload-progress",
         SyncProgressPayload {
@@ -307,14 +315,46 @@ pub(crate) async fn upload_tar_stream_multipart(
     );
 
     while let Some(msg) = rx.recv().await {
+        // Verificar cancelaciones
         if let Some(ref t) = cancel {
             if t.upload_cancel_requested() {
+                upload_tasks.abort_all(); // Detenemos las subidas en curso
                 let _ = multipart_abort(api_base, user_id, api_key, &key, &upload_id).await;
                 return Err("Subida cancelada".to_string());
             }
             if t.upload_pause_requested() {
+                upload_tasks.abort_all();
                 let _ = multipart_abort(api_base, user_id, api_key, &key, &upload_id).await;
                 return Err("Pausa no soportada en backups streaming (usa Cancelar).".to_string());
+            }
+        }
+
+        // Manejar errores en las tareas concurrentes que ya terminaron
+        while let Some(res) = upload_tasks.try_join_next() {
+            match res {
+                Ok(Ok((pn, etag, bytes_sent))) => {
+                    completed_parts.push((pn, etag));
+                    loaded += bytes_sent;
+                    let _ = app.emit(
+                        "sync-upload-progress",
+                        SyncProgressPayload {
+                            game_id: game_id.to_string(),
+                            filename: format!("{} (stream)", relative_filename),
+                            loaded,
+                            total: estimated_total,
+                        },
+                    );
+                }
+                Ok(Err(e)) => {
+                    upload_tasks.abort_all();
+                    let _ = multipart_abort(api_base, user_id, api_key, &key, &upload_id).await;
+                    return Err(e);
+                }
+                Err(e) => {
+                    upload_tasks.abort_all();
+                    let _ = multipart_abort(api_base, user_id, api_key, &key, &upload_id).await;
+                    return Err(format!("Fallo crítico en hilo de subida: {}", e));
+                }
             }
         }
 
@@ -338,32 +378,65 @@ pub(crate) async fn upload_tar_stream_multipart(
                             part_number,
                         )
                         .await?;
+
                         let url = part_urls_cache
                             .get(&part_number)
                             .cloned()
                             .ok_or_else(|| format!("Falta URL para parte {}", part_number))?;
+
                         let bytes_to_send = bytes::Bytes::from(std::mem::take(&mut part_buf));
                         part_buf = Vec::with_capacity(PART_SIZE);
-                        let (pn, etag) = with_retry(|| {
-                            put_part(&client, &url, part_number, bytes_to_send.clone())
-                        })
-                        .await?;
-                        completed_parts.push((pn, etag));
-                        loaded += PART_SIZE as u64;
-                        let _ = app.emit(
-                            "sync-upload-progress",
-                            SyncProgressPayload {
-                                game_id: game_id.to_string(),
-                                filename: format!("{} (stream)", relative_filename),
-                                loaded,
-                                total: estimated_total,
-                            },
-                        );
+
+                        // Si hemos alcanzado el límite de concurrencia, esperamos a que termine una parte
+                        if upload_tasks.len() >= MAX_CONCURRENT_PARTS {
+                            if let Some(res) = upload_tasks.join_next().await {
+                                match res {
+                                    Ok(Ok((pn, etag, bytes_sent))) => {
+                                        completed_parts.push((pn, etag));
+                                        loaded += bytes_sent;
+                                        let _ = app.emit(
+                                            "sync-upload-progress",
+                                            SyncProgressPayload {
+                                                game_id: game_id.to_string(),
+                                                filename: format!("{} (stream)", relative_filename),
+                                                loaded,
+                                                total: estimated_total,
+                                            },
+                                        );
+                                    }
+                                    Ok(Err(e)) => {
+                                        upload_tasks.abort_all();
+                                        let _ = multipart_abort(
+                                            api_base, user_id, api_key, &key, &upload_id,
+                                        )
+                                        .await;
+                                        return Err(e);
+                                    }
+                                    Err(e) => {
+                                        upload_tasks.abort_all();
+                                        let _ = multipart_abort(
+                                            api_base, user_id, api_key, &key, &upload_id,
+                                        )
+                                        .await;
+                                        return Err(format!("Fallo de hilo: {}", e));
+                                    }
+                                }
+                            }
+                        }
+
+                        // Lanzamos la subida de la parte actual al hilo en segundo plano
+                        let pn_clone = part_number;
+                        upload_tasks.spawn(async move {
+                            with_retry(|| put_part(url.clone(), pn_clone, bytes_to_send.clone()))
+                                .await
+                        });
+
                         part_number += 1;
                     }
                 }
             }
             TarStreamMsg::Err(e) => {
+                upload_tasks.abort_all();
                 let _ = multipart_abort(api_base, user_id, api_key, &key, &upload_id).await;
                 sync_logger::log_error("full_backup_streaming_error", &ctx, &e);
                 return Err(e);
@@ -372,7 +445,7 @@ pub(crate) async fn upload_tar_stream_multipart(
         }
     }
 
-    // Última parte (puede ser < 5MiB; permitido como parte final).
+    // Procesar la última parte si quedó algo en el buffer
     if !part_buf.is_empty() {
         ensure_part_urls_cached(
             &mut part_urls_cache,
@@ -384,25 +457,46 @@ pub(crate) async fn upload_tar_stream_multipart(
             part_number,
         )
         .await?;
+
         let url = part_urls_cache
             .get(&part_number)
             .cloned()
             .ok_or_else(|| format!("Falta URL para parte {}", part_number))?;
+
         let bytes_to_send = bytes::Bytes::from(std::mem::take(&mut part_buf));
-        let sent_len = bytes_to_send.len() as u64;
-        let (pn, etag) =
-            with_retry(|| put_part(&client, &url, part_number, bytes_to_send.clone())).await?;
-        completed_parts.push((pn, etag));
-        loaded += sent_len;
-        let _ = app.emit(
-            "sync-upload-progress",
-            SyncProgressPayload {
-                game_id: game_id.to_string(),
-                filename: format!("{} (stream)", relative_filename),
-                loaded,
-                total: estimated_total,
-            },
-        );
+
+        upload_tasks.spawn(async move {
+            with_retry(|| put_part(url.clone(), part_number, bytes_to_send.clone())).await
+        });
+    }
+
+    // Esperar a que terminen todas las subidas en curso
+    while let Some(res) = upload_tasks.join_next().await {
+        match res {
+            Ok(Ok((pn, etag, bytes_sent))) => {
+                completed_parts.push((pn, etag));
+                loaded += bytes_sent;
+                let _ = app.emit(
+                    "sync-upload-progress",
+                    SyncProgressPayload {
+                        game_id: game_id.to_string(),
+                        filename: format!("{} (stream)", relative_filename),
+                        loaded,
+                        total: estimated_total,
+                    },
+                );
+            }
+            Ok(Err(e)) => {
+                upload_tasks.abort_all();
+                let _ = multipart_abort(api_base, user_id, api_key, &key, &upload_id).await;
+                return Err(e);
+            }
+            Err(e) => {
+                upload_tasks.abort_all();
+                let _ = multipart_abort(api_base, user_id, api_key, &key, &upload_id).await;
+                return Err(format!("Fallo crítico al finalizar hilos: {}", e));
+            }
+        }
     }
 
     completed_parts.sort_by_key(|p| p.0);
@@ -424,8 +518,7 @@ pub(crate) async fn upload_tar_stream_multipart(
     Ok(())
 }
 
-/// Dry-run: consume el stream de TAR y emite progreso/log sin subir a la nube.
-/// No toca la API ni S3. Útil para medir rendimiento sin coste.
+/// Dry-run: consume el stream de TAR y emite progreso sin subir a la nube.
 pub(crate) async fn upload_tar_stream_multipart_dry_run(
     mut rx: tokio::sync::mpsc::Receiver<TarStreamMsg>,
     game_id: &str,
