@@ -1,9 +1,16 @@
 //! Detección automática de Steam App ID a partir de rutas de guardados.
 //! Escanea las bibliotecas de Steam y asocia rutas de juego con sus app IDs.
 
+use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+static VDF_PATH_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#""path"\s+"([^"]+)""#).unwrap());
+#[cfg(target_os = "windows")]
+static ENV_VAR_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"%([^%]+)%").unwrap());
 
 /// Rutas posibles de Steam según plataforma.
 fn steam_path_candidates() -> Vec<PathBuf> {
@@ -73,69 +80,57 @@ fn read_library_paths(steam_root: &Path) -> Vec<PathBuf> {
     Vec::new()
 }
 
-/// Extrae las rutas "path" del VDF. Formato simplificado.
+/// Extrae las rutas "path" del VDF usando Regex (mucho más limpio y seguro).
 fn parse_libraryfolders_vdf(content: &str) -> Option<Vec<PathBuf>> {
-    let mut paths = Vec::new();
+    let paths: Vec<PathBuf> = VDF_PATH_REGEX
+        .captures_iter(content)
+        .filter_map(|cap| cap.get(1))
+        .map(|m| PathBuf::from(m.as_str().replace("\\\\", "\\")))
+        .filter(|p| p.is_dir())
+        .collect();
+
+    if paths.is_empty() {
+        None
+    } else {
+        Some(paths)
+    }
+}
+
+/// Parsea un archivo appmanifest_*.acf
+/// Devuelve (appid, installdir).
+fn parse_appmanifest(content: &str) -> Option<(String, String)> {
+    let mut appid = None;
+    let mut installdir = None;
 
     for line in content.lines() {
         let line = line.trim();
-        if !line.to_lowercase().contains("\"path\"") {
-            continue;
-        }
-        // Buscar valor entre comillas (el que viene después de "path")
-        let mut in_quotes = false;
-        let mut start = 0;
-        let mut found_path_key = false;
-        let mut i = 0;
-        let chars: Vec<char> = line.chars().collect();
+        let line_lower = line.to_lowercase();
 
-        while i < chars.len() {
-            if chars[i] == '"' {
-                if !in_quotes {
-                    start = i + 1;
-                    in_quotes = true;
-                } else {
-                    let s: String = chars[start..i].iter().collect();
-                    if found_path_key {
-                        // En VDF las barras van escapadas: "D:\\Program Files"
-                        let p = PathBuf::from(s.replace("\\\\", "\\"));
-                        if p.is_dir() {
-                            paths.push(p);
-                        }
-                        break;
-                    }
-                    if s.eq_ignore_ascii_case("path") {
-                        found_path_key = true;
-                    }
-                    in_quotes = false;
-                }
-            }
-            i += 1;
+        if line_lower.starts_with("\"appid\"") {
+            appid = line.split('"').nth(3).map(|s| s.to_string());
+        } else if line_lower.starts_with("\"installdir\"") {
+            installdir = line.split('"').nth(3).map(|s| s.to_string());
+        }
+
+        // Si ya encontramos ambos, salimos del bucle para ahorrar CPU
+        if appid.is_some() && installdir.is_some() {
+            break;
         }
     }
-
-    Some(paths).filter(|p| !p.is_empty())
-}
-
-/// Parsea un archivo appmanifest_*.acf y devuelve (appid, installdir).
-fn parse_appmanifest(content: &str) -> Option<(String, String)> {
-    let appid = content
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .windows(2)
-        .find(|w| w[0].trim_matches('"').eq_ignore_ascii_case("appid"))
-        .and_then(|w| w.get(1).map(|s| s.trim_matches('"').to_string()));
-
-    let installdir = content
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .windows(2)
-        .find(|w| w[0].trim_matches('"').eq_ignore_ascii_case("installdir"))
-        .and_then(|w| w.get(1).map(|s| s.trim_matches('"').to_string()));
 
     match (appid, installdir) {
         (Some(a), Some(i)) if !a.is_empty() && !i.is_empty() => Some((a, i)),
         _ => None,
+    }
+}
+
+/// Limpia el prefijo UNC (\\?\) que añade `canonicalize` en Windows.
+fn clean_unc_path(path: &Path) -> PathBuf {
+    let s = path.to_string_lossy();
+    if s.starts_with(r"\\?\") {
+        PathBuf::from(s[4..].to_string())
+    } else {
+        path.to_path_buf()
     }
 }
 
@@ -157,12 +152,14 @@ fn build_path_to_appid_map(library_paths: &[PathBuf]) -> HashMap<PathBuf, String
         for entry in entries.flatten() {
             let path = entry.path();
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
             if name.starts_with("appmanifest_") && name.ends_with(".acf") {
                 if let Ok(content) = fs::read_to_string(&path) {
                     if let Some((appid, installdir)) = parse_appmanifest(&content) {
                         let game_path = steamapps.join("common").join(&installdir);
                         if let Ok(canonical) = game_path.canonicalize() {
-                            map.insert(canonical, appid);
+                            // Limpiamos el path antes de insertarlo en el mapa
+                            map.insert(clean_unc_path(&canonical), appid);
                         }
                     }
                 }
@@ -173,41 +170,38 @@ fn build_path_to_appid_map(library_paths: &[PathBuf]) -> HashMap<PathBuf, String
     map
 }
 
-/// Normaliza una ruta para comparación (expande env vars, canonicaliza si existe).
+/// Normaliza una ruta para comparación (expande env vars, canonicaliza si existe y limpia UNC).
 fn normalize_path(s: &str) -> PathBuf {
     let expanded = expand_env_vars(s);
     let path = PathBuf::from(&expanded);
-    path.canonicalize().unwrap_or(path)
+
+    if let Ok(canonical) = path.canonicalize() {
+        clean_unc_path(&canonical)
+    } else {
+        path
+    }
 }
 
-/// Expande variables de entorno como %APPDATA% en Windows.
+/// Expande variables de entorno como %APPDATA% en Windows usando Regex estático.
 fn expand_env_vars(s: &str) -> String {
     #[cfg(target_os = "windows")]
     {
-        use std::env;
-
         let mut result = s.to_string();
-        let mut i = 0;
-        while let Some(start) = result[i..].find('%') {
-            let start = i + start;
-            if let Some(end) = result[start + 1..].find('%') {
-                let end = start + 1 + end;
-                let var = &result[start + 1..end];
-                if let Ok(val) = env::var(var) {
-                    result = format!("{}{}{}", &result[..start], val, &result[end + 1..]);
-                    i = start;
-                } else {
-                    i = end + 1;
+        for cap in ENV_VAR_REGEX.captures_iter(s) {
+            if let Some(var) = cap.get(1) {
+                let var_str = var.as_str();
+                if let Ok(val) = std::env::var(var_str) {
+                    result = result.replace(&format!("%{}%", var_str), &val);
                 }
-            } else {
-                break;
             }
         }
         result
     }
 
     #[cfg(not(target_os = "windows"))]
-    s.to_string()
+    {
+        s.to_string()
+    }
 }
 
 /// Construye el mapa ruta de instalación -> Steam App ID para todas las bibliotecas.
@@ -236,31 +230,28 @@ pub fn resolve_steam_app_id_from_map(
     let mut best: Option<(&PathBuf, &String)> = None;
     for (steam_game_path, appid) in path_to_appid {
         if normalized.starts_with(steam_game_path) {
-            if best
+            let current_components = steam_game_path.components().count();
+            let best_components = best
                 .as_ref()
                 .map(|(p, _)| p.components().count())
-                .unwrap_or(0)
-                < steam_game_path.components().count()
-            {
+                .unwrap_or(0);
+
+            if best_components < current_components {
                 best = Some((steam_game_path, appid));
             }
         }
     }
+
     best.map(|(_, id)| id.clone())
 }
 
 /// Resuelve el Steam App ID para un juego dado sus rutas.
-/// Solo aplica si el juego no tiene ya steamAppId ni imageUrl.
-pub fn resolve_app_id_for_game(game_paths: &[String]) -> Option<String> {
-    let steam_root = steam_path_candidates()
-        .into_iter()
-        .find(|p| p.join("steamapps").is_dir())?;
-
-    let library_paths = read_library_paths(&steam_root);
-    let path_to_appid = build_path_to_appid_map(&library_paths);
-
+pub fn resolve_app_id_for_game(
+    game_paths: &[String],
+    path_to_appid: &HashMap<PathBuf, String>,
+) -> Option<String> {
     for path in game_paths {
-        if let Some(appid) = resolve_steam_app_id_from_map(&path_to_appid, path) {
+        if let Some(appid) = resolve_steam_app_id_from_map(path_to_appid, path) {
             return Some(appid);
         }
     }

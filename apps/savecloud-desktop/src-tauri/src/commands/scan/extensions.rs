@@ -1,3 +1,4 @@
+//! Extensiones de guardados.
 use serde::Deserialize;
 use std::sync::OnceLock;
 

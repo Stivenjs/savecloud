@@ -46,6 +46,12 @@ pub struct OperationLogEntryDto {
 #[tauri::command]
 pub fn get_config() -> ConfigDto {
     let cfg = config::load_config();
+
+    #[cfg(target_os = "windows")]
+    let steam_map = steam::get_steam_path_to_appid_map();
+    #[cfg(not(target_os = "windows"))]
+    let steam_map = std::collections::HashMap::new();
+
     ConfigDto {
         api_base_url: cfg.api_base_url,
         api_key: cfg.api_key,
@@ -56,11 +62,12 @@ pub fn get_config() -> ConfigDto {
             .map(|g| {
                 let steam_app_id = g.steam_app_id.clone().or_else(|| {
                     if g.image_url.is_none() {
-                        steam::resolve_app_id_for_game(&g.paths)
+                        steam::resolve_app_id_for_game(&g.paths, &steam_map)
                     } else {
                         None
                     }
                 });
+
                 GameDto {
                     id: g.id,
                     paths: g.paths,

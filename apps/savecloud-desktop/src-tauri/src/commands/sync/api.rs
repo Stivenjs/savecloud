@@ -3,37 +3,17 @@
 use super::models::SyncResultDto;
 use super::models::{RemoteSaveDto, RemoteSaveInfoDto};
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 
 const S3_ACCELERATE_HOST: &str = "s3-accelerate.amazonaws.com";
 
-pub(crate) async fn api_request(
-    base_url: &str,
-    user_id: &str,
-    api_key: &str,
-    method: &str,
-    path: &str,
-    body: Option<&[u8]>,
-) -> Result<reqwest::Response, String> {
-    let url = format!("{}/saves{}", base_url.trim_end_matches('/'), path);
-    let client = reqwest::Client::builder()
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
         .user_agent("SaveCloud-desktop/1.0")
+        .timeout(std::time::Duration::from_secs(120))
         .build()
-        .map_err(|e| e.to_string())?;
-
-    let mut req = client
-        .request(method.parse().unwrap(), &url)
-        .header("x-user-id", user_id)
-        .header("x-api-key", api_key);
-
-    if let Some(b) = body {
-        req = req
-            .header("Content-Type", "application/json")
-            .body(b.to_vec());
-    }
-
-    let res = req.send().await.map_err(|e| e.to_string())?;
-    Ok(res)
-}
+        .expect("Fallo al construir el cliente HTTP estático")
+});
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,7 +53,7 @@ struct DownloadUrlResultItem {
     #[serde(rename = "gameId")]
     _game_id: String,
     #[serde(rename = "key")]
-    _key: String,
+    key: String,
 }
 
 #[derive(Deserialize)]
@@ -82,7 +62,67 @@ struct DownloadUrlsResponse {
     urls: Vec<DownloadUrlResultItem>,
 }
 
-/// Obtiene varias URLs de subida en una sola petición (batch).
+#[derive(Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CopyFriendFilePlanDto {
+    pub key: String,
+    pub filename: String,
+    pub target_filename: String,
+}
+
+struct ApiContext {
+    base_url: String,
+    user_id: String,
+    api_key: String,
+}
+
+fn get_api_context() -> Result<ApiContext, String> {
+    let cfg = crate::config::load_config();
+    let base_url = cfg
+        .api_base_url
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura apiBaseUrl en Configuración")?
+        .to_string();
+    let user_id = cfg
+        .user_id
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura userId en Configuración")?
+        .to_string();
+    let api_key = cfg.api_key.unwrap_or_default();
+
+    Ok(ApiContext {
+        base_url,
+        user_id,
+        api_key,
+    })
+}
+
+pub(crate) async fn api_request(
+    base_url: &str,
+    user_id: &str,
+    api_key: &str,
+    method: &str,
+    path: &str,
+    body: Option<&[u8]>,
+) -> Result<reqwest::Response, String> {
+    let url = format!("{}/saves{}", base_url.trim_end_matches('/'), path);
+
+    let mut req = HTTP_CLIENT
+        .request(method.parse().unwrap(), &url)
+        .header("x-user-id", user_id)
+        .header("x-api-key", api_key);
+
+    if let Some(b) = body {
+        req = req
+            .header("Content-Type", "application/json")
+            .body(b.to_vec());
+    }
+
+    req.send().await.map_err(|e| e.to_string())
+}
+
 pub(crate) async fn get_upload_urls(
     base_url: &str,
     user_id: &str,
@@ -100,23 +140,28 @@ pub(crate) async fn get_upload_urls(
             filename: f.clone(),
         })
         .collect();
-    let body = serde_json::json!({ "items": items });
-    let body_bytes = body.to_string().into_bytes();
+
+    let body = serde_json::json!({ "items": items }).to_string();
+
     let res = api_request(
         base_url,
         user_id,
         api_key,
         "POST",
         "/upload-urls",
-        Some(&body_bytes),
+        Some(body.as_bytes()),
     )
     .await
     .map_err(|e| format!("upload-urls: {}", e))?;
+
     if !res.status().is_success() {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("API upload-urls: {} {}", status, text));
+        return Err(format!(
+            "API upload-urls: {} {}",
+            res.status(),
+            res.text().await.unwrap_or_default()
+        ));
     }
+
     let parsed: UploadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
     Ok(parsed
         .urls
@@ -125,7 +170,6 @@ pub(crate) async fn get_upload_urls(
         .collect())
 }
 
-/// Obtiene varias URLs de descarga en una sola petición (batch).
 pub(crate) async fn get_download_urls(
     base_url: &str,
     user_id: &str,
@@ -142,28 +186,33 @@ pub(crate) async fn get_download_urls(
             key: key.clone(),
         })
         .collect();
-    let body = serde_json::json!({ "items": req_items });
-    let body_bytes = body.to_string().into_bytes();
+
+    let body = serde_json::json!({ "items": req_items }).to_string();
+
     let res = api_request(
         base_url,
         user_id,
         api_key,
         "POST",
         "/download-urls",
-        Some(&body_bytes),
+        Some(body.as_bytes()),
     )
     .await
     .map_err(|e| format!("download-urls: {}", e))?;
+
     if !res.status().is_success() {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("API download-urls: {} {}", status, text));
+        return Err(format!(
+            "API download-urls: {} {}",
+            res.status(),
+            res.text().await.unwrap_or_default()
+        ));
     }
+
     let parsed: DownloadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
     Ok(parsed
         .urls
         .into_iter()
-        .map(|u| (u.download_url, u._key))
+        .map(|u| (u.download_url, u.key))
         .collect())
 }
 
@@ -177,9 +226,11 @@ async fn list_remote_saves_for_user(
         .map_err(|e| format!("GET /saves: {}", e))?;
 
     if !res.status().is_success() {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("API: {} {}", status, text));
+        return Err(format!(
+            "API: {} {}",
+            res.status(),
+            res.text().await.unwrap_or_default()
+        ));
     }
 
     let raw: Vec<RemoteSaveDto> = res.json().await.map_err(|e| e.to_string())?;
@@ -204,287 +255,229 @@ async fn list_remote_saves_for_user(
     Ok(out)
 }
 
-/// Lista todos los guardados remotos del usuario actual.
 #[tauri::command]
 pub async fn sync_list_remote_saves() -> Result<Vec<RemoteSaveInfoDto>, String> {
-    let cfg = crate::config::load_config();
-    let api_base = cfg
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura apiBaseUrl en Configuración")?;
-    let user_id = cfg
-        .user_id
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?;
-    let api_key = cfg.api_key.as_deref().unwrap_or("");
-
-    list_remote_saves_for_user(api_base, api_key, user_id).await
+    let ctx = get_api_context()?;
+    list_remote_saves_for_user(&ctx.base_url, &ctx.api_key, &ctx.user_id).await
 }
 
-/// Lista todos los guardados remotos de otro usuario (amigo).
 #[tauri::command]
 pub async fn sync_list_remote_saves_for_user(
     user_id: String,
 ) -> Result<Vec<RemoteSaveInfoDto>, String> {
-    let cfg = crate::config::load_config();
-    let api_base = cfg
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura apiBaseUrl en Configuración")?;
-    let api_key = cfg.api_key.as_deref().unwrap_or("");
-    let user_id = user_id.trim();
-    if user_id.is_empty() {
+    let ctx = get_api_context()?;
+    let trimmed_user_id = user_id.trim();
+    if trimmed_user_id.is_empty() {
         return Err("userId vacío".into());
     }
-    list_remote_saves_for_user(api_base, api_key, user_id).await
+
+    list_remote_saves_for_user(&ctx.base_url, &ctx.api_key, trimmed_user_id).await
 }
 
-/// Borra todos los guardados del juego en la nube (S3).
 #[tauri::command]
 pub async fn sync_delete_game_from_cloud(game_id: String) -> Result<(), String> {
-    let cfg = crate::config::load_config();
-    let api_base = cfg
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura apiBaseUrl en Configuración")?;
-    let user_id = cfg
-        .user_id
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?;
-    let api_key = cfg.api_key.as_deref().unwrap_or("");
-    let body = serde_json::json!({ "gameId": game_id.trim() });
-    let body_bytes = body.to_string().into_bytes();
+    let ctx = get_api_context()?;
+    let body = serde_json::json!({ "gameId": game_id.trim() }).to_string();
+
     let res = api_request(
-        api_base,
-        user_id,
-        api_key,
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
         "POST",
         "/delete-game",
-        Some(&body_bytes),
+        Some(body.as_bytes()),
     )
     .await
     .map_err(|e| format!("delete-game: {}", e))?;
+
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("API delete-game: {} {}", status, text));
+        return Err(format!(
+            "API delete-game: {} {}",
+            res.status(),
+            res.text().await.unwrap_or_default()
+        ));
     }
     Ok(())
 }
 
-/// Renombra un juego en la nube (copia objetos de old_game_id a new_game_id y borra los antiguos).
 #[tauri::command]
 pub async fn sync_rename_game_in_cloud(
     old_game_id: String,
     new_game_id: String,
 ) -> Result<(), String> {
-    let cfg = crate::config::load_config();
-    let api_base = cfg
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura apiBaseUrl en Configuración")?;
-    let user_id = cfg
-        .user_id
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?;
-    let api_key = cfg.api_key.as_deref().unwrap_or("");
+    let ctx = get_api_context()?;
     let body = serde_json::json!({
         "oldGameId": old_game_id.trim(),
         "newGameId": new_game_id.trim()
-    });
-    let body_bytes = body.to_string().into_bytes();
+    })
+    .to_string();
+
     let res = api_request(
-        api_base,
-        user_id,
-        api_key,
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
         "POST",
         "/rename-game",
-        Some(&body_bytes),
+        Some(body.as_bytes()),
     )
     .await
     .map_err(|e| format!("rename-game: {}", e))?;
+
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("API rename-game: {} {}", status, text));
+        return Err(format!(
+            "API rename-game: {} {}",
+            res.status(),
+            res.text().await.unwrap_or_default()
+        ));
     }
     Ok(())
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CopyFriendFilePlanDto {
-    pub key: String,
-    pub filename: String,
-    pub target_filename: String,
-}
-
-/// Implementación común para copiar guardados de un amigo según un plan.
 async fn copy_friend_saves_with_plan_impl(
     friend_user_id: &str,
     game_id: &str,
     plan: Vec<CopyFriendFilePlanDto>,
 ) -> Result<SyncResultDto, String> {
-    let cfg = crate::config::load_config();
-    let api_base = cfg
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura apiBaseUrl en Configuración")?;
-    let current_user_id = cfg
-        .user_id
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?;
-    let api_key = cfg.api_key.as_deref().unwrap_or("");
-
-    let client = reqwest::Client::builder()
-        .user_agent("SaveCloud-desktop/1.0")
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let mut ok_count = 0u32;
-    let mut err_count = 0u32;
-    let mut errors = Vec::new();
+    let ctx = get_api_context()?;
 
     if plan.is_empty() {
         return Ok(SyncResultDto {
-            ok_count,
-            err_count,
-            errors: vec!["No hay archivos en el plan de copia".into()],
+            ok_count: 0,
+            err_count: 0,
+            errors: vec!["No hay archivos en el plan".into()],
         });
     }
 
+    // A. Pedir TODAS las URLs de descarga del amigo de una vez
+    let download_requests: Vec<(String, String)> = plan
+        .iter()
+        .map(|p| (game_id.to_string(), p.key.clone()))
+        .collect();
+
+    let download_urls = match get_download_urls(
+        &ctx.base_url,
+        friend_user_id,
+        &ctx.api_key,
+        &download_requests,
+    )
+    .await
+    {
+        Ok(urls) => urls,
+        Err(e) => {
+            return Err(format!(
+                "Fallo al obtener URLs de descarga en bloque: {}",
+                e
+            ))
+        }
+    };
+
+    // B. Pedir TODAS las URLs de subida propias de una vez
+    let upload_requests: Vec<String> = plan.iter().map(|p| p.target_filename.clone()).collect();
+    let upload_urls = match get_upload_urls(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        game_id,
+        &upload_requests,
+    )
+    .await
+    {
+        Ok(urls) => urls,
+        Err(e) => return Err(format!("Fallo al obtener URLs de subida en bloque: {}", e)),
+    };
+
+    // Mapeos rápidos para buscar las URLs por clave/filename
+    let download_map: std::collections::HashMap<_, _> = download_urls
+        .into_iter()
+        .map(|(url, key)| (key, url))
+        .collect();
+    let upload_map: std::collections::HashMap<_, _> = upload_urls
+        .into_iter()
+        .map(|(url, filename)| (filename, url))
+        .collect();
+
+    // C. Lanzar todas las transferencias en paralelo
+    let mut set = tokio::task::JoinSet::new();
+
     for item in plan {
-        // 2. Pedir URL de descarga usando el userId del amigo
-        let body_download = serde_json::json!({
-            "gameId": game_id,
-            "key": item.key
-        });
-        let res_download = api_request(
-            api_base,
-            friend_user_id,
-            api_key,
-            "POST",
-            "/download-url",
-            Some(body_download.to_string().as_bytes()),
-        )
-        .await
-        .map_err(|e| format!("download-url: {}", e))?;
+        let download_url = download_map.get(&item.key).cloned();
+        let upload_url = upload_map.get(&item.target_filename).cloned();
 
-        if !res_download.status().is_success() {
-            errors.push(format!(
-                "{}: API download-url {}",
-                item.filename,
-                res_download.status()
-            ));
-            err_count += 1;
-            continue;
-        }
+        set.spawn(async move {
+            let mut item_err = None;
+            let mut success = false;
 
-        let json_download: serde_json::Value =
-            res_download.json().await.map_err(|e| e.to_string())?;
-        let download_url = match json_download.get("downloadUrl").and_then(|v| v.as_str()) {
-            Some(u) => u,
-            None => {
-                errors.push(format!("{}: API no devolvió downloadUrl", item.filename));
-                err_count += 1;
-                continue;
-            }
-        };
+            let d_url = match download_url {
+                Some(u) => u,
+                None => return (item, false, Some("Sin URL de descarga".to_string())),
+            };
+            let u_url = match upload_url {
+                Some(u) => u,
+                None => return (item, false, Some("Sin URL de subida".to_string())),
+            };
 
-        // 3. Pedir URL de subida en TU cuenta
-        let body_upload = serde_json::json!({
-            "gameId": game_id,
-            "filename": item.target_filename
-        });
-        let res_upload = api_request(
-            api_base,
-            current_user_id,
-            api_key,
-            "POST",
-            "/upload-url",
-            Some(body_upload.to_string().as_bytes()),
-        )
-        .await
-        .map_err(|e| format!("upload-url: {}", e))?;
-
-        if !res_upload.status().is_success() {
-            errors.push(format!(
-                "{}: API upload-url {}",
-                item.target_filename,
-                res_upload.status()
-            ));
-            err_count += 1;
-            continue;
-        }
-
-        let json_upload: serde_json::Value = res_upload.json().await.map_err(|e| e.to_string())?;
-        let upload_url = match json_upload.get("uploadUrl").and_then(|v| v.as_str()) {
-            Some(u) => u,
-            None => {
-                errors.push(format!(
-                    "{}: API no devolvió uploadUrl",
-                    item.target_filename
-                ));
-                err_count += 1;
-                continue;
-            }
-        };
-
-        // 4. Descargar del amigo y subir a tu cuenta
-        let bytes = match client.get(download_url).send().await {
-            Ok(resp) => match resp.bytes().await {
-                Ok(b) => b,
-                Err(e) => {
-                    errors.push(format!("{}: error leyendo descarga: {}", item.filename, e));
-                    err_count += 1;
-                    continue;
+            // Descargar de S3 a memoria
+            let bytes = match HTTP_CLIENT.get(&d_url).send().await {
+                Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+                    Ok(b) => b,
+                    Err(e) => return (item, false, Some(format!("error leyendo descarga: {}", e))),
+                },
+                Ok(resp) => {
+                    return (
+                        item,
+                        false,
+                        Some(format!("error HTTP descarga: {}", resp.status())),
+                    )
                 }
-            },
-            Err(e) => {
-                errors.push(format!("{}: error HTTP descarga: {}", item.filename, e));
-                err_count += 1;
-                continue;
-            }
-        };
+                Err(e) => {
+                    return (
+                        item,
+                        false,
+                        Some(format!("falla de red en descarga: {}", e)),
+                    )
+                }
+            };
 
-        let content_length = bytes.len();
-        let put_res = match client
-            .put(upload_url)
-            .body(bytes)
-            .header("Content-Type", "application/octet-stream")
-            .header("Content-Length", content_length.to_string())
-            .send()
-            .await
-        {
-            Ok(r) => r,
-            Err(e) => {
-                errors.push(format!(
-                    "{}: error HTTP subida: {}",
-                    item.target_filename, e
-                ));
-                err_count += 1;
-                continue;
-            }
-        };
+            // Subir desde memoria al S3 destino
+            let content_length = bytes.len();
+            match HTTP_CLIENT
+                .put(&u_url)
+                .body(bytes)
+                .header("Content-Type", "application/octet-stream")
+                .header("Content-Length", content_length.to_string())
+                .send()
+                .await
+            {
+                Ok(put_res) if put_res.status().is_success() => success = true,
+                Ok(put_res) => item_err = Some(format!("error S3 PUT: {}", put_res.status())),
+                Err(e) => item_err = Some(format!("falla de red en subida: {}", e)),
+            };
 
-        if !put_res.status().is_success() {
-            errors.push(format!(
-                "{}: S3 PUT {}",
-                item.target_filename,
-                put_res.status()
-            ));
-            err_count += 1;
-        } else {
-            ok_count += 1;
+            (item, success, item_err)
+        });
+    }
+
+    // D. Recolectar resultados a medida que los hilos terminan
+    let mut ok_count = 0;
+    let mut err_count = 0;
+    let mut errors = Vec::new();
+
+    while let Some(res) = set.join_next().await {
+        match res {
+            Ok((item, success, err_opt)) => {
+                if success {
+                    ok_count += 1;
+                } else {
+                    err_count += 1;
+                    if let Some(e) = err_opt {
+                        errors.push(format!("{}: {}", item.filename, e));
+                    }
+                }
+            }
+            Err(e) => {
+                err_count += 1;
+                errors.push(format!("Fallo crítico en hilo de transferencia: {}", e));
+            }
         }
     }
 
@@ -504,34 +497,27 @@ async fn copy_friend_saves_with_plan_impl(
     Ok(result)
 }
 
-/// Copia todos los guardados de un juego desde la cuenta de un amigo a la cuenta actual.
 #[tauri::command]
 pub async fn copy_friend_saves(
     friend_user_id: String,
     game_id: String,
 ) -> Result<SyncResultDto, String> {
-    let cfg = crate::config::load_config();
-    let api_base = cfg
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura apiBaseUrl en Configuración")?;
-    let api_key = cfg.api_key.as_deref().unwrap_or("");
-
     let friend_id = friend_user_id.trim();
     if friend_id.is_empty() {
         return Err("friendUserId vacío".into());
     }
-    let game_id_trimmed = game_id.trim().to_string();
+
+    let game_id_trimmed = game_id.trim();
     if game_id_trimmed.is_empty() {
         return Err("gameId vacío".into());
     }
 
-    // 1. Listar todos los saves del amigo para este juego y construir plan por defecto (mismo nombre).
-    let all_saves = list_remote_saves_for_user(api_base, api_key, friend_id).await?;
+    let ctx = get_api_context()?;
+    let all_saves = list_remote_saves_for_user(&ctx.base_url, &ctx.api_key, friend_id).await?;
+
     let plan: Vec<CopyFriendFilePlanDto> = all_saves
         .into_iter()
-        .filter(|s| s.game_id.eq_ignore_ascii_case(&game_id_trimmed))
+        .filter(|s| s.game_id.eq_ignore_ascii_case(game_id_trimmed))
         .map(|s| CopyFriendFilePlanDto {
             key: s.key,
             filename: s.filename.clone(),
@@ -543,59 +529,48 @@ pub async fn copy_friend_saves(
         return Ok(SyncResultDto {
             ok_count: 0,
             err_count: 0,
-            errors: vec!["El amigo no tiene guardados para este juego".into()],
+            errors: vec!["El amigo no tiene guardados".into()],
         });
     }
 
-    copy_friend_saves_with_plan_impl(friend_id, &game_id_trimmed, plan).await
+    copy_friend_saves_with_plan_impl(friend_id, game_id_trimmed, plan).await
 }
 
-/// Copia guardados de un amigo usando un plan detallado (para manejo avanzado de conflictos).
 #[tauri::command]
 pub async fn copy_friend_saves_with_plan(
     friend_user_id: String,
     game_id: String,
     plan: Vec<CopyFriendFilePlanDto>,
 ) -> Result<SyncResultDto, String> {
-    let friend_id = friend_user_id.trim().to_string();
-    if friend_id.is_empty() {
-        return Err("friendUserId vacío".into());
-    }
-    let game_id_trimmed = game_id.trim().to_string();
-    if game_id_trimmed.is_empty() {
-        return Err("gameId vacío".into());
+    let friend_id = friend_user_id.trim();
+    let game_id_trimmed = game_id.trim();
+
+    if friend_id.is_empty() || game_id_trimmed.is_empty() {
+        return Err("friendUserId o gameId están vacíos".into());
     }
 
-    copy_friend_saves_with_plan_impl(&friend_id, &game_id_trimmed, plan).await
+    copy_friend_saves_with_plan_impl(friend_id, game_id_trimmed, plan).await
 }
 
-/// Devuelve si la API está dando URLs con S3 Transfer Acceleration ("accelerated" | "standard" | "unknown").
-/// Sirve para mostrarlo en Configuración.
 #[tauri::command]
 pub async fn get_s3_transfer_endpoint_type() -> Result<String, String> {
-    let cfg = crate::config::load_config();
-    let api_base = match cfg.api_base_url.as_deref().filter(|s| !s.trim().is_empty()) {
-        Some(b) => b,
-        None => return Ok("unknown".to_string()),
+    let Ok(ctx) = get_api_context() else {
+        return Ok("unknown".to_string());
     };
-    let user_id = match cfg.user_id.as_deref().filter(|s| !s.trim().is_empty()) {
-        Some(u) => u,
-        None => return Ok("unknown".to_string()),
-    };
-    let api_key = cfg.api_key.as_deref().unwrap_or("");
 
     let body = serde_json::json!({
         "gameId": "__check__",
         "filename": "__check__.tmp"
-    });
-    let body_bytes = body.to_string().into_bytes();
+    })
+    .to_string();
+
     let res = match api_request(
-        api_base,
-        user_id,
-        api_key,
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
         "POST",
         "/upload-url",
-        Some(&body_bytes),
+        Some(body.as_bytes()),
     )
     .await
     {
@@ -606,11 +581,10 @@ pub async fn get_s3_transfer_endpoint_type() -> Result<String, String> {
     if !res.status().is_success() {
         return Ok("unknown".to_string());
     }
-    let json: serde_json::Value = match res.json().await {
-        Ok(j) => j,
-        Err(_) => return Ok("unknown".to_string()),
-    };
+
+    let json: serde_json::Value = res.json().await.unwrap_or_default();
     let upload_url = json.get("uploadUrl").and_then(|v| v.as_str()).unwrap_or("");
+
     Ok(if upload_url.contains(S3_ACCELERATE_HOST) {
         "accelerated".to_string()
     } else {
