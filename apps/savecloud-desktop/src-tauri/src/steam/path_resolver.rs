@@ -1,9 +1,8 @@
 //! Detección automática de Steam App ID a partir de rutas de guardados.
 //! Escanea las bibliotecas de Steam y asocia rutas de juego con sus app IDs.
 
-
 use std::collections::HashMap;
-use std::path::PathBuf; 
+use std::path::PathBuf;
 
 #[cfg(target_os = "windows")]
 use regex::Regex;
@@ -12,7 +11,7 @@ use regex::Regex;
 use std::fs;
 
 #[cfg(target_os = "windows")]
-use std::path::Path; 
+use std::path::Path;
 
 #[cfg(target_os = "windows")]
 use std::sync::LazyLock;
@@ -247,8 +246,8 @@ pub fn resolve_steam_app_id_from_map(
 
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = path_to_appid; 
-        let _ = game_path; 
+        let _ = path_to_appid;
+        let _ = game_path;
         None
     }
 }
