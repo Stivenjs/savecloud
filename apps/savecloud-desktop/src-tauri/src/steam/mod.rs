@@ -7,6 +7,4 @@ mod path_resolver;
 
 pub use path_resolver::resolve_app_id_for_game;
 
-// Exportamos estas funciones para todos los sistemas.
-// En Unix, el módulo path_resolver proveerá stubs vacíos.
 pub use path_resolver::{get_steam_path_to_appid_map, resolve_steam_app_id_from_map};

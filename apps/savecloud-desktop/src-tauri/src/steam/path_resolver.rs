@@ -1,6 +1,7 @@
 //! Detección automática de Steam App ID a partir de rutas de guardados.
 //! Escanea las bibliotecas de Steam y asocia rutas de juego con sus app IDs.
 
+
 use std::collections::HashMap;
 use std::path::PathBuf; 
 
