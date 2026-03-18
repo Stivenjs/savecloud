@@ -9,7 +9,10 @@ mod paths;
 use crate::config;
 #[cfg(target_os = "windows")]
 use crate::{manifest, steam};
-use filters::{folder_contains_save_like_files, is_excluded_folder};
+use filters::{
+    folder_contains_save_like_files, folder_name_hints_save, is_excluded_folder,
+    GENERIC_INNER_FOLDERS,
+};
 use rayon::prelude::*;
 use regex::Regex;
 use serde::Serialize;
@@ -19,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 static ENV_VAR_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"%([^%]+)%").unwrap());
+static NUMBER_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\d+$").unwrap());
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -26,11 +30,8 @@ pub struct PathCandidateDto {
     pub path: String,
     pub folder_name: String,
     pub base_path: String,
-    /// Steam App ID cuando se conoce (p. ej. por manifiesto o por ruta Steam).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub steam_app_id: Option<String>,
-    /// Varias rutas de guardado para el mismo juego (manifiesto Ludusavi).
-    /// Si está presente, al añadir se deben registrar todas.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub paths: Option<Vec<String>>,
 }
@@ -48,7 +49,6 @@ impl CandidateList {
         }
     }
 
-    /// Añade un candidato si su ruta (en minúsculas) no ha sido vista antes.
     fn add(&mut self, candidate: PathCandidateDto) {
         let key = candidate.path.to_lowercase();
         if self.seen.insert(key) {
@@ -70,7 +70,6 @@ impl CandidateList {
 fn expand_path(raw: &str) -> Option<String> {
     let mut result = raw.to_string();
 
-    // %VAR%
     for cap in ENV_VAR_REGEX.captures_iter(raw) {
         if let Some(var) = cap.get(1) {
             let var_str = var.as_str();
@@ -79,7 +78,6 @@ fn expand_path(raw: &str) -> Option<String> {
         }
     }
 
-    // ~
     if result.starts_with('~') {
         let home = std::env::var("USERPROFILE")
             .or_else(|_| std::env::var("HOME"))
@@ -114,7 +112,13 @@ fn list_subdirs(dir_path: &Path) -> Vec<(PathBuf, String)> {
                 return None;
             }
             let name = e.file_name().into_string().ok()?;
-            if name.starts_with('.') {
+            let name_lower = name.to_lowercase();
+
+            if name.starts_with('.')
+                || name_lower == "7"
+                || name_lower == "241100"
+                || name_lower == "steam controller configs"
+            {
                 return None;
             }
             Some((e.path(), name))
@@ -128,26 +132,63 @@ fn scan_base_paths_into_vec(base_path: &str, base_label: &str) -> Vec<PathCandid
         return vec![];
     }
 
-    list_subdirs(base)
-        .into_iter()
-        .filter(|(full_path, name)| {
-            !is_excluded_folder(name) && folder_contains_save_like_files(full_path)
-        })
-        .map(|(full_path, name)| PathCandidateDto {
-            path: full_path.to_string_lossy().to_string(),
-            folder_name: name,
-            base_path: base_label.to_string(),
-            steam_app_id: None,
-            paths: None,
-        })
-        .collect()
+    let mut candidates = Vec::new();
+
+    for (l1_path, l1_name) in list_subdirs(base) {
+        if is_excluded_folder(&l1_name) {
+            continue;
+        }
+
+        if !folder_contains_save_like_files(&l1_path) {
+            continue;
+        }
+
+        let mut found_valid_l2 = false;
+
+        for (l2_path, l2_name) in list_subdirs(&l1_path) {
+            if is_excluded_folder(&l2_name) {
+                continue;
+            }
+
+            let l2_lower = l2_name.to_lowercase();
+
+            if folder_name_hints_save(&l2_name)
+                || NUMBER_REGEX.is_match(&l2_name)
+                || GENERIC_INNER_FOLDERS.contains(&l2_lower)
+            {
+                continue;
+            }
+
+            if folder_contains_save_like_files(&l2_path) {
+                found_valid_l2 = true;
+                candidates.push(PathCandidateDto {
+                    path: l2_path.to_string_lossy().to_string(),
+                    folder_name: format!("{} ({})", l2_name, l1_name),
+                    base_path: base_label.to_string(),
+                    steam_app_id: None,
+                    paths: None,
+                });
+            }
+        }
+
+        if !found_valid_l2 {
+            candidates.push(PathCandidateDto {
+                path: l1_path.to_string_lossy().to_string(),
+                folder_name: l1_name,
+                base_path: base_label.to_string(),
+                steam_app_id: None,
+                paths: None,
+            });
+        }
+    }
+
+    candidates
 }
 
 #[cfg(target_os = "windows")]
 mod windows_scanners {
     use super::*;
 
-    static NUMBER_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\d+$").unwrap());
     static VDF_PATH_REGEX: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r#""path"\s+"([^"]+)""#).unwrap());
 
@@ -160,7 +201,6 @@ mod windows_scanners {
             .collect()
     }
 
-    /// Centraliza la lógica repetitiva de consultar el manifiesto y armar las rutas.
     fn extract_manifest_data(
         app_id_or_name: &str,
         base_path: &str,
@@ -196,7 +236,6 @@ mod windows_scanners {
             }
         }
 
-        // Fallback si no hay manifiesto o no se encontró la entrada
         (
             format!("Steam App {}", app_id_or_name),
             Some(app_id_or_name.to_string()),

@@ -72,9 +72,41 @@
     ".escape",
     ".usa",
     ".bls",
-    ".rgss3a"
+    ".rgss3a",
+    ".sgd",
+    ".qsave",
+    ".asave",
+    ".csave",
+    ".rpgsave",
+    ".kvs",
+    ".bms",
+    ".char",
+    ".map",
+    ".pws",
+    ".fwl",
+    ".fws",
+    ".savegame",
+    ".rtc",
+    ".dsv",
+    ".duc",
+    ".mcd",
+    ".mem",
+    ".gci",
+    ".sra",
+    ".fla",
+    ".eep"
   ],
-  "weak_save_extensions": [".dat", ".bin", ".bak", ".json", ".ini"],
+  "weak_save_extensions": [
+    ".dat",
+    ".bin",
+    ".bak",
+    ".json",
+    ".ini",
+    ".xml",
+    ".yaml",
+    ".yml",
+    ".txt"
+  ],
   "save_folder_names": [
     "saves",
     "save",
@@ -87,7 +119,12 @@
     "player",
     "characters",
     "checkpoints",
-    "slots"
+    "slots",
+    "userdata",
+    "storage",
+    "user",
+    "localstore",
+    "remote"
   ],
   "save_name_hints": [
     "save",
@@ -101,6 +138,9 @@
     "game",
     "backup",
     "world",
-    "character"
+    "character",
+    "campaign",
+    "story",
+    "chapter"
   ]
 }

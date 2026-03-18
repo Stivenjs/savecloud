@@ -14,6 +14,7 @@ use super::extensions::{
 struct ExclusionsData {
     excluded_folder_names: Vec<String>,
     excluded_partial_patterns: Vec<String>,
+    generic_inner_folders: Vec<String>,
 }
 
 static EXCLUSIONS_DATA: LazyLock<ExclusionsData> = LazyLock::new(|| {
@@ -25,7 +26,15 @@ pub(super) static EXCLUDED_FOLDER_NAMES: LazyLock<HashSet<String>> = LazyLock::n
     EXCLUSIONS_DATA
         .excluded_folder_names
         .iter()
-        .cloned()
+        .map(|s| s.to_lowercase())
+        .collect()
+});
+
+pub(super) static GENERIC_INNER_FOLDERS: LazyLock<HashSet<String>> = LazyLock::new(|| {
+    EXCLUSIONS_DATA
+        .generic_inner_folders
+        .iter()
+        .map(|s| s.to_lowercase())
         .collect()
 });
 
@@ -86,24 +95,19 @@ pub(super) fn folder_contains_save_like_files(dir_path: &Path) -> bool {
 /// Carpetas que parecen IDs, hashes o UUIDs (Steam ID, profile ID, cache hash, etc.).
 fn is_likely_id_or_hash(name: &str) -> bool {
     let s = name.trim();
-    if s.is_empty() || s.len() > 64 {
+    if s.is_empty() || s.len() > 128 {
         return false;
     }
-    // Un solo dígito (ej. slot "0" en EA)
-    if s.len() == 1 && s.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+
+    if s.chars().all(|c| c.is_ascii_digit()) && s.len() > 12 {
         return true;
     }
-    // Solo dígitos (Steam ID ~17 dígitos, App ID, etc.)
-    if s.len() >= 8 && s.chars().all(|c| c.is_ascii_digit()) {
+
+    // Hex puro (32+ caracteres): Hashes de caché largos
+    if s.len() >= 32 && s.chars().all(|c| c.is_ascii_hexdigit()) {
         return true;
     }
-    // Hex puro (8+ caracteres): 8D96F585, hashes de 32/40 chars
-    if s.len() >= 8
-        && s.chars().all(|c| c.is_ascii_hexdigit())
-        && s.chars().any(|c| matches!(c, 'a'..='f' | 'A'..='F'))
-    {
-        return true;
-    }
+
     // UUID con guiones: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     if s.len() >= 36 && s.contains('-') {
         let parts: Vec<&str> = s.split('-').collect();
@@ -115,24 +119,29 @@ fn is_likely_id_or_hash(name: &str) -> bool {
             return true;
         }
     }
+
     // Hash con prefijo: st_76561199073321731 (Steam ID en No Man's Sky)
-    if s.starts_with("st_") && s.len() > 10 && s[3..].chars().all(|c| c.is_ascii_digit()) {
+    if s.starts_with("st_") && s.len() > 18 && s[3..].chars().all(|c| c.is_ascii_digit()) {
         return true;
     }
+
     false
 }
 
 pub(super) fn is_excluded_folder(name: &str) -> bool {
     let lower = name.to_lowercase().trim().to_string();
+
     if EXCLUDED_FOLDER_NAMES.contains(&lower) {
         return true;
     }
+
     if is_likely_id_or_hash(name) {
         return true;
     }
+
     excluded_partial_patterns()
         .iter()
-        .any(|p| lower.contains(p))
+        .any(|p| lower.contains(&p.to_lowercase()))
 }
 
 /// Profundidad máxima al buscar archivos recursivamente (ej. GameName/Saved/SaveGames).
@@ -147,17 +156,17 @@ fn collect_files_recursive(dir_path: &Path, depth: usize, names: &mut Vec<String
     };
     for e in entries.filter_map(|x| x.ok()) {
         if let Ok(meta) = e.metadata() {
+            let name_os = e.file_name();
+            let name = name_os.to_string_lossy();
+
+            if name.starts_with('.') || is_excluded_folder(&name) {
+                continue;
+            }
+
             if meta.is_file() {
-                if let Ok(name) = e.file_name().into_string() {
-                    names.push(name);
-                }
+                names.push(name.into_owned());
             } else if meta.is_dir() {
-                let name = e.file_name();
-                if name.to_string_lossy().starts_with('.') {
-                    continue;
-                }
-                let sub = dir_path.join(name);
-                collect_files_recursive(&sub, depth + 1, names);
+                collect_files_recursive(&dir_path.join(name_os), depth + 1, names);
             }
         }
     }

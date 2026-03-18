@@ -6,37 +6,144 @@
         "path": "%USERPROFILE%\\Documents\\My Games",
         "label": "Documents/My Games"
       },
-      { "path": "%USERPROFILE%\\Documents", "label": "Documents" },
-      { "path": "%USERPROFILE%\\AppData\\LocalLow", "label": "LocalLow" },
-      { "path": "%USERPROFILE%\\Saved Games", "label": "Saved Games" },
-      { "path": "%LOCALAPPDATA%", "label": "LocalAppData" },
-      { "path": "%LOCALAPPDATA%\\Low", "label": "LocalAppData/Low" },
-      { "path": "%APPDATA%", "label": "AppData" }
+      {
+        "path": "%USERPROFILE%\\Saved Games",
+        "label": "Saved Games (Official)"
+      },
+      {
+        "path": "%USERPROFILE%\\Documents",
+        "label": "Documents"
+      },
+      {
+        "path": "%LOCALAPPDATA%",
+        "label": "LocalAppData"
+      },
+      {
+        "path": "%APPDATA%",
+        "label": "AppData/Roaming"
+      },
+      {
+        "path": "%LOCALAPPDATA%\\Low",
+        "label": "LocalAppData/Low"
+      },
+      {
+        "path": "%USERPROFILE%\\AppData\\LocalLow",
+        "label": "LocalLow"
+      },
+      {
+        "path": "%LOCALAPPDATA%\\Packages\\*\\SystemAppData\\wgs",
+        "label": "Xbox / MS Store Games"
+      },
+      {
+        "path": "%PROGRAMDATA%",
+        "label": "ProgramData (Global Saves)"
+      },
+      {
+        "path": "%USERPROFILE%\\Documents\\Rockstar Games",
+        "label": "Rockstar Games (Documents)"
+      },
+      {
+        "path": "%USERPROFILE%\\Documents\\Ubisoft Connect",
+        "label": "Ubisoft Connect (Documents)"
+      }
     ],
     "crack_save_locations": [
-      { "path": "C:\\Users\\Public\\Documents\\EMPRESS", "label": "EMPRESS" },
+      {
+        "path": "C:\\Users\\Public\\Documents\\EMPRESS",
+        "label": "EMPRESS"
+      },
+      {
+        "path": "C:\\Users\\Public\\Documents\\Steam\\RUNE",
+        "label": "RUNE (Public)"
+      },
+      {
+        "path": "C:\\Users\\Public\\Documents\\Steam\\TENOKE",
+        "label": "TENOKE"
+      },
       {
         "path": "C:\\Users\\Public\\Documents\\Steam",
         "label": "CODEX/Steam emu"
       },
-      { "path": "%APPDATA%\\Goldberg SteamEmu Saves", "label": "Goldberg" },
-      { "path": "%APPDATA%\\CODEX", "label": "CODEX" },
-      { "path": "%APPDATA%\\CPY_SAVES", "label": "CPY (Conspir4cy)" },
-      { "path": "%APPDATA%\\Skidrow", "label": "Skidrow" },
-      { "path": "%APPDATA%\\FLT", "label": "FLT" },
-      { "path": "%APPDATA%\\RUNE", "label": "RUNE" },
-      { "path": "%LOCALAPPDATA%\\CODEX", "label": "CODEX (Local)" },
+      {
+        "path": "C:\\Users\\Public\\Documents\\Steam\\Saves",
+        "label": "Generic Steam Emu"
+      },
+      {
+        "path": "%APPDATA%\\Goldberg SteamEmu Saves",
+        "label": "Goldberg"
+      },
+      {
+        "path": "%APPDATA%\\CODEX",
+        "label": "CODEX"
+      },
+      {
+        "path": "%APPDATA%\\RUNE",
+        "label": "RUNE"
+      },
+      {
+        "path": "%APPDATA%\\FLT",
+        "label": "FLT"
+      },
+      {
+        "path": "%APPDATA%\\Skidrow",
+        "label": "Skidrow"
+      },
+      {
+        "path": "%APPDATA%\\CPY_SAVES",
+        "label": "CPY (Roaming)"
+      },
+      {
+        "path": "%LOCALAPPDATA%\\CODEX",
+        "label": "CODEX (Local)"
+      },
       {
         "path": "%USERPROFILE%\\Documents\\CPY_SAVES",
         "label": "CPY (Documents)"
+      },
+      {
+        "path": "C:\\ProgramData\\Steam\\RLD!",
+        "label": "RELOADED"
+      },
+      {
+        "path": "%APPDATA%\\yuzu\\nand\\user\\save",
+        "label": "Yuzu (Switch)"
+      },
+      {
+        "path": "%APPDATA%\\Ryujinx\\bis\\user\\save",
+        "label": "Ryujinx (Switch)"
+      },
+      {
+        "path": "%LOCALAPPDATA%\\Suyu\\nand\\user\\save",
+        "label": "Suyu (Switch)"
       }
     ]
   },
   "unix": {
     "base_scan_templates": [
-      { "path": "~/.local/share", "label": "Local Share" },
-      { "path": "~/.config", "label": "Config" },
-      { "path": "~/Documents", "label": "Documents" }
+      {
+        "path": "~/.local/share/Steam/steamapps/compatdata",
+        "label": "Steam Proton Prefixes"
+      },
+      {
+        "path": "~/.var/app",
+        "label": "Flatpak Data (Emulators/Apps)"
+      },
+      {
+        "path": "~/.local/share",
+        "label": "Local Share"
+      },
+      {
+        "path": "~/.config",
+        "label": "Config"
+      },
+      {
+        "path": "~/Documents",
+        "label": "Documents"
+      },
+      {
+        "path": "~/Games",
+        "label": "Lutris / Heroic Games"
+      }
     ]
   }
 }
