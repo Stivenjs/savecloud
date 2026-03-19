@@ -1,15 +1,13 @@
-import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@heroui/react";
 import { Moon, Sun } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import type { NavItem } from "@components/layout/Sidebar";
 import { StaggeredMenu } from "@components/external/StaggeredMenu";
 
 interface AppLayoutProps {
   navItems: NavItem[];
-  activeNavId: string;
-  onNavSelect: (id: string) => void;
   children: ReactNode;
 }
 
@@ -18,13 +16,13 @@ const menuItemsFromNav = (navItems: NavItem[]) =>
     id: n.id,
     label: n.label,
     ariaLabel: `Ir a ${n.label}`,
-    link: "#",
+    link: n.id,
   }));
 
-export function AppLayout({ navItems, activeNavId: _activeNavId, onNavSelect, children }: AppLayoutProps) {
+export function AppLayout({ navItems, children }: AppLayoutProps) {
   const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const navigate = useNavigate();
+
   const isDark = resolvedTheme === "dark";
 
   return (
@@ -43,21 +41,19 @@ export function AppLayout({ navItems, activeNavId: _activeNavId, onNavSelect, ch
         accentColor="#6366f1"
         showLogo={false}
         closeOnClickAway
-        onItemClick={(item) => item.id && onNavSelect(item.id)}
+        onItemClick={(item) => item.link && navigate(item.link)}
         panelFooter={
-          mounted ? (
-            <Button
-              isIconOnly
-              variant="flat"
-              radius="md"
-              color="default"
-              size="lg"
-              className="text-foreground"
-              aria-label={isDark ? "Modo claro" : "Modo oscuro"}
-              onPress={() => setTheme(isDark ? "light" : "dark")}>
-              {isDark ? <Sun size={22} /> : <Moon size={22} />}
-            </Button>
-          ) : null
+          <Button
+            isIconOnly
+            variant="flat"
+            radius="md"
+            color="default"
+            size="lg"
+            className="text-foreground"
+            aria-label={isDark ? "Modo claro" : "Modo oscuro"}
+            onPress={() => setTheme(isDark ? "light" : "dark")}>
+            {isDark ? <Sun size={22} /> : <Moon size={22} />}
+          </Button>
         }
       />
     </div>
