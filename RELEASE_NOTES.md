@@ -1,6 +1,6 @@
 # Notas de versión
 
-## 1.8.4
+## 1.8.5
 
 ### API (backend)
 
@@ -44,7 +44,7 @@
 
 ---
 
-## 1.8.4 (actual)
+## 1.8.5 (actual)
 
 ### App de escritorio (Tauri)
 

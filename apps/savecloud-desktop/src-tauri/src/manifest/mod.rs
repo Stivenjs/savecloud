@@ -10,29 +10,21 @@ use tokio::fs;
 const MANIFEST_URL: &str =
     "https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/refs/heads/master/data/manifest.yaml";
 
-/// Entrada del manifiesto para un juego: nombre y rutas de guardado (templates).
 #[derive(Clone, Debug)]
 pub struct GameManifestEntry {
     pub name: String,
-    /// Rutas que contienen los placeholders de Ludusavi (<winAppData>, <base>, etc.)
     pub save_paths: Vec<PathTemplate>,
-    /// Ruta de registro Windows (opcional).
-    #[allow(dead_code)]
     pub registry_path: Option<String>,
-    /// Nombres de la carpeta de instalación base (ej. "Gnorp" o "The Witcher 3").
     #[allow(dead_code)]
     pub install_dirs: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
 pub enum PathTemplate {
-    /// Ruta absoluta con placeholders del sistema (ej. <winAppData>/Game/Saves).
     Absolute(String),
-    /// Ruta relativa al directorio de instalación (ej. "saves" extraído de "<base>/saves").
     RelativeToInstall(String),
 }
 
-/// Índice: Steam App ID (string) -> entrada del manifiesto.
 pub type ManifestIndex = HashMap<String, GameManifestEntry>;
 
 #[derive(Deserialize, Debug)]
@@ -41,7 +33,7 @@ struct ManifestGame {
     steam: Option<SteamEntry>,
     #[serde(rename = "steamExtra")]
     steam_extra: Option<Vec<SteamId>>,
-    registry: Option<String>,
+    registry: Option<HashMap<String, IgnoredAny>>,
     #[serde(rename = "installDir")]
     install_dir: Option<HashMap<String, IgnoredAny>>,
 }
@@ -78,7 +70,6 @@ struct WhenCondition {
     os: Option<String>,
 }
 
-/// Descarga el manifiesto de forma asíncrona y lo guarda en la caché.
 async fn ensure_manifest_cached(cache_path: &Path) -> Result<(), String> {
     if cache_path.exists() {
         return Ok(());
@@ -111,10 +102,10 @@ async fn ensure_manifest_cached(cache_path: &Path) -> Result<(), String> {
     fs::write(cache_path, &body)
         .await
         .map_err(|e| e.to_string())?;
+
     Ok(())
 }
 
-/// Carga el manifiesto desde el directorio de configuración de forma asíncrona.
 pub async fn load_manifest_index_async() -> Result<ManifestIndex, String> {
     let cache_dir = crate::config::config_dir()
         .ok_or_else(|| "No se pudo obtener el directorio de config".to_string())?;
@@ -122,14 +113,12 @@ pub async fn load_manifest_index_async() -> Result<ManifestIndex, String> {
 
     ensure_manifest_cached(&cache_path).await?;
 
-    // La lectura del archivo y el parseo del YAML pueden bloquear un poco,
-    // lo delegamos al pool de blocking de Tokio.
     tokio::task::spawn_blocking(move || {
         let content = std::fs::read_to_string(&cache_path).map_err(|e| e.to_string())?;
         parse_manifest_yaml(&content)
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("Error en el hilo bloqueante: {}", e))?
 }
 
 fn when_has_windows(when_list: &Option<Vec<WhenCondition>>) -> bool {
@@ -150,8 +139,16 @@ fn when_has_windows(when_list: &Option<Vec<WhenCondition>>) -> bool {
 }
 
 fn parse_manifest_yaml(content: &str) -> Result<ManifestIndex, String> {
-    let root: HashMap<String, ManifestGame> =
-        serde_yaml::from_str(content).map_err(|e| format!("Failed to parse YAML: {}", e))?;
+    let root: HashMap<String, ManifestGame> = match serde_yaml::from_str(content) {
+        Ok(r) => r,
+        Err(e) => {
+            println!(
+                "\n[ERROR CRÍTICO] ¡Fallo al leer la base de datos YAML!: {}",
+                e
+            );
+            return Err(format!("Fallo YAML: {}", e));
+        }
+    };
 
     let mut index = ManifestIndex::with_capacity(root.len());
 
@@ -177,10 +174,6 @@ fn parse_manifest_yaml(content: &str) -> Result<ManifestIndex, String> {
             }
         }
 
-        if steam_ids.is_empty() {
-            continue;
-        }
-
         let mut save_paths = Vec::new();
         if let Some(files) = game_data.files {
             for (path_str, entry) in files {
@@ -189,11 +182,12 @@ fn parse_manifest_yaml(content: &str) -> Result<ManifestIndex, String> {
                     continue;
                 }
 
-                let has_save = entry.tags.as_ref().map_or(false, |tags| {
-                    tags.iter().any(|t| t.eq_ignore_ascii_case("save"))
+                let has_save_or_config = entry.tags.as_ref().map_or(true, |tags| {
+                    tags.iter()
+                        .any(|t| t.eq_ignore_ascii_case("save") || t.eq_ignore_ascii_case("config"))
                 });
 
-                if !has_save || !when_has_windows(&entry.when) {
+                if !has_save_or_config || !when_has_windows(&entry.when) {
                     continue;
                 }
 
@@ -220,15 +214,18 @@ fn parse_manifest_yaml(content: &str) -> Result<ManifestIndex, String> {
             }
         }
 
+        let registry_path = game_data
+            .registry
+            .and_then(|reg| reg.keys().next().cloned());
+
         let entry = GameManifestEntry {
-            name: game_name,
+            name: game_name.clone(),
             save_paths,
-            registry_path: game_data
-                .registry
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty()),
+            registry_path,
             install_dirs,
         };
+
+        index.insert(game_name.to_lowercase(), entry.clone());
 
         for id in steam_ids {
             index.insert(id, entry.clone());
@@ -238,7 +235,6 @@ fn parse_manifest_yaml(content: &str) -> Result<ManifestIndex, String> {
     Ok(index)
 }
 
-/// Expande los placeholders específicos de Ludusavi a rutas reales del sistema.
 fn expand_ludusavi_placeholders(s: &str) -> String {
     let mut result = s.to_string();
 
@@ -277,7 +273,6 @@ fn expand_ludusavi_placeholders(s: &str) -> String {
             }
         }
 
-        // Ludusavi usa slashes (/) en el YAML, en Windows necesitamos backslashes (\)
         result = result.replace('/', "\\");
     }
 
@@ -295,7 +290,6 @@ fn expand_ludusavi_placeholders(s: &str) -> String {
         }
     }
 
-    // Fallback: si el YAML tiene alguna variable nativa %VAR%
     if result.contains('%') {
         #[cfg(target_os = "windows")]
         {
@@ -329,7 +323,6 @@ fn expand_ludusavi_placeholders(s: &str) -> String {
     result
 }
 
-/// Resuelve una plantilla de ruta. Si es relativa a la instalación, requiere el `install_dir`.
 pub fn resolve_path_template(template: &PathTemplate, install_dir: Option<&str>) -> String {
     match template {
         PathTemplate::Absolute(s) => expand_ludusavi_placeholders(s),
@@ -341,14 +334,12 @@ pub fn resolve_path_template(template: &PathTemplate, install_dir: Option<&str>)
                 let base = base.trim_end_matches(&['/', '\\']);
                 format!("{}{}{}", base, std::path::MAIN_SEPARATOR, rel_trim)
             } else {
-                // Si la ruta requiere instalación pero no la pasamos, devolvemos vacío para no escanear la raíz
                 String::new()
             }
         }
     }
 }
 
-/// Devuelve la entrada del manifiesto para un Steam App ID y opcionalmente el directorio de instalación.
 pub fn get_entry_for_steam_app(
     index: &ManifestIndex,
     steam_app_id: &str,

@@ -24,7 +24,7 @@ use std::sync::LazyLock;
 static ENV_VAR_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"%([^%]+)%").unwrap());
 static NUMBER_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\d+$").unwrap());
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PathCandidateDto {
     pub path: String,
@@ -65,6 +65,43 @@ impl CandidateList {
     fn into_inner(self) -> (Vec<PathCandidateDto>, HashSet<String>) {
         (self.candidates, self.seen)
     }
+}
+
+// Filtro de carpetas genéricas del sistema para evitar falsos positivos
+fn is_common_root_dir(path_str: &str) -> bool {
+    let mut p = path_str.to_lowercase();
+    p = p.trim_end_matches(&['\\', '/']).to_string();
+
+    // Filtra discos base (C:, D:, etc.)
+    if p.len() <= 3 && p.ends_with(':') {
+        return true;
+    }
+
+    let user_profile = std::env::var("USERPROFILE")
+        .unwrap_or_default()
+        .to_lowercase();
+    let public = std::env::var("PUBLIC")
+        .unwrap_or_else(|_| "c:\\users\\public".to_string())
+        .to_lowercase();
+    let appdata = std::env::var("APPDATA").unwrap_or_default().to_lowercase();
+    let localappdata = std::env::var("LOCALAPPDATA")
+        .unwrap_or_default()
+        .to_lowercase();
+
+    let common = vec![
+        user_profile.clone(),
+        appdata,
+        localappdata.clone(),
+        format!("{}\\locallow", user_profile),
+        format!("{}\\documents", user_profile),
+        format!("{}\\saved games", user_profile),
+        format!("{}\\packages", localappdata),
+        format!("{}\\steam", localappdata),
+        public.clone(),
+        format!("{}\\documents", public),
+    ];
+
+    common.contains(&p)
 }
 
 fn expand_path(raw: &str) -> Option<String> {
@@ -314,7 +351,10 @@ mod windows_scanners {
             .collect()
     }
 
-    fn find_steam_library_candidates(library_path: &str) -> Vec<PathCandidateDto> {
+    fn find_steam_library_candidates(
+        library_path: &str,
+        path_to_appid: &std::collections::HashMap<PathBuf, String>,
+    ) -> Vec<PathCandidateDto> {
         let common = Path::new(library_path).join("steamapps").join("common");
         if !common.exists() || !common.is_dir() {
             return vec![];
@@ -322,15 +362,28 @@ mod windows_scanners {
 
         list_subdirs(&common)
             .into_iter()
-            .filter(|(full_path, _)| folder_contains_save_like_files(full_path))
             .filter_map(|(full_path, name)| {
-                full_path.to_str().map(|p| PathCandidateDto {
-                    path: p.to_string(),
-                    folder_name: name,
-                    base_path: format!("Steam Library ({})", library_path),
-                    steam_app_id: None,
-                    paths: None,
-                })
+                if is_excluded_folder(&name) {
+                    return None;
+                }
+
+                let path_str = full_path.to_string_lossy().to_string();
+
+                let is_steam_game =
+                    steam::resolve_steam_app_id_from_map(path_to_appid, &path_str).is_some();
+                let passes_heuristic = folder_contains_save_like_files(&full_path);
+
+                if is_steam_game || passes_heuristic {
+                    Some(PathCandidateDto {
+                        path: path_str,
+                        folder_name: name,
+                        base_path: format!("Steam Library ({})", library_path),
+                        steam_app_id: None,
+                        paths: None,
+                    })
+                } else {
+                    None
+                }
             })
             .collect()
     }
@@ -351,7 +404,7 @@ mod windows_scanners {
         libraries.extend(find_steam_library_paths(steam_path));
 
         for lib in libraries {
-            for mut c in find_steam_library_candidates(&lib) {
+            for mut c in find_steam_library_candidates(&lib, path_to_appid) {
                 let app_id_opt = steam::resolve_steam_app_id_from_map(path_to_appid, &c.path);
                 c.steam_app_id = app_id_opt.clone();
 
@@ -495,11 +548,151 @@ fn base_scan_jobs(cfg: &config::Config) -> Vec<(String, String)> {
     jobs
 }
 
+#[cfg(target_os = "windows")]
+fn read_registry_install_dir(full_path: &str) -> Option<String> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
+
+    let parts: Vec<&str> = full_path.splitn(2, '\\').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+
+    let hive_str = parts[0];
+    let rest = parts[1];
+
+    if let Some(last_slash) = rest.rfind('\\') {
+        let subkey_str = &rest[..last_slash];
+        let value_name = &rest[last_slash + 1..];
+
+        let hive = match hive_str {
+            "HKEY_LOCAL_MACHINE" => RegKey::predef(HKEY_LOCAL_MACHINE),
+            "HKEY_CURRENT_USER" => RegKey::predef(HKEY_CURRENT_USER),
+            _ => return None,
+        };
+
+        let subkeys_to_try = [
+            subkey_str.to_string(),
+            subkey_str.replace("SOFTWARE\\", "SOFTWARE\\WOW6432Node\\"),
+        ];
+
+        for key in subkeys_to_try {
+            if let Ok(subkey) = hive.open_subkey(&key) {
+                if let Ok(val) = subkey.get_value::<String, _>(value_name) {
+                    let clean_val = val
+                        .trim_matches('"')
+                        .trim_end_matches(['\\', '/'])
+                        .to_string();
+                    if !clean_val.is_empty() {
+                        return Some(clean_val);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 fn scan_path_candidates_sync(
     #[cfg(target_os = "windows")] manifest_index: Option<crate::manifest::ManifestIndex>,
 ) -> Vec<PathCandidateDto> {
     let cfg = config::load_config();
     let mut list = CandidateList::new();
+
+    
+    #[cfg(target_os = "windows")]
+    if let Some(manifest) = &manifest_index {
+        let mut unique_entries = Vec::new();
+        let mut seen = HashSet::new();
+        for entry in manifest.values() {
+            if seen.insert(&entry.name) {
+                unique_entries.push(entry);
+            }
+        }
+
+        let active_candidates: Vec<PathCandidateDto> = unique_entries
+            .par_iter()
+            .filter_map(|entry| {
+                let mut valid_game_paths = Vec::new();
+
+                let mut install_dir_cache: Option<String> = None;
+                if let Some(reg_path) = &entry.registry_path {
+                    install_dir_cache = read_registry_install_dir(reg_path);
+                }
+
+                for template in &entry.save_paths {
+                    let expanded_path_opt = match template {
+                        crate::manifest::PathTemplate::Absolute(_) => {
+                            Some(crate::manifest::resolve_path_template(template, None))
+                        }
+                        crate::manifest::PathTemplate::RelativeToInstall(_) => {
+                            install_dir_cache.as_ref().map(|install_dir| {
+                                crate::manifest::resolve_path_template(template, Some(install_dir))
+                            })
+                        }
+                    };
+
+                    if let Some(expanded) = expanded_path_opt {
+                        let clean_path_str = if let Some(idx) = expanded.find('*') {
+                            let before = &expanded[..idx];
+                            if let Some(sep) = before.rfind(|c| c == '\\' || c == '/') {
+                                before[..sep].to_string()
+                            } else {
+                                before.to_string()
+                            }
+                        } else {
+                            expanded.clone()
+                        };
+
+                        let path = Path::new(&clean_path_str);
+
+                        if path.exists() {
+                            let folder_path = if path.is_file() {
+                                path.parent().unwrap_or(path).to_string_lossy().to_string()
+                            } else {
+                                clean_path_str.clone()
+                            };
+
+                            // Filtramos directorios genéricos vacíos (ej. C:\, AppData\Local, etc.)
+                            if Path::new(&folder_path).is_dir() && !is_common_root_dir(&folder_path)
+                            {
+                                if std::fs::read_dir(&folder_path)
+                                    .map(|mut i| i.next().is_some())
+                                    .unwrap_or(false)
+                                {
+                                    if !valid_game_paths.contains(&folder_path) {
+                                        valid_game_paths.push(folder_path);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+            // Si un juego de Ludusavi tiene múltiples rutas, las agrupamos en un solo DTO.
+                if !valid_game_paths.is_empty() {
+                    let display_path = valid_game_paths[0].clone();
+                    let paths_opt = if valid_game_paths.len() > 1 {
+                        Some(valid_game_paths)
+                    } else {
+                        None
+                    };
+
+                    Some(PathCandidateDto {
+                        path: display_path,
+                        folder_name: entry.name.clone(),
+                        base_path: "Base de Datos Oficial".to_string(),
+                        steam_app_id: None,
+                        paths: paths_opt,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        list.extend(active_candidates);
+    }
 
     let parallel_candidates: Vec<PathCandidateDto> = base_scan_jobs(&cfg)
         .par_iter()
@@ -515,15 +708,46 @@ fn scan_path_candidates_sync(
         windows_scanners::scan_cracks(&mut list, &manifest_index);
     }
 
-    let (mut final_candidates, _) = list.into_inner();
+    let (final_candidates, _) = list.into_inner();
 
-    final_candidates.sort_by(|a, b| {
+ 
+    let mut filtered_candidates = Vec::new();
+    for cand in &final_candidates {
+        if cand.base_path != "Base de Datos Oficial" {
+      
+            let is_redundant = final_candidates.iter().any(|official| {
+                if official.base_path == "Base de Datos Oficial" {
+                    let cand_path_lower = cand.path.to_lowercase();
+
+                    let mut official_paths = vec![official.path.to_lowercase()];
+                    if let Some(extra_paths) = &official.paths {
+                        for ep in extra_paths {
+                            official_paths.push(ep.to_lowercase());
+                        }
+                    }
+
+                    official_paths.iter().any(|op| {
+                        op.starts_with(&cand_path_lower) && op.len() > cand_path_lower.len()
+                    })
+                } else {
+                    false
+                }
+            });
+
+            if is_redundant {
+                continue;
+            }
+        }
+        filtered_candidates.push(cand.clone());
+    }
+
+    filtered_candidates.sort_by(|a, b| {
         a.base_path
             .cmp(&b.base_path)
             .then(a.folder_name.cmp(&b.folder_name))
     });
 
-    final_candidates
+    filtered_candidates
 }
 
 #[tauri::command]
