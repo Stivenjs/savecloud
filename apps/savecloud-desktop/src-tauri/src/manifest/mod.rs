@@ -8,7 +8,7 @@ use std::path::Path;
 use tokio::fs;
 
 const MANIFEST_URL: &str =
-    "https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/refs/heads/master/data/manifest.yaml";
+    "https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/master/data/manifest.yaml";
 
 #[derive(Clone, Debug)]
 pub struct GameManifestEntry {
@@ -71,10 +71,6 @@ struct WhenCondition {
 }
 
 async fn ensure_manifest_cached(cache_path: &Path) -> Result<(), String> {
-    if cache_path.exists() {
-        return Ok(());
-    }
-
     let parent = cache_path
         .parent()
         .ok_or_else(|| "No parent dir for manifest".to_string())?;
@@ -83,16 +79,42 @@ async fn ensure_manifest_cached(cache_path: &Path) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
 
+    let etag_path = cache_path.with_extension("etag");
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(60))
         .build()
         .map_err(|e| e.to_string())?;
 
-    let response = client
-        .get(MANIFEST_URL)
+    let mut request = client.get(MANIFEST_URL);
+
+    if cache_path.exists() && etag_path.exists() {
+        if let Ok(etag) = fs::read_to_string(&etag_path).await {
+            request = request.header(reqwest::header::IF_NONE_MATCH, etag.trim());
+        }
+    }
+
+    let response = request
         .send()
         .await
         .map_err(|e| format!("Error de red: {}", e))?;
+
+    if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+        return Ok(());
+    }
+
+    if !response.status().is_success() {
+        if cache_path.exists() {
+            return Ok(());
+        }
+        return Err(format!("Error HTTP: {}", response.status()));
+    }
+
+    let new_etag = response
+        .headers()
+        .get(reqwest::header::ETAG)
+        .and_then(|val| val.to_str().ok())
+        .map(|s| s.to_string());
 
     let body = response
         .bytes()
@@ -102,6 +124,10 @@ async fn ensure_manifest_cached(cache_path: &Path) -> Result<(), String> {
     fs::write(cache_path, &body)
         .await
         .map_err(|e| e.to_string())?;
+
+    if let Some(etag_val) = new_etag {
+        let _ = fs::write(&etag_path, etag_val).await;
+    }
 
     Ok(())
 }

@@ -1,6 +1,6 @@
 [package]
 name = "savecloud-desktop"
-version = "1.8.6"
+version = "1.8.8"
 description = "Sync your game saves to the cloud. Auto-upload on change, local backups before overwrite. Works with Steam, non-Steam, and emulated games."
 authors = ["Steven Jaime"]
 edition = "2021"
