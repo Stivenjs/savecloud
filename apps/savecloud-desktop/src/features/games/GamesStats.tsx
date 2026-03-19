@@ -14,9 +14,9 @@ import {
   Spinner,
   useDisclosure,
 } from "@heroui/react";
-import { Cloud, CloudOff, Gamepad2, HardDrive, Info } from "lucide-react";
+import { Cloud, CloudOff, Gamepad2, HardDrive, Info, Clock } from "lucide-react";
 import { formatGameDisplayName } from "@utils/gameImage";
-import { formatSize } from "@utils/format";
+import { formatLastSync, formatPlaytime, formatSize } from "@utils/format";
 import type { CloudGameSummary } from "@hooks/useLastSyncInfo";
 
 interface GamesStatsProps {
@@ -32,27 +32,12 @@ interface GamesStatsProps {
   cloudGames?: CloudGameSummary[];
   /** Tamaño total en la nube en bytes. */
   totalCloudSize?: number;
+  /** Tiempo total de juego en segundos. */
+  totalPlaytimeSeconds?: number;
+  /** Cargando datos de tiempo de juego. */
+  playtimeLoading?: boolean;
   /** Permite configurar un juego local a partir de un juego que solo existe en la nube. */
   onConfigureFromCloud?: (gameId: string) => void;
-}
-
-function formatLastSync(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "Hace un momento";
-  if (diffMins < 60) return `Hace ${diffMins} min`;
-  if (diffHours < 24) return `Hace ${diffHours} h`;
-  if (diffDays === 1) return "Ayer";
-  if (diffDays < 7) return `Hace ${diffDays} días`;
-  return date.toLocaleDateString("es", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 export function GamesStats({
@@ -63,6 +48,8 @@ export function GamesStats({
   hasSyncConfig = false,
   cloudGames = [],
   totalCloudSize = 0,
+  totalPlaytimeSeconds = 0,
+  playtimeLoading = false,
   onConfigureFromCloud,
 }: GamesStatsProps) {
   const showCloudSection = hasSyncConfig;
@@ -70,6 +57,7 @@ export function GamesStats({
   const useModal = cloudGames.length > 8;
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
 
+  // Contenido compartido para el detalle de la nube (Popover o Modal)
   const cloudDetailContent = (
     <ul className="space-y-2">
       {cloudGames.map((g) => (
@@ -81,12 +69,17 @@ export function GamesStats({
             </span>
           </div>
           <div className="flex items-center justify-between gap-2">
-            <Code size="sm" className="max-w-[200px] truncate">
+            <Code size="sm" className="max-w-[200px] truncate text-[10px]">
               {g.gameId}
             </Code>
             {onConfigureFromCloud && (
-              <Button size="sm" variant="light" className="h-7 text-xs" onPress={() => onConfigureFromCloud(g.gameId)}>
-                Configurar juego
+              <Button
+                size="sm"
+                variant="flat"
+                color="primary"
+                className="h-7 text-xs"
+                onPress={() => onConfigureFromCloud(g.gameId)}>
+                Configurar
               </Button>
             )}
           </div>
@@ -97,19 +90,39 @@ export function GamesStats({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card className="border border-default-200">
+      {/* Grid responsivo: cambia de 3 a 4 columnas según si hay config de nube */}
+      <div
+        className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${showCloudSection ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+        {/* CARD: Juegos Locales */}
+        <Card className="border border-default-200 shadow-sm">
           <CardBody className="flex flex-row items-center gap-4 py-5">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
               <Gamepad2 size={24} className="text-primary" />
             </div>
-            <div>
-              <p className="text-sm text-default-500">Juegos configurados</p>
+            <div className="min-w-0">
+              <p className="text-sm text-default-500">Juegos locales</p>
               <p className="text-2xl font-semibold text-foreground">{gamesCount}</p>
             </div>
           </CardBody>
         </Card>
-        <Card className="border border-default-200">
+
+        {/* CARD: Tiempo Total (AÑADIDA) */}
+        <Card className="border border-default-200 shadow-sm">
+          <CardBody className="flex flex-row items-center gap-4 py-5">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-warning/10">
+              {playtimeLoading ? <Spinner size="sm" color="warning" /> : <Clock size={24} className="text-warning" />}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm text-default-500">Tiempo total</p>
+              <p className="text-2xl font-semibold text-foreground">
+                {playtimeLoading ? "..." : formatPlaytime(totalPlaytimeSeconds)}
+              </p>
+            </div>
+          </CardBody>
+        </Card>
+
+        {/* CARD: Última Sincronización */}
+        <Card className="border border-default-200 shadow-sm">
           <CardBody className="flex flex-row items-center gap-4 py-5">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-default-100">
               {lastSyncLoading ? (
@@ -120,87 +133,97 @@ export function GamesStats({
                 <CloudOff size={24} className="text-default-500" />
               )}
             </div>
-            <div>
-              <p className="text-sm text-default-500">Última sincronización</p>
-              <p className="text-lg font-medium text-foreground">
-                {lastSyncLoading ? "Cargando..." : lastSyncAt ? formatLastSync(lastSyncAt) : "Nunca"}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-default-500">Sincronización</p>
+              <p className="truncate text-lg font-medium text-foreground">
+                {lastSyncLoading ? "..." : lastSyncAt ? formatLastSync(lastSyncAt) : "Nunca"}
               </p>
-              {lastSyncAt && lastSyncGameId && (
-                <p className="text-sm text-default-400">{formatGameDisplayName(lastSyncGameId)}</p>
+              {lastSyncAt && lastSyncGameId && !lastSyncLoading && (
+                <p className="truncate text-xs text-default-400">{formatGameDisplayName(lastSyncGameId)}</p>
               )}
             </div>
           </CardBody>
         </Card>
+
+        {/* CARD: Espacio en la Nube */}
         {showCloudSection && (
-          <Card className="border border-default-200">
+          <Card className="border border-default-200 shadow-sm">
             <CardBody className="flex flex-row items-center gap-4 py-5">
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary/10">
                 {lastSyncLoading ? (
-                  <Spinner size="sm" color="primary" />
+                  <Spinner size="sm" color="secondary" />
                 ) : (
                   <HardDrive size={24} className="text-secondary" />
                 )}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-default-500">En la nube</p>
-                <p className="text-lg font-medium text-foreground">
-                  {lastSyncLoading
-                    ? "Cargando..."
-                    : hasCloudGames
-                      ? `${cloudGames.length} juego${
-                          cloudGames.length !== 1 ? "s" : ""
-                        } · ${formatSize(totalCloudSize)}`
-                      : "Vacío"}
-                </p>
+                <div className="flex items-baseline gap-1">
+                  <p className="text-lg font-medium text-foreground">
+                    {lastSyncLoading ? "..." : formatSize(totalCloudSize)}
+                  </p>
+                  {!lastSyncLoading && hasCloudGames && (
+                    <span className="text-xs text-default-400">({cloudGames.length} j.)</span>
+                  )}
+                </div>
               </div>
-              {hasCloudGames &&
-                (useModal ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={onOpen}
-                      className="flex size-8 shrink-0 items-center justify-center rounded-lg text-default-400 transition-colors hover:bg-default-100 hover:text-foreground"
-                      aria-label="Ver detalle de guardados en la nube">
+
+              {/* Gatillo para ver el desglose */}
+              {hasCloudGames && !lastSyncLoading && (
+                <div className="shrink-0">
+                  {useModal ? (
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      variant="light"
+                      onPress={onOpen}
+                      className="text-default-400 hover:text-foreground">
                       <Info size={18} />
-                    </button>
-                    <Modal isOpen={isOpen} onOpenChange={onOpenChange} size="3xl" scrollBehavior="inside">
-                      <ModalContent>
-                        <ModalHeader>
-                          <p className="text-lg font-medium">Guardados en la nube ({cloudGames.length} juegos)</p>
-                        </ModalHeader>
-                        <ModalBody>
-                          <div className="max-h-[70vh] overflow-y-auto">{cloudDetailContent}</div>
-                        </ModalBody>
-                        <ModalFooter>
-                          <Button color="primary" onPress={() => onOpenChange()}>
-                            Cerrar
-                          </Button>
-                        </ModalFooter>
-                      </ModalContent>
-                    </Modal>
-                  </>
-                ) : (
-                  <Popover placement="bottom" showArrow>
-                    <PopoverTrigger>
-                      <button
-                        type="button"
-                        className="flex size-8 shrink-0 items-center justify-center rounded-lg text-default-400 transition-colors hover:bg-default-100 hover:text-foreground"
-                        aria-label="Ver detalle de guardados en la nube">
-                        <Info size={18} />
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-104 p-0">
-                      <div className="border-b border-default-200 px-4 py-3">
-                        <p className="text-sm font-medium text-foreground">Guardados en la nube</p>
-                      </div>
-                      <div className="max-h-72 overflow-y-auto p-3">{cloudDetailContent}</div>
-                    </PopoverContent>
-                  </Popover>
-                ))}
+                    </Button>
+                  ) : (
+                    <Popover placement="bottom-end" showArrow>
+                      <PopoverTrigger>
+                        <Button isIconOnly size="sm" variant="light" className="text-default-400 hover:text-foreground">
+                          <Info size={18} />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-0">
+                        <div className="border-b border-default-200 px-4 py-3">
+                          <p className="text-sm font-medium text-foreground">Detalle de la nube</p>
+                        </div>
+                        <div className="max-h-72 overflow-y-auto p-3">{cloudDetailContent}</div>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+              )}
             </CardBody>
           </Card>
         )}
       </div>
+
+      {/* Modal para cuando hay muchos juegos en la nube */}
+      {useModal && (
+        <Modal isOpen={isOpen} onOpenChange={onOpenChange} size="2xl" scrollBehavior="inside" backdrop="blur">
+          <ModalContent>
+            <ModalHeader className="flex flex-col gap-1">
+              <p className="text-lg font-medium">Juegos en la nube</p>
+              <p className="text-xs font-normal text-default-500">
+                Total archivos: {cloudGames.reduce((acc, curr) => acc + curr.fileCount, 0)} · Peso:{" "}
+                {formatSize(totalCloudSize)}
+              </p>
+            </ModalHeader>
+            <ModalBody>
+              <div className="pb-4">{cloudDetailContent}</div>
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="flat" onPress={() => onOpenChange()}>
+                Cerrar
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+      )}
     </div>
   );
 }

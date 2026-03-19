@@ -418,6 +418,7 @@ export interface GameStats {
   localSizeBytes: number;
   localLastModified: string | null;
   cloudLastModified: string | null;
+  playtimeSeconds: number;
 }
 
 /** Obtiene estadísticas de todos los juegos configurados */

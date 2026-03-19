@@ -31,6 +31,7 @@ import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
 import { useSyncProgress } from "@contexts/SyncProgressContext";
 import { filterGames, type OriginFilter } from "@features/games/GamesFilters";
+import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
 
 export interface OperationResult {
   type: "sync" | "download";
@@ -226,9 +227,9 @@ export function useGamesPage() {
       await Promise.all([
         refetch?.(),
         refetchLastSync?.(),
-        queryClient.invalidateQueries({ queryKey: ["config"] }),
-        queryClient.invalidateQueries({ queryKey: ["game-stats"] }),
-        queryClient.invalidateQueries({ queryKey: ["unsynced-games"] }),
+        queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY, type: "active" }),
+        queryClient.invalidateQueries({ queryKey: ["game-stats"], type: "active" }),
+        queryClient.invalidateQueries({ queryKey: ["unsynced-games"], type: "active" }),
       ]);
     } finally {
       dispatch({ type: "SET_REFRESHING", payload: false });
@@ -269,7 +270,7 @@ export function useGamesPage() {
         await addGame(idToUse, path);
       }
       scheduleConfigBackupToCloud();
-      queryClient.invalidateQueries({ queryKey: ["config"] });
+      queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
       refetch?.();
       dispatch({ type: "SET_SCAN_MODAL", open: false });
       return;
@@ -299,7 +300,7 @@ export function useGamesPage() {
       }
       await removeGame(gameId);
       scheduleConfigBackupToCloud();
-      queryClient.invalidateQueries({ queryKey: ["config"] });
+      queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
       refetch?.();
       dispatch({ type: "SET_GAME_TO_REMOVE", game: null });
     } catch (e) {
@@ -367,6 +368,7 @@ export function useGamesPage() {
         dispatch({ type: "SET_SYNCING", value: null });
         refetchLastSync?.();
         queryClient.invalidateQueries({ queryKey: ["game-stats"] });
+        queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
       }
     } else {
       dispatch({ type: "SET_DOWNLOADING", value: game.id });
@@ -410,6 +412,7 @@ export function useGamesPage() {
       dispatch({ type: "SET_DOWNLOADING", value: null });
       refetchLastSync?.();
       queryClient.invalidateQueries({ queryKey: ["game-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
     }
   };
 
@@ -435,6 +438,7 @@ export function useGamesPage() {
     } finally {
       refetchLastSync?.();
       queryClient.invalidateQueries({ queryKey: ["game-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
     }
   };
 
@@ -449,6 +453,7 @@ export function useGamesPage() {
     } finally {
       refetchLastSync?.();
       queryClient.invalidateQueries({ queryKey: ["game-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
     }
   };
 
@@ -491,6 +496,7 @@ export function useGamesPage() {
       dispatch({ type: "SET_SYNCING", value: null });
       refetchLastSync?.();
       queryClient.invalidateQueries({ queryKey: ["game-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
     }
   };
 
@@ -553,6 +559,7 @@ export function useGamesPage() {
       dispatch({ type: "SET_DOWNLOADING", value: null });
       refetchLastSync?.();
       queryClient.invalidateQueries({ queryKey: ["game-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
     }
   };
 
@@ -592,6 +599,7 @@ export function useGamesPage() {
     } finally {
       refetchLastSync?.();
       queryClient.invalidateQueries({ queryKey: ["game-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
     }
   };
 

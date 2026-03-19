@@ -5,6 +5,7 @@ use crate::commands::sync::api::{
     api_request, sync_list_remote_saves, sync_list_remote_saves_for_user,
 };
 use crate::config;
+use crate::time;
 use chrono::Utc;
 use regex::Regex;
 use std::fs;
@@ -341,6 +342,7 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
             edition_label: g.edition_label,
             source_url: g.source_url,
             magnet_link: g.magnet_link,
+            playtime_seconds: g.playtime_seconds,
         })
         .collect();
 
@@ -353,6 +355,7 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
         keep_backups_per_game: None,
         full_backup_streaming: None,
         full_backup_streaming_dry_run: None,
+        total_playtime: time::get_total_playtime(),
     })
 }
 
@@ -387,6 +390,7 @@ pub fn add_games_from_friend(friend_games: Vec<GameDto>) -> Result<usize, String
             edition_label: g.edition_label,
             source_url: g.source_url,
             magnet_link: None,
+            playtime_seconds: 0,
         });
         existing_ids.insert(id_lower);
         added += 1;

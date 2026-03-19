@@ -1,56 +1,71 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listen } from "@tauri-apps/api/event";
+import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { checkGamesRunning } from "@services/tauri";
+import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
 
 const QUERY_KEY = ["game-running"] as const;
 
-/**
- * Comprueba qué juegos están en ejecución.
- * Sirve para mostrar advertencias antes de sincronizar.
- *
- * Optimizado: Hace una sola petición inicial para cargar rápido,
- * y luego se actualiza en tiempo real mediante eventos de Tauri (sin polling).
- */
+interface PlaytimePayload {
+  gameId: string;
+  newTime: number;
+}
+
 export function useGameRunningStatus(gameIds: readonly string[]): Record<string, boolean> {
   const queryClient = useQueryClient();
   const sortedIds = [...gameIds].sort();
+  const idsKey = sortedIds.join(",");
 
   const { data } = useQuery({
     queryKey: [...QUERY_KEY, sortedIds],
     queryFn: () => checkGamesRunning(sortedIds),
     enabled: sortedIds.length > 0,
     staleTime: Infinity,
-    gcTime: 1000 * 60 * 5,
   });
 
   useEffect(() => {
     if (sortedIds.length === 0) return;
 
-    const unlistenPromise = listen<Record<string, boolean>>("games-running-status", (event) => {
-      const globalState = event.payload;
+    let unlisteners: UnlistenFn[] = [];
 
-      queryClient.setQueryData([...QUERY_KEY, sortedIds], (oldData: Record<string, boolean> | undefined) => {
-        if (!oldData) return globalState;
-
-        const updated = { ...oldData };
-        let hasChanges = false;
-
-        sortedIds.forEach((id) => {
-          if (globalState[id] !== undefined && globalState[id] !== oldData[id]) {
-            updated[id] = globalState[id];
-            hasChanges = true;
-          }
+    async function setupListeners() {
+      const unlistenStatus = await listen<Record<string, boolean>>("games-running-status", (event) => {
+        const globalState = event.payload;
+        queryClient.setQueryData([...QUERY_KEY, sortedIds], (oldData: any) => {
+          if (!oldData) return globalState;
+          return { ...oldData, ...globalState };
         });
-
-        return hasChanges ? updated : oldData;
       });
-    });
+      unlisteners.push(unlistenStatus);
+
+      const unlistenTime = await listen<PlaytimePayload>("playtime-updated", (event) => {
+        const { gameId, newTime } = event.payload;
+
+        queryClient.setQueryData(CONFIG_QUERY_KEY, (oldConfig: any) => {
+          if (!oldConfig) return oldConfig;
+          return {
+            ...oldConfig,
+            games: oldConfig.games.map((g: any) => (g.id === gameId ? { ...g, playtimeSeconds: newTime } : g)),
+          };
+        });
+      });
+      unlisteners.push(unlistenTime);
+
+      const unlistenTotal = await listen<number>("total-playtime-updated", (event) => {
+        queryClient.setQueryData(CONFIG_QUERY_KEY, (oldConfig: any) => {
+          if (!oldConfig) return oldConfig;
+          return { ...oldConfig, totalPlaytime: event.payload };
+        });
+      });
+      unlisteners.push(unlistenTotal);
+    }
+
+    setupListeners();
 
     return () => {
-      unlistenPromise.then((unlisten) => unlisten());
+      unlisteners.forEach((fn) => fn());
     };
-  }, [queryClient, sortedIds.join(",")]);
+  }, [queryClient, idsKey]);
 
   const map = data ?? {};
   const result: Record<string, boolean> = {};

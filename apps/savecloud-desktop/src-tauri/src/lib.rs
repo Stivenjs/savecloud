@@ -10,6 +10,7 @@ mod torrent;
 mod tray;
 mod tray_state;
 mod controller;
+mod time;
 use tauri::Manager;
 
 fn load_dotenv() {
