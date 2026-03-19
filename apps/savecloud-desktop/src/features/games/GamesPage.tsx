@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Spinner } from "@heroui/react";
-import { Copy, RefreshCw, User } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import { AddGameModal } from "@features/games/AddGameModal";
 import { DownloadAllConflictModal } from "@features/games/DownloadAllConflictModal";
@@ -17,7 +17,6 @@ import { OperationErrorCard } from "@features/games/OperationErrorCard";
 import { BulkActionConfirmModal } from "@features/games/BulkActionConfirmModal";
 import { RemoveGameModal } from "@features/games/RemoveGameModal";
 import { ScanModal } from "@features/games/ScanModal";
-import { ConnectionStatusIndicator } from "@features/games/ConnectionStatusIndicator";
 import { useGamesPage } from "@features/games/useGamesPage";
 import { useGameStats } from "@hooks/useGameStats";
 import { scheduleConfigBackupToCloud } from "@services/tauri";
