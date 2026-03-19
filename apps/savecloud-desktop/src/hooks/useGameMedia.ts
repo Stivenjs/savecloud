@@ -5,6 +5,8 @@ import { getGameImageUrl, getGameLibraryHeroUrl, getSteamAppId } from "@utils/ga
 import type { ConfiguredGame } from "@app-types/config";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
 
+const globalLoadedImages = new Set<string>();
+
 interface UseGameMediaOptions {
   game: ConfiguredGame;
   resolvedSteamAppId?: string | null;
@@ -20,9 +22,6 @@ export function useGameMedia({
   mediaBySteamAppId,
   mediaFromBatch = false,
 }: UseGameMediaOptions) {
-  const [imgError, setImgError] = useState(false);
-  const [imgLoaded, setImgLoaded] = useState(false);
-
   const staticImageUrl = getGameImageUrl(game, resolvedSteamAppId);
   const extraImageUrl = getGameLibraryHeroUrl(game, resolvedSteamAppId);
   const steamAppId = getSteamAppId(game, resolvedSteamAppId);
@@ -75,12 +74,27 @@ export function useGameMedia({
     mediaBySteamAppId,
   ]);
 
+  const [imgError, setImgError] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(() => {
+    return displayImageUrl ? globalLoadedImages.has(displayImageUrl) : false;
+  });
+
   useEffect(() => {
     setImgError(false);
-    setImgLoaded(false);
+    if (displayImageUrl && globalLoadedImages.has(displayImageUrl)) {
+      setImgLoaded(true);
+    } else {
+      setImgLoaded(false);
+    }
   }, [displayImageUrl]);
 
-  const handleImgLoad = useCallback(() => setImgLoaded(true), []);
+  const handleImgLoad = useCallback(() => {
+    if (displayImageUrl) {
+      globalLoadedImages.add(displayImageUrl);
+    }
+    setImgLoaded(true);
+  }, [displayImageUrl]);
+
   const handleImgError = useCallback(() => setImgError(true), []);
 
   return {

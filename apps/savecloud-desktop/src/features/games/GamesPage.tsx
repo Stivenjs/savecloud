@@ -23,6 +23,7 @@ import { useGameStats } from "@hooks/useGameStats";
 import { scheduleConfigBackupToCloud } from "@services/tauri";
 import { countGamesOverSizeThreshold } from "@utils/packageRecommendation";
 import { createShareLink } from "@services/share.service";
+import { UserBadge } from "@features/games/UserBadge";
 import { toastError, toastSuccess } from "@utils/toast";
 
 export function GamesPage() {
@@ -149,34 +150,7 @@ export function GamesPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <User size={14} className="text-default-400" />
-              <span className="text-xs text-default-400">ID:</span>
-              {config?.userId?.trim() ? (
-                <code className="font-mono text-xs text-default-500">{config.userId}</code>
-              ) : (
-                <span className="text-xs text-default-400">Sin configurar</span>
-              )}
-            </div>
-
-            {config?.userId?.trim() && (
-              <Button
-                size="sm"
-                variant="light"
-                isIconOnly
-                aria-label="Copiar User ID"
-                onPress={async () => {
-                  try {
-                    await navigator.clipboard.writeText(config.userId ?? "");
-                    toastSuccess("User ID copiado", "Puedes compartirlo con tus amigos.");
-                  } catch {
-                    // sin clipboard, ignorar
-                  }
-                }}>
-                <Copy size={14} />
-              </Button>
-            )}
-            {hasSyncConfig && <ConnectionStatusIndicator status={connectionStatus} />}
+            <UserBadge userId={config?.userId} hasSyncConfig={hasSyncConfig} connectionStatus={connectionStatus} />{" "}
           </div>
         </div>
 
