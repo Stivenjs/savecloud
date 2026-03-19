@@ -15,11 +15,14 @@
       {
         "label": "main",
         "title": "SaveCloud",
-        "width": 800,
-        "height": 600,
-        "minWidth": 800,
+        "center": true,
+        "width": 1280,
+        "height": 720,
+        "minWidth": 900,
         "minHeight": 600,
-        "resizable": true
+        "resizable": true,
+        "decorations": true,
+        "transparent": false
       }
     ],
     "security": {
@@ -30,15 +33,40 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
-    "createUpdaterArtifacts": true,
+    "targets": [
+      "nsis",
+      "msi",
+      "dmg",
+      "appimage",
+      "deb"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "hardenedRuntime": true,
+      "entitlements": "entitlements.plist"
+    },
+    "windows": {
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.digicert.com"
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0"
+        ]
+      },
+      "appimage": {
+        "bundleMediaFramework": true
+      }
+    }
   },
   "plugins": {
     "updater": {

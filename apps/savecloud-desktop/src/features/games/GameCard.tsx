@@ -1,9 +1,9 @@
 import { memo } from "react";
 import { Card, CardFooter, Skeleton, Tooltip } from "@heroui/react";
 import { GameCardHoverMotion } from "@features/games/GameCardHoverMotion";
-import { Gamepad2 } from "lucide-react";
+import { Clock, Gamepad2 } from "lucide-react";
 import { formatGameDisplayName } from "@utils/gameImage";
-import { formatBytes, formatRelativeDate } from "@utils/format";
+import { formatBytes, formatPlaytime, formatRelativeDate } from "@utils/format";
 import { GameCardHoverCard } from "@features/games/GameCardHoverCard";
 import { GameCardStatusBar } from "@features/games/GameCardStatusBar";
 import { GameCardSyncProgress } from "@features/games/GameCardSyncProgress";
@@ -155,16 +155,23 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
               </Tooltip>
             )}
 
-            <div className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-center gap-1 bg-black/40 px-3 py-2 backdrop-blur-sm opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+            <div className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-center gap-1 bg-black/60 px-3 py-2 backdrop-blur-md opacity-0 transition-opacity duration-150 group-hover:opacity-100 z-20">
               {stats && (
-                <p className="w-full truncate text-center text-[10px] text-white">
-                  {formatBytes(stats.localSizeBytes)}
-                  {stats.localLastModified != null && <> · Local: {formatRelativeDate(stats.localLastModified)}</>}
-                </p>
+                <>
+                  <p className="w-full truncate text-center text-[10px] text-white font-medium">
+                    {formatBytes(stats.localSizeBytes)}
+                    {stats.localLastModified != null && <> · {formatRelativeDate(stats.localLastModified)}</>}
+                  </p>
+
+                  <div className="flex items-center gap-1 text-warning">
+                    <Clock size={10} />
+                    <span className="text-[10px] font-bold">{formatPlaytime(stats.playtimeSeconds)}</span>
+                  </div>
+                </>
               )}
 
               {game.editionLabel && (
-                <p className="w-full truncate text-center text-[10px] text-white/80">Origen: {game.editionLabel}</p>
+                <p className="w-full truncate text-center text-[10px] text-white/70">{game.editionLabel}</p>
               )}
             </div>
           </CardFooter>

@@ -78,6 +78,9 @@ pub struct ConfiguredGame {
     /// Magnet link o ruta a archivo .torrent para descargar contenido del juego.
     #[serde(default)]
     pub magnet_link: Option<String>,
+    /// Tiempo de juego en segundos.
+    #[serde(default)]
+    pub playtime_seconds: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

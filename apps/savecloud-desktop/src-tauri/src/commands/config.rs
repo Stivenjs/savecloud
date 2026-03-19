@@ -1,12 +1,12 @@
 //! Comandos relacionados con la configuración.
 
-use std::fs;
-use std::path::Path;
-
 use crate::config;
 use crate::steam;
+use crate::time;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::Path;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +19,7 @@ pub struct ConfigDto {
     pub keep_backups_per_game: Option<u32>,
     pub full_backup_streaming: Option<bool>,
     pub full_backup_streaming_dry_run: Option<bool>,
+    pub total_playtime: u64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -31,6 +32,7 @@ pub struct GameDto {
     pub edition_label: Option<String>,
     pub source_url: Option<String>,
     pub magnet_link: Option<String>,
+    pub playtime_seconds: u64,
 }
 
 #[derive(Serialize)]
@@ -76,6 +78,7 @@ pub fn get_config() -> ConfigDto {
                     edition_label: g.edition_label,
                     source_url: g.source_url,
                     magnet_link: g.magnet_link,
+                    playtime_seconds: g.playtime_seconds,
                 }
             })
             .collect(),
@@ -83,6 +86,7 @@ pub fn get_config() -> ConfigDto {
         keep_backups_per_game: cfg.keep_backups_per_game,
         full_backup_streaming: cfg.full_backup_streaming,
         full_backup_streaming_dry_run: cfg.full_backup_streaming_dry_run,
+        total_playtime: time::get_total_playtime(),
     }
 }
 
@@ -232,6 +236,7 @@ pub fn add_game(
             edition_label,
             source_url,
             magnet_link: None,
+            playtime_seconds: 0,
         });
     }
 

@@ -2,9 +2,11 @@
 //! Incluye un watcher para emitir eventos al frontend de forma reactiva.
 
 use crate::config;
+use crate::time;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::OnceLock;
+use std::time::Instant;
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tauri::{AppHandle, Emitter};
 
@@ -118,25 +120,73 @@ pub fn are_games_running(game_ids: &[String]) -> HashMap<String, bool> {
 pub fn start_process_watcher(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut previous_state: HashMap<String, bool> = HashMap::new();
+        let mut last_checkpoint: HashMap<String, Instant> = HashMap::new();
 
         loop {
             let cfg = config::load_config();
             let game_ids: Vec<String> = cfg.games.iter().map(|g| g.id.clone()).collect();
+            let current_state = are_games_running(&game_ids);
 
-            if !game_ids.is_empty() {
-                let current_state = are_games_running(&game_ids);
+            if current_state != previous_state {
+                let _ = app.emit("games-running-status", &current_state);
+            }
 
-                if current_state != previous_state {
-                    let _ = app.emit("games-running-status", &current_state);
-                    previous_state = current_state;
+            for (game_id, &is_running) in &current_state {
+                let was_running = *previous_state.get(game_id).unwrap_or(&false);
+
+                if is_running {
+                    if !was_running {
+                        last_checkpoint.insert(game_id.clone(), Instant::now());
+                    } else {
+                        if let Some(start) = last_checkpoint.get(game_id) {
+                            let elapsed = start.elapsed().as_secs();
+
+                            if elapsed >= 60 {
+                                let _ = time::add_playtime(game_id, elapsed);
+                                last_checkpoint.insert(game_id.clone(), Instant::now());
+
+                                emit_playtime_update(&app, game_id);
+                            }
+                        }
+                    }
+                } else if was_running {
+                    if let Some(start) = last_checkpoint.remove(game_id) {
+                        let remaining = start.elapsed().as_secs();
+                        if remaining > 0 {
+                            let _ = time::add_playtime(game_id, remaining);
+
+                            emit_playtime_update(&app, game_id);
+                        }
+                    }
                 }
             }
 
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            previous_state = current_state;
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         }
     });
 }
 
+fn emit_playtime_update(app: &AppHandle, game_id: &str) {
+    let new_time = time::get_game_playtime(game_id);
+    let _ = app.emit(
+        "playtime-updated",
+        Payload {
+            game_id: game_id.to_string(),
+            new_time,
+        },
+    );
+
+    let total_time = time::get_total_playtime();
+    let _ = app.emit("total-playtime-updated", total_time);
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Payload {
+    game_id: String,
+    new_time: u64,
+}
 fn get_executable_names_to_check(game_id: &str) -> Vec<String> {
     let cfg = config::load_config();
     if let Some(game) = cfg

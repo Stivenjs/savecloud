@@ -1,53 +1,40 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { syncCheckUnsyncedGames, syncUploadGame } from "@services/tauri";
-import { useConfig } from "@hooks/useConfig";
-import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
+import { useConfig, CONFIG_QUERY_KEY } from "@hooks/useConfig";
+import { LAST_SYNC_QUERY_KEY } from "@hooks/useLastSyncInfo";
 import { toastSyncResult } from "@utils/toast";
 import { formatGameDisplayName } from "@utils/gameImage";
 
+const UNSYNCED_QUERY_KEY = ["unsynced-games"] as const;
+
 export function useUnsyncedSaves() {
+  const queryClient = useQueryClient();
   const { config } = useConfig();
-  const hasSyncConfig = !!(config?.apiBaseUrl?.trim() && config?.userId?.trim() && config?.apiKey?.trim());
 
-  const { refetch: refetchLastSync } = useLastSyncInfo(!!hasSyncConfig);
-  const [unsyncedGameIds, setUnsyncedGameIds] = useState<string[]>([]);
-  const [isChecking, setIsChecking] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const hasSyncConfig = useMemo(
+    () => !!(config?.apiBaseUrl?.trim() && config?.userId?.trim() && config?.apiKey?.trim()),
+    [config]
+  );
 
-  const check = useCallback(async () => {
-    if (!hasSyncConfig) return;
-    setIsChecking(true);
-    try {
-      const list = await syncCheckUnsyncedGames();
-      setUnsyncedGameIds(list.map((g) => g.gameId));
-    } catch {
-      setUnsyncedGameIds([]);
-    } finally {
-      setIsChecking(false);
-    }
-  }, [hasSyncConfig]);
+  const {
+    data: unsyncedList = [],
+    isLoading: isChecking,
+    refetch: refetchUnsynced,
+  } = useQuery({
+    queryKey: UNSYNCED_QUERY_KEY,
+    queryFn: syncCheckUnsyncedGames,
+    enabled: hasSyncConfig,
+    staleTime: 30 * 1000,
+  });
 
-  useEffect(() => {
-    check();
-  }, [check]);
+  const unsyncedGameIds = useMemo(() => unsyncedList.map((g) => g.gameId), [unsyncedList]);
 
-  useEffect(() => {
-    if (!hasSyncConfig) return;
-    const onVisible = () => {
-      check();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [hasSyncConfig, check]);
+  const { mutateAsync: uploadAll, isPending: isUploading } = useMutation({
+    mutationKey: ["upload-all-unsynced"],
+    mutationFn: async () => {
+      if (unsyncedGameIds.length === 0) return;
 
-  const closeModal = useCallback(() => {
-    setUnsyncedGameIds([]);
-  }, []);
-
-  const uploadAll = useCallback(async () => {
-    if (unsyncedGameIds.length === 0) return;
-    setIsUploading(true);
-    try {
       for (const gameId of unsyncedGameIds) {
         try {
           const result = await syncUploadGame(gameId);
@@ -63,12 +50,18 @@ export function useUnsyncedSaves() {
           );
         }
       }
-      setUnsyncedGameIds([]);
-      refetchLastSync?.();
-    } finally {
-      setIsUploading(false);
-    }
-  }, [unsyncedGameIds, refetchLastSync]);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: UNSYNCED_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: LAST_SYNC_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["game-stats"] });
+      queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+    },
+  });
+
+  const closeModal = useCallback(() => {
+    queryClient.setQueryData(UNSYNCED_QUERY_KEY, []);
+  }, [queryClient]);
 
   return {
     unsyncedGameIds,
@@ -77,6 +70,6 @@ export function useUnsyncedSaves() {
     showUnsyncedModal: unsyncedGameIds.length > 0,
     closeModal,
     uploadAll,
-    refetchUnsynced: check,
+    refetchUnsynced,
   };
 }
