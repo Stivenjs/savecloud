@@ -159,13 +159,19 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
               {stats && (
                 <>
                   <p className="w-full truncate text-center text-[10px] text-white font-medium">
-                    {formatBytes(stats.localSizeBytes)}
-                    {stats.localLastModified != null && <> · {formatRelativeDate(stats.localLastModified)}</>}
+                    <span className="text-white/60">Guardado:</span> {formatBytes(stats.localSizeBytes)}
                   </p>
+
+                  {stats.localLastModified != null && (
+                    <p className="w-full truncate text-center text-[10px] text-white font-medium">
+                      <span className="text-white/60">Última vez:</span> {formatRelativeDate(stats.localLastModified)}
+                    </p>
+                  )}
 
                   <div className="flex items-center gap-1 text-warning">
                     <Clock size={10} />
                     <span className="text-[10px] font-bold">{formatPlaytime(stats.playtimeSeconds)}</span>
+                    <span className="text-[10px] text-white/60">jugado</span>
                   </div>
                 </>
               )}
