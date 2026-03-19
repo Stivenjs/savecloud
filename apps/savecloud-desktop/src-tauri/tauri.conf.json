@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "SaveCloud",
-  "version": "1.8.8",
+  "version": "1.9.0",
   "identifier": "com.savecloud.app",
   "build": {
     "beforeDevCommand": "bun run dev",
@@ -19,7 +19,7 @@
         "width": 1280,
         "height": 720,
         "minWidth": 900,
-        "minHeight": 600,
+        "minHeight": 720,
         "resizable": true,
         "decorations": true,
         "transparent": false
@@ -32,6 +32,7 @@
     }
   },
   "bundle": {
+    "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
     "icon": [
@@ -40,27 +41,7 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ],
-    "macOS": {
-      "minimumSystemVersion": "11.0",
-      "hardenedRuntime": true,
-      "entitlements": "entitlements.plist"
-    },
-    "windows": {
-      "digestAlgorithm": "sha256",
-      "timestampUrl": "http://timestamp.digicert.com"
-    },
-    "linux": {
-      "deb": {
-        "depends": [
-          "libwebkit2gtk-4.1-0",
-          "libgtk-3-0"
-        ]
-      },
-      "appimage": {
-        "bundleMediaFramework": true
-      }
-    }
+    ]
   },
   "plugins": {
     "updater": {
