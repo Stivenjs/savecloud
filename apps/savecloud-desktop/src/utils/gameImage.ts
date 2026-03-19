@@ -6,22 +6,18 @@ const STEAM_CDN_BASE = "https://cdn.cloudflare.steamstatic.com/steam/apps";
  * Obtiene la URL de la imagen del juego.
  *
  * Prioridad:
- * 1. imageUrl (config)
+ * 1. imageUrl (config - imagen personalizada)
  * 2. steamAppId (config o resuelto dinámicamente)
  * 3. App ID extraído del id (ej. empress-re4-2050650 → 2050650)
  * 4. id numérico puro
- * 5. null → placeholder
+ * 5. null → fallback al frontend (Gamepad icon)
  */
 export function getGameImageUrl(game: ConfiguredGame, resolvedSteamAppId?: string | null): string | null {
   if (game.imageUrl?.trim()) {
     return game.imageUrl.trim();
   }
 
-  const appId =
-    game.steamAppId?.trim() ??
-    resolvedSteamAppId?.trim() ??
-    extractAppIdFromId(game.id) ??
-    (isSteamAppId(game.id) ? game.id : null);
+  const appId = getSteamAppId(game, resolvedSteamAppId);
 
   if (appId) {
     return `${STEAM_CDN_BASE}/${appId}/header.jpg`;
@@ -45,7 +41,7 @@ export function getSteamAppId(game: ConfiguredGame, resolvedSteamAppId?: string 
 
 /**
  * URL de imagen extra para hovercard (library hero de Steam).
- * Muchos juegos tienen esta imagen; si no existe devolverá 404.
+ * Igual que header.jpg, para juegos nuevos dará 404 si no se usa el hash obtenido por API.
  */
 export function getGameLibraryHeroUrl(game: ConfiguredGame, resolvedSteamAppId?: string | null): string | null {
   const appId = getSteamAppId(game, resolvedSteamAppId);
@@ -107,7 +103,7 @@ export function idToSearchQuery(id: string): string {
       break;
     }
   }
-  // Quitar sufijos como -crack, -repack, -x64
+
   cleaned = cleaned.replace(/-?(crack|repack|x64|x86|v[0-9.]+)$/i, "");
   return cleaned.replace(/-/g, " ").trim() || id.replace(/-/g, " ");
 }
@@ -118,9 +114,7 @@ export function idToSearchQuery(id: string): string {
  */
 export function formatGameDisplayName(id: string): string {
   let cleaned = idToSearchQuery(id);
-  // Quitar Steam App ID al final (ej. "resident evil 4 2050650" → "resident evil 4")
   cleaned = cleaned.replace(/\s+\d{4,10}$/, "");
-  // Title case: primera letra de cada palabra en mayúscula
   return cleaned
     .split(/\s+/)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())

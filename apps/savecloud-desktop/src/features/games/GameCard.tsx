@@ -1,16 +1,16 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { memo } from "react";
 import { Card, CardFooter, Skeleton, Tooltip } from "@heroui/react";
 import { GameCardHoverMotion } from "@features/games/GameCardHoverMotion";
 import { Gamepad2 } from "lucide-react";
-import { getSteamAppdetailsMedia } from "@services/tauri";
-import { formatGameDisplayName, getGameImageUrl, getGameLibraryHeroUrl, getSteamAppId } from "@utils/gameImage";
+import { formatGameDisplayName } from "@utils/gameImage";
 import { formatBytes, formatRelativeDate } from "@utils/format";
 import { GameCardHoverCard } from "@features/games/GameCardHoverCard";
 import { GameCardStatusBar } from "@features/games/GameCardStatusBar";
 import { GameCardSyncProgress } from "@features/games/GameCardSyncProgress";
 import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";
 import { GameCardActions } from "@features/games/GameCardActions";
+import { useGameMedia } from "@hooks/useGameMedia";
+
 import type { ConfiguredGame } from "@app-types/config";
 import type { GameStats } from "@services/tauri";
 import type { SyncProgressState } from "@contexts/SyncProgressContext";
@@ -60,7 +60,7 @@ export interface GameCardProps {
   mediaFromBatch?: boolean;
 }
 
-export function GameCard(props: GameCardProps) {
+export const GameCard = memo(function GameCard(props: GameCardProps) {
   const {
     game,
     stats,
@@ -74,30 +74,26 @@ export function GameCard(props: GameCardProps) {
     mediaFromBatch = false,
   } = props;
 
-  const [imgError, setImgError] = useState(false);
-  const [imgLoaded, setImgLoaded] = useState(false);
-
-  const imageUrl = getGameImageUrl(game, resolvedSteamAppId);
-  const extraImageUrl = getGameLibraryHeroUrl(game, resolvedSteamAppId);
-  const steamAppId = getSteamAppId(game, resolvedSteamAppId);
-
-  const { data: appdetailsMedia } = useQuery({
-    queryKey: ["steam-appdetails-media", steamAppId ?? ""],
-    queryFn: () => getSteamAppdetailsMedia(steamAppId!),
-    enabled: !!steamAppId && !mediaFromBatch,
-    staleTime: 5 * 60 * 1000,
+  const {
+    displayImageUrl,
+    mediaUrls,
+    videoUrl,
+    isEffectivelyLoading,
+    imgLoaded,
+    imgError,
+    handleImgLoad,
+    handleImgError,
+  } = useGameMedia({
+    game,
+    resolvedSteamAppId,
+    externalLoading,
+    mediaBySteamAppId,
+    mediaFromBatch,
   });
 
-  const mediaSource = (mediaBySteamAppId && steamAppId ? mediaBySteamAppId[steamAppId] : undefined) ?? appdetailsMedia;
-  const mediaUrls = useMemo(() => {
-    if (mediaSource?.mediaUrls?.length) return mediaSource.mediaUrls;
-    return [imageUrl, extraImageUrl].filter(Boolean) as string[];
-  }, [mediaSource?.mediaUrls, imageUrl, extraImageUrl]);
-
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
-  const isLoading = externalLoading ?? (imageUrl && !imgError && !imgLoaded);
 
-  if (isLoading) {
+  if (externalLoading) {
     return (
       <Card isFooterBlurred className="overflow-hidden border-none shadow-md" radius="lg">
         <Skeleton className="aspect-460/215 w-full rounded-t-large" />
@@ -109,7 +105,7 @@ export function GameCard(props: GameCardProps) {
   }
 
   return (
-    <GameCardHoverCard game={game} mediaUrls={mediaUrls} videoUrl={mediaSource?.videoUrl ?? null} stats={stats}>
+    <GameCardHoverCard game={game} mediaUrls={mediaUrls} videoUrl={videoUrl} stats={stats}>
       <GameCardHoverMotion>
         <Card className="group relative overflow-hidden border-none shadow-none" radius="lg">
           <GameCardActions {...props} isUploadTooLarge={isUploadTooLarge} />
@@ -117,18 +113,27 @@ export function GameCard(props: GameCardProps) {
           {syncProgress && syncProgress.total > 0 && <GameCardSyncProgress progress={syncProgress} />}
 
           <div className="relative aspect-460/215 w-full overflow-hidden rounded-t-large bg-default-100">
-            {imageUrl && !imgError ? (
+            {(isEffectivelyLoading || (displayImageUrl && !imgLoaded && !imgError)) && (
+              <Skeleton className="absolute inset-0 z-10 size-full" />
+            )}
+
+            {displayImageUrl && !imgError ? (
               <img
-                src={imageUrl}
+                key={displayImageUrl}
+                src={displayImageUrl}
                 alt={game.id}
-                className="size-full object-cover object-center"
-                onLoad={() => setImgLoaded(true)}
-                onError={() => setImgError(true)}
+                className={`size-full object-cover object-center transition-opacity duration-300 ${
+                  imgLoaded ? "opacity-100" : "opacity-0"
+                }`}
+                onLoad={handleImgLoad}
+                onError={handleImgError}
               />
             ) : (
-              <div className="flex size-full items-center justify-center">
-                <Gamepad2 size={48} className="text-default-400" strokeWidth={1.5} />
-              </div>
+              !isEffectivelyLoading && (
+                <div className="flex size-full items-center justify-center">
+                  <Gamepad2 size={48} className="text-default-400" strokeWidth={1.5} />
+                </div>
+              )
             )}
           </div>
 
@@ -168,4 +173,4 @@ export function GameCard(props: GameCardProps) {
       </GameCardHoverMotion>
     </GameCardHoverCard>
   );
-}
+});
