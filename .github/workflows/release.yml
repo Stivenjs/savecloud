@@ -127,6 +127,11 @@ jobs:
         with:
           targets: ${{ matrix.rustTargets || '' }}
 
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "apps/savecloud-desktop/src-tauri -> target"
+
       - name: Sync version from tag
         run: bun run scripts/sync-version.ts
         env:
@@ -175,7 +180,7 @@ jobs:
           find cli-windows -type f -exec cp {} release/ \;
           find cli-unix -type f -exec cp {} release/ \;
           for dir in desktop-*; do
-            [ -d "$dir" ] && find "$dir" -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.sig" -o -name "*.app.tar.gz" \) -exec cp {} release/ \;
+            [ -d "$dir" ] && find "$dir" -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.sig" -o -name "*.app.tar.gz" -o -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release/ \;
           done
 
       - name: Generate updater latest.json
