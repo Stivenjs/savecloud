@@ -245,7 +245,6 @@ export function useGamesPage() {
 
     const setupListeners = async () => {
       const onGlobalSyncEvent = () => {
-        console.log("Actividad en la nube detectada (Tauri). Refrescando UI...");
         handleRefresh();
       };
 
