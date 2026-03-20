@@ -1,6 +1,6 @@
 {
   "name": "savecloud",
-  "version": "1.9.0",
+  "version": "1.9.2",
   "private": true,
   "bin": {
     "savecloud": "./src/cli/index.ts"
