@@ -358,6 +358,21 @@ async fn download_one_file(
         }
     }
 
+    drop(writer);
+
+    if write_err.is_none() {
+        if let Ok(dt) = DateTime::parse_from_rfc3339(&save.last_modified)
+            .or_else(|_| DateTime::parse_from_rfc2822(&save.last_modified))
+        {
+            let unix_secs = dt.timestamp();
+            let unix_nanos = dt.timestamp_subsec_nanos();
+            let ft = filetime::FileTime::from_unix_time(unix_secs, unix_nanos);
+
+            // Forzamos al disco duro a ponerle la fecha de S3
+            let _ = filetime::set_file_mtime(&dest_path, ft);
+        }
+    }
+
     match write_err {
         Some(e) => Err(e),
         None => Ok(()),

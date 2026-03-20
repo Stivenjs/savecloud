@@ -96,16 +96,21 @@ export function GamesList({
   hasSyncConfig = false,
 }: GamesListProps) {
   const resolvedSteamAppIds = useResolvedSteamAppIds(games);
+  const isResolvingIds = useMemo(() => {
+    return games.some((game) => needsSteamSearch(game) && resolvedSteamAppIds[game.id] === undefined);
+  }, [games, resolvedSteamAppIds]);
+
   const steamAppIdsForBatch = useMemo(() => {
     const ids = games.map((g) => getSteamAppId(g, resolvedSteamAppIds[g.id])).filter((id): id is string => !!id);
-    return [...new Set(ids)];
+    return [...new Set(ids)].sort();
   }, [games, resolvedSteamAppIds]);
 
   const { data: mediaBySteamAppId } = useQuery({
-    queryKey: ["steam-appdetails-media-batch", [...steamAppIdsForBatch].sort().join(",")],
+    queryKey: ["steam-appdetails-media-batch", steamAppIdsForBatch.join(",")],
     queryFn: () => getSteamAppdetailsMediaBatch(steamAppIdsForBatch),
-    enabled: steamAppIdsForBatch.length > 0,
+    enabled: steamAppIdsForBatch.length > 0 && !isResolvingIds,
     staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const { statsByGameId } = useGameStats(games.length > 0);

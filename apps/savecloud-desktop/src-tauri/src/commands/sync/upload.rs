@@ -285,7 +285,11 @@ pub(crate) async fn sync_upload_game_impl(
         )
         .await
         {
-            Ok(()) => ok_count += 1,
+            Ok(()) => {
+                ok_count += 1;
+                let now = filetime::FileTime::from_system_time(std::time::SystemTime::now());
+                let _ = filetime::set_file_mtime(std::path::Path::new(&absolute), now);
+            }
             Err(e) => {
                 if e == multipart_upload::PAUSED_ERR_MSG {
                     let _ = app.emit(
@@ -378,6 +382,8 @@ pub(crate) async fn sync_upload_game_impl(
                 };
 
                 if put_res.status().is_success() {
+                    let now = filetime::FileTime::from_system_time(std::time::SystemTime::now());
+                    let _ = filetime::set_file_mtime(std::path::Path::new(&absolute), now);
                     Ok(())
                 } else {
                     let msg = format!("{}: S3 PUT {}", relative, put_res.status());

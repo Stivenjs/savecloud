@@ -45,6 +45,7 @@ rayon = "1"
 tar = "0.4"
 librqbit = "8.1.1"
 tauri-plugin-single-instance = "2.4.0"
+filetime = "0.2.27"
 
 
 [dev-dependencies]
