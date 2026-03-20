@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { isEnabled, enable, disable } from "@tauri-apps/plugin-autostart";
 import {
@@ -16,18 +16,15 @@ import {
   importFriendConfig,
 } from "@services/tauri";
 import { useConfig } from "@hooks/useConfig";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastError, toastSuccess } from "@utils/toast";
 import { notifyTest } from "@utils/notification";
 
 type SettingsPageState = {
-  autostart: boolean;
-  loading: boolean;
   testingNotification: boolean;
   exporting: boolean;
   importing: boolean;
   checkingUpdate: boolean;
-  configPath: string;
   createConfigModalOpen: boolean;
   pullFriendConfigModalOpen: boolean;
   pullFriendUserId: string;
@@ -43,13 +40,10 @@ type SettingsPageState = {
 };
 
 type SettingsPageAction =
-  | { type: "SET_AUTOSTART"; payload: boolean }
-  | { type: "SET_LOADING"; payload: boolean }
   | { type: "SET_TESTING_NOTIFICATION"; payload: boolean }
   | { type: "SET_EXPORTING"; payload: boolean }
   | { type: "SET_IMPORTING"; payload: boolean }
   | { type: "SET_CHECKING_UPDATE"; payload: boolean }
-  | { type: "SET_CONFIG_PATH"; payload: string }
   | {
       type: "SET_CREATE_MODAL";
       open: boolean;
@@ -76,13 +70,10 @@ type SettingsPageAction =
   | { type: "SET_RESTORE_CONFIRM_OPEN"; payload: boolean };
 
 const initialState: SettingsPageState = {
-  autostart: false,
-  loading: true,
   testingNotification: false,
   exporting: false,
   importing: false,
   checkingUpdate: false,
-  configPath: "",
   createConfigModalOpen: false,
   pullFriendConfigModalOpen: false,
   pullFriendUserId: "",
@@ -99,10 +90,6 @@ const initialState: SettingsPageState = {
 
 function settingsPageReducer(state: SettingsPageState, action: SettingsPageAction): SettingsPageState {
   switch (action.type) {
-    case "SET_AUTOSTART":
-      return { ...state, autostart: action.payload };
-    case "SET_LOADING":
-      return { ...state, loading: action.payload };
     case "SET_TESTING_NOTIFICATION":
       return { ...state, testingNotification: action.payload };
     case "SET_EXPORTING":
@@ -111,8 +98,6 @@ function settingsPageReducer(state: SettingsPageState, action: SettingsPageActio
       return { ...state, importing: action.payload };
     case "SET_CHECKING_UPDATE":
       return { ...state, checkingUpdate: action.payload };
-    case "SET_CONFIG_PATH":
-      return { ...state, configPath: action.payload };
     case "SET_PULL_FRIEND_MODAL":
       return { ...state, pullFriendConfigModalOpen: action.open };
     case "SET_PULL_FRIEND_USER_ID":
@@ -160,18 +145,33 @@ function settingsPageReducer(state: SettingsPageState, action: SettingsPageActio
 
 export function useSettingsPage() {
   const [state, dispatch] = useReducer(settingsPageReducer, initialState);
-  const { config, refetch: refetchConfig } = useConfig();
+  const { config, loading: loadingUseConfig, refetch: refetchConfig } = useConfig();
   const queryClient = useQueryClient();
 
-  useEffect(() => {
-    isEnabled()
-      .then((enabled) => dispatch({ type: "SET_AUTOSTART", payload: enabled }))
-      .finally(() => dispatch({ type: "SET_LOADING", payload: false }));
-  }, []);
+  const { data: autostart = false, isLoading: loadingAutostart } = useQuery({
+    queryKey: ["autostartStatus"],
+    queryFn: isEnabled,
+    staleTime: 1000 * 60 * 5,
+  });
 
-  useEffect(() => {
-    getConfigPath().then((path) => dispatch({ type: "SET_CONFIG_PATH", payload: path }));
-  }, []);
+  const { data: configPath = "", isLoading: loadingConfigPath } = useQuery({
+    queryKey: ["configPath"],
+    queryFn: getConfigPath,
+    staleTime: Infinity,
+  });
+
+  const { data: s3TransferEndpointType = null, isLoading: loadingS3 } = useQuery({
+    queryKey: ["s3TransferEndpointType", config?.apiBaseUrl, config?.userId],
+    queryFn: async () => {
+      try {
+        return await getS3TransferEndpointType();
+      } catch {
+        return "unknown";
+      }
+    },
+    enabled: !!config?.apiBaseUrl?.trim() && !!config?.userId?.trim(),
+    staleTime: 1000 * 60 * 5,
+  });
 
   useEffect(() => {
     if (state.createConfigModalOpen && config) {
@@ -266,12 +266,10 @@ export function useSettingsPage() {
     dispatch({ type: "SET_PULLING_FRIEND_CONFIG", payload: true });
     try {
       await importFriendConfig(state.pullFriendUserId);
-
       toastSuccess(
         "Configuración importada",
         `Se ha importado la configuración de ${state.pullFriendUserId} correctamente.`
       );
-
       setTimeout(() => {
         window.location.reload();
       }, 1500);
@@ -300,10 +298,10 @@ export function useSettingsPage() {
     try {
       const path = await createConfigFile(state.createApiBaseUrl, state.createApiKey, state.createUserId);
       dispatch({ type: "SET_CREATE_MODAL", open: false });
+
       refetchConfig?.();
       queryClient.invalidateQueries({ queryKey: ["config"] });
-      const newPath = await getConfigPath();
-      dispatch({ type: "SET_CONFIG_PATH", payload: newPath });
+      queryClient.invalidateQueries({ queryKey: ["configPath"] });
 
       if (restoreAfter) {
         toastSuccess("Conexión configurada", "Iniciando recuperación desde la nube...");
@@ -328,7 +326,7 @@ export function useSettingsPage() {
       } else {
         await disable();
       }
-      dispatch({ type: "SET_AUTOSTART", payload: checked });
+      queryClient.setQueryData(["autostartStatus"], checked);
     } catch (e) {
       console.error("Error al cambiar autostart:", e);
     }
@@ -371,22 +369,13 @@ export function useSettingsPage() {
     dispatch({ type: "SET_CREATE_MODAL", open: true });
   };
 
-  const [s3TransferEndpointType, setS3TransferEndpointType] = useState<"accelerated" | "standard" | "unknown" | null>(
-    null
-  );
-  useEffect(() => {
-    if (!config?.apiBaseUrl?.trim() || !config?.userId?.trim()) {
-      setS3TransferEndpointType(null);
-      return;
-    }
-    getS3TransferEndpointType()
-      .then(setS3TransferEndpointType)
-      .catch(() => setS3TransferEndpointType("unknown"));
-  }, [config?.apiBaseUrl, config?.userId]);
-
   return {
     ...state,
     config,
+    configPath,
+    autostart,
+    loading: loadingAutostart,
+    loadingConfigData: loadingConfigPath || loadingS3 || loadingUseConfig,
     s3TransferEndpointType,
     handleExportConfig,
     handleImportConfig,

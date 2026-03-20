@@ -1,4 +1,4 @@
-import { Button, Card, CardBody } from "@heroui/react";
+import { Button, Card, CardBody, Skeleton } from "@heroui/react";
 import { FileJson, Cloud, HardDrive, FolderOpen, Zap } from "lucide-react";
 
 interface ConfigSectionProps {
@@ -10,6 +10,8 @@ interface ConfigSectionProps {
   userId?: string | null;
   /** "accelerated" = S3 Transfer Acceleration activo; "standard" = endpoint estándar; "unknown" o null = no comprobado. */
   s3TransferEndpointType?: "accelerated" | "standard" | "unknown" | null;
+  /** Indica si la información principal aún se está cargando (útil para skeletons) */
+  isLoadingData?: boolean;
   onCreateConfig: () => void;
   onExport: () => void | Promise<void>;
   onImportMerge: () => void | Promise<void>;
@@ -27,6 +29,7 @@ export function ConfigSection({
   configPath,
   userId,
   s3TransferEndpointType,
+  isLoadingData = false,
   onCreateConfig,
   onExport,
   onImportMerge,
@@ -47,8 +50,11 @@ export function ConfigSection({
           respaldar o restaurar desde la nube.
         </p>
 
-        {s3TransferEndpointType != null && s3TransferEndpointType !== "unknown" ? (
-          <div className="flex items-center gap-2 rounded-lg border border-default-200 bg-default-50/50 px-3 py-2">
+        {/* Zona del Endpoint S3 */}
+        {isLoadingData ? (
+          <Skeleton className="h-10 w-full md:w-64 rounded-lg" />
+        ) : s3TransferEndpointType != null && s3TransferEndpointType !== "unknown" ? (
+          <div className="flex items-center gap-2 rounded-lg border border-default-200 bg-default-50/50 px-3 py-2 w-fit">
             <Zap size={18} className="text-warning" />
             <span className="text-sm text-default-700">
               Transferencia S3: <strong>{s3TransferEndpointType === "accelerated" ? "Acelerada" : "Estándar"}</strong>
@@ -56,30 +62,41 @@ export function ConfigSection({
           </div>
         ) : null}
 
-        {/* Ruta y User ID */}
-        {configPath ? (
-          <div className="space-y-3 rounded-lg border border-default-200 bg-default-50/50 p-4">
-            <div className="flex items-center gap-2">
-              <FolderOpen size={18} className="text-default-500" />
-              <span className="text-sm font-medium text-default-700">Ruta del archivo</span>
-            </div>
-            <p className="break-all font-mono text-xs text-default-600">{configPath}</p>
-            <p className="text-xs text-default-500">
-              La app solo lee <code className="rounded bg-default-200 px-1">config.json</code> desde esta carpeta. Si te
-              enviaron un JSON, usa &quot;Importar (reemplazar)&quot; más abajo.
-            </p>
-            {userId ? (
-              <div className="pt-2 border-t border-default-200">
-                <span className="text-xs font-medium text-default-500">Tu User ID: </span>
-                <span className="font-mono text-sm text-foreground">{userId}</span>
-                <p className="mt-1 text-xs text-default-500">
-                  Comparte este ID con amigos para que puedan ver tu perfil en la pestaña Amigos (o usa un link de
-                  compartir desde el juego).
-                </p>
-              </div>
-            ) : null}
+        {/* Zona de la Ruta del archivo y User ID */}
+        <div className="space-y-3 rounded-lg border border-default-200 bg-default-50/50 p-4">
+          <div className="flex items-center gap-2">
+            <FolderOpen size={18} className="text-default-500" />
+            <span className="text-sm font-medium text-default-700">Ruta del archivo</span>
           </div>
-        ) : null}
+
+          {isLoadingData ? (
+            <Skeleton className="h-4 w-full md:w-3/4 rounded-lg" />
+          ) : configPath ? (
+            <p className="break-all font-mono text-xs text-default-600">{configPath}</p>
+          ) : (
+            <p className="text-xs text-default-400 italic">Ruta no disponible.</p>
+          )}
+
+          <p className="text-xs text-default-500">
+            La app solo lee <code className="rounded bg-default-200 px-1">config.json</code> desde esta carpeta. Si te
+            enviaron un JSON, usa &quot;Importar (reemplazar)&quot; más abajo.
+          </p>
+
+          <div className="pt-2 border-t border-default-200">
+            <span className="text-xs font-medium text-default-500">Tu User ID: </span>
+            {isLoadingData ? (
+              <Skeleton className="h-4 w-32 inline-block ml-2 align-middle rounded-lg" />
+            ) : userId ? (
+              <span className="font-mono text-sm text-foreground ml-1">{userId}</span>
+            ) : (
+              <span className="text-xs text-default-400 italic ml-1">No configurado</span>
+            )}
+            <p className="mt-1 text-xs text-default-500">
+              Comparte este ID con amigos para que puedan ver tu perfil en la pestaña Amigos (o usa un link de compartir
+              desde el juego).
+            </p>
+          </div>
+        </div>
 
         {/* Configurar Conexión */}
         <div className="space-y-2">

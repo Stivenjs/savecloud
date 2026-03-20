@@ -6,3 +6,60 @@ body {
   margin: 0;
   font-family: "Plus Jakarta Sans", system-ui, sans-serif;
 }
+
+:root {
+  view-transition-name: none;
+}
+
+::view-transition-old(page-content),
+::view-transition-new(page-content) {
+  animation-duration: 300ms;
+  animation-fill-mode: both;
+  will-change: transform, opacity;
+}
+
+::view-transition-old(page-content) {
+  animation-name: fade-out, slide-out-left;
+  animation-timing-function: ease-in, cubic-bezier(0.4, 0, 1, 1);
+}
+
+::view-transition-new(page-content) {
+  animation-name: fade-in, slide-in-right;
+  animation-timing-function: ease-out, cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translate3d(16px, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes slide-out-left {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-16px, 0, 0);
+  }
+}

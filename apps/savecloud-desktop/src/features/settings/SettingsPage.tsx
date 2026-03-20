@@ -17,6 +17,7 @@ export function SettingsPage() {
   const {
     autostart,
     loading,
+    loadingConfigData,
     testingNotification,
     exporting,
     importing,
@@ -74,6 +75,7 @@ export function SettingsPage() {
         configPath={configPath}
         userId={config?.userId}
         s3TransferEndpointType={s3TransferEndpointType}
+        isLoadingData={loadingConfigData}
         onCreateConfig={openCreateConfigModal}
         onPullFriendConfig={() => setPullFriendConfigModalOpen(true)}
         onExport={handleExportConfig}
