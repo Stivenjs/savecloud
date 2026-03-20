@@ -15,8 +15,6 @@ Servidor de guardado en la nube para juegos (S3 + Lambda) y app de escritorio pa
 ![React](https://img.shields.io/badge/frontend-react-61dafb)
 ![Rust](https://img.shields.io/badge/backend-rust-orange)
 
-Servidor de guardado en la nube para juegos (S3 + Lambda) y app de escritorio para sincronizar guardados. Clean Architecture en backend y CLI.
-
 ---
 
 ## Vista de la aplicación
