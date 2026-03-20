@@ -14,83 +14,49 @@ env:
 jobs:
   build-cli-windows:
     runs-on: windows-latest
-    env:
-      DEFINE_API_URL: "process.env.SYNC_GAMES_API_URL='${{ secrets.SYNC_GAMES_API_URL }}'"
-      DEFINE_API_KEY: "process.env.SYNC_GAMES_API_KEY='${{ secrets.SYNC_GAMES_API_KEY }}'"
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-
-      - name: Sync version from tag
+          cache: true
+      - name: Sync version
         run: bun run scripts/sync-version.ts
         env:
           GITHUB_REF: ${{ github.ref }}
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build CLI (Windows x64)
+      - run: bun install --frozen-lockfile
+      - name: Build CLI
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          bun build src/cli/index.ts --compile --outfile dist/savecloud-windows-x64.exe --define $env:DEFINE_API_URL --define $env:DEFINE_API_KEY --minify --windows-icon assets/icon.ico
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+          bun build src/cli/index.ts --compile --outfile dist/savecloud-windows-x64.exe --define "process.env.SYNC_GAMES_API_URL='${{ secrets.SYNC_GAMES_API_URL }}'" --define "process.env.SYNC_GAMES_API_KEY='${{ secrets.SYNC_GAMES_API_KEY }}'" --minify --windows-icon assets/icon.ico
+      - uses: actions/upload-artifact@v4
         with:
           name: cli-windows
           path: dist/savecloud-windows-x64.exe
 
   build-cli-unix:
     runs-on: ubuntu-latest
-    env:
-      DEFINE_API_URL: "process.env.SYNC_GAMES_API_URL='${{ secrets.SYNC_GAMES_API_URL }}'"
-      DEFINE_API_KEY: "process.env.SYNC_GAMES_API_KEY='${{ secrets.SYNC_GAMES_API_KEY }}'"
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-
-      - name: Sync version from tag
+          cache: true
+      - name: Sync version
         run: bun run scripts/sync-version.ts
         env:
           GITHUB_REF: ${{ github.ref }}
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build CLI (Linux x64)
+      - run: bun install --frozen-lockfile
+      - name: Build CLI Multi-platform
         run: |
           mkdir -p dist
-          bun build src/cli/index.ts --compile --target=bun-linux-x64 --outfile dist/savecloud-linux-x64 \
-            --define "$DEFINE_API_URL" --define "$DEFINE_API_KEY" --minify
-
-      - name: Build CLI (macOS arm64)
-        run: |
-          bun build src/cli/index.ts --compile --target=bun-darwin-arm64 --outfile dist/savecloud-darwin-arm64 \
-            --define "$DEFINE_API_URL" --define "$DEFINE_API_KEY" --minify
-
-      - name: Build CLI (macOS x64)
-        run: |
-          bun build src/cli/index.ts --compile --target=bun-darwin-x64 --outfile dist/savecloud-darwin-x64 \
-            --define "$DEFINE_API_URL" --define "$DEFINE_API_KEY" --minify
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+          bun build src/cli/index.ts --compile --target=bun-linux-x64 --outfile dist/savecloud-linux-x64 --define "process.env.SYNC_GAMES_API_URL='${{ secrets.SYNC_GAMES_API_URL }}'" --define "process.env.SYNC_GAMES_API_KEY='${{ secrets.SYNC_GAMES_API_KEY }}'" --minify
+          bun build src/cli/index.ts --compile --target=bun-darwin-arm64 --outfile dist/savecloud-darwin-arm64 --define "process.env.SYNC_GAMES_API_URL='${{ secrets.SYNC_GAMES_API_URL }}'" --define "process.env.SYNC_GAMES_API_KEY='${{ secrets.SYNC_GAMES_API_KEY }}'" --minify
+          bun build src/cli/index.ts --compile --target=bun-darwin-x64 --outfile dist/savecloud-darwin-x64 --define "process.env.SYNC_GAMES_API_URL='${{ secrets.SYNC_GAMES_API_URL }}'" --define "process.env.SYNC_GAMES_API_KEY='${{ secrets.SYNC_GAMES_API_KEY }}'" --minify
+      - uses: actions/upload-artifact@v4
         with:
           name: cli-unix
-          path: |
-            dist/savecloud-linux-x64
-            dist/savecloud-darwin-arm64
-            dist/savecloud-darwin-x64
+          path: dist/savecloud-*
 
   build-desktop:
     strategy:
@@ -114,16 +80,19 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+          cache: true
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies (Ubuntu)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev build-essential curl wget file libxdo-dev libssl-dev
+
+      - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rustTargets || '' }}
 
@@ -132,19 +101,14 @@ jobs:
         with:
           workspaces: "apps/savecloud-desktop/src-tauri"
           add-job-id-key: false
+          save-if: false
 
-      - name: Sync version from tag
+      - name: Sync version
         run: bun run scripts/sync-version.ts
         env:
           GITHUB_REF: ${{ github.ref }}
 
-      - name: Install dependencies (Ubuntu)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev build-essential curl wget file libxdo-dev libssl-dev
-
-      - name: Install dependencies
+      - name: Install Bun dependencies
         run: bun install --frozen-lockfile
         working-directory: apps/savecloud-desktop
 
@@ -164,25 +128,18 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
 
       - name: Consolidate release files
         run: |
           mkdir -p release
-          find cli-windows -type f -exec cp {} release/ \;
-          find cli-unix -type f -exec cp {} release/ \;
-          for dir in desktop-*; do
-            [ -d "$dir" ] && find "$dir" -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.sig" -o -name "*.app.tar.gz" -o -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release/ \;
-          done
+          find . -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.sig" -o -name "*.app.tar.gz" -o -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release/ \;
+          ls -R release/
 
       - name: Generate updater latest.json
         run: bun run scripts/generate-updater-json.ts
