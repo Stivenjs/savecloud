@@ -1,0 +1,27 @@
+name: Cache Seed
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/savecloud-desktop/src-tauri/**"
+      - "**/Cargo.lock"
+
+jobs:
+  seed-rust-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "apps/savecloud-desktop/src-tauri"
+
+      - name: Fetch dependencies
+        run: cargo fetch
+        working-directory: apps/savecloud-desktop/src-tauri

@@ -130,7 +130,8 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "apps/savecloud-desktop/src-tauri -> target"
+          workspaces: "apps/savecloud-desktop/src-tauri"
+          add-job-id-key: false
 
       - name: Sync version from tag
         run: bun run scripts/sync-version.ts
