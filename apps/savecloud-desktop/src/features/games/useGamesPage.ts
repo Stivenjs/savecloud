@@ -270,6 +270,9 @@ export function useGamesPage() {
         await addGame(idToUse, path);
       }
       scheduleConfigBackupToCloud();
+
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
       queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
       refetch?.();
       dispatch({ type: "SET_SCAN_MODAL", open: false });
@@ -300,6 +303,9 @@ export function useGamesPage() {
       }
       await removeGame(gameId);
       scheduleConfigBackupToCloud();
+
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
       queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
       refetch?.();
       dispatch({ type: "SET_GAME_TO_REMOVE", game: null });
@@ -332,6 +338,10 @@ export function useGamesPage() {
       notifyFullBackupError(formatGameDisplayName(game.id), msg).catch(() => {});
     } finally {
       dispatch({ type: "SET_FULL_BACKUP_UPLOADING", gameId: null });
+
+      refetch?.();
+      queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
     }
   };
 
@@ -369,6 +379,9 @@ export function useGamesPage() {
         refetchLastSync?.();
         queryClient.invalidateQueries({ queryKey: ["game-stats"] });
         queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
+
+        refetch?.();
+        queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
       }
     } else {
       dispatch({ type: "SET_DOWNLOADING", value: game.id });
@@ -413,6 +426,9 @@ export function useGamesPage() {
       refetchLastSync?.();
       queryClient.invalidateQueries({ queryKey: ["game-stats"] });
       queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
+
+      refetch?.();
+      queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
     }
   };
 
@@ -497,6 +513,9 @@ export function useGamesPage() {
       refetchLastSync?.();
       queryClient.invalidateQueries({ queryKey: ["game-stats"] });
       queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
+
+      refetch?.();
+      queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
     }
   };
 
@@ -560,6 +579,9 @@ export function useGamesPage() {
       refetchLastSync?.();
       queryClient.invalidateQueries({ queryKey: ["game-stats"] });
       queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
+
+      refetch?.();
+      queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
     }
   };
 

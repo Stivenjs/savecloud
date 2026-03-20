@@ -106,7 +106,7 @@ export function GamesStats({
           </CardBody>
         </Card>
 
-        {/* CARD: Tiempo Total (AÑADIDA) */}
+        {/* CARD: Tiempo Total  */}
         <Card className="border border-default-200 shadow-sm">
           <CardBody className="flex flex-row items-center gap-4 py-5">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-warning/10">
