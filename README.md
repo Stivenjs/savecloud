@@ -1,5 +1,3 @@
-# SaveCloud
-
 <h1>
   <img src="/assets/icon.ico" width="40" style="vertical-align: middle; margin-right: 10px;" />
   SaveCloud
