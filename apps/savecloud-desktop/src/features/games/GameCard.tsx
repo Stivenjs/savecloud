@@ -120,6 +120,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
               <img
                 key={displayImageUrl}
                 src={displayImageUrl}
+                loading="lazy"
                 alt={game.id}
                 className={`size-full object-cover object-center transition-opacity duration-300 ${
                   imgLoaded ? "opacity-100" : "opacity-0"
