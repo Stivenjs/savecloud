@@ -4552,7 +4552,7 @@ dependencies = [
 
 [[package]]
 name = "savecloud-desktop"
-version = "1.9.2"
+version = "1.10.1"
 dependencies = [
  "base64 0.22.1",
  "bytes",

@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 /**
  * Genera latest.json para el updater de Tauri a partir de los artifacts descargados en CI.
- * Solo debe ejecutarse en la GitHub Action de release, después de descargar los artifacts.
  *
  * Uso:
  * VERSION=0.1.7 GITHUB_REPOSITORY=Stivenjs/savecloud bun run scripts/generate-updater-json.ts
@@ -12,6 +11,7 @@ import { mkdir } from "fs/promises";
 import { Glob } from "bun";
 
 const raw = process.env.VERSION || process.env.GITHUB_REF?.replace(/^refs\/tags\/v?/, "") || "0.0.0";
+
 const VERSION = raw.replace(/^v/, "");
 const REPO = process.env.GITHUB_REPOSITORY || "Stivenjs/savecloud";
 const BASE_URL = `https://github.com/${REPO}/releases/download/v${VERSION}`;
@@ -51,10 +51,27 @@ if (!Object.keys(platforms).length) {
 }
 
 let notes = process.env.RELEASE_NOTES?.trim() ?? "";
-const notesFile = Bun.file(resolve(cwd, "RELEASE_NOTES.md"));
 
-if (!notes && (await notesFile.exists())) {
-  notes = (await notesFile.text()).trim();
+if (!notes) {
+  const notesGlob = new Glob("**/RELEASE_NOTES.md");
+
+  let notesPath: string | null = null;
+
+  for (const match of notesGlob.scanSync({ cwd, absolute: true })) {
+    if (match.includes("savecloud-desktop")) {
+      notesPath = match;
+      break;
+    }
+  }
+
+  if (notesPath) {
+    const notesFile = Bun.file(notesPath);
+    if (await notesFile.exists()) {
+      notes = (await notesFile.text()).trim();
+    }
+  } else {
+    console.warn("No se encontró RELEASE_NOTES.md en el repositorio");
+  }
 }
 
 const outputPath = resolve(cwd, "release/latest.json");
@@ -62,7 +79,16 @@ await mkdir(resolve(cwd, "release"), { recursive: true });
 
 await Bun.write(
   outputPath,
-  JSON.stringify({ version: VERSION, notes, pub_date: new Date().toISOString(), platforms }, null, 2)
+  JSON.stringify(
+    {
+      version: VERSION,
+      notes,
+      pub_date: new Date().toISOString(),
+      platforms,
+    },
+    null,
+    2
+  )
 );
 
 console.log("latest.json generado:", outputPath);
