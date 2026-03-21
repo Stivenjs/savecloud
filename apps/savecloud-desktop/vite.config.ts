@@ -40,11 +40,18 @@ export default defineConfig(() => ({
   build: {
     // Tauri uses Chromium on Windows and WebKit on macOS and Linux
     target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome105" : "safari13",
-
     minify: (!process.env.TAURI_ENV_DEBUG ? "esbuild" : false) as "esbuild" | false,
-
-    // produce sourcemaps for debug builds
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
+
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "react-router-dom"],
+          "vendor-ui": ["@heroui/react", "lucide-react", "framer-motion"],
+          "vendor-utils": ["gsap", "@tanstack/react-query", "hls.js", "three"],
+        },
+      },
+    },
   },
 
   server: {

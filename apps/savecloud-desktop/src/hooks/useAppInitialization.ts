@@ -4,6 +4,7 @@ import { backupConfigToCloud, checkForUpdatesWithPrompt } from "@services/tauri"
 import { toastSyncResult } from "@utils/toast";
 import { notifySyncComplete, notifySyncError } from "@utils/notification";
 import { formatGameDisplayName } from "@utils/gameImage";
+import { useInputManager } from "@features/input/useInputManager";
 
 /**
  * Hook encargado de inicializar comportamientos globales de la aplicación.
@@ -30,6 +31,7 @@ import { formatGameDisplayName } from "@utils/gameImage";
  * ```
  */
 export function useAppInitialization() {
+  useInputManager();
   /**
    * Respaldos periódicos de configuración del usuario.
    *

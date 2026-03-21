@@ -24,8 +24,10 @@ import { countGamesOverSizeThreshold } from "@utils/packageRecommendation";
 import { createShareLink } from "@services/share.service";
 import { UserBadge } from "@features/games/UserBadge";
 import { toastError, toastSuccess } from "@utils/toast";
+import { useNavigationStore } from "@features/input/store";
 
 export function GamesPage() {
+  const { pushLayer, popLayer } = useNavigationStore();
   const {
     config,
     loading,
@@ -159,7 +161,10 @@ export function GamesPage() {
             gamesCount={config?.games?.length ?? 0}
             syncing={syncing}
             downloading={downloading}
-            onScanPress={() => setScanModalOpen(true)}
+            onScanPress={() => {
+              pushLayer("scan-modal", "scan-search-input");
+              setScanModalOpen(true);
+            }}
             onAddPress={() => {
               setAddModalInitial({ path: "", suggestedId: "" });
               setAddModalOpen(true);
@@ -199,6 +204,7 @@ export function GamesPage() {
         onClose={() => {
           setConfigureFromCloudGameId(null);
           setScanModalOpen(false);
+          popLayer();
         }}
         onSelectCandidate={handleScanSelect}
       />

@@ -1,3 +1,4 @@
+export type InputMode = "gamepad" | "mouse";
 export type SemanticAction =
   | "navigate_up"
   | "navigate_down"
@@ -7,34 +8,14 @@ export type SemanticAction =
   | "back"
   | "menu";
 
-export interface ControllerEvent {
-  action: SemanticAction;
-  player: number;
-}
-
-export interface NodeNeighbors {
-  up?: string;
-  down?: string;
-  left?: string;
-  right?: string;
-}
-
 export interface FocusNode {
   id: string;
-  ref: React.RefObject<HTMLElement | null>;
-  scope?: string; // Para agrupar navegación (ej. 'sidebar', 'library_grid')
-  neighbors?: NodeNeighbors;
-  onSelect?: () => void;
-  onFocus?: () => void;
+  getElement: () => HTMLElement | null;
+  onPress?: () => void;
 }
 
-export interface NavigationContextProps {
-  activeId: string | null;
-  activeScope: string;
-  registerNode: (node: FocusNode) => void;
-  unregisterNode: (id: string) => void;
-  isFocusVisible: boolean;
-  setActiveId: (id: string) => void;
-  setScope: (scope: string) => void;
-  handleAction: (action: SemanticAction) => void;
+export interface Layer {
+  id: string;
+  nodes: Map<string, FocusNode>;
+  previousFocusId: string | null;
 }
