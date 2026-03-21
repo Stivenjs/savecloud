@@ -6,6 +6,29 @@ import { HeroUIProvider, ToastProvider } from "@heroui/react";
 import App from "./App";
 import "./index.css";
 
+window.addEventListener("error", (e) => {
+  const message = e.error?.stack || e.message || "Unknown error";
+  console.error("Global error:", message);
+
+  document.body.innerHTML = `
+    <pre style="color:red; padding:20px; white-space:pre-wrap;">
+${message}
+    </pre>
+  `;
+});
+
+window.addEventListener("unhandledrejection", (e) => {
+  const message = (e.reason && (e.reason.stack || e.reason.message)) || JSON.stringify(e.reason);
+
+  console.error("Unhandled promise rejection:", message);
+
+  document.body.innerHTML = `
+    <pre style="color:red; padding:20px; white-space:pre-wrap;">
+${message}
+    </pre>
+  `;
+});
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
