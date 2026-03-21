@@ -128,7 +128,7 @@ export function useAppInitialization() {
    * - Abrir inspector (Ctrl+Shift+C)
    * - Abrir menú contextual (click derecho)
    */
-  useEffect(() => {
+  /*useEffect(() => {
     if (import.meta.env.DEV) return;
 
     const blockKeys = (e: KeyboardEvent) => {
@@ -157,5 +157,5 @@ export function useAppInitialization() {
       window.removeEventListener("keydown", blockKeys);
       window.removeEventListener("contextmenu", blockContextMenu);
     };
-  }, []);
+  }, []);*/
 }
