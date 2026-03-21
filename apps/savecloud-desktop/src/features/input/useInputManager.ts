@@ -7,7 +7,7 @@ const NAVIGATION_THROTTLE_MS = 120;
 
 export function useInputManager() {
   const { setInputMode, navigate, confirm, popLayer } = useNavigationStore();
-  const mouseTimeout = useRef<NodeJS.Timeout | null>(null);
+  const mouseTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastGamepadInput = useRef<number>(0);
   const lastKeyInput = useRef<number>(0);
 
