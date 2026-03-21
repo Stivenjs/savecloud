@@ -9,8 +9,8 @@ const ReactCompilerConfig = {
   target: "19" as const,
 };
 
+// https://vite.dev/config/
 export default defineConfig(() => ({
-  base: "./",
   plugins: [
     react({
       babel: {
@@ -18,7 +18,7 @@ export default defineConfig(() => ({
       },
     }),
     tailwindcss(),
-  ],
+  ].flat(),
 
   resolve: {
     alias: {
@@ -33,13 +33,11 @@ export default defineConfig(() => ({
     },
   },
 
+  // Vite options tailored for Tauri development
   clearScreen: false,
 
-  optimizeDeps: {
-    include: ["react", "react-dom", "react-router-dom", "zustand", "three", "hls.js"],
-  },
-
   build: {
+    // Tauri uses Chromium on Windows and WebKit on macOS and Linux
     target: process.env.TAURI_ENV_PLATFORM === "windows" ? "chrome105" : "safari13",
     minify: (!process.env.TAURI_ENV_DEBUG ? "esbuild" : false) as "esbuild" | false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
@@ -47,11 +45,9 @@ export default defineConfig(() => ({
     rollupOptions: {
       output: {
         manualChunks: {
-          "vendor-core": ["react", "react-dom", "react-router-dom", "zustand", "@tanstack/react-query"],
+          "vendor-react": ["react", "react-dom", "react-router-dom"],
           "vendor-ui": ["@heroui/react", "lucide-react", "framer-motion"],
-          "vendor-3d": ["three"],
-          "vendor-video": ["hls.js"],
-          "vendor-anim": ["gsap"],
+          "vendor-utils": ["gsap", "@tanstack/react-query", "hls.js", "three"],
         },
       },
     },
