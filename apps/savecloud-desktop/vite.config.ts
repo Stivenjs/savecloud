@@ -48,7 +48,7 @@ export default defineConfig(() => ({
         manualChunks: {
           "vendor-react": ["react", "react-dom", "react-router-dom"],
           "vendor-ui": ["@heroui/react", "lucide-react", "framer-motion"],
-          "vendor-utils": ["gsap", "@tanstack/react-query", "hls.js"],
+          "vendor-utils": ["gsap", "@tanstack/react-query", "hls.js", "three"],
         },
       },
     },

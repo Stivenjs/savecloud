@@ -32,12 +32,14 @@
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.13.1",
-    "tailwindcss": "^4.2.1"
+    "tailwindcss": "^4.2.1",
+    "three": "^0.183.2"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "@types/three": "^0.183.1",
     "@vitejs/plugin-react": "^4.6.0",
     "babel-plugin-react-compiler": "^19.1.0-rc.3",
     "eslint-plugin-react-hooks": "^6.0.0-rc.1",
