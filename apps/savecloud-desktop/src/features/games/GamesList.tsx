@@ -166,11 +166,14 @@ export function GamesList({
       </Card>
     );
   }
-
+  const stableListKey = useMemo(
+    () => [animationKey ?? "", games.map((g) => g.id).join(",")].join("|"),
+    [animationKey, games.map((g) => g.id).join(",")]
+  );
   return (
     <GamesListMotionContainer
       className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5"
-      listKey={[animationKey ?? "", games.map((g) => g.id).join(",")].join("|")}>
+      listKey={stableListKey}>
       {games.map((game) => (
         <GamesListMotionItem key={game.id}>
           <GameCard
