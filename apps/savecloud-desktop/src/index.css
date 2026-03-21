@@ -1,6 +1,4 @@
 @import "tailwindcss";
-
-/* Cargar config con plugin HeroUI y content (GitHub #5733) */
 @config "../tailwind.config.js";
 
 @layer utilities {
