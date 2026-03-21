@@ -39,21 +39,8 @@ export function findNextNode(
     if (!isInCone) continue;
 
     const euclideanDist = Math.sqrt(dx * dx + dy * dy);
-    let mainAxisDist: number;
-    let crossAxisDist: number;
 
-    switch (direction) {
-      case "RIGHT":
-      case "LEFT":
-        mainAxisDist = Math.abs(dx);
-        crossAxisDist = Math.abs(dy);
-        break;
-      case "DOWN":
-      case "UP":
-        mainAxisDist = Math.abs(dy);
-        crossAxisDist = Math.abs(dx);
-        break;
-    }
+    const crossAxisDist = direction === "RIGHT" || direction === "LEFT" ? Math.abs(dy) : Math.abs(dx);
 
     const alignmentPenalty = crossAxisDist / (euclideanDist || 1);
     const score = euclideanDist * (1 + alignmentPenalty * 2);
