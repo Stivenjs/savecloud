@@ -34,22 +34,28 @@ export function GameCardHoverMotion({ children, className = "rounded-2xl" }: Gam
     };
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+  const isUpdatingRef = useRef(false);
 
-    rafRef.current = requestAnimationFrame(() => {
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isUpdatingRef.current) return;
+
+    isUpdatingRef.current = true;
+
+    requestAnimationFrame(() => {
       const rect = rectRef.current;
-      if (!rect) return;
+      if (!rect) {
+        isUpdatingRef.current = false;
+        return;
+      }
 
       const { left, top, width, height } = rect;
       const x = e.clientX - left - width / 2;
       const y = e.clientY - top - height / 2;
 
-      const rotateYValue = (x / width) * TILT_MAX;
-      const rotateXValue = (y / height) * -TILT_MAX;
+      rotateY.set((x / width) * TILT_MAX);
+      rotateX.set((y / height) * -TILT_MAX);
 
-      rotateY.set(rotateYValue);
-      rotateX.set(rotateXValue);
+      isUpdatingRef.current = false;
     });
   };
 

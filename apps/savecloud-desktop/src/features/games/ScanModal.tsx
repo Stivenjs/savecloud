@@ -124,7 +124,12 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
   });
 
   return (
-    <Modal isOpen={isOpen} onOpenChange={(open) => !open && onClose()} size="2xl" autoFocus={false}>
+    <Modal
+      isOpen={isOpen}
+      onOpenChange={(open) => !open && onClose()}
+      size="2xl"
+      autoFocus={false}
+      scrollBehavior="inside">
       <ModalContent>
         <ModalHeader className="flex items-center gap-2">
           <FolderOpen size={22} />

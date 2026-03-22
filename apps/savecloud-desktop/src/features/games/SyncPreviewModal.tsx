@@ -51,7 +51,7 @@ export function SyncPreviewModal({
   const isUploadBlocked = type === "upload" && fileCount > 0 && isGameTooLargeForSync(fileCount, totalBytes);
 
   return (
-    <Modal isOpen={isOpen} onOpenChange={(o) => !o && onClose()} size="lg">
+    <Modal isOpen={isOpen} onOpenChange={(o) => !o && onClose()} size="lg" scrollBehavior="inside">
       <ModalContent>
         <ModalHeader className="flex items-center gap-2">
           {type === "upload" ? (

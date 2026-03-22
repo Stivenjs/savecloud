@@ -13,6 +13,8 @@ const HOVER_OPEN_DELAY_MS = 400;
 const HOVER_CLOSE_DELAY_MS = 150;
 const CAROUSEL_INTERVAL_MS = 3500;
 
+const VIDEO_INIT_DELAY_MS = 700;
+
 /** Transición del carrusel: slide + fade (easeIn en exit, easeOut en enter = easeInOut global). */
 const slideVariants = {
   enter: {
@@ -67,12 +69,18 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl }: GameCardHov
   const [currentImageLoaded, setCurrentImageLoaded] = useState(false);
   const [nextImageReady, setNextImageReady] = useState(false);
   const [failedUrls, setFailedUrls] = useState<Set<string>>(new Set());
+
   const hoverOpenRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nextSlideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const videoInitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const pendingAdvanceRef = useRef(false);
   const preloadImgRef = useRef<HTMLImageElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const isHoveringRef = useRef(false);
 
   const hlsRef = useRef<HlsType | null>(null);
 
@@ -85,6 +93,18 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl }: GameCardHov
   const currentUrl = validUrls[safeIndex];
   const nextUrl = hasCarousel ? validUrls[(safeIndex + 1) % validUrls.length] : null;
 
+  /** Destruye la instancia HLS activa de forma segura y limpia la referencia. */
+  const destroyHls = useCallback(() => {
+    hlsRef.current?.destroy();
+    hlsRef.current = null;
+  }, []);
+
+  /** Pausa el video y destruye HLS. Evita llamar play() en un elemento desmontado. */
+  const stopVideo = useCallback(() => {
+    videoRef.current?.pause();
+    destroyHls();
+  }, [destroyHls]);
+
   useEffect(() => {
     setCurrentImageLoaded(false);
     setNextImageReady(false);
@@ -96,11 +116,15 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl }: GameCardHov
     } else {
       setIsVideoMode(false);
       setIsMuted(true);
-      videoRef.current?.pause();
-      hlsRef.current?.destroy();
-      hlsRef.current = null;
+
+      stopVideo();
+
+      if (videoInitTimeoutRef.current) {
+        clearTimeout(videoInitTimeoutRef.current);
+        videoInitTimeoutRef.current = null;
+      }
     }
-  }, [showHovercard]);
+  }, [showHovercard, stopVideo]);
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = isMuted;
@@ -108,74 +132,91 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl }: GameCardHov
 
   useEffect(() => {
     if (!isVideoMode || !hasVideo || !videoUrl || !useHls) return;
+
     const videoEl = videoRef.current;
     if (!videoEl) return;
 
     let isMounted = true;
 
-    const initVideo = async () => {
+    videoInitTimeoutRef.current = setTimeout(async () => {
+      if (!isMounted) return;
+
       const Hls = (await import("hls.js")).default;
 
       if (!isMounted) return;
 
       if (Hls.isSupported()) {
+        hlsRef.current?.destroy();
+
         const hls = new Hls();
         hlsRef.current = hls;
+
         hls.loadSource(videoUrl);
         hls.attachMedia(videoEl);
+
         hls.on(Hls.Events.ERROR, (_, data) => {
           if (data.fatal) hls.destroy();
         });
       } else if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
         videoEl.src = videoUrl;
       }
-    };
-
-    initVideo();
+    }, VIDEO_INIT_DELAY_MS);
 
     return () => {
       isMounted = false;
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
+
+      if (videoInitTimeoutRef.current) {
+        clearTimeout(videoInitTimeoutRef.current);
+        videoInitTimeoutRef.current = null;
       }
+
+      destroyHls();
     };
-  }, [isVideoMode, hasVideo, videoUrl, useHls]);
+  }, [isVideoMode, hasVideo, videoUrl, useHls, destroyHls]);
 
   useEffect(() => {
-    if (!showHovercard || !nextUrl) return;
+    if (!showHovercard || !nextUrl || isVideoMode) return;
+
     setNextImageReady(false);
+
     const img = new Image();
     preloadImgRef.current = img;
+
     img.onload = () => {
       if (preloadImgRef.current !== img) return;
+
       setNextImageReady(true);
+
       if (pendingAdvanceRef.current) {
         pendingAdvanceRef.current = false;
         setCurrentIndex((i) => (i + 1) % validUrls.length);
       }
     };
+
     img.onerror = () => {
       if (preloadImgRef.current !== img) return;
       setNextImageReady(true);
     };
+
     img.src = nextUrl;
+
     return () => {
       preloadImgRef.current = null;
       img.src = "";
     };
-  }, [showHovercard, nextUrl, validUrls.length]);
+  }, [showHovercard, nextUrl, validUrls.length, isVideoMode]);
 
   useEffect(() => {
     if (!showHovercard || !hasCarousel || !currentImageLoaded || isVideoMode) return;
+
     nextSlideTimeoutRef.current = setTimeout(() => {
-      nextSlideTimeoutRef.current = null;
       if (nextImageReady) {
         setCurrentIndex((i) => (i + 1) % validUrls.length);
       } else {
         pendingAdvanceRef.current = true;
       }
     }, CAROUSEL_INTERVAL_MS);
+
     return () => {
       if (nextSlideTimeoutRef.current) {
         clearTimeout(nextSlideTimeoutRef.current);
@@ -186,38 +227,49 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl }: GameCardHov
 
   const toggleVideoMode = useCallback(() => {
     if (isVideoMode) {
-      videoRef.current?.pause();
-      hlsRef.current?.destroy();
-      hlsRef.current = null;
+      stopVideo();
       setIsVideoMode(false);
     } else {
       setIsVideoMode(true);
-      setTimeout(() => videoRef.current?.play(), 150);
+
+      requestAnimationFrame(() => {
+        videoRef.current?.play();
+      });
     }
-  }, [isVideoMode]);
+  }, [isVideoMode, stopVideo]);
 
   const reportImageError = useCallback((url: string) => {
     setFailedUrls((prev) => new Set(prev).add(url));
   }, []);
 
   const openHovercard = useCallback(() => {
+    isHoveringRef.current = true;
+
     if (hoverCloseRef.current) {
       clearTimeout(hoverCloseRef.current);
       hoverCloseRef.current = null;
     }
+
     if (hoverOpenRef.current) return;
+
     hoverOpenRef.current = setTimeout(() => {
+      if (!isHoveringRef.current) return;
+
       hoverOpenRef.current = null;
       setShowHovercard(true);
     }, HOVER_OPEN_DELAY_MS);
   }, []);
 
   const closeHovercard = useCallback(() => {
+    isHoveringRef.current = false;
+
     if (hoverOpenRef.current) {
       clearTimeout(hoverOpenRef.current);
       hoverOpenRef.current = null;
     }
+
     if (hoverCloseRef.current) return;
+
     hoverCloseRef.current = setTimeout(() => {
       hoverCloseRef.current = null;
       setShowHovercard(false);
@@ -239,6 +291,7 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl }: GameCardHov
             {children}
           </div>
         </PopoverTrigger>
+
         <PopoverContent
           onMouseEnter={openHovercard}
           onMouseLeave={closeHovercard}
@@ -276,6 +329,7 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl }: GameCardHov
             ) : (
               <div className="absolute inset-0 bg-default-200" />
             )}
+
             {hasVideo && (
               <div className="absolute right-1.5 top-1.5 z-10 flex gap-1">
                 {isVideoMode && (
@@ -289,6 +343,7 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl }: GameCardHov
                       onPress={() => setShowVideoModal(true)}>
                       <Maximize2 size={16} strokeWidth={2} />
                     </Button>
+
                     <Button
                       isIconOnly
                       size="sm"
@@ -300,6 +355,7 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl }: GameCardHov
                     </Button>
                   </>
                 )}
+
                 <Button
                   isIconOnly
                   size="sm"
@@ -314,6 +370,7 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl }: GameCardHov
           </motion.div>
         </PopoverContent>
       </Popover>
+
       {hasVideo && videoUrl && (
         <GameVideoModal isOpen={showVideoModal} onClose={() => setShowVideoModal(false)} videoUrl={videoUrl} />
       )}

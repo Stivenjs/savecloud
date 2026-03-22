@@ -46,7 +46,7 @@ export function UnsyncedSavesModal({
   const hasPerGameActions = typeof onUploadGame === "function" && typeof onFullBackupGame === "function";
 
   return (
-    <Modal isOpen={isOpen} onOpenChange={(open) => !open && onClose()} size="lg">
+    <Modal isOpen={isOpen} onOpenChange={(open) => !open && onClose()} size="lg" scrollBehavior="inside">
       <ModalContent>
         <ModalHeader className="flex gap-2">
           <CloudUpload size={22} />
