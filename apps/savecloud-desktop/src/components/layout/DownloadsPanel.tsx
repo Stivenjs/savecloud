@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button, Progress } from "@heroui/react";
-import { ChevronDown, ChevronUp, Download } from "lucide-react";
+import { Ban, Check, ChevronDown, ChevronUp, Download, Pause, X } from "lucide-react";
 import { useSyncStore } from "@store/SyncStore";
 import { useTorrentStore } from "@store/TorrentStore";
 import { formatGameDisplayName } from "@utils/gameImage";
@@ -10,6 +10,9 @@ type DownloadRow = {
   label: string;
   subtitle: string;
   value: number;
+  source: "sync" | "torrent";
+  canPause?: boolean;
+  canCancel?: boolean;
 };
 
 export function DownloadsPanel() {
@@ -27,6 +30,9 @@ export function DownloadsPanel() {
         label: gameName,
         subtitle: task.filename,
         value,
+        source: "sync" as const,
+        canPause: task.canPause ?? task.type === "upload",
+        canCancel: task.canCancel ?? task.type === "upload",
       };
     });
 
@@ -35,6 +41,7 @@ export function DownloadsPanel() {
       label: task.name || "Torrent",
       subtitle: task.state,
       value: Math.max(0, Math.min(100, Math.round(task.progressPercent))),
+      source: "torrent" as const,
     }));
 
     return [...syncRows, ...torrentRows];
@@ -75,6 +82,28 @@ export function DownloadsPanel() {
               <div key={row.id} className="rounded-lg border border-default-100 bg-default-50/50 px-2 py-2">
                 <p className="truncate text-xs font-medium">{row.label}</p>
                 <p className="truncate text-[11px] text-default-500">{row.subtitle}</p>
+                {row.source === "sync" ? (
+                  <div className="mt-1 flex items-center gap-2 text-[10px] text-default-500">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5">
+                      <Pause size={10} />
+                      Pausa
+                      {row.canPause ? (
+                        <Check size={10} className="text-success" />
+                      ) : (
+                        <Ban size={10} className="text-danger" />
+                      )}
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5">
+                      <X size={10} />
+                      Cancelar
+                      {row.canCancel ? (
+                        <Check size={10} className="text-success" />
+                      ) : (
+                        <Ban size={10} className="text-danger" />
+                      )}
+                    </span>
+                  </div>
+                ) : null}
                 <Progress size="sm" value={row.value} className="mt-1" />
               </div>
             ))}
