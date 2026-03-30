@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Progress } from "@heroui/react";
+import { Button, Progress, ScrollShadow } from "@heroui/react";
 import { ChevronDown, ChevronUp, Clock, Download, Pause, X, Zap } from "lucide-react";
 import { useSyncStore } from "@store/SyncStore";
 import { useTorrentStore } from "@store/TorrentStore";
@@ -23,6 +23,7 @@ type DownloadRow = {
 
 export function DownloadsPanel() {
   const [collapsed, setCollapsed] = useState(false);
+  const syncOperation = useSyncStore((s) => s.syncOperation);
   const syncTasks = useSyncStore((s) => s.activeTasksById);
   const aggregate = useSyncStore((s) => s.aggregateProgress);
   const torrentTasks = useTorrentStore((s) => s.activeByHash);
@@ -117,11 +118,15 @@ export function DownloadsPanel() {
   }, [syncTasks, syncMetrics, torrentTasks]);
 
   const totalActive = rows.length;
-  if (totalActive === 0) return null;
+  const keepPanelVisibleForBatch = syncOperation?.mode === "batch";
+  if (totalActive === 0 && !keepPanelVisibleForBatch) return null;
+  const visibleRows = rows.length > 0 ? rows.length : keepPanelVisibleForBatch ? 1 : 0;
+  const estimatedRowHeightPx = 86;
+  const listMaxHeightPx = collapsed ? 0 : Math.min(visibleRows * estimatedRowHeightPx, 176);
 
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 z-50 w-[360px] max-w-[90vw]">
-      <div className="pointer-events-auto rounded-xl border border-default-200 bg-content1/95 p-3 shadow-lg backdrop-blur-sm">
+      <div className="pointer-events-auto rounded-xl border border-default-200 bg-content1/95 p-3 shadow-lg backdrop-blur-sm transition-all duration-200 ease-out">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Download size={16} className="text-primary" />
@@ -145,8 +150,18 @@ export function DownloadsPanel() {
           showValueLabel
         />
 
-        {!collapsed && (
-          <div className="max-h-52 space-y-2 overflow-y-auto">
+        <div
+          className="overflow-hidden transition-[max-height,opacity] duration-300 ease-out"
+          style={{ maxHeight: `${listMaxHeightPx}px`, opacity: collapsed ? 0 : 1 }}>
+          <ScrollShadow hideScrollBar className="max-h-44 space-y-1.5 pr-1" size={18} orientation="vertical">
+            {rows.length === 0 && keepPanelVisibleForBatch ? (
+              <div className="rounded-lg border border-default-100 bg-default-50/50 px-2 py-2">
+                <p className="text-xs font-medium">Preparando siguiente juego…</p>
+                <p className="text-[11px] text-default-500">
+                  La subida por lotes sigue activa aunque este instante no tenga archivo en vuelo.
+                </p>
+              </div>
+            ) : null}
             {rows.map((row) => (
               <div key={row.id} className="rounded-lg border border-default-100 bg-default-50/50 px-2 py-2">
                 <p className="truncate text-xs font-medium">{row.label}</p>
@@ -154,13 +169,13 @@ export function DownloadsPanel() {
                 {row.source === "sync" && (row.canPause || row.canCancel) ? (
                   <div className="mt-1 flex items-center gap-2 text-[10px] text-default-500">
                     {row.canPause ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5 cursor-pointer">
                         <Pause size={10} />
                         Pausa
                       </span>
                     ) : null}
                     {row.canCancel ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5">
+                      <span className="inline-flex items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5 cursor-pointer">
                         <X size={10} />
                         Cancelar
                       </span>
@@ -184,8 +199,8 @@ export function DownloadsPanel() {
                 <Progress size="sm" value={row.value} className="mt-1" />
               </div>
             ))}
-          </div>
-        )}
+          </ScrollShadow>
+        </div>
       </div>
     </div>
   );

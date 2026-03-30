@@ -21,18 +21,24 @@ export function TransferOverlayRouter() {
   const [mode, setMode] = useState<OverlayMode>("none");
 
   useEffect(() => {
-    if (totalActive === 0) {
+    const hasAnyTransferSignal =
+      totalActive > 0 || !!progress || !!torrentProgress || !!pausedUploadInfo || !!syncOperation;
+
+    if (!hasAnyTransferSignal) {
       setDownloadsPanelSessionActive(false);
       return;
     }
+
     if (totalActive > 1 || syncOperation?.mode === "batch") {
       setDownloadsPanelSessionActive(true);
     }
-  }, [totalActive, syncOperation?.mode]);
+  }, [totalActive, syncOperation, syncOperation?.mode, progress, torrentProgress, pausedUploadInfo]);
 
   const desiredMode = useMemo<OverlayMode>(() => {
     if (pausedUploadInfo) return "sync_floating";
-    if (downloadsPanelSessionActive && totalActive > 0) return "downloads_panel";
+    if (downloadsPanelSessionActive && (totalActive > 0 || syncOperation?.mode === "batch")) {
+      return "downloads_panel";
+    }
 
     const isPackagedOperation =
       progress?.filename?.includes("Empaquetando") ||

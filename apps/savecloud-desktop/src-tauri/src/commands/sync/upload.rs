@@ -322,6 +322,27 @@ pub(crate) async fn sync_upload_game_impl(
     let mut ok_count = 0u32;
     let mut err_count = 0u32;
     let mut errors = Vec::new();
+    let mut loaded_bytes_total: u64 = 0;
+
+    emit_sync_upload_progress(
+        &app,
+        SyncProgressPayload {
+            operation_id: Some(format!("sync-upload-{}", game_id)),
+            status: Some("running".to_string()),
+            game_id: game_id.clone(),
+            filename: "Preparando subida…".to_string(),
+            loaded: 0,
+            total: total_size,
+            downloaded_bytes: Some(0),
+            total_bytes: Some(total_size),
+            can_pause: None,
+            can_cancel: None,
+            can_resume: None,
+            strategy: None,
+            state: None,
+            reason_code: None,
+        },
+    );
 
     for ((absolute, relative), total) in multipart_files {
         if let Some(ref t) = tray_inner {
@@ -345,6 +366,7 @@ pub(crate) async fn sync_upload_game_impl(
         {
             Ok(()) => {
                 ok_count += 1;
+                loaded_bytes_total = loaded_bytes_total.saturating_add(total);
                 let now = filetime::FileTime::from_system_time(std::time::SystemTime::now());
                 let _ = filetime::set_file_mtime(std::path::Path::new(&absolute), now);
             }
@@ -434,7 +456,12 @@ pub(crate) async fn sync_upload_game_impl(
                 let body = match tokio::fs::read(&absolute).await {
                     Ok(b) => b,
                     Err(e) => {
-                        return Err((relative.clone(), absolute, format!("{}: {}", relative, e)))
+                        return Err((
+                            relative.clone(),
+                            absolute,
+                            total,
+                            format!("{}: {}", relative, e),
+                        ))
                     }
                 };
 
@@ -448,17 +475,22 @@ pub(crate) async fn sync_upload_game_impl(
                 {
                     Ok(r) => r,
                     Err(e) => {
-                        return Err((relative.clone(), absolute, format!("{}: {}", relative, e)))
+                        return Err((
+                            relative.clone(),
+                            absolute,
+                            total,
+                            format!("{}: {}", relative, e),
+                        ))
                     }
                 };
 
                 if put_res.status().is_success() {
                     let now = filetime::FileTime::from_system_time(std::time::SystemTime::now());
                     let _ = filetime::set_file_mtime(std::path::Path::new(&absolute), now);
-                    Ok(())
+                    Ok((relative, total))
                 } else {
                     let msg = format!("{}: S3 PUT {}", relative, put_res.status());
-                    Err((relative, absolute, msg))
+                    Err((relative, absolute, total, msg))
                 }
             })
             .buffer_unordered(SIMPLE_PUT_CONCURRENCY);
@@ -479,8 +511,30 @@ pub(crate) async fn sync_upload_game_impl(
             }
 
             match result {
-                Ok(()) => ok_count += 1,
-                Err((relative, absolute, err_msg)) => {
+                Ok((relative, uploaded_bytes)) => {
+                    ok_count += 1;
+                    loaded_bytes_total = loaded_bytes_total.saturating_add(uploaded_bytes);
+                    emit_sync_upload_progress(
+                        &app,
+                        SyncProgressPayload {
+                            operation_id: Some(format!("sync-upload-{}", game_id)),
+                            status: Some("running".to_string()),
+                            game_id: game_id.clone(),
+                            filename: relative,
+                            loaded: loaded_bytes_total.min(total_size),
+                            total: total_size,
+                            downloaded_bytes: Some(loaded_bytes_total.min(total_size)),
+                            total_bytes: Some(total_size),
+                            can_pause: None,
+                            can_cancel: None,
+                            can_resume: None,
+                            strategy: Some(SyncOperationStrategy::Simple),
+                            state: None,
+                            reason_code: None,
+                        },
+                    );
+                }
+                Err((relative, absolute, _uploaded_bytes, err_msg)) => {
                     crate::commands::logs::sync_logger::log_error(
                         "upload_put",
                         &crate::commands::logs::sync_logger::upload_context(
