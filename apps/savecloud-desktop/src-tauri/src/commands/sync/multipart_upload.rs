@@ -411,6 +411,8 @@ pub(crate) async fn upload_one_file_multipart(
                 total: total_size,
                 downloaded_bytes: Some(total_size),
                 total_bytes: Some(total_size),
+                can_pause: None,
+                can_cancel: None,
             },
         );
         return Ok(());
@@ -528,6 +530,8 @@ pub(crate) async fn upload_one_file_multipart(
                 total: total_size,
                 downloaded_bytes: Some(loaded),
                 total_bytes: Some(total_size),
+                can_pause: None,
+                can_cancel: None,
             },
         );
     }
@@ -614,6 +618,8 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
                 total: state.total_size,
                 downloaded_bytes: Some(state.total_size),
                 total_bytes: Some(state.total_size),
+                can_pause: None,
+                can_cancel: None,
             },
         );
         return Ok(());
@@ -699,6 +705,8 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
                 total: state.total_size,
                 downloaded_bytes: Some(loaded),
                 total_bytes: Some(state.total_size),
+                can_pause: None,
+                can_cancel: None,
             },
         );
     }

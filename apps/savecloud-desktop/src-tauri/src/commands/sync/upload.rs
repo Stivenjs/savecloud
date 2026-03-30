@@ -111,6 +111,8 @@ fn file_stream_with_progress(
                                 total,
                                 downloaded_bytes: Some(loaded),
                                 total_bytes: Some(total),
+                                can_pause: None,
+                                can_cancel: None,
                             },
                         );
                     }
@@ -139,6 +141,8 @@ fn file_stream_with_progress(
                     total,
                     downloaded_bytes: Some(total),
                     total_bytes: Some(total),
+                    can_pause: None,
+                    can_cancel: None,
                 },
             );
         }

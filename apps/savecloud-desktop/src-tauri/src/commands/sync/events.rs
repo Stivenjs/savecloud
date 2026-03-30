@@ -23,11 +23,23 @@ pub(crate) fn emit_sync_terminal(
     );
 }
 
-pub(crate) fn emit_sync_upload_progress(app: &AppHandle, payload: SyncProgressPayload) {
+pub(crate) fn emit_sync_upload_progress(app: &AppHandle, mut payload: SyncProgressPayload) {
+    if payload.can_pause.is_none() {
+        payload.can_pause = Some(true);
+    }
+    if payload.can_cancel.is_none() {
+        payload.can_cancel = Some(true);
+    }
     let _ = app.emit("sync-upload-progress", payload);
 }
 
-pub(crate) fn emit_sync_download_progress(app: &AppHandle, payload: SyncProgressPayload) {
+pub(crate) fn emit_sync_download_progress(app: &AppHandle, mut payload: SyncProgressPayload) {
+    if payload.can_pause.is_none() {
+        payload.can_pause = Some(false);
+    }
+    if payload.can_cancel.is_none() {
+        payload.can_cancel = Some(false);
+    }
     let _ = app.emit("sync-download-progress", payload);
 }
 

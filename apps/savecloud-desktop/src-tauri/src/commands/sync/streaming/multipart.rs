@@ -539,6 +539,8 @@ fn maybe_emit_progress(
                 total,
                 downloaded_bytes: Some(loaded),
                 total_bytes: Some(total),
+                can_pause: None,
+                can_cancel: None,
             },
         );
     }

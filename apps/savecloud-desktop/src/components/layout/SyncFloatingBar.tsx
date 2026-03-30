@@ -13,6 +13,7 @@ interface SyncFloatingBarProps {
   isIndeterminate: boolean;
   value: number;
   canPause: boolean;
+  canCancel: boolean;
   speedBps: number | null;
   etaSeconds: number | null;
   onCancel: () => void;
@@ -25,6 +26,7 @@ export function SyncFloatingBar({
   isIndeterminate,
   value,
   canPause,
+  canCancel,
   speedBps,
   etaSeconds,
   onCancel,
@@ -65,7 +67,7 @@ export function SyncFloatingBar({
 
       <div className="mt-1 flex items-center gap-2">
         <p className="min-w-0 flex-1 truncate text-xs text-default-400">{progress.filename}</p>
-        {progress.type === "upload" && (
+        {progress.type === "upload" && (canPause || canCancel) && (
           <>
             <span className="shrink-0 text-default-200 select-none" aria-hidden>
               |
@@ -83,16 +85,18 @@ export function SyncFloatingBar({
                   </button>
                 </Tooltip>
               ) : null}
-              <Tooltip content="Cancelar subida" placement="top">
-                <button
-                  type="button"
-                  onClick={onCancel}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-full text-danger hover:bg-danger/10 transition-colors"
-                  aria-label="Cancelar subida"
-                  onPointerDownCapture={(e) => e.stopPropagation()}>
-                  <X size={14} />
-                </button>
-              </Tooltip>
+              {canCancel ? (
+                <Tooltip content="Cancelar subida" placement="top">
+                  <button
+                    type="button"
+                    onClick={onCancel}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full text-danger hover:bg-danger/10 transition-colors"
+                    aria-label="Cancelar subida"
+                    onPointerDownCapture={(e) => e.stopPropagation()}>
+                    <X size={14} />
+                  </button>
+                </Tooltip>
+              ) : null}
             </span>
           </>
         )}

@@ -8,6 +8,8 @@ export interface SyncProgressState {
   type: "upload" | "download";
   operationId?: string;
   status?: "queued" | "running" | "paused" | "completed" | "failed";
+  canPause?: boolean;
+  canCancel?: boolean;
   gameId: string;
   filename: string;
   loaded: number;
@@ -209,6 +211,8 @@ export function initSyncListeners() {
   listen<{
     operationId?: string;
     status?: SyncProgressState["status"];
+    canPause?: boolean;
+    canCancel?: boolean;
     gameId: string;
     filename: string;
     loaded: number;
@@ -220,6 +224,8 @@ export function initSyncListeners() {
   listen<{
     operationId?: string;
     status?: SyncProgressState["status"];
+    canPause?: boolean;
+    canCancel?: boolean;
     gameId: string;
     filename: string;
     loaded: number;

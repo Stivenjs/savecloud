@@ -84,6 +84,10 @@ pub struct SyncProgressPayload {
     pub downloaded_bytes: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub total_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub can_pause: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub can_cancel: Option<bool>,
 }
 
 #[derive(Clone, Serialize)]

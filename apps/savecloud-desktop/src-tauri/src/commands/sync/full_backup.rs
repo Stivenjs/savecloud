@@ -280,6 +280,8 @@ pub async fn download_and_restore_full_backup_impl(
                     total,
                     downloaded_bytes: Some(loaded),
                     total_bytes: Some(total),
+                    can_pause: None,
+                    can_cancel: None,
                 },
             );
         }
@@ -297,6 +299,8 @@ pub async fn download_and_restore_full_backup_impl(
                 total,
                 downloaded_bytes: Some(total),
                 total_bytes: Some(total),
+                can_pause: None,
+                can_cancel: None,
             },
         );
     }
@@ -391,6 +395,8 @@ pub async fn create_and_upload_full_backup(
             total: 1,
             downloaded_bytes: Some(0),
             total_bytes: Some(1),
+            can_pause: Some(false),
+            can_cancel: Some(false),
         },
     );
 
@@ -458,6 +464,8 @@ pub async fn create_and_upload_full_backup(
                 total: size,
                 downloaded_bytes: Some(0),
                 total_bytes: Some(size),
+                can_pause: None,
+                can_cancel: None,
             },
         );
 

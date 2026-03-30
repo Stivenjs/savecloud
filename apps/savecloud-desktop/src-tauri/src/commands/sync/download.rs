@@ -507,6 +507,8 @@ async fn download_one_file(
                             total,
                             downloaded_bytes: Some(loaded),
                             total_bytes: Some(total),
+                            can_pause: None,
+                            can_cancel: None,
                         },
                     );
                 }
@@ -540,6 +542,8 @@ async fn download_one_file(
                 total,
                 downloaded_bytes: Some(total),
                 total_bytes: Some(total),
+                can_pause: None,
+                can_cancel: None,
             },
         );
     }
