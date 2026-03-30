@@ -73,8 +73,15 @@ pub fn spawn_exit_watcher(app: AppHandle, tray_state: Arc<crate::tray::tray_stat
                                     err_count: r.err_count,
                                 }
                             });
+                            crate::notifications::writer::try_record_auto_sync_done(
+                                &app_for_async,
+                                &gid,
+                                r.ok_count,
+                                r.err_count,
+                            );
                         }
                         Err(e) => {
+                            let err_copy = e.clone();
                             let _ = app_for_async.emit("auto-sync-error", {
                                 #[derive(serde::Serialize, Clone)]
                                 struct Payload {
@@ -82,10 +89,15 @@ pub fn spawn_exit_watcher(app: AppHandle, tray_state: Arc<crate::tray::tray_stat
                                     error: String,
                                 }
                                 Payload {
-                                    game_id: gid,
+                                    game_id: gid.clone(),
                                     error: e,
                                 }
                             });
+                            crate::notifications::writer::try_record_auto_sync_error(
+                                &app_for_async,
+                                &gid,
+                                &err_copy,
+                            );
                         }
                     }
                 });

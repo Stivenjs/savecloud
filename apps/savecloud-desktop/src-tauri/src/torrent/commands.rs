@@ -94,6 +94,7 @@ pub async fn cancel_torrent(
 
     engine::cancel_via_session(&session, &info_hash).await?;
     let _ = app.emit(engine::TORRENT_CANCELLED_EVENT, &info_hash);
+    crate::notifications::writer::try_record_torrent_cancelled(&app, &info_hash, &info_hash);
     Ok(())
 }
 

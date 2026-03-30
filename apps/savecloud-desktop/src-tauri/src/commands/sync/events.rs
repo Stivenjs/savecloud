@@ -48,17 +48,23 @@ pub(crate) fn emit_sync_terminal(
         state_name(&next_state),
         reason_code.as_deref(),
     );
-    let _ = app.emit(
-        "sync-operation-terminal",
-        SyncTerminalPayload {
-            operation_id,
-            status: status.to_string(),
-            r#type: ty.to_string(),
-            game_id,
-            strategy: None,
-            state: Some(next_state),
-            reason_code,
-        },
+    let payload = SyncTerminalPayload {
+        operation_id: operation_id.clone(),
+        status: status.to_string(),
+        r#type: ty.to_string(),
+        game_id: game_id.clone(),
+        strategy: None,
+        state: Some(next_state),
+        reason_code: reason_code.clone(),
+    };
+    let _ = app.emit("sync-operation-terminal", payload);
+    crate::notifications::writer::try_record_sync_terminal(
+        app,
+        &operation_id,
+        status,
+        ty,
+        game_id,
+        reason_code,
     );
 }
 

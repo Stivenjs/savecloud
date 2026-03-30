@@ -1,6 +1,7 @@
 mod commands;
 mod compat;
 mod config;
+mod notifications;
 mod controller;
 mod ipc;
 #[cfg(target_os = "windows")]

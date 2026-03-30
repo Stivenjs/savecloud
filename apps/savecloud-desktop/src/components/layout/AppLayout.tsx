@@ -5,6 +5,7 @@ import { Moon, Sun } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import type { NavItem } from "@components/layout/Sidebar";
 import { StaggeredMenu } from "@components/external/StaggeredMenu";
+import { NotificationCenter } from "@components/layout/NotificationCenter";
 import { useShellUiStore } from "@store/ShellUiStore";
 
 interface AppLayoutProps {
@@ -61,6 +62,7 @@ export function AppLayout({ navItems, children }: AppLayoutProps) {
             handleNavigation(item.link);
           }, 320);
         }}
+        headerActions={<NotificationCenter />}
         panelFooter={
           <Button
             isIconOnly

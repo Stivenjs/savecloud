@@ -452,6 +452,7 @@ pub fn spawn_progress_monitor(
 
             if stats.finished {
                 let _ = app.emit(TORRENT_DONE_EVENT, &payload);
+                crate::notifications::writer::try_record_torrent_done(&app, &name, &info_hash);
                 if let Some(engine) = &engine_state {
                     let mut eng = engine.lock().await;
                     eng.unregister_active(&info_hash);
