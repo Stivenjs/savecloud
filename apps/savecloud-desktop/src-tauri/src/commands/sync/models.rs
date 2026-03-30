@@ -9,6 +9,29 @@
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncOperationStrategy {
+    Simple,
+    Multipart,
+    Streaming,
+    DownloadFile,
+    DownloadPackaged,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncOperationState {
+    Queued,
+    Running,
+    Pausing,
+    Paused,
+    Cancelling,
+    Cancelled,
+    Completed,
+    Failed,
+}
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveFileDto {
@@ -88,6 +111,14 @@ pub struct SyncProgressPayload {
     pub can_pause: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub can_cancel: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub can_resume: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strategy: Option<SyncOperationStrategy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<SyncOperationState>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -110,6 +141,12 @@ pub struct SyncTerminalPayload {
     pub r#type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub game_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strategy: Option<SyncOperationStrategy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<SyncOperationState>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason_code: Option<String>,
 }
 
 #[derive(Serialize)]

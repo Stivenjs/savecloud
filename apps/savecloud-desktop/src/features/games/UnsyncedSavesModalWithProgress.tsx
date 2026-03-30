@@ -14,7 +14,7 @@ export function UnsyncedSavesModalWithProgress() {
   const [loadingGameId, setLoadingGameId] = useState<string | null>(null);
 
   const handleUploadAll = useCallback(async () => {
-    setSyncOperation({ type: "upload", mode: "batch", gameId: null });
+    setSyncOperation({ type: "upload", mode: "batch", gameId: null, operationId: "sync-upload-batch" });
     try {
       await uploadAll();
     } finally {
@@ -25,7 +25,7 @@ export function UnsyncedSavesModalWithProgress() {
   const handleUploadGame = useCallback(
     async (gameId: string) => {
       setLoadingGameId(gameId);
-      setSyncOperation({ type: "upload", mode: "single", gameId });
+      setSyncOperation({ type: "upload", mode: "single", gameId, operationId: `sync-upload-${gameId}` });
       try {
         const result = await syncUploadGame(gameId);
         toastSyncResult(result, formatGameDisplayName(gameId));
@@ -45,7 +45,7 @@ export function UnsyncedSavesModalWithProgress() {
   const handleFullBackupGame = useCallback(
     async (gameId: string) => {
       setLoadingGameId(gameId);
-      setSyncOperation({ type: "upload", mode: "single", gameId });
+      setSyncOperation({ type: "upload", mode: "single", gameId, operationId: `sync-upload-${gameId}` });
       try {
         await createAndUploadFullBackup(gameId);
         toastSuccess("Backup completo subido", `${formatGameDisplayName(gameId)}: empaquetado subido a la nube.`);

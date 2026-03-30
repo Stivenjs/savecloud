@@ -42,7 +42,7 @@ use crate::network::DATA_CLIENT;
 
 use super::super::api;
 use super::super::events::emit_sync_upload_progress;
-use super::super::models::SyncProgressPayload;
+use super::super::models::{SyncOperationStrategy, SyncProgressPayload};
 use super::tar_stream::TarStreamMsg;
 use super::upload_strategy::{ConcurrencyController, UploadStrategy};
 use crate::commands::logs::sync_logger;
@@ -539,8 +539,12 @@ fn maybe_emit_progress(
                 total,
                 downloaded_bytes: Some(loaded),
                 total_bytes: Some(total),
-                can_pause: None,
-                can_cancel: None,
+                can_pause: Some(false),
+                can_cancel: Some(true),
+                can_resume: None,
+                strategy: Some(SyncOperationStrategy::Streaming),
+                state: None,
+                reason_code: None,
             },
         );
     }

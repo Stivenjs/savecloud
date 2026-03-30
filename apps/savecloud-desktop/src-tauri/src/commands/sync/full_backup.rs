@@ -26,7 +26,7 @@ use super::events::{
     emit_full_backup_done, emit_sync_download_done, emit_sync_download_progress,
     emit_sync_terminal, emit_sync_upload_done, emit_sync_upload_progress, sync_status_from_result,
 };
-use super::models::SyncProgressPayload;
+use super::models::{SyncOperationStrategy, SyncProgressPayload};
 use super::multipart_upload;
 use super::streaming;
 use crate::config;
@@ -282,6 +282,10 @@ pub async fn download_and_restore_full_backup_impl(
                     total_bytes: Some(total),
                     can_pause: None,
                     can_cancel: None,
+                    can_resume: None,
+                    strategy: Some(SyncOperationStrategy::DownloadPackaged),
+                    state: None,
+                    reason_code: None,
                 },
             );
         }
@@ -301,6 +305,10 @@ pub async fn download_and_restore_full_backup_impl(
                 total_bytes: Some(total),
                 can_pause: None,
                 can_cancel: None,
+                can_resume: None,
+                strategy: Some(SyncOperationStrategy::DownloadPackaged),
+                state: None,
+                reason_code: None,
             },
         );
     }
@@ -321,6 +329,8 @@ pub async fn download_and_restore_full_backup_impl(
         "completed",
         "download",
         Some(game_id.clone()),
+        None,
+        None,
     );
     if emit_done {
         emit_sync_download_done(&app);
@@ -384,6 +394,14 @@ pub async fn create_and_upload_full_backup(
     tray_state.0.reset_upload_cancel();
     tray_state.0.reset_upload_pause();
 
+    let use_streaming = cfg.full_backup_streaming.unwrap_or(false);
+    let dry_run = cfg.full_backup_streaming_dry_run.unwrap_or(false);
+    let backup_strategy = if use_streaming {
+        SyncOperationStrategy::Streaming
+    } else {
+        SyncOperationStrategy::Multipart
+    };
+
     emit_sync_upload_progress(
         &app,
         SyncProgressPayload {
@@ -397,11 +415,12 @@ pub async fn create_and_upload_full_backup(
             total_bytes: Some(1),
             can_pause: Some(false),
             can_cancel: Some(false),
+            can_resume: Some(false),
+            strategy: Some(backup_strategy),
+            state: None,
+            reason_code: None,
         },
     );
-
-    let use_streaming = cfg.full_backup_streaming.unwrap_or(false);
-    let dry_run = cfg.full_backup_streaming_dry_run.unwrap_or(false);
 
     tray_state.0.syncing_inc();
     tray_state.0.update_tooltip();
@@ -466,6 +485,10 @@ pub async fn create_and_upload_full_backup(
                 total_bytes: Some(size),
                 can_pause: None,
                 can_cancel: None,
+                can_resume: None,
+                strategy: Some(SyncOperationStrategy::Multipart),
+                state: None,
+                reason_code: None,
             },
         );
 
@@ -486,13 +509,26 @@ pub async fn create_and_upload_full_backup(
     tray_state.0.syncing_dec();
     tray_state.0.update_tooltip();
 
-    let status = sync_status_from_result(&result);
+    let status = if tray_state.0.upload_cancel_requested() {
+        "cancelled"
+    } else {
+        sync_status_from_result(&result)
+    };
+    let reason_code = match &result {
+        Err(e) if e.contains("pausa no soportada") => {
+            Some("PAUSE_NOT_SUPPORTED_BY_STRATEGY".to_string())
+        }
+        Err(e) if e.contains("subida cancelada") => Some("CANCELLED_BY_USER".to_string()),
+        _ => None,
+    };
     emit_sync_terminal(
         &app,
         format!("sync-upload-{game_id}"),
         status,
         "upload",
         Some(game_id.clone()),
+        None,
+        reason_code,
     );
     emit_full_backup_done(&app);
 

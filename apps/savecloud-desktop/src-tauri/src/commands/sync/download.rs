@@ -24,8 +24,8 @@ use super::events::{
 };
 use super::models::{
     ActiveDownloadStateDto, DownloadConflictDto, DownloadConflictsResultDto,
-    GameConflictsResultDto, GameSyncResultDto, RemoteSaveInfoDto, SyncProgressPayload,
-    SyncResultDto, UnsyncedGameDto,
+    GameConflictsResultDto, GameSyncResultDto, RemoteSaveInfoDto, SyncOperationStrategy,
+    SyncProgressPayload, SyncResultDto, UnsyncedGameDto,
 };
 use crate::commands::logs::sync_logger;
 use crate::network::DATA_CLIENT;
@@ -509,6 +509,10 @@ async fn download_one_file(
                             total_bytes: Some(total),
                             can_pause: None,
                             can_cancel: None,
+                            can_resume: None,
+                            strategy: Some(SyncOperationStrategy::DownloadFile),
+                            state: None,
+                            reason_code: None,
                         },
                     );
                 }
@@ -544,6 +548,10 @@ async fn download_one_file(
                 total_bytes: Some(total),
                 can_pause: None,
                 can_cancel: None,
+                can_resume: None,
+                strategy: Some(SyncOperationStrategy::DownloadFile),
+                state: None,
+                reason_code: None,
             },
         );
     }
@@ -621,6 +629,8 @@ pub async fn sync_download_game(
         status,
         "download",
         Some(game_id.clone()),
+        None,
+        None,
     );
     emit_sync_download_done(&app);
 
@@ -972,6 +982,8 @@ pub async fn sync_download_all_games(
                         status,
                         "download",
                         Some(dto.game_id.clone()),
+                        None,
+                        None,
                     );
                 }
                 emit_sync_download_done(&app);
@@ -1032,6 +1044,8 @@ pub async fn sync_download_all_games(
             status,
             "download",
             Some(dto.game_id.clone()),
+            None,
+            None,
         );
     }
     emit_sync_download_done(&app);

@@ -176,6 +176,28 @@ pub fn log_api(operation: &str, endpoint: &str, status: u16, body_preview: &str)
     write_line(block);
 }
 
+/// Registra transición de estado de una operación de sync en formato estructurado.
+pub fn log_transition(
+    operation_id: &str,
+    strategy: Option<&str>,
+    prev_state: Option<&str>,
+    next_state: &str,
+    reason_code: Option<&str>,
+) {
+    let block = format_block(
+        "INFO",
+        "TRANSITION",
+        vec![
+            ("operationId", operation_id.to_string()),
+            ("strategy", strategy.unwrap_or("unknown").to_string()),
+            ("prevState", prev_state.unwrap_or("unknown").to_string()),
+            ("nextState", next_state.to_string()),
+            ("reasonCode", reason_code.unwrap_or("").to_string()),
+        ],
+    );
+    write_line(block);
+}
+
 /// Contexto típico para subida
 pub fn upload_context(game_id: &str, filename: &str, absolute_path: &str) -> String {
     format!(

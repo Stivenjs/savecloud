@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 
 use super::api;
 use super::events::emit_sync_upload_progress;
-use super::models::SyncProgressPayload;
+use super::models::{SyncOperationStrategy, SyncProgressPayload};
 use crate::commands::logs::sync_logger;
 use crate::network::DATA_CLIENT;
 use futures_util::stream::StreamExt;
@@ -413,6 +413,10 @@ pub(crate) async fn upload_one_file_multipart(
                 total_bytes: Some(total_size),
                 can_pause: None,
                 can_cancel: None,
+                can_resume: None,
+                strategy: Some(SyncOperationStrategy::Multipart),
+                state: None,
+                reason_code: None,
             },
         );
         return Ok(());
@@ -532,6 +536,10 @@ pub(crate) async fn upload_one_file_multipart(
                 total_bytes: Some(total_size),
                 can_pause: None,
                 can_cancel: None,
+                can_resume: None,
+                strategy: Some(SyncOperationStrategy::Multipart),
+                state: None,
+                reason_code: None,
             },
         );
     }
@@ -620,6 +628,10 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
                 total_bytes: Some(state.total_size),
                 can_pause: None,
                 can_cancel: None,
+                can_resume: None,
+                strategy: Some(SyncOperationStrategy::Multipart),
+                state: None,
+                reason_code: None,
             },
         );
         return Ok(());
@@ -707,6 +719,10 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
                 total_bytes: Some(state.total_size),
                 can_pause: None,
                 can_cancel: None,
+                can_resume: None,
+                strategy: Some(SyncOperationStrategy::Multipart),
+                state: None,
+                reason_code: None,
             },
         );
     }

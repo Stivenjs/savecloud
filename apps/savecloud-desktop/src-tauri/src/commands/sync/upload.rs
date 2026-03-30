@@ -23,7 +23,7 @@ use super::events::{
     emit_sync_terminal, emit_sync_upload_done, emit_sync_upload_paused, emit_sync_upload_progress,
     sync_status_from_err_count, sync_status_from_result,
 };
-use super::models::{GameSyncResultDto, SyncProgressPayload, SyncResultDto};
+use super::models::{GameSyncResultDto, SyncOperationStrategy, SyncProgressPayload, SyncResultDto};
 use super::multipart_upload;
 use crate::network::DATA_CLIENT;
 use crate::tray::tray_state::TrayState;
@@ -113,6 +113,10 @@ fn file_stream_with_progress(
                                 total_bytes: Some(total),
                                 can_pause: None,
                                 can_cancel: None,
+                                can_resume: None,
+                                strategy: Some(SyncOperationStrategy::Simple),
+                                state: None,
+                                reason_code: None,
                             },
                         );
                     }
@@ -143,6 +147,10 @@ fn file_stream_with_progress(
                     total_bytes: Some(total),
                     can_pause: None,
                     can_cancel: None,
+                    can_resume: None,
+                    strategy: Some(SyncOperationStrategy::Simple),
+                    state: None,
+                    reason_code: None,
                 },
             );
         }
@@ -193,7 +201,7 @@ pub async fn sync_upload_resume(app: AppHandle) -> Result<SyncResultDto, String>
     tray_state.0.clone().refresh_unsynced_async();
     let op_id = load_paused_operation_id();
     let status = sync_status_from_result(&result);
-    emit_sync_terminal(&app, op_id, status, "upload", None);
+    emit_sync_terminal(&app, op_id, status, "upload", None, None, None);
     emit_sync_upload_done(&app);
 
     result.map(|()| SyncResultDto {
@@ -222,8 +230,26 @@ pub async fn sync_upload_game(
     tray_state.0.syncing_dec();
     tray_state.0.clone().refresh_unsynced_async();
 
-    let status = sync_status_from_result(&result);
-    emit_sync_terminal(&app, operation_id, status, "upload", Some(game_id));
+    let cancelled = tray_state.0.upload_cancel_requested();
+    let status = if cancelled {
+        "cancelled"
+    } else {
+        sync_status_from_result(&result)
+    };
+    let reason_code = if cancelled {
+        Some("CANCELLED_BY_USER".to_string())
+    } else {
+        None
+    };
+    emit_sync_terminal(
+        &app,
+        operation_id,
+        status,
+        "upload",
+        Some(game_id),
+        None,
+        reason_code,
+    );
     emit_sync_upload_done(&app);
     result
 }
@@ -573,14 +599,25 @@ pub async fn sync_upload_all_games(
         results_by_id.insert(game_id.clone(), GameSyncResultDto { game_id, result });
     }
 
+    let cancelled = tray_state.0.upload_cancel_requested();
     for dto in results_by_id.values() {
-        let status = sync_status_from_err_count(dto.result.err_count);
+        let status = if cancelled {
+            "cancelled"
+        } else {
+            sync_status_from_err_count(dto.result.err_count)
+        };
         emit_sync_terminal(
             &app,
             format!("sync-upload-{}", dto.game_id),
             status,
             "upload",
             Some(dto.game_id.clone()),
+            None,
+            if cancelled {
+                Some("CANCELLED_BY_USER".to_string())
+            } else {
+                None
+            },
         );
     }
 

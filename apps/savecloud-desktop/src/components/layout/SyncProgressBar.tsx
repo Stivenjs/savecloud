@@ -57,12 +57,8 @@ export function SyncProgressBar() {
   const value =
     progress && progress.total > 0 ? Math.min(100, Math.round((progress.loaded / progress.total) * 100)) : 0;
 
-  const isUploadOperation = progress?.type === "upload";
-  const isPackagingPhase = progress?.filename?.includes("Empaquetando") || progress?.filename?.includes("Extrayendo");
-  const fallbackCanPause = !!isUploadOperation && !isPackagingPhase && !isIndeterminate;
-  const fallbackCanCancel = !!isUploadOperation && !isPackagingPhase;
-  const canPause = progress?.canPause ?? fallbackCanPause;
-  const canCancel = progress?.canCancel ?? fallbackCanCancel;
+  const canPause = !!progress?.canPause;
+  const canCancel = !!progress?.canCancel;
 
   useEffect(() => {
     if (!progress) {

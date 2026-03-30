@@ -7,9 +7,12 @@ import { notifyDownloadDone, notifyFullBackupDone, notifyUploadDone } from "@uti
 export interface SyncProgressState {
   type: "upload" | "download";
   operationId?: string;
-  status?: "queued" | "running" | "paused" | "completed" | "failed";
+  status?: "queued" | "running" | "pausing" | "paused" | "cancelling" | "cancelled" | "completed" | "failed";
   canPause?: boolean;
   canCancel?: boolean;
+  canResume?: boolean;
+  strategy?: "simple" | "multipart" | "streaming" | "downloadFile" | "downloadPackaged";
+  reasonCode?: string;
   gameId: string;
   filename: string;
   loaded: number;
@@ -213,6 +216,9 @@ export function initSyncListeners() {
     status?: SyncProgressState["status"];
     canPause?: boolean;
     canCancel?: boolean;
+    canResume?: boolean;
+    strategy?: SyncProgressState["strategy"];
+    reasonCode?: string;
     gameId: string;
     filename: string;
     loaded: number;
@@ -226,6 +232,9 @@ export function initSyncListeners() {
     status?: SyncProgressState["status"];
     canPause?: boolean;
     canCancel?: boolean;
+    canResume?: boolean;
+    strategy?: SyncProgressState["strategy"];
+    reasonCode?: string;
     gameId: string;
     filename: string;
     loaded: number;
@@ -239,9 +248,17 @@ export function initSyncListeners() {
     status: "completed" | "failed" | "paused" | "cancelled";
     type: "upload" | "download";
     gameId?: string;
+    reasonCode?: string;
   }>("sync-operation-terminal", (ev) => {
     const state = useSyncStore.getState();
     state.removeTaskByOperationId(ev.payload.operationId);
+    // En batch, backend emite terminal por juego. Si coincide por prefijo, limpiamos task equivalente.
+    if (ev.payload.type === "upload" && ev.payload.gameId) {
+      state.removeTaskByOperationId(`sync-upload-${ev.payload.gameId}`);
+    }
+    if (ev.payload.type === "download" && ev.payload.gameId) {
+      state.removeTaskByOperationId(`sync-download-${ev.payload.gameId}`);
+    }
     if (state.syncOperation?.operationId && state.syncOperation.operationId === ev.payload.operationId) {
       state.setSyncOperation(null);
     }
@@ -261,15 +278,18 @@ export function initSyncListeners() {
     }
   });
 
-  listen<{ gameId: string; filename: string; operationId?: string }>("sync-upload-paused", (ev) => {
-    const state = useSyncStore.getState();
-    state.setProgress((prev) => (prev?.type === "upload" ? null : prev));
-    state.removeTaskByOperationId(ev.payload.operationId ?? state.syncOperation?.operationId);
-    state.setSyncOperation(null);
-    useSyncStore.setState({
-      pausedUploadInfo: { gameId: ev.payload.gameId, filename: ev.payload.filename },
-    });
-  });
+  listen<{ gameId: string; filename: string; operationId?: string; reasonCode?: string }>(
+    "sync-upload-paused",
+    (ev) => {
+      const state = useSyncStore.getState();
+      state.setProgress((prev) => (prev?.type === "upload" ? null : prev));
+      state.removeTaskByOperationId(ev.payload.operationId ?? state.syncOperation?.operationId);
+      state.setSyncOperation(null);
+      useSyncStore.setState({
+        pausedUploadInfo: { gameId: ev.payload.gameId, filename: ev.payload.filename },
+      });
+    }
+  );
 
   listen("sync-download-done", () => {
     const state = useSyncStore.getState();
