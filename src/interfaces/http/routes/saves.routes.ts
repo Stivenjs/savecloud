@@ -37,12 +37,21 @@ import type { ListBackupsUseCase } from "@application/use-cases/ListBackupsUseCa
 import type { DeleteBackupUseCase } from "@application/use-cases/DeleteBackupUseCase";
 import type { RenameBackupUseCase } from "@application/use-cases/RenameBackupUseCase";
 import type { ListSavesUseCase } from "@application/use-cases/ListSavesUseCase";
+import { invalidateListSavesByGameCache } from "@application/use-cases/ListSavesUseCase";
 import type { CreateMultipartUploadUseCase } from "@application/use-cases/CreateMultipartUploadUseCase";
 import type { CreateMultipartUploadWithPartUrlsUseCase } from "@application/use-cases/CreateMultipartUploadWithPartUrlsUseCase";
 import type { GetUploadPartUrlsUseCase } from "@application/use-cases/GetUploadPartUrlsUseCase";
 import type { CompleteMultipartUploadUseCase } from "@application/use-cases/CompleteMultipartUploadUseCase";
 import type { AbortMultipartUploadUseCase } from "@application/use-cases/AbortMultipartUploadUseCase";
 import { getUserId, getErrorMessage } from "@shared/utils";
+import { TtlCache } from "@shared/ttlCache";
+
+const savesSummaryCache = new TtlCache<string, unknown[]>({ ttlMs: 20_000, maxEntries: 200 });
+
+function invalidateSavesCaches(userId: string, gameId?: string): void {
+  savesSummaryCache.delete(userId);
+  invalidateListSavesByGameCache(userId, gameId);
+}
 
 export async function registerSavesRoutes(
   app: FastifyInstance,
@@ -66,8 +75,53 @@ export async function registerSavesRoutes(
 ): Promise<void> {
   app.get("/saves", async (request, reply) => {
     const userId = getUserId(request);
-    const saves = await deps.listSavesUseCase.execute({ userId });
+    const query: unknown = request.query;
+    const gameId =
+      query && typeof query === "object" && "gameId" in query && typeof (query as any).gameId === "string"
+        ? (query as any).gameId.trim()
+        : undefined;
+
+    const saves = await deps.listSavesUseCase.execute({ userId, gameId });
     return reply.send(saves);
+  });
+
+  app.get("/saves/summary", async (request, reply) => {
+    const userId = getUserId(request);
+    const cached = savesSummaryCache.get(userId);
+    if (cached) return reply.send(cached);
+
+    const saves = await deps.listSavesUseCase.execute({ userId });
+
+    type Agg = { fileCount: number; totalSize: number; lastModified: Date | null };
+    const byGame = new Map<string, Agg>();
+
+    for (const s of saves) {
+      const key = s.gameId;
+      const existing = byGame.get(key) ?? { fileCount: 0, totalSize: 0, lastModified: null };
+      const size = s.size ?? 0;
+      const lm = s.lastModified;
+
+      const nextLast =
+        existing.lastModified == null || (lm && lm > existing.lastModified)
+          ? (lm ?? existing.lastModified)
+          : existing.lastModified;
+
+      byGame.set(key, {
+        fileCount: existing.fileCount + 1,
+        totalSize: existing.totalSize + size,
+        lastModified: nextLast,
+      });
+    }
+
+    const summary = Array.from(byGame.entries()).map(([gameId, agg]) => ({
+      gameId,
+      fileCount: agg.fileCount,
+      totalSizeBytes: agg.totalSize,
+      lastModified: agg.lastModified ? agg.lastModified.toISOString() : null,
+    }));
+
+    savesSummaryCache.set(userId, summary);
+    return reply.send(summary);
   });
 
   app.get<{ Querystring: ListBackupsQuery }>(
@@ -92,6 +146,7 @@ export async function registerSavesRoutes(
         const { gameId, key } = request.body;
 
         await deps.deleteBackupUseCase.execute({ userId, gameId: gameId.trim(), key: key.trim() });
+        invalidateSavesCaches(userId, gameId);
         return reply.status(204).send();
       } catch (err) {
         const message = getErrorMessage(err);
@@ -117,6 +172,7 @@ export async function registerSavesRoutes(
           key: key.trim(),
           newFilename: newFilename.trim(),
         });
+        invalidateSavesCaches(userId, gameId);
         return reply.status(204).send();
       } catch (err) {
         const message = getErrorMessage(err);
@@ -135,7 +191,9 @@ export async function registerSavesRoutes(
     async (request, reply) => {
       try {
         const userId = getUserId(request);
-        await deps.deleteGameFromCloudUseCase.execute({ userId, gameId: request.body.gameId.trim() });
+        const gameId = request.body.gameId.trim();
+        await deps.deleteGameFromCloudUseCase.execute({ userId, gameId });
+        invalidateSavesCaches(userId, gameId);
         return reply.status(204).send();
       } catch (err) {
         request.log.error({ err }, "delete-game failed");
@@ -158,6 +216,8 @@ export async function registerSavesRoutes(
         }
 
         await deps.renameGameInCloudUseCase.execute({ userId, oldGameId, newGameId });
+        invalidateSavesCaches(userId, oldGameId);
+        invalidateSavesCaches(userId, newGameId);
         return reply.status(204).send();
       } catch (err) {
         request.log.error({ err }, "rename-game failed");

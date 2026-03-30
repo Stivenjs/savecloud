@@ -75,6 +75,16 @@ pub struct RemoteSaveInfoDto {
     pub size: Option<u64>,
 }
 
+/// Resumen agregado de guardados en la nube por juego.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudSavesSummaryDto {
+    pub game_id: String,
+    pub file_count: u32,
+    pub total_size_bytes: u64,
+    pub last_modified: Option<String>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupInfoDto {

@@ -62,6 +62,14 @@ export interface SaveRepository {
   /** Varias URLs de descarga en una sola llamada. */
   getDownloadUrls(userId: string, items: DownloadUrlItem[]): Promise<DownloadUrlResult[]>;
   listByUser(userId: string): Promise<GameSave[]>;
+  /**
+   * Lista los archivos de guardado de un usuario filtrados por juego.
+   *
+   * Implementaciones pueden optimizar esta operación usando un prefijo
+   * más específico (`userId/gameId/`) en lugar de recorrer todos los
+   * objetos del usuario.
+   */
+  listByUserAndGame(userId: string, gameId: string): Promise<GameSave[]>;
   /** Lista backups (archivos .tar) del juego bajo userId/gameId/backups/ */
   listBackups(userId: string, gameId: string): Promise<BackupMetadata[]>;
   /** Borra un backup por key (debe estar bajo userId/gameId/backups/). */

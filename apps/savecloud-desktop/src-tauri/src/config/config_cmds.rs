@@ -5,7 +5,7 @@
 //! del árbol de juegos.
 
 use crate::commands::sync::api::{
-    api_request, sync_list_remote_saves, sync_list_remote_saves_for_user,
+    api_request, sync_list_remote_saves_for_user,
 };
 use crate::config::gamification::GamificationStateDto;
 use crate::config::{self, Config, ConfigDto, ConfiguredGame, GameDto, OperationLogEntryDto};
@@ -753,7 +753,8 @@ pub async fn restore_config_from_cloud() -> Result<(), String> {
         .to_string();
     let api_key = settings.api_key.as_deref().unwrap_or("").to_string();
 
-    let saves = sync_list_remote_saves().await?;
+    // Optimización: el config vive bajo el juego especial "__config__".
+    let saves = crate::commands::sync::api::sync_list_remote_saves_for_game("__config__".to_string()).await?;
     let mut config_saves: Vec<_> = saves
         .into_iter()
         .filter(|s| s.game_id == "__config__" && s.filename.ends_with("config.json"))
@@ -762,7 +763,9 @@ pub async fn restore_config_from_cloud() -> Result<(), String> {
         return Err("Incapacidad de resolver nodo remoto de config".into());
     }
     config_saves.sort_by(|a, b| a.last_modified.cmp(&b.last_modified));
-    let latest = config_saves.pop().unwrap();
+    let latest = config_saves
+        .pop()
+        .ok_or_else(|| "Incapacidad de resolver nodo remoto de config".to_string())?;
 
     let bytes = s3_transfer(&api_base, &user_id, &api_key, &latest.key, None, false).await?;
     let imported: Config = serde_json::from_slice(&bytes)

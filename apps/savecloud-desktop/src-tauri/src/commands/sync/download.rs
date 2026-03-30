@@ -209,11 +209,8 @@ pub async fn sync_check_download_conflicts(
         None => return Err("No se pudo expandir la ruta de destino".into()),
     };
 
-    let all = api::sync_list_remote_saves().await?;
-    let saves: Vec<RemoteSaveInfoDto> = all
-        .into_iter()
-        .filter(|s| s.game_id.eq_ignore_ascii_case(&game_id))
-        .collect();
+    // Optimización: si ya conocemos el juego, listamos solo su prefijo remoto.
+    let saves: Vec<RemoteSaveInfoDto> = api::sync_list_remote_saves_for_game(game_id.clone()).await?;
 
     let conflicts = check_conflicts_for_game(&dest_base, &saves);
     Ok(DownloadConflictsResultDto { conflicts })
@@ -711,10 +708,8 @@ pub(crate) async fn sync_download_game_impl(
     let saves: Vec<_> = match prefetched_saves {
         Some(s) => s,
         None => {
-            let all = api::sync_list_remote_saves().await?;
-            all.into_iter()
-                .filter(|s| s.game_id.eq_ignore_ascii_case(&game_id))
-                .collect()
+            // Optimización: lista solo los objetos del juego cuando es una operación individual.
+            api::sync_list_remote_saves_for_game(game_id.clone()).await?
         }
     };
 
