@@ -12,6 +12,7 @@
 pub mod api;
 pub mod backup;
 pub mod download;
+pub mod events;
 pub mod full_backup;
 mod models;
 pub mod multipart_upload;

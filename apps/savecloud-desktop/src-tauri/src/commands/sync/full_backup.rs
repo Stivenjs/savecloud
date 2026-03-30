@@ -22,13 +22,17 @@ use tokio::io::AsyncWriteExt;
 use tokio_util::io::SyncIoBridge;
 
 use super::api;
+use super::events::{
+    emit_full_backup_done, emit_sync_download_done, emit_sync_download_progress,
+    emit_sync_terminal, emit_sync_upload_done, emit_sync_upload_progress, sync_status_from_result,
+};
 use super::models::SyncProgressPayload;
 use super::multipart_upload;
 use super::streaming;
 use crate::config;
 use crate::network::DATA_CLIENT;
 use crate::tray::tray_state::TrayState;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
 /// Prefijo S3 para backups (key = userId/gameId/backups/<filename>.tar).
 const BACKUPS_PREFIX: &str = "backups/";
@@ -265,26 +269,34 @@ pub async fn download_and_restore_full_backup_impl(
 
         if loaded - last_emit >= FULL_BACKUP_DOWNLOAD_EMIT_BYTES || (total > 0 && loaded >= total) {
             last_emit = loaded;
-            let _ = app.emit(
-                "sync-download-progress",
+            emit_sync_download_progress(
+                &app,
                 SyncProgressPayload {
+                    operation_id: Some(format!("sync-download-{game_id}")),
+                    status: Some("running".to_string()),
                     game_id: game_id.clone(),
                     filename: tar_name.to_string(),
                     loaded,
                     total,
+                    downloaded_bytes: Some(loaded),
+                    total_bytes: Some(total),
                 },
             );
         }
     }
 
     if total > 0 && loaded < total {
-        let _ = app.emit(
-            "sync-download-progress",
+        emit_sync_download_progress(
+            &app,
             SyncProgressPayload {
+                operation_id: Some(format!("sync-download-{game_id}")),
+                status: Some("running".to_string()),
                 game_id: game_id.clone(),
                 filename: tar_name.to_string(),
                 loaded: total,
                 total,
+                downloaded_bytes: Some(total),
+                total_bytes: Some(total),
             },
         );
     }
@@ -299,8 +311,15 @@ pub async fn download_and_restore_full_backup_impl(
         .map_err(|e| format!("Pánico en hilo de descompresión: {}", e))??;
 
     tray_state.set_just_restored(&game_id);
+    emit_sync_terminal(
+        &app,
+        format!("sync-download-{game_id}"),
+        "completed",
+        "download",
+        Some(game_id.clone()),
+    );
     if emit_done {
-        let _ = app.emit("sync-download-done", ());
+        emit_sync_download_done(&app);
     }
 
     Ok(())
@@ -361,13 +380,17 @@ pub async fn create_and_upload_full_backup(
     tray_state.0.reset_upload_cancel();
     tray_state.0.reset_upload_pause();
 
-    let _ = app.emit(
-        "sync-upload-progress",
+    emit_sync_upload_progress(
+        &app,
         SyncProgressPayload {
+            operation_id: Some(format!("sync-upload-{game_id}")),
+            status: Some("running".to_string()),
             game_id: game_id.clone(),
             filename: "Empaquetando…".to_string(),
             loaded: 0,
             total: 1,
+            downloaded_bytes: Some(0),
+            total_bytes: Some(1),
         },
     );
 
@@ -424,13 +447,17 @@ pub async fn create_and_upload_full_backup(
 
         let _temp_guard = TempFileGuard(tar_path.clone());
 
-        let _ = app.emit(
-            "sync-upload-progress",
+        emit_sync_upload_progress(
+            &app,
             SyncProgressPayload {
+                operation_id: Some(format!("sync-upload-{game_id}")),
+                status: Some("running".to_string()),
                 game_id: game_id.clone(),
                 filename: relative_filename.clone(),
                 loaded: 0,
                 total: size,
+                downloaded_bytes: Some(0),
+                total_bytes: Some(size),
             },
         );
 
@@ -451,11 +478,19 @@ pub async fn create_and_upload_full_backup(
     tray_state.0.syncing_dec();
     tray_state.0.update_tooltip();
 
-    let _ = app.emit("full-backup-done", ());
+    let status = sync_status_from_result(&result);
+    emit_sync_terminal(
+        &app,
+        format!("sync-upload-{game_id}"),
+        status,
+        "upload",
+        Some(game_id.clone()),
+    );
+    emit_full_backup_done(&app);
 
     if result.is_ok() {
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        let _ = app.emit("sync-upload-done", ());
+        emit_sync_upload_done(&app);
     }
 
     result.map(|_| relative_filename)

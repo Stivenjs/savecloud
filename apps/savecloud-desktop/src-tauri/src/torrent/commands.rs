@@ -24,17 +24,23 @@ pub async fn start_torrent_download(
         engine.session()
     };
 
-    engine::emit_starting_event(&app, "", &magnet);
-
     let (info_hash, name, id) =
         engine::add_magnet_to_session(&session, &magnet, &save_path).await?;
+    engine::emit_starting_event(&app, &info_hash, &name);
 
     {
         let mut eng = state.engine.lock().await;
         eng.register_active(info_hash.clone());
     }
 
-    engine::spawn_progress_monitor(session, id, info_hash.clone(), name, app);
+    engine::spawn_progress_monitor(
+        session,
+        id,
+        info_hash.clone(),
+        name,
+        app,
+        Some(state.engine.clone()),
+    );
 
     Ok(info_hash)
 }
@@ -52,17 +58,23 @@ pub async fn start_torrent_file_download(
         engine.session()
     };
 
-    engine::emit_starting_event(&app, "", &file_path);
-
     let (info_hash, name, id) =
         engine::add_file_to_session(&session, &file_path, &save_path).await?;
+    engine::emit_starting_event(&app, &info_hash, &name);
 
     {
         let mut eng = state.engine.lock().await;
         eng.register_active(info_hash.clone());
     }
 
-    engine::spawn_progress_monitor(session, id, info_hash.clone(), name, app);
+    engine::spawn_progress_monitor(
+        session,
+        id,
+        info_hash.clone(),
+        name,
+        app,
+        Some(state.engine.clone()),
+    );
 
     Ok(info_hash)
 }
@@ -263,19 +275,33 @@ pub async fn download_torrent_from_cloud(
         engine.session()
     };
 
-    engine::emit_starting_event(&app, "", &game_id);
-
     let (info_hash, name, id) =
         engine::add_file_to_session(&session, &temp_path, &save_path).await?;
+    engine::emit_starting_event(&app, &info_hash, &name);
 
     {
         let mut eng = state.engine.lock().await;
         eng.register_active(info_hash.clone());
     }
 
-    engine::spawn_progress_monitor(session, id, info_hash.clone(), name, app);
+    engine::spawn_progress_monitor(
+        session,
+        id,
+        info_hash.clone(),
+        name,
+        app,
+        Some(state.engine.clone()),
+    );
 
     Ok(info_hash)
+}
+
+#[tauri::command]
+pub async fn get_active_torrent_downloads(
+    state: State<'_, TorrentState>,
+) -> Result<Vec<String>, TorrentError> {
+    let engine = state.engine.lock().await;
+    Ok(engine.active_hashes())
 }
 
 /// Elimina un archivo .torrent almacenado en la nube (S3).

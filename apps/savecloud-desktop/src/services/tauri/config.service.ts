@@ -433,6 +433,16 @@ export interface SyncResult {
   errors: string[];
 }
 
+export interface ActiveDownloadState {
+  id: string;
+  kind: "upload" | "download";
+  gameId: string | null;
+  name: string;
+  state: "queued" | "running" | "paused" | "completed" | "failed";
+  loaded: number;
+  total: number;
+}
+
 /** Sube los guardados de un juego a la nube */
 export async function syncUploadGame(gameId: string): Promise<SyncResult> {
   const r = await invoke<{
@@ -628,6 +638,11 @@ export async function syncDownloadAllGames(): Promise<GameSyncResult[]> {
   }));
 }
 
+/** Snapshot de descargas activas para rehidratar la UI al iniciar. */
+export async function getActiveDownloadsState(): Promise<ActiveDownloadState[]> {
+  return invoke<ActiveDownloadState[]>("get_active_downloads_state");
+}
+
 /** Información de un backup local */
 export interface BackupInfo {
   id: string;
@@ -791,6 +806,11 @@ export async function pauseTorrent(infoHash: string): Promise<void> {
 /** Reanuda la descarga de un torrent pausado */
 export async function resumeTorrent(infoHash: string): Promise<void> {
   await invoke("resume_torrent", { infoHash });
+}
+
+/** Lista infoHash de torrents activos para rehidratación. */
+export async function getActiveTorrentDownloads(): Promise<string[]> {
+  return invoke<string[]>("get_active_torrent_downloads");
 }
 
 /** Información de un archivo .torrent en la nube */

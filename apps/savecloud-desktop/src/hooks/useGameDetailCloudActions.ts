@@ -20,7 +20,9 @@ export function useGameDetailCloudActions() {
   const handleSync = useCallback(
     async (g: ConfiguredGame) => {
       setOpLoading("sync");
-      useSyncStore.getState().setSyncOperation({ type: "upload", mode: "single", gameId: g.id });
+      useSyncStore
+        .getState()
+        .setSyncOperation({ type: "upload", mode: "single", gameId: g.id, operationId: `sync-upload-${g.id}` });
       try {
         await syncUploadGame(g.id);
         toastSuccess("Subido", `${formatGameDisplayName(g.id)} sincronizado con la nube.`);
@@ -40,7 +42,12 @@ export function useGameDetailCloudActions() {
   const handleDownload = useCallback(
     async (g: ConfiguredGame) => {
       setOpLoading("download");
-      useSyncStore.getState().setSyncOperation({ type: "download", mode: "single", gameId: g.id });
+      useSyncStore.getState().setSyncOperation({
+        type: "download",
+        mode: "single",
+        gameId: g.id,
+        operationId: `sync-download-${g.id}`,
+      });
       try {
         await syncDownloadGame(g.id);
         toastSuccess("Descargado", `${formatGameDisplayName(g.id)} restaurado desde la nube.`);
@@ -59,7 +66,9 @@ export function useGameDetailCloudActions() {
   const handleFullBackupUpload = useCallback(
     async (g: ConfiguredGame) => {
       setFullBackupUploadingGameId(g.id);
-      useSyncStore.getState().setSyncOperation({ type: "upload", mode: "single", gameId: g.id });
+      useSyncStore
+        .getState()
+        .setSyncOperation({ type: "upload", mode: "single", gameId: g.id, operationId: `sync-upload-${g.id}` });
       try {
         await createAndUploadFullBackup(g.id);
         toastSuccess(

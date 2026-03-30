@@ -39,9 +39,9 @@ use bytes::{BufMut, BytesMut};
 use tokio::sync::Semaphore;
 
 use crate::network::DATA_CLIENT;
-use tauri::Emitter;
 
 use super::super::api;
+use super::super::events::emit_sync_upload_progress;
 use super::super::models::SyncProgressPayload;
 use super::tar_stream::TarStreamMsg;
 use super::upload_strategy::{ConcurrencyController, UploadStrategy};
@@ -528,13 +528,17 @@ fn maybe_emit_progress(
     };
     if force || pct > *last_pct {
         *last_pct = pct;
-        let _ = app.emit(
-            "sync-upload-progress",
+        emit_sync_upload_progress(
+            app,
             SyncProgressPayload {
+                operation_id: Some(format!("sync-upload-{}", game_id)),
+                status: Some("running".to_string()),
                 game_id: game_id.to_string(),
                 filename: filename.to_string(),
                 loaded,
                 total,
+                downloaded_bytes: Some(loaded),
+                total_bytes: Some(total),
             },
         );
     }

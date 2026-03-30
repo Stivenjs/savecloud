@@ -104,7 +104,7 @@ export function RestoreBackupModal({ isOpen, onClose, game, onSuccess }: Restore
   const handleCreateFullBackup = async () => {
     if (!gameId || !game) return;
     setCreatingFullBackup(true);
-    setSyncOperation({ type: "upload", mode: "single", gameId });
+    setSyncOperation({ type: "upload", mode: "single", gameId, operationId: `sync-upload-${gameId}` });
     try {
       await createAndUploadFullBackup(gameId);
       toastSuccess(
@@ -122,7 +122,7 @@ export function RestoreBackupModal({ isOpen, onClose, game, onSuccess }: Restore
   const handleRestoreCloud = async (b: CloudBackupInfo) => {
     if (!gameId || !game) return;
     setRestoringCloudKey(b.key);
-    setSyncOperation({ type: "download", mode: "single", gameId });
+    setSyncOperation({ type: "download", mode: "single", gameId, operationId: `sync-download-${gameId}` });
     try {
       await downloadAndRestoreFullBackup(gameId, b.key);
       toastSuccess("Restauración completada", `Se ha restaurado el backup ${b.filename} en la carpeta del juego.`);

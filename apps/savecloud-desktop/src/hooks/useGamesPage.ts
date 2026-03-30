@@ -351,7 +351,7 @@ export function useGamesPage() {
 
   const handleFullBackupUpload = async (game: ConfiguredGame) => {
     dispatch({ type: "SET_FULL_BACKUP_UPLOADING", gameId: game.id });
-    setSyncOperation({ type: "upload", mode: "single", gameId: game.id });
+    setSyncOperation({ type: "upload", mode: "single", gameId: game.id, operationId: `sync-upload-${game.id}` });
     try {
       await createAndUploadFullBackup(game.id);
       toastSuccess(
@@ -380,7 +380,7 @@ export function useGamesPage() {
     const game = syncPreviewGame;
     if (syncPreviewType === "upload") {
       dispatch({ type: "SET_SYNCING", value: game.id });
-      setSyncOperation({ type: "upload", mode: "single", gameId: game.id });
+      setSyncOperation({ type: "upload", mode: "single", gameId: game.id, operationId: `sync-upload-${game.id}` });
       dispatch({ type: "SET_OPERATION_RESULT", value: null });
       try {
         const result = await syncUploadGame(game.id);
@@ -415,7 +415,12 @@ export function useGamesPage() {
       }
     } else {
       dispatch({ type: "SET_DOWNLOADING", value: game.id });
-      setSyncOperation({ type: "download", mode: "single", gameId: game.id });
+      setSyncOperation({
+        type: "download",
+        mode: "single",
+        gameId: game.id,
+        operationId: `sync-download-${game.id}`,
+      });
       try {
         await executeDownload(game);
         dispatch({ type: "SET_SYNC_PREVIEW", game: null, previewType: null });
@@ -492,7 +497,12 @@ export function useGamesPage() {
     if (!downloadConflictGame) return;
     const game = downloadConflictGame;
     dispatch({ type: "SET_DOWNLOADING", value: game.id });
-    setSyncOperation({ type: "download", mode: "single", gameId: game.id });
+    setSyncOperation({
+      type: "download",
+      mode: "single",
+      gameId: game.id,
+      operationId: `sync-download-${game.id}`,
+    });
     try {
       await executeDownload(game);
       dispatch({ type: "SET_DOWNLOAD_CONFLICT", game: null, conflicts: [] });
@@ -510,7 +520,7 @@ export function useGamesPage() {
   const executeSyncAll = async () => {
     if (!config?.games?.length) return;
     dispatch({ type: "SET_SYNCING", value: "all" });
-    setSyncOperation({ type: "upload", mode: "batch", gameId: null });
+    setSyncOperation({ type: "upload", mode: "batch", gameId: null, operationId: "sync-upload-batch" });
     dispatch({ type: "SET_OPERATION_RESULT", value: null });
     let totalResult = { okCount: 0, errCount: 0, errors: [] as string[] };
     try {
@@ -577,7 +587,7 @@ export function useGamesPage() {
 
   const executeDownloadAll = async () => {
     if (!config?.games?.length) return;
-    setSyncOperation({ type: "download", mode: "batch", gameId: null });
+    setSyncOperation({ type: "download", mode: "batch", gameId: null, operationId: "sync-download-batch" });
     let totalResult = { okCount: 0, errCount: 0, errors: [] as string[] };
     try {
       const results = await syncDownloadAllGames();

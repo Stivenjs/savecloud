@@ -1,0 +1,63 @@
+import { useEffect, useMemo, useState } from "react";
+import { useSyncStore } from "@store/SyncStore";
+import { useTorrentStore } from "@store/TorrentStore";
+import { DownloadsPanel } from "./DownloadsPanel";
+import { SyncProgressBar } from "./SyncProgressBar";
+
+type OverlayMode = "none" | "downloads_panel" | "sync_floating" | "torrent_bar";
+
+const MODE_SWITCH_HYSTERESIS_MS = 250;
+
+export function TransferOverlayRouter() {
+  const syncOperation = useSyncStore((s) => s.syncOperation);
+  const progress = useSyncStore((s) => s.progress);
+  const pausedUploadInfo = useSyncStore((s) => s.pausedUploadInfo);
+  const syncActiveCount = useSyncStore((s) => s.activeCount);
+  const torrentProgress = useTorrentStore((s) => s.progress);
+  const torrentActiveCount = useTorrentStore((s) => s.activeCount);
+
+  const totalActive = syncActiveCount + torrentActiveCount;
+  const [downloadsPanelSessionActive, setDownloadsPanelSessionActive] = useState(false);
+  const [mode, setMode] = useState<OverlayMode>("none");
+
+  useEffect(() => {
+    if (totalActive === 0) {
+      setDownloadsPanelSessionActive(false);
+      return;
+    }
+    if (totalActive > 1 || syncOperation?.mode === "batch") {
+      setDownloadsPanelSessionActive(true);
+    }
+  }, [totalActive, syncOperation?.mode]);
+
+  const desiredMode = useMemo<OverlayMode>(() => {
+    if (pausedUploadInfo) return "sync_floating";
+    if (downloadsPanelSessionActive && totalActive > 0) return "downloads_panel";
+
+    const isPackagedOperation =
+      progress?.filename?.includes("Empaquetando") ||
+      progress?.filename?.includes("Extrayendo") ||
+      progress?.filename?.startsWith("backups/") ||
+      progress?.filename?.endsWith(".tar");
+
+    if (progress && (syncOperation?.mode === "batch" || isPackagedOperation)) return "sync_floating";
+    if (torrentProgress) return "torrent_bar";
+    return "none";
+  }, [downloadsPanelSessionActive, pausedUploadInfo, progress, syncOperation?.mode, torrentProgress, totalActive]);
+
+  useEffect(() => {
+    if (mode === desiredMode) return;
+    const timeoutId = setTimeout(() => {
+      setMode(desiredMode);
+    }, MODE_SWITCH_HYSTERESIS_MS);
+    return () => clearTimeout(timeoutId);
+  }, [desiredMode, mode]);
+
+  if (mode === "downloads_panel") {
+    return <DownloadsPanel />;
+  }
+  if (mode === "sync_floating" || mode === "torrent_bar") {
+    return <SyncProgressBar />;
+  }
+  return null;
+}

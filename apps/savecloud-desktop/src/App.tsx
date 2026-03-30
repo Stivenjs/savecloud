@@ -1,5 +1,5 @@
 import { MemoryRouter } from "react-router-dom";
-import { AppLayout, SyncProgressBar } from "@components/layout";
+import { AppLayout, TransferOverlayRouter } from "@components/layout";
 import { NAV_ITEMS, AppRoutes } from "@components/navigation/PageContent";
 import { TrayActionsListener } from "@components/sync/TrayActionsListener";
 import { UnsyncedSavesModalWithProgress } from "@features/games";
@@ -20,7 +20,7 @@ function App() {
         </AppLayout>
       </MemoryRouter>
 
-      <SyncProgressBar />
+      <TransferOverlayRouter />
     </>
   );
 }
