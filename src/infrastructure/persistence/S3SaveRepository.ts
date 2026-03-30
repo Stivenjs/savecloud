@@ -317,6 +317,44 @@ export class S3SaveRepository implements SaveRepository {
   }
 
   /**
+   * Lista los archivos de guardado de un usuario para un juego concreto.
+   *
+   * Utiliza un prefijo más específico (`userId/gameId/`) para evitar tener
+   * que recorrer todos los objetos del usuario cuando solo interesa un juego.
+   *
+   * @param userId - Identificador del usuario.
+   * @param gameId - Identificador del juego.
+   */
+  async listByUserAndGame(userId: string, gameId: string): Promise<GameSave[]> {
+    const prefix = `${userId}/${gameId}/`;
+    const allContents: { Key: string; LastModified?: Date; Size?: number }[] = [];
+    let continuationToken: string | undefined;
+
+    do {
+      const response = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucketName,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        })
+      );
+      const contents = (response.Contents ?? []).filter(
+        (obj): obj is { Key: string; LastModified?: Date; Size?: number } => !!obj.Key
+      );
+      allContents.push(...contents);
+      continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    return allContents.map((obj) => ({
+      gameId,
+      key: obj.Key,
+      filename: S3SaveRepository.relativeFilename(obj.Key, prefix),
+      lastModified: obj.LastModified ?? new Date(0),
+      size: obj.Size,
+    }));
+  }
+
+  /**
    * Lista los backups empaquetados de un juego concreto.
    *
    * Pagina sobre ListObjectsV2 igual que {@link listByUser}. El campo

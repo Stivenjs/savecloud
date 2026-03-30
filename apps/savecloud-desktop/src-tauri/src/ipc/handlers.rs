@@ -44,6 +44,8 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::commands::sync::upload::sync_upload_game,
         crate::commands::sync::upload::sync_upload_all_games,
         crate::commands::sync::api::sync_list_remote_saves,
+        crate::commands::sync::api::sync_list_remote_saves_for_game,
+        crate::commands::sync::api::sync_list_remote_saves_summary,
         crate::commands::sync::api::sync_delete_game_from_cloud,
         crate::commands::sync::api::sync_rename_game_in_cloud,
         crate::commands::sync::download::sync_check_download_conflicts,

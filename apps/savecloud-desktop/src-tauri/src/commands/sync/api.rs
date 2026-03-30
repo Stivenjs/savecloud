@@ -8,7 +8,7 @@
 //! reintentos en solicitudes críticas.
 
 use super::models::SyncResultDto;
-use super::models::{RemoteSaveDto, RemoteSaveInfoDto};
+use super::models::{CloudSavesSummaryDto, RemoteSaveDto, RemoteSaveInfoDto};
 use crate::network::API_CLIENT;
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
@@ -258,10 +258,107 @@ async fn list_remote_saves_for_user(
     Ok(out)
 }
 
+async fn list_remote_saves_for_user_and_game(
+    api_base: &str,
+    api_key: &str,
+    user_id: &str,
+    game_id: &str,
+) -> Result<Vec<RemoteSaveInfoDto>, String> {
+    let trimmed_game_id = game_id.trim();
+    if trimmed_game_id.is_empty() {
+        return Err("gameId vacío".into());
+    }
+    let path = format!("?gameId={}", urlencoding::encode(trimmed_game_id));
+    let res = api_request(api_base, user_id, api_key, "GET", &path, None)
+        .await
+        .map_err(|e| format!("GET /saves?gameId: {}", e))?;
+
+    if !res.status().is_success() {
+        return Err(format!(
+            "API: {} {}",
+            res.status(),
+            res.text().await.unwrap_or_default()
+        ));
+    }
+
+    let raw: Vec<RemoteSaveDto> = res.json().await.map_err(|e| e.to_string())?;
+    let out: Vec<RemoteSaveInfoDto> = raw
+        .into_iter()
+        .map(|s| {
+            let parts: Vec<&str> = s.key.split('/').collect();
+            let filename = if parts.len() >= 3 {
+                parts[2..].join("/")
+            } else {
+                s.key.clone()
+            };
+            RemoteSaveInfoDto {
+                game_id: s.game_id,
+                key: s.key,
+                filename,
+                last_modified: s.last_modified,
+                size: s.size,
+            }
+        })
+        .collect();
+    Ok(out)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CloudSavesSummaryItem {
+    game_id: String,
+    file_count: u32,
+    total_size_bytes: u64,
+    last_modified: Option<String>,
+}
+
+async fn list_remote_saves_summary_for_user(
+    api_base: &str,
+    api_key: &str,
+    user_id: &str,
+) -> Result<Vec<CloudSavesSummaryDto>, String> {
+    let res = api_request(api_base, user_id, api_key, "GET", "/summary", None)
+        .await
+        .map_err(|e| format!("GET /saves/summary: {}", e))?;
+
+    if !res.status().is_success() {
+        return Err(format!(
+            "API: {} {}",
+            res.status(),
+            res.text().await.unwrap_or_default()
+        ));
+    }
+
+    let raw: Vec<CloudSavesSummaryItem> = res.json().await.map_err(|e| e.to_string())?;
+    Ok(raw
+        .into_iter()
+        .map(|s| CloudSavesSummaryDto {
+            game_id: s.game_id,
+            file_count: s.file_count,
+            total_size_bytes: s.total_size_bytes,
+            last_modified: s.last_modified,
+        })
+        .collect())
+}
+
 #[tauri::command]
 pub async fn sync_list_remote_saves() -> Result<Vec<RemoteSaveInfoDto>, String> {
     let ctx = get_api_context()?;
     list_remote_saves_for_user(&ctx.base_url, &ctx.api_key, &ctx.user_id).await
+}
+
+#[tauri::command]
+pub async fn sync_list_remote_saves_for_game(
+    game_id: String,
+) -> Result<Vec<RemoteSaveInfoDto>, String> {
+    let ctx = get_api_context()?;
+    list_remote_saves_for_user_and_game(&ctx.base_url, &ctx.api_key, &ctx.user_id, &game_id).await
+}
+
+#[tauri::command]
+pub async fn sync_list_remote_saves_summary() -> Result<Vec<CloudSavesSummaryDto>, String> {
+    let ctx = get_api_context()?;
+    list_remote_saves_summary_for_user(&ctx.base_url, &ctx.api_key, &ctx.user_id).await
 }
 
 #[tauri::command]

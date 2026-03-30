@@ -191,15 +191,14 @@ pub async fn upload_torrent_to_cloud(
 /// Lista los archivos .torrent almacenados en la nube para un juego.
 #[tauri::command]
 pub async fn list_cloud_torrents(game_id: String) -> Result<Vec<CloudTorrentInfo>, TorrentError> {
-    let all_saves = crate::commands::sync::api::sync_list_remote_saves()
+    // Optimización: lista solo los objetos de este juego.
+    let all_saves = crate::commands::sync::api::sync_list_remote_saves_for_game(game_id.clone())
         .await
         .map_err(|e| TorrentError::CloudUrls(e))?;
 
     let torrents = all_saves
         .into_iter()
-        .filter(|s| {
-            s.game_id.eq_ignore_ascii_case(&game_id) && s.filename.starts_with("__torrent__/")
-        })
+        .filter(|s| s.filename.starts_with("__torrent__/"))
         .map(|s| CloudTorrentInfo {
             game_id: s.game_id,
             key: s.key,

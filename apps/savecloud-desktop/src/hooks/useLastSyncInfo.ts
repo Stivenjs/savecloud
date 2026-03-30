@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery, type Query } from "@tanstack/react-query";
-import { syncListRemoteSaves } from "@services/tauri";
+import { syncListRemoteSavesSummary } from "@services/tauri";
 
 export const LAST_SYNC_QUERY_KEY = ["last-sync-info"] as const;
 const CONFIG_GAME_ID = "__config__";
@@ -25,7 +25,7 @@ type LastSyncQueryData = {
   totalCloudSize: number;
 };
 
-function computeLastSync(saves: { gameId: string; lastModified: string }[]): LastSyncInfo {
+function computeLastSync(saves: { gameId: string; lastModified: string | null }[]): LastSyncInfo {
   if (saves.length === 0) {
     return { lastSyncAt: null, lastSyncGameId: null };
   }
@@ -33,6 +33,7 @@ function computeLastSync(saves: { gameId: string; lastModified: string }[]): Las
   let latest: { gameId: string; date: Date } | null = null;
 
   for (const s of saves) {
+    if (!s.lastModified) continue;
     const date = new Date(s.lastModified);
     if (!latest || date > latest.date) {
       latest = { gameId: s.gameId, date };
@@ -45,25 +46,14 @@ function computeLastSync(saves: { gameId: string; lastModified: string }[]): Las
   };
 }
 
-function computeCloudGames(saves: { gameId: string; size?: number }[]): {
+function computeCloudGames(saves: { gameId: string; totalSizeBytes: number; fileCount: number }[]): {
   cloudGames: CloudGameSummary[];
   totalSize: number;
 } {
-  const byGame = new Map<string, { count: number; size: number }>();
-
-  for (const s of saves) {
-    const existing = byGame.get(s.gameId) ?? { count: 0, size: 0 };
-
-    byGame.set(s.gameId, {
-      count: existing.count + 1,
-      size: existing.size + (s.size ?? 0),
-    });
-  }
-
-  const cloudGames: CloudGameSummary[] = Array.from(byGame.entries()).map(([gameId, { count, size }]) => ({
-    gameId,
-    fileCount: count,
-    totalSize: size,
+  const cloudGames: CloudGameSummary[] = saves.map((s) => ({
+    gameId: s.gameId,
+    fileCount: s.fileCount,
+    totalSize: s.totalSizeBytes,
   }));
 
   const totalSize = cloudGames.reduce((sum, g) => sum + g.totalSize, 0);
@@ -76,9 +66,8 @@ export function useLastSyncInfo(enabled: boolean) {
     queryKey: LAST_SYNC_QUERY_KEY,
 
     queryFn: async (): Promise<LastSyncQueryData> => {
-      const allSaves = await syncListRemoteSaves();
-
-      const saves = allSaves.filter((s) => s.gameId !== CONFIG_GAME_ID);
+      const all = await syncListRemoteSavesSummary();
+      const saves = all.filter((s) => s.gameId !== CONFIG_GAME_ID);
 
       const lastSync = computeLastSync(saves);
       const { cloudGames, totalSize } = computeCloudGames(saves);

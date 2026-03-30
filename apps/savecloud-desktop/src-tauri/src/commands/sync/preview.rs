@@ -57,11 +57,8 @@ pub async fn preview_download(game_id: String) -> Result<PreviewDownloadDto, Str
         None => return Err("No se pudo expandir la ruta".into()),
     };
 
-    let all = api::sync_list_remote_saves().await?;
-    let saves: Vec<_> = all
-        .into_iter()
-        .filter(|s| s.game_id.eq_ignore_ascii_case(&game_id))
-        .collect();
+    // Optimización: listamos solo el prefijo del juego en la nube.
+    let saves = api::sync_list_remote_saves_for_game(game_id.clone()).await?;
 
     let conflicts_result = download::sync_check_download_conflicts(game_id.clone()).await?;
 

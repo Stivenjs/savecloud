@@ -553,9 +553,22 @@ export interface RemoteSaveInfo {
   size?: number;
 }
 
+/** Resumen agregado de guardados en la nube por juego (para UI y “última sync”). */
+export interface CloudSavesSummary {
+  gameId: string;
+  fileCount: number;
+  totalSizeBytes: number;
+  lastModified: string | null;
+}
+
 /** Lista todos los guardados del usuario en la nube (para última sincronización, etc.) */
 export async function syncListRemoteSaves(): Promise<RemoteSaveInfo[]> {
   return invoke<RemoteSaveInfo[]>("sync_list_remote_saves");
+}
+
+/** Resumen agregado por juego (más rápido que listar todos los archivos). */
+export async function syncListRemoteSavesSummary(): Promise<CloudSavesSummary[]> {
+  return invoke<CloudSavesSummary[]>("sync_list_remote_saves_summary");
 }
 
 /** Lista todos los guardados en la nube de otro usuario (amigo) */
