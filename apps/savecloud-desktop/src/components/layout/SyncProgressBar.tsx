@@ -57,7 +57,8 @@ export function SyncProgressBar() {
   const value =
     progress && progress.total > 0 ? Math.min(100, Math.round((progress.loaded / progress.total) * 100)) : 0;
 
-  const canPause = progress?.type === "upload" && !(isPackagedOperation && progress.total <= 0);
+  const canPause = !!progress?.canPause;
+  const canCancel = !!progress?.canCancel;
 
   useEffect(() => {
     if (!progress) {
@@ -138,6 +139,7 @@ export function SyncProgressBar() {
             isIndeterminate={!!isIndeterminate}
             value={value}
             canPause={canPause}
+            canCancel={canCancel}
             speedBps={speedBps}
             etaSeconds={etaSeconds}
             onCancel={onCancelUpload}

@@ -19,17 +19,21 @@
 //! - Se aplican reintentos con backoff en operaciones críticas.
 //! - Se configuran timeouts a nivel de conexión y de request en el cliente HTTP.
 use super::api;
-use super::models::{GameSyncResultDto, SyncProgressPayload, SyncResultDto};
+use super::events::{
+    emit_sync_terminal, emit_sync_upload_done, emit_sync_upload_paused, emit_sync_upload_progress,
+    sync_status_from_err_count, sync_status_from_result,
+};
+use super::models::{GameSyncResultDto, SyncOperationStrategy, SyncProgressPayload, SyncResultDto};
 use super::multipart_upload;
-use crate::utils::path_utils;
 use crate::network::DATA_CLIENT;
 use crate::tray::tray_state::TrayState;
+use crate::utils::path_utils;
 use bytes::Bytes;
 use futures_util::stream::{self, Stream, StreamExt};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufReader, Read};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Manager, State};
 use tokio::sync::mpsc;
 
 /// Emitir progreso cada N bytes para no saturar el frontend (usado por `file_stream_with_progress`).
@@ -96,13 +100,23 @@ fn file_stream_with_progress(
                         || (total > 0 && loaded >= total)
                     {
                         last_emit = loaded;
-                        let _ = app.emit(
-                            "sync-upload-progress",
+                        emit_sync_upload_progress(
+                            &app,
                             SyncProgressPayload {
+                                operation_id: Some(format!("sync-upload-{}", game_id)),
+                                status: Some("running".to_string()),
                                 game_id: game_id.clone(),
                                 filename: filename.clone(),
                                 loaded,
                                 total,
+                                downloaded_bytes: Some(loaded),
+                                total_bytes: Some(total),
+                                can_pause: None,
+                                can_cancel: None,
+                                can_resume: None,
+                                strategy: Some(SyncOperationStrategy::Simple),
+                                state: None,
+                                reason_code: None,
                             },
                         );
                     }
@@ -120,13 +134,23 @@ fn file_stream_with_progress(
         }
 
         if loaded > 0 && loaded < total {
-            let _ = app.emit(
-                "sync-upload-progress",
+            emit_sync_upload_progress(
+                &app,
                 SyncProgressPayload {
+                    operation_id: Some(format!("sync-upload-{}", game_id)),
+                    status: Some("running".to_string()),
                     game_id,
                     filename,
                     loaded: total,
                     total,
+                    downloaded_bytes: Some(total),
+                    total_bytes: Some(total),
+                    can_pause: None,
+                    can_cancel: None,
+                    can_resume: None,
+                    strategy: Some(SyncOperationStrategy::Simple),
+                    state: None,
+                    reason_code: None,
                 },
             );
         }
@@ -175,7 +199,10 @@ pub async fn sync_upload_resume(app: AppHandle) -> Result<SyncResultDto, String>
 
     tray_state.0.syncing_dec();
     tray_state.0.clone().refresh_unsynced_async();
-    let _ = app.emit("sync-upload-done", ());
+    let op_id = load_paused_operation_id();
+    let status = sync_status_from_result(&result);
+    emit_sync_terminal(&app, op_id, status, "upload", None, None, None);
+    emit_sync_upload_done(&app);
 
     result.map(|()| SyncResultDto {
         ok_count: 1,
@@ -196,12 +223,34 @@ pub async fn sync_upload_game(
 
     tray_state.0.reset_upload_cancel();
     tray_state.0.reset_upload_pause();
-    let result = sync_upload_game_impl(game_id, app.clone(), Some(tray_state.0.clone())).await;
+    let operation_id = format!("sync-upload-{}", game_id);
+    let result =
+        sync_upload_game_impl(game_id.clone(), app.clone(), Some(tray_state.0.clone())).await;
 
     tray_state.0.syncing_dec();
     tray_state.0.clone().refresh_unsynced_async();
 
-    let _ = app.emit("sync-upload-done", ());
+    let cancelled = tray_state.0.upload_cancel_requested();
+    let status = if cancelled {
+        "cancelled"
+    } else {
+        sync_status_from_result(&result)
+    };
+    let reason_code = if cancelled {
+        Some("CANCELLED_BY_USER".to_string())
+    } else {
+        None
+    };
+    emit_sync_terminal(
+        &app,
+        operation_id,
+        status,
+        "upload",
+        Some(game_id),
+        None,
+        reason_code,
+    );
+    emit_sync_upload_done(&app);
     result
 }
 
@@ -273,6 +322,27 @@ pub(crate) async fn sync_upload_game_impl(
     let mut ok_count = 0u32;
     let mut err_count = 0u32;
     let mut errors = Vec::new();
+    let mut loaded_bytes_total: u64 = 0;
+
+    emit_sync_upload_progress(
+        &app,
+        SyncProgressPayload {
+            operation_id: Some(format!("sync-upload-{}", game_id)),
+            status: Some("running".to_string()),
+            game_id: game_id.clone(),
+            filename: "Preparando subida…".to_string(),
+            loaded: 0,
+            total: total_size,
+            downloaded_bytes: Some(0),
+            total_bytes: Some(total_size),
+            can_pause: None,
+            can_cancel: None,
+            can_resume: None,
+            strategy: None,
+            state: None,
+            reason_code: None,
+        },
+    );
 
     for ((absolute, relative), total) in multipart_files {
         if let Some(ref t) = tray_inner {
@@ -296,18 +366,13 @@ pub(crate) async fn sync_upload_game_impl(
         {
             Ok(()) => {
                 ok_count += 1;
+                loaded_bytes_total = loaded_bytes_total.saturating_add(total);
                 let now = filetime::FileTime::from_system_time(std::time::SystemTime::now());
                 let _ = filetime::set_file_mtime(std::path::Path::new(&absolute), now);
             }
             Err(e) => {
                 if e == multipart_upload::PAUSED_ERR_MSG {
-                    let _ = app.emit(
-                        "sync-upload-paused",
-                        serde_json::json!({
-                            "gameId": game_id,
-                            "filename": relative,
-                        }),
-                    );
+                    emit_sync_upload_paused(&app, &game_id, &relative);
                     break;
                 } else {
                     crate::commands::logs::sync_logger::log_error(
@@ -391,7 +456,12 @@ pub(crate) async fn sync_upload_game_impl(
                 let body = match tokio::fs::read(&absolute).await {
                     Ok(b) => b,
                     Err(e) => {
-                        return Err((relative.clone(), absolute, format!("{}: {}", relative, e)))
+                        return Err((
+                            relative.clone(),
+                            absolute,
+                            total,
+                            format!("{}: {}", relative, e),
+                        ))
                     }
                 };
 
@@ -405,17 +475,22 @@ pub(crate) async fn sync_upload_game_impl(
                 {
                     Ok(r) => r,
                     Err(e) => {
-                        return Err((relative.clone(), absolute, format!("{}: {}", relative, e)))
+                        return Err((
+                            relative.clone(),
+                            absolute,
+                            total,
+                            format!("{}: {}", relative, e),
+                        ))
                     }
                 };
 
                 if put_res.status().is_success() {
                     let now = filetime::FileTime::from_system_time(std::time::SystemTime::now());
                     let _ = filetime::set_file_mtime(std::path::Path::new(&absolute), now);
-                    Ok(())
+                    Ok((relative, total))
                 } else {
                     let msg = format!("{}: S3 PUT {}", relative, put_res.status());
-                    Err((relative, absolute, msg))
+                    Err((relative, absolute, total, msg))
                 }
             })
             .buffer_unordered(SIMPLE_PUT_CONCURRENCY);
@@ -436,8 +511,30 @@ pub(crate) async fn sync_upload_game_impl(
             }
 
             match result {
-                Ok(()) => ok_count += 1,
-                Err((relative, absolute, err_msg)) => {
+                Ok((relative, uploaded_bytes)) => {
+                    ok_count += 1;
+                    loaded_bytes_total = loaded_bytes_total.saturating_add(uploaded_bytes);
+                    emit_sync_upload_progress(
+                        &app,
+                        SyncProgressPayload {
+                            operation_id: Some(format!("sync-upload-{}", game_id)),
+                            status: Some("running".to_string()),
+                            game_id: game_id.clone(),
+                            filename: relative,
+                            loaded: loaded_bytes_total.min(total_size),
+                            total: total_size,
+                            downloaded_bytes: Some(loaded_bytes_total.min(total_size)),
+                            total_bytes: Some(total_size),
+                            can_pause: None,
+                            can_cancel: None,
+                            can_resume: None,
+                            strategy: Some(SyncOperationStrategy::Simple),
+                            state: None,
+                            reason_code: None,
+                        },
+                    );
+                }
+                Err((relative, absolute, _uploaded_bytes, err_msg)) => {
                     crate::commands::logs::sync_logger::log_error(
                         "upload_put",
                         &crate::commands::logs::sync_logger::upload_context(
@@ -556,6 +653,28 @@ pub async fn sync_upload_all_games(
         results_by_id.insert(game_id.clone(), GameSyncResultDto { game_id, result });
     }
 
+    let cancelled = tray_state.0.upload_cancel_requested();
+    for dto in results_by_id.values() {
+        let status = if cancelled {
+            "cancelled"
+        } else {
+            sync_status_from_err_count(dto.result.err_count)
+        };
+        emit_sync_terminal(
+            &app,
+            format!("sync-upload-{}", dto.game_id),
+            status,
+            "upload",
+            Some(dto.game_id.clone()),
+            None,
+            if cancelled {
+                Some("CANCELLED_BY_USER".to_string())
+            } else {
+                None
+            },
+        );
+    }
+
     let results: Vec<GameSyncResultDto> = cfg
         .games
         .iter()
@@ -565,7 +684,13 @@ pub async fn sync_upload_all_games(
     tray_state.0.syncing_dec();
     tray_state.0.clone().refresh_unsynced_async();
 
-    let _ = app.emit("sync-upload-done", ());
+    emit_sync_upload_done(&app);
 
     Ok(results)
+}
+
+fn load_paused_operation_id() -> String {
+    multipart_upload::load_paused_state()
+        .map(|s| format!("sync-upload-{}", s.game_id))
+        .unwrap_or_else(|| "sync-upload-resume".to_string())
 }

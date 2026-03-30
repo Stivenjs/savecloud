@@ -4,6 +4,7 @@ import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { Agent } from "https";
 import type { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from "aws-lambda";
 import { buildApp } from "@interfaces/http/app";
+import { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
 import { S3SaveRepository } from "@infrastructure/persistence/S3SaveRepository";
 import { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
 
@@ -26,6 +27,7 @@ const s3 = new S3Client({
 
 const saveRepository = new S3SaveRepository(s3, bucketName);
 const shareTokenStore = new ShareTokenS3(s3, bucketName);
+const notificationStore = new S3NotificationStore(s3, bucketName);
 
 let cachedProxy: ((event: APIGatewayProxyEvent, context: Context) => Promise<APIGatewayProxyResult>) | null = null;
 
@@ -34,6 +36,7 @@ async function getProxy() {
     const app = await buildApp({
       saveRepository,
       shareTokenStore,
+      notificationStore,
     });
 
     cachedProxy = awsLambdaFastify(app, {

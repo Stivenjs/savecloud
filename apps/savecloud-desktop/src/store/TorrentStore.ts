@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
+import { getActiveTorrentDownloads } from "@services/tauri/config.service";
 
 export type TorrentDownloadState = "starting" | "downloading" | "paused" | "completed";
 
@@ -18,27 +19,67 @@ export interface TorrentProgressState {
 
 interface TorrentStore {
   progress: TorrentProgressState | null;
+  activeByHash: Record<string, TorrentProgressState>;
+  activeCount: number;
   setProgress: (progress: TorrentProgressState | null) => void;
+  removeByHash: (infoHash: string) => void;
+  hydrateActive: () => Promise<void>;
 }
-
-/** Timeout para ocultar la barra tras completar. */
-const DONE_HIDE_MS = 3000;
-let doneTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const useTorrentStore = create<TorrentStore>((set) => ({
   progress: null,
+  activeByHash: {},
+  activeCount: 0,
   setProgress: (progress) => {
-    if (doneTimer) {
-      clearTimeout(doneTimer);
-      doneTimer = null;
+    set((state) => {
+      const next = { ...state.activeByHash };
+      if (progress?.infoHash && progress.state !== "completed") {
+        next[progress.infoHash] = progress;
+      } else if (progress?.infoHash) {
+        delete next[progress.infoHash];
+      }
+      const nextProgress =
+        progress?.state === "completed"
+          ? state.progress?.infoHash === progress.infoHash
+            ? null
+            : state.progress
+          : progress;
+      return { progress: nextProgress, activeByHash: next, activeCount: Object.keys(next).length };
+    });
+  },
+  removeByHash: (infoHash) =>
+    set((state) => {
+      const next = { ...state.activeByHash };
+      delete next[infoHash];
+      const nextProgress = state.progress?.infoHash === infoHash ? null : state.progress;
+      return { activeByHash: next, activeCount: Object.keys(next).length, progress: nextProgress };
+    }),
+  hydrateActive: async () => {
+    try {
+      const hashes = await getActiveTorrentDownloads();
+      set((state) => {
+        const next = { ...state.activeByHash };
+        for (const hash of hashes) {
+          if (!next[hash]) {
+            next[hash] = {
+              infoHash: hash,
+              name: hash,
+              progressPercent: 0,
+              downloadSpeedBytes: 0,
+              uploadSpeedBytes: 0,
+              state: "starting",
+              totalBytes: 0,
+              downloadedBytes: 0,
+              etaSeconds: null,
+              peersConnected: 0,
+            };
+          }
+        }
+        return { activeByHash: next, activeCount: Object.keys(next).length };
+      });
+    } catch {
+      // Best effort, luego llegan eventos en vivo.
     }
-    if (progress?.state === "completed") {
-      doneTimer = setTimeout(() => {
-        set({ progress: null });
-        doneTimer = null;
-      }, DONE_HIDE_MS);
-    }
-    set({ progress });
   },
 }));
 
@@ -48,23 +89,18 @@ export function initTorrentListeners() {
   if (listenersInitialized) return;
   listenersInitialized = true;
 
-  const { setProgress } = useTorrentStore.getState();
+  const { setProgress, removeByHash, hydrateActive } = useTorrentStore.getState();
+  hydrateActive();
 
   listen<TorrentProgressState>("torrent-download-progress", (ev) => {
     setProgress(ev.payload);
   });
 
   listen<string>("torrent-download-cancelled", (ev) => {
-    const cur = useTorrentStore.getState().progress;
-    if (cur && cur.infoHash === ev.payload) {
-      setProgress(null);
-    }
+    removeByHash(ev.payload);
   });
 
-  listen<TorrentProgressState>("torrent-download-done", () => {
-    const state = useTorrentStore.getState();
-    if (state.progress) {
-      setProgress({ ...state.progress, state: "completed", progressPercent: 100 });
-    }
+  listen<TorrentProgressState>("torrent-download-done", (ev) => {
+    setProgress({ ...ev.payload, state: "completed", progressPercent: 100 });
   });
 }

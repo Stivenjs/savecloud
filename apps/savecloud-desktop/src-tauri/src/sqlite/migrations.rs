@@ -31,6 +31,11 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         conn.pragma_update(None, "user_version", "5")?;
     }
 
+    if version < 6 {
+        conn.execute_batch(include_str!("sql/006_notifications.sql"))?;
+        conn.pragma_update(None, "user_version", "6")?;
+    }
+
     Ok(())
 }
 

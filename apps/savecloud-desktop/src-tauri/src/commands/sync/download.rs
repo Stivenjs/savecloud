@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::PathBuf;
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
 use futures_util::stream::{self, StreamExt};
@@ -18,15 +18,20 @@ use tokio::io::{AsyncWriteExt, BufWriter};
 
 use super::api;
 use super::backup;
-use super::models::{
-    DownloadConflictDto, DownloadConflictsResultDto, GameConflictsResultDto, GameSyncResultDto,
-    RemoteSaveInfoDto, SyncProgressPayload, SyncResultDto, UnsyncedGameDto,
+use super::events::{
+    emit_sync_download_done, emit_sync_download_progress, emit_sync_terminal,
+    sync_status_from_err_count, sync_status_from_result,
 };
-use crate::utils::path_utils;
+use super::models::{
+    ActiveDownloadStateDto, DownloadConflictDto, DownloadConflictsResultDto,
+    GameConflictsResultDto, GameSyncResultDto, RemoteSaveInfoDto, SyncOperationStrategy,
+    SyncProgressPayload, SyncResultDto, UnsyncedGameDto,
+};
 use crate::commands::logs::sync_logger;
 use crate::network::DATA_CLIENT;
 use crate::tray::tray_state::TrayState;
-use tauri::{AppHandle, Emitter, State};
+use crate::utils::path_utils;
+use tauri::{AppHandle, State};
 
 /// Número máximo de reintentos al intentar crear un archivo bloqueado.
 const FILE_CREATE_MAX_RETRIES: u32 = 3;
@@ -38,6 +43,10 @@ const FILE_CREATE_BACKOFF_BASE_MS: u64 = 200;
 
 /// Umbral en bytes entre emisiones sucesivas de eventos de progreso de descarga.
 const DOWNLOAD_PROGRESS_EMIT_BYTES: u64 = 256 * 1024;
+/// Umbral de emisión para archivos empaquetados grandes (.tar / backups/*).
+const DOWNLOAD_PROGRESS_EMIT_BYTES_PACKAGED: u64 = 2 * 1024 * 1024;
+/// Intervalo mínimo entre emisiones para evitar saturar IPC/UI.
+const DOWNLOAD_PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(180);
 
 /// Número máximo de descargas de archivos individuales en paralelo por juego.
 const DOWNLOAD_FILE_CONCURRENCY: usize = 16;
@@ -336,10 +345,11 @@ pub async fn sync_check_unsynced_games() -> Result<Vec<UnsyncedGameDto>, String>
         });
 
         let paths = game.paths.clone();
-        let local_files =
-            tokio::task::spawn_blocking(move || crate::utils::path_utils::list_all_files_with_mtime(&paths))
-                .await
-                .map_err(|e| format!("Error en scan local: {}", e))?;
+        let local_files = tokio::task::spawn_blocking(move || {
+            crate::utils::path_utils::list_all_files_with_mtime(&paths)
+        })
+        .await
+        .map_err(|e| format!("Error en scan local: {}", e))?;
 
         let mut has_unsynced = false;
 
@@ -471,6 +481,14 @@ async fn download_one_file(
     let total = res.content_length().or(save.size).unwrap_or(0);
     let mut loaded: u64 = 0;
     let mut last_emit: u64 = 0;
+    let mut last_emit_at = Instant::now();
+    let is_packaged_backup =
+        save.filename.starts_with("backups/") || save.filename.ends_with(".tar");
+    let emit_bytes_threshold = if is_packaged_backup {
+        DOWNLOAD_PROGRESS_EMIT_BYTES_PACKAGED
+    } else {
+        DOWNLOAD_PROGRESS_EMIT_BYTES
+    };
 
     let file = create_file_with_retry(&dest_path)
         .await
@@ -485,18 +503,31 @@ async fn download_one_file(
             Ok(chunk) => {
                 loaded += chunk.len() as u64;
 
-                let should_emit = loaded - last_emit >= DOWNLOAD_PROGRESS_EMIT_BYTES
-                    || (total > 0 && loaded >= total);
+                let bytes_step = loaded.saturating_sub(last_emit) >= emit_bytes_threshold;
+                let time_step = last_emit_at.elapsed() >= DOWNLOAD_PROGRESS_EMIT_INTERVAL;
+                let done = total > 0 && loaded >= total;
+                let should_emit = (bytes_step && time_step) || done;
 
                 if should_emit {
                     last_emit = loaded;
-                    let _ = app.emit(
-                        "sync-download-progress",
+                    last_emit_at = Instant::now();
+                    emit_sync_download_progress(
+                        app,
                         SyncProgressPayload {
+                            operation_id: Some(format!("sync-download-{game_id}")),
+                            status: Some("running".to_string()),
                             game_id: game_id.to_string(),
                             filename: save.filename.clone(),
                             loaded,
                             total,
+                            downloaded_bytes: Some(loaded),
+                            total_bytes: Some(total),
+                            can_pause: None,
+                            can_cancel: None,
+                            can_resume: None,
+                            strategy: Some(SyncOperationStrategy::DownloadFile),
+                            state: None,
+                            reason_code: None,
                         },
                     );
                 }
@@ -519,13 +550,23 @@ async fn download_one_file(
     // Emite el 100 % si la transferencia terminó correctamente pero el último
     // chunk no lo alcanzó exactamente por el umbral de emisión.
     if write_err.is_none() && total > 0 && loaded < total {
-        let _ = app.emit(
-            "sync-download-progress",
+        emit_sync_download_progress(
+            app,
             SyncProgressPayload {
+                operation_id: Some(format!("sync-download-{game_id}")),
+                status: Some("running".to_string()),
                 game_id: game_id.to_string(),
                 filename: save.filename.clone(),
                 loaded: total,
                 total,
+                downloaded_bytes: Some(total),
+                total_bytes: Some(total),
+                can_pause: None,
+                can_cancel: None,
+                can_resume: None,
+                strategy: Some(SyncOperationStrategy::DownloadFile),
+                state: None,
+                reason_code: None,
             },
         );
     }
@@ -591,11 +632,22 @@ pub async fn sync_download_game(
     tray_state.0.syncing_inc();
     tray_state.0.update_tooltip();
 
+    let operation_id = format!("sync-download-{game_id}");
     let result = sync_download_game_impl(game_id.clone(), app.clone(), None).await;
 
     tray_state.0.syncing_dec();
     tray_state.0.clone().refresh_unsynced_async();
-    let _ = app.emit("sync-download-done", ());
+    let status = sync_status_from_result(&result);
+    emit_sync_terminal(
+        &app,
+        operation_id,
+        status,
+        "download",
+        Some(game_id.clone()),
+        None,
+        None,
+    );
+    emit_sync_download_done(&app);
 
     result
 }
@@ -937,7 +989,19 @@ pub async fn sync_download_all_games(
                 // Devuelve los resultados en el orden original de la configuración.
                 tray_state.0.syncing_dec();
                 tray_state.0.clone().refresh_unsynced_async();
-                let _ = app.emit("sync-download-done", ());
+                for dto in results_by_id.values() {
+                    let status = sync_status_from_err_count(dto.result.err_count);
+                    emit_sync_terminal(
+                        &app,
+                        format!("sync-download-{}", dto.game_id),
+                        status,
+                        "download",
+                        Some(dto.game_id.clone()),
+                        None,
+                        None,
+                    );
+                }
+                emit_sync_download_done(&app);
                 return Ok(cfg
                     .games
                     .iter()
@@ -987,7 +1051,19 @@ pub async fn sync_download_all_games(
 
     tray_state.0.syncing_dec();
     tray_state.0.clone().refresh_unsynced_async();
-    let _ = app.emit("sync-download-done", ());
+    for dto in &results {
+        let status = sync_status_from_err_count(dto.result.err_count);
+        emit_sync_terminal(
+            &app,
+            format!("sync-download-{}", dto.game_id),
+            status,
+            "download",
+            Some(dto.game_id.clone()),
+            None,
+            None,
+        );
+    }
+    emit_sync_download_done(&app);
 
     let keep = cfg
         .keep_backups_per_game
@@ -995,4 +1071,11 @@ pub async fn sync_download_all_games(
     let _ = backup::cleanup_old_backups(keep);
 
     Ok(results)
+}
+
+#[tauri::command]
+pub async fn get_active_downloads_state() -> Result<Vec<ActiveDownloadStateDto>, String> {
+    // Por ahora sync solo expone eventos push de progreso.
+    // Este endpoint permite rehidratación futura sin romper contrato.
+    Ok(Vec::new())
 }

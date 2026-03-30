@@ -5,6 +5,8 @@ import { toastSyncResult } from "@utils/toast";
 import { notifySyncComplete, notifySyncError } from "@utils/notification";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { useInputManager } from "@features/input/useInputManager";
+import { getConfig } from "@services/tauri/config.service";
+import { useNotificationStore } from "@store/NotificationStore";
 import { initSyncListeners } from "@store/SyncStore";
 import { initTorrentListeners } from "@store/TorrentStore";
 
@@ -36,6 +38,49 @@ export function useAppInitialization() {
   useInputManager();
   initSyncListeners();
   initTorrentListeners();
+
+  /**
+   * Contador de notificaciones + sync periódico con la API (multi-dispositivo).
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    const refresh = async () => {
+      try {
+        const cfg = await getConfig();
+        if (!cfg.userId?.trim() || !cfg.apiBaseUrl?.trim()) {
+          console.info("[SaveCloud:useAppInitialization] sync notificaciones omitido (falta userId o apiBaseUrl)", {
+            hasUserId: !!cfg.userId?.trim(),
+            hasApi: !!cfg.apiBaseUrl?.trim(),
+          });
+          return;
+        }
+        await useNotificationStore.getState().syncWithCloud();
+        if (!cancelled) {
+          await useNotificationStore.getState().refreshUnreadCount();
+        }
+      } catch (e) {
+        console.warn("[SaveCloud:useAppInitialization] refresh notificaciones error", e);
+      }
+    };
+
+    void useNotificationStore.getState().refreshUnreadCount();
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void useNotificationStore.getState().refreshUnreadCount();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = setInterval(refresh, 120_000);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(interval);
+    };
+  }, []);
   /**
    * Respaldos periódicos de configuración del usuario.
    *

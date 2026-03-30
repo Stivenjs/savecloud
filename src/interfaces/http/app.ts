@@ -17,12 +17,15 @@ import { CreateMultipartUploadWithPartUrlsUseCase } from "@application/use-cases
 import { GetUploadPartUrlsUseCase } from "@application/use-cases/GetUploadPartUrlsUseCase";
 import { CompleteMultipartUploadUseCase } from "@application/use-cases/CompleteMultipartUploadUseCase";
 import { AbortMultipartUploadUseCase } from "@application/use-cases/AbortMultipartUploadUseCase";
+import type { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
 import { registerSavesRoutes } from "@interfaces/http/routes/saves.routes";
 import { registerShareRoutes } from "@interfaces/http/routes/share.routes";
+import { registerNotificationRoutes } from "@interfaces/http/routes/notifications.routes";
 
 export interface AppDependencies {
   saveRepository: SaveRepository;
   shareTokenStore?: ShareTokenS3;
+  notificationStore?: S3NotificationStore;
 }
 
 /**
@@ -84,6 +87,10 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
 
   if (deps.shareTokenStore) {
     await registerShareRoutes(app, deps.shareTokenStore);
+  }
+
+  if (deps.notificationStore) {
+    await registerNotificationRoutes(app, deps.notificationStore);
   }
 
   app.get("/health", async (_, reply: FastifyReply) => {

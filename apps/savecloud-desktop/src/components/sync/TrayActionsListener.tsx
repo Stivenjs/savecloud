@@ -18,7 +18,7 @@ export function TrayActionsListener() {
 
   useEffect(() => {
     const unsubUpload = listen("tray-action-upload-all", async () => {
-      setSyncOperation({ type: "upload", mode: "batch", gameId: null });
+      setSyncOperation({ type: "upload", mode: "batch", gameId: null, operationId: "sync-upload-batch" });
       let totalResult = { okCount: 0, errCount: 0, errors: [] as string[] };
       try {
         const results = await syncUploadAllGames();
@@ -43,7 +43,7 @@ export function TrayActionsListener() {
     });
 
     const unsubDownload = listen("tray-action-download-all", async () => {
-      setSyncOperation({ type: "download", mode: "batch", gameId: null });
+      setSyncOperation({ type: "download", mode: "batch", gameId: null, operationId: "sync-download-batch" });
       let totalResult = { okCount: 0, errCount: 0, errors: [] as string[] };
       try {
         const results = await syncDownloadAllGames();
@@ -80,7 +80,12 @@ export function TrayActionsListener() {
         toastError("Sin juegos", "Añade al menos un juego para hacer backup desde la bandeja.");
         return;
       }
-      setSyncOperation({ type: "upload", mode: "single", gameId: firstGameId });
+      setSyncOperation({
+        type: "upload",
+        mode: "single",
+        gameId: firstGameId,
+        operationId: `sync-upload-${firstGameId}`,
+      });
       try {
         await createAndUploadFullBackup(firstGameId);
         toastSuccess(

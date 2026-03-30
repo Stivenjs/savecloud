@@ -21,6 +21,7 @@ use std::sync::Arc;
 use librqbit::api::TorrentIdOrHash;
 use librqbit::{AddTorrent, AddTorrentOptions, Session, SessionOptions, TorrentStatsState};
 use tauri::{AppHandle, Emitter};
+use tokio::sync::Mutex;
 
 use super::errors::TorrentError;
 use super::models::{TorrentDownloadState, TorrentProgressPayload};
@@ -141,6 +142,10 @@ impl TorrentEngine {
     /// operación sin efecto.
     pub fn unregister_active(&mut self, info_hash: &str) {
         self.active.remove(info_hash);
+    }
+
+    pub fn active_hashes(&self) -> Vec<String> {
+        self.active.iter().cloned().collect()
     }
 }
 
@@ -372,6 +377,7 @@ pub fn spawn_progress_monitor(
     info_hash: String,
     name: String,
     app: AppHandle,
+    engine_state: Option<Arc<Mutex<TorrentEngine>>>,
 ) {
     tokio::spawn(async move {
         let id = TorrentIdOrHash::Id(torrent_id);
@@ -446,6 +452,11 @@ pub fn spawn_progress_monitor(
 
             if stats.finished {
                 let _ = app.emit(TORRENT_DONE_EVENT, &payload);
+                crate::notifications::writer::try_record_torrent_done(&app, &name, &info_hash);
+                if let Some(engine) = &engine_state {
+                    let mut eng = engine.lock().await;
+                    eng.unregister_active(&info_hash);
+                }
                 break;
             }
         }

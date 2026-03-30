@@ -23,12 +23,12 @@ use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 
 use super::api;
-use super::models::SyncProgressPayload;
+use super::events::emit_sync_upload_progress;
+use super::models::{SyncOperationStrategy, SyncProgressPayload};
 use crate::commands::logs::sync_logger;
 use crate::network::DATA_CLIENT;
 use futures_util::stream::StreamExt;
 use serde::{Deserialize, Serialize};
-use tauri::Emitter;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -400,13 +400,23 @@ pub(crate) async fn upload_one_file_multipart(
             with_retry(|| multipart_init(api_base, user_id, api_key, game_id, relative_filename))
                 .await?;
         multipart_complete(api_base, user_id, api_key, &k, &uid, &[]).await?;
-        let _ = app.emit(
-            "sync-upload-progress",
+        emit_sync_upload_progress(
+            &app,
             SyncProgressPayload {
+                operation_id: Some(format!("sync-upload-{}", game_id)),
+                status: Some("running".to_string()),
                 game_id: game_id.to_string(),
                 filename: relative_filename.to_string(),
                 loaded: total_size,
                 total: total_size,
+                downloaded_bytes: Some(total_size),
+                total_bytes: Some(total_size),
+                can_pause: None,
+                can_cancel: None,
+                can_resume: None,
+                strategy: Some(SyncOperationStrategy::Multipart),
+                state: None,
+                reason_code: None,
             },
         );
         return Ok(());
@@ -513,13 +523,23 @@ pub(crate) async fn upload_one_file_multipart(
         };
         completed_parts.push((part_number, etag));
         loaded = std::cmp::min(loaded + part_len, total_size);
-        let _ = app.emit(
-            "sync-upload-progress",
+        emit_sync_upload_progress(
+            &app,
             SyncProgressPayload {
+                operation_id: Some(format!("sync-upload-{}", game_id_owned)),
+                status: Some("running".to_string()),
                 game_id: game_id_owned.clone(),
                 filename: filename_owned.clone(),
                 loaded,
                 total: total_size,
+                downloaded_bytes: Some(loaded),
+                total_bytes: Some(total_size),
+                can_pause: None,
+                can_cancel: None,
+                can_resume: None,
+                strategy: Some(SyncOperationStrategy::Multipart),
+                state: None,
+                reason_code: None,
             },
         );
     }
@@ -595,13 +615,23 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
         )
         .await?;
         remove_paused_state_file();
-        let _ = app.emit(
-            "sync-upload-progress",
+        emit_sync_upload_progress(
+            &app,
             SyncProgressPayload {
+                operation_id: Some(format!("sync-upload-{}", state.game_id)),
+                status: Some("running".to_string()),
                 game_id: state.game_id.clone(),
                 filename: state.filename.clone(),
                 loaded: state.total_size,
                 total: state.total_size,
+                downloaded_bytes: Some(state.total_size),
+                total_bytes: Some(state.total_size),
+                can_pause: None,
+                can_cancel: None,
+                can_resume: None,
+                strategy: Some(SyncOperationStrategy::Multipart),
+                state: None,
+                reason_code: None,
             },
         );
         return Ok(());
@@ -676,13 +706,23 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
         all_parts.push((part_number, etag));
         loaded = std::cmp::min(loaded + part_len, state.total_size);
 
-        let _ = app.emit(
-            "sync-upload-progress",
+        emit_sync_upload_progress(
+            &app,
             SyncProgressPayload {
+                operation_id: Some(format!("sync-upload-{}", state.game_id)),
+                status: Some("running".to_string()),
                 game_id: state.game_id.clone(),
                 filename: state.filename.clone(),
                 loaded,
                 total: state.total_size,
+                downloaded_bytes: Some(loaded),
+                total_bytes: Some(state.total_size),
+                can_pause: None,
+                can_cancel: None,
+                can_resume: None,
+                strategy: Some(SyncOperationStrategy::Multipart),
+                state: None,
+                reason_code: None,
             },
         );
     }
