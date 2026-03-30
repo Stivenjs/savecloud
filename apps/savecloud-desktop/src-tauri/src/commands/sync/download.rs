@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::PathBuf;
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
 use futures_util::stream::{self, StreamExt};
@@ -43,6 +43,10 @@ const FILE_CREATE_BACKOFF_BASE_MS: u64 = 200;
 
 /// Umbral en bytes entre emisiones sucesivas de eventos de progreso de descarga.
 const DOWNLOAD_PROGRESS_EMIT_BYTES: u64 = 256 * 1024;
+/// Umbral de emisión para archivos empaquetados grandes (.tar / backups/*).
+const DOWNLOAD_PROGRESS_EMIT_BYTES_PACKAGED: u64 = 2 * 1024 * 1024;
+/// Intervalo mínimo entre emisiones para evitar saturar IPC/UI.
+const DOWNLOAD_PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(180);
 
 /// Número máximo de descargas de archivos individuales en paralelo por juego.
 const DOWNLOAD_FILE_CONCURRENCY: usize = 16;
@@ -477,6 +481,14 @@ async fn download_one_file(
     let total = res.content_length().or(save.size).unwrap_or(0);
     let mut loaded: u64 = 0;
     let mut last_emit: u64 = 0;
+    let mut last_emit_at = Instant::now();
+    let is_packaged_backup =
+        save.filename.starts_with("backups/") || save.filename.ends_with(".tar");
+    let emit_bytes_threshold = if is_packaged_backup {
+        DOWNLOAD_PROGRESS_EMIT_BYTES_PACKAGED
+    } else {
+        DOWNLOAD_PROGRESS_EMIT_BYTES
+    };
 
     let file = create_file_with_retry(&dest_path)
         .await
@@ -491,11 +503,14 @@ async fn download_one_file(
             Ok(chunk) => {
                 loaded += chunk.len() as u64;
 
-                let should_emit = loaded - last_emit >= DOWNLOAD_PROGRESS_EMIT_BYTES
-                    || (total > 0 && loaded >= total);
+                let bytes_step = loaded.saturating_sub(last_emit) >= emit_bytes_threshold;
+                let time_step = last_emit_at.elapsed() >= DOWNLOAD_PROGRESS_EMIT_INTERVAL;
+                let done = total > 0 && loaded >= total;
+                let should_emit = (bytes_step && time_step) || done;
 
                 if should_emit {
                     last_emit = loaded;
+                    last_emit_at = Instant::now();
                     emit_sync_download_progress(
                         app,
                         SyncProgressPayload {
