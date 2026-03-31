@@ -22,6 +22,7 @@ use tokio::io::AsyncWriteExt;
 use tokio_util::io::SyncIoBridge;
 
 use super::api;
+use super::context::ApiContext;
 use super::events::{
     emit_full_backup_done, emit_sync_download_done, emit_sync_download_progress,
     emit_sync_terminal, emit_sync_upload_done, emit_sync_upload_progress, sync_status_from_result,
@@ -37,33 +38,8 @@ use tauri::{AppHandle, State};
 /// Prefijo S3 para backups (key = userId/gameId/backups/<filename>.tar).
 const BACKUPS_PREFIX: &str = "backups/";
 
-struct ApiContext {
-    base_url: String,
-    user_id: String,
-    api_key: String,
-}
-
 fn get_api_context() -> Result<ApiContext, String> {
-    let cfg = config::load_config();
-    let base_url = cfg
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura apiBaseUrl en Configuración")?
-        .to_string();
-    let user_id = cfg
-        .user_id
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura tu usuario en Configuración")?
-        .to_string();
-    let api_key = cfg.api_key.unwrap_or_default();
-
-    Ok(ApiContext {
-        base_url,
-        user_id,
-        api_key,
-    })
+    super::context::resolve_api_context()
 }
 
 /// Crea un archivo .tar con el contenido de `source_dir` y lo escribe en `dest_path`.
