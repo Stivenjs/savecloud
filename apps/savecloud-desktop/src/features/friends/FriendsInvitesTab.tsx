@@ -135,6 +135,7 @@ export function FriendsInvitesTab({
                   </p>
                   <Button
                     color="primary"
+                    variant="solid"
                     isLoading={inviteBusy}
                     onPress={handleCreateInvite}
                     className="w-full"
@@ -188,9 +189,10 @@ export function FriendsInvitesTab({
                     Si pegas un enlace (recomendado), la app descubre automáticamente la URL del servidor.
                   </p>
                   <Button
-                    variant="flat"
-                    color="default"
+                    color="primary"
+                    variant="solid"
                     isLoading={inviteBusy}
+                    isDisabled={!inviteTokenInput.trim() || inviteBusy}
                     onPress={handleAcceptInviteByToken}
                     className="w-full"
                     size="sm"
