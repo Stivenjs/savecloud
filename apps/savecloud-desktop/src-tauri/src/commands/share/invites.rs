@@ -399,20 +399,19 @@ pub async fn list_cloud_memberships() -> Result<CloudMembershipsResponseDto, Str
         if !base_url_raw.trim().is_empty() && !api_key_raw.trim().is_empty() {
             let base_url = normalize_base_url(base_url_raw);
             let endpoint = format!("{}/invites/memberships", base_url);
-            let response = API_CLIENT
+            let response_result = API_CLIENT
                 .get(&endpoint)
                 .header("x-api-key", api_key_raw)
                 .header("x-user-id", &user_id)
                 .send()
-                .await
-                .map_err(|e| format!("Fallo de red: {}", e))?;
+                .await;
 
-            if response.status().is_success() {
-                let parsed = response
-                    .json::<CloudMembershipsResponseDto>()
-                    .await
-                    .map_err(|e| format!("Error de deserialización: {}", e))?;
-                host_memberships = parsed.host_memberships;
+            if let Ok(response) = response_result {
+                if response.status().is_success() {
+                    if let Ok(parsed) = response.json::<CloudMembershipsResponseDto>().await {
+                        host_memberships = parsed.host_memberships;
+                    }
+                }
             }
         }
     }
@@ -424,20 +423,21 @@ pub async fn list_cloud_memberships() -> Result<CloudMembershipsResponseDto, Str
             Err(_) => continue,
         };
         let endpoint = format!("{}/invites/memberships", base_url);
-        let response = API_CLIENT
+        let response = match API_CLIENT
             .get(&endpoint)
             .header("x-api-key", api_key)
             .header("x-user-id", &user_id)
             .send()
             .await
-            .map_err(|e| format!("Fallo de red: {}", e))?;
+        {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
 
         if response.status().is_success() {
-            let parsed = response
-                .json::<CloudMembershipsResponseDto>()
-                .await
-                .map_err(|e| format!("Error de deserialización: {}", e))?;
-            member_memberships.extend(parsed.member_memberships);
+            if let Ok(parsed) = response.json::<CloudMembershipsResponseDto>().await {
+                member_memberships.extend(parsed.member_memberships);
+            }
         }
     }
 

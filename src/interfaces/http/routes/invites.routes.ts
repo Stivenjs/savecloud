@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { getUserId, getErrorMessage } from "@shared/utils";
+import { getUserId, getErrorMessage, resolvePublicBaseUrl } from "@shared/utils";
 import type { CreateCloudInviteUseCase } from "@application/use-cases/CreateCloudInviteUseCase";
 import type { ListPendingCloudInvitesUseCase } from "@application/use-cases/ListPendingCloudInvitesUseCase";
 import type { RespondCloudInviteUseCase } from "@application/use-cases/RespondCloudInviteUseCase";
@@ -41,9 +41,10 @@ export async function registerInviteRoutes(
           expiresInDays: request.body.expiresInDays,
           withToken: request.body.withToken ?? true,
         });
+        const baseUrl = resolvePublicBaseUrl(request);
         return reply.send({
           ...invite,
-          inviteUrl: invite.token ? `${request.protocol}://${request.hostname}/invites/accept/${invite.token}` : null,
+          inviteUrl: invite.token ? `${baseUrl}/invites/accept/${invite.token}` : null,
         });
       } catch (err) {
         return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
