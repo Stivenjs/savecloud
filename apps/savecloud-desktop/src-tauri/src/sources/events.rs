@@ -3,6 +3,8 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
+use crate::notifications::writer;
+
 use super::domain::{DownloadProtocol, SourceDownloadJob, SourceJobStatus};
 
 /// Nombre del evento de progreso continuo.
@@ -52,5 +54,5 @@ pub fn emit_terminal(app: &AppHandle, job: &SourceDownloadJob) {
         error: job.error.clone(),
     };
     let _ = app.emit(SOURCES_TERMINAL_EVENT, payload);
+    writer::try_record_source_download_terminal(app, job);
 }
-

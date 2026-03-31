@@ -1,5 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 
+/** Debe coincidir con `NOTIFICATIONS_CHANGED_EVENT` en `notifications/writer.rs`. */
+export const NOTIFICATIONS_CHANGED_EVENT = "notifications-changed";
+
 /** Alineado con `NotificationRecordDto` en Rust y `NotificationRecord` en la API. */
 export interface NotificationRecord {
   id: string;

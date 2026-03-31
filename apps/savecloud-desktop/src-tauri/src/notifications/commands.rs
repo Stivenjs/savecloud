@@ -1,6 +1,6 @@
 //! Comandos Tauri del centro de notificaciones.
 
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::config;
 use crate::sqlite::AppDb;
@@ -8,6 +8,7 @@ use crate::sqlite::AppDb;
 use super::db;
 use super::models::{ListNotificationsParams, NotificationRecordDto};
 use super::sync_http;
+use super::writer::emit_notifications_changed;
 
 #[tauri::command]
 pub fn list_notifications(
@@ -137,7 +138,10 @@ pub async fn sync_notifications_push(db: State<'_, AppDb>) -> Result<usize, Stri
 }
 
 #[tauri::command]
-pub async fn sync_notifications_pull(db: State<'_, AppDb>) -> Result<usize, String> {
+pub async fn sync_notifications_pull(
+    app: AppHandle,
+    db: State<'_, AppDb>,
+) -> Result<usize, String> {
     let user_id = config::load_config()
         .user_id
         .filter(|s| !s.trim().is_empty())
@@ -173,6 +177,10 @@ pub async fn sync_notifications_pull(db: State<'_, AppDb>) -> Result<usize, Stri
     if let Some(c) = next {
         db::set_meta(&db, "last_pull_cursor", &c)
             .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
+    }
+
+    if merged > 0 {
+        emit_notifications_changed(&app);
     }
 
     Ok(merged)
