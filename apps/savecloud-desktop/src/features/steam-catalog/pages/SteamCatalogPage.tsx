@@ -7,8 +7,6 @@ import { SteamCatalogGrid } from "@features/steam-catalog/components/SteamCatalo
 import { SteamCatalogPagination } from "@features/steam-catalog/components/SteamCatalogPagination";
 import { SteamCatalogToolbar } from "@features/steam-catalog/components/SteamCatalogToolbar";
 import { useSteamCatalogQueries } from "@features/steam-catalog/hooks/useSteamCatalogQueries";
-import { useQuery } from "@tanstack/react-query";
-import { getDefaultSourceDownloadDir } from "@services/tauri";
 
 export function SteamCatalogPage() {
   const navigate = useNavigate();
@@ -42,10 +40,6 @@ export function SteamCatalogPage() {
     toggleTag,
     clearFilters,
   } = useSteamCatalogQueries();
-  const { data: defaultSourceDownloadDir } = useQuery({
-    queryKey: ["default-source-download-dir"],
-    queryFn: getDefaultSourceDownloadDir,
-  });
 
   useRegisterGlobalBack(() => {
     navigate("/");
@@ -133,7 +127,6 @@ export function SteamCatalogPage() {
                     }
                     mediaBySteamAppId={mediaBySteamAppId}
                     matchByGameName={matchByGameName}
-                    defaultDownloadDir={defaultSourceDownloadDir ?? ""}
                     isMatchingPending={isMatchingPending}
                   />
 

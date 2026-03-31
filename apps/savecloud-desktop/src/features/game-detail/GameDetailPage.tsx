@@ -3,11 +3,12 @@ import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
+import { open } from "@tauri-apps/plugin-dialog";
 import { Button, Spinner, Tab, Tabs } from "@heroui/react";
 import { ArrowLeft, Cpu, Gamepad2, LayoutList, ScrollText } from "lucide-react";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { launchGame, openSaveFolder, removeGame, scheduleConfigBackupToCloud } from "@services/tauri";
-import { getDefaultSourceDownloadDir, sourcesFindMatchForGame, startSourceDownload } from "@services/tauri";
+import { sourcesFindMatchForGame, startSourceDownload } from "@services/tauri";
 import { createShareLink } from "@services/share.service";
 import { toastError, toastSuccess } from "@utils/toast";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
@@ -144,10 +145,6 @@ export function GameDetailPage() {
 
   const showRequirementsTab = steamDetails ? hasSteamRequirements(steamDetails) : false;
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
-  const { data: defaultSourceDownloadDir } = useQuery({
-    queryKey: ["default-source-download-dir"],
-    queryFn: getDefaultSourceDownloadDir,
-  });
   const { data: sourceMatch } = useQuery({
     queryKey: ["sources-match-detail", displayName],
     queryFn: () => sourcesFindMatchForGame(displayName),
@@ -157,22 +154,25 @@ export function GameDetailPage() {
   const handleInstallFromSources = useCallback(async () => {
     const best = sourceMatch?.best;
     if (!best) return;
-    const destination = defaultSourceDownloadDir?.trim();
-    if (!destination) {
-      toastError("Falta carpeta de descarga", "Configura la carpeta por defecto en Configuracion.");
+    const selectedPath = await open({
+      title: `Seleccionar carpeta para ${displayName}`,
+      directory: true,
+      multiple: false,
+    });
+    if (!selectedPath || typeof selectedPath !== "string") {
       return;
     }
     try {
       await startSourceDownload({
         sourceId: best.sourceId,
         itemId: best.itemId,
-        destinationDir: destination,
+        destinationDir: selectedPath.trim(),
       });
       toastSuccess("Descarga iniciada", `Instalacion iniciada para ${displayName}.`);
     } catch (e) {
       toastError("No se pudo iniciar", e instanceof Error ? e.message : "Error inesperado");
     }
-  }, [sourceMatch?.best, defaultSourceDownloadDir, displayName]);
+  }, [sourceMatch?.best, displayName]);
 
   if (isLoading) {
     return (

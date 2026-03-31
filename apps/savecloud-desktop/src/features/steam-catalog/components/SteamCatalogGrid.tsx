@@ -1,6 +1,7 @@
 import type { CatalogListItem } from "@services/tauri";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
 import type { SourceMatchResult } from "@services/tauri";
+import { open } from "@tauri-apps/plugin-dialog";
 import { GameCard } from "@features/games/GameCard";
 import { GamesListMotionContainer, GamesListMotionItem } from "@features/games/GamesListMotion";
 import { catalogListItemToConfiguredGame } from "@features/steam-catalog/model/catalogConfiguredGame";
@@ -13,7 +14,6 @@ type SteamCatalogGridProps = {
   listKey: string;
   mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null;
   matchByGameName: Record<string, SourceMatchResult>;
-  defaultDownloadDir: string;
   isMatchingPending: boolean;
 };
 
@@ -22,22 +22,27 @@ export function SteamCatalogGrid({
   listKey,
   mediaBySteamAppId,
   matchByGameName,
-  defaultDownloadDir,
   isMatchingPending,
 }: SteamCatalogGridProps) {
   const handleInstall = async (gameName: string) => {
     const match = matchByGameName[gameName];
     const best = match?.best;
     if (!best) return;
-    if (!defaultDownloadDir.trim()) {
-      toastError("Falta carpeta de descarga", "Configura la carpeta por defecto en Configuracion.");
+
+    const selectedPath = await open({
+      title: `Seleccionar carpeta para ${gameName}`,
+      directory: true,
+      multiple: false,
+    });
+    if (!selectedPath || typeof selectedPath !== "string") {
       return;
     }
+
     try {
       await startSourceDownload({
         sourceId: best.sourceId,
         itemId: best.itemId,
-        destinationDir: defaultDownloadDir.trim(),
+        destinationDir: selectedPath.trim(),
         preferredProtocol: null,
       });
       toastSuccess("Descarga iniciada", `Instalacion iniciada para ${gameName}.`);
