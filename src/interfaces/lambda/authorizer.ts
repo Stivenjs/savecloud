@@ -63,19 +63,14 @@ export async function handler(event: {
     return { isAuthorized: true };
   }
 
-  // Fallar cerrado si la env var no está configurada
-  if (!expectedApiKey) {
-    return deny("API_KEY not configured", { path: rawPath, method });
-  }
-
   const key = getHeader(event.headers ?? {}, "x-api-key");
 
   if (!key) {
     return deny("missing x-api-key header", { path: rawPath, method });
   }
 
-  // API key global (modo admin/host)
-  if (safeCompare(key, expectedApiKey)) {
+  // API key global (modo admin/host) - solo si existe en entorno
+  if (expectedApiKey && safeCompare(key, expectedApiKey)) {
     return { isAuthorized: true };
   }
 
@@ -89,5 +84,5 @@ export async function handler(event: {
     return deny("x-user-id does not match access token", { path: rawPath, method });
   }
 
-  return deny("invalid x-api-key", { path: rawPath, method });
+  return deny("invalid x-api-key/access-token", { path: rawPath, method });
 }

@@ -27,15 +27,22 @@ pub(crate) fn resolve_api_context() -> Result<ApiContext, String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        if let Some(host_base_url) = settings.cloud_host_api_base_urls.get(active_host) {
-            let host_api_key = crate::config::get_secure_api_key_for_cloud_host(active_host)
-                .ok_or("Faltan credenciales de acceso para este host")?;
-            return Ok(ApiContext {
-                base_url: host_base_url.trim_end_matches('/').to_string(),
-                user_id,
-                api_key: host_api_key,
-            });
-        }
+        let host_base_url = settings
+            .cloud_host_api_base_urls
+            .get(active_host)
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .ok_or(
+                "La nube compartida activa no tiene URL configurada. Reacepta la invitación o cambia a tu nube.",
+            )?;
+        let host_api_key = crate::config::get_secure_api_key_for_cloud_host(active_host).ok_or(
+            "La nube compartida activa no tiene credenciales guardadas. Reacepta la invitación.",
+        )?;
+        return Ok(ApiContext {
+            base_url: host_base_url.trim_end_matches('/').to_string(),
+            user_id,
+            api_key: host_api_key,
+        });
     }
 
     let base_url = settings
