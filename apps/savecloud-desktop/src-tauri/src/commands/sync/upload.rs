@@ -259,6 +259,7 @@ pub(crate) async fn sync_upload_game_impl(
     app: AppHandle,
     tray_inner: Option<std::sync::Arc<crate::tray::tray_state::TrayStateInner>>,
 ) -> Result<SyncResultDto, String> {
+    let api_ctx = super::context::resolve_api_context()?;
     let cfg = crate::config::load_config();
     let game = cfg
         .games
@@ -273,17 +274,13 @@ pub(crate) async fn sync_upload_game_impl(
         ));
     }
 
-    let api_base = cfg
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura apiBaseUrl en Configuración")?;
     let user_id = cfg
         .user_id
         .as_deref()
         .filter(|s| !s.trim().is_empty())
         .ok_or("Configura tu usuario en Configuración")?;
-    let api_key = cfg.api_key.as_deref().unwrap_or("");
+    let api_base = api_ctx.base_url.as_str();
+    let api_key = api_ctx.api_key.as_str();
 
     let files = path_utils::list_all_files_from_paths(&game.paths);
     if files.is_empty() {
@@ -577,12 +574,8 @@ pub async fn sync_upload_all_games(
     app: AppHandle,
     tray_state: State<'_, TrayState>,
 ) -> Result<Vec<GameSyncResultDto>, String> {
+    let _ = super::context::resolve_api_context()?;
     let cfg = crate::config::load_config();
-    let _ = cfg
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura apiBaseUrl en Configuración")?;
     let _ = cfg
         .user_id
         .as_deref()

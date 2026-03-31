@@ -570,18 +570,10 @@ pub(crate) async fn upload_one_file_multipart(
 pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), String> {
     let state = load_paused_state().ok_or("No hay ninguna subida pausada")?;
 
-    let cfg = crate::config::load_config();
-    let api_base = cfg
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura apiBaseUrl en Configuración")?;
-    let user_id = cfg
-        .user_id
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura tu usuario en Configuración")?;
-    let api_key = cfg.api_key.as_deref().unwrap_or("");
+    let api_ctx = super::context::resolve_api_context()?;
+    let api_base = api_ctx.base_url.as_str();
+    let user_id = api_ctx.user_id.as_str();
+    let api_key = api_ctx.api_key.as_str();
 
     let num_parts = if state.total_size == 0 {
         0u32

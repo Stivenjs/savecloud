@@ -125,6 +125,47 @@ pub async fn list_cloud_backups(
 /// Cada cuántos bytes emitimos progreso de descarga del empaquetado.
 const FULL_BACKUP_DOWNLOAD_EMIT_BYTES: u64 = 256 * 1024;
 
+fn unpack_archive_resilient<R: std::io::Read>(
+    archive: &mut tar::Archive<R>,
+    dest_dir: &Path,
+) -> Result<(), String> {
+    let entries = archive
+        .entries()
+        .map_err(|e| format!("Fallo al leer entradas del backup: {}", e))?;
+
+    for entry in entries {
+        let mut entry = entry.map_err(|e| format!("Entrada TAR inválida: {}", e))?;
+        let rel_path = entry
+            .path()
+            .map_err(|e| format!("Ruta TAR inválida: {}", e))?
+            .into_owned();
+        let target_path = dest_dir.join(&rel_path);
+
+        if entry.header().entry_type().is_file() && target_path.exists() {
+            let _ = fs::remove_file(&target_path);
+        }
+
+        match entry.unpack_in(dest_dir) {
+            Ok(true) => {}
+            Ok(false) => {
+                return Err(format!(
+                    "Ruta insegura al extraer backup: {}",
+                    rel_path.display()
+                ));
+            }
+            Err(e) => {
+                return Err(format!(
+                    "Fallo en extracción [{}]: {}",
+                    target_path.display(),
+                    e
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Implementa la descarga y extracción en streaming puro de un backup empaquetado.
 ///
 /// Esta arquitectura elimina la necesidad de archivos temporales. Crea una tubería
@@ -224,9 +265,7 @@ pub async fn download_and_restore_full_backup_impl(
         let sync_reader = SyncIoBridge::new(rx);
         let mut archive = tar::Archive::new(sync_reader);
 
-        archive
-            .unpack(&dest_dir_clone)
-            .map_err(|e| format!("Fallo en extracción: {}", e))
+        unpack_archive_resilient(&mut archive, &dest_dir_clone)
     });
 
     let mut loaded: u64 = 0;
