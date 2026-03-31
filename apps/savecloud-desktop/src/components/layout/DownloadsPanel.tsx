@@ -108,20 +108,56 @@ export function DownloadsPanel() {
       };
     });
 
-    const torrentRows = Object.values(torrentTasks).map((task) => ({
-      id: `torrent-${task.infoHash}`,
-      label: task.name || "Torrent",
-      subtitle: task.state,
-      value: Math.max(0, Math.min(100, Math.round(task.progressPercent))),
-      source: "torrent" as const,
-      loaded: task.downloadedBytes,
-      total: task.totalBytes,
-      speedBps: task.downloadSpeedBytes,
-      etaSeconds: task.etaSeconds,
-    }));
+    /** Jobs de instalación por fuentes que ya tienen el mismo torrent en sesión: no duplicar fila en el panel. */
+    const sourceTorrentHashes = new Set(
+      Object.values(sourcesTasks)
+        .filter(
+          (j) =>
+            (j.protocol === "torrentMagnet" || j.protocol === "torrentFile") &&
+            typeof j.externalId === "string" &&
+            j.externalId.length > 0
+        )
+        .map((j) => j.externalId as string)
+    );
+
+    const torrentRows = Object.values(torrentTasks)
+      .filter((task) => !sourceTorrentHashes.has(task.infoHash))
+      .map((task) => ({
+        id: `torrent-${task.infoHash}`,
+        label: task.name || "Torrent",
+        subtitle: task.state,
+        value: Math.max(0, Math.min(100, Math.round(task.progressPercent))),
+        source: "torrent" as const,
+        loaded: task.downloadedBytes,
+        total: task.totalBytes,
+        speedBps: task.downloadSpeedBytes,
+        etaSeconds: task.etaSeconds,
+      }));
 
     const sourceRows = Object.values(sourcesTasks).map((task) => {
-      const value = task.total > 0 ? Math.min(100, Math.round((task.loaded / task.total) * 100)) : 0;
+      const isTorrentBacked = task.protocol === "torrentMagnet" || task.protocol === "torrentFile";
+      const torrent = isTorrentBacked && task.externalId ? torrentTasks[task.externalId] : undefined;
+
+      let loaded = task.loaded;
+      let total = task.total;
+      if (torrent) {
+        if (torrent.totalBytes > 0) {
+          loaded = torrent.downloadedBytes;
+          total = torrent.totalBytes;
+        } else if (torrent.downloadedBytes > 0) {
+          loaded = torrent.downloadedBytes;
+        }
+      }
+
+      const value =
+        total > 0
+          ? Math.min(100, Math.round((loaded / total) * 100))
+          : torrent
+            ? Math.max(0, Math.min(100, Math.round(torrent.progressPercent)))
+            : task.total > 0
+              ? Math.min(100, Math.round((task.loaded / task.total) * 100))
+              : 0;
+
       const subtitle = `${task.protocol} · ${task.status}`;
       return {
         id: `sources-${task.jobId}`,
@@ -133,8 +169,10 @@ export function DownloadsPanel() {
         isPaused: task.status === "paused",
         canPause: task.status === "running",
         canCancel: task.status === "queued" || task.status === "running" || task.status === "paused",
-        loaded: task.loaded,
-        total: task.total,
+        loaded,
+        total,
+        speedBps: torrent ? torrent.downloadSpeedBytes : undefined,
+        etaSeconds: torrent ? torrent.etaSeconds : undefined,
       };
     });
 
