@@ -16,6 +16,7 @@ import { useSettingsPage } from "@features/settings/useSettingsPage";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigationStore } from "@features/input/store";
 import { DevSdk } from "@features/settings/DevSdk";
+import { SourceInstallSettingsCard } from "@features/settings/SourceInstallSettingsCard";
 
 const ReleaseNotesDialogLazy = lazy(() =>
   import("@features/settings/ReleaseNotesDialog").then((module) => ({ default: module.ReleaseNotesDialog }))
@@ -74,6 +75,16 @@ export function SettingsPage() {
     setResetSteamCatalogConfirmOpen,
     setPullFriendConfigModalOpen,
     setPullFriendUserId,
+    sourcesBusy,
+    sourceUrl,
+    defaultSourceDownloadDir,
+    sourcesSummary,
+    setSourceUrl,
+    setDefaultSourceDownloadDir,
+    handleImportSourceByUrl,
+    handleImportSourceByFile,
+    handleSelectDefaultSourceDownloadDir,
+    handleSaveDefaultSourceDownloadDir,
   } = useSettingsPage();
 
   const popLayer = useNavigationStore((s) => s.popLayer);
@@ -162,6 +173,18 @@ export function SettingsPage() {
           }>
           <div className="space-y-4">
             <AutostartCard autostart={autostart} loading={loading} onChange={handleAutostartChange} />
+            <SourceInstallSettingsCard
+              sourceUrl={sourceUrl}
+              defaultDownloadDir={defaultSourceDownloadDir}
+              sourcesBusy={sourcesBusy}
+              sources={sourcesSummary}
+              onSourceUrlChange={setSourceUrl}
+              onDefaultDownloadDirChange={setDefaultSourceDownloadDir}
+              onImportUrl={() => handleImportSourceByUrl("merge")}
+              onImportFile={() => handleImportSourceByFile("merge")}
+              onPickFolder={handleSelectDefaultSourceDownloadDir}
+              onSaveDefaultDir={handleSaveDefaultSourceDownloadDir}
+            />
             <div className="grid gap-4 sm:grid-cols-2">
               <UpdatesCard checkingUpdate={checkingUpdate} onCheckUpdates={handleCheckUpdates} />
               <ReleaseNotesCard onOpenNotes={() => setReleaseNotesOpen(true)} />

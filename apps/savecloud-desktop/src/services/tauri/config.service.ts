@@ -41,6 +41,14 @@ export async function getConfigPath(): Promise<string> {
   return invoke<string>("get_config_path");
 }
 
+export async function getDefaultSourceDownloadDir(): Promise<string | null> {
+  return invoke<string | null>("get_default_source_download_dir");
+}
+
+export async function setDefaultSourceDownloadDir(path: string | null): Promise<void> {
+  await invoke("set_default_source_download_dir", { path: path?.trim() || null });
+}
+
 /** Busca Steam App ID por nombre de juego (scraping dinámico) */
 export async function searchSteamAppId(query: string): Promise<string | null> {
   return invoke<string | null>("search_steam_app_id", { query });

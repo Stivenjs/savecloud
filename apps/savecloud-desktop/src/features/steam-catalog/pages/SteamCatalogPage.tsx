@@ -25,7 +25,9 @@ export function SteamCatalogPage() {
     items,
     totalBrowse,
     mediaBySteamAppId,
+    matchByGameName,
     isMediaBatchPending,
+    isMatchingPending,
     isLoading,
     isError,
     errorMsg,
@@ -113,6 +115,9 @@ export function SteamCatalogPage() {
                 </div>
               ) : (
                 <>
+                  {isMatchingPending ? (
+                    <p className="text-xs text-default-400">Validando disponibilidad en tus fuentes...</p>
+                  ) : null}
                   <SteamCatalogGrid
                     items={items}
                     listKey={
@@ -121,6 +126,8 @@ export function SteamCatalogPage() {
                         : `browse-${filterSignature}-p${page}`
                     }
                     mediaBySteamAppId={mediaBySteamAppId}
+                    matchByGameName={matchByGameName}
+                    isMatchingPending={isMatchingPending}
                   />
 
                   <SteamCatalogPagination

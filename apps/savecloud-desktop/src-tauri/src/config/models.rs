@@ -39,6 +39,8 @@ pub struct AppSettings {
     pub full_backup_streaming: Option<bool>,
     #[serde(default)]
     pub full_backup_streaming_dry_run: Option<bool>,
+    #[serde(default)]
+    pub default_source_download_dir: Option<String>,
     /// URL o ruta local: fondo del perfil (imagen, GIF o vídeo).
     #[serde(default)]
     pub profile_background: Option<String>,
@@ -149,6 +151,8 @@ pub struct Config {
     pub keep_backups_per_game: Option<u32>,
     pub full_backup_streaming: Option<bool>,
     pub full_backup_streaming_dry_run: Option<bool>,
+    #[serde(default)]
+    pub default_source_download_dir: Option<String>,
     /// Perfil (mismos campos que `AppSettings`; incluidos en export/import y backup en nube).
     #[serde(default)]
     pub profile_background: Option<String>,
@@ -178,6 +182,8 @@ pub struct ConfigDto {
     pub keep_backups_per_game: Option<u32>,
     pub full_backup_streaming: Option<bool>,
     pub full_backup_streaming_dry_run: Option<bool>,
+    #[serde(default)]
+    pub default_source_download_dir: Option<String>,
     pub total_playtime: u64,
     #[serde(default)]
     pub profile_background: Option<String>,

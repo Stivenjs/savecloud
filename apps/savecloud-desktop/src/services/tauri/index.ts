@@ -4,3 +4,4 @@ export * from "./compat.service";
 export * from "./gamification.service";
 export * from "./updater.service";
 export * from "./invites.service";
+export * from "./sources.service";

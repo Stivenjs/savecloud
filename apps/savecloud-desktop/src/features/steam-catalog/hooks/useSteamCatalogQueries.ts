@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CatalogListItem } from "@services/tauri";
+import type { SourceMatchResult } from "@services/tauri";
 import {
   getSteamAppdetailsMediaBatch,
   getSteamCatalogFilterFacets,
   listSteamCatalogPage,
   searchSteamCatalog,
+  sourcesFindMatchesBatch,
   syncSteamStoreTrending,
 } from "@services/tauri";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
@@ -44,20 +46,14 @@ export function useSteamCatalogQueries() {
   });
 
   useEffect(() => {
-    let cancelled = false;
     void (async () => {
       try {
         await syncSteamStoreTrending();
-        if (!cancelled) {
-          await queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
-        }
       } catch {
         /* Sin ranking de tienda; el listado sigue ordenando por app_id. */
       }
+      await queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [queryClient]);
 
   const browseQuery = useQuery({
@@ -124,6 +120,23 @@ export function useSteamCatalogQueries() {
   /** Hasta que el batch de portadas termine (1.ª vez por clave), las cards quedaban sin media y parecían rotas. */
   const isMediaBatchPending = steamAppIdsForBatch.length > 0 && !mediaQuery.isFetched;
 
+  const visibleNames = useMemo(() => items.map((i) => i.name), [items]);
+  const matchesQuery = useQuery({
+    queryKey: ["sources-matches", visibleNames.join("|")],
+    queryFn: () => sourcesFindMatchesBatch(visibleNames),
+    enabled: visibleNames.length > 0,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
+  });
+  const matchByGameName = useMemo(() => {
+    const map: Record<string, SourceMatchResult> = {};
+    for (const entry of matchesQuery.data ?? []) {
+      map[entry.gameName] = entry;
+    }
+    return map;
+  }, [matchesQuery.data]);
+
   const isLoading = searchMode ? searchQuery.isPending : browseQuery.isPending;
   const isError = searchMode ? searchQuery.isError : browseQuery.isError;
   const errorMsg = (searchMode ? searchQuery.error : browseQuery.error) as Error | undefined;
@@ -173,7 +186,9 @@ export function useSteamCatalogQueries() {
     items,
     totalBrowse,
     mediaBySteamAppId: mediaQuery.data ?? null,
+    matchByGameName,
     isMediaBatchPending,
+    isMatchingPending: matchesQuery.isPending || matchesQuery.isFetching,
     isLoading,
     isError,
     errorMsg,

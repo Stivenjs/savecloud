@@ -16,7 +16,10 @@ import {
   importFriendConfig,
   syncSteamCatalog,
   resetSteamCatalogSync,
+  getDefaultSourceDownloadDir,
+  setDefaultSourceDownloadDir,
 } from "@services/tauri";
+import { importSourceFromFile, importSourceFromUrl, listSourcesSummary } from "@services/tauri/sources.service";
 import { MASKED_CONFIG_SECRET } from "@/constants/configMask";
 import { useConfig } from "@hooks/useConfig";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -43,6 +46,9 @@ type SettingsPageState = {
   restoreConfirmOpen: boolean;
   resetSteamCatalogConfirmOpen: boolean;
   steamCatalogBusy: boolean;
+  sourcesBusy: boolean;
+  sourceUrl: string;
+  defaultSourceDownloadDir: string;
 };
 
 type SettingsPageAction =
@@ -78,7 +84,10 @@ type SettingsPageAction =
   | { type: "SET_RESTORING_CONFIG"; payload: boolean }
   | { type: "SET_RESTORE_CONFIRM_OPEN"; payload: boolean }
   | { type: "SET_RESET_STEAM_CATALOG_CONFIRM_OPEN"; payload: boolean }
-  | { type: "SET_STEAM_CATALOG_BUSY"; payload: boolean };
+  | { type: "SET_STEAM_CATALOG_BUSY"; payload: boolean }
+  | { type: "SET_SOURCES_BUSY"; payload: boolean }
+  | { type: "SET_SOURCE_URL"; payload: string }
+  | { type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR"; payload: string };
 
 const initialState: SettingsPageState = {
   testingNotification: false,
@@ -100,6 +109,9 @@ const initialState: SettingsPageState = {
   restoreConfirmOpen: false,
   resetSteamCatalogConfirmOpen: false,
   steamCatalogBusy: false,
+  sourcesBusy: false,
+  sourceUrl: "",
+  defaultSourceDownloadDir: "",
 };
 
 function settingsPageReducer(state: SettingsPageState, action: SettingsPageAction): SettingsPageState {
@@ -160,6 +172,12 @@ function settingsPageReducer(state: SettingsPageState, action: SettingsPageActio
       return { ...state, resetSteamCatalogConfirmOpen: action.payload };
     case "SET_STEAM_CATALOG_BUSY":
       return { ...state, steamCatalogBusy: action.payload };
+    case "SET_SOURCES_BUSY":
+      return { ...state, sourcesBusy: action.payload };
+    case "SET_SOURCE_URL":
+      return { ...state, sourceUrl: action.payload };
+    case "SET_DEFAULT_SOURCE_DOWNLOAD_DIR":
+      return { ...state, defaultSourceDownloadDir: action.payload };
     default:
       return state;
   }
@@ -181,6 +199,24 @@ export function useSettingsPage() {
     queryFn: getConfigPath,
     staleTime: Infinity,
   });
+
+  const { data: sourcesSummary = [] } = useQuery({
+    queryKey: ["sources-catalogs"],
+    queryFn: listSourcesSummary,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const dir = await getDefaultSourceDownloadDir();
+      if (!cancelled) {
+        dispatch({ type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR", payload: dir ?? "" });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const { data: s3TransferEndpointType = null, isLoading: loadingS3 } = useQuery({
     queryKey: ["s3TransferEndpointType", config?.apiBaseUrl, config?.userId],
@@ -439,6 +475,63 @@ export function useSettingsPage() {
     }
   };
 
+  const handleImportSourceByUrl = async (mode: "merge" | "replace") => {
+    if (!state.sourceUrl.trim()) return;
+    dispatch({ type: "SET_SOURCES_BUSY", payload: true });
+    try {
+      await importSourceFromUrl(state.sourceUrl.trim(), mode);
+      toastSuccess("Fuente importada", "Se importó correctamente desde URL.");
+      dispatch({ type: "SET_SOURCE_URL", payload: "" });
+      queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
+    } catch (e) {
+      toastError("Error al importar", e instanceof Error ? e.message : String(e));
+    } finally {
+      dispatch({ type: "SET_SOURCES_BUSY", payload: false });
+    }
+  };
+
+  const handleImportSourceByFile = async (mode: "merge" | "replace") => {
+    dispatch({ type: "SET_SOURCES_BUSY", payload: true });
+    try {
+      const path = await open({
+        title: "Seleccionar JSON de fuente",
+        directory: false,
+        multiple: false,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!path || typeof path !== "string") return;
+      await importSourceFromFile(path, mode);
+      toastSuccess("Fuente importada", "Se importó correctamente desde archivo.");
+      queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
+    } catch (e) {
+      toastError("Error al importar", e instanceof Error ? e.message : String(e));
+    } finally {
+      dispatch({ type: "SET_SOURCES_BUSY", payload: false });
+    }
+  };
+
+  const handleSelectDefaultSourceDownloadDir = async () => {
+    const path = await open({
+      title: "Seleccionar carpeta de descargas",
+      directory: true,
+      multiple: false,
+    });
+    if (!path || typeof path !== "string") return;
+    dispatch({ type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR", payload: path });
+    await setDefaultSourceDownloadDir(path);
+    queryClient.invalidateQueries({ queryKey: ["config"] });
+  };
+
+  const handleSaveDefaultSourceDownloadDir = async () => {
+    try {
+      await setDefaultSourceDownloadDir(state.defaultSourceDownloadDir.trim() || null);
+      queryClient.invalidateQueries({ queryKey: ["config"] });
+      toastSuccess("Ruta guardada", "Carpeta por defecto actualizada.");
+    } catch (e) {
+      toastError("Error al guardar ruta", e instanceof Error ? e.message : String(e));
+    }
+  };
+
   return {
     ...state,
     config,
@@ -472,5 +565,12 @@ export function useSettingsPage() {
       dispatch({ type: "SET_RESET_STEAM_CATALOG_CONFIRM_OPEN", payload: v }),
     setPullFriendConfigModalOpen: (open: boolean) => dispatch({ type: "SET_PULL_FRIEND_MODAL", open }),
     setPullFriendUserId: (id: string) => dispatch({ type: "SET_PULL_FRIEND_USER_ID", payload: id }),
+    sourcesSummary,
+    setSourceUrl: (v: string) => dispatch({ type: "SET_SOURCE_URL", payload: v }),
+    setDefaultSourceDownloadDir: (v: string) => dispatch({ type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR", payload: v }),
+    handleImportSourceByUrl,
+    handleImportSourceByFile,
+    handleSelectDefaultSourceDownloadDir,
+    handleSaveDefaultSourceDownloadDir,
   };
 }

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { NOTIFICATIONS_CHANGED_EVENT } from "@services/tauri/notifications.service";
 import { backupConfigToCloud, checkForUpdatesWithPrompt } from "@services/tauri";
 import { toastSyncResult } from "@utils/toast";
 import { notifySyncComplete, notifySyncError } from "@utils/notification";
@@ -8,6 +9,7 @@ import { useInputManager } from "@features/input/useInputManager";
 import { getConfig } from "@services/tauri/config.service";
 import { useNotificationStore } from "@store/NotificationStore";
 import { initSyncListeners } from "@store/SyncStore";
+import { initSourcesListeners } from "@store/SourcesDownloadsStore";
 import { initTorrentListeners } from "@store/TorrentStore";
 
 /**
@@ -37,6 +39,7 @@ import { initTorrentListeners } from "@store/TorrentStore";
 export function useAppInitialization() {
   useInputManager();
   initSyncListeners();
+  initSourcesListeners();
   initTorrentListeners();
 
   /**
@@ -79,6 +82,20 @@ export function useAppInitialization() {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
       clearInterval(interval);
+    };
+  }, []);
+
+  /** Badge y lista del centro de notificaciones cuando el backend inserta o hace pull. */
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen(NOTIFICATIONS_CHANGED_EVENT, () => {
+      void useNotificationStore.getState().refreshUnreadCount();
+      void useNotificationStore.getState().loadItems({ unreadOnly: false, silent: true });
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
     };
   }, []);
   /**
