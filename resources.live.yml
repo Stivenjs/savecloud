@@ -49,7 +49,7 @@ Resources:
                   - S3CanonicalUserId
             Action: "s3:GetObject"
             Resource:
-              - Fn::Sub: "arn:aws:s3:::${SavesBucket}/*"
+              - Fn::Sub: "arn:aws:s3:::${SavesBucket}/*/backups/*"
 
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
@@ -79,6 +79,12 @@ Resources:
           CachedMethods:
             - GET
             - HEAD
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN:
+                Fn::GetAtt:
+                  - CloudFrontAllowBackupsOnlyFunction
+                  - FunctionARN
           Compress: true
           MinTTL: 31536000
           DefaultTTL: 31536000
@@ -89,3 +95,48 @@ Resources:
               Forward: none
         ViewerCertificate:
           CloudFrontDefaultCertificate: true
+
+  CloudFrontAllowBackupsOnlyFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name:
+        Fn::Sub: "savecloud-allow-backups-only-${sls:stage, 'dev'}"
+      AutoPublish: true
+      FunctionConfig:
+        Comment: "Block all CloudFront paths except */backups/*"
+        Runtime: cloudfront-js-1.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          var uri = request.uri || "";
+          if (uri.indexOf("/backups/") !== -1) {
+            return request;
+          }
+
+          return {
+            statusCode: 403,
+            statusDescription: "Forbidden",
+            headers: {
+              "cache-control": { value: "no-store" },
+              "content-type": { value: "text/plain; charset=utf-8" }
+            },
+            body: "Forbidden"
+          };
+        }
+
+Outputs:
+  CloudFrontDistributionDomainName:
+    Description: CloudFront domain for backup downloads
+    Value:
+      Fn::GetAtt:
+        - CloudFrontDistribution
+        - DomainName
+  CloudFrontDistributionUrl:
+    Description: CloudFront URL for backup downloads
+    Value:
+      Fn::Join:
+        - ""
+        - - "https://"
+          - Fn::GetAtt:
+              - CloudFrontDistribution
+              - DomainName
