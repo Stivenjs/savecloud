@@ -7,7 +7,7 @@ import { getSteamAppdetailsMediaBatch } from "@services/tauri";
 import { GameCard } from "@features/games/GameCard";
 import { formatSize } from "@utils/format";
 import { getSteamAppId } from "@utils/gameImage";
-import type { FriendGameSummary } from "./useFriendsPage";
+import type { FriendGameSummary } from "@hooks/useFriendsPage";
 
 interface FriendProfileBannerProps {
   userIdDisplay: string;
