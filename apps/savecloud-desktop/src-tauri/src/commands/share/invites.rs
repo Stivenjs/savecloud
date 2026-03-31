@@ -3,6 +3,19 @@ use crate::network::API_CLIENT;
 use serde::{Deserialize, Serialize};
 use tauri::command;
 
+fn normalize_base_url(input: &str) -> String {
+    let s = input.trim().trim_end_matches('/').to_string();
+    if s.starts_with("https://") {
+        return s;
+    }
+    if s.starts_with("http://") {
+        // API Gateway suele requerir HTTPS; upgrade automático para evitar fallos por puerto 80.
+        return format!("https://{}", s.trim_start_matches("http://"));
+    }
+    // Si el usuario pegó solo el host (sin esquema), asumimos HTTPS.
+    format!("https://{}", s)
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AcceptInviteProvisionResponseDto {
@@ -207,7 +220,7 @@ pub async fn accept_cloud_invite_by_url(invite_url: String) -> Result<(), String
     let idx = trimmed
         .find(marker)
         .ok_or("URL inválida: falta /invites/accept/<token>")?;
-    let base_url = trimmed[..idx].trim_end_matches('/').to_string();
+    let base_url = normalize_base_url(&trimmed[..idx]);
     let token = trimmed[idx + marker.len()..].trim().to_string();
     if token.is_empty() {
         return Err("URL inválida: token vacío".into());
