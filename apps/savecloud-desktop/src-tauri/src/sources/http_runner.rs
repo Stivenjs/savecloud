@@ -10,6 +10,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::network::DATA_CLIENT;
 
+use super::hosters::{self, HosterError};
 use super::parser::slugify;
 
 /// Resultado del runner HTTP.
@@ -31,13 +32,22 @@ pub async fn run_http_download(
         .await
         .map_err(|e| format!("No se pudo crear destino: {e}"))?;
 
-    let output = destination.join(build_output_name(title, uri));
+    let resolved = hosters::resolve_download_url(uri)
+        .await
+        .map_err(|e: HosterError| e.to_user_string())?;
+    let effective_uri = resolved.url.as_ref();
+
+    let output = destination.join(build_output_name(title, effective_uri));
     let mut file = tokio::fs::File::create(&output)
         .await
         .map_err(|e| format!("No se pudo crear archivo destino: {e}"))?;
 
-    let response = DATA_CLIENT
-        .get(uri)
+    let mut request = DATA_CLIENT.get(effective_uri);
+    if let Some(cookie) = &resolved.cookie {
+        request = request.header("Cookie", cookie);
+    }
+
+    let response = request
         .send()
         .await
         .map_err(|e| format!("Error HTTP al descargar: {e}"))?;

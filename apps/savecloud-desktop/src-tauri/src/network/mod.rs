@@ -6,6 +6,7 @@
 //! - [`API_CLIENT`]: llamadas cortas de metadatos (JSON, presigned URLs, init/complete).
 //! - [`DATA_CLIENT`]: transferencias binarias pesadas hacia S3 (PUT de partes multipart).
 //! - [`STEAM_CLIENT`]: scraping de la API pública de Steam con User-Agent de navegador.
+//! - [`HOSTER_CLIENT`]: APIs y páginas de hosters de descarga (Gofile, Mediafire, etc.).
 //!
 //! # Por qué tres clientes separados
 //!
@@ -149,10 +150,27 @@ pub static DATA_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
 /// No comparte pool con los otros clientes porque el host de destino es distinto
 /// y el patrón de uso (ráfagas cortas, luego silencio) no se beneficia de
 /// mantener conexiones idle por períodos largos.
+/// User-Agent de navegador usado por [`HOSTER_CLIENT`] y por la generación de tokens (p. ej. Gofile).
+pub const HOSTER_BROWSER_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
 pub static STEAM_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .user_agent(HOSTER_BROWSER_USER_AGENT)
         .timeout(Duration::from_secs(15))
         .build()
         .expect("fallo critico al inicializar STEAM_CLIENT")
+});
+
+/// Cliente para APIs y páginas de hosters de descarga (Gofile, Mediafire, etc.).
+///
+/// User-Agent tipo navegador y timeouts acordes a JSON/HTML; separado de `DATA_CLIENT`
+/// para no mezclar con el pool optimizado para S3.
+pub static HOSTER_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .user_agent(HOSTER_BROWSER_USER_AGENT)
+        .timeout(Duration::from_secs(120))
+        .connect_timeout(Duration::from_secs(20))
+        .tcp_nodelay(true)
+        .build()
+        .expect("fallo critico al inicializar HOSTER_CLIENT")
 });
