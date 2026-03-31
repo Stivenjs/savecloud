@@ -674,6 +674,7 @@ pub(crate) async fn sync_download_game_impl(
     app: AppHandle,
     prefetched_saves: Option<Vec<RemoteSaveInfoDto>>,
 ) -> Result<SyncResultDto, String> {
+    let api_ctx = super::context::resolve_api_context()?;
     let cfg = crate::config::load_config();
     let game = cfg
         .games
@@ -688,17 +689,13 @@ pub(crate) async fn sync_download_game_impl(
         ));
     }
 
-    let api_base = cfg
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura apiBaseUrl en Configuración")?;
     let user_id = cfg
         .user_id
         .as_deref()
         .filter(|s| !s.trim().is_empty())
         .ok_or("Configura tu usuario en Configuración")?;
-    let api_key = cfg.api_key.as_deref().unwrap_or("");
+    let api_base = api_ctx.base_url.as_str();
+    let api_key = api_ctx.api_key.as_str();
 
     let dest_base = match path_utils::expand_path(game.paths[0].trim()) {
         Some(p) => PathBuf::from(p),
@@ -837,19 +834,16 @@ pub async fn sync_download_all_games(
     app: AppHandle,
     tray_state: State<'_, TrayState>,
 ) -> Result<Vec<GameSyncResultDto>, String> {
+    let api_ctx = super::context::resolve_api_context()?;
     let cfg = crate::config::load_config();
 
-    let api_base = cfg
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura apiBaseUrl en Configuración")?;
     let user_id = cfg
         .user_id
         .as_deref()
         .filter(|s| !s.trim().is_empty())
         .ok_or("Configura tu usuario en Configuración")?;
-    let api_key = cfg.api_key.as_deref().unwrap_or("");
+    let api_base = api_ctx.base_url.as_str();
+    let api_key = api_ctx.api_key.as_str();
 
     tray_state.0.syncing_inc();
     tray_state.0.update_tooltip();

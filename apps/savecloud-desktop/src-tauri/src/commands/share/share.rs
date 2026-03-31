@@ -5,7 +5,6 @@
 //! Utiliza el estado gestionado de Tauri para mantener un pool de conexiones
 //! HTTP persistente, reduciendo la latencia en las negociaciones TLS.
 
-use crate::config;
 use crate::network::API_CLIENT;
 use serde::{Deserialize, Serialize};
 use tauri::command;
@@ -55,22 +54,10 @@ pub async fn create_remote_share_link(
     game_id: String,
     expires_in_days: Option<u32>,
 ) -> Result<String, String> {
-    let settings = config::load_settings();
-
-    let base_url = settings
-        .api_base_url
-        .as_deref()
-        .ok_or("Configuración de API ausente")?;
-
-    let api_key = settings
-        .api_key
-        .as_deref()
-        .ok_or("API Key no encontrada en el almacenamiento seguro")?;
-
-    let user_id = settings
-        .user_id
-        .as_deref()
-        .ok_or("Usuario no configurado")?;
+    let api_ctx = crate::commands::sync::context::resolve_api_context()?;
+    let base_url = api_ctx.base_url;
+    let api_key = api_ctx.api_key;
+    let user_id = api_ctx.user_id;
 
     let endpoint = format!("{}/share", base_url.trim_end_matches('/'));
 
@@ -112,11 +99,8 @@ pub async fn create_remote_share_link(
 /// * `token` - El código único del enlace compartido.
 #[command]
 pub async fn resolve_remote_share_token(token: String) -> Result<ResolvedShare, String> {
-    let settings = config::load_settings();
-    let base_url = settings
-        .api_base_url
-        .as_deref()
-        .ok_or("Configuración de API ausente")?;
+    let api_ctx = crate::commands::sync::context::resolve_api_context()?;
+    let base_url = api_ctx.base_url;
 
     let endpoint = format!("{}/share/{}", base_url.trim_end_matches('/'), token);
 
