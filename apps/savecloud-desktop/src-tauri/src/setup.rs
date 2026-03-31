@@ -78,6 +78,7 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     app.manage(TorrentState {
         engine: std::sync::Arc::new(tokio::sync::Mutex::new(torrent_engine)),
     });
+    app.manage(crate::sources::queue::SourcesState::new_from_disk());
 
     // 4. Extracción de estados compartidos
     let tray_state = app.state::<TrayState>();

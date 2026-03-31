@@ -10,6 +10,7 @@ mod network;
 mod plugins;
 mod setup;
 mod sqlite;
+mod sources;
 mod steam;
 mod steam_cache;
 mod steam_catalog;

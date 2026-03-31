@@ -76,6 +76,7 @@ pub fn get_config() -> ConfigDto {
         keep_backups_per_game: combined.keep_backups_per_game,
         full_backup_streaming: combined.full_backup_streaming,
         full_backup_streaming_dry_run: combined.full_backup_streaming_dry_run,
+        default_source_download_dir: combined.default_source_download_dir,
         total_playtime: time::get_total_playtime(),
         profile_background: settings.profile_background.clone(),
         profile_avatar: settings.profile_avatar.clone(),
@@ -215,6 +216,24 @@ pub fn set_full_backup_streaming(enabled: bool) -> Result<(), String> {
 pub fn set_full_backup_streaming_dry_run(enabled: bool) -> Result<(), String> {
     let mut settings = config::load_settings();
     settings.full_backup_streaming_dry_run = Some(enabled);
+    config::save_settings(&settings)
+}
+
+/// Lee la carpeta destino por defecto para descargas desde fuentes.
+#[tauri::command]
+pub fn get_default_source_download_dir() -> Option<String> {
+    config::load_settings().default_source_download_dir
+}
+
+/// Guarda la carpeta destino por defecto para descargas desde fuentes.
+#[tauri::command]
+pub fn set_default_source_download_dir(path: Option<String>) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.default_source_download_dir = path
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
     config::save_settings(&settings)
 }
 
@@ -849,6 +868,7 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
         keep_backups_per_game: None,
         full_backup_streaming: None,
         full_backup_streaming_dry_run: None,
+        default_source_download_dir: None,
         total_playtime: 0,
         profile_background: None,
         profile_avatar: None,

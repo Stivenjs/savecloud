@@ -87,3 +87,19 @@ export function formatLastSync(date: Date): string {
     year: "numeric",
   });
 }
+
+export function getSourceDisplayName(sourceUrl: string): string {
+  const raw = sourceUrl ?? "";
+  if (raw.startsWith("file://")) {
+    const normalized = raw.replace("file://", "").replace(/\\/g, "/");
+    const parts = normalized.split("/");
+    return parts[parts.length - 1] || "";
+  }
+  try {
+    const url = new URL(raw);
+    const parts = url.pathname.split("/").filter(Boolean);
+    return parts[parts.length - 1] || "";
+  } catch {
+    return "";
+  }
+}

@@ -7,6 +7,8 @@ import { SteamCatalogGrid } from "@features/steam-catalog/components/SteamCatalo
 import { SteamCatalogPagination } from "@features/steam-catalog/components/SteamCatalogPagination";
 import { SteamCatalogToolbar } from "@features/steam-catalog/components/SteamCatalogToolbar";
 import { useSteamCatalogQueries } from "@features/steam-catalog/hooks/useSteamCatalogQueries";
+import { useQuery } from "@tanstack/react-query";
+import { getDefaultSourceDownloadDir } from "@services/tauri";
 
 export function SteamCatalogPage() {
   const navigate = useNavigate();
@@ -25,7 +27,9 @@ export function SteamCatalogPage() {
     items,
     totalBrowse,
     mediaBySteamAppId,
+    matchByGameName,
     isMediaBatchPending,
+    isMatchingPending,
     isLoading,
     isError,
     errorMsg,
@@ -38,6 +42,10 @@ export function SteamCatalogPage() {
     toggleTag,
     clearFilters,
   } = useSteamCatalogQueries();
+  const { data: defaultSourceDownloadDir } = useQuery({
+    queryKey: ["default-source-download-dir"],
+    queryFn: getDefaultSourceDownloadDir,
+  });
 
   useRegisterGlobalBack(() => {
     navigate("/");
@@ -113,6 +121,9 @@ export function SteamCatalogPage() {
                 </div>
               ) : (
                 <>
+                  {isMatchingPending ? (
+                    <p className="text-xs text-default-400">Validando disponibilidad en tus fuentes...</p>
+                  ) : null}
                   <SteamCatalogGrid
                     items={items}
                     listKey={
@@ -121,6 +132,8 @@ export function SteamCatalogPage() {
                         : `browse-${filterSignature}-p${page}`
                     }
                     mediaBySteamAppId={mediaBySteamAppId}
+                    matchByGameName={matchByGameName}
+                    defaultDownloadDir={defaultSourceDownloadDir ?? ""}
                   />
 
                   <SteamCatalogPagination

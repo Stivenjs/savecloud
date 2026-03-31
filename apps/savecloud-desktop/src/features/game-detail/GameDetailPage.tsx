@@ -2,10 +2,12 @@ import { addTransitionType, startTransition, useCallback, useEffect, useRef, use
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Button, Spinner, Tab, Tabs } from "@heroui/react";
 import { ArrowLeft, Cpu, Gamepad2, LayoutList, ScrollText } from "lucide-react";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { launchGame, openSaveFolder, removeGame, scheduleConfigBackupToCloud } from "@services/tauri";
+import { getDefaultSourceDownloadDir, sourcesFindMatchForGame, startSourceDownload } from "@services/tauri";
 import { createShareLink } from "@services/share.service";
 import { toastError, toastSuccess } from "@utils/toast";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
@@ -170,6 +172,35 @@ export function GameDetailPage() {
 
   const showRequirementsTab = steamDetails ? hasSteamRequirements(steamDetails) : false;
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
+  const { data: defaultSourceDownloadDir } = useQuery({
+    queryKey: ["default-source-download-dir"],
+    queryFn: getDefaultSourceDownloadDir,
+  });
+  const { data: sourceMatch } = useQuery({
+    queryKey: ["sources-match-detail", displayName],
+    queryFn: () => sourcesFindMatchForGame(displayName),
+    enabled: !!displayName?.trim(),
+  });
+
+  const handleInstallFromSources = useCallback(async () => {
+    const best = sourceMatch?.best;
+    if (!best) return;
+    const destination = defaultSourceDownloadDir?.trim();
+    if (!destination) {
+      toastError("Falta carpeta de descarga", "Configura la carpeta por defecto en Configuracion.");
+      return;
+    }
+    try {
+      await startSourceDownload({
+        sourceId: best.sourceId,
+        itemId: best.itemId,
+        destinationDir: destination,
+      });
+      toastSuccess("Descarga iniciada", `Instalacion iniciada para ${displayName}.`);
+    } catch (e) {
+      toastError("No se pudo iniciar", e instanceof Error ? e.message : "Error inesperado");
+    }
+  }, [sourceMatch?.best, defaultSourceDownloadDir, displayName]);
 
   return (
     <div className="space-y-5 pb-4">
@@ -206,6 +237,26 @@ export function GameDetailPage() {
         onRestoreBackup={isSteamCatalogOnly ? undefined : setGameToRestoreBackup}
         onFullBackupUpload={!isSteamCatalogOnly && hasSyncConfig ? setGameToFullBackupConfirm : undefined}
       />
+
+      {sourceMatch?.best ? (
+        <section className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold">Disponibilidad en tus fuentes</p>
+              <p className="text-xs text-default-500">
+                Coincidencia: {sourceMatch.best.itemTitle} ({sourceMatch.best.sourceName})
+              </p>
+            </div>
+            <Button color="primary" onPress={() => void handleInstallFromSources()}>
+              Instalar
+            </Button>
+          </div>
+        </section>
+      ) : (
+        <section className="rounded-xl border border-default-200/70 bg-default-100/80 p-4">
+          <p className="text-sm text-default-500">No disponible en tus fuentes.</p>
+        </section>
+      )}
 
       <GameDrawer
         isOpen={!!gameToEdit}
