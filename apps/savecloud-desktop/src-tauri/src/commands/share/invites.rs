@@ -21,6 +21,7 @@ fn normalize_base_url(input: &str) -> String {
 pub struct AcceptInviteProvisionResponseDto {
     pub access_token: String,
     pub api_url: String,
+    pub host_user_id: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -61,14 +62,14 @@ pub struct CloudMembershipsResponseDto {
     pub member_memberships: Vec<CloudMembershipDto>,
 }
 
-fn load_api_auth() -> Result<(String, String, String), String> {
+fn load_host_api_auth() -> Result<(String, String, String), String> {
     let settings = config::load_settings();
-    let base_url = settings
+    let base_url_raw = settings
         .api_base_url
         .as_deref()
         .ok_or("Configuración de API ausente")?
-        .trim_end_matches('/')
-        .to_string();
+        .trim_end_matches('/');
+    let base_url = normalize_base_url(base_url_raw);
     let api_key = settings
         .api_key
         .as_deref()
@@ -82,13 +83,53 @@ fn load_api_auth() -> Result<(String, String, String), String> {
     Ok((base_url, api_key, user_id))
 }
 
+fn load_member_api_auth(host_user_id: &str) -> Result<(String, String, String), String> {
+    let host = host_user_id.trim();
+    if host.is_empty() {
+        return Err("Host inválido".into());
+    }
+
+    let settings = config::load_settings();
+
+    let base_url_raw = settings
+        .cloud_host_api_base_urls
+        .get(host)
+        .ok_or("No existe conexión guardada para este host")?;
+    let base_url = normalize_base_url(base_url_raw);
+
+    let api_key = config::get_secure_api_key_for_cloud_host(host)
+        .ok_or("Faltan credenciales de acceso para este host")?;
+
+    let user_id = settings
+        .user_id
+        .as_deref()
+        .ok_or("Usuario no configurado")?
+        .trim()
+        .to_string();
+
+    Ok((base_url, api_key, user_id))
+}
+
+fn load_active_member_api_auth() -> Result<(String, String, String), String> {
+    let settings = config::load_settings();
+    if let Some(active_host) = settings
+        .active_cloud_host_user_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return load_member_api_auth(active_host);
+    }
+    load_host_api_auth()
+}
+
 #[command]
 pub async fn create_cloud_invite(
     invitee_user_id: Option<String>,
     with_token: Option<bool>,
     expires_in_days: Option<u32>,
 ) -> Result<CloudInviteDto, String> {
-    let (base_url, api_key, user_id) = load_api_auth()?;
+    let (base_url, api_key, user_id) = load_host_api_auth()?;
     let endpoint = format!("{}/invites", base_url);
     let mut payload = serde_json::Map::new();
     payload.insert(
@@ -131,7 +172,7 @@ pub async fn create_cloud_invite(
 
 #[command]
 pub async fn list_pending_cloud_invites() -> Result<Vec<CloudInviteDto>, String> {
-    let (base_url, api_key, user_id) = load_api_auth()?;
+    let (base_url, api_key, user_id) = load_active_member_api_auth()?;
     let endpoint = format!("{}/invites/pending", base_url);
     let response = API_CLIENT
         .get(&endpoint)
@@ -156,7 +197,7 @@ pub async fn list_pending_cloud_invites() -> Result<Vec<CloudInviteDto>, String>
 
 #[command]
 pub async fn respond_cloud_invite(invite_id: String, action: String) -> Result<(), String> {
-    let (base_url, api_key, user_id) = load_api_auth()?;
+    let (base_url, api_key, user_id) = load_active_member_api_auth()?;
     let endpoint = format!("{}/invites/{}/respond", base_url, invite_id.trim());
     let payload = serde_json::json!({ "action": action.trim() });
     let response = API_CLIENT
@@ -179,7 +220,7 @@ pub async fn respond_cloud_invite(invite_id: String, action: String) -> Result<(
 
 #[command]
 pub async fn accept_cloud_invite_by_token(token: String) -> Result<(), String> {
-    let (base_url, api_key, user_id) = load_api_auth()?;
+    let (base_url, api_key, user_id) = load_active_member_api_auth()?;
     let endpoint = format!("{}/invites/accept-token", base_url);
     let payload = serde_json::json!({ "token": token.trim() });
     let response = API_CLIENT
@@ -251,10 +292,23 @@ pub async fn accept_cloud_invite_by_url(invite_url: String) -> Result<(), String
         .await
         .map_err(|e| format!("Error de deserialización: {}", e))?;
 
-    // Guardar provisionado: apiBaseUrl + apiKey (accessToken) en settings (apiKey va a Keyring).
+    // Guardar provisionado por host:
+    // - apiBaseUrl del host invitador
+    // - accessToken en Keyring para ese host
+    // - activar ese host para que Sync apunte a la conexión correcta
     let mut next = config::load_settings();
-    next.api_base_url = Some(parsed.api_url.trim_end_matches('/').to_string());
-    next.api_key = Some(parsed.access_token);
+    next.cloud_host_api_base_urls.insert(
+        parsed.host_user_id.clone(),
+        parsed.api_url.trim_end_matches('/').to_string(),
+    );
+    next.active_cloud_host_user_id = Some(parsed.host_user_id);
+    config::set_secure_api_key_for_cloud_host(
+        next.active_cloud_host_user_id
+            .as_deref()
+            .unwrap_or_default(),
+        // access_token
+        parsed.access_token.as_str(),
+    )?;
     config::save_settings(&next)?;
 
     Ok(())
@@ -262,7 +316,7 @@ pub async fn accept_cloud_invite_by_url(invite_url: String) -> Result<(), String
 
 #[command]
 pub async fn leave_cloud_membership(host_user_id: String) -> Result<(), String> {
-    let (base_url, api_key, user_id) = load_api_auth()?;
+    let (base_url, api_key, user_id) = load_member_api_auth(&host_user_id)?;
     let endpoint = format!("{}/invites/memberships/leave", base_url);
     let payload = serde_json::json!({
       "hostUserId": host_user_id.trim(),
@@ -294,7 +348,7 @@ pub async fn leave_cloud_membership(host_user_id: String) -> Result<(), String> 
 
 #[command]
 pub async fn remove_cloud_member(member_user_id: String) -> Result<(), String> {
-    let (base_url, api_key, user_id) = load_api_auth()?;
+    let (base_url, api_key, user_id) = load_host_api_auth()?;
     let endpoint = format!("{}/invites/memberships/remove", base_url);
     let payload = serde_json::json!({
       "hostUserId": user_id,
@@ -326,24 +380,69 @@ pub async fn remove_cloud_member(member_user_id: String) -> Result<(), String> {
 
 #[command]
 pub async fn list_cloud_memberships() -> Result<CloudMembershipsResponseDto, String> {
-    let (base_url, api_key, user_id) = load_api_auth()?;
-    let endpoint = format!("{}/invites/memberships", base_url);
-    let response = API_CLIENT
-        .get(&endpoint)
-        .header("x-api-key", api_key)
-        .header("x-user-id", user_id)
-        .send()
-        .await
-        .map_err(|e| format!("Fallo de red: {}", e))?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "API Error ({}): {}",
-            response.status(),
-            response.text().await.unwrap_or_default()
-        ));
+    let settings = config::load_settings();
+    let user_id = settings
+        .user_id
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Usuario no configurado")?
+        .to_string();
+
+    let mut host_memberships: Vec<CloudMembershipDto> = vec![];
+    let mut member_memberships: Vec<CloudMembershipDto> = vec![];
+
+    // 1) Tu propia nube: solo nos interesa host_memberships.
+    if let (Some(base_url_raw), Some(api_key_raw)) = (
+        settings.api_base_url.as_deref(),
+        settings.api_key.as_deref(),
+    ) {
+        if !base_url_raw.trim().is_empty() && !api_key_raw.trim().is_empty() {
+            let base_url = normalize_base_url(base_url_raw);
+            let endpoint = format!("{}/invites/memberships", base_url);
+            let response = API_CLIENT
+                .get(&endpoint)
+                .header("x-api-key", api_key_raw)
+                .header("x-user-id", &user_id)
+                .send()
+                .await
+                .map_err(|e| format!("Fallo de red: {}", e))?;
+
+            if response.status().is_success() {
+                let parsed = response
+                    .json::<CloudMembershipsResponseDto>()
+                    .await
+                    .map_err(|e| format!("Error de deserialización: {}", e))?;
+                host_memberships = parsed.host_memberships;
+            }
+        }
     }
-    response
-        .json::<CloudMembershipsResponseDto>()
-        .await
-        .map_err(|e| format!("Error de deserialización: {}", e))
+
+    // 2) Nubes de hosts donde eres miembro: solo nos interesan member_memberships.
+    for (host, _base_url) in settings.cloud_host_api_base_urls.iter() {
+        let (base_url, api_key, _) = match load_member_api_auth(host) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let endpoint = format!("{}/invites/memberships", base_url);
+        let response = API_CLIENT
+            .get(&endpoint)
+            .header("x-api-key", api_key)
+            .header("x-user-id", &user_id)
+            .send()
+            .await
+            .map_err(|e| format!("Fallo de red: {}", e))?;
+
+        if response.status().is_success() {
+            let parsed = response
+                .json::<CloudMembershipsResponseDto>()
+                .await
+                .map_err(|e| format!("Error de deserialización: {}", e))?;
+            member_memberships.extend(parsed.member_memberships);
+        }
+    }
+
+    Ok(CloudMembershipsResponseDto {
+        host_memberships,
+        member_memberships,
+    })
 }

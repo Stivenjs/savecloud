@@ -5,6 +5,7 @@
 //! para la sincronización con la nube y los DTOs expuestos al frontend.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Configuraciones generales de la aplicación y del usuario.
 ///
@@ -25,6 +26,11 @@ pub struct AppSettings {
     pub user_id: Option<String>,
     #[serde(default)]
     pub active_cloud_host_user_id: Option<String>,
+    /// Mapea `hostUserId` (anfitrión) -> `apiBaseUrl` del servidor donde vive esa nube invitada.
+    ///
+    /// Las credenciales secretas (`apiKey`/accessToken) se guardan aparte en el Keyring por `hostUserId`.
+    #[serde(default)]
+    pub cloud_host_api_base_urls: BTreeMap<String, String>,
     #[serde(default)]
     pub custom_scan_paths: Vec<String>,
     #[serde(default)]

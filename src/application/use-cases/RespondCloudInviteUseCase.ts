@@ -1,4 +1,5 @@
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
+import type { CloudInvite } from "@domain/entities/CloudInvite";
 
 export interface RespondCloudInviteInput {
   userId: string;
@@ -10,7 +11,7 @@ export interface RespondCloudInviteInput {
 export class RespondCloudInviteUseCase {
   constructor(private readonly repository: CloudInviteRepository) {}
 
-  async execute(input: RespondCloudInviteInput): Promise<void> {
+  async execute(input: RespondCloudInviteInput): Promise<CloudInvite> {
     const userId = input.userId.trim();
     const invite = input.inviteId
       ? await this.repository.getInviteById(input.inviteId)
@@ -44,7 +45,7 @@ export class RespondCloudInviteUseCase {
         updatedAt: now,
         active: true,
       });
-      return;
+      return invite;
     }
 
     if (invite.inviteeUserId && invite.inviteeUserId !== input.userId.trim()) {
@@ -54,5 +55,7 @@ export class RespondCloudInviteUseCase {
     invite.rejectedAt = now;
     invite.updatedAt = now;
     await this.repository.updateInvite(invite);
+
+    return invite;
   }
 }

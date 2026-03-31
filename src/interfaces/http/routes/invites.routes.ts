@@ -87,7 +87,7 @@ export async function registerInviteRoutes(
     async (request, reply: FastifyReply) => {
       try {
         const userId = getUserId(request);
-        await deps.respondCloudInviteUseCase.execute({
+        const invite = await deps.respondCloudInviteUseCase.execute({
           userId,
           token: request.body.token.trim(),
           action: "accept",
@@ -96,6 +96,7 @@ export async function registerInviteRoutes(
         return reply.send({
           accessToken,
           apiUrl: `${request.protocol}://${request.hostname}`,
+          hostUserId: invite.hostUserId,
         });
       } catch (err) {
         const message = getErrorMessage(err);

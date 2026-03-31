@@ -347,6 +347,7 @@ export function useFriendsPage() {
       }
       dispatch({ type: "SET_INVITE_TOKEN_INPUT", payload: "" });
       toastInfo("Invitación aceptada", "Ahora puedes usar la nube del anfitrión.");
+      await queryClient.invalidateQueries({ queryKey: ["config"] });
       await refreshInvitesState();
     } catch (e) {
       toastError("No se pudo aceptar", e instanceof Error ? e.message : "Error inesperado");
