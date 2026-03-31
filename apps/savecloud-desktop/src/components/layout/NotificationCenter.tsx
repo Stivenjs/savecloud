@@ -144,12 +144,12 @@ export function NotificationCenter() {
       <PopoverTrigger>
         <Button
           isIconOnly
-          radius="full"
+          radius="sm"
           variant="light"
           className="bg-transparent border-transparent shadow-none"
           aria-label="Centro de notificaciones">
           <Badge
-            content={unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined}
+            content={unreadCount > 0 ? (unreadCount > 9 ? "9+" : unreadCount) : undefined}
             color="danger"
             size="sm"
             shape="circle"
