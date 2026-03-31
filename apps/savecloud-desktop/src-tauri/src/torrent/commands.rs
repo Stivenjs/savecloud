@@ -334,31 +334,6 @@ pub async fn delete_cloud_torrent(
     Ok(())
 }
 
-struct ApiContext {
-    base_url: String,
-    user_id: String,
-    api_key: String,
-}
-
-fn get_api_context() -> Result<ApiContext, TorrentError> {
-    let cfg = crate::config::load_config();
-    let base_url = cfg
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| TorrentError::Config("apiBaseUrl no configurado".into()))?
-        .to_string();
-    let user_id = cfg
-        .user_id
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| TorrentError::Config("usuario no configurado".into()))?
-        .to_string();
-    let api_key = cfg.api_key.unwrap_or_default();
-
-    Ok(ApiContext {
-        base_url,
-        user_id,
-        api_key,
-    })
+fn get_api_context() -> Result<crate::commands::sync::context::ApiContext, TorrentError> {
+    crate::commands::sync::context::resolve_api_context().map_err(TorrentError::Config)
 }

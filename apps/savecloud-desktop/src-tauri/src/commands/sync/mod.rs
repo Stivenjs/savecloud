@@ -11,6 +11,7 @@
 
 pub mod api;
 pub mod backup;
+pub mod context;
 pub mod download;
 pub mod events;
 pub mod full_backup;

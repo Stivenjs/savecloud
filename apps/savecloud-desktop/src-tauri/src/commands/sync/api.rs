@@ -7,6 +7,7 @@
 //! Incluye configuración de timeouts, manejo de errores y soporte para
 //! reintentos en solicitudes críticas.
 
+use super::context::ApiContext;
 use super::models::SyncResultDto;
 use super::models::{CloudSavesSummaryDto, RemoteSaveDto, RemoteSaveInfoDto};
 use crate::network::API_CLIENT;
@@ -73,60 +74,8 @@ pub struct CopyFriendFilePlanDto {
     pub target_filename: String,
 }
 
-struct ApiContext {
-    base_url: String,
-    user_id: String,
-    api_key: String,
-}
-
 fn get_api_context() -> Result<ApiContext, String> {
-    let settings = crate::config::load_settings();
-
-    let user_id = settings
-        .user_id
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura tu usuario en Configuración")?
-        .to_string();
-
-    // Si hay host activo (nube del anfitrión), usamos credenciales por host.
-    if let Some(active_host) = settings
-        .active_cloud_host_user_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        if let Some(host_base_url) = settings.cloud_host_api_base_urls.get(active_host) {
-            let host_api_key = crate::config::get_secure_api_key_for_cloud_host(active_host)
-                .ok_or("Faltan credenciales de acceso para este host")?;
-            return Ok(ApiContext {
-                base_url: host_base_url.trim_end_matches('/').to_string(),
-                user_id,
-                api_key: host_api_key,
-            });
-        }
-    }
-
-    // Caso: nube propia (o sin host activo válido).
-    let base_url = settings
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura URL de la API en Configuración")?
-        .to_string();
-
-    let api_key = settings
-        .api_key
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura tu clave de acceso (apiKey)")?
-        .to_string();
-
-    Ok(ApiContext {
-        base_url,
-        user_id,
-        api_key,
-    })
+    super::context::resolve_api_context()
 }
 
 pub(crate) async fn api_request(
