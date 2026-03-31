@@ -10,6 +10,16 @@ import {
   getFriendConfig,
   syncListRemoteSaves,
   syncListRemoteSavesForUser,
+  createCloudInvite,
+  listPendingCloudInvites,
+  respondCloudInvite,
+  acceptCloudInviteByToken,
+  leaveCloudMembership,
+  removeCloudMember,
+  type CloudInvite,
+  type CloudMembership,
+  listCloudMemberships,
+  setActiveCloudHostUserId,
 } from "@services/tauri";
 import { extractShareTokenFromUrl, resolveShareToken } from "@services/share.service";
 import { toastError, toastInfo, toastSyncResult } from "@utils/toast";
@@ -57,6 +67,12 @@ type FriendsPageState = {
   shareLinkConfirmLoading: boolean;
   shareLinkPreview: ShareLinkPreview | null;
   copyConfirmPreview: CopyFriendSavesPreview | null;
+  inviteeUserIdInput: string;
+  inviteTokenInput: string;
+  inviteBusy: boolean;
+  pendingInvites: CloudInvite[];
+  hostMemberships: CloudMembership[];
+  memberMemberships: CloudMembership[];
 };
 
 type FriendsPageAction =
@@ -75,7 +91,13 @@ type FriendsPageAction =
   | {
       type: "SET_COPY_CONFIRM_PREVIEW";
       payload: CopyFriendSavesPreview | null;
-    };
+    }
+  | { type: "SET_INVITEE_USER_ID_INPUT"; payload: string }
+  | { type: "SET_INVITE_TOKEN_INPUT"; payload: string }
+  | { type: "SET_INVITE_BUSY"; payload: boolean }
+  | { type: "SET_PENDING_INVITES"; payload: CloudInvite[] }
+  | { type: "SET_HOST_MEMBERSHIPS"; payload: CloudMembership[] }
+  | { type: "SET_MEMBER_MEMBERSHIPS"; payload: CloudMembership[] };
 
 const initialState: FriendsPageState = {
   friendIdInput: "",
@@ -93,6 +115,12 @@ const initialState: FriendsPageState = {
   shareLinkConfirmLoading: false,
   shareLinkPreview: null,
   copyConfirmPreview: null,
+  inviteeUserIdInput: "",
+  inviteTokenInput: "",
+  inviteBusy: false,
+  pendingInvites: [],
+  hostMemberships: [],
+  memberMemberships: [],
 };
 
 function friendsPageReducer(state: FriendsPageState, action: FriendsPageAction): FriendsPageState {
@@ -127,6 +155,18 @@ function friendsPageReducer(state: FriendsPageState, action: FriendsPageAction):
       return { ...state, shareLinkPreview: action.payload };
     case "SET_COPY_CONFIRM_PREVIEW":
       return { ...state, copyConfirmPreview: action.payload };
+    case "SET_INVITEE_USER_ID_INPUT":
+      return { ...state, inviteeUserIdInput: action.payload };
+    case "SET_INVITE_TOKEN_INPUT":
+      return { ...state, inviteTokenInput: action.payload };
+    case "SET_INVITE_BUSY":
+      return { ...state, inviteBusy: action.payload };
+    case "SET_PENDING_INVITES":
+      return { ...state, pendingInvites: action.payload };
+    case "SET_HOST_MEMBERSHIPS":
+      return { ...state, hostMemberships: action.payload };
+    case "SET_MEMBER_MEMBERSHIPS":
+      return { ...state, memberMemberships: action.payload };
     default:
       return state;
   }
@@ -151,9 +191,16 @@ export function useFriendsPage() {
     shareLinkConfirmLoading,
     shareLinkPreview,
     copyConfirmPreview,
+    inviteeUserIdInput,
+    inviteTokenInput,
+    inviteBusy,
+    pendingInvites,
+    hostMemberships,
+    memberMemberships,
   } = state;
 
   const { config: ourConfig } = useConfig();
+  const activeCloudHostUserId = ourConfig?.activeCloudHostUserId?.trim() || null;
 
   const summaries: FriendGameSummary[] = useMemo(() => {
     if (!friendConfig) return [];
@@ -215,6 +262,134 @@ export function useFriendsPage() {
       });
     } finally {
       dispatch({ type: "SET_LOADING", payload: false });
+    }
+  };
+
+  const loadPendingInvites = async () => {
+    try {
+      const items = await listPendingCloudInvites();
+      dispatch({ type: "SET_PENDING_INVITES", payload: items });
+    } catch {
+      dispatch({ type: "SET_PENDING_INVITES", payload: [] });
+    }
+  };
+
+  const loadMemberships = async () => {
+    try {
+      const result = await listCloudMemberships();
+      dispatch({
+        type: "SET_HOST_MEMBERSHIPS",
+        payload: result.hostMemberships.filter((x) => x.active),
+      });
+      dispatch({
+        type: "SET_MEMBER_MEMBERSHIPS",
+        payload: result.memberMemberships.filter((x) => x.active),
+      });
+    } catch {
+      dispatch({ type: "SET_HOST_MEMBERSHIPS", payload: [] });
+      dispatch({ type: "SET_MEMBER_MEMBERSHIPS", payload: [] });
+    }
+  };
+
+  const refreshInvitesState = async () => {
+    await Promise.all([loadPendingInvites(), loadMemberships()]);
+  };
+
+  const handleCreateInvite = async () => {
+    dispatch({ type: "SET_INVITE_BUSY", payload: true });
+    try {
+      const invitee = inviteeUserIdInput.trim();
+      const invite = await createCloudInvite({
+        inviteeUserId: invitee || undefined,
+        withToken: true,
+      });
+      const shareToken = invite.token;
+      if (shareToken) {
+        toastInfo("Invitación creada", `Token: ${shareToken}`);
+      } else {
+        toastInfo("Invitación creada", "Se creó la invitación por userId.");
+      }
+      dispatch({ type: "SET_INVITEE_USER_ID_INPUT", payload: "" });
+      await refreshInvitesState();
+    } catch (e) {
+      toastError("No se pudo crear la invitación", e instanceof Error ? e.message : "Error inesperado");
+    } finally {
+      dispatch({ type: "SET_INVITE_BUSY", payload: false });
+    }
+  };
+
+  const handleAcceptInviteByToken = async () => {
+    const token = inviteTokenInput.trim();
+    if (!token) {
+      toastError("Token vacío", "Pega un token válido.");
+      return;
+    }
+    dispatch({ type: "SET_INVITE_BUSY", payload: true });
+    try {
+      await acceptCloudInviteByToken(token);
+      dispatch({ type: "SET_INVITE_TOKEN_INPUT", payload: "" });
+      toastInfo("Invitación aceptada", "Ahora puedes usar la nube del anfitrión.");
+      await refreshInvitesState();
+    } catch (e) {
+      toastError("No se pudo aceptar", e instanceof Error ? e.message : "Error inesperado");
+    } finally {
+      dispatch({ type: "SET_INVITE_BUSY", payload: false });
+    }
+  };
+
+  const handleRespondInvite = async (inviteId: string, action: "accept" | "reject") => {
+    dispatch({ type: "SET_INVITE_BUSY", payload: true });
+    try {
+      await respondCloudInvite(inviteId, action);
+      await refreshInvitesState();
+      toastInfo("Invitación actualizada", action === "accept" ? "Invitación aceptada." : "Invitación rechazada.");
+    } catch (e) {
+      toastError("No se pudo actualizar", e instanceof Error ? e.message : "Error inesperado");
+    } finally {
+      dispatch({ type: "SET_INVITE_BUSY", payload: false });
+    }
+  };
+
+  const handleLeaveMembership = async (hostUserId: string) => {
+    dispatch({ type: "SET_INVITE_BUSY", payload: true });
+    try {
+      await leaveCloudMembership(hostUserId);
+      toastInfo("Saliste de la nube", `Ya no usarás la nube de ${hostUserId}.`);
+      await refreshInvitesState();
+    } catch (e) {
+      toastError("No se pudo salir", e instanceof Error ? e.message : "Error inesperado");
+    } finally {
+      dispatch({ type: "SET_INVITE_BUSY", payload: false });
+    }
+  };
+
+  const handleRemoveMember = async (memberUserId: string) => {
+    dispatch({ type: "SET_INVITE_BUSY", payload: true });
+    try {
+      await removeCloudMember(memberUserId);
+      toastInfo("Miembro eliminado", `${memberUserId} fue removido de tu nube.`);
+      await refreshInvitesState();
+    } catch (e) {
+      toastError("No se pudo eliminar", e instanceof Error ? e.message : "Error inesperado");
+    } finally {
+      dispatch({ type: "SET_INVITE_BUSY", payload: false });
+    }
+  };
+
+  const handleUseHostCloud = async (hostUserId: string | null) => {
+    dispatch({ type: "SET_INVITE_BUSY", payload: true });
+    try {
+      await setActiveCloudHostUserId(hostUserId);
+      if (hostUserId?.trim()) {
+        toastInfo("Nube activa actualizada", `Ahora usarás la nube de ${hostUserId}.`);
+      } else {
+        toastInfo("Nube activa actualizada", "Ahora usarás tu nube propia.");
+      }
+      await queryClient.invalidateQueries({ queryKey: ["config"] });
+    } catch (e) {
+      toastError("No se pudo actualizar la nube activa", e instanceof Error ? e.message : "Error inesperado");
+    } finally {
+      dispatch({ type: "SET_INVITE_BUSY", payload: false });
     }
   };
 
@@ -452,6 +627,24 @@ export function useFriendsPage() {
     copyConfirmPreview,
     setCopyConfirmPreview,
     handleConfirmCopySaves,
+    inviteeUserIdInput,
+    setInviteeUserIdInput: (v: string) => dispatch({ type: "SET_INVITEE_USER_ID_INPUT", payload: v }),
+    inviteTokenInput,
+    setInviteTokenInput: (v: string) => dispatch({ type: "SET_INVITE_TOKEN_INPUT", payload: v }),
+    inviteBusy,
+    pendingInvites,
+    hostMemberships,
+    memberMemberships,
+    loadPendingInvites,
+    loadMemberships,
+    refreshInvitesState,
+    handleCreateInvite,
+    handleAcceptInviteByToken,
+    handleRespondInvite,
+    handleLeaveMembership,
+    handleRemoveMember,
+    handleUseHostCloud,
+    activeCloudHostUserId,
     ourConfig,
     handleLoadFriend,
     handleImportFromShareLink,

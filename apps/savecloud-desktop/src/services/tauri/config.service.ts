@@ -350,6 +350,13 @@ export async function createConfigFile(
   });
 }
 
+/** Selecciona la nube activa para sync: `null` = nube propia, string = nube del host. */
+export async function setActiveCloudHostUserId(hostUserId: string | null): Promise<void> {
+  await invoke("set_active_cloud_host_user_id", {
+    hostUserId: hostUserId?.trim() || null,
+  });
+}
+
 /** Importa configuración de un amigo directamente desde la nube reemplazando la local (no toca credentials locales) */
 export async function importFriendConfig(friendUserId: string): Promise<void> {
   await invoke("import_friend_config", { friendUserId });

@@ -28,6 +28,8 @@ export interface Config {
   /** Clave Steam Web API si está configurada; valor enmascarado desde el backend. */
   readonly steamWebApiKey?: string;
   readonly userId?: string;
+  /** ID del usuario que está usando la nube como host. */
+  readonly activeCloudHostUserId?: string;
   readonly games: readonly ConfiguredGame[];
   readonly customScanPaths?: readonly string[];
   /** Tiempo de juego total acumulado (segundos). */

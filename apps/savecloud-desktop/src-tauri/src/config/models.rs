@@ -24,6 +24,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub user_id: Option<String>,
     #[serde(default)]
+    pub active_cloud_host_user_id: Option<String>,
+    #[serde(default)]
     pub custom_scan_paths: Vec<String>,
     #[serde(default)]
     pub keep_backups_per_game: Option<u32>,
@@ -135,6 +137,8 @@ pub struct Config {
     pub api_base_url: Option<String>,
     pub api_key: Option<String>,
     pub user_id: Option<String>,
+    #[serde(default)]
+    pub active_cloud_host_user_id: Option<String>,
     pub custom_scan_paths: Vec<String>,
     pub keep_backups_per_game: Option<u32>,
     pub full_backup_streaming: Option<bool>,
@@ -161,6 +165,8 @@ pub struct ConfigDto {
     pub api_base_url: Option<String>,
     pub api_key: Option<String>,
     pub user_id: Option<String>,
+    #[serde(default)]
+    pub active_cloud_host_user_id: Option<String>,
     pub games: Vec<GameDto>,
     pub custom_scan_paths: Vec<String>,
     pub keep_backups_per_game: Option<u32>,

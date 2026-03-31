@@ -4,9 +4,7 @@
 //! almacenamiento S3, importación/exportación de estado y manipulaciones
 //! del árbol de juegos.
 
-use crate::commands::sync::api::{
-    api_request, sync_list_remote_saves_for_user,
-};
+use crate::commands::sync::api::{api_request, sync_list_remote_saves_for_user};
 use crate::config::gamification::GamificationStateDto;
 use crate::config::{self, Config, ConfigDto, ConfiguredGame, GameDto, OperationLogEntryDto};
 use crate::steam;
@@ -73,6 +71,7 @@ pub fn get_config() -> ConfigDto {
         api_base_url: combined.api_base_url,
         api_key: combined.api_key.map(|_| config::MASKED_API_KEY.to_string()),
         user_id: combined.user_id,
+        active_cloud_host_user_id: combined.active_cloud_host_user_id,
         custom_scan_paths: combined.custom_scan_paths,
         keep_backups_per_game: combined.keep_backups_per_game,
         full_backup_streaming: combined.full_backup_streaming,
@@ -182,6 +181,17 @@ pub fn create_config_file(
 
     config::save_settings(&settings)?;
     Ok(get_config_path())
+}
+
+#[tauri::command]
+pub fn set_active_cloud_host_user_id(host_user_id: Option<String>) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.active_cloud_host_user_id = host_user_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    config::save_settings(&settings)
 }
 
 /// Modifica la política local de retención máxima de respaldos por juego.
@@ -754,7 +764,9 @@ pub async fn restore_config_from_cloud() -> Result<(), String> {
     let api_key = settings.api_key.as_deref().unwrap_or("").to_string();
 
     // Optimización: el config vive bajo el juego especial "__config__".
-    let saves = crate::commands::sync::api::sync_list_remote_saves_for_game("__config__".to_string()).await?;
+    let saves =
+        crate::commands::sync::api::sync_list_remote_saves_for_game("__config__".to_string())
+            .await?;
     let mut config_saves: Vec<_> = saves
         .into_iter()
         .filter(|s| s.game_id == "__config__" && s.filename.ends_with("config.json"))
@@ -832,6 +844,7 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
         api_base_url: None,
         api_key: None,
         user_id: Some(friend_id.to_string()),
+        active_cloud_host_user_id: None,
         custom_scan_paths: vec![],
         keep_backups_per_game: None,
         full_backup_streaming: None,

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Spinner, Tab, Tabs } from "@heroui/react";
+import { Button, Input, Spinner, Tab, Tabs } from "@heroui/react";
 import type { ConfiguredGame } from "@app-types/config";
 import { useFriendsPage } from "@features/friends/useFriendsPage";
 import { AddFriendGamesModal } from "@features/friends/AddFriendGamesModal";
@@ -12,7 +12,7 @@ import { CopyFriendSavesConfirmModal } from "@features/friends/CopyFriendSavesCo
 import { useNavigationStore } from "@features/input/store";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 
-type FriendsTabKey = "link" | "user";
+type FriendsTabKey = "link" | "user" | "invites";
 
 export function FriendsPage() {
   const [friendsTab, setFriendsTab] = useState<FriendsTabKey>("link");
@@ -47,10 +47,31 @@ export function FriendsPage() {
     handleConfirmShareLinkImport,
     handleCopySaves,
     invalidateConfig,
+    inviteeUserIdInput,
+    setInviteeUserIdInput,
+    inviteTokenInput,
+    setInviteTokenInput,
+    inviteBusy,
+    pendingInvites,
+    hostMemberships,
+    memberMemberships,
+    refreshInvitesState,
+    handleCreateInvite,
+    handleAcceptInviteByToken,
+    handleRespondInvite,
+    handleLeaveMembership,
+    handleRemoveMember,
+    handleUseHostCloud,
+    activeCloudHostUserId,
   } = useFriendsPage();
 
   const handleAddGamesPress = useCallback(() => setAddFriendGamesOpen(true), [setAddFriendGamesOpen]);
   const handleUseAsTemplate = useCallback((game: ConfiguredGame) => setTemplateGame(game), [setTemplateGame]);
+
+  const handleOpenInvites = useCallback(() => {
+    setFriendsTab("invites");
+    void refreshInvitesState();
+  }, [refreshInvitesState]);
 
   useRegisterGlobalBack(() => {
     switch (true) {
@@ -112,7 +133,138 @@ export function FriendsPage() {
             error={error}
           />
         </Tab>
+        <Tab key="invites" title="Invitaciones">
+          <div className="space-y-4">
+            <div className="grid gap-2">
+              <Input
+                label="Invitar por userId (opcional)"
+                placeholder="user-123"
+                value={inviteeUserIdInput}
+                onValueChange={setInviteeUserIdInput}
+              />
+              <Button color="primary" isLoading={inviteBusy} onPress={handleCreateInvite}>
+                Crear invitación
+              </Button>
+            </div>
+            <div className="grid gap-2">
+              <Input
+                label="Aceptar por token"
+                placeholder="pega token de invitación"
+                value={inviteTokenInput}
+                onValueChange={setInviteTokenInput}
+              />
+              <Button variant="flat" isLoading={inviteBusy} onPress={handleAcceptInviteByToken}>
+                Aceptar invitación por token
+              </Button>
+            </div>
+            <div className="rounded-xl border border-default-200 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-medium">Pendientes para ti</p>
+                <Button size="sm" variant="light" onPress={() => void refreshInvitesState()}>
+                  Refrescar
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {pendingInvites.length === 0 ? (
+                  <p className="text-sm text-default-500">No tienes invitaciones pendientes.</p>
+                ) : (
+                  pendingInvites.map((invite) => (
+                    <div key={invite.id} className="rounded-lg border border-default-200 p-2 text-sm">
+                      <p>
+                        Anfitrión: <strong>{invite.hostUserId}</strong>
+                      </p>
+                      <p className="text-default-500">Expira: {new Date(invite.expiresAt).toLocaleString()}</p>
+                      <div className="mt-2 flex gap-2">
+                        <Button size="sm" color="success" onPress={() => void handleRespondInvite(invite.id, "accept")}>
+                          Aceptar
+                        </Button>
+                        <Button
+                          size="sm"
+                          color="danger"
+                          variant="flat"
+                          onPress={() => void handleRespondInvite(invite.id, "reject")}>
+                          Rechazar
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="rounded-xl border border-default-200 p-3">
+              <p className="mb-2 text-sm font-medium">Nube activa para sincronización</p>
+              <div className="mb-3 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant={activeCloudHostUserId ? "flat" : "solid"}
+                  color={activeCloudHostUserId ? "default" : "primary"}
+                  onPress={() => void handleUseHostCloud(null)}>
+                  Usar mi nube
+                </Button>
+                {memberMemberships.map((m) => (
+                  <Button
+                    key={`active-${m.hostUserId}`}
+                    size="sm"
+                    variant={activeCloudHostUserId === m.hostUserId ? "solid" : "flat"}
+                    color={activeCloudHostUserId === m.hostUserId ? "primary" : "default"}
+                    onPress={() => void handleUseHostCloud(m.hostUserId)}>
+                    {`Usar nube de ${m.hostUserId}`}
+                  </Button>
+                ))}
+              </div>
+              <p className="mb-2 text-sm font-medium">Nubes que usas como miembro</p>
+              <div className="space-y-2">
+                {memberMemberships.length === 0 ? (
+                  <p className="text-sm text-default-500">No perteneces a ninguna nube compartida.</p>
+                ) : (
+                  memberMemberships.map((m) => (
+                    <div key={`${m.hostUserId}-${m.memberUserId}`} className="flex items-center justify-between gap-2">
+                      <p className="text-sm">
+                        Host: <strong>{m.hostUserId}</strong>
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        color="warning"
+                        onPress={() => void handleLeaveMembership(m.hostUserId)}>
+                        Salir
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="rounded-xl border border-default-200 p-3">
+              <p className="mb-2 text-sm font-medium">Miembros en tu nube (host)</p>
+              <div className="space-y-2">
+                {hostMemberships.length === 0 ? (
+                  <p className="text-sm text-default-500">No tienes miembros activos en tu nube.</p>
+                ) : (
+                  hostMemberships.map((m) => (
+                    <div key={`${m.hostUserId}-${m.memberUserId}`} className="flex items-center justify-between gap-2">
+                      <p className="text-sm">
+                        Miembro: <strong>{m.memberUserId}</strong>
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        color="danger"
+                        onPress={() => void handleRemoveMember(m.memberUserId)}>
+                        Eliminar
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </Tab>
       </Tabs>
+      <div className="flex justify-end">
+        <Button size="sm" variant="light" onPress={handleOpenInvites}>
+          Gestionar invitaciones
+        </Button>
+      </div>
 
       {loading ? (
         <div className="flex min-h-[20vh] flex-col items-center justify-center gap-3">

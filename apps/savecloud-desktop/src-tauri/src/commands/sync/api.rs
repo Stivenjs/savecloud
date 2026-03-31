@@ -117,6 +117,16 @@ pub(crate) async fn api_request(
         .header("x-user-id", user_id)
         .header("x-api-key", api_key);
 
+    let active_host = crate::config::load_settings()
+        .active_cloud_host_user_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    if let Some(host) = active_host {
+        req = req.header("x-cloud-host-user-id", host);
+    }
+
     if let Some(b) = body {
         req = req
             .header("Content-Type", "application/json")

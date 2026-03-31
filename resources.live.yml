@@ -15,6 +15,16 @@ Resources:
           - AllowedHeaders: ["Content-Type", "x-user-id", "x-api-key"]
             AllowedMethods: [GET, PUT, HEAD]
             AllowedOrigins: ["*"]
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireShareTokens7Days
+            Status: Enabled
+            Prefix: share-tokens/
+            ExpirationInDays: 7
+          - Id: ExpireCloudInvites7Days
+            Status: Enabled
+            Prefix: cloud-invites/
+            ExpirationInDays: 7
 
   CloudFrontOriginAccessIdentity:
     Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
