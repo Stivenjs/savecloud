@@ -77,7 +77,7 @@ export function FriendsPage() {
     void refreshInvitesState();
     const id = window.setInterval(() => {
       void refreshInvitesState();
-    }, 10000);
+    }, 30000);
 
     return () => window.clearInterval(id);
   }, [friendsTab, refreshInvitesState]);

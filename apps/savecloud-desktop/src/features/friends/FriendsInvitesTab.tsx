@@ -86,6 +86,11 @@ export function FriendsInvitesTab({
 
   return (
     <div className="space-y-4">
+      <div className="space-y-1">
+        <p className="text-sm text-default-500">
+          Comparte un enlace para que tu amigo pueda acceder a la nube del anfitrión (sin configuración manual).
+        </p>
+      </div>
       <div className="flex flex-wrap gap-2">
         <Chip size="sm" variant="flat" color="primary">
           Pendientes: {pendingInvites.length}
@@ -125,6 +130,9 @@ export function FriendsInvitesTab({
                     size="sm"
                     startContent={<UserRound className="h-3.5 w-3.5 text-default-400 shrink-0" />}
                   />
+                  <p className="text-xs text-default-500">
+                    Si lo dejas vacío, generas un enlace con código (token) para cualquiera que lo reciba.
+                  </p>
                   <Button
                     color="primary"
                     isLoading={inviteBusy}
@@ -146,6 +154,9 @@ export function FriendsInvitesTab({
                             {lastCreatedInviteToken}
                           </p>
                         </div>
+                        <p className="text-xs text-default-500">
+                          Pásaselo a tu amigo: puede pegarlo aquí para aceptar (sin configurar nada).
+                        </p>
                         <Button
                           size="sm"
                           variant="flat"
@@ -173,6 +184,9 @@ export function FriendsInvitesTab({
                     size="sm"
                     startContent={<Mail className="h-3.5 w-3.5 text-default-400 shrink-0" />}
                   />
+                  <p className="text-xs text-default-500">
+                    Si pegas un enlace (recomendado), la app descubre automáticamente la URL del servidor.
+                  </p>
                   <Button
                     variant="flat"
                     color="default"
@@ -188,17 +202,20 @@ export function FriendsInvitesTab({
             </div>
 
             <SectionCard
-              title="Invitaciones pendientes para ti"
+              title="Invitaciones pendientes"
               icon={<Mail className="h-4 w-4" />}
               action={
-                <Button
-                  size="sm"
-                  variant="light"
-                  startContent={<RefreshCcw className="h-3.5 w-3.5" />}
-                  onPress={() => void refreshInvitesState()}>
-                  Refrescar
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="light"
+                    startContent={<RefreshCcw className="h-3.5 w-3.5" />}
+                    onPress={() => void refreshInvitesState()}>
+                    Actualizar ahora
+                  </Button>
+                </div>
               }>
+              <p className="mb-3 text-xs text-default-500">Se actualiza sola mientras tengas abierta esta pestaña.</p>
               {pendingInvites.length === 0 ? (
                 <EmptyState
                   message="No tienes invitaciones pendientes."
