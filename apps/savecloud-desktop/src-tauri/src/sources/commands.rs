@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 
 use once_cell::sync::Lazy;
 use rayon::prelude::*;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::network::API_CLIENT;
 
@@ -549,6 +549,7 @@ pub async fn cancel_source_download(
             crate::torrent::engine::cancel_via_session(&session, &info_hash)
                 .await
                 .map_err(|e| e.to_string())?;
+            let _ = app.emit(crate::torrent::engine::TORRENT_CANCELLED_EVENT, &info_hash);
         }
     }
 
