@@ -73,6 +73,7 @@ type FriendsPageState = {
   pendingInvites: CloudInvite[];
   hostMemberships: CloudMembership[];
   memberMemberships: CloudMembership[];
+  lastCreatedInviteToken: string | null;
 };
 
 type FriendsPageAction =
@@ -97,7 +98,8 @@ type FriendsPageAction =
   | { type: "SET_INVITE_BUSY"; payload: boolean }
   | { type: "SET_PENDING_INVITES"; payload: CloudInvite[] }
   | { type: "SET_HOST_MEMBERSHIPS"; payload: CloudMembership[] }
-  | { type: "SET_MEMBER_MEMBERSHIPS"; payload: CloudMembership[] };
+  | { type: "SET_MEMBER_MEMBERSHIPS"; payload: CloudMembership[] }
+  | { type: "SET_LAST_CREATED_INVITE_TOKEN"; payload: string | null };
 
 const initialState: FriendsPageState = {
   friendIdInput: "",
@@ -121,6 +123,7 @@ const initialState: FriendsPageState = {
   pendingInvites: [],
   hostMemberships: [],
   memberMemberships: [],
+  lastCreatedInviteToken: null,
 };
 
 function friendsPageReducer(state: FriendsPageState, action: FriendsPageAction): FriendsPageState {
@@ -167,6 +170,8 @@ function friendsPageReducer(state: FriendsPageState, action: FriendsPageAction):
       return { ...state, hostMemberships: action.payload };
     case "SET_MEMBER_MEMBERSHIPS":
       return { ...state, memberMemberships: action.payload };
+    case "SET_LAST_CREATED_INVITE_TOKEN":
+      return { ...state, lastCreatedInviteToken: action.payload };
     default:
       return state;
   }
@@ -197,6 +202,7 @@ export function useFriendsPage() {
     pendingInvites,
     hostMemberships,
     memberMemberships,
+    lastCreatedInviteToken,
   } = state;
 
   const { config: ourConfig } = useConfig();
@@ -305,8 +311,15 @@ export function useFriendsPage() {
       });
       const shareToken = invite.token;
       if (shareToken) {
-        toastInfo("Invitación creada", `Token: ${shareToken}`);
+        dispatch({ type: "SET_LAST_CREATED_INVITE_TOKEN", payload: shareToken });
+        try {
+          await navigator.clipboard.writeText(shareToken);
+          toastInfo("Invitación creada", "Token copiado al portapapeles.");
+        } catch {
+          toastInfo("Invitación creada", `Token: ${shareToken}`);
+        }
       } else {
+        dispatch({ type: "SET_LAST_CREATED_INVITE_TOKEN", payload: null });
         toastInfo("Invitación creada", "Se creó la invitación por userId.");
       }
       dispatch({ type: "SET_INVITEE_USER_ID_INPUT", payload: "" });
@@ -390,6 +403,17 @@ export function useFriendsPage() {
       toastError("No se pudo actualizar la nube activa", e instanceof Error ? e.message : "Error inesperado");
     } finally {
       dispatch({ type: "SET_INVITE_BUSY", payload: false });
+    }
+  };
+
+  const handleCopyLastToken = async () => {
+    const token = lastCreatedInviteToken?.trim();
+    if (!token) return;
+    try {
+      await navigator.clipboard.writeText(token);
+      toastInfo("Token copiado", "Se copió al portapapeles.");
+    } catch {
+      toastError("No se pudo copiar", "Copia manualmente el token mostrado.");
     }
   };
 
@@ -645,6 +669,8 @@ export function useFriendsPage() {
     handleRemoveMember,
     handleUseHostCloud,
     activeCloudHostUserId,
+    lastCreatedInviteToken,
+    handleCopyLastToken,
     ourConfig,
     handleLoadFriend,
     handleImportFromShareLink,

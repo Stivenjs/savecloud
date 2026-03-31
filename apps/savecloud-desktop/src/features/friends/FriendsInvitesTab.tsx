@@ -1,0 +1,373 @@
+import { useState } from "react";
+import { Avatar, Button, Chip, Divider, Input, Tab, Tabs } from "@heroui/react";
+import { Check, Cloud, Copy, LogOut, Mail, Plus, RefreshCcw, Trash2, UserRound, X } from "lucide-react";
+import type { CloudInvite, CloudMembership } from "@services/tauri/invites.service";
+
+function SectionCard({
+  title,
+  icon,
+  action,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-default-100 bg-default-50/40 overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-default-100">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-default-100 text-default-600">
+            {icon}
+          </span>
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+        </div>
+        {action}
+      </div>
+      <div className="px-4 py-4">{children}</div>
+    </div>
+  );
+}
+
+function EmptyState({ message, icon }: { message: string; icon?: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
+      <div className="h-10 w-10 rounded-full bg-default-100 flex items-center justify-center">
+        {icon ?? <Mail className="h-5 w-5 text-default-400" />}
+      </div>
+      <p className="text-sm text-default-500">{message}</p>
+    </div>
+  );
+}
+
+interface FriendsInvitesTabProps {
+  inviteeUserIdInput: string;
+  setInviteeUserIdInput: (value: string) => void;
+  inviteTokenInput: string;
+  setInviteTokenInput: (value: string) => void;
+  inviteBusy: boolean;
+  pendingInvites: CloudInvite[];
+  hostMemberships: CloudMembership[];
+  memberMemberships: CloudMembership[];
+  refreshInvitesState: () => void | Promise<void>;
+  handleCreateInvite: () => void | Promise<void>;
+  handleAcceptInviteByToken: () => void | Promise<void>;
+  handleRespondInvite: (inviteId: string, action: "accept" | "reject") => void | Promise<void>;
+  handleLeaveMembership: (hostUserId: string) => void | Promise<void>;
+  handleRemoveMember: (memberUserId: string) => void | Promise<void>;
+  handleUseHostCloud: (hostUserId: string | null) => void | Promise<void>;
+  activeCloudHostUserId: string | null;
+  lastCreatedInviteToken: string | null;
+  handleCopyLastToken: () => void | Promise<void>;
+}
+
+export function FriendsInvitesTab({
+  inviteeUserIdInput,
+  setInviteeUserIdInput,
+  inviteTokenInput,
+  setInviteTokenInput,
+  inviteBusy,
+  pendingInvites,
+  hostMemberships,
+  memberMemberships,
+  refreshInvitesState,
+  handleCreateInvite,
+  handleAcceptInviteByToken,
+  handleRespondInvite,
+  handleLeaveMembership,
+  handleRemoveMember,
+  handleUseHostCloud,
+  activeCloudHostUserId,
+  lastCreatedInviteToken,
+  handleCopyLastToken,
+}: FriendsInvitesTabProps) {
+  const [view, setView] = useState<"requests" | "cloud">("requests");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        <Chip size="sm" variant="flat" color="primary">
+          Pendientes: {pendingInvites.length}
+        </Chip>
+        <Chip size="sm" variant="flat" color="secondary">
+          Nubes compartidas: {memberMemberships.length}
+        </Chip>
+        <Chip size="sm" variant="flat" color="warning">
+          Miembros en tu nube: {hostMemberships.length}
+        </Chip>
+      </div>
+
+      <Tabs
+        selectedKey={view}
+        onSelectionChange={(key) => setView((String(key) as "requests" | "cloud") || "requests")}
+        variant="underlined"
+        classNames={{ panel: "pt-4" }}>
+        <Tab
+          key="requests"
+          title={
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4" />
+              <span>Solicitudes</span>
+            </div>
+          }>
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <SectionCard title="Enviar invitación" icon={<Plus className="h-4 w-4" />}>
+                <div className="space-y-3 md:max-w-md">
+                  <Input
+                    label="User ID del invitado"
+                    labelPlacement="outside"
+                    placeholder="user-123 (opcional)"
+                    value={inviteeUserIdInput}
+                    onValueChange={setInviteeUserIdInput}
+                    variant="bordered"
+                    size="sm"
+                    startContent={<UserRound className="h-3.5 w-3.5 text-default-400 shrink-0" />}
+                  />
+                  <Button
+                    color="primary"
+                    isLoading={inviteBusy}
+                    onPress={handleCreateInvite}
+                    className="w-full"
+                    size="sm">
+                    Crear invitación
+                  </Button>
+
+                  {lastCreatedInviteToken && (
+                    <>
+                      <Divider />
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-default-500 uppercase tracking-wide">Token generado</p>
+                        <div className="rounded-xl bg-default-100 border border-default-200 p-3">
+                          <p className="font-mono text-xs break-all text-foreground leading-relaxed">
+                            {lastCreatedInviteToken}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="flat"
+                          color="default"
+                          className="w-full"
+                          startContent={<Copy className="h-3.5 w-3.5" />}
+                          onPress={() => void handleCopyLastToken()}>
+                          Copiar token
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Aceptar invitación" icon={<Check className="h-4 w-4" />}>
+                <div className="space-y-3 md:max-w-md">
+                  <Input
+                    label="Token de invitación"
+                    labelPlacement="outside"
+                    placeholder="Pega aquí el token recibido"
+                    value={inviteTokenInput}
+                    onValueChange={setInviteTokenInput}
+                    variant="bordered"
+                    size="sm"
+                    startContent={<Mail className="h-3.5 w-3.5 text-default-400 shrink-0" />}
+                  />
+                  <Button
+                    variant="flat"
+                    color="default"
+                    isLoading={inviteBusy}
+                    onPress={handleAcceptInviteByToken}
+                    className="w-full"
+                    size="sm"
+                    startContent={!inviteBusy && <Check className="h-3.5 w-3.5" />}>
+                    Aceptar invitación
+                  </Button>
+                </div>
+              </SectionCard>
+            </div>
+
+            <SectionCard
+              title="Invitaciones pendientes para ti"
+              icon={<Mail className="h-4 w-4" />}
+              action={
+                <Button
+                  size="sm"
+                  variant="light"
+                  startContent={<RefreshCcw className="h-3.5 w-3.5" />}
+                  onPress={() => void refreshInvitesState()}>
+                  Refrescar
+                </Button>
+              }>
+              {pendingInvites.length === 0 ? (
+                <EmptyState
+                  message="No tienes invitaciones pendientes."
+                  icon={<Mail className="h-5 w-5 text-default-400" />}
+                />
+              ) : (
+                <div className="space-y-2">
+                  {pendingInvites.map((invite) => (
+                    <div
+                      key={invite.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-default-200 bg-default-50 p-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar name={invite.hostUserId} size="sm" className="shrink-0" color="primary" isBordered />
+                        <div>
+                          <p className="text-sm font-medium">{invite.hostUserId}</p>
+                          <p className="text-xs text-default-400">
+                            Expira {new Date(invite.expiresAt).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <Button
+                          size="sm"
+                          color="success"
+                          variant="flat"
+                          startContent={<Check className="h-3.5 w-3.5" />}
+                          onPress={() => void handleRespondInvite(invite.id, "accept")}>
+                          Aceptar
+                        </Button>
+                        <Button
+                          size="sm"
+                          color="danger"
+                          variant="light"
+                          startContent={<X className="h-3.5 w-3.5" />}
+                          onPress={() => void handleRespondInvite(invite.id, "reject")}>
+                          Rechazar
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+          </div>
+        </Tab>
+
+        <Tab
+          key="cloud"
+          title={
+            <div className="flex items-center gap-2">
+              <Cloud className="h-4 w-4" />
+              <span>Nube compartida</span>
+            </div>
+          }>
+          <div className="grid gap-4 md:grid-cols-2">
+            <SectionCard title="Nube activa para sincronización" icon={<Cloud className="h-4 w-4" />}>
+              <div className="space-y-3">
+                <p className="text-xs text-default-500">Selecciona qué nube usar para sincronizar tus saves.</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant={activeCloudHostUserId ? "flat" : "solid"}
+                    color={activeCloudHostUserId ? "default" : "primary"}
+                    startContent={<Cloud className="h-3.5 w-3.5" />}
+                    onPress={() => void handleUseHostCloud(null)}>
+                    Mi nube
+                  </Button>
+                  {memberMemberships.map((m) => (
+                    <Button
+                      key={`active-${m.hostUserId}`}
+                      size="sm"
+                      variant={activeCloudHostUserId === m.hostUserId ? "solid" : "flat"}
+                      color={activeCloudHostUserId === m.hostUserId ? "primary" : "default"}
+                      onPress={() => void handleUseHostCloud(m.hostUserId)}>
+                      {m.hostUserId}
+                    </Button>
+                  ))}
+                </div>
+
+                <Divider />
+
+                <div>
+                  <p className="text-xs font-medium text-default-500 uppercase tracking-wide mb-2">
+                    Nubes donde eres miembro
+                  </p>
+                  {memberMemberships.length === 0 ? (
+                    <EmptyState
+                      message="No perteneces a ninguna nube compartida."
+                      icon={<Cloud className="h-5 w-5 text-default-400" />}
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      {memberMemberships.map((m) => (
+                        <div
+                          key={`${m.hostUserId}-${m.memberUserId}`}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <Avatar name={m.hostUserId} size="sm" color="secondary" />
+                            <div>
+                              <p className="text-xs font-medium">{m.hostUserId}</p>
+                              <p className="text-[10px] text-default-400">Anfitrión</p>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="light"
+                            color="warning"
+                            startContent={<LogOut className="h-3.5 w-3.5" />}
+                            onPress={() => void handleLeaveMembership(m.hostUserId)}>
+                            Salir
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Miembros en tu nube" icon={<UserRound className="h-4 w-4" />}>
+              <div className="space-y-3">
+                <p className="text-xs text-default-500">Usuarios que tienen acceso a tu nube como miembros.</p>
+                {hostMemberships.length === 0 ? (
+                  <EmptyState
+                    message="No tienes miembros activos en tu nube."
+                    icon={<UserRound className="h-5 w-5 text-default-400" />}
+                  />
+                ) : (
+                  <div className="space-y-2">
+                    {hostMemberships.map((m) => (
+                      <div
+                        key={`${m.hostUserId}-${m.memberUserId}`}
+                        className="flex items-center justify-between gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <Avatar name={m.memberUserId} size="sm" color="danger" />
+                          <div>
+                            <p className="text-xs font-medium">{m.memberUserId}</p>
+                            <p className="text-[10px] text-default-400">Miembro</p>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="light"
+                          color="danger"
+                          startContent={<Trash2 className="h-3.5 w-3.5" />}
+                          onPress={() => void handleRemoveMember(m.memberUserId)}>
+                          Eliminar
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+          </div>
+        </Tab>
+      </Tabs>
+    </div>
+  );
+}
+
+export function InvitesTabTitle({ pendingCount }: { pendingCount: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Mail className="h-4 w-4" />
+      <span>Invitaciones</span>
+      {pendingCount > 0 && (
+        <Chip size="sm" color="primary" variant="solid" className="h-4 min-w-4 px-1 text-[10px]">
+          {pendingCount}
+        </Chip>
+      )}
+    </div>
+  );
+}
