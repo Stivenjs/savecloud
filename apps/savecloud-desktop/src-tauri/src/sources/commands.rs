@@ -5,8 +5,8 @@ use tauri::{AppHandle, Manager};
 use crate::network::API_CLIENT;
 
 use super::domain::{
-    DownloadProtocol, ImportMode, SourceCatalogSummary, SourceDownloadJob, SourceItemsPage, SourceJobStatus,
-    SourceMatchCandidate, SourceMatchResult,
+    DownloadProtocol, ImportMode, SourceCatalogSummary, SourceDownloadJob, SourceItemsPage,
+    SourceJobStatus, SourceMatchCandidate, SourceMatchResult,
 };
 use super::parser::parse_catalog;
 use super::queue::{cancel_job, new_job_id, now_iso, spawn_job, SourcesState};
@@ -160,29 +160,57 @@ fn similarity_score(left: &str, right: &str) -> f32 {
     intersection / union
 }
 
-fn find_matches(game_name: &str, threshold: f32) -> Result<SourceMatchResult, String> {
-    let normalized_game = normalize_title(game_name);
-    let mut matches: Vec<SourceMatchCandidate> = vec![];
+#[derive(Debug, Clone)]
+struct IndexedSourceItem {
+    source_id: String,
+    source_name: String,
+    item_id: String,
+    item_title: String,
+    normalized_title: String,
+    protocols: Vec<DownloadProtocol>,
+}
+
+fn build_match_index() -> Result<Vec<IndexedSourceItem>, String> {
+    let mut out: Vec<IndexedSourceItem> = vec![];
     for source in store::load_sources()? {
         for item in source.downloads {
-            let normalized_item = normalize_title(&item.title);
-            let score = similarity_score(&normalized_game, &normalized_item);
-            if score >= threshold {
-                let mut protocols: Vec<DownloadProtocol> = vec![];
-                for uri in item.uris {
-                    if !protocols.contains(&uri.protocol) {
-                        protocols.push(uri.protocol);
-                    }
+            let mut protocols: Vec<DownloadProtocol> = vec![];
+            for uri in item.uris {
+                if !protocols.contains(&uri.protocol) {
+                    protocols.push(uri.protocol);
                 }
-                matches.push(SourceMatchCandidate {
-                    source_id: source.id.clone(),
-                    source_name: source.name.clone(),
-                    item_id: item.id,
-                    item_title: item.title,
-                    score,
-                    protocols,
-                });
             }
+            out.push(IndexedSourceItem {
+                source_id: source.id.clone(),
+                source_name: source.name.clone(),
+                item_id: item.id,
+                item_title: item.title.clone(),
+                normalized_title: normalize_title(&item.title),
+                protocols,
+            });
+        }
+    }
+    Ok(out)
+}
+
+fn find_matches_from_index(
+    game_name: &str,
+    normalized_game: &str,
+    threshold: f32,
+    index: &[IndexedSourceItem],
+) -> SourceMatchResult {
+    let mut matches: Vec<SourceMatchCandidate> = vec![];
+    for item in index {
+        let score = similarity_score(normalized_game, &item.normalized_title);
+        if score >= threshold {
+            matches.push(SourceMatchCandidate {
+                source_id: item.source_id.clone(),
+                source_name: item.source_name.clone(),
+                item_id: item.item_id.clone(),
+                item_title: item.item_title.clone(),
+                score,
+                protocols: item.protocols.clone(),
+            });
         }
     }
     matches.sort_by(|a, b| b.score.total_cmp(&a.score));
@@ -190,11 +218,11 @@ fn find_matches(game_name: &str, threshold: f32) -> Result<SourceMatchResult, St
         matches.truncate(5);
     }
     let best = matches.first().cloned();
-    Ok(SourceMatchResult {
+    SourceMatchResult {
         game_name: game_name.to_string(),
         best,
         candidates: matches,
-    })
+    }
 }
 
 /// Busca match para un juego contra las fuentes importadas (normalizado + fuzzy).
@@ -203,7 +231,14 @@ pub async fn sources_find_match_for_game(
     game_name: String,
     threshold: Option<f32>,
 ) -> Result<SourceMatchResult, String> {
-    find_matches(&game_name, threshold.unwrap_or(0.58))
+    let index = build_match_index()?;
+    let normalized_game = normalize_title(&game_name);
+    Ok(find_matches_from_index(
+        &game_name,
+        &normalized_game,
+        threshold.unwrap_or(0.58),
+        &index,
+    ))
 }
 
 /// Busca matches para una lista de juegos visibles en catálogo.
@@ -212,10 +247,17 @@ pub async fn sources_find_matches_batch(
     game_names: Vec<String>,
     threshold: Option<f32>,
 ) -> Result<Vec<SourceMatchResult>, String> {
+    let index = build_match_index()?;
     let mut out = Vec::with_capacity(game_names.len());
     let score_threshold = threshold.unwrap_or(0.58);
     for name in game_names {
-        out.push(find_matches(&name, score_threshold)?);
+        let normalized_game = normalize_title(&name);
+        out.push(find_matches_from_index(
+            &name,
+            &normalized_game,
+            score_threshold,
+            &index,
+        ));
     }
     Ok(out)
 }

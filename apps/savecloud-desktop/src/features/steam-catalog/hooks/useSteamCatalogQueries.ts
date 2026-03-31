@@ -27,6 +27,7 @@ export function useSteamCatalogQueries() {
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [page, setPage] = useState(1);
+  const [trendingBootstrapDone, setTrendingBootstrapDone] = useState(false);
 
   const debounced = useDebouncedValue(searchTerm.trim(), 350);
   const searchMode = debounced.length >= STEAM_CATALOG_SEARCH_MIN;
@@ -50,11 +51,13 @@ export function useSteamCatalogQueries() {
     void (async () => {
       try {
         await syncSteamStoreTrending();
-        if (!cancelled) {
-          await queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
-        }
       } catch {
         /* Sin ranking de tienda; el listado sigue ordenando por app_id. */
+      } finally {
+        if (!cancelled) {
+          setTrendingBootstrapDone(true);
+          await queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
+        }
       }
     })();
     return () => {
@@ -71,7 +74,7 @@ export function useSteamCatalogQueries() {
         selectedGenres.length ? selectedGenres : null,
         selectedTags.length ? selectedTags : null
       ),
-    enabled: !searchMode,
+    enabled: !searchMode && trendingBootstrapDone,
     placeholderData: keepPreviousData,
   });
 
@@ -128,11 +131,12 @@ export function useSteamCatalogQueries() {
 
   const visibleNames = useMemo(() => items.map((i) => i.name), [items]);
   const matchesQuery = useQuery({
-    queryKey: ["sources-matches", ...visibleNames],
+    queryKey: ["sources-matches", visibleNames.join("|")],
     queryFn: () => sourcesFindMatchesBatch(visibleNames),
     enabled: visibleNames.length > 0,
     staleTime: 30_000,
     refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
   });
   const matchByGameName = useMemo(() => {
     const map: Record<string, SourceMatchResult> = {};
@@ -142,7 +146,7 @@ export function useSteamCatalogQueries() {
     return map;
   }, [matchesQuery.data]);
 
-  const isLoading = searchMode ? searchQuery.isPending : browseQuery.isPending;
+  const isLoading = searchMode ? searchQuery.isPending : !trendingBootstrapDone || browseQuery.isPending;
   const isError = searchMode ? searchQuery.isError : browseQuery.isError;
   const errorMsg = (searchMode ? searchQuery.error : browseQuery.error) as Error | undefined;
   const isPageTransition = searchMode ? searchQuery.isFetching : browseQuery.isFetching;
@@ -193,7 +197,7 @@ export function useSteamCatalogQueries() {
     mediaBySteamAppId: mediaQuery.data ?? null,
     matchByGameName,
     isMediaBatchPending,
-    isMatchingPending: matchesQuery.isFetching && !matchesQuery.isFetched,
+    isMatchingPending: matchesQuery.isPending || matchesQuery.isFetching,
     isLoading,
     isError,
     errorMsg,

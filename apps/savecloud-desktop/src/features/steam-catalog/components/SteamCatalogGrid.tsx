@@ -14,6 +14,7 @@ type SteamCatalogGridProps = {
   mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null;
   matchByGameName: Record<string, SourceMatchResult>;
   defaultDownloadDir: string;
+  isMatchingPending: boolean;
 };
 
 export function SteamCatalogGrid({
@@ -22,6 +23,7 @@ export function SteamCatalogGrid({
   mediaBySteamAppId,
   matchByGameName,
   defaultDownloadDir,
+  isMatchingPending,
 }: SteamCatalogGridProps) {
   const handleInstall = async (gameName: string) => {
     const match = matchByGameName[gameName];
@@ -59,13 +61,21 @@ export function SteamCatalogGrid({
                 mediaBySteamAppId={mediaBySteamAppId ?? null}
                 mediaFromBatch
               />
-              {match?.best ? (
-                <Button size="sm" color="primary" className="w-full" onPress={() => void handleInstall(item.name)}>
-                  Instalar
-                </Button>
-              ) : (
-                <p className="text-center text-xs text-default-400">No disponible en tus fuentes</p>
-              )}
+              <div className="h-8">
+                {isMatchingPending ? (
+                  <div className="h-full w-full animate-pulse rounded-medium bg-default-200/70" />
+                ) : match?.best ? (
+                  <Button
+                    size="sm"
+                    color="primary"
+                    className="h-full w-full"
+                    onPress={() => void handleInstall(item.name)}>
+                    Instalar
+                  </Button>
+                ) : (
+                  <p className="pt-2 text-center text-xs text-default-400">No disponible en tus fuentes</p>
+                )}
+              </div>
             </div>
           </GamesListMotionItem>
         );

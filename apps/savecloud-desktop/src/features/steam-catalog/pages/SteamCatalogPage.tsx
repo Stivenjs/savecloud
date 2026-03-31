@@ -134,6 +134,7 @@ export function SteamCatalogPage() {
                     mediaBySteamAppId={mediaBySteamAppId}
                     matchByGameName={matchByGameName}
                     defaultDownloadDir={defaultSourceDownloadDir ?? ""}
+                    isMatchingPending={isMatchingPending}
                   />
 
                   <SteamCatalogPagination
