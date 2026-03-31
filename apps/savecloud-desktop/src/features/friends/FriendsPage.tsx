@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Chip, Spinner, Tab, Tabs } from "@heroui/react";
 import { Link2, UserRound } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
-import { useFriendsPage } from "@features/friends/useFriendsPage";
+import { useFriendsPage } from "@/hooks/useFriendsPage";
 import { AddFriendGamesModal } from "@features/friends/AddFriendGamesModal";
 import { FriendGameTemplateModal } from "@features/friends/FriendGameTemplateModal";
 import { FriendGamesSection } from "@features/friends/FriendGamesSection";
