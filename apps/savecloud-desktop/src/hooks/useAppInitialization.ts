@@ -8,6 +8,7 @@ import { useInputManager } from "@features/input/useInputManager";
 import { getConfig } from "@services/tauri/config.service";
 import { useNotificationStore } from "@store/NotificationStore";
 import { initSyncListeners } from "@store/SyncStore";
+import { initSourcesListeners } from "@store/SourcesDownloadsStore";
 import { initTorrentListeners } from "@store/TorrentStore";
 
 /**
@@ -37,6 +38,7 @@ import { initTorrentListeners } from "@store/TorrentStore";
 export function useAppInitialization() {
   useInputManager();
   initSyncListeners();
+  initSourcesListeners();
   initTorrentListeners();
 
   /**

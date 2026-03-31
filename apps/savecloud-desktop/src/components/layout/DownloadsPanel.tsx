@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Progress, ScrollShadow } from "@heroui/react";
 import { ChevronDown, ChevronUp, Clock, Download, Pause, X, Zap } from "lucide-react";
+import { cancelSourceDownload, pauseSourceDownload, resumeSourceDownload } from "@services/tauri";
+import { useSourcesDownloadsStore } from "@store/SourcesDownloadsStore";
 import { useSyncStore } from "@store/SyncStore";
 import { useTorrentStore } from "@store/TorrentStore";
 import { formatBytes } from "@utils/format";
@@ -12,7 +14,9 @@ type DownloadRow = {
   label: string;
   subtitle: string;
   value: number;
-  source: "sync" | "torrent";
+  source: "sync" | "torrent" | "sources";
+  jobId?: string;
+  isPaused?: boolean;
   canPause?: boolean;
   canCancel?: boolean;
   loaded?: number;
@@ -26,6 +30,8 @@ export function DownloadsPanel() {
   const syncOperation = useSyncStore((s) => s.syncOperation);
   const syncTasks = useSyncStore((s) => s.activeTasksById);
   const aggregate = useSyncStore((s) => s.aggregateProgress);
+  const sourcesTasks = useSourcesDownloadsStore((s) => s.activeByJobId);
+  const sourcesAggregate = useSourcesDownloadsStore((s) => s.aggregateProgress);
   const torrentTasks = useTorrentStore((s) => s.activeByHash);
   const metricsRef = useRef<Record<string, { startMs: number; lastLoaded: number; gameId: string; filename: string }>>(
     {}
@@ -114,8 +120,26 @@ export function DownloadsPanel() {
       etaSeconds: task.etaSeconds,
     }));
 
-    return [...syncRows, ...torrentRows];
-  }, [syncTasks, syncMetrics, torrentTasks]);
+    const sourceRows = Object.values(sourcesTasks).map((task) => {
+      const value = task.total > 0 ? Math.min(100, Math.round((task.loaded / task.total) * 100)) : 0;
+      const subtitle = `${task.protocol} · ${task.status}`;
+      return {
+        id: `sources-${task.jobId}`,
+        jobId: task.jobId,
+        label: task.title || "Descarga",
+        subtitle,
+        value,
+        source: "sources" as const,
+        isPaused: task.status === "paused",
+        canPause: task.status === "running",
+        canCancel: task.status === "queued" || task.status === "running" || task.status === "paused",
+        loaded: task.loaded,
+        total: task.total,
+      };
+    });
+
+    return [...syncRows, ...sourceRows, ...torrentRows];
+  }, [syncTasks, syncMetrics, sourcesTasks, torrentTasks]);
 
   const totalActive = rows.length;
   const keepPanelVisibleForBatch = syncOperation?.mode === "batch";
@@ -144,7 +168,16 @@ export function DownloadsPanel() {
 
         <Progress
           size="sm"
-          value={aggregate.percent}
+          value={
+            aggregate.total + sourcesAggregate.total > 0
+              ? Math.min(
+                  100,
+                  Math.round(
+                    ((aggregate.loaded + sourcesAggregate.loaded) / (aggregate.total + sourcesAggregate.total)) * 100
+                  )
+                )
+              : aggregate.percent
+          }
           aria-label="Progreso agregado de descargas"
           className="mb-2"
           showValueLabel
@@ -176,6 +209,34 @@ export function DownloadsPanel() {
                     ) : null}
                     {row.canCancel ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5 cursor-pointer">
+                        <X size={10} />
+                        Cancelar
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+                {row.source === "sources" && row.jobId ? (
+                  <div className="mt-1 flex items-center gap-2 text-[10px] text-default-500">
+                    {row.canPause ? (
+                      <span
+                        className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5"
+                        onClick={() => void pauseSourceDownload(row.jobId!)}>
+                        <Pause size={10} />
+                        Pausa
+                      </span>
+                    ) : null}
+                    {row.isPaused ? (
+                      <span
+                        className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5"
+                        onClick={() => void resumeSourceDownload(row.jobId!)}>
+                        <Zap size={10} />
+                        Reanudar
+                      </span>
+                    ) : null}
+                    {row.canCancel ? (
+                      <span
+                        className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5"
+                        onClick={() => void cancelSourceDownload(row.jobId!)}>
                         <X size={10} />
                         Cancelar
                       </span>

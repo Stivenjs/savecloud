@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSourcesDownloadsStore } from "@store/SourcesDownloadsStore";
 import { useSyncStore } from "@store/SyncStore";
 import { useTorrentStore } from "@store/TorrentStore";
 import { DownloadsPanel } from "./DownloadsPanel";
@@ -13,16 +14,18 @@ export function TransferOverlayRouter() {
   const progress = useSyncStore((s) => s.progress);
   const pausedUploadInfo = useSyncStore((s) => s.pausedUploadInfo);
   const syncActiveCount = useSyncStore((s) => s.activeCount);
+  const sourcesActiveCount = useSourcesDownloadsStore((s) => s.activeCount);
+  const sourcesProgress = useSourcesDownloadsStore((s) => s.lastProgress);
   const torrentProgress = useTorrentStore((s) => s.progress);
   const torrentActiveCount = useTorrentStore((s) => s.activeCount);
 
-  const totalActive = syncActiveCount + torrentActiveCount;
+  const totalActive = syncActiveCount + torrentActiveCount + sourcesActiveCount;
   const [downloadsPanelSessionActive, setDownloadsPanelSessionActive] = useState(false);
   const [mode, setMode] = useState<OverlayMode>("none");
 
   useEffect(() => {
     const hasAnyTransferSignal =
-      totalActive > 0 || !!progress || !!torrentProgress || !!pausedUploadInfo || !!syncOperation;
+      totalActive > 0 || !!progress || !!torrentProgress || !!sourcesProgress || !!pausedUploadInfo || !!syncOperation;
 
     if (!hasAnyTransferSignal) {
       setDownloadsPanelSessionActive(false);
@@ -32,7 +35,7 @@ export function TransferOverlayRouter() {
     if (totalActive > 1 || syncOperation?.mode === "batch") {
       setDownloadsPanelSessionActive(true);
     }
-  }, [totalActive, syncOperation, syncOperation?.mode, progress, torrentProgress, pausedUploadInfo]);
+  }, [totalActive, syncOperation, syncOperation?.mode, progress, torrentProgress, sourcesProgress, pausedUploadInfo]);
 
   const desiredMode = useMemo<OverlayMode>(() => {
     if (pausedUploadInfo) return "sync_floating";

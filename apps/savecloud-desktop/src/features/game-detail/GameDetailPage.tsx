@@ -142,34 +142,6 @@ export function GameDetailPage() {
     [navigate]
   );
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
-        <Spinner size="lg" color="primary" />
-        <p className="text-default-500">Cargando detalles del juego...</p>
-      </div>
-    );
-  }
-
-  if (!game) {
-    return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
-        <Gamepad2 size={56} className="text-default-400" strokeWidth={1.2} />
-        <p className="text-lg font-medium text-default-600">Juego no encontrado</p>
-        <p className="text-sm text-default-400">
-          El juego <span className="font-mono text-default-500">{gameId}</span> no está configurado.
-        </p>
-        <Button
-          color="primary"
-          variant="bordered"
-          startContent={<ArrowLeft size={18} />}
-          onPress={handleBackWithTransition}>
-          Volver
-        </Button>
-      </div>
-    );
-  }
-
   const showRequirementsTab = steamDetails ? hasSteamRequirements(steamDetails) : false;
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
   const { data: defaultSourceDownloadDir } = useQuery({
@@ -201,6 +173,34 @@ export function GameDetailPage() {
       toastError("No se pudo iniciar", e instanceof Error ? e.message : "Error inesperado");
     }
   }, [sourceMatch?.best, defaultSourceDownloadDir, displayName]);
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
+        <Spinner size="lg" color="primary" />
+        <p className="text-default-500">Cargando detalles del juego...</p>
+      </div>
+    );
+  }
+
+  if (!game) {
+    return (
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
+        <Gamepad2 size={56} className="text-default-400" strokeWidth={1.2} />
+        <p className="text-lg font-medium text-default-600">Juego no encontrado</p>
+        <p className="text-sm text-default-400">
+          El juego <span className="font-mono text-default-500">{gameId}</span> no está configurado.
+        </p>
+        <Button
+          color="primary"
+          variant="bordered"
+          startContent={<ArrowLeft size={18} />}
+          onPress={handleBackWithTransition}>
+          Volver
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 pb-4">

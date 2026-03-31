@@ -27,7 +27,6 @@ export function useSteamCatalogQueries() {
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [page, setPage] = useState(1);
-  const [trendingBootstrapDone, setTrendingBootstrapDone] = useState(false);
 
   const debounced = useDebouncedValue(searchTerm.trim(), 350);
   const searchMode = debounced.length >= STEAM_CATALOG_SEARCH_MIN;
@@ -47,22 +46,14 @@ export function useSteamCatalogQueries() {
   });
 
   useEffect(() => {
-    let cancelled = false;
     void (async () => {
       try {
         await syncSteamStoreTrending();
       } catch {
         /* Sin ranking de tienda; el listado sigue ordenando por app_id. */
-      } finally {
-        if (!cancelled) {
-          setTrendingBootstrapDone(true);
-          await queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
-        }
       }
+      await queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [queryClient]);
 
   const browseQuery = useQuery({
@@ -74,7 +65,7 @@ export function useSteamCatalogQueries() {
         selectedGenres.length ? selectedGenres : null,
         selectedTags.length ? selectedTags : null
       ),
-    enabled: !searchMode && trendingBootstrapDone,
+    enabled: !searchMode,
     placeholderData: keepPreviousData,
   });
 
@@ -146,7 +137,7 @@ export function useSteamCatalogQueries() {
     return map;
   }, [matchesQuery.data]);
 
-  const isLoading = searchMode ? searchQuery.isPending : !trendingBootstrapDone || browseQuery.isPending;
+  const isLoading = searchMode ? searchQuery.isPending : browseQuery.isPending;
   const isError = searchMode ? searchQuery.isError : browseQuery.isError;
   const errorMsg = (searchMode ? searchQuery.error : browseQuery.error) as Error | undefined;
   const isPageTransition = searchMode ? searchQuery.isFetching : browseQuery.isFetching;
