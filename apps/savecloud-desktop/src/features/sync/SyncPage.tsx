@@ -5,6 +5,7 @@ import { useConfig } from "@hooks/useConfig";
 import { syncUploadGame, type SyncResult } from "@services/tauri";
 import type { ConfiguredGame } from "@app-types/config";
 import { formatGameDisplayName } from "@utils/gameImage";
+import { hasUsableCloudConnection } from "@utils/cloudConnection";
 
 interface SyncPageProps {
   onNavigateToSettings?: () => void;
@@ -86,7 +87,7 @@ export function SyncPage({ onNavigateToSettings }: SyncPageProps) {
   }
 
   const games = config?.games ?? [];
-  const hasConfig = config?.apiBaseUrl?.trim() && config?.userId?.trim() && config?.apiKey?.trim();
+  const hasConfig = hasUsableCloudConnection(config);
 
   if (!hasConfig) {
     return (

@@ -11,6 +11,7 @@ import {
 import { useGameRunningStatus } from "@hooks/useGameRunningStatus";
 import { getGameLibraryHeroUrl, getSteamAppId, isSteamMoviePosterUrl } from "@utils/gameImage";
 import { configuredGameFromSteamCatalogRouteId, isSteamCatalogRouteGameId } from "@utils/steamCatalogGameId";
+import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import type { ConfiguredGame } from "@app-types/config";
 
 interface LocationState {
@@ -90,7 +91,7 @@ export function useGameDetail() {
     libraryHeroFallbackUrl,
     videoUrl: steamDetails?.media.videoUrl ?? null,
     isLoading,
-    hasSyncConfig: !!(config?.apiBaseUrl && config?.apiKey && config?.userId),
+    hasSyncConfig: hasUsableCloudConnection(config ?? null),
     isSteamCatalogOnly: isCatalogRoute,
     /** Ruta para volver con atrás; si falta, el detalle usa `navigate(-1)`. */
     backToPath: navState?.from ?? null,
