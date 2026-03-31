@@ -23,3 +23,24 @@ export function getErrorMessage(err: unknown): string {
   if (err != null && typeof err === "object" && "code" in err) return String((err as { code: unknown }).code);
   return String(err);
 }
+
+function firstHeaderValue(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (Array.isArray(value) && value.length > 0 && typeof value[0] === "string" && value[0].trim()) {
+    return value[0].trim();
+  }
+  return null;
+}
+
+export function resolvePublicBaseUrl(request: FastifyRequest): string {
+  const xfProtoRaw = firstHeaderValue(request.headers?.["x-forwarded-proto"]);
+  const xfHostRaw = firstHeaderValue(request.headers?.["x-forwarded-host"]);
+  const hostRaw = firstHeaderValue(request.headers?.host);
+
+  const proto = (xfProtoRaw?.split(",")[0]?.trim() || request.protocol || "https").toLowerCase();
+  const host = xfHostRaw?.split(",")[0]?.trim() || hostRaw || request.hostname;
+
+  // En edge/public internet preferimos HTTPS para enlaces compartibles.
+  const safeProto = proto === "http" ? "https" : proto;
+  return `${safeProto}://${host}`;
+}
