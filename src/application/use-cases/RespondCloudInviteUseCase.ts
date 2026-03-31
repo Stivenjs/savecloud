@@ -11,6 +11,7 @@ export class RespondCloudInviteUseCase {
   constructor(private readonly repository: CloudInviteRepository) {}
 
   async execute(input: RespondCloudInviteInput): Promise<void> {
+    const userId = input.userId.trim();
     const invite = input.inviteId
       ? await this.repository.getInviteById(input.inviteId)
       : input.token
@@ -19,6 +20,9 @@ export class RespondCloudInviteUseCase {
     if (!invite) throw new Error("Invite not found");
     if (invite.status !== "pending") throw new Error("Invite is no longer pending");
     if (invite.expiresAt <= new Date().toISOString()) throw new Error("Invite expired");
+    if (invite.hostUserId.trim() === userId) {
+      throw new Error("You cannot accept your own invite");
+    }
 
     const now = new Date().toISOString();
     if (input.action === "accept") {
@@ -26,9 +30,9 @@ export class RespondCloudInviteUseCase {
       invite.acceptedAt = now;
       invite.updatedAt = now;
       if (!invite.inviteeUserId) {
-        invite.inviteeUserId = input.userId.trim();
+        invite.inviteeUserId = userId;
       }
-      if (invite.inviteeUserId !== input.userId.trim()) {
+      if (invite.inviteeUserId !== userId) {
         throw new Error("Invite does not belong to this user");
       }
       await this.repository.updateInvite(invite);
