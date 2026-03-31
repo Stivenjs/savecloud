@@ -39,6 +39,7 @@ export function TransferOverlayRouter() {
 
   const desiredMode = useMemo<OverlayMode>(() => {
     if (pausedUploadInfo) return "sync_floating";
+    if (sourcesActiveCount > 0) return "downloads_panel";
     if (downloadsPanelSessionActive && (totalActive > 0 || syncOperation?.mode === "batch")) {
       return "downloads_panel";
     }
@@ -52,7 +53,15 @@ export function TransferOverlayRouter() {
     if (progress && (syncOperation?.mode === "batch" || isPackagedOperation)) return "sync_floating";
     if (torrentProgress) return "torrent_bar";
     return "none";
-  }, [downloadsPanelSessionActive, pausedUploadInfo, progress, syncOperation?.mode, torrentProgress, totalActive]);
+  }, [
+    downloadsPanelSessionActive,
+    pausedUploadInfo,
+    progress,
+    sourcesActiveCount,
+    syncOperation?.mode,
+    torrentProgress,
+    totalActive,
+  ]);
 
   useEffect(() => {
     if (mode === desiredMode) return;
