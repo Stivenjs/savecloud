@@ -5,6 +5,7 @@ import { useConfig, CONFIG_QUERY_KEY } from "@hooks/useConfig";
 import { LAST_SYNC_QUERY_KEY } from "@hooks/useLastSyncInfo";
 import { toastSyncResult } from "@utils/toast";
 import { formatGameDisplayName } from "@utils/gameImage";
+import { hasUsableCloudConnection } from "@utils/cloudConnection";
 
 const UNSYNCED_QUERY_KEY = ["unsynced-games"] as const;
 
@@ -14,10 +15,7 @@ export function useUnsyncedSaves() {
 
   const [isDismissed, setIsDismissed] = useState(false);
 
-  const hasSyncConfig = useMemo(
-    () => !!(config?.apiBaseUrl?.trim() && config?.userId?.trim() && config?.apiKey?.trim()),
-    [config]
-  );
+  const hasSyncConfig = useMemo(() => hasUsableCloudConnection(config), [config]);
 
   const {
     data: unsyncedList = [],

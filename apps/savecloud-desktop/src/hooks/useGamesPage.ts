@@ -31,6 +31,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConfig } from "@hooks/useConfig";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
+import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { useSyncStore } from "@store/SyncStore";
 import { filterGames, type OriginFilter } from "@features/games/GamesFilters";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
@@ -202,7 +203,7 @@ export function useGamesPage() {
   } = state;
 
   const { config, loading, error, refetch } = useConfig();
-  const hasSyncConfig = !!(config?.apiBaseUrl?.trim() && config?.userId?.trim() && config?.apiKey?.trim());
+  const hasSyncConfig = hasUsableCloudConnection(config);
   const {
     lastSyncAt,
     lastSyncGameId,
