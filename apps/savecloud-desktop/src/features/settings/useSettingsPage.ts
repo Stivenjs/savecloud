@@ -282,7 +282,7 @@ export function useSettingsPage() {
 
   const handlePullFriendConfig = async () => {
     if (!state.pullFriendUserId.trim()) {
-      toastError("Error", "Ingresa un User ID válido.");
+      toastError("Error", "Ingresa un usuario válido.");
       return;
     }
     dispatch({ type: "SET_PULLING_FRIEND_CONFIG", payload: true });

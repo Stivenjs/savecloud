@@ -55,7 +55,7 @@ fn get_api_context() -> Result<ApiContext, String> {
         .user_id
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?
+        .ok_or("Configura tu usuario en Configuración")?
         .to_string();
     let api_key = cfg.api_key.unwrap_or_default();
 

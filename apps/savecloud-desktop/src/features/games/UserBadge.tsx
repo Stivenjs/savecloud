@@ -38,7 +38,7 @@ export function UserBadge({
     if (!isConfigured) return;
     try {
       await navigator.clipboard.writeText(userId ?? "");
-      toastSuccess("User ID copiado", "Puedes compartirlo con tus amigos.");
+      toastSuccess("Usuario copiado", "Puedes compartirlo con tus amigos.");
     } catch {
       // ignore
     }
@@ -98,7 +98,7 @@ export function UserBadge({
           size="sm"
           variant="light"
           isIconOnly
-          aria-label="Copiar User ID"
+          aria-label="Copiar usuario"
           onPress={handleCopy}
           className="-ml-1 text-default-400 hover:text-foreground">
           <Copy size={16} />

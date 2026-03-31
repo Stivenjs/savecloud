@@ -5,6 +5,7 @@ export interface CloudInvite {
   hostUserId: string;
   inviteeUserId?: string | null;
   token?: string | null;
+  inviteUrl?: string | null;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -57,6 +58,10 @@ export async function respondCloudInvite(inviteId: string, action: "accept" | "r
 
 export async function acceptCloudInviteByToken(token: string): Promise<void> {
   await invoke("accept_cloud_invite_by_token", { token });
+}
+
+export async function acceptCloudInviteByUrl(inviteUrl: string): Promise<void> {
+  await invoke("accept_cloud_invite_by_url", { inviteUrl });
 }
 
 export async function leaveCloudMembership(hostUserId: string): Promise<void> {

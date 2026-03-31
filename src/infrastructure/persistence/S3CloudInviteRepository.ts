@@ -41,11 +41,11 @@ export class S3CloudInviteRepository implements CloudInviteRepository {
   }
 
   private membershipsKey(hostUserId: string): string {
-    return `cloud-invites/memberships/${hostUserId}.json`;
+    return `cloud-invites-memberships/${hostUserId}.json`;
   }
 
   private sharedGamesKey(hostUserId: string, memberUserId: string): string {
-    return `cloud-invites/shared-games/${hostUserId}/${memberUserId}.json`;
+    return `cloud-invites-shared-games/${hostUserId}/${memberUserId}.json`;
   }
 
   private async getJsonOrNull<T>(key: string): Promise<T | null> {

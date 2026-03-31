@@ -5,6 +5,7 @@ import type { ListPendingCloudInvitesUseCase } from "@application/use-cases/List
 import type { RespondCloudInviteUseCase } from "@application/use-cases/RespondCloudInviteUseCase";
 import type { SetCloudGameShareUseCase } from "@application/use-cases/SetCloudGameShareUseCase";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
+import { issueUserAccessToken } from "@shared/accessToken";
 import {
   AcceptByTokenSchema,
   type AcceptByTokenBody,
@@ -91,7 +92,11 @@ export async function registerInviteRoutes(
           token: request.body.token.trim(),
           action: "accept",
         });
-        return reply.status(204).send();
+        const accessToken = issueUserAccessToken(userId, 30 * 24 * 60 * 60);
+        return reply.send({
+          accessToken,
+          apiUrl: `${request.protocol}://${request.hostname}`,
+        });
       } catch (err) {
         const message = getErrorMessage(err);
         const status = message.includes("not found") ? 404 : message.includes("does not belong") ? 403 : 400;

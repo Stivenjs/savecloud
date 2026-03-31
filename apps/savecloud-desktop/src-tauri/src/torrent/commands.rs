@@ -352,7 +352,7 @@ fn get_api_context() -> Result<ApiContext, TorrentError> {
         .user_id
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| TorrentError::Config("userId no configurado".into()))?
+        .ok_or_else(|| TorrentError::Config("usuario no configurado".into()))?
         .to_string();
     let api_key = cfg.api_key.unwrap_or_default();
 

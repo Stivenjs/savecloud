@@ -102,6 +102,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::commands::share::invites::list_pending_cloud_invites,
         crate::commands::share::invites::respond_cloud_invite,
         crate::commands::share::invites::accept_cloud_invite_by_token,
+        crate::commands::share::invites::accept_cloud_invite_by_url,
         crate::commands::share::invites::leave_cloud_membership,
         crate::commands::share::invites::remove_cloud_member,
         crate::commands::share::invites::list_cloud_memberships,

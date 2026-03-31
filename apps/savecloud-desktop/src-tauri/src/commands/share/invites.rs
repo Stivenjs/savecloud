@@ -5,11 +5,19 @@ use tauri::command;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AcceptInviteProvisionResponseDto {
+    pub access_token: String,
+    pub api_url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CloudInviteDto {
     pub id: String,
     pub host_user_id: String,
     pub invitee_user_id: Option<String>,
     pub token: Option<String>,
+    pub invite_url: Option<String>,
     pub status: String,
     pub created_at: String,
     pub updated_at: String,
@@ -56,7 +64,7 @@ fn load_api_auth() -> Result<(String, String, String), String> {
     let user_id = settings
         .user_id
         .as_deref()
-        .ok_or("User ID no configurado")?
+        .ok_or("Usuario no configurado")?
         .to_string();
     Ok((base_url, api_key, user_id))
 }
@@ -177,6 +185,66 @@ pub async fn accept_cloud_invite_by_token(token: String) -> Result<(), String> {
         response.status(),
         response.text().await.unwrap_or_default()
     ))
+}
+
+#[command]
+pub async fn accept_cloud_invite_by_url(invite_url: String) -> Result<(), String> {
+    let settings = config::load_settings();
+    let user_id = settings
+        .user_id
+        .as_deref()
+        .ok_or("Usuario no configurado")?
+        .trim()
+        .to_string();
+
+    let trimmed = invite_url.trim().to_string();
+    if trimmed.is_empty() {
+        return Err("URL vacía".into());
+    }
+
+    // Espera algo como: https://host.tld/invites/accept/<token>
+    let marker = "/invites/accept/";
+    let idx = trimmed
+        .find(marker)
+        .ok_or("URL inválida: falta /invites/accept/<token>")?;
+    let base_url = trimmed[..idx].trim_end_matches('/').to_string();
+    let token = trimmed[idx + marker.len()..].trim().to_string();
+    if token.is_empty() {
+        return Err("URL inválida: token vacío".into());
+    }
+
+    let endpoint = format!("{}/invites/accept-token", base_url);
+    let payload = serde_json::json!({ "token": token });
+
+    // Bootstrap: esta llamada NO requiere x-api-key (ruta pública en backend).
+    let response = API_CLIENT
+        .post(&endpoint)
+        .header("x-user-id", user_id.clone())
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Fallo de red: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "API Error ({}): {}",
+            response.status(),
+            response.text().await.unwrap_or_default()
+        ));
+    }
+
+    let parsed = response
+        .json::<AcceptInviteProvisionResponseDto>()
+        .await
+        .map_err(|e| format!("Error de deserialización: {}", e))?;
+
+    // Guardar provisionado: apiBaseUrl + apiKey (accessToken) en settings (apiKey va a Keyring).
+    let mut next = config::load_settings();
+    next.api_base_url = Some(parsed.api_url.trim_end_matches('/').to_string());
+    next.api_key = Some(parsed.access_token);
+    config::save_settings(&next)?;
+
+    Ok(())
 }
 
 #[command]

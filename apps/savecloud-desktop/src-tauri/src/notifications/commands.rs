@@ -20,7 +20,7 @@ pub fn list_notifications(
     {
         Some(u) => u,
         None => {
-            return Err("Configura userId en Configuración".to_string());
+            return Err("Configura tu usuario en Configuración".to_string());
         }
     };
 
@@ -45,7 +45,7 @@ pub fn notification_unread_count(db: State<'_, AppDb>) -> Result<i64, String> {
     {
         Some(u) => u,
         None => {
-            return Err("Configura userId en Configuración".to_string());
+            return Err("Configura tu usuario en Configuración".to_string());
         }
     };
 
@@ -58,7 +58,7 @@ pub fn mark_notification_read(db: State<'_, AppDb>, id: String) -> Result<(), St
     let user_id = config::load_config()
         .user_id
         .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?;
+        .ok_or("Configura tu usuario en Configuración")?;
 
     db.with_conn(|conn| db::mark_read(conn, &user_id, &id))
         .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
@@ -76,7 +76,7 @@ pub fn mark_all_notifications_read(db: State<'_, AppDb>) -> Result<(), String> {
     let user_id = config::load_config()
         .user_id
         .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?;
+        .ok_or("Configura tu usuario en Configuración")?;
 
     let ids: Vec<String> = db
         .with_conn(|conn| {
@@ -100,7 +100,7 @@ pub fn dismiss_notification(db: State<'_, AppDb>, id: String) -> Result<(), Stri
     let user_id = config::load_config()
         .user_id
         .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?;
+        .ok_or("Configura tu usuario en Configuración")?;
 
     db.with_conn(|conn| db::dismiss(conn, &user_id, &id))
         .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
@@ -118,7 +118,7 @@ pub async fn sync_notifications_push(db: State<'_, AppDb>) -> Result<usize, Stri
     let user_id = config::load_config()
         .user_id
         .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?;
+        .ok_or("Configura tu usuario en Configuración")?;
 
     let pending: Vec<NotificationRecordDto> = db
         .with_conn(|conn| db::list_pending_sync(conn, &user_id, 200))
@@ -141,7 +141,7 @@ pub async fn sync_notifications_pull(db: State<'_, AppDb>) -> Result<usize, Stri
     let user_id = config::load_config()
         .user_id
         .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?;
+        .ok_or("Configura tu usuario en Configuración")?;
 
     let cursor = db::get_meta(&db, "last_pull_cursor")
         .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?

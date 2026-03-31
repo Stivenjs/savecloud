@@ -116,9 +116,9 @@ export function FriendsInvitesTab({
               <SectionCard title="Enviar invitación" icon={<Plus className="h-4 w-4" />}>
                 <div className="space-y-3 md:max-w-md">
                   <Input
-                    label="User ID del invitado"
+                    label="Usuario del invitado (opcional)"
                     labelPlacement="outside"
-                    placeholder="user-123 (opcional)"
+                    placeholder="Ej: gabi21"
                     value={inviteeUserIdInput}
                     onValueChange={setInviteeUserIdInput}
                     variant="bordered"
@@ -138,7 +138,9 @@ export function FriendsInvitesTab({
                     <>
                       <Divider />
                       <div className="space-y-1.5">
-                        <p className="text-xs font-medium text-default-500 uppercase tracking-wide">Token generado</p>
+                        <p className="text-xs font-medium text-default-500 uppercase tracking-wide">
+                          Enlace de invitación
+                        </p>
                         <div className="rounded-xl bg-default-100 border border-default-200 p-3">
                           <p className="font-mono text-xs break-all text-foreground leading-relaxed">
                             {lastCreatedInviteToken}
@@ -151,7 +153,7 @@ export function FriendsInvitesTab({
                           className="w-full"
                           startContent={<Copy className="h-3.5 w-3.5" />}
                           onPress={() => void handleCopyLastToken()}>
-                          Copiar token
+                          Copiar enlace
                         </Button>
                       </div>
                     </>
@@ -162,9 +164,9 @@ export function FriendsInvitesTab({
               <SectionCard title="Aceptar invitación" icon={<Check className="h-4 w-4" />}>
                 <div className="space-y-3 md:max-w-md">
                   <Input
-                    label="Token de invitación"
+                    label="Enlace o código de invitación"
                     labelPlacement="outside"
-                    placeholder="Pega aquí el token recibido"
+                    placeholder="Pega el enlace completo o el código"
                     value={inviteTokenInput}
                     onValueChange={setInviteTokenInput}
                     variant="bordered"

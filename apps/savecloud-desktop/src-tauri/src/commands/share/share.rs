@@ -70,7 +70,7 @@ pub async fn create_remote_share_link(
     let user_id = settings
         .user_id
         .as_deref()
-        .ok_or("User ID no configurado")?;
+        .ok_or("Usuario no configurado")?;
 
     let endpoint = format!("{}/share", base_url.trim_end_matches('/'));
 

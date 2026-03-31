@@ -56,8 +56,8 @@ export function CreateConfigModal({
             variant="bordered"
           />
           <Input
-            label="User ID (userId)"
-            placeholder="tu-user-id"
+            label="Usuario (ID)"
+            placeholder="Ej: gabi21"
             value={userId}
             onValueChange={onUserIdChange}
             variant="bordered"

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Chip, Spinner, Tab, Tabs } from "@heroui/react";
 import { Link2, UserRound } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
@@ -71,6 +71,17 @@ export function FriendsPage() {
   const handleAddGamesPress = useCallback(() => setAddFriendGamesOpen(true), [setAddFriendGamesOpen]);
   const handleUseAsTemplate = useCallback((game: ConfiguredGame) => setTemplateGame(game), [setTemplateGame]);
 
+  useEffect(() => {
+    if (friendsTab !== "invites") return;
+
+    void refreshInvitesState();
+    const id = window.setInterval(() => {
+      void refreshInvitesState();
+    }, 10000);
+
+    return () => window.clearInterval(id);
+  }, [friendsTab, refreshInvitesState]);
+
   useRegisterGlobalBack(() => {
     switch (true) {
       case !!copyConfirmPreview:
@@ -99,12 +110,12 @@ export function FriendsPage() {
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold">Amigos</h1>
           <Chip size="sm" variant="flat" color="default" className="text-xs">
-            Importar desde link o ver perfil por User ID
+            Importar desde enlace o ver perfil por usuario
           </Chip>
         </div>
         <p className="max-w-3xl text-sm text-default-500">
           Usa <strong className="text-foreground">Importar por link</strong> si te pasaron un enlace de compartir, o{" "}
-          <strong className="text-foreground">Buscar por User ID</strong> para cargar el perfil de un amigo de
+          <strong className="text-foreground">Buscar por usuario</strong> para cargar el perfil de un amigo de
           confianza.
         </p>
       </div>
@@ -143,7 +154,7 @@ export function FriendsPage() {
           title={
             <div className="flex items-center gap-2">
               <UserRound className="h-4 w-4" />
-              <span>Buscar por User ID</span>
+              <span>Buscar por usuario</span>
             </div>
           }>
           <FriendProfileCard
@@ -190,7 +201,7 @@ export function FriendsPage() {
       {/* Friend games */}
       {friendConfig && !loading ? (
         <FriendGamesSection
-          userIdDisplay={friendConfig.userId ?? "(sin userId en config)"}
+          userIdDisplay={friendConfig.userId ?? "(sin usuario en config)"}
           summaries={summaries}
           copyingGameId={copyingGameId}
           onAddGamesPress={handleAddGamesPress}

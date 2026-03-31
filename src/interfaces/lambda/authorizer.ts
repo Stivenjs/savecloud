@@ -5,6 +5,7 @@
  */
 
 import { timingSafeEqual } from "crypto";
+import { verifyUserAccessToken } from "@shared/accessToken";
 
 const expectedApiKey = process.env.API_KEY ?? "";
 
@@ -57,6 +58,11 @@ export async function handler(event: {
     return { isAuthorized: true };
   }
 
+  // Aceptar invitación por token debe ser público (bootstrap de credenciales)
+  if (method === "POST" && rawPath === "/invites/accept-token") {
+    return { isAuthorized: true };
+  }
+
   // Fallar cerrado si la env var no está configurada
   if (!expectedApiKey) {
     return deny("API_KEY not configured", { path: rawPath, method });
@@ -68,9 +74,20 @@ export async function handler(event: {
     return deny("missing x-api-key header", { path: rawPath, method });
   }
 
-  if (!safeCompare(key, expectedApiKey)) {
-    return deny("invalid x-api-key", { path: rawPath, method });
+  // API key global (modo admin/host)
+  if (safeCompare(key, expectedApiKey)) {
+    return { isAuthorized: true };
   }
 
-  return { isAuthorized: true };
+  // Access token por usuario (modo invitado): requiere que coincida con x-user-id
+  const token = verifyUserAccessToken(key);
+  if (token) {
+    const userId = getHeader(event.headers ?? {}, "x-user-id").trim();
+    if (userId && userId === token.userId) {
+      return { isAuthorized: true };
+    }
+    return deny("x-user-id does not match access token", { path: rawPath, method });
+  }
+
+  return deny("invalid x-api-key", { path: rawPath, method });
 }

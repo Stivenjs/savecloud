@@ -282,7 +282,7 @@ pub(crate) async fn sync_upload_game_impl(
         .user_id
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?;
+        .ok_or("Configura tu usuario en Configuración")?;
     let api_key = cfg.api_key.as_deref().unwrap_or("");
 
     let files = path_utils::list_all_files_from_paths(&game.paths);
@@ -587,7 +587,7 @@ pub async fn sync_upload_all_games(
         .user_id
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?;
+        .ok_or("Configura tu usuario en Configuración")?;
 
     tray_state.0.syncing_inc();
     tray_state.0.reset_upload_cancel();
