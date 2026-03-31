@@ -297,9 +297,12 @@ pub async fn accept_cloud_invite_by_url(invite_url: String) -> Result<(), String
     // - accessToken en Keyring para ese host
     // - activar ese host para que Sync apunte a la conexión correcta
     let mut next = config::load_settings();
+    // Usar la base de la URL de invitación como fuente de verdad:
+    // evita problemas de protocolo/host cuando hay proxies o stage paths.
+    let resolved_host_api_url = base_url.clone();
     next.cloud_host_api_base_urls.insert(
         parsed.host_user_id.clone(),
-        parsed.api_url.trim_end_matches('/').to_string(),
+        resolved_host_api_url.trim_end_matches('/').to_string(),
     );
     next.active_cloud_host_user_id = Some(parsed.host_user_id);
     config::set_secure_api_key_for_cloud_host(
