@@ -1,5 +1,6 @@
-import { useCallback, useState } from "react";
-import { Spinner, Tab, Tabs } from "@heroui/react";
+import { useCallback, useEffect, useState } from "react";
+import { Chip, Spinner, Tab, Tabs } from "@heroui/react";
+import { Link2, UserRound } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import { useFriendsPage } from "@features/friends/useFriendsPage";
 import { AddFriendGamesModal } from "@features/friends/AddFriendGamesModal";
@@ -9,11 +10,11 @@ import { FriendProfileCard } from "@features/friends/FriendProfileCard";
 import { ShareLinkCard } from "@features/friends/ShareLinkCard";
 import { ShareLinkImportConfirmModal } from "@features/friends/ShareLinkImportConfirmModal";
 import { CopyFriendSavesConfirmModal } from "@features/friends/CopyFriendSavesConfirmModal";
+import { FriendsInvitesTab, InvitesTabTitle } from "@features/friends/FriendsInvitesTab";
 import { useNavigationStore } from "@features/input/store";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 
-type FriendsTabKey = "link" | "user";
-
+type FriendsTabKey = "link" | "user" | "invites";
 export function FriendsPage() {
   const [friendsTab, setFriendsTab] = useState<FriendsTabKey>("link");
   const popLayer = useNavigationStore((s) => s.popLayer);
@@ -47,10 +48,39 @@ export function FriendsPage() {
     handleConfirmShareLinkImport,
     handleCopySaves,
     invalidateConfig,
+    inviteeUserIdInput,
+    setInviteeUserIdInput,
+    inviteTokenInput,
+    setInviteTokenInput,
+    inviteBusy,
+    pendingInvites,
+    hostMemberships,
+    memberMemberships,
+    refreshInvitesState,
+    handleCreateInvite,
+    handleAcceptInviteByToken,
+    handleRespondInvite,
+    handleLeaveMembership,
+    handleRemoveMember,
+    handleUseHostCloud,
+    activeCloudHostUserId,
+    lastCreatedInviteToken,
+    handleCopyLastToken,
   } = useFriendsPage();
 
   const handleAddGamesPress = useCallback(() => setAddFriendGamesOpen(true), [setAddFriendGamesOpen]);
   const handleUseAsTemplate = useCallback((game: ConfiguredGame) => setTemplateGame(game), [setTemplateGame]);
+
+  useEffect(() => {
+    if (friendsTab !== "invites") return;
+
+    void refreshInvitesState();
+    const id = window.setInterval(() => {
+      void refreshInvitesState();
+    }, 30000);
+
+    return () => window.clearInterval(id);
+  }, [friendsTab, refreshInvitesState]);
 
   useRegisterGlobalBack(() => {
     switch (true) {
@@ -75,26 +105,41 @@ export function FriendsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold">Amigos</h1>
-          <span className="inline-flex h-7 items-center rounded-full bg-default-100 px-3 text-xs text-default-500">
-            Importar desde link o ver perfil por User ID
-          </span>
+          <Chip size="sm" variant="flat" color="default" className="text-xs">
+            Importar desde enlace o ver perfil por usuario
+          </Chip>
         </div>
-        <p className="max-w-3xl text-sm text-default-600">
+        <p className="max-w-3xl text-sm text-default-500">
           Usa <strong className="text-foreground">Importar por link</strong> si te pasaron un enlace de compartir, o{" "}
-          <strong className="text-foreground">Buscar por User ID</strong> para cargar el perfil de un amigo de
+          <strong className="text-foreground">Buscar por usuario</strong> para cargar el perfil de un amigo de
           confianza.
         </p>
       </div>
 
+      {/* Tabs */}
       <Tabs
         selectedKey={friendsTab}
-        onSelectionChange={(k) => setFriendsTab((String(k) as FriendsTabKey) || "link")}
+        onSelectionChange={(k) => {
+          const nextTab = (String(k) as FriendsTabKey) || "link";
+          setFriendsTab(nextTab);
+          if (nextTab === "invites") {
+            void refreshInvitesState();
+          }
+        }}
         variant="underlined"
         classNames={{ panel: "pt-4" }}>
-        <Tab key="link" title="Importar por link">
+        <Tab
+          key="link"
+          title={
+            <div className="flex items-center gap-2">
+              <Link2 className="h-4 w-4" />
+              <span>Importar por link</span>
+            </div>
+          }>
           <ShareLinkCard
             shareLinkInput={shareLinkInput}
             onShareLinkChange={setShareLinkInput}
@@ -103,7 +148,15 @@ export function FriendsPage() {
             disabled={!ourConfig?.apiBaseUrl?.trim()}
           />
         </Tab>
-        <Tab key="user" title="Buscar por User ID">
+
+        <Tab
+          key="user"
+          title={
+            <div className="flex items-center gap-2">
+              <UserRound className="h-4 w-4" />
+              <span>Buscar por usuario</span>
+            </div>
+          }>
           <FriendProfileCard
             friendIdInput={friendIdInput}
             onFriendIdChange={setFriendIdInput}
@@ -112,8 +165,32 @@ export function FriendsPage() {
             error={error}
           />
         </Tab>
+
+        <Tab key="invites" title={<InvitesTabTitle pendingCount={pendingInvites.length} />}>
+          <FriendsInvitesTab
+            inviteeUserIdInput={inviteeUserIdInput}
+            setInviteeUserIdInput={setInviteeUserIdInput}
+            inviteTokenInput={inviteTokenInput}
+            setInviteTokenInput={setInviteTokenInput}
+            inviteBusy={inviteBusy}
+            pendingInvites={pendingInvites}
+            hostMemberships={hostMemberships}
+            memberMemberships={memberMemberships}
+            refreshInvitesState={refreshInvitesState}
+            handleCreateInvite={handleCreateInvite}
+            handleAcceptInviteByToken={handleAcceptInviteByToken}
+            handleRespondInvite={handleRespondInvite}
+            handleLeaveMembership={handleLeaveMembership}
+            handleRemoveMember={handleRemoveMember}
+            handleUseHostCloud={handleUseHostCloud}
+            activeCloudHostUserId={activeCloudHostUserId}
+            lastCreatedInviteToken={lastCreatedInviteToken}
+            handleCopyLastToken={handleCopyLastToken}
+          />
+        </Tab>
       </Tabs>
 
+      {/* Loading state */}
       {loading ? (
         <div className="flex min-h-[20vh] flex-col items-center justify-center gap-3">
           <Spinner size="lg" color="primary" />
@@ -121,9 +198,10 @@ export function FriendsPage() {
         </div>
       ) : null}
 
+      {/* Friend games */}
       {friendConfig && !loading ? (
         <FriendGamesSection
-          userIdDisplay={friendConfig.userId ?? "(sin userId en config)"}
+          userIdDisplay={friendConfig.userId ?? "(sin usuario en config)"}
           summaries={summaries}
           copyingGameId={copyingGameId}
           onAddGamesPress={handleAddGamesPress}
@@ -132,6 +210,7 @@ export function FriendsPage() {
         />
       ) : null}
 
+      {/* Modals */}
       <AddFriendGamesModal
         isOpen={addFriendGamesOpen}
         onClose={() => setAddFriendGamesOpen(false)}
@@ -140,7 +219,6 @@ export function FriendsPage() {
         onAdded={invalidateConfig}
       />
       <FriendGameTemplateModal isOpen={templateOpen} game={templateGame} onClose={() => setTemplateOpen(false)} />
-
       <ShareLinkImportConfirmModal
         isOpen={!!shareLinkPreview}
         onClose={() => setShareLinkPreview(null)}
@@ -150,7 +228,6 @@ export function FriendsPage() {
         onConfirm={handleConfirmShareLinkImport}
         isLoading={shareLinkConfirmLoading}
       />
-
       <CopyFriendSavesConfirmModal
         isOpen={!!copyConfirmPreview}
         onClose={() => setCopyConfirmPreview(null)}

@@ -17,13 +17,22 @@ import { CreateMultipartUploadWithPartUrlsUseCase } from "@application/use-cases
 import { GetUploadPartUrlsUseCase } from "@application/use-cases/GetUploadPartUrlsUseCase";
 import { CompleteMultipartUploadUseCase } from "@application/use-cases/CompleteMultipartUploadUseCase";
 import { AbortMultipartUploadUseCase } from "@application/use-cases/AbortMultipartUploadUseCase";
+import { CreateCloudInviteUseCase } from "@application/use-cases/CreateCloudInviteUseCase";
+import { ListPendingCloudInvitesUseCase } from "@application/use-cases/ListPendingCloudInvitesUseCase";
+import { RespondCloudInviteUseCase } from "@application/use-cases/RespondCloudInviteUseCase";
+import { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
+import { SetCloudGameShareUseCase } from "@application/use-cases/SetCloudGameShareUseCase";
+import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import type { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
 import { registerSavesRoutes } from "@interfaces/http/routes/saves.routes";
 import { registerShareRoutes } from "@interfaces/http/routes/share.routes";
 import { registerNotificationRoutes } from "@interfaces/http/routes/notifications.routes";
+import { registerInviteRoutes } from "@interfaces/http/routes/invites.routes";
+import { verifyUserAccessToken } from "@shared/accessToken";
 
 export interface AppDependencies {
   saveRepository: SaveRepository;
+  cloudInviteRepository?: CloudInviteRepository;
   shareTokenStore?: ShareTokenS3;
   notificationStore?: S3NotificationStore;
 }
@@ -43,11 +52,20 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     app.addHook("onRequest", async (request, reply) => {
       if (request.url === "/health") return;
       if (request.method === "GET" && request.url.startsWith("/share/")) return;
+      if (request.method === "POST" && request.url === "/invites/accept-token") return;
 
       const key = request.headers["x-api-key"];
-      if (key !== expectedApiKey) {
-        return reply.status(401).send({ error: "Unauthorized" });
+      if (key === expectedApiKey) return;
+
+      if (typeof key === "string" && key.trim()) {
+        const token = verifyUserAccessToken(key);
+        if (token) {
+          const userId = request.headers["x-user-id"];
+          if (typeof userId === "string" && userId.trim() && userId.trim() === token.userId) return;
+        }
       }
+
+      return reply.status(401).send({ error: "Unauthorized" });
     });
   }
 
@@ -66,6 +84,9 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   const getUploadPartUrlsUseCase = new GetUploadPartUrlsUseCase(deps.saveRepository);
   const completeMultipartUploadUseCase = new CompleteMultipartUploadUseCase(deps.saveRepository);
   const abortMultipartUploadUseCase = new AbortMultipartUploadUseCase(deps.saveRepository);
+  const resolveCloudStorageScopeUseCase = deps.cloudInviteRepository
+    ? new ResolveCloudStorageScopeUseCase(deps.cloudInviteRepository)
+    : undefined;
 
   await registerSavesRoutes(app, {
     getUploadUrlUseCase,
@@ -83,6 +104,8 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     getUploadPartUrlsUseCase,
     completeMultipartUploadUseCase,
     abortMultipartUploadUseCase,
+    resolveCloudStorageScopeUseCase,
+    cloudInviteRepository: deps.cloudInviteRepository,
   });
 
   if (deps.shareTokenStore) {
@@ -91,6 +114,16 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
 
   if (deps.notificationStore) {
     await registerNotificationRoutes(app, deps.notificationStore);
+  }
+
+  if (deps.cloudInviteRepository) {
+    await registerInviteRoutes(app, {
+      createCloudInviteUseCase: new CreateCloudInviteUseCase(deps.cloudInviteRepository),
+      listPendingCloudInvitesUseCase: new ListPendingCloudInvitesUseCase(deps.cloudInviteRepository),
+      respondCloudInviteUseCase: new RespondCloudInviteUseCase(deps.cloudInviteRepository),
+      setCloudGameShareUseCase: new SetCloudGameShareUseCase(deps.cloudInviteRepository),
+      cloudInviteRepository: deps.cloudInviteRepository,
+    });
   }
 
   app.get("/health", async (_, reply: FastifyReply) => {

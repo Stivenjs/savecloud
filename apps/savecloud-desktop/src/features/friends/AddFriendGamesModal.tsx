@@ -97,7 +97,7 @@ export function AddFriendGamesModal({ isOpen, onClose, friendGames, ourGameIds, 
         </ModalHeader>
         <ModalBody>
           <p className="text-sm text-default-600">
-            Se añadirán solo los juegos que aún no tienes. No se modifica tu API key ni tu User ID. Revisa las rutas en
+            Se añadirán solo los juegos que aún no tienes. No se modifica tu API key ni tu usuario. Revisa las rutas en
             Configuración después.
           </p>
           {gamesToOffer.length === 0 ? (

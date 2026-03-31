@@ -210,7 +210,8 @@ pub async fn sync_check_download_conflicts(
     };
 
     // Optimización: si ya conocemos el juego, listamos solo su prefijo remoto.
-    let saves: Vec<RemoteSaveInfoDto> = api::sync_list_remote_saves_for_game(game_id.clone()).await?;
+    let saves: Vec<RemoteSaveInfoDto> =
+        api::sync_list_remote_saves_for_game(game_id.clone()).await?;
 
     let conflicts = check_conflicts_for_game(&dest_base, &saves);
     Ok(DownloadConflictsResultDto { conflicts })
@@ -696,7 +697,7 @@ pub(crate) async fn sync_download_game_impl(
         .user_id
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?;
+        .ok_or("Configura tu usuario en Configuración")?;
     let api_key = cfg.api_key.as_deref().unwrap_or("");
 
     let dest_base = match path_utils::expand_path(game.paths[0].trim()) {
@@ -847,7 +848,7 @@ pub async fn sync_download_all_games(
         .user_id
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?;
+        .ok_or("Configura tu usuario en Configuración")?;
     let api_key = cfg.api_key.as_deref().unwrap_or("");
 
     tray_state.0.syncing_inc();

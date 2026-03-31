@@ -43,10 +43,13 @@ import type { CreateMultipartUploadWithPartUrlsUseCase } from "@application/use-
 import type { GetUploadPartUrlsUseCase } from "@application/use-cases/GetUploadPartUrlsUseCase";
 import type { CompleteMultipartUploadUseCase } from "@application/use-cases/CompleteMultipartUploadUseCase";
 import type { AbortMultipartUploadUseCase } from "@application/use-cases/AbortMultipartUploadUseCase";
+import type { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
+import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import { getUserId, getErrorMessage } from "@shared/utils";
 import { TtlCache } from "@shared/ttlCache";
 
 const savesSummaryCache = new TtlCache<string, unknown[]>({ ttlMs: 20_000, maxEntries: 200 });
+const CLOUD_HOST_HEADER = "x-cloud-host-user-id";
 
 function invalidateSavesCaches(userId: string, gameId?: string): void {
   savesSummaryCache.delete(userId);
@@ -71,10 +74,21 @@ export async function registerSavesRoutes(
     getUploadPartUrlsUseCase: GetUploadPartUrlsUseCase;
     completeMultipartUploadUseCase: CompleteMultipartUploadUseCase;
     abortMultipartUploadUseCase: AbortMultipartUploadUseCase;
+    resolveCloudStorageScopeUseCase?: ResolveCloudStorageScopeUseCase;
+    cloudInviteRepository?: CloudInviteRepository;
   }
 ): Promise<void> {
+  async function getStorageUserIdFromRequest(request: any): Promise<string> {
+    const requesterUserId = getUserId(request);
+    const hostHeader = request.headers[CLOUD_HOST_HEADER];
+    const requestedHostUserId = typeof hostHeader === "string" && hostHeader.trim() ? hostHeader.trim() : undefined;
+    if (!deps.resolveCloudStorageScopeUseCase) return requesterUserId;
+    const scope = await deps.resolveCloudStorageScopeUseCase.execute(requesterUserId, requestedHostUserId);
+    return scope.storageUserId;
+  }
+
   app.get("/saves", async (request, reply) => {
-    const userId = getUserId(request);
+    const userId = await getStorageUserIdFromRequest(request);
     const query: unknown = request.query;
     const gameId =
       query && typeof query === "object" && "gameId" in query && typeof (query as any).gameId === "string"
@@ -86,7 +100,7 @@ export async function registerSavesRoutes(
   });
 
   app.get("/saves/summary", async (request, reply) => {
-    const userId = getUserId(request);
+    const userId = await getStorageUserIdFromRequest(request);
     const cached = savesSummaryCache.get(userId);
     if (cached) return reply.send(cached);
 
@@ -129,8 +143,9 @@ export async function registerSavesRoutes(
     { schema: { querystring: ListBackupsQuerySchema } },
     async (request, reply) => {
       const userId = getUserId(request);
+      const storageUserId = await getStorageUserIdFromRequest(request);
       const result = await deps.listBackupsUseCase.execute({
-        userId,
+        userId: storageUserId,
         gameId: request.query.gameId.trim(),
       });
       return reply.send(result);
@@ -143,9 +158,10 @@ export async function registerSavesRoutes(
     async (request, reply) => {
       try {
         const userId = getUserId(request);
+        const storageUserId = await getStorageUserIdFromRequest(request);
         const { gameId, key } = request.body;
 
-        await deps.deleteBackupUseCase.execute({ userId, gameId: gameId.trim(), key: key.trim() });
+        await deps.deleteBackupUseCase.execute({ userId: storageUserId, gameId: gameId.trim(), key: key.trim() });
         invalidateSavesCaches(userId, gameId);
         return reply.status(204).send();
       } catch (err) {
@@ -164,10 +180,11 @@ export async function registerSavesRoutes(
     async (request, reply) => {
       try {
         const userId = getUserId(request);
+        const storageUserId = await getStorageUserIdFromRequest(request);
         const { gameId, key, newFilename } = request.body;
 
         await deps.renameBackupUseCase.execute({
-          userId,
+          userId: storageUserId,
           gameId: gameId.trim(),
           key: key.trim(),
           newFilename: newFilename.trim(),
@@ -191,8 +208,9 @@ export async function registerSavesRoutes(
     async (request, reply) => {
       try {
         const userId = getUserId(request);
+        const storageUserId = await getStorageUserIdFromRequest(request);
         const gameId = request.body.gameId.trim();
-        await deps.deleteGameFromCloudUseCase.execute({ userId, gameId });
+        await deps.deleteGameFromCloudUseCase.execute({ userId: storageUserId, gameId });
         invalidateSavesCaches(userId, gameId);
         return reply.status(204).send();
       } catch (err) {
@@ -208,6 +226,7 @@ export async function registerSavesRoutes(
     async (request, reply) => {
       try {
         const userId = getUserId(request);
+        const storageUserId = await getStorageUserIdFromRequest(request);
         const oldGameId = request.body.oldGameId.trim();
         const newGameId = request.body.newGameId.trim();
 
@@ -215,7 +234,7 @@ export async function registerSavesRoutes(
           return reply.status(400).send({ error: "Bad Request", message: "oldGameId and newGameId must be different" });
         }
 
-        await deps.renameGameInCloudUseCase.execute({ userId, oldGameId, newGameId });
+        await deps.renameGameInCloudUseCase.execute({ userId: storageUserId, oldGameId, newGameId });
         invalidateSavesCaches(userId, oldGameId);
         invalidateSavesCaches(userId, newGameId);
         return reply.status(204).send();
@@ -230,7 +249,7 @@ export async function registerSavesRoutes(
     "/saves/upload-url",
     { schema: { body: UploadUrlSchema } },
     async (request, reply) => {
-      const userId = getUserId(request);
+      const userId = await getStorageUserIdFromRequest(request);
       const { gameId, filename } = request.body;
 
       const result = await deps.getUploadUrlUseCase.execute({
@@ -247,7 +266,7 @@ export async function registerSavesRoutes(
     { schema: { body: UploadUrlsBatchSchema } },
     async (request, reply) => {
       try {
-        const userId = getUserId(request);
+        const userId = await getStorageUserIdFromRequest(request);
         const items = request.body.items.map((x) => ({ gameId: x.gameId.trim(), filename: x.filename.trim() }));
 
         const result = await deps.getUploadUrlsUseCase.execute({ userId, items });
@@ -264,8 +283,24 @@ export async function registerSavesRoutes(
     { schema: { body: DownloadUrlSchema } },
     async (request, reply) => {
       try {
-        const userId = getUserId(request);
+        const requesterUserId = getUserId(request);
+        const userId = await getStorageUserIdFromRequest(request);
         const { gameId, key, range } = request.body;
+        if (
+          deps.cloudInviteRepository &&
+          key.startsWith(`${requesterUserId}/${gameId.trim()}/`) &&
+          userId !== requesterUserId
+        ) {
+          const hostUserId = userId.split("::member::")[0];
+          const canReadShared = await deps.cloudInviteRepository.isGameSharedWithMember(
+            hostUserId,
+            requesterUserId,
+            gameId.trim()
+          );
+          if (!canReadShared) {
+            return reply.status(403).send({ error: "Forbidden", message: "Game is not shared for this member" });
+          }
+        }
 
         const result = await deps.getDownloadUrlUseCase.execute({
           userId,
@@ -289,7 +324,7 @@ export async function registerSavesRoutes(
     { schema: { body: DownloadUrlsBatchSchema } },
     async (request, reply) => {
       try {
-        const userId = getUserId(request);
+        const userId = await getStorageUserIdFromRequest(request);
         const items = request.body.items.map((x) => ({ gameId: x.gameId.trim(), key: x.key.trim() }));
 
         const result = await deps.getDownloadUrlsUseCase.execute({ userId, items });
@@ -305,7 +340,7 @@ export async function registerSavesRoutes(
     "/saves/multipart/init",
     { schema: { body: UploadUrlSchema } },
     async (request, reply) => {
-      const userId = getUserId(request);
+      const userId = await getStorageUserIdFromRequest(request);
       const { gameId, filename } = request.body;
 
       const result = await deps.createMultipartUploadUseCase.execute({
@@ -321,7 +356,7 @@ export async function registerSavesRoutes(
     "/saves/multipart/init-with-part-urls",
     { schema: { body: InitMultipartPartUrlsSchema } },
     async (request, reply) => {
-      const userId = getUserId(request);
+      const userId = await getStorageUserIdFromRequest(request);
       const { gameId, filename, partCount } = request.body;
 
       const result = await deps.createMultipartUploadWithPartUrlsUseCase.execute({

@@ -10,6 +10,7 @@ use std::fs;
 
 pub const KEYRING_SERVICE: &str = "savecloud_api";
 pub const KEYRING_ACCOUNT: &str = "default_user";
+const KEYRING_ACCOUNT_CLOUD_HOST_PREFIX: &str = "cloud_host_";
 const KEYRING_ACCOUNT_STEAM_WEB_API: &str = "steam_web_api";
 
 /// Recupera la clave de la API desde el almacenamiento seguro del sistema operativo.
@@ -36,6 +37,34 @@ fn set_secure_api_key(key: &str) -> Result<(), String> {
     }
 
     let entry = Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT).map_err(|e| e.to_string())?;
+    entry.set_password(key).map_err(|e| e.to_string())
+}
+
+fn cloud_host_keyring_account(host_user_id: &str) -> String {
+    // Evita colisiones simples y mantiene independencia por host invitador.
+    format!(
+        "{}{}",
+        KEYRING_ACCOUNT_CLOUD_HOST_PREFIX,
+        host_user_id.trim()
+    )
+}
+
+/// Recupera el accessToken guardado en el Keyring para una nube de un host concreto.
+pub fn get_secure_api_key_for_cloud_host(host_user_id: &str) -> Option<String> {
+    let account = cloud_host_keyring_account(host_user_id);
+    Entry::new(KEYRING_SERVICE, &account)
+        .ok()
+        .and_then(|entry| entry.get_password().ok())
+        .filter(|k| k != MASKED_API_KEY)
+}
+
+/// Guarda el accessToken en el Keyring para una nube de un host concreto.
+pub fn set_secure_api_key_for_cloud_host(host_user_id: &str, key: &str) -> Result<(), String> {
+    if key == MASKED_API_KEY {
+        return Ok(());
+    }
+    let account = cloud_host_keyring_account(host_user_id);
+    let entry = Entry::new(KEYRING_SERVICE, &account).map_err(|e| e.to_string())?;
     entry.set_password(key).map_err(|e| e.to_string())
 }
 
@@ -280,6 +309,7 @@ pub fn get_combined_config() -> Config {
         api_base_url: settings.api_base_url,
         api_key: settings.api_key,
         user_id: settings.user_id,
+        active_cloud_host_user_id: settings.active_cloud_host_user_id,
         custom_scan_paths: settings.custom_scan_paths,
         keep_backups_per_game: settings.keep_backups_per_game,
         full_backup_streaming: settings.full_backup_streaming,
@@ -334,6 +364,10 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
         .or(current_settings.api_key);
 
     current_settings.user_id = cfg.user_id.clone().or(current_settings.user_id);
+    current_settings.active_cloud_host_user_id = cfg
+        .active_cloud_host_user_id
+        .clone()
+        .or(current_settings.active_cloud_host_user_id);
     current_settings.custom_scan_paths = cfg.custom_scan_paths.clone();
     current_settings.keep_backups_per_game = cfg.keep_backups_per_game;
     current_settings.full_backup_streaming = cfg.full_backup_streaming;

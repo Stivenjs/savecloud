@@ -28,16 +28,16 @@ export function PullFriendConfigModal({
         <ModalHeader className="flex flex-col gap-1">Importar configuración de un amigo</ModalHeader>
         <ModalBody>
           <p className="text-sm text-default-500">
-            Ingresa el <strong>User ID</strong> para descargar su configuración completa desde la nube de SaveCloud.
+            Ingresa el <strong>usuario</strong> para descargar su configuración completa desde la nube de SaveCloud.
           </p>
           <p className="text-xs text-warning">
             Nota: Al hacer esto, <strong>su configuración reemplazará la tuya por completo</strong> localmente,
-            incluyendo tu propia API Key, User ID y URL del servidor. Esto es útil si estás intentando recuperar tu
+            incluyendo tu propia API Key, usuario y URL del servidor. Esto es útil si estás intentando recuperar tu
             cuenta en un PC nuevo.
           </p>
           <Input
-            label="User ID"
-            placeholder="ej. mi-amigo-123"
+            label="Usuario"
+            placeholder="Ej: gabi21"
             value={userId}
             onChange={(e) => onChangeUserId(e.target.value)}
             disabled={pulling}

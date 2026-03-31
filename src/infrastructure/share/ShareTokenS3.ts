@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { randomBytes } from "node:crypto";
 
 const PREFIX = "share-tokens/";
@@ -54,7 +54,16 @@ export class ShareTokenS3 {
       const body = await res.Body?.transformToString();
       if (!body) return null;
       const payload = JSON.parse(body) as ShareTokenPayload;
-      if (new Date(payload.expiresAt) <= new Date()) return null;
+      if (new Date(payload.expiresAt) <= new Date()) {
+        // Limpieza física en S3: token expirado se elimina al ser consultado.
+        await this.s3.send(
+          new DeleteObjectCommand({
+            Bucket: this.bucketName,
+            Key: key,
+          })
+        );
+        return null;
+      }
       return payload;
     } catch {
       return null;

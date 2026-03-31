@@ -5,6 +5,7 @@
 //! para la sincronización con la nube y los DTOs expuestos al frontend.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Configuraciones generales de la aplicación y del usuario.
 ///
@@ -23,6 +24,13 @@ pub struct AppSettings {
     pub api_key: Option<String>,
     #[serde(default)]
     pub user_id: Option<String>,
+    #[serde(default)]
+    pub active_cloud_host_user_id: Option<String>,
+    /// Mapea `hostUserId` (anfitrión) -> `apiBaseUrl` del servidor donde vive esa nube invitada.
+    ///
+    /// Las credenciales secretas (`apiKey`/accessToken) se guardan aparte en el Keyring por `hostUserId`.
+    #[serde(default)]
+    pub cloud_host_api_base_urls: BTreeMap<String, String>,
     #[serde(default)]
     pub custom_scan_paths: Vec<String>,
     #[serde(default)]
@@ -135,6 +143,8 @@ pub struct Config {
     pub api_base_url: Option<String>,
     pub api_key: Option<String>,
     pub user_id: Option<String>,
+    #[serde(default)]
+    pub active_cloud_host_user_id: Option<String>,
     pub custom_scan_paths: Vec<String>,
     pub keep_backups_per_game: Option<u32>,
     pub full_backup_streaming: Option<bool>,
@@ -161,6 +171,8 @@ pub struct ConfigDto {
     pub api_base_url: Option<String>,
     pub api_key: Option<String>,
     pub user_id: Option<String>,
+    #[serde(default)]
+    pub active_cloud_host_user_id: Option<String>,
     pub games: Vec<GameDto>,
     pub custom_scan_paths: Vec<String>,
     pub keep_backups_per_game: Option<u32>,

@@ -2,7 +2,9 @@
 
 use crate::network::API_CLIENT;
 
-use super::models::{NotificationAckBody, NotificationBatchBody, NotificationListResponse, NotificationRecordDto};
+use super::models::{
+    NotificationAckBody, NotificationBatchBody, NotificationListResponse, NotificationRecordDto,
+};
 
 fn api_context() -> Result<(String, String, String), String> {
     let cfg = crate::config::load_config();
@@ -16,18 +18,14 @@ fn api_context() -> Result<(String, String, String), String> {
         .user_id
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?
+        .ok_or("Configura tu usuario en Configuración")?
         .to_string();
     let api_key = cfg.api_key.unwrap_or_default();
     Ok((base_url, user_id, api_key))
 }
 
 fn notifications_url(base: &str, path: &str) -> String {
-    format!(
-        "{}/notifications{}",
-        base.trim_end_matches('/'),
-        path
-    )
+    format!("{}/notifications{}", base.trim_end_matches('/'), path)
 }
 
 pub async fn push_batch(items: Vec<NotificationRecordDto>) -> Result<(), String> {
@@ -52,7 +50,10 @@ pub async fn push_batch(items: Vec<NotificationRecordDto>) -> Result<(), String>
     Ok(())
 }
 
-pub async fn pull_since(cursor: Option<&str>, limit: i64) -> Result<NotificationListResponse, String> {
+pub async fn pull_since(
+    cursor: Option<&str>,
+    limit: i64,
+) -> Result<NotificationListResponse, String> {
     let (base_url, user_id, api_key) = api_context()?;
     let mut url = notifications_url(&base_url, "");
     let mut q = format!("?limit={limit}");

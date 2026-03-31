@@ -152,7 +152,8 @@ export function NotificationCenter() {
             content={unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined}
             color="danger"
             size="sm"
-            shape="circle">
+            shape="circle"
+            isInvisible={unreadCount === 0}>
             <Bell size={22} />
           </Badge>
         </Button>

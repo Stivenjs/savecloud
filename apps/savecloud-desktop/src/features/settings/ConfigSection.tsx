@@ -114,7 +114,7 @@ export function ConfigSection({
 
             <div className="mt-4 border-t border-default-200 pt-4">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <span className="text-xs font-medium text-default-500">User ID</span>
+                <span className="text-xs font-medium text-default-500">Usuario</span>
                 {isLoadingData ? (
                   <Skeleton className="h-4 w-32 rounded-lg" />
                 ) : userId ? (
@@ -139,7 +139,7 @@ export function ConfigSection({
             Conexión a la nube
           </p>
           <p className="text-sm text-default-600">
-            API, clave y User ID para sincronizar o recuperar la configuración en un equipo nuevo.
+            API, clave y usuario para sincronizar o recuperar la configuración en un equipo nuevo.
           </p>
           <Button size="sm" variant="flat" color="primary" onPress={onCreateConfig} startContent={<Cloud size={16} />}>
             Configurar conexión
@@ -219,7 +219,7 @@ export function ConfigSection({
             </li>
             <li>
               <strong className="text-default-600">Importar de usuario:</strong> trae la configuración pública de otro
-              User ID.
+              usuario.
             </li>
           </ul>
           <div className="flex flex-wrap gap-2">

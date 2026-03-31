@@ -580,7 +580,7 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
         .user_id
         .as_deref()
         .filter(|s| !s.trim().is_empty())
-        .ok_or("Configura userId en Configuración")?;
+        .ok_or("Configura tu usuario en Configuración")?;
     let api_key = cfg.api_key.as_deref().unwrap_or("");
 
     let num_parts = if state.total_size == 0 {
