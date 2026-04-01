@@ -5,6 +5,7 @@
 //! del árbol de juegos.
 
 use crate::commands::sync::api::{api_request, sync_list_remote_saves_for_user};
+use crate::commands::sync::context::resolve_api_context;
 use crate::config::gamification::GamificationStateDto;
 use crate::config::{self, Config, ConfigDto, ConfiguredGame, GameDto, OperationLogEntryDto};
 use crate::steam;
@@ -738,24 +739,19 @@ async fn s3_transfer(
 /// Extrae la imagen en memoria hacia un flujo que termina escrito en S3, simulando el nodo `__config__`.
 #[tauri::command]
 pub async fn backup_config_to_cloud() -> Result<(), String> {
-    let settings = config::load_settings();
-    let api_base = settings
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Parámetro URI omitido")?;
-    let user_id = settings
-        .user_id
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Parámetro UserID omitido")?;
-    let api_key = settings.api_key.as_deref().unwrap_or("");
-
+    let ctx = resolve_api_context()?;
     let combined = config::get_combined_config();
     let bytes = serde_json::to_vec_pretty(&combined).unwrap();
-    s3_transfer(api_base, user_id, api_key, "config.json", Some(bytes), true)
-        .await
-        .map(|_| ())
+    s3_transfer(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        "config.json",
+        Some(bytes),
+        true,
+    )
+    .await
+    .map(|_| ())
 }
 
 /// Extrae el archivo estático de S3 y lo reparte dinámicamente sobre la arquitectura de persistencia.
@@ -767,20 +763,7 @@ pub async fn backup_config_to_cloud() -> Result<(), String> {
 /// 4. Distribuye la ingesta atómicamente por cada subsistema.
 #[tauri::command]
 pub async fn restore_config_from_cloud() -> Result<(), String> {
-    let settings = config::load_settings();
-    let api_base = settings
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Parámetro URI omitido")?
-        .to_string();
-    let user_id = settings
-        .user_id
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Parámetro UserID omitido")?
-        .to_string();
-    let api_key = settings.api_key.as_deref().unwrap_or("").to_string();
+    let ctx = resolve_api_context()?;
 
     // Optimización: el config vive bajo el juego especial "__config__".
     let saves =
@@ -798,7 +781,15 @@ pub async fn restore_config_from_cloud() -> Result<(), String> {
         .pop()
         .ok_or_else(|| "Incapacidad de resolver nodo remoto de config".to_string())?;
 
-    let bytes = s3_transfer(&api_base, &user_id, &api_key, &latest.key, None, false).await?;
+    let bytes = s3_transfer(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        &latest.key,
+        None,
+        false,
+    )
+    .await?;
     let imported: Config = serde_json::from_slice(&bytes)
         .map_err(|e| format!("Incapacidad de mutar buffer: {}", e))?;
 
@@ -824,16 +815,10 @@ pub async fn restore_config_from_cloud() -> Result<(), String> {
 pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, String> {
     let friend_id = friend_user_id.trim();
     if friend_id.is_empty() {
-        return Err("Puntero ID Foráneo inexistente".into());
+        return Err("Escribe el usuario del amigo.".into());
     }
 
-    let settings = config::load_settings();
-    let api_base = settings
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Parámetro URI omitido")?;
-    let api_key = settings.api_key.as_deref().unwrap_or("");
+    let ctx = resolve_api_context()?;
 
     let saves = sync_list_remote_saves_for_user(friend_id.to_string()).await?;
     let mut config_saves: Vec<_> = saves
@@ -841,23 +826,26 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
         .filter(|s| s.game_id == "__config__" && s.filename.ends_with("config.json"))
         .collect();
     if config_saves.is_empty() {
-        return Err("Puntero foráneo declinó contener persistencia compatible".into());
+        return Err(
+            "Ese usuario no tiene configuración respaldada en la nube (no se encontró config.json)."
+                .into(),
+        );
     }
 
     config_saves.sort_by(|a, b| a.last_modified.cmp(&b.last_modified));
     let latest = config_saves.pop().unwrap();
 
     let bytes = s3_transfer(
-        api_base,
-        settings.user_id.as_deref().unwrap_or(""),
-        api_key,
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
         &latest.key,
         None,
         false,
     )
     .await?;
     let imported: Config = serde_json::from_slice(&bytes)
-        .map_err(|_| "La memoria transferida por el host fue parseada como errónea")?;
+        .map_err(|e| format!("El archivo de configuración descargado no es válido: {}", e))?;
 
     Ok(ConfigDto {
         api_base_url: None,
@@ -936,17 +924,10 @@ pub fn add_games_from_friend(friend_games: Vec<GameDto>) -> Result<usize, String
 pub async fn import_friend_config(friend_user_id: String) -> Result<(), String> {
     let friend_id = friend_user_id.trim();
     if friend_id.is_empty() {
-        return Err("Target ID nulo".into());
+        return Err("Escribe el usuario del amigo.".into());
     }
 
-    let settings = config::load_settings();
-    let api_base = settings
-        .api_base_url
-        .as_deref()
-        .filter(|s| !s.trim().is_empty())
-        .ok_or("Parámetro URI omitido")?
-        .to_string();
-    let api_key = settings.api_key.as_deref().unwrap_or("").to_string();
+    let ctx = resolve_api_context()?;
 
     let saves = sync_list_remote_saves_for_user(friend_id.to_string()).await?;
     let mut config_saves: Vec<_> = saves
@@ -954,23 +935,26 @@ pub async fn import_friend_config(friend_user_id: String) -> Result<(), String> 
         .filter(|s| s.game_id == "__config__" && s.filename.ends_with("config.json"))
         .collect();
     if config_saves.is_empty() {
-        return Err("Bloque Target remoto vacío".into());
+        return Err(
+            "Ese usuario no tiene configuración respaldada en la nube (no se encontró config.json)."
+                .into(),
+        );
     }
 
     config_saves.sort_by(|a, b| a.last_modified.cmp(&b.last_modified));
     let latest = config_saves.pop().unwrap();
 
     let bytes = s3_transfer(
-        &api_base,
-        settings.user_id.as_deref().unwrap_or(""),
-        &api_key,
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
         &latest.key,
         None,
         false,
     )
     .await?;
-    let mut imported: Config =
-        serde_json::from_slice(&bytes).map_err(|e| format!("Volcado estático inválido: {}", e))?;
+    let mut imported: Config = serde_json::from_slice(&bytes)
+        .map_err(|e| format!("El archivo de configuración descargado no es válido: {}", e))?;
 
     imported.user_id = Some(friend_id.to_string());
 
