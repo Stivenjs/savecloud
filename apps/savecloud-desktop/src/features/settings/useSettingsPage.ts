@@ -1,4 +1,5 @@
-import { useEffect, useReducer } from "react";
+import { useEffect, useReducer, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { isEnabled, enable, disable } from "@tauri-apps/plugin-autostart";
 import {
@@ -18,13 +19,16 @@ import {
   resetSteamCatalogSync,
   exportSteamSeedManifestToCloud,
   resetCloudSeedState,
-  importCloudSeedBatchesToSqlite,
+  importCloudSeedRunUntilDone,
+  type SteamCatalogSyncProgressPayload,
+  type SteamSeedImportProgressPayload,
   getDefaultSourceDownloadDir,
   setDefaultSourceDownloadDir,
 } from "@services/tauri";
 import { importSourceFromFile, importSourceFromUrl, listSourcesSummary } from "@services/tauri/sources.service";
 import { MASKED_CONFIG_SECRET } from "@/constants/configMask";
 import { useConfig } from "@hooks/useConfig";
+import { STEAM_SEED_FRESHNESS_QUERY_KEY } from "@features/steam-catalog/hooks/useSteamSeedFreshness";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastError, toastSuccess } from "@utils/toast";
 import { notifyTest } from "@utils/notification";
@@ -193,6 +197,10 @@ function settingsPageReducer(state: SettingsPageState, action: SettingsPageActio
 
 export function useSettingsPage() {
   const [state, dispatch] = useReducer(settingsPageReducer, initialState);
+  const [steamCatalogSyncProgress, setSteamCatalogSyncProgress] = useState<SteamCatalogSyncProgressPayload | null>(
+    null
+  );
+  const [steamSeedImportProgress, setSteamSeedImportProgress] = useState<SteamSeedImportProgressPayload | null>(null);
   const { config, loading: loadingUseConfig, refetch: refetchConfig } = useConfig();
   const queryClient = useQueryClient();
 
@@ -451,17 +459,24 @@ export function useSettingsPage() {
 
   const handleSyncSteamCatalog = async () => {
     dispatch({ type: "SET_STEAM_CATALOG_BUSY", payload: true });
+    setSteamCatalogSyncProgress(null);
+    let unlisten: (() => void) | undefined;
     try {
+      unlisten = await listen<SteamCatalogSyncProgressPayload>("steam-catalog-sync-progress", (ev) => {
+        setSteamCatalogSyncProgress(ev.payload);
+      });
       const stats = await syncSteamCatalog();
       toastSuccess(
-        "Catálogo Steam actualizado",
-        `Modo: ${stats.mode}. Entradas: ${stats.appsUpserted} (lotes: ${stats.batches}).`
+        "Listado de juegos actualizado",
+        `Se guardaron ${stats.appsUpserted.toLocaleString()} entradas en ${stats.batches} pasos (${stats.mode === "full" ? "descarga completa" : "solo novedades"}).`
       );
       refetchConfig?.();
       queryClient.invalidateQueries({ queryKey: ["config"] });
     } catch (e) {
-      toastError("Error al sincronizar catálogo", e instanceof Error ? e.message : String(e));
+      toastError("No se pudo actualizar el listado de Steam", e instanceof Error ? e.message : String(e));
     } finally {
+      unlisten?.();
+      setSteamCatalogSyncProgress(null);
       dispatch({ type: "SET_STEAM_CATALOG_BUSY", payload: false });
     }
   };
@@ -488,11 +503,11 @@ export function useSettingsPage() {
     try {
       const result = await exportSteamSeedManifestToCloud();
       toastSuccess(
-        "Manifest publicado en nube",
-        `AppIDs: ${result.appIdsExported}. Partes subidas: ${result.partsUploaded}.`
+        "Lista enviada a la nube",
+        `Se subieron ${result.appIdsExported.toLocaleString()} juegos en ${result.partsUploaded} parte(s).`
       );
     } catch (e) {
-      toastError("Error al exportar manifest", e instanceof Error ? e.message : String(e));
+      toastError("No se pudo enviar la lista", e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_STEAM_SEED_BUSY", payload: false });
     }
@@ -502,26 +517,40 @@ export function useSettingsPage() {
     dispatch({ type: "SET_STEAM_SEED_BUSY", payload: true });
     try {
       await resetCloudSeedState();
-      toastSuccess("Seed reiniciado", "Se restableció state.json del seed cloud.");
+      toastSuccess(
+        "Progreso en la nube reiniciado",
+        "La próxima descarga volverá a empezar desde el principio (no borra lo que ya tienes guardado aquí)."
+      );
+      queryClient.invalidateQueries({ queryKey: STEAM_SEED_FRESHNESS_QUERY_KEY });
     } catch (e) {
-      toastError("Error al resetear seed", e instanceof Error ? e.message : String(e));
+      toastError("No se pudo reiniciar", e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_STEAM_SEED_BUSY", payload: false });
     }
   };
 
-  const handleImportCloudSeedToSqlite = async () => {
+  const handleImportCloudSeedFromCloud = async () => {
     dispatch({ type: "SET_STEAM_SEED_BUSY", payload: true });
+    setSteamSeedImportProgress(null);
+    let unlisten: (() => void) | undefined;
     try {
-      const result = await importCloudSeedBatchesToSqlite();
+      unlisten = await listen<SteamSeedImportProgressPayload>("steam-seed-import-progress", (ev) => {
+        setSteamSeedImportProgress(ev.payload);
+      });
+      const result = await importCloudSeedRunUntilDone();
+      const trending =
+        result.trendingPriorityEntries > 0 ? ` Orden de destacados: ${result.trendingPriorityEntries} juegos.` : "";
       toastSuccess(
-        "Seed importado a SQLite",
-        `Batches: ${result.batchesProcessed}. Filas actualizadas: ${result.rowsUpdated}.`
+        "Información descargada",
+        `Se actualizaron ${result.rowsUpdated.toLocaleString()} juegos en ${result.batchesProcessed} lotes (${result.rounds} pasadas).${trending}`
       );
       queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
+      queryClient.invalidateQueries({ queryKey: STEAM_SEED_FRESHNESS_QUERY_KEY });
     } catch (e) {
-      toastError("Error al importar seed", e instanceof Error ? e.message : String(e));
+      toastError("No se pudo descargar la información", e instanceof Error ? e.message : String(e));
     } finally {
+      unlisten?.();
+      setSteamSeedImportProgress(null);
       dispatch({ type: "SET_STEAM_SEED_BUSY", payload: false });
     }
   };
@@ -607,7 +636,9 @@ export function useSettingsPage() {
     confirmResetSteamCatalogSync,
     handleExportSteamSeedManifest,
     handleResetCloudSeed,
-    handleImportCloudSeedToSqlite,
+    handleImportCloudSeedFromCloud,
+    steamCatalogSyncProgress,
+    steamSeedImportProgress,
     openCreateConfigModal,
     setCreateApiBaseUrl: (v: string) => dispatch({ type: "SET_CREATE_API_BASE_URL", payload: v }),
     setCreateApiKey: (v: string) => dispatch({ type: "SET_CREATE_API_KEY", payload: v }),

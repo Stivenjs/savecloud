@@ -267,6 +267,31 @@ export interface SteamSeedImportResult {
   rowsUpdated: number;
 }
 
+export interface SteamSeedImportRunResult {
+  rounds: number;
+  batchesProcessed: number;
+  rowsUpdated: number;
+  trendingPriorityEntries: number;
+}
+
+/** Payload emitido por el backend durante `sync_import_cloud_seed_run_until_done`. */
+export interface SteamSeedImportProgressPayload {
+  iteration: number;
+  batchesThisRound: number;
+  rowsThisRound: number;
+  totalBatches: number;
+  totalRowsUpdated: number;
+  done: boolean;
+}
+
+/** Payload emitido durante `sync_steam_catalog` por cada lote. */
+export interface SteamCatalogSyncProgressPayload {
+  mode: string;
+  batch: number;
+  appsUpserted: number;
+  done: boolean;
+}
+
 /** Sincroniza el catálogo Steam en SQLite (requiere clave Steam Web API). */
 export async function syncSteamCatalog(): Promise<CatalogSyncStats> {
   return invoke<CatalogSyncStats>("sync_steam_catalog");
@@ -289,11 +314,46 @@ export async function resetCloudSeedState(): Promise<void> {
   await invoke("sync_reset_cloud_seed_state");
 }
 
-/** Importa batches del steam-seed a SQLite local (`details_json`, `enriched_at`). */
-export async function importCloudSeedBatchesToSqlite(maxBatches?: number): Promise<SteamSeedImportResult> {
+/** Importa una sola tanda de batches del steam-seed a SQLite (uso avanzado). */
+export async function importCloudSeedBatchesToSqlite(
+  maxBatches?: number,
+  strategy?: string,
+  concurrency?: number
+): Promise<SteamSeedImportResult> {
   return invoke<SteamSeedImportResult>("sync_import_cloud_seed_batches_to_sqlite", {
     maxBatches: maxBatches ?? null,
+    strategy: strategy ?? null,
+    concurrency: concurrency ?? null,
   });
+}
+
+/**
+ * Descarga todas las tandas disponibles hasta agotar el catálogo en la nube (un solo clic).
+ * Al terminar, aplica el ranking de prioridad desde `priority_appids.jsonl` si existe.
+ */
+export async function importCloudSeedRunUntilDone(options?: {
+  maxBatches?: number;
+  strategy?: string;
+  concurrency?: number;
+}): Promise<SteamSeedImportRunResult> {
+  return invoke<SteamSeedImportRunResult>("sync_import_cloud_seed_run_until_done", {
+    maxBatches: options?.maxBatches ?? null,
+    strategy: options?.strategy ?? null,
+    concurrency: options?.concurrency ?? null,
+  });
+}
+
+/** Resultado de comparar el último batch del worker en S3 con el máximo importado en SQLite. */
+export interface SteamSeedFreshness {
+  status: string;
+  cloudLastBatchKey: string | null;
+  localMaxBatchKey: string | null;
+  error: string | null;
+}
+
+/** Consulta GET /saves/steam-seed/status y el estado local (sin listar todo S3). */
+export async function getSteamSeedFreshness(): Promise<SteamSeedFreshness> {
+  return invoke<SteamSeedFreshness>("sync_get_steam_seed_freshness");
 }
 
 /**

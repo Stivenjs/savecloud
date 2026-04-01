@@ -15,5 +15,5 @@ mod error;
 mod meta;
 mod query;
 pub mod sync;
-mod trending;
+pub(crate) mod trending;
 mod types;

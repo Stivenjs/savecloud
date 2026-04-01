@@ -66,9 +66,11 @@ export function SettingsPage() {
     confirmResetSteamCatalogSync,
     steamCatalogBusy,
     steamSeedBusy,
+    steamCatalogSyncProgress,
+    steamSeedImportProgress,
     handleExportSteamSeedManifest,
     handleResetCloudSeed,
-    handleImportCloudSeedToSqlite,
+    handleImportCloudSeedFromCloud,
     openCreateConfigModal,
     setCreateApiBaseUrl,
     setCreateApiKey,
@@ -156,6 +158,8 @@ export function SettingsPage() {
             isLoadingData={loadingConfigData}
             steamCatalogBusy={steamCatalogBusy}
             steamSeedBusy={steamSeedBusy}
+            steamCatalogSyncProgress={steamCatalogSyncProgress}
+            steamSeedImportProgress={steamSeedImportProgress}
             onCreateConfig={openCreateConfigModal}
             onPullFriendConfig={() => setPullFriendConfigModalOpen(true)}
             onExport={handleExportConfig}
@@ -167,7 +171,7 @@ export function SettingsPage() {
             onResetSteamCatalogSync={handleResetSteamCatalogSync}
             onExportSteamSeedManifest={handleExportSteamSeedManifest}
             onResetCloudSeedState={handleResetCloudSeed}
-            onImportCloudSeedBatches={handleImportCloudSeedToSqlite}
+            onImportCloudSeedFromCloud={handleImportCloudSeedFromCloud}
           />
         </Tab>
 

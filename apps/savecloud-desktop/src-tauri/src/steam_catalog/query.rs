@@ -20,6 +20,35 @@ pub fn normalize_for_search(s: &str) -> String {
         .join(" ")
 }
 
+/// Etiqueta legible de un elemento de `json_each` sobre `genres` / `categories`:
+/// objetos Steam `{ "id", "description" }` o, si no aplica, el valor en bruto.
+/// Evita `json_extract` sobre texto no JSON (evita "malformed JSON" en SQLite).
+fn json_facet_label_expr(elem_alias: &str) -> String {
+    format!(
+        "CASE \
+           WHEN json_valid({alias}.value) AND json_type({alias}.value) = 'object' \
+             THEN COALESCE(NULLIF(json_extract({alias}.value, '$.description'), ''), {alias}.value) \
+           ELSE {alias}.value \
+         END",
+        alias = elem_alias
+    )
+}
+
+/// Argumento seguro para `json_each`: solo el array en `path` si el documento es JSON válido y el
+/// valor es un array; si no, `'[]'`. Así el planificador no aplica `json_each`/`json_extract` a texto
+/// corrupto o a un campo que no es array (causa habitual de "malformed JSON").
+fn json_array_at_path_or_empty(table_alias: &str, path: &'static str) -> String {
+    format!(
+        "CASE \
+           WHEN json_valid({alias}.details_json) \
+             AND json_type(json_extract({alias}.details_json, '{path}')) = 'array' \
+             THEN json_extract({alias}.details_json, '{path}') \
+           ELSE '[]' END",
+        alias = table_alias,
+        path = path,
+    )
+}
+
 fn append_json_genre_filter(
     sql: &mut String,
     params: &mut Vec<String>,
@@ -29,8 +58,10 @@ fn append_json_genre_filter(
     if genres.is_empty() {
         return;
     }
+    let label = json_facet_label_expr("_gf");
+    let genres_json = json_array_at_path_or_empty(table_alias, "$.genres");
     sql.push_str(&format!(
-        " AND EXISTS (SELECT 1 FROM json_each(json_extract({table_alias}.details_json, '$.genres')) AS _gf WHERE _gf.value IN (",
+        " AND EXISTS (SELECT 1 FROM json_each({genres_json}) AS _gf WHERE ({label}) IN (",
     ));
     for (i, _) in genres.iter().enumerate() {
         if i > 0 {
@@ -51,8 +82,10 @@ fn append_json_tag_filter(
     if tags.is_empty() {
         return;
     }
+    let label = json_facet_label_expr("_tf");
+    let categories_json = json_array_at_path_or_empty(table_alias, "$.categories");
     sql.push_str(&format!(
-        " AND EXISTS (SELECT 1 FROM json_each(json_extract({table_alias}.details_json, '$.categories')) AS _tf WHERE _tf.value IN (",
+        " AND EXISTS (SELECT 1 FROM json_each({categories_json}) AS _tf WHERE ({label}) IN (",
     ));
     for (i, _) in tags.iter().enumerate() {
         if i > 0 {
@@ -172,27 +205,34 @@ pub fn search_catalog_filtered(
 
 /// Facetas desde `details_json` (apps enriquecidas). Etiquetas = categorías Steam (`categories`).
 pub fn filter_facets(conn: &Connection) -> Result<CatalogFilterFacets, rusqlite::Error> {
-    let genres = collect_facet_rows(
-        conn,
-        "SELECT g.value AS label, COUNT(DISTINCT steam_catalog_apps.app_id) AS cnt \
+    let g_label = json_facet_label_expr("g");
+    let genres_arg = json_array_at_path_or_empty("steam_catalog_apps", "$.genres");
+    let genres_sql = format!(
+        "SELECT {g_label} AS label, COUNT(DISTINCT steam_catalog_apps.app_id) AS cnt \
          FROM steam_catalog_apps, \
-              json_each(json_extract(steam_catalog_apps.details_json, '$.genres')) AS g \
+              json_each({genres_arg}) AS g \
          WHERE steam_catalog_apps.details_json IS NOT NULL \
            AND length(trim(steam_catalog_apps.details_json)) > 0 \
-         GROUP BY g.value \
+           AND length(trim({g_label})) > 0 \
+         GROUP BY 1 \
          ORDER BY cnt DESC, label COLLATE NOCASE ASC",
-    )?;
+    );
 
-    let tags = collect_facet_rows(
-        conn,
-        "SELECT t.value AS label, COUNT(DISTINCT steam_catalog_apps.app_id) AS cnt \
+    let t_label = json_facet_label_expr("t");
+    let categories_arg = json_array_at_path_or_empty("steam_catalog_apps", "$.categories");
+    let tags_sql = format!(
+        "SELECT {t_label} AS label, COUNT(DISTINCT steam_catalog_apps.app_id) AS cnt \
          FROM steam_catalog_apps, \
-              json_each(json_extract(steam_catalog_apps.details_json, '$.categories')) AS t \
+              json_each({categories_arg}) AS t \
          WHERE steam_catalog_apps.details_json IS NOT NULL \
            AND length(trim(steam_catalog_apps.details_json)) > 0 \
-         GROUP BY t.value \
+           AND length(trim({t_label})) > 0 \
+         GROUP BY 1 \
          ORDER BY cnt DESC, label COLLATE NOCASE ASC",
-    )?;
+    );
+
+    let genres = collect_facet_rows(conn, &genres_sql)?;
+    let tags = collect_facet_rows(conn, &tags_sql)?;
 
     Ok(CatalogFilterFacets { genres, tags })
 }

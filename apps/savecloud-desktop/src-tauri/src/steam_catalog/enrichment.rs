@@ -5,6 +5,7 @@ use rusqlite::Connection;
 use crate::sqlite::error::SqliteError;
 use crate::sqlite::AppDb;
 use crate::steam::appdetails::fetch_steam_app_details_from_store;
+use crate::steam::appdetails::steam_app_details_from_store_data;
 use crate::steam_cache::{normalize_steam_app_id, steam_api_cache, SteamAppDetails};
 
 fn catalog_contains_app(conn: &Connection, app_id: u32) -> Result<bool, rusqlite::Error> {
@@ -65,6 +66,13 @@ pub async fn fetch_catalog_app_details(
         if let Ok(details) = serde_json::from_str::<SteamAppDetails>(j) {
             steam_api_cache().insert_details(sid.clone(), details.clone());
             return Ok(details);
+        }
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(j) {
+            if v.as_object().is_some() {
+                let details = steam_app_details_from_store_data(&v);
+                steam_api_cache().insert_details(sid.clone(), details.clone());
+                return Ok(details);
+            }
         }
     }
 

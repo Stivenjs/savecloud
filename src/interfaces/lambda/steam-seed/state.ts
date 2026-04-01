@@ -10,6 +10,7 @@ export function defaultSteamSeedState(): SteamSeedStateV1 {
     version: 1,
     priorityLine: 0,
     priorityDone: false,
+    prioritySignature: null,
     manifestPart: 0,
     manifestLine: 0,
     batchSeq: 0,
