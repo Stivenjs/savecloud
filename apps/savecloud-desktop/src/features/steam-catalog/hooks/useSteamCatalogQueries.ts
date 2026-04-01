@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { CatalogListItem } from "@services/tauri";
 import type { SourceMatchResult } from "@services/tauri";
 import {
@@ -21,12 +21,42 @@ function selectionKey(labels: string[]): string {
   return [...labels].sort().join("\u0001");
 }
 
+/** No llamar a Steam en cada montaje; deduplica llamadas concurrentes (p. ej. React Strict Mode). */
+const STEAM_TRENDING_SYNC_THROTTLE_MS = 30 * 60 * 1000;
+const STORAGE_KEY_TRENDING_LAST = "steamCatalogTrendingLastSyncMs";
+
+let trendingSyncInFlight: Promise<void> | null = null;
+
+function syncSteamTrendingIfStale(): Promise<void> {
+  if (trendingSyncInFlight) return trendingSyncInFlight;
+
+  trendingSyncInFlight = (async () => {
+    try {
+      const now = Date.now();
+      const raw = sessionStorage.getItem(STORAGE_KEY_TRENDING_LAST);
+      const last = raw ? Number(raw) : 0;
+      if (Number.isFinite(last) && now - last < STEAM_TRENDING_SYNC_THROTTLE_MS) {
+        return;
+      }
+      await syncSteamStoreTrending();
+      sessionStorage.setItem(STORAGE_KEY_TRENDING_LAST, String(Date.now()));
+    } catch {
+      /* Sin ranking de tienda; el listado sigue ordenando por app_id. */
+    } finally {
+      trendingSyncInFlight = null;
+    }
+  })();
+
+  return trendingSyncInFlight;
+}
+
 export function useSteamCatalogQueries() {
-  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [page, setPage] = useState(1);
+  /** Listado/búsqueda esperan a la sync de tendencia (o al throttle) para no duplicar peticiones. */
+  const [trendingReady, setTrendingReady] = useState(false);
 
   const debounced = useDebouncedValue(searchTerm.trim(), 350);
   const searchMode = debounced.length >= STEAM_CATALOG_SEARCH_MIN;
@@ -46,15 +76,15 @@ export function useSteamCatalogQueries() {
   });
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
-      try {
-        await syncSteamStoreTrending();
-      } catch {
-        /* Sin ranking de tienda; el listado sigue ordenando por app_id. */
-      }
-      await queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
+      await syncSteamTrendingIfStale();
+      if (!cancelled) setTrendingReady(true);
     })();
-  }, [queryClient]);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const browseQuery = useQuery({
     queryKey: ["steamCatalog", "browse", page, genresKey, tagsKey],
@@ -65,8 +95,10 @@ export function useSteamCatalogQueries() {
         selectedGenres.length ? selectedGenres : null,
         selectedTags.length ? selectedTags : null
       ),
-    enabled: !searchMode,
+    enabled: !searchMode && trendingReady,
     placeholderData: keepPreviousData,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const searchQuery = useQuery({
@@ -78,7 +110,9 @@ export function useSteamCatalogQueries() {
         selectedGenres.length ? selectedGenres : null,
         selectedTags.length ? selectedTags : null
       ),
-    enabled: searchMode,
+    enabled: searchMode && trendingReady,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const searchResultsAll: CatalogListItem[] = searchQuery.data ?? [];
@@ -137,7 +171,7 @@ export function useSteamCatalogQueries() {
     return map;
   }, [matchesQuery.data]);
 
-  const isLoading = searchMode ? searchQuery.isPending : browseQuery.isPending;
+  const isLoading = !trendingReady || (searchMode ? searchQuery.isPending : browseQuery.isPending);
   const isError = searchMode ? searchQuery.isError : browseQuery.isError;
   const errorMsg = (searchMode ? searchQuery.error : browseQuery.error) as Error | undefined;
   const isPageTransition = searchMode ? searchQuery.isFetching : browseQuery.isFetching;
