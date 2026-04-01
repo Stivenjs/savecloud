@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CatalogListItem } from "@services/tauri";
 import type { SourceMatchResult } from "@services/tauri";
 import {
@@ -62,7 +62,21 @@ function syncSteamTrendingIfStale(): Promise<void> {
   return trendingSyncInFlight;
 }
 
+/** Si la sync de tendencia fue reciente, el listado puede habilitarse sin esperar al efecto (evita spinner al volver al catálogo). */
+function readTrendingReadyFromSession(): boolean {
+  if (typeof sessionStorage === "undefined") return false;
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY_TRENDING_LAST);
+    const last = raw ? Number(raw) : 0;
+    const now = Date.now();
+    return Number.isFinite(last) && now - last < STEAM_TRENDING_SYNC_THROTTLE_MS;
+  } catch {
+    return false;
+  }
+}
+
 export function useSteamCatalogQueries() {
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const skipSearchInputSyncFromDebouncedUrl = useRef(false);
 
@@ -77,7 +91,7 @@ export function useSteamCatalogQueries() {
 
   const [searchInput, setSearchInput] = useState(() => searchParams.get(STEAM_CATALOG_URL_Q) ?? "");
   /** Listado/búsqueda esperan a la sync de tendencia (o al throttle) para no duplicar peticiones. */
-  const [trendingReady, setTrendingReady] = useState(false);
+  const [trendingReady, setTrendingReady] = useState(readTrendingReadyFromSession);
 
   const debounced = useDebouncedValue(searchInput.trim(), 350);
   const searchMode = debounced.length >= STEAM_CATALOG_SEARCH_MIN;
@@ -227,7 +241,18 @@ export function useSteamCatalogQueries() {
     ? searchQuery.isPending && searchQuery.data === undefined
     : browseQuery.isPending && browseQuery.data === undefined;
 
-  const isLoading = !trendingReady || listQueryPendingNoData;
+  const browseQueryKey = useMemo(
+    () => ["steamCatalog", "browse", page, genresKey, tagsKey] as const,
+    [page, genresKey, tagsKey]
+  );
+  const searchQueryKey = useMemo(
+    () => ["steamCatalog", "search", debounced, genresKey, tagsKey] as const,
+    [debounced, genresKey, tagsKey]
+  );
+  const hasListInCache = queryClient.getQueryData(searchMode ? searchQueryKey : browseQueryKey) !== undefined;
+
+  /** No bloquear con «Cargando catálogo» si TanStack ya tiene datos en caché (p. ej. al volver del detalle sin red). */
+  const isLoading = (!hasListInCache && !trendingReady) || (listQueryPendingNoData && trendingReady);
   const isError = searchMode ? searchQuery.isError : browseQuery.isError;
   const errorMsg = (searchMode ? searchQuery.error : browseQuery.error) as Error | undefined;
   const isPageTransition = searchMode ? searchQuery.isFetching : browseQuery.isFetching;
