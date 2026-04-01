@@ -163,8 +163,41 @@ async fn fetch_single_app_name(app_id: &str) -> Option<(String, String)> {
     None
 }
 
-#[tauri::command]
-pub async fn get_steam_app_names_batch(app_ids: Vec<String>) -> HashMap<String, String> {
+/// Nombres ya presentes en catálogo local; evita golpear Store innecesariamente.
+fn load_catalog_names_map(
+    conn: &Connection,
+    app_ids: &[String],
+) -> Result<HashMap<String, String>, rusqlite::Error> {
+    let pids: Vec<i64> = app_ids
+        .iter()
+        .filter_map(|s| s.parse::<i64>().ok())
+        .collect();
+    if pids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let placeholders = pids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT app_id, name FROM steam_catalog_apps \
+         WHERE app_id IN ({placeholders}) \
+           AND name IS NOT NULL AND length(trim(name)) > 0"
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let mut rows = stmt.query(rusqlite::params_from_iter(pids.iter().copied()))?;
+    let mut out = HashMap::new();
+    while let Some(row) = rows.next()? {
+        let pid: i64 = row.get(0)?;
+        let name: String = row.get(1)?;
+        out.insert(pid.to_string(), name);
+    }
+    Ok(out)
+}
+
+async fn get_steam_app_names_batch_impl(
+    db: AppDb,
+    app_ids: Vec<String>,
+) -> HashMap<String, String> {
     let mut valid_ids: Vec<String> = app_ids
         .into_iter()
         .map(|s| s.trim().to_string())
@@ -178,7 +211,27 @@ pub async fn get_steam_app_names_batch(app_ids: Vec<String>) -> HashMap<String, 
         return HashMap::new();
     }
 
-    let stream = futures_util::stream::iter(valid_ids.into_iter().map(|app_id| async move {
+    let db_conn = db;
+    let ids_for_db = valid_ids.clone();
+    let from_db = tokio::task::spawn_blocking(move || {
+        db_conn.with_conn(|c| load_catalog_names_map(c, &ids_for_db))
+    })
+    .await
+    .ok()
+    .and_then(|r| r.ok())
+    .unwrap_or_default();
+
+    let mut final_map = from_db;
+    let ids_to_fetch: Vec<String> = valid_ids
+        .into_iter()
+        .filter(|id| !final_map.contains_key(id))
+        .collect();
+
+    if ids_to_fetch.is_empty() {
+        return final_map;
+    }
+
+    let stream = futures_util::stream::iter(ids_to_fetch.into_iter().map(|app_id| async move {
         for _ in 0..2 {
             if let Some(result) = fetch_single_app_name(&app_id).await {
                 return Some(result);
@@ -191,7 +244,6 @@ pub async fn get_steam_app_names_batch(app_ids: Vec<String>) -> HashMap<String, 
 
     let results: Vec<Option<(String, String)>> = stream.collect().await;
 
-    let mut final_map = HashMap::new();
     for (id, name) in results.into_iter().flatten() {
         final_map.insert(id, name);
     }
@@ -200,11 +252,25 @@ pub async fn get_steam_app_names_batch(app_ids: Vec<String>) -> HashMap<String, 
 }
 
 #[tauri::command]
-pub async fn get_steam_app_name(app_id: String) -> Option<String> {
-    let app_id = normalize_steam_app_id(&app_id)?;
+pub async fn get_steam_app_names_batch(
+    db: State<'_, AppDb>,
+    app_ids: Vec<String>,
+) -> Result<HashMap<String, String>, String> {
+    Ok(get_steam_app_names_batch_impl(db.deref().clone(), app_ids).await)
+}
 
-    let mut results = get_steam_app_names_batch(vec![app_id.clone()]).await;
-    results.remove(&app_id)
+#[tauri::command]
+pub async fn get_steam_app_name(
+    db: State<'_, AppDb>,
+    app_id: String,
+) -> Result<Option<String>, String> {
+    let Some(app_id) = normalize_steam_app_id(&app_id) else {
+        return Ok(None);
+    };
+
+    let mut results =
+        get_steam_app_names_batch_impl(db.deref().clone(), vec![app_id.clone()]).await;
+    Ok(results.remove(&app_id))
 }
 
 async fn search_steam_app_id_impl(query: String) -> Option<String> {
