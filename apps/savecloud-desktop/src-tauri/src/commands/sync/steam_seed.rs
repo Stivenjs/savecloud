@@ -2,13 +2,23 @@
 
 use super::api::api_request;
 use super::context::resolve_api_context;
+use super::context::ApiContext;
 use crate::network::API_CLIENT;
 use crate::sqlite::error::SqliteError;
 use crate::sqlite::AppDb;
 use crate::steam_catalog::trending::sync_store_trending;
+use futures_util::stream::{self, StreamExt};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::State;
+
+/// Estado persistido del import local (cursor lexicográfico o watermark para modo recientes).
+#[derive(Debug, Clone)]
+struct SteamSeedImportState {
+    strategy: String,
+    cursor_last_key: Option<String>,
+    newest_watermark: Option<String>,
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -147,6 +157,213 @@ fn infer_name_from_details_json(details_json: &str) -> Option<String> {
 
 fn normalize_display_name_for_seed(name: &str) -> String {
     name.trim().to_lowercase()
+}
+
+fn parse_import_strategy(s: Option<&str>) -> Result<String, String> {
+    match s.map(str::trim).filter(|x| !x.is_empty()) {
+        None => Ok("cursor".to_string()),
+        Some(x) if x.eq_ignore_ascii_case("cursor") => Ok("cursor".to_string()),
+        Some(x) if x.eq_ignore_ascii_case("newest_first") => Ok("newest_first".to_string()),
+        Some(x) => Err(format!(
+            "strategy inválida: {} (usa 'cursor' o 'newest_first')",
+            x
+        )),
+    }
+}
+
+fn load_or_init_import_state(conn: &Connection) -> Result<SteamSeedImportState, rusqlite::Error> {
+    let result = conn.query_row(
+        "SELECT strategy, cursor_last_key, newest_watermark FROM steam_seed_import_state WHERE id = 1",
+        [],
+        |row| {
+            Ok(SteamSeedImportState {
+                strategy: row.get(0)?,
+                cursor_last_key: row.get(1)?,
+                newest_watermark: row.get(2)?,
+            })
+        },
+    );
+    match result {
+        Ok(s) => Ok(s),
+        Err(rusqlite::Error::QueryReturnedNoRows) => {
+            conn.execute("INSERT INTO steam_seed_import_state (id) VALUES (1)", [])?;
+            load_or_init_import_state(conn)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+fn save_import_state(
+    conn: &Connection,
+    state: &SteamSeedImportState,
+) -> Result<(), rusqlite::Error> {
+    conn.execute(
+        "UPDATE steam_seed_import_state SET strategy = ?1, cursor_last_key = ?2, newest_watermark = ?3, updated_at = unixepoch() WHERE id = 1",
+        rusqlite::params![
+            state.strategy,
+            state.cursor_last_key,
+            state.newest_watermark
+        ],
+    )?;
+    Ok(())
+}
+
+async fn list_batch_page(
+    ctx: &ApiContext,
+    list_cursor: Option<&str>,
+) -> Result<SteamSeedBatchesResponse, String> {
+    let path = if let Some(c) = list_cursor {
+        format!(
+            "/steam-seed/batches?maxKeys=200&cursor={}",
+            urlencoding::encode(c)
+        )
+    } else {
+        "/steam-seed/batches?maxKeys=200".to_string()
+    };
+    let list_res = api_request(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        "GET",
+        &path,
+        None,
+    )
+    .await
+    .map_err(|e| format!("steam-seed/batches: {}", e))?;
+    if !list_res.status().is_success() {
+        return Err(format!(
+            "API steam-seed/batches: {} {}",
+            list_res.status(),
+            list_res.text().await.unwrap_or_default()
+        ));
+    }
+    list_res.json().await.map_err(|e| e.to_string())
+}
+
+/// Avanza por el listado S3 en orden lexicográfico ascendente, sin repetir batches ya importados.
+async fn collect_cursor_keys(
+    ctx: &ApiContext,
+    last_key: Option<&str>,
+    max_batches: u32,
+) -> Result<Vec<String>, String> {
+    let mut collected = Vec::new();
+    let mut list_cursor: Option<String> = None;
+    loop {
+        let page = list_batch_page(ctx, list_cursor.as_deref()).await?;
+        for k in page.keys {
+            if let Some(lk) = last_key {
+                if k.as_str() <= lk {
+                    continue;
+                }
+            }
+            collected.push(k);
+            if collected.len() as u32 >= max_batches {
+                return Ok(collected);
+            }
+        }
+        list_cursor = page.next_cursor;
+        if list_cursor.is_none() {
+            break;
+        }
+    }
+    Ok(collected)
+}
+
+async fn fetch_all_batch_keys(ctx: &ApiContext) -> Result<Vec<String>, String> {
+    let mut all = Vec::new();
+    let mut list_cursor: Option<String> = None;
+    loop {
+        let page = list_batch_page(ctx, list_cursor.as_deref()).await?;
+        all.extend(page.keys);
+        list_cursor = page.next_cursor;
+        if list_cursor.is_none() {
+            break;
+        }
+    }
+    Ok(all)
+}
+
+/// Prioriza los batches más recientes (sufijo numérico con padding: orden lexicográfico = cronológico).
+async fn collect_newest_first_keys(
+    ctx: &ApiContext,
+    watermark: Option<&str>,
+    max_batches: u32,
+) -> Result<Vec<String>, String> {
+    let mut all = fetch_all_batch_keys(ctx).await?;
+    all.sort_unstable();
+    let mut descending: Vec<String> = all.into_iter().rev().collect();
+    if let Some(w) = watermark {
+        descending.retain(|k| k.as_str() < w);
+    }
+    descending.truncate(max_batches as usize);
+    Ok(descending)
+}
+
+async fn fetch_one_batch(ctx: &ApiContext, key: &str) -> Result<Vec<(u32, String)>, String> {
+    let body = serde_json::json!({ "key": key }).to_string();
+    let url_res = api_request(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        "POST",
+        "/steam-seed/batch/download-url",
+        Some(body.as_bytes()),
+    )
+    .await
+    .map_err(|e| format!("steam-seed/batch/download-url: {}", e))?;
+    if !url_res.status().is_success() {
+        return Err(format!(
+            "API steam-seed/batch/download-url: {} {}",
+            url_res.status(),
+            url_res.text().await.unwrap_or_default()
+        ));
+    }
+    let dl: SteamSeedBatchDownloadUrlResponse = url_res.json().await.map_err(|e| e.to_string())?;
+    let content = API_CLIENT
+        .get(&dl.download_url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !content.status().is_success() {
+        return Err(format!("batch GET {}: {}", key, content.status()));
+    }
+    let text = content.text().await.map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for line in text.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let parsed: SteamSeedBatchLine =
+            serde_json::from_str(line).map_err(|e| format!("batch line parse error: {}", e))?;
+        if parsed.steam_success == Some(true) {
+            if let Some(data) = parsed.data {
+                let json = serde_json::to_string(&data).map_err(|e| e.to_string())?;
+                out.push((parsed.app_id, json));
+            }
+        }
+    }
+    Ok(out)
+}
+
+async fn fetch_batches_concurrent(
+    ctx: &ApiContext,
+    keys: &[String],
+    concurrency: usize,
+) -> Result<Vec<(u32, String)>, String> {
+    let results: Vec<Result<Vec<(u32, String)>, String>> =
+        stream::iter(keys.iter().cloned().map(|key| {
+            let ctx = ctx.clone();
+            async move { fetch_one_batch(&ctx, &key).await }
+        }))
+        .buffer_unordered(concurrency)
+        .collect()
+        .await;
+
+    let mut updates = Vec::new();
+    for r in results {
+        updates.extend(r?);
+    }
+    Ok(updates)
 }
 
 #[tauri::command]
@@ -314,50 +531,38 @@ pub async fn sync_reset_cloud_seed_state() -> Result<(), String> {
 pub async fn sync_import_cloud_seed_batches_to_sqlite(
     db: State<'_, AppDb>,
     max_batches: Option<u32>,
+    strategy: Option<String>,
+    concurrency: Option<u32>,
 ) -> Result<SteamSeedImportResultDto, String> {
     let ctx = resolve_api_context()?;
     let max_batches = max_batches.unwrap_or(50).clamp(1, 500);
+    let concurrency = concurrency.unwrap_or(4).clamp(1, 32) as usize;
+    let requested_strategy = parse_import_strategy(strategy.as_deref())?;
 
-    let mut cursor: Option<String> = None;
-    let mut to_process: Vec<String> = Vec::new();
-    while (to_process.len() as u32) < max_batches {
-        let path = if let Some(c) = &cursor {
-            format!(
-                "/steam-seed/batches?maxKeys=200&cursor={}",
-                urlencoding::encode(c)
-            )
-        } else {
-            "/steam-seed/batches?maxKeys=200".to_string()
-        };
-        let list_res = api_request(
-            &ctx.base_url,
-            &ctx.user_id,
-            &ctx.api_key,
-            "GET",
-            &path,
-            None,
-        )
-        .await
-        .map_err(|e| format!("steam-seed/batches: {}", e))?;
-        if !list_res.status().is_success() {
-            return Err(format!(
-                "API steam-seed/batches: {} {}",
-                list_res.status(),
-                list_res.text().await.unwrap_or_default()
-            ));
-        }
-        let page: SteamSeedBatchesResponse = list_res.json().await.map_err(|e| e.to_string())?;
-        for k in page.keys {
-            if (to_process.len() as u32) >= max_batches {
-                break;
-            }
-            to_process.push(k);
-        }
-        cursor = page.next_cursor;
-        if cursor.is_none() {
-            break;
-        }
+    let db_load = db.inner().clone();
+    let mut import_state =
+        tokio::task::spawn_blocking(move || db_load.with_conn(load_or_init_import_state))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e: SqliteError| e.to_string())?;
+
+    if import_state.strategy != requested_strategy {
+        import_state.cursor_last_key = None;
+        import_state.newest_watermark = None;
     }
+
+    let to_process = match requested_strategy.as_str() {
+        "cursor" => {
+            collect_cursor_keys(&ctx, import_state.cursor_last_key.as_deref(), max_batches).await?
+        }
+        "newest_first" => {
+            collect_newest_first_keys(&ctx, import_state.newest_watermark.as_deref(), max_batches)
+                .await?
+        }
+        _ => {
+            return Err("estrategia de import no soportada".to_string());
+        }
+    };
 
     if to_process.is_empty() {
         return Ok(SteamSeedImportResultDto {
@@ -366,55 +571,38 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
         });
     }
 
-    let mut updates: Vec<(u32, String)> = Vec::new();
-    for key in &to_process {
-        let body = serde_json::json!({ "key": key }).to_string();
-        let url_res = api_request(
-            &ctx.base_url,
-            &ctx.user_id,
-            &ctx.api_key,
-            "POST",
-            "/steam-seed/batch/download-url",
-            Some(body.as_bytes()),
-        )
-        .await
-        .map_err(|e| format!("steam-seed/batch/download-url: {}", e))?;
-        if !url_res.status().is_success() {
-            return Err(format!(
-                "API steam-seed/batch/download-url: {} {}",
-                url_res.status(),
-                url_res.text().await.unwrap_or_default()
-            ));
+    let updates = fetch_batches_concurrent(&ctx, &to_process, concurrency).await?;
+
+    match requested_strategy.as_str() {
+        "cursor" => {
+            import_state.cursor_last_key = Some(
+                to_process
+                    .iter()
+                    .max()
+                    .expect("to_process no vacío")
+                    .clone(),
+            );
         }
-        let dl: SteamSeedBatchDownloadUrlResponse =
-            url_res.json().await.map_err(|e| e.to_string())?;
-        let content = API_CLIENT
-            .get(&dl.download_url)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-        if !content.status().is_success() {
-            return Err(format!("batch GET {}: {}", key, content.status()));
+        "newest_first" => {
+            import_state.newest_watermark = Some(
+                to_process
+                    .iter()
+                    .min()
+                    .expect("to_process no vacío")
+                    .clone(),
+            );
         }
-        let text = content.text().await.map_err(|e| e.to_string())?;
-        for line in text.lines() {
-            if line.trim().is_empty() {
-                continue;
-            }
-            let parsed: SteamSeedBatchLine =
-                serde_json::from_str(line).map_err(|e| format!("batch line parse error: {}", e))?;
-            if parsed.steam_success == Some(true) {
-                if let Some(data) = parsed.data {
-                    let json = serde_json::to_string(&data).map_err(|e| e.to_string())?;
-                    updates.push((parsed.app_id, json));
-                }
-            }
-        }
+        _ => {}
     }
+    import_state.strategy = requested_strategy;
 
     let db = db.inner().clone();
     let rows_updated = tokio::task::spawn_blocking(move || {
-        db.with_conn(|conn| apply_seed_updates(conn, &updates))
+        db.with_conn(|conn| {
+            let n = apply_seed_updates(conn, &updates)?;
+            save_import_state(conn, &import_state)?;
+            Ok(n)
+        })
     })
     .await
     .map_err(|e| e.to_string())?
