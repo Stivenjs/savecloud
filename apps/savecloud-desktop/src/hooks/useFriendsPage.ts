@@ -248,8 +248,8 @@ export function useFriendsPage() {
     return set;
   }, [ourConfig?.games]);
 
-  const handleLoadFriend = async () => {
-    const id = friendIdInput.trim();
+  const loadFriendProfileById = useCallback(async (userId: string) => {
+    const id = userId.trim();
     if (!id) {
       dispatch({
         type: "SET_ERROR",
@@ -257,6 +257,7 @@ export function useFriendsPage() {
       });
       return;
     }
+    dispatch({ type: "SET_FRIEND_ID_INPUT", payload: id });
     dispatch({ type: "SET_LOADING", payload: true });
     dispatch({ type: "SET_ERROR", payload: null });
     try {
@@ -268,6 +269,18 @@ export function useFriendsPage() {
     } finally {
       dispatch({ type: "SET_LOADING", payload: false });
     }
+  }, []);
+
+  const handleLoadFriend = async () => {
+    const id = friendIdInput.trim();
+    if (!id) {
+      dispatch({
+        type: "SET_ERROR",
+        payload: "Escribe el usuario de tu amigo.",
+      });
+      return;
+    }
+    await loadFriendProfileById(id);
   };
 
   const loadPendingInvites = useCallback(async () => {
@@ -677,6 +690,7 @@ export function useFriendsPage() {
     handleCopyLastToken,
     ourConfig,
     handleLoadFriend,
+    loadFriendProfileById,
     handleImportFromShareLink,
     handleConfirmShareLinkImport,
     handleCopySaves,

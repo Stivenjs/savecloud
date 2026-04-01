@@ -36,6 +36,10 @@ export async function setProfileAppearance(updates: {
   });
 }
 
+export async function setShareVisualProfileWithHosts(enabled: boolean): Promise<void> {
+  await invoke("set_share_visual_profile_with_hosts", { enabled });
+}
+
 /** Ruta del archivo de configuración (para mostrar al usuario) */
 export async function getConfigPath(): Promise<string> {
   return invoke<string>("get_config_path");

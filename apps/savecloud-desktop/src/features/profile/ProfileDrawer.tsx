@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Accordion,
   AccordionItem,
@@ -8,18 +8,25 @@ import {
   DrawerContent,
   DrawerHeader,
   Input,
+  Switch,
 } from "@heroui/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { FolderOpen, ImageIcon, Layers, Link2, MonitorPlay, Save, Trophy, User } from "lucide-react";
+import { ProfileHeroBackground } from "@features/profile/PublicProfileHero";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Config } from "@app-types/config";
 import type { GamificationState } from "@app-types/gamification";
 import type { ConnectionStatus } from "@hooks/useLastSyncInfo";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
-import { readImageAsDataUrl, scheduleConfigBackupToCloud, setProfileAppearance } from "@services/tauri";
+import {
+  readImageAsDataUrl,
+  scheduleConfigBackupToCloud,
+  setProfileAppearance,
+  setShareVisualProfileWithHosts,
+} from "@services/tauri";
 import { achievementLabel, formatHoursToNextLevel } from "@utils/gamificationLabels";
 import { formatPlaytime } from "@utils/format";
-import { isProfileVideoSource, resolveProfileAsset } from "@utils/profileMedia";
+import { resolveProfileAsset } from "@utils/profileMedia";
 import { toastError, toastSuccess } from "@utils/toast";
 
 interface ProfileDrawerProps {
@@ -46,36 +53,6 @@ function connectionLabel(status: ConnectionStatus | undefined): { text: string; 
   }
 }
 
-const ProfileHeroBackground = memo(function ProfileHeroBackground({ rawUrl }: { rawUrl: string }) {
-  const resolved = useMemo(() => resolveProfileAsset(rawUrl), [rawUrl]);
-  const isVideo = isProfileVideoSource(rawUrl);
-
-  if (!resolved) return null;
-
-  if (isVideo) {
-    return (
-      <video
-        src={resolved}
-        className="absolute inset-0 size-full object-cover"
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="none"
-      />
-    );
-  }
-  return (
-    <img
-      src={resolved}
-      alt=""
-      decoding="async"
-      fetchPriority="low"
-      className="absolute inset-0 size-full object-cover"
-    />
-  );
-});
-
 export function ProfileDrawer({
   isOpen,
   onClose,
@@ -89,12 +66,14 @@ export function ProfileDrawer({
   const [avatar, setAvatar] = useState("");
   const [frame, setFrame] = useState("");
   const [saving, setSaving] = useState(false);
+  const [shareVisualWithHosts, setShareVisualWithHosts] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !config) return;
     setBg(config.profileBackground ?? "");
     setAvatar(config.profileAvatar ?? "");
     setFrame(config.profileFrame ?? "");
+    setShareVisualWithHosts(config.shareVisualProfileWithHosts ?? false);
   }, [isOpen, config]);
 
   const gamesCount = config?.games?.length ?? 0;
@@ -125,6 +104,7 @@ export function ProfileDrawer({
         profileAvatar: avatar.trim() || null,
         profileFrame: frame.trim() || null,
       });
+      await setShareVisualProfileWithHosts(shareVisualWithHosts);
       await queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
       scheduleConfigBackupToCloud();
       toastSuccess("Perfil actualizado", "Se guardó la apariencia del perfil.");
@@ -134,7 +114,7 @@ export function ProfileDrawer({
     } finally {
       setSaving(false);
     }
-  }, [avatar, bg, frame, onClose, queryClient]);
+  }, [avatar, bg, frame, onClose, queryClient, shareVisualWithHosts]);
 
   const pickFile = useCallback(async (kind: "background" | "avatar" | "frame") => {
     try {
@@ -242,6 +222,20 @@ export function ProfileDrawer({
           <p className="text-[11px] leading-snug text-default-500">
             Enlaces https o archivos locales. Las rutas locales dependen del archivo en disco.
           </p>
+
+          <div className="flex flex-col gap-2 rounded-lg border border-default-200 bg-default-50/60 p-3 dark:bg-default-100/5">
+            <Switch
+              isSelected={shareVisualWithHosts}
+              onValueChange={setShareVisualWithHosts}
+              size="sm"
+              classNames={{ label: "text-sm text-foreground" }}>
+              Compartir perfil visual con anfitriones de nubes compartidas
+            </Switch>
+            <p className="text-[11px] leading-snug text-default-500">
+              Si lo activas, quienes te invitaron como miembro podrán ver fondo, avatar y marco al cargar tu usuario en
+              Amigos (no aplica a cualquier persona que escriba tu ID).
+            </p>
+          </div>
 
           <div className="rounded-lg border border-default-200 bg-default-50/60 p-3 dark:bg-default-100/5">
             <div className="mb-2 flex items-center justify-between gap-2">

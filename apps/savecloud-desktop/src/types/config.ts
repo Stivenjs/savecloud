@@ -48,4 +48,6 @@ export interface Config {
   readonly profileAvatar?: string;
   /** URL o ruta local del marco sobre el avatar. */
   readonly profileFrame?: string;
+  /** Si es true, los anfitriones de nubes donde participas pueden ver tu perfil visual al cargar tu usuario. */
+  readonly shareVisualProfileWithHosts?: boolean;
 }

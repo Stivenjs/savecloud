@@ -66,6 +66,7 @@ export function FriendsPage() {
     activeCloudHostUserId,
     lastCreatedInviteToken,
     handleCopyLastToken,
+    loadFriendProfileById,
   } = useFriendsPage();
 
   const handleAddGamesPress = useCallback(() => setAddFriendGamesOpen(true), [setAddFriendGamesOpen]);
@@ -186,6 +187,10 @@ export function FriendsPage() {
             activeCloudHostUserId={activeCloudHostUserId}
             lastCreatedInviteToken={lastCreatedInviteToken}
             handleCopyLastToken={handleCopyLastToken}
+            onViewMemberProfile={(memberUserId) => {
+              setFriendsTab("user");
+              void loadFriendProfileById(memberUserId);
+            }}
           />
         </Tab>
       </Tabs>
@@ -202,6 +207,16 @@ export function FriendsPage() {
       {friendConfig && !loading ? (
         <FriendGamesSection
           userIdDisplay={friendConfig.userId ?? "(sin usuario en config)"}
+          friendVisualProfile={
+            friendConfig.shareVisualProfileWithHosts
+              ? {
+                  profileBackground: friendConfig.profileBackground,
+                  profileAvatar: friendConfig.profileAvatar,
+                  profileFrame: friendConfig.profileFrame,
+                  totalPlaytimeSeconds: friendConfig.totalPlaytime ?? 0,
+                }
+              : null
+          }
           summaries={summaries}
           copyingGameId={copyingGameId}
           onAddGamesPress={handleAddGamesPress}

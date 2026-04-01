@@ -4,6 +4,7 @@
 //! almacenamiento S3, importación/exportación de estado y manipulaciones
 //! del árbol de juegos.
 
+use crate::commands::share::invites;
 use crate::commands::sync::api::{api_request, get_download_urls, sync_list_remote_saves_for_user};
 use crate::commands::sync::context::resolve_api_context;
 use crate::config::gamification::GamificationStateDto;
@@ -87,6 +88,7 @@ pub fn get_config() -> ConfigDto {
             .as_ref()
             .filter(|k| !k.trim().is_empty())
             .map(|_| config::MASKED_STEAM_WEB_API_KEY.to_string()),
+        share_visual_profile_with_hosts: settings.share_visual_profile_with_hosts,
         games: combined
             .games
             .into_iter()
@@ -253,6 +255,14 @@ pub fn set_profile_appearance(
     settings.profile_background = norm(profile_background);
     settings.profile_avatar = norm(profile_avatar);
     settings.profile_frame = norm(profile_frame);
+    config::save_settings(&settings)
+}
+
+/// Permite a los anfitriones de nubes compartidas ver avatar, fondo y marco al cargar tu perfil.
+#[tauri::command]
+pub fn set_share_visual_profile_with_hosts(enabled: bool) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.share_visual_profile_with_hosts = enabled;
     config::save_settings(&settings)
 }
 
@@ -641,6 +651,8 @@ pub fn import_config_from_file(path: String, mode: String) -> Result<(), String>
         if imported.profile_frame.is_some() {
             current.profile_frame = imported.profile_frame.clone();
         }
+        current.share_visual_profile_with_hosts =
+            current.share_visual_profile_with_hosts || imported.share_visual_profile_with_hosts;
         return config::apply_combined_config(&current);
     }
 
@@ -844,6 +856,30 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
     let imported: Config = serde_json::from_slice(&bytes)
         .map_err(|e| format!("El archivo de configuración descargado no es válido: {}", e))?;
 
+    let allow_visual = imported.share_visual_profile_with_hosts
+        && invites::viewer_is_host_of_member(friend_id).await?;
+
+    let friend_total_playtime: u64 = imported.games.iter().map(|g| g.playtime_seconds).sum();
+
+    let (profile_background, profile_avatar, profile_frame, total_playtime, share_visual_profile_with_hosts) =
+        if allow_visual {
+            (
+                imported.profile_background.clone(),
+                imported.profile_avatar.clone(),
+                imported.profile_frame.clone(),
+                friend_total_playtime,
+                true,
+            )
+        } else {
+            (
+                None,
+                None,
+                None,
+                0u64,
+                false,
+            )
+        };
+
     Ok(ConfigDto {
         api_base_url: None,
         api_key: None,
@@ -854,11 +890,12 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
         full_backup_streaming: None,
         full_backup_streaming_dry_run: None,
         default_source_download_dir: None,
-        total_playtime: 0,
-        profile_background: None,
-        profile_avatar: None,
-        profile_frame: None,
+        total_playtime,
+        profile_background,
+        profile_avatar,
+        profile_frame,
         steam_web_api_key: None,
+        share_visual_profile_with_hosts,
         games: imported
             .games
             .into_iter()
