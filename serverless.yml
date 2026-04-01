@@ -53,6 +53,15 @@ custom:
         - ""
         - - "https://"
           - Fn::GetAtt: [CloudFrontDistribution, DomainName]
+  # Seed Steam: dev sin schedule por defecto; live con regla barata (ajustar rate si hace falta).
+  steamSeedScheduleEnabled:
+    dev: false
+    live: true
+  steamSeedScheduleRate:
+    dev: rate(24 hours)
+    live: rate(24 minutes)
+  # Valor por defecto de filtros appdetails.
+  steamSeedFiltersDefault: "basic,developers,publishers,genres,categories,release_date,screenshots,movies"
 
 functions:
   apiAuthorizer:
@@ -75,5 +84,23 @@ functions:
           method: ANY
           authorizer:
             name: apiKeyAuthorizer
+
+  steamSeedWorker:
+    handler: src/interfaces/lambda/steam-seed/handler.handler
+    description: Seed incremental Steam appdetails (S3 + EventBridge) - ${sls:stage, 'dev'}
+    timeout: 900
+    memorySize: 256
+    reservedConcurrency: 1
+    environment:
+      STEAM_SEED_PREFIX: steam-seed
+      STEAM_DELAY_MS: "2000"
+      STEAM_BATCH_SIZE: "8"
+      STEAM_BACKOFF_MINUTES: "30"
+      STEAM_LANG: spanish
+      STEAM_FILTERS: ${env:STEAM_FILTERS, self:custom.steamSeedFiltersDefault}
+    events:
+      - schedule:
+          rate: ${self:custom.steamSeedScheduleRate.${sls:stage}, 'rate(15 minutes)'}
+          enabled: ${self:custom.steamSeedScheduleEnabled.${sls:stage}, false}
 
 resources: ${file(./resources.${sls:stage}.yml)}
