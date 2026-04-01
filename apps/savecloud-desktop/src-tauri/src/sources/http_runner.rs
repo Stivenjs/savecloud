@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;
 
-use crate::network::DATA_CLIENT;
+use crate::network::{DATA_CLIENT, HOSTER_BROWSER_USER_AGENT};
 
 use super::hosters::{self, HosterError};
 use super::parser::slugify;
@@ -44,7 +44,13 @@ pub async fn run_http_download(
 
     let mut request = DATA_CLIENT.get(effective_uri);
     if let Some(cookie) = &resolved.cookie {
-        request = request.header("Cookie", cookie);
+        // Gofile (y similares) rechazan el CDN con UA de app; debe coincidir con el token del API.
+        request = request
+            .header("Cookie", cookie)
+            .header("User-Agent", HOSTER_BROWSER_USER_AGENT)
+            .header("Referer", "https://gofile.io/")
+            .header("Origin", "https://gofile.io")
+            .header("Accept", "*/*");
     }
 
     let response = request
