@@ -50,6 +50,12 @@ pub struct AppSettings {
     /// URL o ruta local: marco superpuesto al avatar (PNG recomendado).
     #[serde(default)]
     pub profile_frame: Option<String>,
+    /// Si es true, los anfitriones de nubes donde este usuario es miembro pueden ver avatar/fondo/marco en el perfil cargado.
+    #[serde(default)]
+    pub share_visual_profile_with_hosts: bool,
+    /// Si es true, los miembros activos de la nube de este usuario (anfitrión) pueden ver avatar/fondo/marco al cargar su perfil.
+    #[serde(default)]
+    pub share_visual_profile_with_members: bool,
     /// Clave [Steam Web API](https://steamcommunity.com/dev/apikey) para `IStoreService/GetAppList` (catálogo local).
     ///
     /// No se serializa en JSON; se guarda en el almacén seguro del SO (Keyring), igual que `api_key`.
@@ -160,6 +166,10 @@ pub struct Config {
     pub profile_avatar: Option<String>,
     #[serde(default)]
     pub profile_frame: Option<String>,
+    #[serde(default)]
+    pub share_visual_profile_with_hosts: bool,
+    #[serde(default)]
+    pub share_visual_profile_with_members: bool,
     pub games: Vec<ConfiguredGame>,
     #[serde(default)]
     pub operation_history: Vec<OperationLogEntry>,
@@ -194,6 +204,10 @@ pub struct ConfigDto {
     /// Presente solo si hay clave configurada; valor enmascarado hacia la UI.
     #[serde(default)]
     pub steam_web_api_key: Option<String>,
+    #[serde(default)]
+    pub share_visual_profile_with_hosts: bool,
+    #[serde(default)]
+    pub share_visual_profile_with_members: bool,
 }
 
 /// DTO representativo de un juego para el frontend.

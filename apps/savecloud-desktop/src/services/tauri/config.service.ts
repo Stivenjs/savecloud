@@ -36,6 +36,14 @@ export async function setProfileAppearance(updates: {
   });
 }
 
+export async function setShareVisualProfileWithHosts(enabled: boolean): Promise<void> {
+  await invoke("set_share_visual_profile_with_hosts", { enabled });
+}
+
+export async function setShareVisualProfileWithMembers(enabled: boolean): Promise<void> {
+  await invoke("set_share_visual_profile_with_members", { enabled });
+}
+
 /** Ruta del archivo de configuración (para mostrar al usuario) */
 export async function getConfigPath(): Promise<string> {
   return invoke<string>("get_config_path");
@@ -409,7 +417,10 @@ export async function searchSteamCatalog(
   });
 }
 
-/** Listado paginado: primero según tendencia sincronizada (`syncSteamStoreTrending`), luego por `app_id` descendente. */
+/**
+ * Listado paginado: primero tendencia (`syncSteamStoreTrending`); luego entradas con ficha enriquecida,
+ * `enriched_at`, actividad del seed y `app_id` como desempate (no solo ID alto).
+ */
 export async function listSteamCatalogPage(
   offset?: number,
   limit?: number,

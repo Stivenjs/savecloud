@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Avatar, Button, Chip, Divider, Input, Tab, Tabs } from "@heroui/react";
-import { Check, Cloud, Copy, LogOut, Mail, Plus, RefreshCcw, Trash2, UserRound, X } from "lucide-react";
+import { Avatar, Button, Chip, Divider, Input, Skeleton, Tab, Tabs } from "@heroui/react";
+import { Check, Cloud, Copy, LogOut, Mail, Plus, RefreshCcw, Trash2, UserRound, Eye, X } from "lucide-react";
 import type { CloudInvite, CloudMembership } from "@services/tauri/invites.service";
 
 function SectionCard({
@@ -60,6 +60,9 @@ interface FriendsInvitesTabProps {
   activeCloudHostUserId: string | null;
   lastCreatedInviteToken: string | null;
   handleCopyLastToken: () => void | Promise<void>;
+  invitesStatsLoading: boolean;
+  /** Carga el perfil (miembro o anfitrión) en la pestaña Buscar por usuario. */
+  onViewCloudPeerProfile: (userId: string) => void;
 }
 
 export function FriendsInvitesTab({
@@ -81,6 +84,8 @@ export function FriendsInvitesTab({
   activeCloudHostUserId,
   lastCreatedInviteToken,
   handleCopyLastToken,
+  invitesStatsLoading,
+  onViewCloudPeerProfile,
 }: FriendsInvitesTabProps) {
   const [view, setView] = useState<"requests" | "cloud">("requests");
 
@@ -91,16 +96,26 @@ export function FriendsInvitesTab({
           Comparte un enlace para que tu amigo pueda acceder a la nube del anfitrión (sin configuración manual).
         </p>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <Chip size="sm" variant="flat" color="primary">
-          Pendientes: {pendingInvites.length}
-        </Chip>
-        <Chip size="sm" variant="flat" color="secondary">
-          Nubes compartidas: {memberMemberships.length}
-        </Chip>
-        <Chip size="sm" variant="flat" color="warning">
-          Miembros en tu nube: {hostMemberships.length}
-        </Chip>
+      <div className="flex flex-wrap items-center gap-2">
+        {invitesStatsLoading ? (
+          <>
+            <Skeleton className="h-7 w-38 rounded-full" />
+            <Skeleton className="h-7 w-44 rounded-full" />
+            <Skeleton className="h-7 w-46 rounded-full" />
+          </>
+        ) : (
+          <>
+            <Chip size="sm" variant="flat" color="primary">
+              Pendientes: {pendingInvites.length}
+            </Chip>
+            <Chip size="sm" variant="flat" color="secondary">
+              Nubes compartidas: {memberMemberships.length}
+            </Chip>
+            <Chip size="sm" variant="flat" color="warning">
+              Miembros en tu nube: {hostMemberships.length}
+            </Chip>
+          </>
+        )}
       </div>
 
       <Tabs
@@ -313,22 +328,32 @@ export function FriendsInvitesTab({
                       {memberMemberships.map((m) => (
                         <div
                           key={`${m.hostUserId}-${m.memberUserId}`}
-                          className="flex items-center justify-between gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2">
-                          <div className="flex items-center gap-2">
+                          className="flex flex-col gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex items-center gap-2 min-w-0">
                             <Avatar name={m.hostUserId} size="sm" color="secondary" />
-                            <div>
-                              <p className="text-xs font-medium">{m.hostUserId}</p>
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium truncate">{m.hostUserId}</p>
                               <p className="text-[10px] text-default-400">Anfitrión</p>
                             </div>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="light"
-                            color="warning"
-                            startContent={<LogOut className="h-3.5 w-3.5" />}
-                            onPress={() => void handleLeaveMembership(m.hostUserId)}>
-                            Salir
-                          </Button>
+                          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="flat"
+                              color="primary"
+                              startContent={<Eye className="h-3.5 w-3.5" />}
+                              onPress={() => onViewCloudPeerProfile(m.hostUserId)}>
+                              Ver perfil
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="light"
+                              color="warning"
+                              startContent={<LogOut className="h-3.5 w-3.5" />}
+                              onPress={() => void handleLeaveMembership(m.hostUserId)}>
+                              Salir
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -350,22 +375,32 @@ export function FriendsInvitesTab({
                     {hostMemberships.map((m) => (
                       <div
                         key={`${m.hostUserId}-${m.memberUserId}`}
-                        className="flex items-center justify-between gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2">
-                        <div className="flex items-center gap-2">
+                        className="flex flex-col gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
                           <Avatar name={m.memberUserId} size="sm" color="danger" />
-                          <div>
-                            <p className="text-xs font-medium">{m.memberUserId}</p>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium truncate">{m.memberUserId}</p>
                             <p className="text-[10px] text-default-400">Miembro</p>
                           </div>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="light"
-                          color="danger"
-                          startContent={<Trash2 className="h-3.5 w-3.5" />}
-                          onPress={() => void handleRemoveMember(m.memberUserId)}>
-                          Eliminar
-                        </Button>
+                        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="flat"
+                            color="primary"
+                            startContent={<Eye className="h-3.5 w-3.5" />}
+                            onPress={() => onViewCloudPeerProfile(m.memberUserId)}>
+                            Ver perfil
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="light"
+                            color="danger"
+                            startContent={<Trash2 className="h-3.5 w-3.5" />}
+                            onPress={() => void handleRemoveMember(m.memberUserId)}>
+                            Eliminar
+                          </Button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -379,16 +414,18 @@ export function FriendsInvitesTab({
   );
 }
 
-export function InvitesTabTitle({ pendingCount }: { pendingCount: number }) {
+export function InvitesTabTitle({ pendingCount, statsLoading }: { pendingCount: number; statsLoading?: boolean }) {
   return (
     <div className="flex items-center gap-2">
       <Mail className="h-4 w-4" />
       <span>Invitaciones</span>
-      {pendingCount > 0 && (
+      {statsLoading ? (
+        <Skeleton className="h-5 w-6 rounded-md" />
+      ) : pendingCount > 0 ? (
         <Chip size="sm" color="primary" variant="solid" className="h-4 min-w-4 px-1 text-[10px]">
           {pendingCount}
         </Chip>
-      )}
+      ) : null}
     </div>
   );
 }

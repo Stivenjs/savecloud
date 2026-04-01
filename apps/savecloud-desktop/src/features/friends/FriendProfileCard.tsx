@@ -26,7 +26,11 @@ export function FriendProfileCard({
         <p className="text-sm text-default-600">
           El <strong>usuario</strong> es el identificador que cada persona tiene en Configuración (junto a &quot;Tu
           usuario&quot;). Si un amigo te pasa el suyo, escríbelo aquí para ver sus juegos, copiar guardados a tu nube o
-          añadir sus juegos a tu lista. Úsalo solo con personas de confianza.
+          añadir sus juegos a tu lista. Si la persona es <strong>invitada en tu nube compartida</strong>, usa su usuario
+          de invitado (el del miembro), no el tuyo como anfitrión. El fondo, avatar y marco solo se muestran si hay
+          relación de nube compartida (anfitrión↔miembro) y ambas partes activaron la opción correspondiente en su
+          perfil (miembro: compartir con anfitriones; anfitrión: compartir con miembros). Úsalo solo con personas de
+          confianza.
         </p>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <Input

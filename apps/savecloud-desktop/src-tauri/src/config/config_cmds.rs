@@ -4,7 +4,8 @@
 //! almacenamiento S3, importación/exportación de estado y manipulaciones
 //! del árbol de juegos.
 
-use crate::commands::sync::api::{api_request, sync_list_remote_saves_for_user};
+use crate::commands::share::invites;
+use crate::commands::sync::api::{api_request, get_download_urls, sync_list_remote_saves_for_user};
 use crate::commands::sync::context::resolve_api_context;
 use crate::config::gamification::GamificationStateDto;
 use crate::config::{self, Config, ConfigDto, ConfiguredGame, GameDto, OperationLogEntryDto};
@@ -87,6 +88,8 @@ pub fn get_config() -> ConfigDto {
             .as_ref()
             .filter(|k| !k.trim().is_empty())
             .map(|_| config::MASKED_STEAM_WEB_API_KEY.to_string()),
+        share_visual_profile_with_hosts: settings.share_visual_profile_with_hosts,
+        share_visual_profile_with_members: settings.share_visual_profile_with_members,
         games: combined
             .games
             .into_iter()
@@ -253,6 +256,22 @@ pub fn set_profile_appearance(
     settings.profile_background = norm(profile_background);
     settings.profile_avatar = norm(profile_avatar);
     settings.profile_frame = norm(profile_frame);
+    config::save_settings(&settings)
+}
+
+/// Permite a los anfitriones de nubes compartidas ver avatar, fondo y marco al cargar tu perfil.
+#[tauri::command]
+pub fn set_share_visual_profile_with_hosts(enabled: bool) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.share_visual_profile_with_hosts = enabled;
+    config::save_settings(&settings)
+}
+
+/// Permite a los miembros de tu nube ver avatar, fondo y marco al cargar tu perfil.
+#[tauri::command]
+pub fn set_share_visual_profile_with_members(enabled: bool) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.share_visual_profile_with_members = enabled;
     config::save_settings(&settings)
 }
 
@@ -641,6 +660,10 @@ pub fn import_config_from_file(path: String, mode: String) -> Result<(), String>
         if imported.profile_frame.is_some() {
             current.profile_frame = imported.profile_frame.clone();
         }
+        current.share_visual_profile_with_hosts =
+            current.share_visual_profile_with_hosts || imported.share_visual_profile_with_hosts;
+        current.share_visual_profile_with_members =
+            current.share_visual_profile_with_members || imported.share_visual_profile_with_members;
         return config::apply_combined_config(&current);
     }
 
@@ -669,47 +692,33 @@ async fn s3_transfer(
     bytes: Option<Vec<u8>>,
     is_upload: bool,
 ) -> Result<Vec<u8>, String> {
-    let endpoint = if is_upload {
-        "/upload-url"
-    } else {
-        "/download-url"
-    };
-    let body = if is_upload {
-        serde_json::json!({ "gameId": "__config__", "filename": filename_or_key })
-    } else {
-        serde_json::json!({ "gameId": "__config__", "key": filename_or_key })
-    };
-
-    let res = api_request(
-        api_base,
-        user_id,
-        api_key,
-        "POST",
-        endpoint,
-        Some(body.to_string().as_bytes()),
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    if !res.status().is_success() {
-        return Err(format!("Socket API rechazó handshake: {}", res.status()));
-    }
-
-    let url_key = if is_upload {
-        "uploadUrl"
-    } else {
-        "downloadUrl"
-    };
-    let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
-    let url = json
-        .get(url_key)
-        .and_then(|v| v.as_str())
-        .ok_or("Payload API sin puntero URL")?;
-
     let client = reqwest::Client::builder()
         .user_agent("SaveCloud-desktop/1.0")
         .build()
         .unwrap();
+
     if is_upload {
+        let body = serde_json::json!({ "gameId": "__config__", "filename": filename_or_key });
+        let res = api_request(
+            api_base,
+            user_id,
+            api_key,
+            "POST",
+            "/upload-url",
+            Some(body.to_string().as_bytes()),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        if !res.status().is_success() {
+            let status = res.status();
+            let detail = res.text().await.unwrap_or_default();
+            return Err(format!("API POST /saves/upload-url: {} {}", status, detail));
+        }
+        let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+        let url = json
+            .get("uploadUrl")
+            .and_then(|v| v.as_str())
+            .ok_or("Payload API sin puntero URL")?;
         let b = bytes.unwrap();
         let put_res = client
             .put(url)
@@ -720,10 +729,21 @@ async fn s3_transfer(
             .await
             .map_err(|e| e.to_string())?;
         if !put_res.status().is_success() {
-            return Err(format!("Bucket abortó el frame PUT: {}", put_res.status()));
+            return Err(format!(
+                "Almacenamiento rechazó la subida (PUT): {}",
+                put_res.status()
+            ));
         }
         Ok(vec![])
     } else {
+        // Usa download-urls (lote) en lugar de download-url: el caso de uso único valida
+        // prefijo userId/gameId y falla para claves de miembros (host::member::...).
+        let items = vec![("__config__".to_string(), filename_or_key.to_string())];
+        let batch = get_download_urls(api_base, user_id, api_key, &items).await?;
+        let url = batch
+            .first()
+            .map(|(u, _)| u.as_str())
+            .ok_or("API no devolvió URL de descarga")?;
         client
             .get(url)
             .send()
@@ -847,6 +867,33 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
     let imported: Config = serde_json::from_slice(&bytes)
         .map_err(|e| format!("El archivo de configuración descargado no es válido: {}", e))?;
 
+    let allow_host_sees_member = imported.share_visual_profile_with_hosts
+        && invites::viewer_is_host_of_member(friend_id).await?;
+    let allow_member_sees_host = imported.share_visual_profile_with_members
+        && invites::viewer_is_member_of_host(friend_id).await?;
+    let allow_visual = allow_host_sees_member || allow_member_sees_host;
+
+    let friend_total_playtime: u64 = imported.games.iter().map(|g| g.playtime_seconds).sum();
+
+    let (profile_background, profile_avatar, profile_frame, total_playtime, share_visual_profile_with_hosts) =
+        if allow_visual {
+            (
+                imported.profile_background.clone(),
+                imported.profile_avatar.clone(),
+                imported.profile_frame.clone(),
+                friend_total_playtime,
+                true,
+            )
+        } else {
+            (
+                None,
+                None,
+                None,
+                0u64,
+                false,
+            )
+        };
+
     Ok(ConfigDto {
         api_base_url: None,
         api_key: None,
@@ -857,11 +904,13 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
         full_backup_streaming: None,
         full_backup_streaming_dry_run: None,
         default_source_download_dir: None,
-        total_playtime: 0,
-        profile_background: None,
-        profile_avatar: None,
-        profile_frame: None,
+        total_playtime,
+        profile_background,
+        profile_avatar,
+        profile_frame,
         steam_web_api_key: None,
+        share_visual_profile_with_hosts,
+        share_visual_profile_with_members: false,
         games: imported
             .games
             .into_iter()

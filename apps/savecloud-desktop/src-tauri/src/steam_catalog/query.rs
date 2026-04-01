@@ -120,8 +120,24 @@ pub fn count_catalog_filtered(
     Ok(count as u64)
 }
 
+/// Fragmento `ORDER BY` compartido entre listado paginado y búsqueda (después de tendencia).
+///
+/// Tras las filas de [`steam_catalog_trending`], el orden ya no es solo `app_id` (eso mezcla IDs altos
+/// recientes con títulos irrelevantes). Priorizamos ficha enriquecida (`details_json`), luego
+/// `enriched_at`, luego actividad del seed, y `app_id` solo como desempate.
+fn order_by_after_trending(table_alias: &str) -> String {
+    format!(
+        "(tr.rank IS NOT NULL) DESC, tr.rank ASC, \
+         ({alias}.details_json IS NOT NULL AND length(trim({alias}.details_json)) > 0) DESC, \
+         {alias}.enriched_at DESC NULLS LAST, \
+         {alias}.last_sync_batch_at DESC, \
+         {alias}.app_id DESC",
+        alias = table_alias
+    )
+}
+
 /// Listado: primero juegos con ranking de tendencia (`steam_catalog_trending`, sync desde la tienda),
-/// luego el resto por `app_id` descendente.
+/// luego el resto con mejor orden que un simple `app_id` descendente (ver [`order_by_after_trending`]).
 pub fn list_catalog_page_filtered(
     conn: &Connection,
     offset: u32,
@@ -137,10 +153,9 @@ pub fn list_catalog_page_filtered(
     let mut params: Vec<String> = Vec::new();
     append_json_genre_filter(&mut sql, &mut params, genres, "a");
     append_json_tag_filter(&mut sql, &mut params, tags, "a");
-    sql.push_str(&format!(
-        " ORDER BY (tr.rank IS NOT NULL) DESC, tr.rank ASC, a.app_id DESC LIMIT {} OFFSET {}",
-        limit, offset
-    ));
+    sql.push_str(" ORDER BY ");
+    sql.push_str(&order_by_after_trending("a"));
+    sql.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
 
     let mut stmt = conn.prepare(&sql)?;
     let rows = if params.is_empty() {
@@ -192,7 +207,9 @@ pub fn search_catalog_filtered(
     let mut params: Vec<String> = vec![pattern];
     append_json_genre_filter(&mut sql, &mut params, genres, "a");
     append_json_tag_filter(&mut sql, &mut params, tags, "a");
-    sql.push_str(" ORDER BY (tr.rank IS NOT NULL) DESC, tr.rank ASC, a.app_id DESC LIMIT ");
+    sql.push_str(" ORDER BY ");
+    sql.push_str(&order_by_after_trending("a"));
+    sql.push_str(" LIMIT ");
     sql.push_str(&limit.to_string());
 
     let mut stmt = conn.prepare(&sql)?;

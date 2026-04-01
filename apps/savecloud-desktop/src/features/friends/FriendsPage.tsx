@@ -54,6 +54,7 @@ export function FriendsPage() {
     setInviteTokenInput,
     inviteBusy,
     pendingInvites,
+    invitesStatsLoading,
     hostMemberships,
     memberMemberships,
     refreshInvitesState,
@@ -66,6 +67,7 @@ export function FriendsPage() {
     activeCloudHostUserId,
     lastCreatedInviteToken,
     handleCopyLastToken,
+    loadFriendProfileById,
   } = useFriendsPage();
 
   const handleAddGamesPress = useCallback(() => setAddFriendGamesOpen(true), [setAddFriendGamesOpen]);
@@ -157,16 +159,46 @@ export function FriendsPage() {
               <span>Buscar por usuario</span>
             </div>
           }>
-          <FriendProfileCard
-            friendIdInput={friendIdInput}
-            onFriendIdChange={setFriendIdInput}
-            onLoadPress={handleLoadFriend}
-            loading={loading}
-            error={error}
-          />
+          <div className="space-y-6">
+            <FriendProfileCard
+              friendIdInput={friendIdInput}
+              onFriendIdChange={setFriendIdInput}
+              onLoadPress={handleLoadFriend}
+              loading={loading}
+              error={error}
+            />
+            {loading ? (
+              <div className="flex min-h-[20vh] flex-col items-center justify-center gap-3">
+                <Spinner size="lg" color="primary" />
+                <p className="text-default-500">Cargando perfil del amigo...</p>
+              </div>
+            ) : null}
+            {friendConfig && !loading ? (
+              <FriendGamesSection
+                userIdDisplay={friendConfig.userId ?? "(sin usuario en config)"}
+                friendVisualProfile={
+                  friendConfig.shareVisualProfileWithHosts
+                    ? {
+                        profileBackground: friendConfig.profileBackground,
+                        profileAvatar: friendConfig.profileAvatar,
+                        profileFrame: friendConfig.profileFrame,
+                        totalPlaytimeSeconds: friendConfig.totalPlaytime ?? 0,
+                      }
+                    : null
+                }
+                summaries={summaries}
+                copyingGameId={copyingGameId}
+                onAddGamesPress={handleAddGamesPress}
+                onCopySaves={handleCopySaves}
+                onUseAsTemplate={handleUseAsTemplate}
+              />
+            ) : null}
+          </div>
         </Tab>
 
-        <Tab key="invites" title={<InvitesTabTitle pendingCount={pendingInvites.length} />}>
+        <Tab
+          key="invites"
+          title={<InvitesTabTitle pendingCount={pendingInvites.length} statsLoading={invitesStatsLoading} />}>
           <FriendsInvitesTab
             inviteeUserIdInput={inviteeUserIdInput}
             setInviteeUserIdInput={setInviteeUserIdInput}
@@ -186,29 +218,14 @@ export function FriendsPage() {
             activeCloudHostUserId={activeCloudHostUserId}
             lastCreatedInviteToken={lastCreatedInviteToken}
             handleCopyLastToken={handleCopyLastToken}
+            invitesStatsLoading={invitesStatsLoading}
+            onViewCloudPeerProfile={(userId) => {
+              setFriendsTab("user");
+              void loadFriendProfileById(userId);
+            }}
           />
         </Tab>
       </Tabs>
-
-      {/* Loading state */}
-      {loading ? (
-        <div className="flex min-h-[20vh] flex-col items-center justify-center gap-3">
-          <Spinner size="lg" color="primary" />
-          <p className="text-default-500">Cargando perfil del amigo...</p>
-        </div>
-      ) : null}
-
-      {/* Friend games */}
-      {friendConfig && !loading ? (
-        <FriendGamesSection
-          userIdDisplay={friendConfig.userId ?? "(sin usuario en config)"}
-          summaries={summaries}
-          copyingGameId={copyingGameId}
-          onAddGamesPress={handleAddGamesPress}
-          onCopySaves={handleCopySaves}
-          onUseAsTemplate={handleUseAsTemplate}
-        />
-      ) : null}
 
       {/* Modals */}
       <AddFriendGamesModal
