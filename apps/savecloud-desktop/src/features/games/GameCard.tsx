@@ -132,10 +132,10 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     startTransition(() => {
       addTransitionType("game-detail");
       navigate(`/games/${game.id}`, {
-        state: { resolvedSteamAppId, from: location.pathname },
+        state: { resolvedSteamAppId, from: `${location.pathname}${location.search}` },
       });
     });
-  }, [navigate, game, location.pathname, onCardNavigate, resolvedSteamAppId]);
+  }, [navigate, game, location.pathname, location.search, onCardNavigate, resolvedSteamAppId]);
 
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
 

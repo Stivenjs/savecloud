@@ -32,6 +32,7 @@ export function SteamCatalogPage() {
     isError,
     errorMsg,
     isPageTransition,
+    isListRefetching,
     facets,
     facetsLoading,
     selectedGenres,
@@ -118,17 +119,27 @@ export function SteamCatalogPage() {
                   {isMatchingPending ? (
                     <p className="text-xs text-default-400">Validando disponibilidad en tus fuentes...</p>
                   ) : null}
-                  <SteamCatalogGrid
-                    items={items}
-                    listKey={
-                      searchMode
-                        ? `search-${debouncedSearch}-${filterSignature}-p${page}`
-                        : `browse-${filterSignature}-p${page}`
-                    }
-                    mediaBySteamAppId={mediaBySteamAppId}
-                    matchByGameName={matchByGameName}
-                    isMatchingPending={isMatchingPending}
-                  />
+                  <div className="relative">
+                    {isListRefetching ? (
+                      <div
+                        className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-large bg-background/60 pt-8 backdrop-blur-[1px]"
+                        aria-busy="true"
+                        aria-label="Actualizando listado">
+                        <Spinner size="md" color="primary" />
+                      </div>
+                    ) : null}
+                    <SteamCatalogGrid
+                      items={items}
+                      listKey={
+                        searchMode
+                          ? `search-${debouncedSearch}-${filterSignature}-p${page}`
+                          : `browse-${filterSignature}-p${page}`
+                      }
+                      mediaBySteamAppId={mediaBySteamAppId}
+                      matchByGameName={matchByGameName}
+                      isMatchingPending={isMatchingPending}
+                    />
+                  </div>
 
                   <SteamCatalogPagination
                     totalPages={totalPages}

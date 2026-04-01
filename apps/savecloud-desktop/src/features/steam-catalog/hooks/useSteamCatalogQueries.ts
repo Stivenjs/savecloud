@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import type { CatalogListItem, CatalogPage } from "@services/tauri";
+import type { CatalogListItem } from "@services/tauri";
 import type { SourceMatchResult } from "@services/tauri";
 import {
   getSteamAppdetailsMediaBatch,
@@ -15,10 +16,21 @@ import {
   STEAM_CATALOG_PAGE_SIZE,
   STEAM_CATALOG_SEARCH_LIMIT,
   STEAM_CATALOG_SEARCH_MIN,
+  STEAM_CATALOG_URL_GENRE,
+  STEAM_CATALOG_URL_PAGE,
+  STEAM_CATALOG_URL_Q,
+  STEAM_CATALOG_URL_TAG,
 } from "@features/steam-catalog/constants";
 
 function selectionKey(labels: string[]): string {
   return [...labels].sort().join("\u0001");
+}
+
+function setRepeatedParam(params: URLSearchParams, key: string, values: string[]) {
+  params.delete(key);
+  for (const v of values) {
+    params.append(key, v);
+  }
 }
 
 /** No llamar a Steam en cada montaje; deduplica llamadas concurrentes (p. ej. React Strict Mode). */
@@ -51,22 +63,54 @@ function syncSteamTrendingIfStale(): Promise<void> {
 }
 
 export function useSteamCatalogQueries() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [page, setPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const skipSearchInputSyncFromDebouncedUrl = useRef(false);
+
+  const page = useMemo(() => {
+    const raw = searchParams.get(STEAM_CATALOG_URL_PAGE);
+    const n = raw ? parseInt(raw, 10) : 1;
+    return Number.isFinite(n) && n >= 1 ? n : 1;
+  }, [searchParams]);
+
+  const selectedGenres = useMemo(() => [...searchParams.getAll(STEAM_CATALOG_URL_GENRE)].sort(), [searchParams]);
+  const selectedTags = useMemo(() => [...searchParams.getAll(STEAM_CATALOG_URL_TAG)].sort(), [searchParams]);
+
+  const [searchInput, setSearchInput] = useState(() => searchParams.get(STEAM_CATALOG_URL_Q) ?? "");
   /** Listado/búsqueda esperan a la sync de tendencia (o al throttle) para no duplicar peticiones. */
   const [trendingReady, setTrendingReady] = useState(false);
 
-  const debounced = useDebouncedValue(searchTerm.trim(), 350);
+  const debounced = useDebouncedValue(searchInput.trim(), 350);
   const searchMode = debounced.length >= STEAM_CATALOG_SEARCH_MIN;
 
   const genresKey = useMemo(() => selectionKey(selectedGenres), [selectedGenres]);
   const tagsKey = useMemo(() => selectionKey(selectedTags), [selectedTags]);
 
   useEffect(() => {
-    setPage(1);
-  }, [searchMode, debounced, genresKey, tagsKey]);
+    if (skipSearchInputSyncFromDebouncedUrl.current) {
+      skipSearchInputSyncFromDebouncedUrl.current = false;
+      return;
+    }
+    setSearchInput(searchParams.get(STEAM_CATALOG_URL_Q) ?? "");
+  }, [searchParams]);
+
+  useEffect(() => {
+    setSearchParams(
+      (prev) => {
+        const currentQ = prev.get(STEAM_CATALOG_URL_Q) ?? "";
+        if (debounced === currentQ) return prev;
+        skipSearchInputSyncFromDebouncedUrl.current = true;
+        const next = new URLSearchParams(prev);
+        if (debounced) {
+          next.set(STEAM_CATALOG_URL_Q, debounced);
+        } else {
+          next.delete(STEAM_CATALOG_URL_Q);
+        }
+        next.set(STEAM_CATALOG_URL_PAGE, "1");
+        return next;
+      },
+      { replace: true }
+    );
+  }, [debounced, setSearchParams]);
 
   const facetsQuery = useQuery({
     queryKey: ["steamCatalog", "facets"],
@@ -96,16 +140,7 @@ export function useSteamCatalogQueries() {
         selectedTags.length ? selectedTags : null
       ),
     enabled: !searchMode && trendingReady,
-    /** Solo conservar lista anterior al cambiar de página; si cambian filtros, no mostrar datos viejos. */
-    placeholderData: (previousData, previousQuery) => {
-      if (previousData == null || !previousQuery) return undefined;
-      const pk = previousQuery.queryKey;
-      if (!Array.isArray(pk) || pk.length < 5) return undefined;
-      const prevG = String(pk[3]);
-      const prevT = String(pk[4]);
-      if (prevG !== genresKey || prevT !== tagsKey) return undefined;
-      return previousData as CatalogPage;
-    },
+    placeholderData: keepPreviousData,
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
   });
@@ -120,6 +155,7 @@ export function useSteamCatalogQueries() {
         selectedTags.length ? selectedTags : null
       ),
     enabled: searchMode && trendingReady,
+    placeholderData: keepPreviousData,
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
   });
@@ -135,9 +171,16 @@ export function useSteamCatalogQueries() {
 
   useEffect(() => {
     if (page > totalPages) {
-      setPage(totalPages);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set(STEAM_CATALOG_URL_PAGE, String(totalPages));
+          return next;
+        },
+        { replace: true }
+      );
     }
-  }, [page, totalPages]);
+  }, [page, totalPages, setSearchParams]);
 
   const items: CatalogListItem[] = useMemo(() => {
     if (searchMode) {
@@ -180,30 +223,86 @@ export function useSteamCatalogQueries() {
     return map;
   }, [matchesQuery.data]);
 
-  const isLoading = !trendingReady || (searchMode ? searchQuery.isPending : browseQuery.isPending);
+  const listQueryPendingNoData = searchMode
+    ? searchQuery.isPending && searchQuery.data === undefined
+    : browseQuery.isPending && browseQuery.data === undefined;
+
+  const isLoading = !trendingReady || listQueryPendingNoData;
   const isError = searchMode ? searchQuery.isError : browseQuery.isError;
   const errorMsg = (searchMode ? searchQuery.error : browseQuery.error) as Error | undefined;
   const isPageTransition = searchMode ? searchQuery.isFetching : browseQuery.isFetching;
+  const isListRefetching =
+    trendingReady && !listQueryPendingNoData && (searchMode ? searchQuery.isFetching : browseQuery.isFetching);
 
-  const toggleGenre = useCallback((label: string) => {
-    setSelectedGenres((prev) => {
-      const i = prev.indexOf(label);
-      if (i >= 0) return prev.filter((_, j) => j !== i);
-      return [...prev, label];
-    });
-  }, []);
+  const setPage = useCallback(
+    (next: number | ((prev: number) => number)) => {
+      setSearchParams(
+        (prev) => {
+          const out = new URLSearchParams(prev);
+          const current = Math.max(1, parseInt(prev.get(STEAM_CATALOG_URL_PAGE) ?? "1", 10) || 1);
+          const resolved = typeof next === "function" ? next(current) : next;
+          out.set(STEAM_CATALOG_URL_PAGE, String(Math.max(1, resolved)));
+          return out;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
 
-  const toggleTag = useCallback((label: string) => {
-    setSelectedTags((prev) => {
-      const i = prev.indexOf(label);
-      if (i >= 0) return prev.filter((_, j) => j !== i);
-      return [...prev, label];
-    });
-  }, []);
+  const toggleGenre = useCallback(
+    (label: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          const genres = [...prev.getAll(STEAM_CATALOG_URL_GENRE)];
+          const i = genres.indexOf(label);
+          if (i >= 0) genres.splice(i, 1);
+          else genres.push(label);
+          setRepeatedParam(next, STEAM_CATALOG_URL_GENRE, genres);
+          next.set(STEAM_CATALOG_URL_PAGE, "1");
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
+
+  const toggleTag = useCallback(
+    (label: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          const tags = [...prev.getAll(STEAM_CATALOG_URL_TAG)];
+          const i = tags.indexOf(label);
+          if (i >= 0) tags.splice(i, 1);
+          else tags.push(label);
+          setRepeatedParam(next, STEAM_CATALOG_URL_TAG, tags);
+          next.set(STEAM_CATALOG_URL_PAGE, "1");
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
 
   const clearFilters = useCallback(() => {
-    setSelectedGenres([]);
-    setSelectedTags([]);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete(STEAM_CATALOG_URL_GENRE);
+        next.delete(STEAM_CATALOG_URL_TAG);
+        next.set(STEAM_CATALOG_URL_PAGE, "1");
+        return next;
+      },
+      { replace: true }
+    );
+  }, [setSearchParams]);
+
+  const setSearchTerm = useCallback((value: string) => {
+    setSearchInput(value);
   }, []);
 
   const filterSignature = `${genresKey}|${tagsKey}`;
@@ -215,7 +314,7 @@ export function useSteamCatalogQueries() {
   const totalForRange = searchMode ? totalSearch : totalBrowse;
 
   return {
-    searchTerm,
+    searchTerm: searchInput,
     setSearchTerm,
     debouncedSearch: debounced,
     searchMode,
@@ -236,6 +335,7 @@ export function useSteamCatalogQueries() {
     isError,
     errorMsg,
     isPageTransition,
+    isListRefetching,
     facets: facetsQuery.data ?? null,
     facetsLoading: facetsQuery.isPending,
     selectedGenres,
