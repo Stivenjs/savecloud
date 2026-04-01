@@ -1,4 +1,5 @@
 import { PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import { createHash } from "crypto";
 import type { BatchLineV1, SteamSeedStateV1 } from "@interfaces/lambda/steam-seed/types";
 import {
   batchKey,
@@ -27,6 +28,11 @@ function envInt(name: string, fallback: number): number {
 function envStr(name: string, fallback: string): string {
   const v = process.env[name];
   return v === undefined || v === "" ? fallback : v;
+}
+
+function prioritySignature(text: string | null): string | null {
+  if (text === null) return null;
+  return createHash("sha1").update(text).digest("hex");
 }
 
 function jitterMs(base: number): number {
@@ -106,6 +112,7 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
   wroteBatchKey?: string;
   done: boolean;
   reason?: "backoff_active" | "no_manifest_parts" | "catalog_complete" | "batch_written";
+  priorityChangedDetected?: boolean;
 }> {
   const { s3, bucket, seedPrefix } = params;
 
@@ -124,21 +131,49 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
 
   const stateBefore = await loadSteamSeedState(s3, bucket, stateKey);
   let state: SteamSeedStateV1 = { ...stateBefore };
+  let priorityChangedDetected = false;
 
   if (state.backoffUntil) {
     const until = new Date(state.backoffUntil).getTime();
     if (Number.isFinite(until) && until > Date.now()) {
-      return { seedPrefix, stateBefore, stateAfter: state, done: false, reason: "backoff_active" };
+      return {
+        seedPrefix,
+        stateBefore,
+        stateAfter: state,
+        done: false,
+        reason: "backoff_active",
+        priorityChangedDetected,
+      };
     }
   }
 
   const priorityText = await tryGetObjectText(s3, bucket, priorityKey);
   const priorityLines = priorityText === null ? null : splitLines(priorityText);
+  const currentPrioritySignature = prioritySignature(priorityText);
+
+  // Si cambió el archivo de prioridad, rearmamos cursor para consumirlo desde cero.
+  if (state.prioritySignature !== currentPrioritySignature) {
+    priorityChangedDetected = true;
+    state = {
+      ...state,
+      prioritySignature: currentPrioritySignature,
+      priorityLine: 0,
+      priorityDone: !priorityLines || priorityLines.length === 0,
+    };
+    await saveSteamSeedState(s3, bucket, stateKey, state);
+  }
 
   const partIndices = await listManifestPartIndices(s3, bucket, manifestPrefix);
   if (partIndices.length === 0) {
     // Sin manifest, no hay nada que hacer.
-    return { seedPrefix, stateBefore, stateAfter: state, done: true, reason: "no_manifest_parts" };
+    return {
+      seedPrefix,
+      stateBefore,
+      stateAfter: state,
+      done: true,
+      reason: "no_manifest_parts",
+      priorityChangedDetected,
+    };
   }
 
   const done = await isStreamDone(s3, bucket, seedPrefix, state, priorityLines, partIndices);
@@ -147,7 +182,14 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
       state = { ...state, catalogComplete: true };
       await saveSteamSeedState(s3, bucket, stateKey, state);
     }
-    return { seedPrefix, stateBefore, stateAfter: state, done: true, reason: "catalog_complete" };
+    return {
+      seedPrefix,
+      stateBefore,
+      stateAfter: state,
+      done: true,
+      reason: "catalog_complete",
+      priorityChangedDetected,
+    };
   }
 
   const { appIds, stateAfter } = await collectAppIds(
@@ -160,7 +202,7 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
     batchSize
   );
   if (appIds.length === 0) {
-    return { seedPrefix, stateBefore, stateAfter: state, done: true };
+    return { seedPrefix, stateBefore, stateAfter: state, done: true, priorityChangedDetected };
   }
 
   const lines: string[] = [];
@@ -250,5 +292,13 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
   };
   await saveSteamSeedState(s3, bucket, stateKey, state);
 
-  return { seedPrefix, stateBefore, stateAfter: state, wroteBatchKey: wroteKey, done: false, reason: "batch_written" };
+  return {
+    seedPrefix,
+    stateBefore,
+    stateAfter: state,
+    wroteBatchKey: wroteKey,
+    done: false,
+    reason: "batch_written",
+    priorityChangedDetected,
+  };
 }

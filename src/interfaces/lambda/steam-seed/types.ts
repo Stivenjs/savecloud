@@ -2,6 +2,8 @@ export type SteamSeedStateV1 = {
   version: 1;
   priorityLine: number;
   priorityDone: boolean;
+  /** Fingerprint del contenido de `priority_appids.jsonl` para detectar cambios. */
+  prioritySignature: string | null;
   manifestPart: number;
   manifestLine: number;
   batchSeq: number;
