@@ -45,6 +45,7 @@ struct SteamSeedBatchLine {
 pub struct SteamSeedExportResultDto {
     pub app_ids_exported: u32,
     pub parts_uploaded: u32,
+    pub priority_ids_uploaded: u32,
 }
 
 #[derive(Serialize)]
@@ -56,6 +57,23 @@ pub struct SteamSeedImportResultDto {
 
 fn list_all_catalog_app_ids(conn: &Connection) -> Result<Vec<u32>, rusqlite::Error> {
     let mut stmt = conn.prepare("SELECT app_id FROM steam_catalog_apps ORDER BY app_id ASC")?;
+    let rows = stmt.query_map([], |row| row.get::<_, i64>(0))?;
+    let mut out = Vec::new();
+    for r in rows {
+        let id_i64 = r?;
+        if id_i64 > 0 {
+            out.push(id_i64 as u32);
+        }
+    }
+    Ok(out)
+}
+
+fn list_trending_app_ids(conn: &Connection) -> Result<Vec<u32>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "SELECT app_id FROM steam_catalog_trending
+         WHERE app_id > 0
+         ORDER BY rank ASC, app_id ASC",
+    )?;
     let rows = stmt.query_map([], |row| row.get::<_, i64>(0))?;
     let mut out = Vec::new();
     for r in rows {
@@ -136,16 +154,18 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
     part_size: Option<u32>,
 ) -> Result<SteamSeedExportResultDto, String> {
     let ctx = resolve_api_context()?;
-    let db = db.inner().clone();
-    let app_ids = tokio::task::spawn_blocking(move || db.with_conn(list_all_catalog_app_ids))
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e: SqliteError| e.to_string())?;
+    let db_manifest = db.inner().clone();
+    let app_ids =
+        tokio::task::spawn_blocking(move || db_manifest.with_conn(list_all_catalog_app_ids))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e: SqliteError| e.to_string())?;
 
     if app_ids.is_empty() {
         return Ok(SteamSeedExportResultDto {
             app_ids_exported: 0,
             parts_uploaded: 0,
+            priority_ids_uploaded: 0,
         });
     }
 
@@ -201,9 +221,62 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
         offset = end;
     }
 
+    // Tendencias de la tienda: se suben como prioridad para adelantarlas en el worker cloud.
+    let db_trending = db.inner().clone();
+    let trending_ids =
+        tokio::task::spawn_blocking(move || db_trending.with_conn(list_trending_app_ids))
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e: SqliteError| e.to_string())?;
+
+    let priority_url_res = api_request(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        "POST",
+        "/steam-seed/priority/upload-url",
+        None,
+    )
+    .await
+    .map_err(|e| format!("priority/upload-url: {}", e))?;
+    if !priority_url_res.status().is_success() {
+        return Err(format!(
+            "API steam-seed priority upload-url: {} {}",
+            priority_url_res.status(),
+            priority_url_res.text().await.unwrap_or_default()
+        ));
+    }
+    let priority_upload: SteamSeedUploadUrlResponse =
+        priority_url_res.json().await.map_err(|e| e.to_string())?;
+    let priority_payload = if trending_ids.is_empty() {
+        String::new()
+    } else {
+        trending_ids
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n"
+    };
+    let put_priority = API_CLIENT
+        .put(&priority_upload.upload_url)
+        .header("Content-Type", "text/plain; charset=utf-8")
+        .body(priority_payload)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !put_priority.status().is_success() {
+        return Err(format!(
+            "S3 PUT priority appids: {} {}",
+            put_priority.status(),
+            put_priority.text().await.unwrap_or_default()
+        ));
+    }
+
     Ok(SteamSeedExportResultDto {
         app_ids_exported: app_ids.len() as u32,
         parts_uploaded,
+        priority_ids_uploaded: trending_ids.len() as u32,
     })
 }
 
