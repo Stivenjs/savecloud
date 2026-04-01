@@ -433,7 +433,7 @@ pub async fn sync_rename_game_in_cloud(
 }
 
 async fn copy_friend_saves_with_plan_impl(
-    friend_user_id: &str,
+    _friend_user_id: &str,
     game_id: &str,
     plan: Vec<CopyFriendFilePlanDto>,
 ) -> Result<SyncResultDto, String> {
@@ -454,7 +454,7 @@ async fn copy_friend_saves_with_plan_impl(
 
     let download_urls = match get_download_urls(
         &ctx.base_url,
-        friend_user_id,
+        &ctx.user_id,
         &ctx.api_key,
         &download_requests,
     )
