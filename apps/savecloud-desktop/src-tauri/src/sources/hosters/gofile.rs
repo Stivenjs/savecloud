@@ -1,4 +1,4 @@
-//! Resolución de enlaces Gofile 
+//! Resolución de enlaces Gofile
 
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -25,7 +25,7 @@ fn time_slot_now() -> u64 {
     now / GOFILE_TIME_SLOT_SECS
 }
 
-/// Genera `X-Website-Token` (SHA-256 hex) 
+/// Genera `X-Website-Token` (SHA-256 hex)
 pub(crate) fn generate_website_token(account_token: &str) -> String {
     generate_website_token_at(account_token, time_slot_now())
 }
@@ -98,7 +98,6 @@ async fn ensure_account_token() -> Result<String, HosterError> {
         .header("Origin", "https://gofile.io")
         .header("Referer", "https://gofile.io/")
         .header("Accept", "*/*")
-        .header("Accept-Encoding", "gzip")
         .header("Connection", "keep-alive")
         .send()
         .await?;
