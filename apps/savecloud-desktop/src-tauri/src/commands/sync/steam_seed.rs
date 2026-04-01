@@ -78,15 +78,56 @@ fn apply_seed_updates(
     let mut updated: u32 = 0;
     {
         let mut stmt = tx.prepare(
-            "UPDATE steam_catalog_apps SET details_json = ?1, enriched_at = unixepoch() WHERE app_id = ?2",
+            "INSERT INTO steam_catalog_apps (
+                app_id,
+                name,
+                name_normalized,
+                details_json,
+                enriched_at,
+                last_sync_batch_at
+             )
+             VALUES (?1, ?2, ?3, ?4, unixepoch(), unixepoch())
+             ON CONFLICT(app_id) DO UPDATE SET
+                details_json = excluded.details_json,
+                enriched_at = unixepoch(),
+                name = CASE
+                    WHEN steam_catalog_apps.name IS NULL OR steam_catalog_apps.name = '' THEN excluded.name
+                    ELSE steam_catalog_apps.name
+                END,
+                name_normalized = CASE
+                    WHEN steam_catalog_apps.name_normalized IS NULL OR steam_catalog_apps.name_normalized = '' THEN excluded.name_normalized
+                    ELSE steam_catalog_apps.name_normalized
+                END",
         )?;
         for (app_id, json) in updates {
-            let n = stmt.execute(rusqlite::params![json, app_id])?;
+            let inferred_name =
+                infer_name_from_details_json(json).unwrap_or_else(|| format!("App {}", app_id));
+            let inferred_name_norm = normalize_display_name_for_seed(&inferred_name);
+            let n = stmt.execute(rusqlite::params![
+                app_id,
+                inferred_name,
+                inferred_name_norm,
+                json
+            ])?;
             updated = updated.saturating_add(n as u32);
         }
     }
     tx.commit()?;
     Ok(updated)
+}
+
+fn infer_name_from_details_json(details_json: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(details_json).ok()?;
+    let name = v.get("name")?.as_str()?.trim();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.to_string())
+    }
+}
+
+fn normalize_display_name_for_seed(name: &str) -> String {
+    name.trim().to_lowercase()
 }
 
 #[tauri::command]
