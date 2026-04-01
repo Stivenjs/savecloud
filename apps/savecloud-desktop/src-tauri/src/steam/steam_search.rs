@@ -19,6 +19,8 @@ use crate::sqlite::error::SqliteError;
 use crate::sqlite::AppDb;
 use crate::steam::appdetails::fetch_steam_app_details_from_store;
 use crate::steam::appdetails::fetch_steam_appdetails_media_from_store;
+use crate::steam::appdetails::parse_media_from_data;
+use crate::steam::appdetails::steam_app_details_from_store_data;
 use crate::steam_cache::{
     normalize_steam_app_id, normalize_steam_appdetails_media, steam_api_cache,
 };
@@ -141,27 +143,52 @@ fn load_catalog_media_map(
         };
         if let Ok(details) = serde_json::from_str::<SteamAppDetails>(&json) {
             out.insert(id.clone(), details.media);
+            continue;
+        }
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&json) {
+            if v.as_object().is_some() {
+                out.insert(id.clone(), parse_media_from_data(&v));
+            }
         }
     }
     Ok(out)
 }
 
-async fn fetch_single_app_name(app_id: &str) -> Option<(String, String)> {
-    let url = format!(
-        "https://store.steampowered.com/api/appdetails?appids={}",
-        app_id
-    );
-
-    let res = STEAM_CLIENT.get(&url).send().await.ok()?;
-    let data: serde_json::Value = res.json().await.ok()?;
-
-    let entry = data.get(app_id)?;
-    if entry.get("success")?.as_bool()? {
-        let name = entry.get("data")?.get("name")?.as_str()?;
-        return Some((app_id.to_string(), name.to_string()));
+/// Nombres presentes en `steam_appdetails_media_cache` (p. ej. tras import seed o fetch previo).
+fn load_names_from_media_cache(
+    conn: &Connection,
+    app_ids: &[String],
+) -> Result<HashMap<String, String>, rusqlite::Error> {
+    let pids: Vec<i64> = app_ids.iter().filter_map(|s| s.parse().ok()).collect();
+    if pids.is_empty() {
+        return Ok(HashMap::new());
     }
+    let placeholders = pids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT app_id, media_json FROM steam_appdetails_media_cache WHERE app_id IN ({placeholders})"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let mut rows = stmt.query(rusqlite::params_from_iter(pids.iter().copied()))?;
+    let mut out = HashMap::new();
+    while let Some(row) = rows.next()? {
+        let pid: i64 = row.get(0)?;
+        let json: String = row.get(1)?;
+        if let Ok(media) = serde_json::from_str::<SteamAppdetailsMedia>(&json) {
+            let name = media.name.trim();
+            if !name.is_empty() {
+                out.insert(pid.to_string(), name.to_string());
+            }
+        }
+    }
+    Ok(out)
+}
 
-    None
+async fn fetch_name_and_media_from_store(app_id: &str) -> Option<(String, SteamAppdetailsMedia)> {
+    let media = fetch_steam_appdetails_media_from_store(app_id).await.ok()?;
+    if media.name.trim().is_empty() {
+        return None;
+    }
+    Some((app_id.to_string(), media))
 }
 
 /// Nombres ya presentes en catálogo local; evita golpear Store innecesariamente.
@@ -283,10 +310,25 @@ async fn get_steam_app_names_batch_impl(
         return HashMap::new();
     }
 
+    let db_for_persist = db.clone();
     let db_conn = db;
     let ids_for_db = valid_ids.clone();
     let from_db = tokio::task::spawn_blocking(move || {
-        db_conn.with_conn(|c| load_catalog_names_map(c, &ids_for_db))
+        db_conn.with_conn(|c| {
+            let mut m = load_catalog_names_map(c, &ids_for_db)?;
+            let missing: Vec<String> = ids_for_db
+                .iter()
+                .filter(|id| !m.contains_key(*id))
+                .cloned()
+                .collect();
+            if !missing.is_empty() {
+                let from_media = load_names_from_media_cache(c, &missing)?;
+                for (k, v) in from_media {
+                    m.insert(k, v);
+                }
+            }
+            Ok(m)
+        })
     })
     .await
     .ok()
@@ -305,7 +347,7 @@ async fn get_steam_app_names_batch_impl(
 
     let stream = futures_util::stream::iter(ids_to_fetch.into_iter().map(|app_id| async move {
         for _ in 0..2 {
-            if let Some(result) = fetch_single_app_name(&app_id).await {
+            if let Some(result) = fetch_name_and_media_from_store(&app_id).await {
                 return Some(result);
             }
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
@@ -314,10 +356,20 @@ async fn get_steam_app_names_batch_impl(
     }))
     .buffer_unordered(STEAM_CONCURRENCY_LIMIT);
 
-    let results: Vec<Option<(String, String)>> = stream.collect().await;
+    let results: Vec<Option<(String, SteamAppdetailsMedia)>> = stream.collect().await;
 
-    for (id, name) in results.into_iter().flatten() {
-        final_map.insert(id, name);
+    let mut to_persist: Vec<(String, SteamAppdetailsMedia)> = Vec::new();
+    for item in results.into_iter().flatten() {
+        let (id, media) = item;
+        final_map.insert(id.clone(), media.name.clone());
+        to_persist.push((id, media));
+    }
+
+    if !to_persist.is_empty() {
+        let _ = tokio::task::spawn_blocking(move || {
+            db_for_persist.with_conn(|c| upsert_persistent_media_cache_batch(c, &to_persist))
+        })
+        .await;
     }
 
     final_map
@@ -622,12 +674,16 @@ pub async fn get_steam_app_details(
     .map_err(|e: SqliteError| e.to_string())?;
 
     if let Some(details_json) = from_sqlite {
-        match serde_json::from_str::<SteamAppDetails>(&details_json) {
-            Ok(details) => {
+        if let Ok(details) = serde_json::from_str::<SteamAppDetails>(&details_json) {
+            steam_api_cache().insert_details(app_id.clone(), details.clone());
+            return Ok(details);
+        }
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&details_json) {
+            if v.as_object().is_some() {
+                let details = steam_app_details_from_store_data(&v);
                 steam_api_cache().insert_details(app_id.clone(), details.clone());
                 return Ok(details);
             }
-            Err(_) => {}
         }
     }
 
@@ -686,5 +742,20 @@ mod media_cache_tests {
         upsert_persistent_media_cache_batch(&conn, &[("440".to_string(), m)]).expect("upsert");
         let map = load_combined_media_from_db(&conn, &["440".to_string()]).expect("combined");
         assert_eq!(map.get("440").unwrap().name, "FromDisk");
+    }
+
+    #[test]
+    fn catalog_media_map_accepts_store_data_json_from_seed() {
+        let conn = Connection::open_in_memory().expect("in memory");
+        run_migrations(&conn).expect("migrate");
+        let raw = r#"{"name":"Seed Game","header_image":"https://cdn.example/header.jpg","screenshots":[]}"#;
+        conn.execute(
+            "INSERT INTO steam_catalog_apps (app_id, name, name_normalized, details_json, last_sync_batch_at)
+             VALUES (999001, 'x', 'x', ?1, unixepoch())",
+            [raw],
+        )
+        .expect("insert");
+        let map = load_catalog_media_map(&conn, &["999001".to_string()]).expect("load");
+        assert_eq!(map.get("999001").unwrap().name, "Seed Game");
     }
 }

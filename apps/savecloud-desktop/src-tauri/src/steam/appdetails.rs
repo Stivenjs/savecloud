@@ -3,6 +3,8 @@
 //! Centraliza la lógica compartida entre [`crate::steam::steam_search`] y el catálogo local
 //! ([`crate::steam_catalog::enrichment`]).
 
+use std::time::Duration;
+
 use crate::network::STEAM_CLIENT;
 use crate::steam_cache::{
     normalize_steam_app_details, normalize_steam_appdetails_media, steam_api_cache,
@@ -14,6 +16,8 @@ const STEAM_APPDETAILS_FILTERS_FULL: &str =
     "basic,developers,publishers,genres,categories,release_date,screenshots,movies";
 const STEAM_APPDETAILS_FILTERS_WITHOUT_MEDIA: &str =
     "basic,developers,publishers,genres,categories,release_date";
+
+const APPDETAILS_429_MAX_ATTEMPTS: u32 = 5;
 
 /// Realiza una petición a `appdetails` y retorna el campo `data`.
 ///
@@ -27,21 +31,35 @@ pub async fn fetch_appdetails_data(
         "https://store.steampowered.com/api/appdetails?appids={app_id}&l={lang}&filters={filters}"
     );
 
-    let res = STEAM_CLIENT
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| format!("Request Error: {e}"))?;
+    let mut attempt: u32 = 0;
+    let body_text = loop {
+        let res = STEAM_CLIENT
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Request Error: {e}"))?;
 
-    let status = res.status();
-    if !status.is_success() {
-        if status.as_u16() == 429 {
-            eprintln!("Límite de Steam (429) alcanzado en app_id: {app_id}");
+        let status = res.status();
+        let code = status.as_u16();
+
+        if code == 429 {
+            eprintln!("Límite de Steam (429) en appdetails, app_id={app_id}, intento {attempt}");
+            attempt += 1;
+            if attempt >= APPDETAILS_429_MAX_ATTEMPTS {
+                return Err(format!("HTTP Error: {status}"));
+            }
+            let backoff_ms = 500_u64 * 2_u64.pow(attempt.min(5));
+            tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+            continue;
         }
-        return Err(format!("HTTP Error: {status}"));
-    }
 
-    let body_text = res.text().await.unwrap_or_default();
+        if !status.is_success() {
+            return Err(format!("HTTP Error: {status}"));
+        }
+
+        break res.text().await.unwrap_or_default();
+    };
+
     if body_text.trim().is_empty() || body_text == "null" {
         return Err("Empty response".into());
     }
@@ -137,6 +155,49 @@ pub fn parse_media_from_data(data: &serde_json::Value) -> SteamAppdetailsMedia {
     })
 }
 
+/// Construye [`SteamAppDetails`] desde el objeto `data` crudo de la Store (`appdetails`),
+/// el mismo formato que el worker de steam-seed persiste en `details_json`.
+#[must_use]
+pub fn steam_app_details_from_store_data(data: &serde_json::Value) -> SteamAppDetails {
+    let str_field = |key: &str| -> String {
+        data.get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_owned()
+    };
+
+    let release_date = data
+        .get("release_date")
+        .and_then(|rd| rd.get("date").and_then(|v| v.as_str()).map(String::from));
+
+    let pc_req = data.get("pc_requirements");
+    let pc_requirements_minimum = pc_req
+        .and_then(|r| r.get("minimum"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let pc_requirements_recommended = pc_req
+        .and_then(|r| r.get("recommended"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    let media = parse_media_from_data(data);
+
+    normalize_steam_app_details(SteamAppDetails {
+        name: str_field("name"),
+        short_description: str_field("short_description"),
+        detailed_description: str_field("detailed_description"),
+        header_image: str_field("header_image"),
+        developers: extract_plain_string_array(data, "developers"),
+        publishers: extract_plain_string_array(data, "publishers"),
+        genres: extract_keyed_string_array(data, "genres", "description"),
+        categories: extract_keyed_string_array(data, "categories", "description"),
+        release_date,
+        pc_requirements_minimum,
+        pc_requirements_recommended,
+        media,
+    })
+}
+
 fn extract_plain_string_array(value: &serde_json::Value, field: &str) -> Vec<String> {
     value
         .get(field)
@@ -191,47 +252,12 @@ pub async fn fetch_steam_app_details_from_store(app_id: &str) -> Result<SteamApp
         .await?
         .ok_or_else(|| "Juego no encontrado en Steam".to_string())?;
 
-    let str_field = |key: &str| -> String {
-        data.get(key)
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
-            .to_owned()
-    };
-
-    let release_date = data
-        .get("release_date")
-        .and_then(|rd| rd.get("date").and_then(|v| v.as_str()).map(String::from));
-
-    let pc_req = data.get("pc_requirements");
-    let pc_requirements_minimum = pc_req
-        .and_then(|r| r.get("minimum"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
-    let pc_requirements_recommended = pc_req
-        .and_then(|r| r.get("recommended"))
-        .and_then(|v| v.as_str())
-        .map(String::from);
-
-    let media = if let Some(cached) = cached_media {
-        normalize_steam_appdetails_media(cached)
+    let mut details = steam_app_details_from_store_data(&data);
+    if let Some(cached) = cached_media {
+        details.media = normalize_steam_appdetails_media(cached);
     } else {
-        let parsed = parse_media_from_data(&data);
-        steam_api_cache().insert_media(app_id.to_owned(), parsed.clone());
-        parsed
-    };
+        steam_api_cache().insert_media(app_id.to_owned(), details.media.clone());
+    }
 
-    Ok(normalize_steam_app_details(SteamAppDetails {
-        name: str_field("name"),
-        short_description: str_field("short_description"),
-        detailed_description: str_field("detailed_description"),
-        header_image: str_field("header_image"),
-        developers: extract_plain_string_array(&data, "developers"),
-        publishers: extract_plain_string_array(&data, "publishers"),
-        genres: extract_keyed_string_array(&data, "genres", "description"),
-        categories: extract_keyed_string_array(&data, "categories", "description"),
-        release_date,
-        pc_requirements_minimum,
-        pc_requirements_recommended,
-        media,
-    }))
+    Ok(normalize_steam_app_details(details))
 }
