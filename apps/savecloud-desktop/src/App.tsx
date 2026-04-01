@@ -1,6 +1,7 @@
 import { MemoryRouter } from "react-router-dom";
 import { AppLayout, TransferOverlayRouter } from "@components/layout";
-import { NAV_ITEMS, AppRoutes } from "@components/navigation/PageContent";
+import { AppRoutes } from "@components/navigation/PageContent";
+import { NAV_ITEMS } from "@components/navigation/navItems";
 import { TrayActionsListener } from "@components/sync/TrayActionsListener";
 import { UnsyncedSavesModalWithProgress } from "@features/games";
 import { useAppInitialization } from "@hooks/useAppInitialization";
