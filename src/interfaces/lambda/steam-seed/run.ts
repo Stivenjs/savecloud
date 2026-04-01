@@ -6,6 +6,7 @@ import {
   STEAM_SEED_PRIORITY_KEY,
   STEAM_SEED_STATE_KEY,
 } from "@interfaces/lambda/steam-seed/layout";
+import { processWithConcurrencyLimit } from "@interfaces/lambda/steam-seed/concurrency";
 import { collectAppIds, isStreamDone } from "@interfaces/lambda/steam-seed/cursor";
 import { listManifestPartIndices, splitLines } from "@interfaces/lambda/steam-seed/manifest";
 import { tryGetObjectText } from "@interfaces/lambda/steam-seed/s3";
@@ -26,6 +27,69 @@ function envInt(name: string, fallback: number): number {
 function envStr(name: string, fallback: string): string {
   const v = process.env[name];
   return v === undefined || v === "" ? fallback : v;
+}
+
+function jitterMs(base: number): number {
+  const spread = Math.max(1, Math.floor(base * 0.35));
+  const min = Math.max(0, base - spread);
+  const max = base + spread;
+  return Math.floor(min + Math.random() * (max - min + 1));
+}
+
+type FetchWithRetryResult = {
+  appId: number;
+  fetchedAt: string;
+  httpStatus: number;
+  steamSuccess: boolean | null;
+  data?: unknown;
+  error?: string;
+  rateLimited: boolean;
+};
+
+/**
+ * Llamada a Steam con retry simple para 429 (backoff exponencial + jitter).
+ */
+async function fetchWithRetry(params: {
+  appId: number;
+  lang: string;
+  filters: string;
+  maxRetries429: number;
+  retryBaseDelayMs: number;
+}): Promise<FetchWithRetryResult> {
+  const { appId, lang, filters, maxRetries429, retryBaseDelayMs } = params;
+  let attempt = 0;
+
+  while (true) {
+    const res = await fetchSteamAppDetails(appId, lang, filters);
+    const fetchedAt = new Date().toISOString();
+
+    if (res.httpStatus !== 429) {
+      return {
+        appId,
+        fetchedAt,
+        httpStatus: res.httpStatus,
+        steamSuccess: res.steamSuccess ?? null,
+        data: res.data,
+        error: res.error,
+        rateLimited: false,
+      };
+    }
+
+    if (attempt >= maxRetries429) {
+      return {
+        appId,
+        fetchedAt,
+        httpStatus: 429,
+        steamSuccess: null,
+        error: "rate_limited",
+        rateLimited: true,
+      };
+    }
+
+    const backoffMs = retryBaseDelayMs * 2 ** attempt;
+    await sleep(jitterMs(backoffMs));
+    attempt += 1;
+  }
 }
 
 /**
@@ -50,6 +114,9 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
   const backoffMinutes = envInt("STEAM_BACKOFF_MINUTES", 30);
   const lang = envStr("STEAM_LANG", "spanish");
   const filters = envStr("STEAM_FILTERS", DEFAULT_STEAM_FILTERS);
+  const maxConcurrency = envInt("STEAM_MAX_CONCURRENCY", 4);
+  const retry429 = envInt("STEAM_429_RETRIES", 2);
+  const retryBaseDelayMs = envInt("STEAM_429_BASE_DELAY_MS", 1500);
 
   const stateKey = `${seedPrefix}/${STEAM_SEED_STATE_KEY}`;
   const manifestPrefix = `${seedPrefix}/`;
@@ -100,32 +167,58 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
   let steamOk = 0;
   let steamNotFound = 0;
   let httpErrors = 0;
+  let sawRateLimit = false;
 
-  for (const appId of appIds) {
-    await sleep(delayMs);
-    const r = await fetchSteamAppDetails(appId, lang, filters);
-    const fetchedAt = new Date().toISOString();
+  const results = await processWithConcurrencyLimit(appIds, maxConcurrency, async (appId) => {
+    await sleep(jitterMs(delayMs));
+    return fetchWithRetry({
+      appId,
+      lang,
+      filters,
+      maxRetries429: retry429,
+      retryBaseDelayMs,
+    });
+  });
 
-    if (r.httpStatus === 429) {
-      const until = new Date(Date.now() + backoffMinutes * 60_000).toISOString();
-      state = { ...state, backoffUntil: until, totals: { ...state.totals, httpErrors: state.totals.httpErrors + 1 } };
-      await saveSteamSeedState(s3, bucket, stateKey, state);
-      return { seedPrefix, stateBefore, stateAfter: state, done: false };
+  for (const r of results) {
+    if (r.rateLimited) {
+      sawRateLimit = true;
+      httpErrors += 1;
+      const line: BatchLineV1 = {
+        appId: r.appId,
+        fetchedAt: r.fetchedAt,
+        httpStatus: r.httpStatus,
+        steamSuccess: null,
+        error: r.error ?? "rate_limited",
+      };
+      lines.push(JSON.stringify(line));
+      continue;
     }
 
     if (r.steamSuccess === true) {
       steamOk += 1;
-      const line: BatchLineV1 = { appId, fetchedAt, httpStatus: r.httpStatus, steamSuccess: true, data: r.data };
+      const line: BatchLineV1 = {
+        appId: r.appId,
+        fetchedAt: r.fetchedAt,
+        httpStatus: r.httpStatus,
+        steamSuccess: true,
+        data: r.data,
+      };
       lines.push(JSON.stringify(line));
     } else if (r.steamSuccess === false) {
       steamNotFound += 1;
-      const line: BatchLineV1 = { appId, fetchedAt, httpStatus: r.httpStatus, steamSuccess: false };
+      const line: BatchLineV1 = {
+        appId: r.appId,
+        fetchedAt: r.fetchedAt,
+        httpStatus: r.httpStatus,
+        steamSuccess: false,
+      };
       lines.push(JSON.stringify(line));
     } else {
       httpErrors += 1;
       const line: BatchLineV1 = {
-        appId,
-        fetchedAt,
+        appId: r.appId,
+        fetchedAt: r.fetchedAt,
         httpStatus: r.httpStatus,
         steamSuccess: null,
         error: r.error ?? "http_error",
@@ -147,7 +240,7 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
   state = {
     ...stateAfter,
     batchSeq: state.batchSeq + 1,
-    backoffUntil: null,
+    backoffUntil: sawRateLimit ? new Date(Date.now() + backoffMinutes * 60_000).toISOString() : null,
     totals: {
       processed: state.totals.processed + appIds.length,
       steamOk: state.totals.steamOk + steamOk,

@@ -93,8 +93,11 @@ functions:
     reservedConcurrency: 1
     environment:
       STEAM_SEED_PREFIX: steam-seed
-      STEAM_DELAY_MS: "2000"
-      STEAM_BATCH_SIZE: "8"
+      STEAM_DELAY_MS: "1200"
+      STEAM_BATCH_SIZE: "60"
+      STEAM_MAX_CONCURRENCY: "4"
+      STEAM_429_RETRIES: "2"
+      STEAM_429_BASE_DELAY_MS: "1500"
       STEAM_BACKOFF_MINUTES: "30"
       STEAM_LANG: spanish
       STEAM_FILTERS: ${env:STEAM_FILTERS, self:custom.steamSeedFiltersDefault}
