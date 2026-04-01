@@ -11,7 +11,18 @@ import {
   Switch,
 } from "@heroui/react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FolderOpen, ImageIcon, Layers, Link2, MonitorPlay, Save, Trophy, User } from "lucide-react";
+import {
+  CircleHelp,
+  FolderOpen,
+  ImageIcon,
+  Layers,
+  Link2,
+  MonitorPlay,
+  Save,
+  Shield,
+  Trophy,
+  User,
+} from "lucide-react";
 import { ProfileHeroBackground } from "@features/profile/PublicProfileHero";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Config } from "@app-types/config";
@@ -223,35 +234,6 @@ export function ProfileDrawer({
         </DrawerHeader>
 
         <DrawerBody className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
-          <p className="text-[11px] leading-snug text-default-500">
-            Enlaces https o archivos locales. Las rutas locales dependen del archivo en disco.
-          </p>
-
-          <div className="flex flex-col gap-2 rounded-lg border border-default-200 bg-default-50/60 p-3 dark:bg-default-100/5">
-            <Switch
-              isSelected={shareVisualWithHosts}
-              onValueChange={setShareVisualWithHosts}
-              size="sm"
-              classNames={{ label: "text-sm text-foreground" }}>
-              Compartir perfil visual con anfitriones de nubes compartidas
-            </Switch>
-            <p className="text-[11px] leading-snug text-default-500">
-              Si lo activas, quienes te invitaron como miembro podrán ver fondo, avatar y marco al cargar tu usuario en
-              Amigos (no aplica a cualquier persona que escriba tu ID).
-            </p>
-            <Switch
-              isSelected={shareVisualWithMembers}
-              onValueChange={setShareVisualWithMembers}
-              size="sm"
-              classNames={{ label: "text-sm text-foreground" }}>
-              Compartir perfil visual con miembros de tu nube
-            </Switch>
-            <p className="text-[11px] leading-snug text-default-500">
-              Si eres anfitrión y lo activas, quienes están en tu nube como miembros podrán ver tu perfil visual al
-              cargar tu usuario en Amigos.
-            </p>
-          </div>
-
           <div className="rounded-lg border border-default-200 bg-default-50/60 p-3 dark:bg-default-100/5">
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
@@ -298,7 +280,7 @@ export function ProfileDrawer({
           <Accordion
             isCompact
             selectionMode="multiple"
-            defaultExpandedKeys={["bg"]}
+            defaultExpandedKeys={[]}
             className="px-0"
             itemClasses={{
               base: "px-0",
@@ -306,6 +288,54 @@ export function ProfileDrawer({
               trigger: "py-2",
               content: "pb-3 pt-0",
             }}>
+            <AccordionItem
+              key="help"
+              aria-label="Ayuda"
+              title={
+                <span className="flex items-center gap-2">
+                  <CircleHelp size={15} className="text-default-500" />
+                  Ayuda
+                </span>
+              }>
+              <p className="text-[11px] leading-snug text-default-500">
+                Puedes usar enlaces https o rutas a archivos locales. Las rutas locales dependen del archivo en disco;
+                si mueves o borras el archivo, el perfil dejará de mostrarlo.
+              </p>
+            </AccordionItem>
+            <AccordionItem
+              key="sharing"
+              aria-label="Privacidad en la nube"
+              title={
+                <span className="flex items-center gap-2">
+                  <Shield size={15} className="text-default-500" />
+                  Privacidad en la nube
+                </span>
+              }>
+              <div className="flex flex-col gap-2">
+                <Switch
+                  isSelected={shareVisualWithHosts}
+                  onValueChange={setShareVisualWithHosts}
+                  size="sm"
+                  classNames={{ label: "text-sm text-foreground" }}>
+                  Compartir perfil visual con anfitriones de nubes compartidas
+                </Switch>
+                <p className="text-[11px] leading-snug text-default-500">
+                  Si lo activas, quienes te invitaron como miembro podrán ver fondo, avatar y marco al cargar tu usuario
+                  en Amigos (no aplica a cualquier persona que escriba tu ID).
+                </p>
+                <Switch
+                  isSelected={shareVisualWithMembers}
+                  onValueChange={setShareVisualWithMembers}
+                  size="sm"
+                  classNames={{ label: "text-sm text-foreground" }}>
+                  Compartir perfil visual con miembros de tu nube
+                </Switch>
+                <p className="text-[11px] leading-snug text-default-500">
+                  Si eres anfitrión y lo activas, quienes están en tu nube como miembros podrán ver tu perfil visual al
+                  cargar tu usuario en Amigos.
+                </p>
+              </div>
+            </AccordionItem>
             <AccordionItem
               key="bg"
               aria-label="Fondo"
