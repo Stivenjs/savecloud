@@ -235,7 +235,7 @@ export function GamesPage() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-4">
+        <div className=" flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <GamesPageHeader
             hasSyncConfig={hasSyncConfig}
             gamesCount={config?.games?.length ?? 0}
@@ -254,7 +254,8 @@ export function GamesPage() {
             onRefreshPress={handleRefresh}
             isRefreshing={refreshing}
           />
-          <div className="shrink-0">
+
+          <div className="w-full xl:w-auto">
             <GamesStatsCompact
               gamesCount={config?.games?.length ?? 0}
               lastSyncAt={lastSyncAt}
