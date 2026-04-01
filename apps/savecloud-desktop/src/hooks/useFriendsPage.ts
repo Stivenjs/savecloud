@@ -264,10 +264,7 @@ export function useFriendsPage() {
       dispatch({ type: "SET_FRIEND_DATA", config: cfg, saves });
     } catch (e) {
       dispatch({ type: "SET_FRIEND_DATA", config: null, saves: [] });
-      dispatch({
-        type: "SET_ERROR",
-        payload: e instanceof Error ? e.message : "No se pudo cargar el perfil del amigo.",
-      });
+      dispatch({ type: "SET_ERROR", payload: getUnknownErrorMessage(e) });
     } finally {
       dispatch({ type: "SET_LOADING", payload: false });
     }
