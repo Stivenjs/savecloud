@@ -16,7 +16,7 @@
 
 use futures_util::StreamExt;
 use std::fs;
-use std::io::BufWriter;
+use std::io::{BufWriter, ErrorKind};
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::SyncIoBridge;
@@ -125,6 +125,77 @@ pub async fn list_cloud_backups(
 /// Cada cuántos bytes emitimos progreso de descarga del empaquetado.
 const FULL_BACKUP_DOWNLOAD_EMIT_BYTES: u64 = 256 * 1024;
 
+/// Quita solo lectura para poder borrar/sobrescribir (Unity y otros suelen dejar `.json` read-only).
+#[cfg(windows)]
+fn strip_readonly_for_overwrite(path: &Path) {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileAttributesW, SetFileAttributesW, FILE_ATTRIBUTE_READONLY, INVALID_FILE_ATTRIBUTES,
+    };
+
+    let wide: Vec<u16> = OsStr::new(path).encode_wide().chain(Some(0)).collect();
+    unsafe {
+        let attrs = GetFileAttributesW(wide.as_ptr());
+        if attrs == INVALID_FILE_ATTRIBUTES {
+            return;
+        }
+        if attrs & FILE_ATTRIBUTE_READONLY != 0 {
+            let _ = SetFileAttributesW(wide.as_ptr(), attrs & !FILE_ATTRIBUTE_READONLY);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn strip_readonly_for_overwrite(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(meta) = fs::metadata(path) {
+        if meta.is_file() {
+            let mut perm = meta.permissions();
+            perm.set_mode(perm.mode() | 0o200);
+            let _ = fs::set_permissions(path, perm);
+        }
+    }
+}
+
+/// Borra un archivo existente antes de que `tar` escriba de nuevo (evita fallos en Windows con atributo solo lectura).
+fn remove_existing_file_for_unpack(target_path: &Path) -> Result<(), String> {
+    if !target_path.exists() || !target_path.is_file() {
+        return Ok(());
+    }
+    strip_readonly_for_overwrite(target_path);
+    fs::remove_file(target_path).map_err(|e| {
+        format!(
+            "No se pudo sobrescribir \"{}\": {}. Cierra el juego si está en ejecución (el archivo puede estar bloqueado) e inténtalo de nuevo.",
+            target_path.display(),
+            e
+        )
+    })
+}
+
+fn unpack_extraction_hint(e: &std::io::Error) -> &'static str {
+    match e.kind() {
+        ErrorKind::PermissionDenied => {
+            " Cierra el juego, revisa que el antivirus no bloquee la carpeta y vuelve a intentar."
+        }
+        ErrorKind::AlreadyExists => {
+            " Si el error persiste, borra manualmente el archivo indicado e inténtalo de nuevo."
+        }
+        _ => {
+            let msg = e.to_string().to_lowercase();
+            if msg.contains("being used")
+                || msg.contains("en uso")
+                || msg.contains("denied")
+                || msg.contains("acc")
+            {
+                " Cierra el juego y cualquier programa que use esa carpeta, luego reintenta."
+            } else {
+                ""
+            }
+        }
+    }
+}
+
 fn unpack_archive_resilient<R: std::io::Read>(
     archive: &mut tar::Archive<R>,
     dest_dir: &Path,
@@ -142,7 +213,7 @@ fn unpack_archive_resilient<R: std::io::Read>(
         let target_path = dest_dir.join(&rel_path);
 
         if entry.header().entry_type().is_file() && target_path.exists() {
-            let _ = fs::remove_file(&target_path);
+            remove_existing_file_for_unpack(&target_path)?;
         }
 
         match entry.unpack_in(dest_dir) {
@@ -154,10 +225,12 @@ fn unpack_archive_resilient<R: std::io::Read>(
                 ));
             }
             Err(e) => {
+                let hint = unpack_extraction_hint(&e);
                 return Err(format!(
-                    "Fallo en extracción [{}]: {}",
+                    "Fallo en extracción [{}]: {}{}",
                     target_path.display(),
-                    e
+                    e,
+                    hint
                 ));
             }
         }
