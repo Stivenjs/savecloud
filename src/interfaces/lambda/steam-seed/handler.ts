@@ -329,7 +329,15 @@ export async function handler(_event: unknown, context: Context): Promise<Record
     return { ok: false, error: "BUCKET_NAME missing" };
   }
 
-  const seedPrefix = (process.env.STEAM_SEED_PREFIX ?? "steam-seed").replace(/\/$/, "");
+  const basePrefix = (process.env.STEAM_SEED_PREFIX ?? "steam-seed").replace(/\/$/, "");
+  const ownerId =
+    typeof _event === "object" &&
+    _event !== null &&
+    "ownerId" in _event &&
+    typeof (_event as { ownerId?: unknown }).ownerId === "string"
+      ? (_event as { ownerId: string }).ownerId.trim()
+      : "";
+  const seedPrefix = ownerId ? `${basePrefix}/${ownerId}` : basePrefix;
   const manifestPrefix = `${seedPrefix}/`;
   const stateKey = `${seedPrefix}/${STEAM_SEED_STATE_KEY}`;
   const priorityKey = `${seedPrefix}/${STEAM_SEED_PRIORITY_KEY}`;

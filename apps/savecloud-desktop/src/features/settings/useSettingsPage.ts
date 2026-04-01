@@ -16,6 +16,9 @@ import {
   importFriendConfig,
   syncSteamCatalog,
   resetSteamCatalogSync,
+  exportSteamSeedManifestToCloud,
+  resetCloudSeedState,
+  importCloudSeedBatchesToSqlite,
   getDefaultSourceDownloadDir,
   setDefaultSourceDownloadDir,
 } from "@services/tauri";
@@ -46,6 +49,7 @@ type SettingsPageState = {
   restoreConfirmOpen: boolean;
   resetSteamCatalogConfirmOpen: boolean;
   steamCatalogBusy: boolean;
+  steamSeedBusy: boolean;
   sourcesBusy: boolean;
   sourceUrl: string;
   defaultSourceDownloadDir: string;
@@ -85,6 +89,7 @@ type SettingsPageAction =
   | { type: "SET_RESTORE_CONFIRM_OPEN"; payload: boolean }
   | { type: "SET_RESET_STEAM_CATALOG_CONFIRM_OPEN"; payload: boolean }
   | { type: "SET_STEAM_CATALOG_BUSY"; payload: boolean }
+  | { type: "SET_STEAM_SEED_BUSY"; payload: boolean }
   | { type: "SET_SOURCES_BUSY"; payload: boolean }
   | { type: "SET_SOURCE_URL"; payload: string }
   | { type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR"; payload: string };
@@ -109,6 +114,7 @@ const initialState: SettingsPageState = {
   restoreConfirmOpen: false,
   resetSteamCatalogConfirmOpen: false,
   steamCatalogBusy: false,
+  steamSeedBusy: false,
   sourcesBusy: false,
   sourceUrl: "",
   defaultSourceDownloadDir: "",
@@ -172,6 +178,8 @@ function settingsPageReducer(state: SettingsPageState, action: SettingsPageActio
       return { ...state, resetSteamCatalogConfirmOpen: action.payload };
     case "SET_STEAM_CATALOG_BUSY":
       return { ...state, steamCatalogBusy: action.payload };
+    case "SET_STEAM_SEED_BUSY":
+      return { ...state, steamSeedBusy: action.payload };
     case "SET_SOURCES_BUSY":
       return { ...state, sourcesBusy: action.payload };
     case "SET_SOURCE_URL":
@@ -475,6 +483,49 @@ export function useSettingsPage() {
     }
   };
 
+  const handleExportSteamSeedManifest = async () => {
+    dispatch({ type: "SET_STEAM_SEED_BUSY", payload: true });
+    try {
+      const result = await exportSteamSeedManifestToCloud();
+      toastSuccess(
+        "Manifest publicado en nube",
+        `AppIDs: ${result.appIdsExported}. Partes subidas: ${result.partsUploaded}.`
+      );
+    } catch (e) {
+      toastError("Error al exportar manifest", e instanceof Error ? e.message : String(e));
+    } finally {
+      dispatch({ type: "SET_STEAM_SEED_BUSY", payload: false });
+    }
+  };
+
+  const handleResetCloudSeed = async () => {
+    dispatch({ type: "SET_STEAM_SEED_BUSY", payload: true });
+    try {
+      await resetCloudSeedState();
+      toastSuccess("Seed reiniciado", "Se restableció state.json del seed cloud.");
+    } catch (e) {
+      toastError("Error al resetear seed", e instanceof Error ? e.message : String(e));
+    } finally {
+      dispatch({ type: "SET_STEAM_SEED_BUSY", payload: false });
+    }
+  };
+
+  const handleImportCloudSeedToSqlite = async () => {
+    dispatch({ type: "SET_STEAM_SEED_BUSY", payload: true });
+    try {
+      const result = await importCloudSeedBatchesToSqlite();
+      toastSuccess(
+        "Seed importado a SQLite",
+        `Batches: ${result.batchesProcessed}. Filas actualizadas: ${result.rowsUpdated}.`
+      );
+      queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
+    } catch (e) {
+      toastError("Error al importar seed", e instanceof Error ? e.message : String(e));
+    } finally {
+      dispatch({ type: "SET_STEAM_SEED_BUSY", payload: false });
+    }
+  };
+
   const handleImportSourceByUrl = async (mode: "merge" | "replace") => {
     if (!state.sourceUrl.trim()) return;
     dispatch({ type: "SET_SOURCES_BUSY", payload: true });
@@ -554,6 +605,9 @@ export function useSettingsPage() {
     handleSyncSteamCatalog,
     handleResetSteamCatalogSync,
     confirmResetSteamCatalogSync,
+    handleExportSteamSeedManifest,
+    handleResetCloudSeed,
+    handleImportCloudSeedToSqlite,
     openCreateConfigModal,
     setCreateApiBaseUrl: (v: string) => dispatch({ type: "SET_CREATE_API_BASE_URL", payload: v }),
     setCreateApiKey: (v: string) => dispatch({ type: "SET_CREATE_API_KEY", payload: v }),

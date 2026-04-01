@@ -24,6 +24,7 @@ import { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveC
 import { SetCloudGameShareUseCase } from "@application/use-cases/SetCloudGameShareUseCase";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import type { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
+import type { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
 import { registerSavesRoutes } from "@interfaces/http/routes/saves.routes";
 import { registerShareRoutes } from "@interfaces/http/routes/share.routes";
 import { registerNotificationRoutes } from "@interfaces/http/routes/notifications.routes";
@@ -32,6 +33,7 @@ import { verifyUserAccessToken } from "@shared/accessToken";
 
 export interface AppDependencies {
   saveRepository: SaveRepository;
+  steamSeedRepository?: S3SteamSeedRepository;
   cloudInviteRepository?: CloudInviteRepository;
   shareTokenStore?: ShareTokenS3;
   notificationStore?: S3NotificationStore;
@@ -104,6 +106,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     getUploadPartUrlsUseCase,
     completeMultipartUploadUseCase,
     abortMultipartUploadUseCase,
+    steamSeedRepository: deps.steamSeedRepository,
     resolveCloudStorageScopeUseCase,
     cloudInviteRepository: deps.cloudInviteRepository,
   });

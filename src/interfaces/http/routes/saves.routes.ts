@@ -26,6 +26,12 @@ import {
   type CompleteMultipartBody,
   AbortMultipartSchema,
   type AbortMultipartBody,
+  SteamSeedManifestUploadUrlSchema,
+  type SteamSeedManifestUploadUrlBody,
+  SteamSeedBatchDownloadUrlSchema,
+  type SteamSeedBatchDownloadUrlBody,
+  SteamSeedBatchesQuerySchema,
+  type SteamSeedBatchesQuery,
 } from "@interfaces/schema/saves";
 import type { GetUploadUrlUseCase } from "@application/use-cases/GetUploadUrlUseCase";
 import type { GetUploadUrlsUseCase } from "@application/use-cases/GetUploadUrlsUseCase";
@@ -45,11 +51,18 @@ import type { CompleteMultipartUploadUseCase } from "@application/use-cases/Comp
 import type { AbortMultipartUploadUseCase } from "@application/use-cases/AbortMultipartUploadUseCase";
 import type { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
+import type { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
 import { getUserId, getErrorMessage } from "@shared/utils";
 import { TtlCache } from "@shared/ttlCache";
 
 const savesSummaryCache = new TtlCache<string, unknown[]>({ ttlMs: 20_000, maxEntries: 200 });
 const CLOUD_HOST_HEADER = "x-cloud-host-user-id";
+
+function ownerIdFromStorageUserId(storageUserId: string): string {
+  const marker = "::member::";
+  const idx = storageUserId.indexOf(marker);
+  return idx > 0 ? storageUserId.slice(0, idx) : storageUserId;
+}
 
 function invalidateSavesCaches(userId: string, gameId?: string): void {
   savesSummaryCache.delete(userId);
@@ -92,6 +105,7 @@ export async function registerSavesRoutes(
     getUploadPartUrlsUseCase: GetUploadPartUrlsUseCase;
     completeMultipartUploadUseCase: CompleteMultipartUploadUseCase;
     abortMultipartUploadUseCase: AbortMultipartUploadUseCase;
+    steamSeedRepository?: S3SteamSeedRepository;
     resolveCloudStorageScopeUseCase?: ResolveCloudStorageScopeUseCase;
     cloudInviteRepository?: CloudInviteRepository;
   }
@@ -452,6 +466,73 @@ export async function registerSavesRoutes(
       } catch (err) {
         request.log.error({ err }, "multipart/abort failed");
         return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
+      }
+    }
+  );
+
+  app.post<{ Body: SteamSeedManifestUploadUrlBody }>(
+    "/saves/steam-seed/manifest/upload-url",
+    { schema: { body: SteamSeedManifestUploadUrlSchema } },
+    async (request, reply) => {
+      if (!deps.steamSeedRepository) {
+        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
+      }
+      const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
+      const result = await deps.steamSeedRepository.getManifestUploadUrl(ownerId, request.body.partIndex);
+      return reply.send(result);
+    }
+  );
+
+  app.post("/saves/steam-seed/priority/upload-url", async (request, reply) => {
+    if (!deps.steamSeedRepository) {
+      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
+    }
+    const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
+    const result = await deps.steamSeedRepository.getPriorityUploadUrl(ownerId);
+    return reply.send(result);
+  });
+
+  app.post("/saves/steam-seed/reset", async (request, reply) => {
+    if (!deps.steamSeedRepository) {
+      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
+    }
+    const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
+    await deps.steamSeedRepository.resetState(ownerId);
+    return reply.status(204).send();
+  });
+
+  app.get<{ Querystring: SteamSeedBatchesQuery }>(
+    "/saves/steam-seed/batches",
+    { schema: { querystring: SteamSeedBatchesQuerySchema } },
+    async (request, reply) => {
+      if (!deps.steamSeedRepository) {
+        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
+      }
+      const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
+      const maxKeys = request.query.maxKeys ?? 200;
+      const out = await deps.steamSeedRepository.listBatchKeys(ownerId, maxKeys, request.query.cursor);
+      return reply.send(out);
+    }
+  );
+
+  app.post<{ Body: SteamSeedBatchDownloadUrlBody }>(
+    "/saves/steam-seed/batch/download-url",
+    { schema: { body: SteamSeedBatchDownloadUrlSchema } },
+    async (request, reply) => {
+      if (!deps.steamSeedRepository) {
+        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
+      }
+      try {
+        const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
+        const downloadUrl = await deps.steamSeedRepository.getBatchDownloadUrl(ownerId, request.body.key.trim());
+        return reply.send({ downloadUrl });
+      } catch (err) {
+        const message = getErrorMessage(err);
+        if (message.startsWith("Invalid key:")) {
+          return reply.status(400).send({ error: "Bad Request", message });
+        }
+        request.log.error({ err }, "steam-seed batch download-url failed");
+        return reply.status(500).send({ error: "Internal Server Error", message });
       }
     }
   );
