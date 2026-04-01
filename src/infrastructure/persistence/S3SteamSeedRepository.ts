@@ -1,6 +1,11 @@
 import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { batchKey } from "@interfaces/lambda/steam-seed/layout";
 import { PRESIGN_EXPIRES_IN_SECONDS } from "@infrastructure/persistence/S3SaveRepository";
+
+function isNoSuchKey(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { name?: string }).name === "NoSuchKey";
+}
 
 type SeedState = {
   version: 1;
@@ -98,6 +103,38 @@ export class S3SteamSeedRepository {
         ContentType: "application/json",
       })
     );
+  }
+
+  /**
+   * Lee `state.json` del worker y devuelve el último batch escrito (clave S3 completa).
+   * `batchSeq` en el estado es el siguiente índice a escribir; el último archivo es `batchSeq - 1`.
+   */
+  async getSteamSeedStatus(ownerId: string): Promise<{
+    lastBatchKey: string | null;
+    batchSeq: number;
+    catalogComplete: boolean;
+  }> {
+    const stateKey = `${this.basePrefix(ownerId)}state.json`;
+    try {
+      const out = await this.s3.send(new GetObjectCommand({ Bucket: this.bucketName, Key: stateKey }));
+      const raw = await out.Body?.transformToString();
+      if (!raw) {
+        return { lastBatchKey: null, batchSeq: 0, catalogComplete: false };
+      }
+      const parsed = JSON.parse(raw) as { batchSeq?: unknown; catalogComplete?: unknown };
+      const batchSeqRaw = parsed.batchSeq;
+      const batchSeq =
+        typeof batchSeqRaw === "number" && Number.isFinite(batchSeqRaw) ? Math.max(0, Math.floor(batchSeqRaw)) : 0;
+      const catalogComplete = Boolean(parsed.catalogComplete);
+      const prefix = this.basePrefix(ownerId);
+      const lastBatchKey = batchSeq > 0 ? `${prefix}${batchKey(batchSeq - 1)}` : null;
+      return { lastBatchKey, batchSeq, catalogComplete };
+    } catch (e) {
+      if (isNoSuchKey(e)) {
+        return { lastBatchKey: null, batchSeq: 0, catalogComplete: false };
+      }
+      throw e;
+    }
   }
 
   async listBatchKeys(

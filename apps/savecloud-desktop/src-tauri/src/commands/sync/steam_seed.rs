@@ -18,6 +18,7 @@ struct SteamSeedImportState {
     strategy: String,
     cursor_last_key: Option<String>,
     newest_watermark: Option<String>,
+    max_imported_batch_key: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -145,6 +146,70 @@ pub struct SteamSeedImportRunResultDto {
     pub trending_priority_entries: u32,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SteamSeedRemoteStatusDto {
+    last_batch_key: Option<String>,
+    #[allow(dead_code)]
+    batch_seq: u32,
+    #[allow(dead_code)]
+    catalog_complete: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteamSeedFreshnessDto {
+    pub status: String,
+    pub cloud_last_batch_key: Option<String>,
+    pub local_max_batch_key: Option<String>,
+    pub error: Option<String>,
+}
+
+fn effective_local_max_imported(state: &SteamSeedImportState) -> Option<String> {
+    state
+        .max_imported_batch_key
+        .clone()
+        .or_else(|| state.cursor_last_key.clone())
+}
+
+/// Prefijo `steam-seed/{ownerId}` antes de `/batches/` (misma convención que S3).
+fn steam_seed_scope_prefix(key: &str) -> Option<&str> {
+    key.find("/batches/").map(|i| &key[..i])
+}
+
+/// Solo compara con el máximo local si pertenece al **mismo** prefijo S3 que la nube actual.
+/// Así un invitado que cambia de nube propia al host (o entre hosts) no mezcla claves ajenas.
+fn local_max_if_same_scope_as_cloud<'a>(
+    cloud_last: Option<&'a str>,
+    local_max: Option<&'a str>,
+) -> Option<&'a str> {
+    let cloud = cloud_last.filter(|s| !s.is_empty())?;
+    let local = local_max?;
+    match (
+        steam_seed_scope_prefix(cloud),
+        steam_seed_scope_prefix(local),
+    ) {
+        (Some(pc), Some(pl)) if pc == pl => Some(local),
+        _ => None,
+    }
+}
+
+fn compute_steam_seed_freshness_status(
+    cloud_last: Option<&str>,
+    local_max: Option<&str>,
+) -> &'static str {
+    let cloud = match cloud_last {
+        None => return "no_cloud_batches",
+        Some(s) if s.is_empty() => return "no_cloud_batches",
+        Some(s) => s,
+    };
+    match local_max {
+        None => "no_local_import",
+        Some(l) if cloud > l => "stale",
+        Some(_) => "up_to_date",
+    }
+}
+
 /// Límite de vueltas por ejecución para evitar bucles ante respuestas anómalas de la API.
 const STEAM_SEED_IMPORT_MAX_ROUNDS: u32 = 5000;
 
@@ -255,13 +320,14 @@ fn parse_import_strategy(s: Option<&str>) -> Result<String, String> {
 
 fn load_or_init_import_state(conn: &Connection) -> Result<SteamSeedImportState, rusqlite::Error> {
     let result = conn.query_row(
-        "SELECT strategy, cursor_last_key, newest_watermark FROM steam_seed_import_state WHERE id = 1",
+        "SELECT strategy, cursor_last_key, newest_watermark, max_imported_batch_key FROM steam_seed_import_state WHERE id = 1",
         [],
         |row| {
             Ok(SteamSeedImportState {
                 strategy: row.get(0)?,
                 cursor_last_key: row.get(1)?,
                 newest_watermark: row.get(2)?,
+                max_imported_batch_key: row.get(3)?,
             })
         },
     );
@@ -280,11 +346,12 @@ fn save_import_state(
     state: &SteamSeedImportState,
 ) -> Result<(), rusqlite::Error> {
     conn.execute(
-        "UPDATE steam_seed_import_state SET strategy = ?1, cursor_last_key = ?2, newest_watermark = ?3, updated_at = unixepoch() WHERE id = 1",
+        "UPDATE steam_seed_import_state SET strategy = ?1, cursor_last_key = ?2, newest_watermark = ?3, max_imported_batch_key = ?4, updated_at = unixepoch() WHERE id = 1",
         rusqlite::params![
             state.strategy,
             state.cursor_last_key,
-            state.newest_watermark
+            state.newest_watermark,
+            state.max_imported_batch_key,
         ],
     )?;
     Ok(())
@@ -626,6 +693,7 @@ async fn import_cloud_seed_one_round(
     if import_state.strategy != requested_strategy {
         import_state.cursor_last_key = None;
         import_state.newest_watermark = None;
+        import_state.max_imported_batch_key = None;
     }
 
     let to_process = match requested_strategy {
@@ -672,6 +740,17 @@ async fn import_cloud_seed_one_round(
         _ => {}
     }
     import_state.strategy = requested_strategy.to_string();
+
+    let batch_max = to_process
+        .iter()
+        .max()
+        .expect("to_process no vacío")
+        .clone();
+    import_state.max_imported_batch_key = Some(match import_state.max_imported_batch_key.clone() {
+        None => batch_max,
+        Some(prev) if batch_max > prev => batch_max,
+        Some(prev) => prev,
+    });
 
     let db = db.clone();
     let rows_updated = tokio::task::spawn_blocking(move || {
@@ -789,4 +868,176 @@ pub async fn sync_import_cloud_seed_run_until_done(
         rows_updated: total_rows,
         trending_priority_entries: trending_priority_entries as u32,
     })
+}
+
+/// Frescura del seed vs SQLite. Usa el mismo [`resolve_api_context`] e [`super::api::api_request`] que el resto de
+/// steam-seed (incluye `x-cloud-host-user-id` cuando hay nube compartida activa), así que invitados ven el estado del
+/// anfitrión. La comparación local solo cuenta si el prefijo `steam-seed/{owner}` coincide con la respuesta actual.
+#[tauri::command]
+pub async fn sync_get_steam_seed_freshness(
+    db: State<'_, AppDb>,
+) -> Result<SteamSeedFreshnessDto, String> {
+    let ctx = match resolve_api_context() {
+        Ok(c) => c,
+        Err(e) => {
+            return Ok(SteamSeedFreshnessDto {
+                status: "unknown".to_string(),
+                cloud_last_batch_key: None,
+                local_max_batch_key: None,
+                error: Some(e),
+            });
+        }
+    };
+
+    let db_load = db.inner().clone();
+    let local_max = match tokio::task::spawn_blocking(move || {
+        db_load.with_conn(|conn| {
+            let s = load_or_init_import_state(conn)?;
+            Ok::<_, rusqlite::Error>(effective_local_max_imported(&s))
+        })
+    })
+    .await
+    {
+        Ok(Ok(max)) => max,
+        Ok(Err(e)) => {
+            return Ok(SteamSeedFreshnessDto {
+                status: "unknown".to_string(),
+                cloud_last_batch_key: None,
+                local_max_batch_key: None,
+                error: Some(e.to_string()),
+            });
+        }
+        Err(e) => {
+            return Ok(SteamSeedFreshnessDto {
+                status: "unknown".to_string(),
+                cloud_last_batch_key: None,
+                local_max_batch_key: None,
+                error: Some(e.to_string()),
+            });
+        }
+    };
+
+    let list_res = match api_request(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        "GET",
+        "/steam-seed/status",
+        None,
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return Ok(SteamSeedFreshnessDto {
+                status: "unknown".to_string(),
+                cloud_last_batch_key: None,
+                local_max_batch_key: local_max.clone(),
+                error: Some(e),
+            });
+        }
+    };
+
+    if !list_res.status().is_success() {
+        let status = list_res.status();
+        let body = list_res.text().await.unwrap_or_default();
+        return Ok(SteamSeedFreshnessDto {
+            status: "unknown".to_string(),
+            cloud_last_batch_key: None,
+            local_max_batch_key: local_max,
+            error: Some(format!("steam-seed/status: {} {}", status, body)),
+        });
+    }
+
+    let remote: SteamSeedRemoteStatusDto = match list_res.json().await {
+        Ok(x) => x,
+        Err(e) => {
+            return Ok(SteamSeedFreshnessDto {
+                status: "unknown".to_string(),
+                cloud_last_batch_key: None,
+                local_max_batch_key: local_max,
+                error: Some(e.to_string()),
+            });
+        }
+    };
+
+    let cloud_last = remote.last_batch_key.clone();
+    let local_for_compare =
+        local_max_if_same_scope_as_cloud(cloud_last.as_deref(), local_max.as_deref());
+    let status =
+        compute_steam_seed_freshness_status(cloud_last.as_deref(), local_for_compare).to_string();
+
+    Ok(SteamSeedFreshnessDto {
+        status,
+        cloud_last_batch_key: cloud_last,
+        local_max_batch_key: local_max,
+        error: None,
+    })
+}
+
+#[cfg(test)]
+mod freshness_tests {
+    use super::compute_steam_seed_freshness_status;
+    use super::local_max_if_same_scope_as_cloud;
+
+    #[test]
+    fn scope_mismatch_ignores_local_max() {
+        let cloud = Some("steam-seed/hostOwner/batches/00000002.jsonl");
+        let local_other = Some("steam-seed/selfUser/batches/00000099.jsonl");
+        assert_eq!(local_max_if_same_scope_as_cloud(cloud, local_other), None);
+        assert_eq!(
+            compute_steam_seed_freshness_status(
+                cloud,
+                local_max_if_same_scope_as_cloud(cloud, local_other)
+            ),
+            "no_local_import"
+        );
+    }
+
+    #[test]
+    fn same_scope_compares_lex() {
+        let cloud = "steam-seed/hostOwner/batches/00000002.jsonl";
+        let local = "steam-seed/hostOwner/batches/00000001.jsonl";
+        assert_eq!(
+            local_max_if_same_scope_as_cloud(Some(cloud), Some(local)),
+            Some(local)
+        );
+        assert_eq!(
+            compute_steam_seed_freshness_status(
+                Some(cloud),
+                local_max_if_same_scope_as_cloud(Some(cloud), Some(local))
+            ),
+            "stale"
+        );
+    }
+
+    #[test]
+    fn lex_order_detects_stale() {
+        let k_old = "steam-seed/u/batches/00000001.jsonl";
+        let k_new = "steam-seed/u/batches/00000002.jsonl";
+        assert_eq!(
+            compute_steam_seed_freshness_status(Some(k_new), Some(k_old)),
+            "stale"
+        );
+        assert_eq!(
+            compute_steam_seed_freshness_status(Some(k_old), Some(k_new)),
+            "up_to_date"
+        );
+        assert_eq!(
+            compute_steam_seed_freshness_status(Some(k_old), Some(k_old)),
+            "up_to_date"
+        );
+    }
+
+    #[test]
+    fn no_cloud_no_local_variants() {
+        assert_eq!(
+            compute_steam_seed_freshness_status(None, Some("x")),
+            "no_cloud_batches"
+        );
+        assert_eq!(
+            compute_steam_seed_freshness_status(Some("steam-seed/u/batches/00000001.jsonl"), None),
+            "no_local_import"
+        );
+    }
 }

@@ -41,6 +41,11 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         conn.pragma_update(None, "user_version", "7")?;
     }
 
+    if version < 8 {
+        conn.execute_batch(include_str!("sql/008_steam_seed_max_imported.sql"))?;
+        conn.pragma_update(None, "user_version", "8")?;
+    }
+
     Ok(())
 }
 

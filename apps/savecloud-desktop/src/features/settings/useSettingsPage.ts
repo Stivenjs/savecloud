@@ -28,6 +28,7 @@ import {
 import { importSourceFromFile, importSourceFromUrl, listSourcesSummary } from "@services/tauri/sources.service";
 import { MASKED_CONFIG_SECRET } from "@/constants/configMask";
 import { useConfig } from "@hooks/useConfig";
+import { STEAM_SEED_FRESHNESS_QUERY_KEY } from "@features/steam-catalog/hooks/useSteamSeedFreshness";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastError, toastSuccess } from "@utils/toast";
 import { notifyTest } from "@utils/notification";
@@ -520,6 +521,7 @@ export function useSettingsPage() {
         "Progreso en la nube reiniciado",
         "La próxima descarga volverá a empezar desde el principio (no borra lo que ya tienes guardado aquí)."
       );
+      queryClient.invalidateQueries({ queryKey: STEAM_SEED_FRESHNESS_QUERY_KEY });
     } catch (e) {
       toastError("No se pudo reiniciar", e instanceof Error ? e.message : String(e));
     } finally {
@@ -543,6 +545,7 @@ export function useSettingsPage() {
         `Se actualizaron ${result.rowsUpdated.toLocaleString()} juegos en ${result.batchesProcessed} lotes (${result.rounds} pasadas).${trending}`
       );
       queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
+      queryClient.invalidateQueries({ queryKey: STEAM_SEED_FRESHNESS_QUERY_KEY });
     } catch (e) {
       toastError("No se pudo descargar la información", e instanceof Error ? e.message : String(e));
     } finally {

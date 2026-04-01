@@ -1,4 +1,5 @@
 import { Button, Card, CardBody, Divider, Progress, Skeleton } from "@heroui/react";
+import { SteamSeedFreshnessBanner } from "@features/steam-catalog/components/SteamSeedFreshnessBanner";
 import { FileJson, Cloud, HardDrive, FolderOpen, Link2, Library, Zap } from "lucide-react";
 import type { SteamCatalogSyncProgressPayload, SteamSeedImportProgressPayload } from "@services/tauri";
 
@@ -240,6 +241,7 @@ export function ConfigSection({
             de la tienda. Aquí puedes enviar tu propia lista o descargar todo lo disponible a este equipo (una sola vez
             hasta completar).
           </p>
+          <SteamSeedFreshnessBanner />
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"

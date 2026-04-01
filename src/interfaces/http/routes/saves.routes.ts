@@ -510,6 +510,15 @@ export async function registerSavesRoutes(
     return reply.status(204).send();
   });
 
+  app.get("/saves/steam-seed/status", async (request, reply) => {
+    if (!deps.steamSeedRepository) {
+      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
+    }
+    const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
+    const out = await deps.steamSeedRepository.getSteamSeedStatus(ownerId);
+    return reply.send(out);
+  });
+
   app.get<{ Querystring: SteamSeedBatchesQuery }>(
     "/saves/steam-seed/batches",
     { schema: { querystring: SteamSeedBatchesQuerySchema } },

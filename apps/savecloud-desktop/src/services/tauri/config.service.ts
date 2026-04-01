@@ -343,6 +343,19 @@ export async function importCloudSeedRunUntilDone(options?: {
   });
 }
 
+/** Resultado de comparar el último batch del worker en S3 con el máximo importado en SQLite. */
+export interface SteamSeedFreshness {
+  status: string;
+  cloudLastBatchKey: string | null;
+  localMaxBatchKey: string | null;
+  error: string | null;
+}
+
+/** Consulta GET /saves/steam-seed/status y el estado local (sin listar todo S3). */
+export async function getSteamSeedFreshness(): Promise<SteamSeedFreshness> {
+  return invoke<SteamSeedFreshness>("sync_get_steam_seed_freshness");
+}
+
 /**
  * Actualiza el orden de “tendencia” desde la tienda pública (más vendidos, ofertas, novedades).
  * No requiere clave Steam Web API. Devuelve cuántas apps quedaron en el ranking local.
