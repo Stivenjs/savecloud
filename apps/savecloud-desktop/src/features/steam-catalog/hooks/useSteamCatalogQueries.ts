@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import type { CatalogListItem } from "@services/tauri";
+import type { CatalogListItem, CatalogPage } from "@services/tauri";
 import type { SourceMatchResult } from "@services/tauri";
 import {
   getSteamAppdetailsMediaBatch,
@@ -96,7 +96,16 @@ export function useSteamCatalogQueries() {
         selectedTags.length ? selectedTags : null
       ),
     enabled: !searchMode && trendingReady,
-    placeholderData: keepPreviousData,
+    /** Solo conservar lista anterior al cambiar de página; si cambian filtros, no mostrar datos viejos. */
+    placeholderData: (previousData, previousQuery) => {
+      if (previousData == null || !previousQuery) return undefined;
+      const pk = previousQuery.queryKey;
+      if (!Array.isArray(pk) || pk.length < 5) return undefined;
+      const prevG = String(pk[3]);
+      const prevT = String(pk[4]);
+      if (prevG !== genresKey || prevT !== tagsKey) return undefined;
+      return previousData as CatalogPage;
+    },
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
   });
