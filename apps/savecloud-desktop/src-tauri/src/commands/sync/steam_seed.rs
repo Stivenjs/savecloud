@@ -5,6 +5,7 @@ use super::context::resolve_api_context;
 use crate::network::API_CLIENT;
 use crate::sqlite::error::SqliteError;
 use crate::sqlite::AppDb;
+use crate::steam_catalog::trending::sync_store_trending;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -154,6 +155,12 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
     part_size: Option<u32>,
 ) -> Result<SteamSeedExportResultDto, String> {
     let ctx = resolve_api_context()?;
+    let db_ref = db.inner().clone();
+
+    // Refresca tendencias Store y las persiste en SQLite antes de exportar prioridad.
+    // Si falla, no bloqueamos la exportación completa: se mantiene el último trending persistido.
+    let _ = sync_store_trending(&db_ref).await;
+
     let db_manifest = db.inner().clone();
     let app_ids =
         tokio::task::spawn_blocking(move || db_manifest.with_conn(list_all_catalog_app_ids))
