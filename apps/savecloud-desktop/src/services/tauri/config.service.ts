@@ -409,7 +409,10 @@ export async function searchSteamCatalog(
   });
 }
 
-/** Listado paginado: primero según tendencia sincronizada (`syncSteamStoreTrending`), luego por `app_id` descendente. */
+/**
+ * Listado paginado: primero tendencia (`syncSteamStoreTrending`); luego entradas con ficha enriquecida,
+ * `enriched_at`, actividad del seed y `app_id` como desempate (no solo ID alto).
+ */
 export async function listSteamCatalogPage(
   offset?: number,
   limit?: number,
