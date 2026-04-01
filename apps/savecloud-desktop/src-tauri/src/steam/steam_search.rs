@@ -15,6 +15,7 @@ use rusqlite::Connection;
 use tauri::State;
 
 use crate::network::STEAM_CLIENT;
+use crate::sqlite::error::SqliteError;
 use crate::sqlite::AppDb;
 use crate::steam::appdetails::fetch_steam_app_details_from_store;
 use crate::steam::appdetails::fetch_steam_appdetails_media_from_store;
@@ -192,6 +193,77 @@ fn load_catalog_names_map(
         out.insert(pid.to_string(), name);
     }
     Ok(out)
+}
+
+fn normalize_display_name_for_catalog(name: &str) -> String {
+    name.trim().to_lowercase()
+}
+
+fn upsert_catalog_details_from_store(
+    conn: &Connection,
+    app_id: &str,
+    details: &SteamAppDetails,
+) -> Result<(), rusqlite::Error> {
+    let Ok(pid) = app_id.parse::<i64>() else {
+        return Ok(());
+    };
+    if pid <= 0 {
+        return Ok(());
+    }
+
+    let name = if details.name.trim().is_empty() {
+        format!("App {pid}")
+    } else {
+        details.name.trim().to_string()
+    };
+    let name_normalized = normalize_display_name_for_catalog(&name);
+    let details_json = serde_json::to_string(details).unwrap_or_else(|_| "{}".to_string());
+
+    conn.execute(
+        "INSERT INTO steam_catalog_apps (
+            app_id,
+            name,
+            name_normalized,
+            details_json,
+            enriched_at,
+            last_sync_batch_at
+         )
+         VALUES (?1, ?2, ?3, ?4, unixepoch(), unixepoch())
+         ON CONFLICT(app_id) DO UPDATE SET
+            details_json = excluded.details_json,
+            enriched_at = unixepoch(),
+            name = CASE
+                WHEN steam_catalog_apps.name IS NULL OR steam_catalog_apps.name = '' THEN excluded.name
+                ELSE steam_catalog_apps.name
+            END,
+            name_normalized = CASE
+                WHEN steam_catalog_apps.name_normalized IS NULL OR steam_catalog_apps.name_normalized = '' THEN excluded.name_normalized
+                ELSE steam_catalog_apps.name_normalized
+            END",
+        rusqlite::params![pid, name, name_normalized, details_json],
+    )?;
+    Ok(())
+}
+
+fn load_catalog_details_json(
+    conn: &Connection,
+    app_id: &str,
+) -> Result<Option<String>, rusqlite::Error> {
+    let Ok(pid) = app_id.parse::<i64>() else {
+        return Ok(None);
+    };
+    match conn.query_row(
+        "SELECT details_json FROM steam_catalog_apps
+         WHERE app_id = ?1
+           AND details_json IS NOT NULL
+           AND length(trim(details_json)) > 0",
+        [pid],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(v) => Ok(Some(v)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e),
+    }
 }
 
 async fn get_steam_app_names_batch_impl(
@@ -528,7 +600,10 @@ pub async fn get_steam_appdetails_media_batch(
 /// Retorna `Err` si el `app_id` no es numérico, si hay error de red,
 /// o si Steam no tiene datos para esa app.
 #[tauri::command]
-pub async fn get_steam_app_details(app_id: String) -> Result<SteamAppDetails, String> {
+pub async fn get_steam_app_details(
+    db: State<'_, AppDb>,
+    app_id: String,
+) -> Result<SteamAppDetails, String> {
     let Some(app_id) = normalize_steam_app_id(&app_id) else {
         return Err("App ID inválido".to_string());
     };
@@ -537,9 +612,40 @@ pub async fn get_steam_app_details(app_id: String) -> Result<SteamAppDetails, St
         return Ok(cached);
     }
 
+    let db_for_read = db.deref().clone();
+    let app_id_for_read = app_id.clone();
+    let from_sqlite = tokio::task::spawn_blocking(move || {
+        db_for_read.with_conn(|c| load_catalog_details_json(c, &app_id_for_read))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e: SqliteError| e.to_string())?;
+
+    if let Some(details_json) = from_sqlite {
+        match serde_json::from_str::<SteamAppDetails>(&details_json) {
+            Ok(details) => {
+                steam_api_cache().insert_details(app_id.clone(), details.clone());
+                return Ok(details);
+            }
+            Err(_) => {}
+        }
+    }
+
     let result = fetch_steam_app_details_from_store(&app_id).await?;
 
-    steam_api_cache().insert_details(app_id, result.clone());
+    steam_api_cache().insert_details(app_id.clone(), result.clone());
+
+    let db_conn = db.deref().clone();
+    let app_id_for_db = app_id.clone();
+    let details_for_db = result.clone();
+    let db_write = tokio::task::spawn_blocking(move || {
+        db_conn.with_conn(|c| upsert_catalog_details_from_store(c, &app_id_for_db, &details_for_db))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e: SqliteError| e.to_string());
+
+    let _ = db_write;
 
     Ok(result)
 }
