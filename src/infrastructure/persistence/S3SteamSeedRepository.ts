@@ -82,6 +82,12 @@ export class S3SteamSeedRepository {
     return { uploadUrl, key };
   }
 
+  async getPriorityDownloadUrl(ownerId: string): Promise<string> {
+    const key = `${this.basePrefix(ownerId)}priority_appids.jsonl`;
+    const command = new GetObjectCommand({ Bucket: this.bucketName, Key: key });
+    return getSignedUrl(this.s3, command, { expiresIn: PRESIGN_EXPIRES_IN_SECONDS });
+  }
+
   async resetState(ownerId: string): Promise<void> {
     const key = `${this.basePrefix(ownerId)}state.json`;
     await this.s3.send(

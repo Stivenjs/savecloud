@@ -1,5 +1,6 @@
-import { Button, Card, CardBody, Divider, Skeleton } from "@heroui/react";
+import { Button, Card, CardBody, Divider, Progress, Skeleton } from "@heroui/react";
 import { FileJson, Cloud, HardDrive, FolderOpen, Link2, Library, Zap } from "lucide-react";
+import type { SteamCatalogSyncProgressPayload, SteamSeedImportProgressPayload } from "@services/tauri";
 
 interface ConfigSectionProps {
   exporting: boolean;
@@ -16,6 +17,8 @@ interface ConfigSectionProps {
   isLoadingData?: boolean;
   steamCatalogBusy?: boolean;
   steamSeedBusy?: boolean;
+  steamCatalogSyncProgress?: SteamCatalogSyncProgressPayload | null;
+  steamSeedImportProgress?: SteamSeedImportProgressPayload | null;
   onCreateConfig: () => void;
   onExport: () => void | Promise<void>;
   onImportMerge: () => void | Promise<void>;
@@ -27,7 +30,7 @@ interface ConfigSectionProps {
   onResetSteamCatalogSync?: () => void | Promise<void>;
   onExportSteamSeedManifest?: () => void | Promise<void>;
   onResetCloudSeedState?: () => void | Promise<void>;
-  onImportCloudSeedBatches?: () => void | Promise<void>;
+  onImportCloudSeedFromCloud?: () => void | Promise<void>;
 }
 
 export function ConfigSection({
@@ -42,6 +45,8 @@ export function ConfigSection({
   isLoadingData = false,
   steamCatalogBusy = false,
   steamSeedBusy = false,
+  steamCatalogSyncProgress = null,
+  steamSeedImportProgress = null,
   onCreateConfig,
   onExport,
   onImportMerge,
@@ -53,7 +58,7 @@ export function ConfigSection({
   onResetSteamCatalogSync,
   onExportSteamSeedManifest,
   onResetCloudSeedState,
-  onImportCloudSeedBatches,
+  onImportCloudSeedFromCloud,
 }: ConfigSectionProps) {
   const showS3TransferBlock = isLoadingData || (s3TransferEndpointType != null && s3TransferEndpointType !== "unknown");
 
@@ -165,9 +170,8 @@ export function ConfigSection({
             </p>
           </div>
           <p className="text-sm text-default-600">
-            Con la misma clave de Steam que indicas en «Configurar conexión», la app descarga y guarda en tu equipo el
-            listado de juegos para que puedas buscarlos y ver información. Las siguientes veces solo se actualizan los
-            cambios nuevos.
+            Con la clave de Steam que añades en «Configurar conexión», la app descarga los nombres del catálogo oficial
+            para poder buscar juegos en SaveCloud. La primera vez puede tardar; después solo se traen novedades.
           </p>
           <div className="rounded-lg border border-default-200 bg-default-50/50 px-3 py-2">
             <span className="text-xs font-medium text-default-500">Clave de Steam</span>
@@ -191,7 +195,7 @@ export function ConfigSection({
               isDisabled={!hasSteamWebApiKey || steamCatalogBusy}
               isLoading={steamCatalogBusy}
               onPress={() => onSyncSteamCatalog?.()}>
-              Sincronizar catálogo ahora
+              Actualizar listado ahora
             </Button>
             <Button
               size="sm"
@@ -199,24 +203,42 @@ export function ConfigSection({
               color="warning"
               isDisabled={steamCatalogBusy}
               onPress={() => onResetSteamCatalogSync?.()}>
-              Volver a descargar todo el listado
+              Borrar progreso y volver a descargar todo
             </Button>
           </div>
+          {steamCatalogBusy ? (
+            <div className="mt-3 space-y-1.5 rounded-medium border border-default-200/80 bg-default-50/40 px-3 py-2 dark:border-default-100/15 dark:bg-default-50/10">
+              <Progress
+                size="sm"
+                isIndeterminate
+                aria-label="Progreso de actualización del catálogo Steam"
+                classNames={{ track: "h-1.5" }}
+              />
+              <p className="text-xs text-default-500">
+                {steamCatalogSyncProgress
+                  ? steamCatalogSyncProgress.done
+                    ? "Listo."
+                    : `Paso ${steamCatalogSyncProgress.batch} · ${steamCatalogSyncProgress.appsUpserted.toLocaleString()} juegos guardados`
+                  : "Conectando con Steam…"}
+              </p>
+            </div>
+          ) : null}
         </section>
 
         <Divider className="my-5" />
 
-        {/* Seed cloud de Steam */}
+        {/* Datos enriquecidos desde la nube (host / compartida) */}
         <section aria-labelledby="config-steam-seed" className="space-y-3">
           <div className="flex items-center gap-2">
             <Cloud size={18} className="text-default-500" />
             <p id="config-steam-seed" className="text-xs font-semibold uppercase tracking-wider text-default-500">
-              Seed cloud de Steam
+              Información de juegos desde la nube
             </p>
           </div>
           <p className="text-sm text-default-600">
-            Publica tu listado local de appids en la nube para que el worker de seed lo procese, y permite importar
-            lotes enriquecidos a SQLite (también para usuarios invitados conectados al host activo).
+            Si usas la nube compartida, el anfitrión puede enviar su lista de juegos; el servidor la enriquece con datos
+            de la tienda. Aquí puedes enviar tu propia lista o descargar todo lo disponible a este equipo (una sola vez
+            hasta completar).
           </p>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -226,15 +248,15 @@ export function ConfigSection({
               isDisabled={steamSeedBusy}
               isLoading={steamSeedBusy}
               onPress={() => onExportSteamSeedManifest?.()}>
-              Publicar manifest a nube
+              Enviar mi lista de juegos
             </Button>
             <Button
               size="sm"
               variant="flat"
               color="secondary"
               isDisabled={steamSeedBusy}
-              onPress={() => onImportCloudSeedBatches?.()}>
-              Importar batches a SQLite
+              onPress={() => onImportCloudSeedFromCloud?.()}>
+              Descargar información detallada
             </Button>
             <Button
               size="sm"
@@ -242,9 +264,26 @@ export function ConfigSection({
               color="warning"
               isDisabled={steamSeedBusy}
               onPress={() => onResetCloudSeedState?.()}>
-              Resetear estado del seed
+              Reiniciar descarga en la nube
             </Button>
           </div>
+          {steamSeedBusy ? (
+            <div className="mt-3 space-y-1.5 rounded-medium border border-default-200/80 bg-default-50/40 px-3 py-2 dark:border-default-100/15 dark:bg-default-50/10">
+              <Progress
+                size="sm"
+                isIndeterminate
+                aria-label="Progreso de descarga de información desde la nube"
+                classNames={{ track: "h-1.5" }}
+              />
+              <p className="text-xs text-default-500">
+                {steamSeedImportProgress
+                  ? steamSeedImportProgress.done
+                    ? "Finalizando…"
+                    : `Pasada ${steamSeedImportProgress.iteration} · ${steamSeedImportProgress.totalBatches} lotes · ${steamSeedImportProgress.totalRowsUpdated.toLocaleString()} juegos actualizados`
+                  : "Preparando descarga…"}
+              </p>
+            </div>
+          ) : null}
         </section>
 
         <Divider className="my-5" />

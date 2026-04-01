@@ -83,6 +83,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::commands::sync::steam_seed::sync_export_steam_manifest_to_cloud_seed,
         crate::commands::sync::steam_seed::sync_reset_cloud_seed_state,
         crate::commands::sync::steam_seed::sync_import_cloud_seed_batches_to_sqlite,
+        crate::commands::sync::steam_seed::sync_import_cloud_seed_run_until_done,
         crate::config::config_cmds::get_friend_config,
         crate::config::config_cmds::add_games_from_friend,
         crate::commands::sync::api::copy_friend_saves,

@@ -6,11 +6,11 @@ use super::context::ApiContext;
 use crate::network::API_CLIENT;
 use crate::sqlite::error::SqliteError;
 use crate::sqlite::AppDb;
-use crate::steam_catalog::trending::sync_store_trending;
+use crate::steam_catalog::trending::{replace_trending_app_ids, sync_store_trending};
 use futures_util::stream::{self, StreamExt};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 
 /// Estado persistido del import local (cursor lexicográfico o watermark para modo recientes).
 #[derive(Debug, Clone)]
@@ -43,6 +43,65 @@ struct SteamSeedBatchDownloadUrlResponse {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct SteamSeedPriorityDownloadUrlResponse {
+    download_url: String,
+}
+
+/// Descarga `priority_appids.jsonl` desde la nube y reemplaza `steam_catalog_trending`.
+/// Si el archivo no existe o la API falla, devuelve `Ok(0)` sin error (mejor esfuerzo).
+pub async fn sync_apply_cloud_priority_trending(
+    db: &AppDb,
+    ctx: &ApiContext,
+) -> Result<usize, String> {
+    let url_res = api_request(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        "POST",
+        "/steam-seed/priority/download-url",
+        None,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    if !url_res.status().is_success() {
+        return Ok(0);
+    }
+    let dl: SteamSeedPriorityDownloadUrlResponse =
+        url_res.json().await.map_err(|e| e.to_string())?;
+    let content = API_CLIENT
+        .get(&dl.download_url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !content.status().is_success() {
+        return Ok(0);
+    }
+    let text = content.text().await.map_err(|e| e.to_string())?;
+    let ids: Vec<u32> = text
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .filter(|&id| id > 0)
+        .collect();
+    if ids.is_empty() {
+        return Ok(0);
+    }
+    let n = ids.len();
+    let db = db.clone();
+    let ids = ids;
+    tokio::task::spawn_blocking(move || {
+        db.with_conn(|c| {
+            replace_trending_app_ids(c, &ids)?;
+            Ok(())
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e: SqliteError| e.to_string())?;
+    Ok(n)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SteamSeedBatchLine {
     app_id: u32,
     #[serde(default)]
@@ -65,6 +124,29 @@ pub struct SteamSeedImportResultDto {
     pub batches_processed: u32,
     pub rows_updated: u32,
 }
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SteamSeedImportProgressPayload {
+    pub iteration: u32,
+    pub batches_this_round: u32,
+    pub rows_this_round: u32,
+    pub total_batches: u32,
+    pub total_rows_updated: u32,
+    pub done: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteamSeedImportRunResultDto {
+    pub rounds: u32,
+    pub batches_processed: u32,
+    pub rows_updated: u32,
+    pub trending_priority_entries: u32,
+}
+
+/// Límite de vueltas por ejecución para evitar bucles ante respuestas anómalas de la API.
+const STEAM_SEED_IMPORT_MAX_ROUNDS: u32 = 5000;
 
 fn list_all_catalog_app_ids(conn: &Connection) -> Result<Vec<u32>, rusqlite::Error> {
     let mut stmt = conn.prepare("SELECT app_id FROM steam_catalog_apps ORDER BY app_id ASC")?;
@@ -527,19 +609,14 @@ pub async fn sync_reset_cloud_seed_state() -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-pub async fn sync_import_cloud_seed_batches_to_sqlite(
-    db: State<'_, AppDb>,
-    max_batches: Option<u32>,
-    strategy: Option<String>,
-    concurrency: Option<u32>,
+async fn import_cloud_seed_one_round(
+    db: &AppDb,
+    ctx: &ApiContext,
+    max_batches: u32,
+    requested_strategy: &str,
+    concurrency: usize,
 ) -> Result<SteamSeedImportResultDto, String> {
-    let ctx = resolve_api_context()?;
-    let max_batches = max_batches.unwrap_or(50).clamp(1, 500);
-    let concurrency = concurrency.unwrap_or(4).clamp(1, 32) as usize;
-    let requested_strategy = parse_import_strategy(strategy.as_deref())?;
-
-    let db_load = db.inner().clone();
+    let db_load = db.clone();
     let mut import_state =
         tokio::task::spawn_blocking(move || db_load.with_conn(load_or_init_import_state))
             .await
@@ -551,12 +628,12 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
         import_state.newest_watermark = None;
     }
 
-    let to_process = match requested_strategy.as_str() {
+    let to_process = match requested_strategy {
         "cursor" => {
-            collect_cursor_keys(&ctx, import_state.cursor_last_key.as_deref(), max_batches).await?
+            collect_cursor_keys(ctx, import_state.cursor_last_key.as_deref(), max_batches).await?
         }
         "newest_first" => {
-            collect_newest_first_keys(&ctx, import_state.newest_watermark.as_deref(), max_batches)
+            collect_newest_first_keys(ctx, import_state.newest_watermark.as_deref(), max_batches)
                 .await?
         }
         _ => {
@@ -571,9 +648,9 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
         });
     }
 
-    let updates = fetch_batches_concurrent(&ctx, &to_process, concurrency).await?;
+    let updates = fetch_batches_concurrent(ctx, &to_process, concurrency).await?;
 
-    match requested_strategy.as_str() {
+    match requested_strategy {
         "cursor" => {
             import_state.cursor_last_key = Some(
                 to_process
@@ -594,9 +671,9 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
         }
         _ => {}
     }
-    import_state.strategy = requested_strategy;
+    import_state.strategy = requested_strategy.to_string();
 
-    let db = db.inner().clone();
+    let db = db.clone();
     let rows_updated = tokio::task::spawn_blocking(move || {
         db.with_conn(|conn| {
             let n = apply_seed_updates(conn, &updates)?;
@@ -611,5 +688,105 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
     Ok(SteamSeedImportResultDto {
         batches_processed: to_process.len() as u32,
         rows_updated,
+    })
+}
+
+#[tauri::command]
+pub async fn sync_import_cloud_seed_batches_to_sqlite(
+    db: State<'_, AppDb>,
+    max_batches: Option<u32>,
+    strategy: Option<String>,
+    concurrency: Option<u32>,
+) -> Result<SteamSeedImportResultDto, String> {
+    let ctx = resolve_api_context()?;
+    let max_batches = max_batches.unwrap_or(50).clamp(1, 500);
+    let concurrency = concurrency.unwrap_or(4).clamp(1, 32) as usize;
+    let requested_strategy = parse_import_strategy(strategy.as_deref())?;
+    import_cloud_seed_one_round(
+        db.inner(),
+        &ctx,
+        max_batches,
+        &requested_strategy,
+        concurrency,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn sync_import_cloud_seed_run_until_done(
+    app: AppHandle,
+    db: State<'_, AppDb>,
+    max_batches: Option<u32>,
+    strategy: Option<String>,
+    concurrency: Option<u32>,
+) -> Result<SteamSeedImportRunResultDto, String> {
+    let ctx = resolve_api_context()?;
+    let max_batches = max_batches.unwrap_or(50).clamp(1, 500);
+    let concurrency = concurrency.unwrap_or(4).clamp(1, 32) as usize;
+    let requested_strategy = parse_import_strategy(strategy.as_deref())?;
+
+    let mut total_batches = 0u32;
+    let mut total_rows = 0u32;
+    let mut round = 0u32;
+
+    loop {
+        round += 1;
+        if round > STEAM_SEED_IMPORT_MAX_ROUNDS {
+            return Err(
+                "Se alcanzó el límite de repeticiones del proceso de descarga. Prueba de nuevo más tarde."
+                    .to_string(),
+            );
+        }
+
+        let r = import_cloud_seed_one_round(
+            db.inner(),
+            &ctx,
+            max_batches,
+            &requested_strategy,
+            concurrency,
+        )
+        .await?;
+
+        total_batches = total_batches.saturating_add(r.batches_processed);
+        total_rows = total_rows.saturating_add(r.rows_updated);
+
+        let _ = app.emit(
+            "steam-seed-import-progress",
+            SteamSeedImportProgressPayload {
+                iteration: round,
+                batches_this_round: r.batches_processed,
+                rows_this_round: r.rows_updated,
+                total_batches,
+                total_rows_updated: total_rows,
+                done: false,
+            },
+        );
+
+        if r.batches_processed == 0 {
+            break;
+        }
+    }
+
+    let _ = app.emit(
+        "steam-seed-import-progress",
+        SteamSeedImportProgressPayload {
+            iteration: round,
+            batches_this_round: 0,
+            rows_this_round: 0,
+            total_batches,
+            total_rows_updated: total_rows,
+            done: true,
+        },
+    );
+
+    let trending_priority_entries = sync_apply_cloud_priority_trending(db.inner(), &ctx)
+        .await
+        .unwrap_or(0);
+
+    Ok(SteamSeedImportRunResultDto {
+        rounds: round,
+        batches_processed: total_batches,
+        rows_updated: total_rows,
+        trending_priority_entries: trending_priority_entries as u32,
     })
 }

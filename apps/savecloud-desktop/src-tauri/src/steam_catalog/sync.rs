@@ -3,6 +3,7 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rusqlite::Connection;
+use tauri::{AppHandle, Emitter};
 use tokio::time::sleep;
 
 use crate::config::load_settings;
@@ -35,6 +36,22 @@ pub struct CatalogSyncStats {
     pub mode: String,
     pub apps_upserted: u64,
     pub batches: u32,
+}
+
+/// Progreso por lote hacia el frontend (no hay total conocido de antemano).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteamCatalogSyncProgressPayload {
+    pub mode: String,
+    pub batch: u32,
+    pub apps_upserted: u64,
+    pub done: bool,
+}
+
+fn emit_steam_catalog_progress(app: Option<&AppHandle>, payload: SteamCatalogSyncProgressPayload) {
+    if let Some(a) = app {
+        let _ = a.emit("steam-catalog-sync-progress", &payload);
+    }
 }
 
 fn now_unix_secs() -> u64 {
@@ -183,7 +200,10 @@ fn invalidate_sync_if_full_catalog_stale(db: &AppDb) -> Result<(), CatalogSyncEr
 }
 
 /// Ejecuta un sync completo (o reanuda) o uno incremental según metadatos en `catalog_sync_meta`.
-pub async fn run_catalog_sync(db: &AppDb) -> Result<CatalogSyncStats, CatalogSyncError> {
+pub async fn run_catalog_sync(
+    db: &AppDb,
+    app: Option<&AppHandle>,
+) -> Result<CatalogSyncStats, CatalogSyncError> {
     let key = resolve_api_key()?;
     invalidate_sync_if_scope_mismatch(db)?;
     invalidate_sync_if_logic_version_mismatch(db)?;
@@ -194,13 +214,17 @@ pub async fn run_catalog_sync(db: &AppDb) -> Result<CatalogSyncStats, CatalogSyn
         == Some("1");
 
     if !full_done {
-        run_full_sync(db, &key).await
+        run_full_sync(db, &key, app).await
     } else {
-        run_incremental_sync(db, &key).await
+        run_incremental_sync(db, &key, app).await
     }
 }
 
-async fn run_full_sync(db: &AppDb, key: &str) -> Result<CatalogSyncStats, CatalogSyncError> {
+async fn run_full_sync(
+    db: &AppDb,
+    key: &str,
+    app: Option<&AppHandle>,
+) -> Result<CatalogSyncStats, CatalogSyncError> {
     let mut last_appid: u32 = db
         .with_conn(|c| get_meta(c, META_RESUME_LAST_APPID))?
         .and_then(|s| s.parse().ok())
@@ -224,6 +248,16 @@ async fn run_full_sync(db: &AppDb, key: &str) -> Result<CatalogSyncStats, Catalo
             db.with_conn(|c| set_meta(c, META_RESUME_LAST_APPID, &last_appid.to_string()))?;
         }
 
+        emit_steam_catalog_progress(
+            app,
+            SteamCatalogSyncProgressPayload {
+                mode: "full".to_string(),
+                batch: batches,
+                apps_upserted: total,
+                done: false,
+            },
+        );
+
         sleep(INTER_REQUEST).await;
 
         if !have_more {
@@ -241,6 +275,15 @@ async fn run_full_sync(db: &AppDb, key: &str) -> Result<CatalogSyncStats, Catalo
                 )?;
                 Ok::<(), rusqlite::Error>(())
             })?;
+            emit_steam_catalog_progress(
+                app,
+                SteamCatalogSyncProgressPayload {
+                    mode: "full".to_string(),
+                    batch: batches,
+                    apps_upserted: total,
+                    done: true,
+                },
+            );
             return Ok(CatalogSyncStats {
                 mode: "full".to_string(),
                 apps_upserted: total,
@@ -256,7 +299,11 @@ async fn run_full_sync(db: &AppDb, key: &str) -> Result<CatalogSyncStats, Catalo
     }
 }
 
-async fn run_incremental_sync(db: &AppDb, key: &str) -> Result<CatalogSyncStats, CatalogSyncError> {
+async fn run_incremental_sync(
+    db: &AppDb,
+    key: &str,
+    app: Option<&AppHandle>,
+) -> Result<CatalogSyncStats, CatalogSyncError> {
     let since: u32 = db
         .with_conn(|c| get_meta(c, META_LAST_INCREMENTAL_AT))?
         .and_then(|s| s.parse().ok())
@@ -280,6 +327,16 @@ async fn run_incremental_sync(db: &AppDb, key: &str) -> Result<CatalogSyncStats,
             last_appid = advance_last_appid(cursor_sent, &apps);
         }
 
+        emit_steam_catalog_progress(
+            app,
+            SteamCatalogSyncProgressPayload {
+                mode: "incremental".to_string(),
+                batch: batches,
+                apps_upserted: total,
+                done: false,
+            },
+        );
+
         sleep(INTER_REQUEST).await;
 
         if !have_more {
@@ -288,6 +345,15 @@ async fn run_incremental_sync(db: &AppDb, key: &str) -> Result<CatalogSyncStats,
                 set_meta(c, META_LAST_INCREMENTAL_AT, &ts.to_string())?;
                 Ok::<(), rusqlite::Error>(())
             })?;
+            emit_steam_catalog_progress(
+                app,
+                SteamCatalogSyncProgressPayload {
+                    mode: "incremental".to_string(),
+                    batch: batches,
+                    apps_upserted: total,
+                    done: true,
+                },
+            );
             return Ok(CatalogSyncStats {
                 mode: "incremental".to_string(),
                 apps_upserted: total,
