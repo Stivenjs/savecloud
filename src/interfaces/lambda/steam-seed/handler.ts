@@ -12,6 +12,16 @@ import {
 } from "@interfaces/lambda/steam-seed/layout";
 import type { BatchLineV1, SteamSeedStateV1 } from "@interfaces/lambda/steam-seed/types";
 
+type OwnersStateV1 = {
+  version: 1;
+  /** Índice round-robin (0..owners.length-1) */
+  cursor: number;
+};
+
+function defaultOwnersState(): OwnersStateV1 {
+  return { version: 1, cursor: 0 };
+}
+
 function defaultState(): SteamSeedStateV1 {
   return {
     version: 1,
@@ -323,20 +333,106 @@ async function isStreamDone(
   return appIds.length === 0;
 }
 
+async function loadOwnersState(s3: S3Client, bucket: string, key: string): Promise<OwnersStateV1> {
+  try {
+    const out = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const raw = await streamToString(out.Body);
+    const parsed = JSON.parse(raw) as OwnersStateV1;
+    if (parsed?.version !== 1) return defaultOwnersState();
+    return { ...defaultOwnersState(), ...parsed };
+  } catch (e) {
+    if (isNoSuchKey(e)) return defaultOwnersState();
+    throw e;
+  }
+}
+
+async function saveOwnersState(s3: S3Client, bucket: string, key: string, state: OwnersStateV1): Promise<void> {
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: JSON.stringify(state),
+      ContentType: "application/json",
+    })
+  );
+}
+
+async function listOwnerIdsWithManifest(s3: S3Client, bucket: string, basePrefix: string): Promise<string[]> {
+  // Listado de prefijos inmediatos: steam-seed/{ownerId}/
+  const owners: string[] = [];
+  let token: string | undefined;
+  const prefix = `${basePrefix}/`;
+  do {
+    const out = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        Delimiter: "/",
+        ContinuationToken: token,
+        MaxKeys: 1000,
+      })
+    );
+    for (const cp of out.CommonPrefixes ?? []) {
+      const p = cp.Prefix ?? "";
+      // p = "steam-seed/{ownerId}/"
+      const rest = p.startsWith(prefix) ? p.slice(prefix.length) : "";
+      const ownerId = rest.endsWith("/") ? rest.slice(0, -1) : rest;
+      if (ownerId) owners.push(ownerId);
+    }
+    token = out.IsTruncated ? out.NextContinuationToken : undefined;
+  } while (token);
+
+  // Filtrar owners que realmente tengan manifest parts.
+  const valid: string[] = [];
+  for (const ownerId of owners.sort()) {
+    const manifestProbePrefix = `${basePrefix}/${ownerId}/manifest/${STEAM_SEED_MANIFEST_PREFIX}`;
+    const probe = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: manifestProbePrefix,
+        MaxKeys: 1,
+      })
+    );
+    if ((probe.Contents ?? []).some((o) => (o.Key ?? "").endsWith(STEAM_SEED_MANIFEST_SUFFIX))) {
+      valid.push(ownerId);
+    }
+  }
+  return valid;
+}
+
 export async function handler(_event: unknown, context: Context): Promise<Record<string, unknown>> {
   const bucket = process.env.BUCKET_NAME?.trim();
   if (!bucket) {
     return { ok: false, error: "BUCKET_NAME missing" };
   }
 
+  const s3 = new S3Client({ region: process.env.AWS_REGION ?? "us-east-2" });
+
   const basePrefix = (process.env.STEAM_SEED_PREFIX ?? "steam-seed").replace(/\/$/, "");
-  const ownerId =
+  const ownerIdFromEvent =
     typeof _event === "object" &&
     _event !== null &&
     "ownerId" in _event &&
     typeof (_event as { ownerId?: unknown }).ownerId === "string"
       ? (_event as { ownerId: string }).ownerId.trim()
       : "";
+
+  let ownerId = ownerIdFromEvent;
+  const ownersStateKey = `${basePrefix}/_owners_state.json`;
+  if (!ownerId) {
+    const owners = await listOwnerIdsWithManifest(s3, bucket, basePrefix);
+    if (owners.length === 0) {
+      // Compatibilidad: si alguien todavía sube en steam-seed/manifest/...
+      ownerId = "";
+    } else {
+      const ownersState = await loadOwnersState(s3, bucket, ownersStateKey);
+      const idx = owners.length === 0 ? 0 : ownersState.cursor % owners.length;
+      ownerId = owners[idx] ?? owners[0]!;
+      await saveOwnersState(s3, bucket, ownersStateKey, { version: 1, cursor: (idx + 1) % owners.length });
+    }
+  }
+
+  // Prefijo por owner si existe, o prefijo base para modo legacy.
   const seedPrefix = ownerId ? `${basePrefix}/${ownerId}` : basePrefix;
   const manifestPrefix = `${seedPrefix}/`;
   const stateKey = `${seedPrefix}/${STEAM_SEED_STATE_KEY}`;
@@ -347,8 +443,6 @@ export async function handler(_event: unknown, context: Context): Promise<Record
   const delayMs = envInt("STEAM_DELAY_MS", 2000);
   const batchSize = envInt("STEAM_BATCH_SIZE", 8);
   const backoffMinutes = envInt("STEAM_BACKOFF_MINUTES", 30);
-
-  const s3 = new S3Client({ region: process.env.AWS_REGION ?? "us-east-2" });
 
   let state = await loadState(s3, bucket, stateKey);
 

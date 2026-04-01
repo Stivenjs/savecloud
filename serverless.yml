@@ -59,7 +59,7 @@ custom:
     live: true
   steamSeedScheduleRate:
     dev: rate(24 hours)
-    live: rate(24 minutes)
+    live: rate(5 minutes)
   # Valor por defecto de filtros appdetails.
   steamSeedFiltersDefault: "basic,developers,publishers,genres,categories,release_date,screenshots,movies"
 
