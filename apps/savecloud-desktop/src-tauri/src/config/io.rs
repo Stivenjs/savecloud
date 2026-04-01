@@ -319,6 +319,7 @@ pub fn get_combined_config() -> Config {
         profile_avatar: settings.profile_avatar.clone(),
         profile_frame: settings.profile_frame.clone(),
         share_visual_profile_with_hosts: settings.share_visual_profile_with_hosts,
+        share_visual_profile_with_members: settings.share_visual_profile_with_members,
         games: library.games,
         operation_history: history.entries,
         gamification: load_gamification(),
@@ -389,6 +390,7 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
         .or(current_settings.profile_avatar);
     current_settings.profile_frame = cfg.profile_frame.clone().or(current_settings.profile_frame);
     current_settings.share_visual_profile_with_hosts = cfg.share_visual_profile_with_hosts;
+    current_settings.share_visual_profile_with_members = cfg.share_visual_profile_with_members;
 
     save_settings(&current_settings)?;
     save_library(&GameLibrary {

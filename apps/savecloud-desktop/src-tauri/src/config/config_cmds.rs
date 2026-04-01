@@ -89,6 +89,7 @@ pub fn get_config() -> ConfigDto {
             .filter(|k| !k.trim().is_empty())
             .map(|_| config::MASKED_STEAM_WEB_API_KEY.to_string()),
         share_visual_profile_with_hosts: settings.share_visual_profile_with_hosts,
+        share_visual_profile_with_members: settings.share_visual_profile_with_members,
         games: combined
             .games
             .into_iter()
@@ -263,6 +264,14 @@ pub fn set_profile_appearance(
 pub fn set_share_visual_profile_with_hosts(enabled: bool) -> Result<(), String> {
     let mut settings = config::load_settings();
     settings.share_visual_profile_with_hosts = enabled;
+    config::save_settings(&settings)
+}
+
+/// Permite a los miembros de tu nube ver avatar, fondo y marco al cargar tu perfil.
+#[tauri::command]
+pub fn set_share_visual_profile_with_members(enabled: bool) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.share_visual_profile_with_members = enabled;
     config::save_settings(&settings)
 }
 
@@ -653,6 +662,8 @@ pub fn import_config_from_file(path: String, mode: String) -> Result<(), String>
         }
         current.share_visual_profile_with_hosts =
             current.share_visual_profile_with_hosts || imported.share_visual_profile_with_hosts;
+        current.share_visual_profile_with_members =
+            current.share_visual_profile_with_members || imported.share_visual_profile_with_members;
         return config::apply_combined_config(&current);
     }
 
@@ -856,8 +867,11 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
     let imported: Config = serde_json::from_slice(&bytes)
         .map_err(|e| format!("El archivo de configuración descargado no es válido: {}", e))?;
 
-    let allow_visual = imported.share_visual_profile_with_hosts
+    let allow_host_sees_member = imported.share_visual_profile_with_hosts
         && invites::viewer_is_host_of_member(friend_id).await?;
+    let allow_member_sees_host = imported.share_visual_profile_with_members
+        && invites::viewer_is_member_of_host(friend_id).await?;
+    let allow_visual = allow_host_sees_member || allow_member_sees_host;
 
     let friend_total_playtime: u64 = imported.games.iter().map(|g| g.playtime_seconds).sum();
 
@@ -896,6 +910,7 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
         profile_frame,
         steam_web_api_key: None,
         share_visual_profile_with_hosts,
+        share_visual_profile_with_members: false,
         games: imported
             .games
             .into_iter()

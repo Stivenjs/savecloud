@@ -76,6 +76,7 @@ type FriendsPageState = {
   hostMemberships: CloudMembership[];
   memberMemberships: CloudMembership[];
   lastCreatedInviteToken: string | null;
+  invitesStatsLoading: boolean;
 };
 
 type FriendsPageAction =
@@ -101,7 +102,8 @@ type FriendsPageAction =
   | { type: "SET_PENDING_INVITES"; payload: CloudInvite[] }
   | { type: "SET_HOST_MEMBERSHIPS"; payload: CloudMembership[] }
   | { type: "SET_MEMBER_MEMBERSHIPS"; payload: CloudMembership[] }
-  | { type: "SET_LAST_CREATED_INVITE_TOKEN"; payload: string | null };
+  | { type: "SET_LAST_CREATED_INVITE_TOKEN"; payload: string | null }
+  | { type: "SET_INVITES_STATS_LOADING"; payload: boolean };
 
 const initialState: FriendsPageState = {
   friendIdInput: "",
@@ -126,6 +128,7 @@ const initialState: FriendsPageState = {
   hostMemberships: [],
   memberMemberships: [],
   lastCreatedInviteToken: null,
+  invitesStatsLoading: false,
 };
 
 function friendsPageReducer(state: FriendsPageState, action: FriendsPageAction): FriendsPageState {
@@ -174,6 +177,8 @@ function friendsPageReducer(state: FriendsPageState, action: FriendsPageAction):
       return { ...state, memberMemberships: action.payload };
     case "SET_LAST_CREATED_INVITE_TOKEN":
       return { ...state, lastCreatedInviteToken: action.payload };
+    case "SET_INVITES_STATS_LOADING":
+      return { ...state, invitesStatsLoading: action.payload };
     default:
       return state;
   }
@@ -205,6 +210,7 @@ export function useFriendsPage() {
     hostMemberships,
     memberMemberships,
     lastCreatedInviteToken,
+    invitesStatsLoading,
   } = state;
 
   const { config: ourConfig } = useConfig();
@@ -310,7 +316,12 @@ export function useFriendsPage() {
   }, []);
 
   const refreshInvitesState = useCallback(async () => {
-    await Promise.all([loadPendingInvites(), loadMemberships()]);
+    dispatch({ type: "SET_INVITES_STATS_LOADING", payload: true });
+    try {
+      await Promise.all([loadPendingInvites(), loadMemberships()]);
+    } finally {
+      dispatch({ type: "SET_INVITES_STATS_LOADING", payload: false });
+    }
   }, [loadPendingInvites, loadMemberships]);
 
   const handleCreateInvite = async () => {
@@ -674,6 +685,7 @@ export function useFriendsPage() {
     setInviteTokenInput: (v: string) => dispatch({ type: "SET_INVITE_TOKEN_INPUT", payload: v }),
     inviteBusy,
     pendingInvites,
+    invitesStatsLoading,
     hostMemberships,
     memberMemberships,
     loadPendingInvites,

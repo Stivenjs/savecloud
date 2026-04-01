@@ -50,4 +50,6 @@ export interface Config {
   readonly profileFrame?: string;
   /** Si es true, los anfitriones de nubes donde participas pueden ver tu perfil visual al cargar tu usuario. */
   readonly shareVisualProfileWithHosts?: boolean;
+  /** Si es true, los miembros de tu nube pueden ver tu perfil visual al cargar tu usuario. */
+  readonly shareVisualProfileWithMembers?: boolean;
 }

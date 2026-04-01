@@ -23,6 +23,7 @@ import {
   scheduleConfigBackupToCloud,
   setProfileAppearance,
   setShareVisualProfileWithHosts,
+  setShareVisualProfileWithMembers,
 } from "@services/tauri";
 import { achievementLabel, formatHoursToNextLevel } from "@utils/gamificationLabels";
 import { formatPlaytime } from "@utils/format";
@@ -67,6 +68,7 @@ export function ProfileDrawer({
   const [frame, setFrame] = useState("");
   const [saving, setSaving] = useState(false);
   const [shareVisualWithHosts, setShareVisualWithHosts] = useState(false);
+  const [shareVisualWithMembers, setShareVisualWithMembers] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !config) return;
@@ -74,6 +76,7 @@ export function ProfileDrawer({
     setAvatar(config.profileAvatar ?? "");
     setFrame(config.profileFrame ?? "");
     setShareVisualWithHosts(config.shareVisualProfileWithHosts ?? false);
+    setShareVisualWithMembers(config.shareVisualProfileWithMembers ?? false);
   }, [isOpen, config]);
 
   const gamesCount = config?.games?.length ?? 0;
@@ -105,6 +108,7 @@ export function ProfileDrawer({
         profileFrame: frame.trim() || null,
       });
       await setShareVisualProfileWithHosts(shareVisualWithHosts);
+      await setShareVisualProfileWithMembers(shareVisualWithMembers);
       await queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
       scheduleConfigBackupToCloud();
       toastSuccess("Perfil actualizado", "Se guardó la apariencia del perfil.");
@@ -114,7 +118,7 @@ export function ProfileDrawer({
     } finally {
       setSaving(false);
     }
-  }, [avatar, bg, frame, onClose, queryClient, shareVisualWithHosts]);
+  }, [avatar, bg, frame, onClose, queryClient, shareVisualWithHosts, shareVisualWithMembers]);
 
   const pickFile = useCallback(async (kind: "background" | "avatar" | "frame") => {
     try {
@@ -234,6 +238,17 @@ export function ProfileDrawer({
             <p className="text-[11px] leading-snug text-default-500">
               Si lo activas, quienes te invitaron como miembro podrán ver fondo, avatar y marco al cargar tu usuario en
               Amigos (no aplica a cualquier persona que escriba tu ID).
+            </p>
+            <Switch
+              isSelected={shareVisualWithMembers}
+              onValueChange={setShareVisualWithMembers}
+              size="sm"
+              classNames={{ label: "text-sm text-foreground" }}>
+              Compartir perfil visual con miembros de tu nube
+            </Switch>
+            <p className="text-[11px] leading-snug text-default-500">
+              Si eres anfitrión y lo activas, quienes están en tu nube como miembros podrán ver tu perfil visual al
+              cargar tu usuario en Amigos.
             </p>
           </div>
 
