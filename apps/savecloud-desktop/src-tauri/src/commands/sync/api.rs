@@ -205,12 +205,20 @@ pub(crate) async fn get_download_urls(
         .collect())
 }
 
+/// Lista guardados remotos. `target_user_id` distinto del autenticado usa `GET /saves?targetUserId=...`
+/// con `x-user-id` = usuario autenticado (compatible con access token por usuario).
 async fn list_remote_saves_for_user(
     api_base: &str,
     api_key: &str,
-    user_id: &str,
+    authenticated_user_id: &str,
+    target_user_id: Option<&str>,
 ) -> Result<Vec<RemoteSaveInfoDto>, String> {
-    let res = api_request(api_base, user_id, api_key, "GET", "", None)
+    let path = match target_user_id {
+        None => String::new(),
+        Some(t) if t == authenticated_user_id => String::new(),
+        Some(t) => format!("?targetUserId={}", urlencoding::encode(t)),
+    };
+    let res = api_request(api_base, authenticated_user_id, api_key, "GET", &path, None)
         .await
         .map_err(|e| format!("GET /saves: {}", e))?;
 
@@ -330,7 +338,7 @@ async fn list_remote_saves_summary_for_user(
 #[tauri::command]
 pub async fn sync_list_remote_saves() -> Result<Vec<RemoteSaveInfoDto>, String> {
     let ctx = get_api_context()?;
-    list_remote_saves_for_user(&ctx.base_url, &ctx.api_key, &ctx.user_id).await
+    list_remote_saves_for_user(&ctx.base_url, &ctx.api_key, &ctx.user_id, None).await
 }
 
 #[tauri::command]
@@ -357,7 +365,12 @@ pub async fn sync_list_remote_saves_for_user(
         return Err("userId vacío".into());
     }
 
-    list_remote_saves_for_user(&ctx.base_url, &ctx.api_key, trimmed_user_id).await
+    let target = if trimmed_user_id == ctx.user_id {
+        None
+    } else {
+        Some(trimmed_user_id)
+    };
+    list_remote_saves_for_user(&ctx.base_url, &ctx.api_key, &ctx.user_id, target).await
 }
 
 #[tauri::command]
@@ -592,7 +605,13 @@ pub async fn copy_friend_saves(
     }
 
     let ctx = get_api_context()?;
-    let all_saves = list_remote_saves_for_user(&ctx.base_url, &ctx.api_key, friend_id).await?;
+    let target = if friend_id == ctx.user_id {
+        None
+    } else {
+        Some(friend_id)
+    };
+    let all_saves =
+        list_remote_saves_for_user(&ctx.base_url, &ctx.api_key, &ctx.user_id, target).await?;
 
     let plan: Vec<CopyFriendFilePlanDto> = all_saves
         .into_iter()

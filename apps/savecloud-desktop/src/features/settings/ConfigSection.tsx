@@ -15,6 +15,7 @@ interface ConfigSectionProps {
   /** Indica si la información principal aún se está cargando (útil para skeletons) */
   isLoadingData?: boolean;
   steamCatalogBusy?: boolean;
+  steamSeedBusy?: boolean;
   onCreateConfig: () => void;
   onExport: () => void | Promise<void>;
   onImportMerge: () => void | Promise<void>;
@@ -24,6 +25,9 @@ interface ConfigSectionProps {
   onRestoreFromCloud: () => void | Promise<void>;
   onSyncSteamCatalog?: () => void | Promise<void>;
   onResetSteamCatalogSync?: () => void | Promise<void>;
+  onExportSteamSeedManifest?: () => void | Promise<void>;
+  onResetCloudSeedState?: () => void | Promise<void>;
+  onImportCloudSeedBatches?: () => void | Promise<void>;
 }
 
 export function ConfigSection({
@@ -37,6 +41,7 @@ export function ConfigSection({
   s3TransferEndpointType,
   isLoadingData = false,
   steamCatalogBusy = false,
+  steamSeedBusy = false,
   onCreateConfig,
   onExport,
   onImportMerge,
@@ -46,6 +51,9 @@ export function ConfigSection({
   onRestoreFromCloud,
   onSyncSteamCatalog,
   onResetSteamCatalogSync,
+  onExportSteamSeedManifest,
+  onResetCloudSeedState,
+  onImportCloudSeedBatches,
 }: ConfigSectionProps) {
   const showS3TransferBlock = isLoadingData || (s3TransferEndpointType != null && s3TransferEndpointType !== "unknown");
 
@@ -192,6 +200,49 @@ export function ConfigSection({
               isDisabled={steamCatalogBusy}
               onPress={() => onResetSteamCatalogSync?.()}>
               Volver a descargar todo el listado
+            </Button>
+          </div>
+        </section>
+
+        <Divider className="my-5" />
+
+        {/* Seed cloud de Steam */}
+        <section aria-labelledby="config-steam-seed" className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Cloud size={18} className="text-default-500" />
+            <p id="config-steam-seed" className="text-xs font-semibold uppercase tracking-wider text-default-500">
+              Seed cloud de Steam
+            </p>
+          </div>
+          <p className="text-sm text-default-600">
+            Publica tu listado local de appids en la nube para que el worker de seed lo procese, y permite importar
+            lotes enriquecidos a SQLite (también para usuarios invitados conectados al host activo).
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="flat"
+              color="primary"
+              isDisabled={steamSeedBusy}
+              isLoading={steamSeedBusy}
+              onPress={() => onExportSteamSeedManifest?.()}>
+              Publicar manifest a nube
+            </Button>
+            <Button
+              size="sm"
+              variant="flat"
+              color="secondary"
+              isDisabled={steamSeedBusy}
+              onPress={() => onImportCloudSeedBatches?.()}>
+              Importar batches a SQLite
+            </Button>
+            <Button
+              size="sm"
+              variant="light"
+              color="warning"
+              isDisabled={steamSeedBusy}
+              onPress={() => onResetCloudSeedState?.()}>
+              Resetear estado del seed
             </Button>
           </div>
         </section>

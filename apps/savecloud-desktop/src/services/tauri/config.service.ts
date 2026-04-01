@@ -257,6 +257,16 @@ export interface CatalogSyncStats {
   batches: number;
 }
 
+export interface SteamSeedExportResult {
+  appIdsExported: number;
+  partsUploaded: number;
+}
+
+export interface SteamSeedImportResult {
+  batchesProcessed: number;
+  rowsUpdated: number;
+}
+
 /** Sincroniza el catálogo Steam en SQLite (requiere clave Steam Web API). */
 export async function syncSteamCatalog(): Promise<CatalogSyncStats> {
   return invoke<CatalogSyncStats>("sync_steam_catalog");
@@ -265,6 +275,25 @@ export async function syncSteamCatalog(): Promise<CatalogSyncStats> {
 /** Borra metadatos de sync del catálogo; la próxima ejecución hará sync completo de nuevo. */
 export async function resetSteamCatalogSync(): Promise<void> {
   await invoke("reset_steam_catalog_sync");
+}
+
+/** Exporta appids del catálogo local a S3 (manifest para steam-seed). */
+export async function exportSteamSeedManifestToCloud(partSize?: number): Promise<SteamSeedExportResult> {
+  return invoke<SteamSeedExportResult>("sync_export_steam_manifest_to_cloud_seed", {
+    partSize: partSize ?? null,
+  });
+}
+
+/** Resetea state.json del steam-seed activo (owner propio o host activo). */
+export async function resetCloudSeedState(): Promise<void> {
+  await invoke("sync_reset_cloud_seed_state");
+}
+
+/** Importa batches del steam-seed a SQLite local (`details_json`, `enriched_at`). */
+export async function importCloudSeedBatchesToSqlite(maxBatches?: number): Promise<SteamSeedImportResult> {
+  return invoke<SteamSeedImportResult>("sync_import_cloud_seed_batches_to_sqlite", {
+    maxBatches: maxBatches ?? null,
+  });
 }
 
 /**

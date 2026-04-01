@@ -26,7 +26,7 @@ import type {
   UploadUrlResult,
 } from "@domain/ports/SaveRepository";
 
-const PRESIGN_EXPIRES_IN_SECONDS = 3600;
+export const PRESIGN_EXPIRES_IN_SECONDS = 3600;
 const DOWNLOAD_BASE_URL = process.env.DOWNLOAD_BASE_URL;
 
 /**

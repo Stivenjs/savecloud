@@ -7,6 +7,7 @@ import { buildApp } from "@interfaces/http/app";
 import { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
 import { S3CloudInviteRepository } from "@infrastructure/persistence/S3CloudInviteRepository";
 import { S3SaveRepository } from "@infrastructure/persistence/S3SaveRepository";
+import { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
 import { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
 
 const bucketName = process.env.BUCKET_NAME ?? "";
@@ -27,6 +28,7 @@ const s3 = new S3Client({
 });
 
 const saveRepository = new S3SaveRepository(s3, bucketName);
+const steamSeedRepository = new S3SteamSeedRepository(s3, bucketName);
 const shareTokenStore = new ShareTokenS3(s3, bucketName);
 const notificationStore = new S3NotificationStore(s3, bucketName);
 const cloudInviteRepository = new S3CloudInviteRepository(s3, bucketName);
@@ -37,6 +39,7 @@ async function getProxy() {
   if (!cachedProxy) {
     const app = await buildApp({
       saveRepository,
+      steamSeedRepository,
       shareTokenStore,
       notificationStore,
       cloudInviteRepository,

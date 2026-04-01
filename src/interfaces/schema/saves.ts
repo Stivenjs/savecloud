@@ -101,3 +101,19 @@ export const AbortMultipartSchema = Type.Object({
   uploadId: Type.String({ minLength: 1 }),
 });
 export type AbortMultipartBody = Static<typeof AbortMultipartSchema>;
+
+export const SteamSeedManifestUploadUrlSchema = Type.Object({
+  partIndex: Type.Integer({ minimum: 0 }),
+});
+export type SteamSeedManifestUploadUrlBody = Static<typeof SteamSeedManifestUploadUrlSchema>;
+
+export const SteamSeedBatchDownloadUrlSchema = Type.Object({
+  key: Type.String({ minLength: 1 }),
+});
+export type SteamSeedBatchDownloadUrlBody = Static<typeof SteamSeedBatchDownloadUrlSchema>;
+
+export const SteamSeedBatchesQuerySchema = Type.Object({
+  maxKeys: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000 })),
+  cursor: Type.Optional(Type.String({ minLength: 1 })),
+});
+export type SteamSeedBatchesQuery = Static<typeof SteamSeedBatchesQuerySchema>;
