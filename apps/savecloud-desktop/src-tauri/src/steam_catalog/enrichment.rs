@@ -47,14 +47,17 @@ pub async fn fetch_catalog_app_details(
     let Some(sid) = normalize_steam_app_id(&app_id) else {
         return Err("App ID inválido".to_string());
     };
+
     let pid = sid
         .parse::<u32>()
         .map_err(|_| "App ID inválido".to_string())?;
 
+    // 1. Intentar desde la caché en RAM
     if let Some(c) = steam_api_cache().get_details(&sid) {
         return Ok(c);
     }
 
+    // 2. Intentar desde SQLite
     let db1 = db.clone();
     let json_opt =
         tokio::task::spawn_blocking(move || db1.with_conn(|c| load_details_json(c, pid)))
@@ -76,6 +79,7 @@ pub async fn fetch_catalog_app_details(
         }
     }
 
+    // 3. Verificar si existe en nuestro catálogo local antes de ir a Steam
     let db2 = db.clone();
     let exists =
         tokio::task::spawn_blocking(move || db2.with_conn(|c| catalog_contains_app(c, pid)))
@@ -89,15 +93,20 @@ pub async fn fetch_catalog_app_details(
         );
     }
 
+    // 4. Fetch desde la Store API
     let details = fetch_steam_app_details_from_store(&sid).await?;
 
+    // 5. Guardar el nuevo JSON en la BD
     let json = serde_json::to_string(&details).map_err(|e| e.to_string())?;
     let db3 = db.clone();
+
     tokio::task::spawn_blocking(move || db3.with_conn(|c| save_details_json(c, pid, &json)))
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e: SqliteError| e.to_string())?;
 
+    // 6. Actualizar RAM y retornar
     steam_api_cache().insert_details(sid, details.clone());
+
     Ok(details)
 }

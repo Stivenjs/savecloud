@@ -11,12 +11,12 @@ use crate::sqlite::AppDb;
 
 use super::api::{fetch_app_list_page, GET_APP_LIST_QUERY_INCLUDES};
 use super::error::CatalogSyncError;
-use super::normalize::normalize_catalog_name;
 use super::meta::{
     delete_meta, get_meta, set_meta, META_APP_LIST_SCOPE, META_CATALOG_SYNC_LOGIC_VERSION,
     META_FULL_CATALOG_COMPLETED_AT, META_FULL_SYNC_DONE, META_LAST_INCREMENTAL_AT,
     META_RESUME_LAST_APPID,
 };
+use super::normalize::normalize_catalog_name;
 
 /// Máximo de peticiones por ejecución para evitar bucles infinitos ante respuestas anómalas.
 const MAX_BATCHES_PER_RUN: u32 = 10_000;
@@ -79,19 +79,28 @@ fn resolve_api_key() -> Result<String, CatalogSyncError> {
 
 fn upsert_apps_batch(conn: &Connection, rows: &[(u32, String)]) -> Result<u64, rusqlite::Error> {
     let mut n = 0u64;
-    let mut stmt = conn.prepare_cached(
-        "INSERT INTO steam_catalog_apps (app_id, name, name_normalized, last_sync_batch_at)
-         VALUES (?1, ?2, ?3, unixepoch())
-         ON CONFLICT(app_id) DO UPDATE SET
-           name = excluded.name,
-           name_normalized = excluded.name_normalized,
-           last_sync_batch_at = unixepoch()",
-    )?;
-    for (app_id, name) in rows {
-        let nn = normalize_catalog_name(name);
-        stmt.execute(rusqlite::params![app_id, name, nn])?;
-        n += 1;
+
+    let tx = conn.unchecked_transaction()?;
+
+    {
+        let mut stmt = tx.prepare_cached(
+            "INSERT INTO steam_catalog_apps (app_id, name, name_normalized, last_sync_batch_at)
+             VALUES (?1, ?2, ?3, unixepoch())
+             ON CONFLICT(app_id) DO UPDATE SET
+               name = excluded.name,
+               name_normalized = excluded.name_normalized,
+               last_sync_batch_at = unixepoch()",
+        )?;
+
+        for (app_id, name) in rows {
+            let nn = normalize_catalog_name(name);
+            stmt.execute(rusqlite::params![app_id, name, nn])?;
+            n += 1;
+        }
     }
+
+    tx.commit()?;
+
     Ok(n)
 }
 
@@ -202,16 +211,25 @@ pub async fn run_catalog_sync(
     invalidate_sync_if_scope_mismatch(db)?;
     invalidate_sync_if_logic_version_mismatch(db)?;
     invalidate_sync_if_full_catalog_stale(db)?;
+    
     let full_done = db
         .with_conn(|c| get_meta(c, META_FULL_SYNC_DONE))?
         .as_deref()
         == Some("1");
 
-    if !full_done {
-        run_full_sync(db, &key, app).await
+    let stats = if !full_done {
+        run_full_sync(db, &key, app).await?
     } else {
-        run_incremental_sync(db, &key, app).await
+        run_incremental_sync(db, &key, app).await?
+    };
+
+    // Si la sincronización trajo datos nuevos (se actualizó o insertó al menos 1 app),
+    // hacemos un checkpoint para consolidar el archivo WAL y ahorrar espacio en disco.
+    if stats.apps_upserted > 0 {
+        let _ = db.checkpoint("TRUNCATE");
     }
+
+    Ok(stats)
 }
 
 async fn run_full_sync(

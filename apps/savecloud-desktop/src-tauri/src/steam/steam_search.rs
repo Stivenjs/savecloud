@@ -9,15 +9,12 @@
 //! Facilita la integración con servicios que requieren identificación
 //! consistente y enriquecimiento de datos dentro del ecosistema de Steam.
 
-use std::ops::Deref;
-
 use rusqlite::Connection;
 use tauri::State;
 
 use crate::network::STEAM_CLIENT;
 use crate::sqlite::error::SqliteError;
 use crate::sqlite::AppDb;
-use crate::steam_catalog::normalize::normalize_catalog_name;
 use crate::steam::appdetails::fetch_steam_app_details_from_store;
 use crate::steam::appdetails::fetch_steam_appdetails_media_from_store;
 use crate::steam::appdetails::parse_media_from_data;
@@ -25,6 +22,7 @@ use crate::steam::appdetails::steam_app_details_from_store_data;
 use crate::steam_cache::{
     normalize_steam_app_id, normalize_steam_appdetails_media, steam_api_cache,
 };
+use crate::steam_catalog::normalize::normalize_catalog_name;
 use futures_util::stream::{self, StreamExt};
 use regex::{Regex, RegexBuilder};
 use std::collections::{HashMap, HashSet};
@@ -308,10 +306,10 @@ async fn get_steam_app_names_batch_impl(
     }
 
     let db_for_persist = db.clone();
-    let db_conn = db;
     let ids_for_db = valid_ids.clone();
+
     let from_db = tokio::task::spawn_blocking(move || {
-        db_conn.with_conn(|c| {
+        db.with_conn(|c| {
             let mut m = load_catalog_names_map(c, &ids_for_db)?;
             let missing: Vec<String> = ids_for_db
                 .iter()
@@ -324,7 +322,7 @@ async fn get_steam_app_names_batch_impl(
                     m.insert(k, v);
                 }
             }
-            Ok(m)
+            Ok::<_, rusqlite::Error>(m)
         })
     })
     .await
@@ -377,7 +375,7 @@ pub async fn get_steam_app_names_batch(
     db: State<'_, AppDb>,
     app_ids: Vec<String>,
 ) -> Result<HashMap<String, String>, String> {
-    Ok(get_steam_app_names_batch_impl(db.deref().clone(), app_ids).await)
+    Ok(get_steam_app_names_batch_impl(db.inner().clone(), app_ids).await)
 }
 
 #[tauri::command]
@@ -390,7 +388,7 @@ pub async fn get_steam_app_name(
     };
 
     let mut results =
-        get_steam_app_names_batch_impl(db.deref().clone(), vec![app_id.clone()]).await;
+        get_steam_app_names_batch_impl(db.inner().clone(), vec![app_id.clone()]).await;
     Ok(results.remove(&app_id))
 }
 
@@ -513,14 +511,14 @@ pub async fn get_steam_appdetails_media(
         return Ok(cached);
     }
 
-    let db_conn = db.deref().clone();
+    let db_conn = db.inner().clone();
     let id_for_db = app_id.clone();
     let from_db = tokio::task::spawn_blocking(move || {
         db_conn.with_conn(|c| load_combined_media_from_db(c, std::slice::from_ref(&id_for_db)))
     })
     .await
     .map_err(|e| e.to_string())?
-    .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
+    .map_err(|e: SqliteError| e.to_string())?;
 
     if let Some(media) = from_db.get(&app_id).cloned() {
         steam_api_cache().insert_media(app_id.clone(), media.clone());
@@ -530,11 +528,11 @@ pub async fn get_steam_appdetails_media(
     let result = fetch_steam_appdetails_media_from_store(&app_id).await?;
     steam_api_cache().insert_media(app_id.clone(), result.clone());
 
-    let db_conn = db.deref().clone();
+    let db_persist = db.inner().clone();
     let id_copy = app_id.clone();
     let res_clone = result.clone();
     let _ = tokio::task::spawn_blocking(move || {
-        db_conn.with_conn(|c| upsert_persistent_media_cache_batch(c, &[(id_copy, res_clone)]))
+        db_persist.with_conn(|c| upsert_persistent_media_cache_batch(c, &[(id_copy, res_clone)]))
     })
     .await;
 
@@ -576,14 +574,14 @@ pub async fn get_steam_appdetails_media_batch(
     }
 
     if !missing_after_cache.is_empty() {
-        let db = db.deref().clone();
+        let db_load = db.inner().clone();
         let ids_for_db = missing_after_cache.clone();
         let from_db = tokio::task::spawn_blocking(move || {
-            db.with_conn(|c| load_combined_media_from_db(c, &ids_for_db))
+            db_load.with_conn(|c| load_combined_media_from_db(c, &ids_for_db))
         })
         .await
         .map_err(|e| e.to_string())?
-        .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
+        .map_err(|e: SqliteError| e.to_string())?;
 
         let api_cache = steam_api_cache();
         for (id, media) in from_db {
@@ -632,9 +630,9 @@ pub async fn get_steam_appdetails_media_batch(
     }
 
     if !to_persist.is_empty() {
-        let db = db.deref().clone();
+        let db_persist = db.inner().clone();
         let _ = tokio::task::spawn_blocking(move || {
-            db.with_conn(|c| upsert_persistent_media_cache_batch(c, &to_persist))
+            db_persist.with_conn(|c| upsert_persistent_media_cache_batch(c, &to_persist))
         })
         .await;
     }
@@ -661,7 +659,7 @@ pub async fn get_steam_app_details(
         return Ok(cached);
     }
 
-    let db_for_read = db.deref().clone();
+    let db_for_read = db.inner().clone();
     let app_id_for_read = app_id.clone();
     let from_sqlite = tokio::task::spawn_blocking(move || {
         db_for_read.with_conn(|c| load_catalog_details_json(c, &app_id_for_read))
@@ -688,17 +686,19 @@ pub async fn get_steam_app_details(
 
     steam_api_cache().insert_details(app_id.clone(), result.clone());
 
-    let db_conn = db.deref().clone();
+    let db_write = db.inner().clone();
     let app_id_for_db = app_id.clone();
     let details_for_db = result.clone();
-    let db_write = tokio::task::spawn_blocking(move || {
-        db_conn.with_conn(|c| upsert_catalog_details_from_store(c, &app_id_for_db, &details_for_db))
+
+    let db_task = tokio::task::spawn_blocking(move || {
+        db_write
+            .with_conn(|c| upsert_catalog_details_from_store(c, &app_id_for_db, &details_for_db))
     })
     .await
     .map_err(|e| e.to_string())?
     .map_err(|e: SqliteError| e.to_string());
 
-    let _ = db_write;
+    let _ = db_task;
 
     Ok(result)
 }

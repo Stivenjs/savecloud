@@ -44,10 +44,33 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
         let _ = std::fs::create_dir_all(&plugins_dir);
     }
 
+    // 3. Inicialización de la base de datos SQLite
     let db = AppDb::open()?;
     db.ping()?;
-    app.manage(db);
 
+    let db_for_maintenance = db.clone();
+
+    app.manage(db);
+    // 4. Inicialización del hilo de mantenimiento de la base de datos
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+        if let Ok((total, free)) = db_for_maintenance.stats() {
+            if total > 0 {
+                let fragmentation = (free as f64 / total as f64) * 100.0;
+
+                if fragmentation > 25.0 && total > 500 {
+                    println!(
+                        "Optimizando base de datos... ({:.2}% fragmentación)",
+                        fragmentation
+                    );
+                    let _ = db_for_maintenance.compact();
+                }
+            }
+        }
+    });
+
+    // 5. Inicialización del buffer de logs
     let logs = new_log_buffer();
     app.manage(logs.clone());
 
@@ -69,7 +92,7 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
         });
     });
 
-    // 3. Inicialización del motor P2P (BitTorrent)
+    // 6. Inicialización del motor P2P (BitTorrent)
     let torrent_engine = tauri::async_runtime::block_on(TorrentEngine::new(
         std::env::temp_dir().join("SaveCloud-torrents"),
     ))
@@ -80,10 +103,10 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     });
     app.manage(crate::sources::queue::SourcesState::new_from_disk());
 
-    // 4. Extracción de estados compartidos
+    // 7. Extracción de estados compartidos
     let tray_state = app.state::<TrayState>();
 
-    // 5. Arranque de los observadores y demonios en segundo plano
+    // 8. Arranque de los observadores y demonios en segundo plano
 
     // Sincronización Reactiva: Sube archivos cuando detecta que el proceso de un juego termina.
     game_exit_sync::spawn_exit_watcher(app.handle().clone(), tray_state.inner().0.clone());

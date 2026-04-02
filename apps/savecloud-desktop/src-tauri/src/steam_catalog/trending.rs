@@ -82,14 +82,21 @@ fn parse_trending_app_ids(root: &Value) -> Vec<u32> {
 
 /// Reemplaza por completo `steam_catalog_trending` con los appids dados (orden = rank ascendente).
 pub fn replace_trending_app_ids(conn: &Connection, ranked: &[u32]) -> Result<(), rusqlite::Error> {
-    conn.execute_batch("BEGIN IMMEDIATE; DELETE FROM steam_catalog_trending;")?;
-    for (rank, app_id) in ranked.iter().enumerate() {
-        conn.execute(
+    let tx = conn.unchecked_transaction()?;
+
+    tx.execute_batch("DELETE FROM steam_catalog_trending;")?;
+
+    {
+        let mut stmt = tx.prepare_cached(
             "INSERT INTO steam_catalog_trending (app_id, rank, updated_at) VALUES (?1, ?2, unixepoch())",
-            rusqlite::params![*app_id as i64, rank as i64],
         )?;
+
+        for (rank, app_id) in ranked.iter().enumerate() {
+            stmt.execute(rusqlite::params![*app_id as i64, rank as i64])?;
+        }
     }
-    conn.execute_batch("COMMIT;")?;
+
+    tx.commit()?;
     Ok(())
 }
 
@@ -100,18 +107,22 @@ pub async fn sync_store_trending(db: &AppDb) -> Result<usize, String> {
         .send()
         .await
         .map_err(|e| e.to_string())?;
+
     if !res.status().is_success() {
         return Err(format!(
             "HTTP {} al descargar tendencias de la tienda",
             res.status()
         ));
     }
+
     let body: Value = res.json().await.map_err(|e| e.to_string())?;
     let ranked = parse_trending_app_ids(&body);
     let n = ranked.len();
-    let db = db.clone();
+
+    let db_clone = db.clone();
+
     tokio::task::spawn_blocking(move || {
-        db.with_conn(|c| {
+        db_clone.with_conn(|c| {
             replace_trending_app_ids(c, &ranked)?;
             Ok(())
         })
