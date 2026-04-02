@@ -148,8 +148,11 @@ export function GameDetailPage() {
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
   const { data: sourceMatch } = useQuery({
     queryKey: ["sources-match-detail", gameId],
-    queryFn: () => sourcesFindMatchForGame(displayName),
-    enabled: !!displayName?.trim(),
+    queryFn: () => {
+      const nameForMatch = steamDetails?.name ?? formatGameDisplayName(gameId);
+      return sourcesFindMatchForGame(nameForMatch);
+    },
+    enabled: !!steamDetails?.name,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     refetchOnMount: false,
