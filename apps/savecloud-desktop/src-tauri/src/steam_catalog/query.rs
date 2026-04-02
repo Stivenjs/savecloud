@@ -89,10 +89,11 @@ pub fn count_catalog_filtered(
 /// Tras las filas de [`steam_catalog_trending`], el orden ya no es solo `app_id` (eso mezcla IDs altos
 /// recientes con títulos irrelevantes). Priorizamos ficha enriquecida (`details_json`), luego
 /// `enriched_at`, luego actividad del seed, y `app_id` solo como desempate.
+/// Fragmento `ORDER BY` compartido entre listado paginado y búsqueda (después de tendencia).
 fn order_by_after_trending(table_alias: &str) -> String {
     format!(
         "(tr.rank IS NOT NULL) DESC, tr.rank ASC, \
-         ({alias}.details_json IS NOT NULL AND length(trim({alias}.details_json)) > 0) DESC, \
+         ({alias}.details_json IS NOT NULL) DESC, \
          {alias}.enriched_at DESC NULLS LAST, \
          {alias}.last_sync_batch_at DESC, \
          {alias}.app_id DESC",
