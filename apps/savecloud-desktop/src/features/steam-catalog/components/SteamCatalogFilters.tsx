@@ -39,10 +39,12 @@ const FacetFilterPanel = memo(function FacetFilterPanel({
 
   const handleToggle = useCallback(
     (label: string) => {
-      const currentValue = selected.has(label);
       setOptimisticPending((prev) => {
         const next = new Map(prev);
-        next.set(label, !currentValue);
+
+        const currentlySelected = prev.has(label) ? prev.get(label) : selected.has(label);
+
+        next.set(label, !currentlySelected);
         return next;
       });
 
@@ -54,7 +56,7 @@ const FacetFilterPanel = memo(function FacetFilterPanel({
           next.delete(label);
           return next;
         });
-      }, 300);
+      }, 800);
     },
     [selected, onToggle]
   );
