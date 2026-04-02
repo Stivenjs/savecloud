@@ -42,6 +42,7 @@ pub fn normalize_catalog_name(name: &str) -> String {
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+#[allow(dead_code)]
 /// Escapa `%`, `_` y `\` para usar en patrones `LIKE` con `ESCAPE '\'`.
 pub fn escape_like_pattern(s: &str) -> String {
     let mut out = String::with_capacity(s.len());

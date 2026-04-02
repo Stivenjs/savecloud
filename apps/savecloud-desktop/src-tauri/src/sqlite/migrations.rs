@@ -23,6 +23,7 @@ const MIGRATIONS: &[&str] = &[
     ), // 10
     include_str!("sql/011_fill_facets_and_triggers.sql"),
     include_str!("sql/012_fast_sort_index.sql"),
+    include_str!("sql/013_fts_search.sql"),
 ];
 
 /// Aplica migraciones pendientes de forma idempotente.

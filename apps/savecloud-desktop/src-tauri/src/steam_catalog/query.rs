@@ -2,7 +2,7 @@
 
 use rusqlite::{params_from_iter, Connection, Row};
 
-use super::normalize::{escape_like_pattern, search_phrase_and_tokens};
+use super::normalize::search_phrase_and_tokens;
 use super::types::{CatalogFilterFacet, CatalogFilterFacets, CatalogListItem, CatalogPage};
 
 fn map_catalog_row(row: &Row<'_>) -> Result<CatalogListItem, rusqlite::Error> {
@@ -188,7 +188,7 @@ pub fn catalog_page_filtered(
     })
 }
 
-/// Búsqueda por tokens (AND) sobre `name_normalized`, orden por relevancia y luego tendencia.
+/// Búsqueda por tokens
 pub fn search_catalog_filtered(
     conn: &Connection,
     q: &str,
@@ -196,44 +196,40 @@ pub fn search_catalog_filtered(
     genres: &[String],
     tags: &[String],
 ) -> Result<Vec<CatalogListItem>, rusqlite::Error> {
-    let Some((phrase, tokens)) = search_phrase_and_tokens(q) else {
+    let Some((_, tokens)) = search_phrase_and_tokens(q) else {
         return Ok(Vec::new());
     };
 
+    let fts_match_query = tokens
+        .iter()
+        .map(|t| format!("\"{}\"*", t.replace('\"', "")))
+        .collect::<Vec<_>>()
+        .join(" AND ");
+
     let mut sql = String::from(
-        "SELECT a.app_id, a.name FROM steam_catalog_apps a \
+        "SELECT a.app_id, a.name FROM steam_catalog_search s \
+         JOIN steam_catalog_apps a ON a.app_id = s.app_id \
          LEFT JOIN steam_catalog_trending tr ON tr.app_id = a.app_id \
-         WHERE a.name_normalized IS NOT NULL AND length(trim(a.name_normalized)) > 0",
+         WHERE steam_catalog_search MATCH ?",
     );
-    let mut params: Vec<String> = Vec::new();
-    for token in &tokens {
-        sql.push_str(" AND a.name_normalized LIKE ? ESCAPE '\\'");
-        params.push(format!("%{}%", escape_like_pattern(token)));
-    }
+
+    let mut params: Vec<String> = vec![fts_match_query];
 
     append_genre_filter(&mut sql, &mut params, genres, "a");
     append_tag_filter(&mut sql, &mut params, tags, "a");
 
-    let phrase_esc = escape_like_pattern(&phrase);
-    sql.push_str(" ORDER BY ");
-    sql.push_str("(CASE WHEN a.name_normalized LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END) ASC, ");
-    sql.push_str("(CASE WHEN a.name_normalized LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END) ASC, ");
-    sql.push_str("COALESCE(NULLIF(instr(a.name_normalized, ?), 0), 999999) ASC, ");
-    sql.push_str("length(a.name_normalized) ASC, ");
-    sql.push_str("(tr.rank IS NOT NULL) DESC, tr.rank ASC, ");
-    sql.push_str("(a.details_json IS NOT NULL) DESC, a.enriched_at DESC, a.last_sync_batch_at DESC, a.app_id DESC ");
+    sql.push_str(
+        " ORDER BY s.rank ASC, (tr.rank IS NOT NULL) DESC, tr.rank ASC, a.enriched_at DESC ",
+    );
     sql.push_str(" LIMIT ");
     sql.push_str(&limit.to_string());
-
-    params.push(format!("%{}%", phrase_esc));
-    params.push(format!("{}%", phrase_esc));
-    params.push(phrase);
 
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map(
         params_from_iter(params.iter().map(|s| s.as_str())),
         map_catalog_row,
     )?;
+
     rows.collect()
 }
 
