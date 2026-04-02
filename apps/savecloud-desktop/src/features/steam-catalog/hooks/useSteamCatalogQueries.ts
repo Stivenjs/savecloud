@@ -221,12 +221,18 @@ export function useSteamCatalogQueries() {
   const isMediaBatchPending = steamAppIdsForBatch.length > 0 && !mediaQuery.isFetched;
 
   const visibleNames = useMemo(() => items.map((i) => i.name), [items]);
+  const visibleNamesKey = useMemo(() => {
+    return [...visibleNames].sort().join("|");
+  }, [visibleNames]);
+
   const matchesQuery = useQuery({
-    queryKey: ["sources-matches", visibleNames.join("|")],
+    queryKey: ["sources-matches", visibleNamesKey],
     queryFn: () => sourcesFindMatchesBatch(visibleNames),
     enabled: visibleNames.length > 0,
-    staleTime: 30_000,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
+    refetchOnMount: false,
     placeholderData: keepPreviousData,
   });
   const matchByGameName = useMemo(() => {

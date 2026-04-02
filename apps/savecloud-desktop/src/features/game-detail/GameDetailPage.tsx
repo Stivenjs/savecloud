@@ -1,10 +1,11 @@
 import { addTransitionType, startTransition, useCallback, useEffect, useRef, useState } from "react";
+import { pickCandidate, sourceCandidateKey } from "@utils/sourceMatch";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Button, Spinner, Tab, Tabs } from "@heroui/react";
+import { Button, Select, SelectItem, Spinner, Tab, Tabs } from "@heroui/react";
 import { ArrowLeft, Cpu, Gamepad2, LayoutList, ScrollText } from "lucide-react";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { launchGame, openSaveFolder, removeGame, scheduleConfigBackupToCloud } from "@services/tauri";
@@ -146,14 +147,39 @@ export function GameDetailPage() {
   const showRequirementsTab = steamDetails ? hasSteamRequirements(steamDetails) : false;
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
   const { data: sourceMatch } = useQuery({
-    queryKey: ["sources-match-detail", displayName],
-    queryFn: () => sourcesFindMatchForGame(displayName),
-    enabled: !!displayName?.trim(),
+    queryKey: ["sources-match-detail", gameId],
+    queryFn: () => {
+      const nameForMatch = steamDetails?.name ?? formatGameDisplayName(gameId);
+      return sourcesFindMatchForGame(nameForMatch);
+    },
+    enabled: !!steamDetails?.name,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
-  const handleInstallFromSources = useCallback(async () => {
+  const sourceCandidates = sourceMatch?.candidates ?? [];
+  const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    const list = sourceMatch?.candidates ?? [];
     const best = sourceMatch?.best;
-    if (!best) return;
+    if (!best || list.length === 0) {
+      setSelectedSourceKey(null);
+      return;
+    }
+    setSelectedSourceKey((prev) => {
+      if (prev && list.some((c) => sourceCandidateKey(c) === prev)) {
+        return prev;
+      }
+      return sourceCandidateKey(best);
+    });
+  }, [sourceMatch]);
+
+  const handleInstallFromSources = useCallback(async () => {
+    const chosen = pickCandidate(sourceCandidates, selectedSourceKey);
+    if (!chosen) return;
     const selectedPath = await open({
       title: `Seleccionar carpeta para ${displayName}`,
       directory: true,
@@ -164,15 +190,15 @@ export function GameDetailPage() {
     }
     try {
       await startSourceDownload({
-        sourceId: best.sourceId,
-        itemId: best.itemId,
+        sourceId: chosen.sourceId,
+        itemId: chosen.itemId,
         destinationDir: selectedPath.trim(),
       });
       toastSuccess("Descarga iniciada", `Instalacion iniciada para ${displayName}.`);
     } catch (e) {
       toastError("No se pudo iniciar", e instanceof Error ? e.message : "Error inesperado");
     }
-  }, [sourceMatch?.best, displayName]);
+  }, [sourceCandidates, selectedSourceKey, displayName]);
 
   if (isLoading) {
     return (
@@ -240,12 +266,35 @@ export function GameDetailPage() {
 
       {sourceMatch?.best ? (
         <section className="rounded-xl border border-primary/30 bg-primary/5 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+            <div className="min-w-0 flex-1 space-y-2">
               <p className="text-sm font-semibold">Disponibilidad en tus fuentes</p>
-              <p className="text-xs text-default-500">
-                Coincidencia: {sourceMatch.best.itemTitle} ({sourceMatch.best.sourceName})
-              </p>
+              {sourceCandidates.length > 1 ? (
+                <Select
+                  label="Elegir fuente"
+                  placeholder="Selecciona una coincidencia"
+                  size="sm"
+                  variant="bordered"
+                  className="mt-1 max-w-md"
+                  selectionMode="single"
+                  selectedKeys={new Set([selectedSourceKey ?? sourceCandidateKey(sourceMatch.best)])}
+                  onSelectionChange={(keys) => {
+                    const next = [...keys][0];
+                    if (next !== undefined) setSelectedSourceKey(String(next));
+                  }}>
+                  {sourceCandidates.map((c) => (
+                    <SelectItem
+                      key={sourceCandidateKey(c)}
+                      textValue={`${c.sourceName} ${c.itemTitle} ${Math.round(c.score * 100)}`}>
+                      {c.sourceName} — {c.itemTitle} ({Math.round(c.score * 100)}%)
+                    </SelectItem>
+                  ))}
+                </Select>
+              ) : (
+                <p className="text-xs text-default-500">
+                  Coincidencia: {sourceMatch.best.itemTitle} ({sourceMatch.best.sourceName})
+                </p>
+              )}
             </div>
             <Button color="primary" onPress={() => void handleInstallFromSources()}>
               Instalar

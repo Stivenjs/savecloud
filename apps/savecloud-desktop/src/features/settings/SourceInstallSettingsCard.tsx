@@ -47,11 +47,22 @@ export function SourceInstallSettingsCard(props: Props) {
         {props.sources.length > 0 ? (
           <div className="rounded-medium border border-default-200 p-2">
             <p className="mb-2 text-xs font-semibold text-default-600">JSON importados</p>
-            <div className="max-h-36 space-y-1 overflow-auto">
+            <div className="max-h-36 space-y-2 overflow-auto">
               {props.sources.map((source) => (
-                <div key={source.id} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="truncate text-default-700">{getSourceDisplayName(source.sourceUrl ?? "")}</span>
-                  <span className="shrink-0 text-default-500">{source.downloadsCount} juegos</span>
+                <div key={source.id} className="border-b border-default-100 pb-2 last:border-b-0 last:pb-0">
+                  <div className="flex items-start justify-between gap-2 text-xs">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-default-800">{source.name}</p>
+                      {source.sourceUrl ? (
+                        <p className="mt-0.5 truncate text-[11px] text-default-400" title={source.sourceUrl}>
+                          {source.sourceUrl.startsWith("file://")
+                            ? getSourceDisplayName(source.sourceUrl)
+                            : source.sourceUrl}
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className="shrink-0 text-default-500">{source.downloadsCount} juegos</span>
+                  </div>
                 </div>
               ))}
             </div>
