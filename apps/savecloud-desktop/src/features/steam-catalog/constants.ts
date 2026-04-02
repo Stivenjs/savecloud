@@ -11,4 +11,4 @@ export const STEAM_CATALOG_SEARCH_MIN = 2;
 export const STEAM_CATALOG_PAGE_SIZE = 24;
 
 /** Límite de resultados de búsqueda en servidor (luego se pagina en cliente). */
-export const STEAM_CATALOG_SEARCH_LIMIT = 300;
+export const STEAM_CATALOG_SEARCH_LIMIT = 400;

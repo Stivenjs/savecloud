@@ -6,6 +6,7 @@ use super::context::ApiContext;
 use crate::network::API_CLIENT;
 use crate::sqlite::error::SqliteError;
 use crate::sqlite::AppDb;
+use crate::steam_catalog::normalize::normalize_catalog_name;
 use crate::steam_catalog::trending::{replace_trending_app_ids, sync_store_trending};
 use futures_util::stream::{self, StreamExt};
 use rusqlite::Connection;
@@ -278,7 +279,7 @@ fn apply_seed_updates(
         for (app_id, json) in updates {
             let inferred_name =
                 infer_name_from_details_json(json).unwrap_or_else(|| format!("App {}", app_id));
-            let inferred_name_norm = normalize_display_name_for_seed(&inferred_name);
+            let inferred_name_norm = normalize_catalog_name(&inferred_name);
             let n = stmt.execute(rusqlite::params![
                 app_id,
                 inferred_name,
@@ -300,10 +301,6 @@ fn infer_name_from_details_json(details_json: &str) -> Option<String> {
     } else {
         Some(name.to_string())
     }
-}
-
-fn normalize_display_name_for_seed(name: &str) -> String {
-    name.trim().to_lowercase()
 }
 
 fn parse_import_strategy(s: Option<&str>) -> Result<String, String> {

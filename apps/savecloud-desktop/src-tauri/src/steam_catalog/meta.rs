@@ -14,6 +14,8 @@ pub const META_APP_LIST_SCOPE: &str = "app_list_scope";
 pub const META_FULL_CATALOG_COMPLETED_AT: &str = "full_catalog_completed_at_unix";
 /// Versión de la lógica de paginación (`have_more` + lote lleno); si cambia, se fuerza sync completo otra vez.
 pub const META_CATALOG_SYNC_LOGIC_VERSION: &str = "catalog_sync_logic_version";
+/// Valor de [`set_meta`] cuando el backfill de `name_normalized` (lógica v2) ya se aplicó; ver [`crate::steam_catalog::normalize`].
+pub const META_NAME_NORMALIZED_BACKFILL: &str = "name_normalized_backfill";
 
 pub fn get_meta(conn: &Connection, key: &str) -> Result<Option<String>, rusqlite::Error> {
     conn.query_row(

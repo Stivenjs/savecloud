@@ -402,7 +402,7 @@ export async function getSteamCatalogFilterFacets(): Promise<CatalogFilterFacets
   return invoke<CatalogFilterFacets>("get_steam_catalog_filter_facets");
 }
 
-/** Búsqueda por nombre sobre el catálogo sincronizado (mín. 2 caracteres en el backend). */
+/** Búsqueda por nombre en el catálogo (tokens AND, relevancia; mín. 2 caracteres útiles en el backend). */
 export async function searchSteamCatalog(
   query: string,
   limit?: number,

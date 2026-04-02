@@ -2,6 +2,7 @@
 
 use rusqlite::{params_from_iter, Connection, Row};
 
+use super::normalize::{escape_like_pattern, search_phrase_and_tokens};
 use super::types::{CatalogFilterFacet, CatalogFilterFacets, CatalogListItem, CatalogPage};
 
 fn map_catalog_row(row: &Row<'_>) -> Result<CatalogListItem, rusqlite::Error> {
@@ -10,14 +11,6 @@ fn map_catalog_row(row: &Row<'_>) -> Result<CatalogListItem, rusqlite::Error> {
         steam_app_id: id.to_string(),
         name: row.get(1)?,
     })
-}
-
-/// Misma heurística que el sync (`name_normalized`): minúsculas y espacios colapsados.
-pub fn normalize_for_search(s: &str) -> String {
-    s.to_lowercase()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 /// Etiqueta legible de un elemento de `json_each` sobre `genres` / `categories`:
@@ -186,7 +179,7 @@ pub fn catalog_page_filtered(
     })
 }
 
-/// Búsqueda por subcadena sobre `name_normalized` (mínimo 2 caracteres útiles).
+/// Búsqueda por tokens (AND) sobre `name_normalized`, orden por relevancia y luego tendencia.
 pub fn search_catalog_filtered(
     conn: &Connection,
     q: &str,
@@ -194,23 +187,36 @@ pub fn search_catalog_filtered(
     genres: &[String],
     tags: &[String],
 ) -> Result<Vec<CatalogListItem>, rusqlite::Error> {
-    let needle = normalize_for_search(q.trim());
-    if needle.len() < 2 {
+    let Some((phrase, tokens)) = search_phrase_and_tokens(q) else {
         return Ok(Vec::new());
-    }
-    let pattern = format!("%{needle}%");
+    };
+
     let mut sql = String::from(
         "SELECT a.app_id, a.name FROM steam_catalog_apps a \
          LEFT JOIN steam_catalog_trending tr ON tr.app_id = a.app_id \
-         WHERE a.name_normalized LIKE ?",
+         WHERE a.name_normalized IS NOT NULL AND length(trim(a.name_normalized)) > 0",
     );
-    let mut params: Vec<String> = vec![pattern];
+    let mut params: Vec<String> = Vec::new();
+    for token in &tokens {
+        sql.push_str(" AND a.name_normalized LIKE ? ESCAPE '\\'");
+        params.push(format!("%{}%", escape_like_pattern(token)));
+    }
     append_json_genre_filter(&mut sql, &mut params, genres, "a");
     append_json_tag_filter(&mut sql, &mut params, tags, "a");
+
+    let phrase_esc = escape_like_pattern(&phrase);
     sql.push_str(" ORDER BY ");
+    sql.push_str("(CASE WHEN a.name_normalized LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END) ASC, ");
+    sql.push_str("(CASE WHEN a.name_normalized LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END) ASC, ");
+    sql.push_str("COALESCE(NULLIF(instr(a.name_normalized, ?), 0), 999999) ASC, ");
+    sql.push_str("length(a.name_normalized) ASC, ");
     sql.push_str(&order_by_after_trending("a"));
     sql.push_str(" LIMIT ");
     sql.push_str(&limit.to_string());
+
+    params.push(format!("%{}%", phrase_esc));
+    params.push(format!("{}%", phrase_esc));
+    params.push(phrase);
 
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map(

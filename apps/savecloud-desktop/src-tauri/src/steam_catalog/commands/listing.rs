@@ -17,7 +17,7 @@ fn sanitize_filter_list(v: Option<Vec<String>>) -> Vec<String> {
         .collect()
 }
 
-/// Búsqueda por nombre sobre `name_normalized` (mínimo 2 caracteres).
+/// Búsqueda por nombre: tokens normalizados (AND) y orden por relevancia; ver `search_catalog_filtered`.
 #[tauri::command]
 pub async fn search_steam_catalog(
     db: State<'_, AppDb>,
@@ -63,7 +63,9 @@ pub async fn list_steam_catalog_page(
 
 /// Géneros y etiquetas (categorías) con recuento, solo apps con `details_json`.
 #[tauri::command]
-pub async fn get_steam_catalog_filter_facets(db: State<'_, AppDb>) -> Result<CatalogFilterFacets, String> {
+pub async fn get_steam_catalog_filter_facets(
+    db: State<'_, AppDb>,
+) -> Result<CatalogFilterFacets, String> {
     let db = db.deref().clone();
     tokio::task::spawn_blocking(move || db.with_conn(catalog_query::filter_facets))
         .await

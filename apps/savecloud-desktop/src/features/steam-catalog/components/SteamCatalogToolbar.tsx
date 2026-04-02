@@ -11,7 +11,7 @@ export function SteamCatalogToolbar({ searchTerm, onSearchTermChange }: SteamCat
   return (
     <Input
       aria-label="Buscar en catálogo"
-      placeholder={`Buscar por nombre (mín. ${STEAM_CATALOG_SEARCH_MIN} caracteres)…`}
+      placeholder={`Varias palabras; no hace falta el título exacto (mín. ${STEAM_CATALOG_SEARCH_MIN} caracteres)…`}
       value={searchTerm}
       onValueChange={onSearchTermChange}
       startContent={<Search size={18} className="text-default-400" />}
