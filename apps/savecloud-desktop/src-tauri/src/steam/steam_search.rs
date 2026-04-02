@@ -75,22 +75,38 @@ fn upsert_persistent_media_cache_batch(
     if items.is_empty() {
         return Ok(());
     }
-    let mut stmt = conn.prepare_cached(
-        "INSERT INTO steam_appdetails_media_cache (app_id, media_json, updated_at) \
-            VALUES (?1, ?2, unixepoch()) \
-            ON CONFLICT(app_id) DO UPDATE SET \
-            media_json = excluded.media_json, updated_at = unixepoch()",
-    )?;
-    for (id, media) in items {
-        let Ok(pid) = id.parse::<i64>() else {
-            continue;
-        };
-        let media = normalize_steam_appdetails_media(media.clone());
-        let Ok(json) = serde_json::to_string(&media) else {
-            continue;
-        };
-        stmt.execute((pid, json))?;
+
+    conn.execute_batch("BEGIN IMMEDIATE;")?;
+
+    let result: Result<(), rusqlite::Error> = (|| {
+        let mut stmt = conn.prepare_cached(
+            "INSERT INTO steam_appdetails_media_cache (app_id, media_json, updated_at) \
+                VALUES (?1, ?2, unixepoch()) \
+                ON CONFLICT(app_id) DO UPDATE SET \
+                media_json = excluded.media_json, updated_at = unixepoch()",
+        )?;
+
+        for (id, media) in items {
+            let Ok(pid) = id.parse::<i64>() else {
+                continue;
+            };
+            let media = normalize_steam_appdetails_media(media.clone());
+            let Ok(json) = serde_json::to_string(&media) else {
+                continue;
+            };
+            stmt.execute((pid, json))?;
+        }
+        Ok(())
+    })();
+
+    match result {
+        Ok(_) => conn.execute_batch("COMMIT;")?,
+        Err(e) => {
+            conn.execute_batch("ROLLBACK;")?;
+            return Err(e);
+        }
     }
+
     Ok(())
 }
 
@@ -123,33 +139,36 @@ fn load_catalog_media_map(
     conn: &Connection,
     app_ids: &[String],
 ) -> Result<HashMap<String, SteamAppdetailsMedia>, rusqlite::Error> {
-    let mut stmt = conn.prepare_cached(
-        "SELECT details_json FROM steam_catalog_apps WHERE app_id = ?1 AND details_json IS NOT NULL",
-    )?;
+    let pids: Vec<i64> = app_ids.iter().filter_map(|s| s.parse().ok()).collect();
+    if pids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let placeholders = pids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT app_id, details_json FROM steam_catalog_apps WHERE app_id IN ({placeholders}) AND details_json IS NOT NULL"
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let mut rows = stmt.query(rusqlite::params_from_iter(pids.iter().copied()))?;
+
     let mut out = HashMap::new();
-    for id in app_ids {
-        let Ok(pid) = id.parse::<i64>() else {
-            continue;
-        };
-        let json: Option<String> = match stmt.query_row([pid], |row| row.get::<_, String>(0)) {
-            Ok(s) => Some(s),
-            Err(rusqlite::Error::QueryReturnedNoRows) => None,
-            Err(e) => return Err(e),
-        };
-        let Some(json) = json else {
-            continue;
-        };
+
+    while let Some(row) = rows.next()? {
+        let pid: i64 = row.get(0)?;
+        let json: String = row.get(1)?;
+
         if json.trim().is_empty() {
             continue;
         }
 
         if let Ok(details) = serde_json::from_str::<SteamAppDetails>(&json) {
-            out.insert(id.clone(), details.media);
+            out.insert(pid.to_string(), details.media);
             continue;
         }
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&json) {
             if v.as_object().is_some() {
-                out.insert(id.clone(), parse_media_from_data(&v));
+                out.insert(pid.to_string(), parse_media_from_data(&v));
             }
         }
     }
@@ -165,20 +184,24 @@ fn load_names_from_media_cache(
     if pids.is_empty() {
         return Ok(HashMap::new());
     }
+
     let placeholders = pids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
     let sql = format!(
-            "SELECT app_id, media_json FROM steam_appdetails_media_cache WHERE app_id IN ({placeholders})"
-        );
+        "SELECT app_id, json_extract(media_json, '$.name') FROM steam_appdetails_media_cache WHERE app_id IN ({placeholders})"
+    );
+
     let mut stmt = conn.prepare(&sql)?;
     let mut rows = stmt.query(rusqlite::params_from_iter(pids.iter().copied()))?;
+
     let mut out = HashMap::new();
     while let Some(row) = rows.next()? {
         let pid: i64 = row.get(0)?;
-        let json: String = row.get(1)?;
-        if let Ok(media) = serde_json::from_str::<SteamAppdetailsMedia>(&json) {
-            let name = media.name.trim();
-            if !name.is_empty() {
-                out.insert(pid.to_string(), name.to_string());
+        let name: Option<String> = row.get(1)?;
+
+        if let Some(n) = name {
+            let trimmed = n.trim();
+            if !trimmed.is_empty() {
+                out.insert(pid.to_string(), trimmed.to_string());
             }
         }
     }
