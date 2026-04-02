@@ -2,52 +2,48 @@
 
 use rusqlite::Connection;
 
+/// Arreglo con todos los scripts de migración en orden.
+/// El índice del arreglo corresponde a la versión:
+/// MIGRATIONS[0] actualiza de la versión 0 a la 1.
+/// MIGRATIONS[1] actualiza de la versión 1 a la 2, etc.
+const MIGRATIONS: &[&str] = &[
+    include_str!("sql/001_catalog_init.sql"),
+    include_str!("sql/002_catalog_sync_meta.sql"),
+    include_str!("sql/003_catalog_details_json.sql"),
+    include_str!("sql/004_catalog_trending.sql"),
+    include_str!("sql/005_steam_media_cache.sql"),
+    include_str!("sql/006_notifications.sql"),
+    include_str!("sql/007_steam_seed_import_state.sql"),
+    include_str!("sql/008_steam_seed_max_imported.sql"),
+    "", // 9
+    concat!(
+        include_str!("sql/009_steam_app_genres.sql"),
+        ";\n",
+        include_str!("sql/010_steam_app_tags.sql")
+    ), // 10
+    include_str!("sql/011_fill_facets_and_triggers.sql"),
+    include_str!("sql/012_fast_sort_index.sql"),
+    include_str!("sql/013_fts_search.sql"),
+    include_str!("sql/014_covering_indexes.sql"),
+];
+
 /// Aplica migraciones pendientes de forma idempotente.
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
-    let version: i32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    let current_version: i32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
 
-    if version < 1 {
-        conn.execute_batch(include_str!("sql/001_catalog_init.sql"))?;
-        conn.pragma_update(None, "user_version", "1")?;
-    }
+    for (index, sql) in MIGRATIONS.iter().enumerate() {
+        let target_version = (index + 1) as i32;
 
-    if version < 2 {
-        conn.execute_batch(include_str!("sql/002_catalog_sync_meta.sql"))?;
-        conn.pragma_update(None, "user_version", "2")?;
-    }
+        if current_version < target_version {
+            let tx = conn.unchecked_transaction()?;
 
-    if version < 3 {
-        conn.execute_batch(include_str!("sql/003_catalog_details_json.sql"))?;
-        conn.pragma_update(None, "user_version", "3")?;
-    }
+            if !sql.trim().is_empty() {
+                tx.execute_batch(sql)?;
+            }
 
-    if version < 4 {
-        conn.execute_batch(include_str!("sql/004_catalog_trending.sql"))?;
-        conn.pragma_update(None, "user_version", "4")?;
-    }
-
-    if version < 5 {
-        conn.execute_batch(include_str!("sql/005_steam_media_cache.sql"))?;
-        conn.pragma_update(None, "user_version", "5")?;
-    }
-
-    if version < 6 {
-        conn.execute_batch(include_str!("sql/006_notifications.sql"))?;
-        conn.pragma_update(None, "user_version", "6")?;
-    }
-
-    if version < 7 {
-        conn.execute_batch(include_str!("sql/007_steam_seed_import_state.sql"))?;
-        conn.pragma_update(None, "user_version", "7")?;
-    }
-
-    if version < 8 {
-        conn.execute_batch(include_str!("sql/008_steam_seed_max_imported.sql"))?;
-        conn.pragma_update(None, "user_version", "8")?;
-    }
-
-    if version < 9 {
-        conn.pragma_update(None, "user_version", "9")?;
+            tx.pragma_update(None, "user_version", target_version)?;
+            tx.commit()?;
+        }
     }
 
     Ok(())
@@ -55,14 +51,18 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
 
 #[cfg(test)]
 mod tests {
-    use rusqlite::Connection;
-
     use super::run_migrations;
+    use rusqlite::Connection;
 
     #[test]
     fn migrations_run_twice_without_error() {
         let conn = Connection::open_in_memory().expect("in memory");
         run_migrations(&conn).expect("first");
         run_migrations(&conn).expect("second");
+
+        let version: i32 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 10);
     }
 }

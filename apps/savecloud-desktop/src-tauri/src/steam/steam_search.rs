@@ -9,15 +9,12 @@
 //! Facilita la integración con servicios que requieren identificación
 //! consistente y enriquecimiento de datos dentro del ecosistema de Steam.
 
-use std::ops::Deref;
-
 use rusqlite::Connection;
 use tauri::State;
 
 use crate::network::STEAM_CLIENT;
 use crate::sqlite::error::SqliteError;
 use crate::sqlite::AppDb;
-use crate::steam_catalog::normalize::normalize_catalog_name;
 use crate::steam::appdetails::fetch_steam_app_details_from_store;
 use crate::steam::appdetails::fetch_steam_appdetails_media_from_store;
 use crate::steam::appdetails::parse_media_from_data;
@@ -25,6 +22,7 @@ use crate::steam::appdetails::steam_app_details_from_store_data;
 use crate::steam_cache::{
     normalize_steam_app_id, normalize_steam_appdetails_media, steam_api_cache,
 };
+use crate::steam_catalog::normalize::normalize_catalog_name;
 use futures_util::stream::{self, StreamExt};
 use regex::{Regex, RegexBuilder};
 use std::collections::{HashMap, HashSet};
@@ -55,8 +53,8 @@ fn load_persistent_media_cache_map(
     }
     let placeholders = pids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
     let sql = format!(
-        "SELECT app_id, media_json FROM steam_appdetails_media_cache WHERE app_id IN ({placeholders})"
-    );
+            "SELECT app_id, media_json FROM steam_appdetails_media_cache WHERE app_id IN ({placeholders})"
+        );
     let mut stmt = conn.prepare(&sql)?;
     let mut rows = stmt.query(rusqlite::params_from_iter(pids.iter().copied()))?;
     let mut out = HashMap::new();
@@ -77,22 +75,38 @@ fn upsert_persistent_media_cache_batch(
     if items.is_empty() {
         return Ok(());
     }
-    let mut stmt = conn.prepare_cached(
-        "INSERT INTO steam_appdetails_media_cache (app_id, media_json, updated_at) \
-         VALUES (?1, ?2, unixepoch()) \
-         ON CONFLICT(app_id) DO UPDATE SET \
-         media_json = excluded.media_json, updated_at = unixepoch()",
-    )?;
-    for (id, media) in items {
-        let Ok(pid) = id.parse::<i64>() else {
-            continue;
-        };
-        let media = normalize_steam_appdetails_media(media.clone());
-        let Ok(json) = serde_json::to_string(&media) else {
-            continue;
-        };
-        stmt.execute((pid, json))?;
+
+    conn.execute_batch("BEGIN IMMEDIATE;")?;
+
+    let result: Result<(), rusqlite::Error> = (|| {
+        let mut stmt = conn.prepare_cached(
+            "INSERT INTO steam_appdetails_media_cache (app_id, media_json, updated_at) \
+                VALUES (?1, ?2, unixepoch()) \
+                ON CONFLICT(app_id) DO UPDATE SET \
+                media_json = excluded.media_json, updated_at = unixepoch()",
+        )?;
+
+        for (id, media) in items {
+            let Ok(pid) = id.parse::<i64>() else {
+                continue;
+            };
+            let media = normalize_steam_appdetails_media(media.clone());
+            let Ok(json) = serde_json::to_string(&media) else {
+                continue;
+            };
+            stmt.execute((pid, json))?;
+        }
+        Ok(())
+    })();
+
+    match result {
+        Ok(_) => conn.execute_batch("COMMIT;")?,
+        Err(e) => {
+            conn.execute_batch("ROLLBACK;")?;
+            return Err(e);
+        }
     }
+
     Ok(())
 }
 
@@ -125,30 +139,36 @@ fn load_catalog_media_map(
     conn: &Connection,
     app_ids: &[String],
 ) -> Result<HashMap<String, SteamAppdetailsMedia>, rusqlite::Error> {
-    let mut stmt = conn.prepare_cached(
-        "SELECT details_json FROM steam_catalog_apps WHERE app_id = ?1 \
-         AND details_json IS NOT NULL AND length(trim(details_json)) > 0",
-    )?;
+    let pids: Vec<i64> = app_ids.iter().filter_map(|s| s.parse().ok()).collect();
+    if pids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let placeholders = pids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "SELECT app_id, details_json FROM steam_catalog_apps WHERE app_id IN ({placeholders}) AND details_json IS NOT NULL"
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let mut rows = stmt.query(rusqlite::params_from_iter(pids.iter().copied()))?;
+
     let mut out = HashMap::new();
-    for id in app_ids {
-        let Ok(pid) = id.parse::<i64>() else {
+
+    while let Some(row) = rows.next()? {
+        let pid: i64 = row.get(0)?;
+        let json: String = row.get(1)?;
+
+        if json.trim().is_empty() {
             continue;
-        };
-        let json: Option<String> = match stmt.query_row([pid], |row| row.get::<_, String>(0)) {
-            Ok(s) => Some(s),
-            Err(rusqlite::Error::QueryReturnedNoRows) => None,
-            Err(e) => return Err(e),
-        };
-        let Some(json) = json else {
-            continue;
-        };
+        }
+
         if let Ok(details) = serde_json::from_str::<SteamAppDetails>(&json) {
-            out.insert(id.clone(), details.media);
+            out.insert(pid.to_string(), details.media);
             continue;
         }
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&json) {
             if v.as_object().is_some() {
-                out.insert(id.clone(), parse_media_from_data(&v));
+                out.insert(pid.to_string(), parse_media_from_data(&v));
             }
         }
     }
@@ -164,20 +184,24 @@ fn load_names_from_media_cache(
     if pids.is_empty() {
         return Ok(HashMap::new());
     }
+
     let placeholders = pids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
     let sql = format!(
-        "SELECT app_id, media_json FROM steam_appdetails_media_cache WHERE app_id IN ({placeholders})"
+        "SELECT app_id, json_extract(media_json, '$.name') FROM steam_appdetails_media_cache WHERE app_id IN ({placeholders})"
     );
+
     let mut stmt = conn.prepare(&sql)?;
     let mut rows = stmt.query(rusqlite::params_from_iter(pids.iter().copied()))?;
+
     let mut out = HashMap::new();
     while let Some(row) = rows.next()? {
         let pid: i64 = row.get(0)?;
-        let json: String = row.get(1)?;
-        if let Ok(media) = serde_json::from_str::<SteamAppdetailsMedia>(&json) {
-            let name = media.name.trim();
-            if !name.is_empty() {
-                out.insert(pid.to_string(), name.to_string());
+        let name: Option<String> = row.get(1)?;
+
+        if let Some(n) = name {
+            let trimmed = n.trim();
+            if !trimmed.is_empty() {
+                out.insert(pid.to_string(), trimmed.to_string());
             }
         }
     }
@@ -208,8 +232,8 @@ fn load_catalog_names_map(
     let placeholders = pids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
     let sql = format!(
         "SELECT app_id, name FROM steam_catalog_apps \
-         WHERE app_id IN ({placeholders}) \
-           AND name IS NOT NULL AND length(trim(name)) > 0"
+            WHERE app_id IN ({placeholders}) \
+            AND name IS NOT NULL AND length(trim(name)) > 0"
     );
 
     let mut stmt = conn.prepare(&sql)?;
@@ -244,28 +268,28 @@ fn upsert_catalog_details_from_store(
     let details_json = serde_json::to_string(details).unwrap_or_else(|_| "{}".to_string());
 
     conn.execute(
-        "INSERT INTO steam_catalog_apps (
-            app_id,
-            name,
-            name_normalized,
-            details_json,
-            enriched_at,
-            last_sync_batch_at
-         )
-         VALUES (?1, ?2, ?3, ?4, unixepoch(), unixepoch())
-         ON CONFLICT(app_id) DO UPDATE SET
-            details_json = excluded.details_json,
-            enriched_at = unixepoch(),
-            name = CASE
-                WHEN steam_catalog_apps.name IS NULL OR steam_catalog_apps.name = '' THEN excluded.name
-                ELSE steam_catalog_apps.name
-            END,
-            name_normalized = CASE
-                WHEN steam_catalog_apps.name_normalized IS NULL OR steam_catalog_apps.name_normalized = '' THEN excluded.name_normalized
-                ELSE steam_catalog_apps.name_normalized
-            END",
-        rusqlite::params![pid, name, name_normalized, details_json],
-    )?;
+            "INSERT INTO steam_catalog_apps (
+                app_id,
+                name,
+                name_normalized,
+                details_json,
+                enriched_at,
+                last_sync_batch_at
+            )
+            VALUES (?1, ?2, ?3, ?4, unixepoch(), unixepoch())
+            ON CONFLICT(app_id) DO UPDATE SET
+                details_json = excluded.details_json,
+                enriched_at = unixepoch(),
+                name = CASE
+                    WHEN steam_catalog_apps.name IS NULL OR steam_catalog_apps.name = '' THEN excluded.name
+                    ELSE steam_catalog_apps.name
+                END,
+                name_normalized = CASE
+                    WHEN steam_catalog_apps.name_normalized IS NULL OR steam_catalog_apps.name_normalized = '' THEN excluded.name_normalized
+                    ELSE steam_catalog_apps.name_normalized
+                END",
+            rusqlite::params![pid, name, name_normalized, details_json],
+        )?;
     Ok(())
 }
 
@@ -277,14 +301,17 @@ fn load_catalog_details_json(
         return Ok(None);
     };
     match conn.query_row(
-        "SELECT details_json FROM steam_catalog_apps
-         WHERE app_id = ?1
-           AND details_json IS NOT NULL
-           AND length(trim(details_json)) > 0",
+        "SELECT details_json FROM steam_catalog_apps WHERE app_id = ?1 AND details_json IS NOT NULL",
         [pid],
         |row| row.get::<_, String>(0),
     ) {
-        Ok(v) => Ok(Some(v)),
+        Ok(v) => {
+             if v.trim().is_empty() {
+                 Ok(None)
+             } else {
+                 Ok(Some(v))
+             }
+        },
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(e),
     }
@@ -308,10 +335,10 @@ async fn get_steam_app_names_batch_impl(
     }
 
     let db_for_persist = db.clone();
-    let db_conn = db;
     let ids_for_db = valid_ids.clone();
+
     let from_db = tokio::task::spawn_blocking(move || {
-        db_conn.with_conn(|c| {
+        db.with_conn(|c| {
             let mut m = load_catalog_names_map(c, &ids_for_db)?;
             let missing: Vec<String> = ids_for_db
                 .iter()
@@ -324,7 +351,7 @@ async fn get_steam_app_names_batch_impl(
                     m.insert(k, v);
                 }
             }
-            Ok(m)
+            Ok::<_, rusqlite::Error>(m)
         })
     })
     .await
@@ -377,7 +404,7 @@ pub async fn get_steam_app_names_batch(
     db: State<'_, AppDb>,
     app_ids: Vec<String>,
 ) -> Result<HashMap<String, String>, String> {
-    Ok(get_steam_app_names_batch_impl(db.deref().clone(), app_ids).await)
+    Ok(get_steam_app_names_batch_impl(db.inner().clone(), app_ids).await)
 }
 
 #[tauri::command]
@@ -390,7 +417,7 @@ pub async fn get_steam_app_name(
     };
 
     let mut results =
-        get_steam_app_names_batch_impl(db.deref().clone(), vec![app_id.clone()]).await;
+        get_steam_app_names_batch_impl(db.inner().clone(), vec![app_id.clone()]).await;
     Ok(results.remove(&app_id))
 }
 
@@ -513,14 +540,14 @@ pub async fn get_steam_appdetails_media(
         return Ok(cached);
     }
 
-    let db_conn = db.deref().clone();
+    let db_conn = db.inner().clone();
     let id_for_db = app_id.clone();
     let from_db = tokio::task::spawn_blocking(move || {
         db_conn.with_conn(|c| load_combined_media_from_db(c, std::slice::from_ref(&id_for_db)))
     })
     .await
     .map_err(|e| e.to_string())?
-    .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
+    .map_err(|e: SqliteError| e.to_string())?;
 
     if let Some(media) = from_db.get(&app_id).cloned() {
         steam_api_cache().insert_media(app_id.clone(), media.clone());
@@ -530,11 +557,11 @@ pub async fn get_steam_appdetails_media(
     let result = fetch_steam_appdetails_media_from_store(&app_id).await?;
     steam_api_cache().insert_media(app_id.clone(), result.clone());
 
-    let db_conn = db.deref().clone();
+    let db_persist = db.inner().clone();
     let id_copy = app_id.clone();
     let res_clone = result.clone();
     let _ = tokio::task::spawn_blocking(move || {
-        db_conn.with_conn(|c| upsert_persistent_media_cache_batch(c, &[(id_copy, res_clone)]))
+        db_persist.with_conn(|c| upsert_persistent_media_cache_batch(c, &[(id_copy, res_clone)]))
     })
     .await;
 
@@ -576,14 +603,14 @@ pub async fn get_steam_appdetails_media_batch(
     }
 
     if !missing_after_cache.is_empty() {
-        let db = db.deref().clone();
+        let db_load = db.inner().clone();
         let ids_for_db = missing_after_cache.clone();
         let from_db = tokio::task::spawn_blocking(move || {
-            db.with_conn(|c| load_combined_media_from_db(c, &ids_for_db))
+            db_load.with_conn(|c| load_combined_media_from_db(c, &ids_for_db))
         })
         .await
         .map_err(|e| e.to_string())?
-        .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
+        .map_err(|e: SqliteError| e.to_string())?;
 
         let api_cache = steam_api_cache();
         for (id, media) in from_db {
@@ -632,9 +659,9 @@ pub async fn get_steam_appdetails_media_batch(
     }
 
     if !to_persist.is_empty() {
-        let db = db.deref().clone();
+        let db_persist = db.inner().clone();
         let _ = tokio::task::spawn_blocking(move || {
-            db.with_conn(|c| upsert_persistent_media_cache_batch(c, &to_persist))
+            db_persist.with_conn(|c| upsert_persistent_media_cache_batch(c, &to_persist))
         })
         .await;
     }
@@ -661,7 +688,7 @@ pub async fn get_steam_app_details(
         return Ok(cached);
     }
 
-    let db_for_read = db.deref().clone();
+    let db_for_read = db.inner().clone();
     let app_id_for_read = app_id.clone();
     let from_sqlite = tokio::task::spawn_blocking(move || {
         db_for_read.with_conn(|c| load_catalog_details_json(c, &app_id_for_read))
@@ -688,17 +715,19 @@ pub async fn get_steam_app_details(
 
     steam_api_cache().insert_details(app_id.clone(), result.clone());
 
-    let db_conn = db.deref().clone();
+    let db_write = db.inner().clone();
     let app_id_for_db = app_id.clone();
     let details_for_db = result.clone();
-    let db_write = tokio::task::spawn_blocking(move || {
-        db_conn.with_conn(|c| upsert_catalog_details_from_store(c, &app_id_for_db, &details_for_db))
+
+    let db_task = tokio::task::spawn_blocking(move || {
+        db_write
+            .with_conn(|c| upsert_catalog_details_from_store(c, &app_id_for_db, &details_for_db))
     })
     .await
     .map_err(|e| e.to_string())?
     .map_err(|e: SqliteError| e.to_string());
 
-    let _ = db_write;
+    let _ = db_task;
 
     Ok(result)
 }
@@ -747,11 +776,11 @@ mod media_cache_tests {
         run_migrations(&conn).expect("migrate");
         let raw = r#"{"name":"Seed Game","header_image":"https://cdn.example/header.jpg","screenshots":[]}"#;
         conn.execute(
-            "INSERT INTO steam_catalog_apps (app_id, name, name_normalized, details_json, last_sync_batch_at)
-             VALUES (999001, 'x', 'x', ?1, unixepoch())",
-            [raw],
-        )
-        .expect("insert");
+                "INSERT INTO steam_catalog_apps (app_id, name, name_normalized, details_json, last_sync_batch_at)
+                VALUES (999001, 'x', 'x', ?1, unixepoch())",
+                [raw],
+            )
+            .expect("insert");
         let map = load_catalog_media_map(&conn, &["999001".to_string()]).expect("load");
         assert_eq!(map.get("999001").unwrap().name, "Seed Game");
     }

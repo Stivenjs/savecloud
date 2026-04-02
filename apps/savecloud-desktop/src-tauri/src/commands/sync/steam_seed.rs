@@ -65,33 +65,40 @@ pub async fn sync_apply_cloud_priority_trending(
     )
     .await
     .map_err(|e| e.to_string())?;
+
     if !url_res.status().is_success() {
         return Ok(0);
     }
+
     let dl: SteamSeedPriorityDownloadUrlResponse =
         url_res.json().await.map_err(|e| e.to_string())?;
+
     let content = API_CLIENT
         .get(&dl.download_url)
         .send()
         .await
         .map_err(|e| e.to_string())?;
+
     if !content.status().is_success() {
         return Ok(0);
     }
+
     let text = content.text().await.map_err(|e| e.to_string())?;
     let ids: Vec<u32> = text
         .lines()
         .filter_map(|line| line.trim().parse::<u32>().ok())
         .filter(|&id| id > 0)
         .collect();
+
     if ids.is_empty() {
         return Ok(0);
     }
+
     let n = ids.len();
-    let db = db.clone();
-    let ids = ids;
+    let db_clone = db.clone();
+
     tokio::task::spawn_blocking(move || {
-        db.with_conn(|c| {
+        db_clone.with_conn(|c| {
             replace_trending_app_ids(c, &ids)?;
             Ok(())
         })
@@ -99,6 +106,7 @@ pub async fn sync_apply_cloud_priority_trending(
     .await
     .map_err(|e| e.to_string())?
     .map_err(|e: SqliteError| e.to_string())?;
+
     Ok(n)
 }
 
@@ -376,6 +384,7 @@ async fn list_batch_page(
     )
     .await
     .map_err(|e| format!("steam-seed/batches: {}", e))?;
+
     if !list_res.status().is_success() {
         return Err(format!(
             "API steam-seed/batches: {} {}",
@@ -457,6 +466,7 @@ async fn fetch_one_batch(ctx: &ApiContext, key: &str) -> Result<Vec<(u32, String
     )
     .await
     .map_err(|e| format!("steam-seed/batch/download-url: {}", e))?;
+
     if !url_res.status().is_success() {
         return Err(format!(
             "API steam-seed/batch/download-url: {} {}",
@@ -464,15 +474,18 @@ async fn fetch_one_batch(ctx: &ApiContext, key: &str) -> Result<Vec<(u32, String
             url_res.text().await.unwrap_or_default()
         ));
     }
+
     let dl: SteamSeedBatchDownloadUrlResponse = url_res.json().await.map_err(|e| e.to_string())?;
     let content = API_CLIENT
         .get(&dl.download_url)
         .send()
         .await
         .map_err(|e| e.to_string())?;
+
     if !content.status().is_success() {
         return Err(format!("batch GET {}: {}", key, content.status()));
     }
+
     let text = content.text().await.map_err(|e| e.to_string())?;
     let mut out = Vec::new();
     for line in text.lines() {
@@ -542,6 +555,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
     let size = part_size.unwrap_or(50_000).clamp(1, 100_000) as usize;
     let mut parts_uploaded: u32 = 0;
     let mut offset = 0usize;
+
     while offset < app_ids.len() {
         let end = (offset + size).min(app_ids.len());
         let chunk = &app_ids[offset..end];
@@ -558,6 +572,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
         )
         .await
         .map_err(|e| format!("manifest/upload-url: {}", e))?;
+
         if !res.status().is_success() {
             return Err(format!(
                 "API steam-seed manifest upload-url: {} {}",
@@ -565,6 +580,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
                 res.text().await.unwrap_or_default()
             ));
         }
+
         let upload: SteamSeedUploadUrlResponse = res.json().await.map_err(|e| e.to_string())?;
         let payload = chunk
             .iter()
@@ -572,6 +588,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
             .collect::<Vec<_>>()
             .join("\n")
             + "\n";
+
         let put = API_CLIENT
             .put(&upload.upload_url)
             .header("Content-Type", "text/plain; charset=utf-8")
@@ -579,6 +596,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
             .send()
             .await
             .map_err(|e| e.to_string())?;
+
         if !put.status().is_success() {
             return Err(format!(
                 "S3 PUT manifest part {}: {} {}",
@@ -609,6 +627,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
     )
     .await
     .map_err(|e| format!("priority/upload-url: {}", e))?;
+
     if !priority_url_res.status().is_success() {
         return Err(format!(
             "API steam-seed priority upload-url: {} {}",
@@ -616,8 +635,10 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
             priority_url_res.text().await.unwrap_or_default()
         ));
     }
+
     let priority_upload: SteamSeedUploadUrlResponse =
         priority_url_res.json().await.map_err(|e| e.to_string())?;
+
     let priority_payload = if trending_ids.is_empty() {
         String::new()
     } else {
@@ -628,6 +649,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
             .join("\n")
             + "\n"
     };
+
     let put_priority = API_CLIENT
         .put(&priority_upload.upload_url)
         .header("Content-Type", "text/plain; charset=utf-8")
@@ -635,6 +657,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
         .send()
         .await
         .map_err(|e| e.to_string())?;
+
     if !put_priority.status().is_success() {
         return Err(format!(
             "S3 PUT priority appids: {} {}",
@@ -663,6 +686,7 @@ pub async fn sync_reset_cloud_seed_state() -> Result<(), String> {
     )
     .await
     .map_err(|e| format!("steam-seed/reset: {}", e))?;
+
     if !res.status().is_success() && res.status().as_u16() != 204 {
         return Err(format!(
             "API steam-seed/reset: {} {}",
@@ -743,15 +767,16 @@ async fn import_cloud_seed_one_round(
         .max()
         .expect("to_process no vacío")
         .clone();
+
     import_state.max_imported_batch_key = Some(match import_state.max_imported_batch_key.clone() {
         None => batch_max,
         Some(prev) if batch_max > prev => batch_max,
         Some(prev) => prev,
     });
 
-    let db = db.clone();
+    let db_update = db.clone();
     let rows_updated = tokio::task::spawn_blocking(move || {
-        db.with_conn(|conn| {
+        db_update.with_conn(|conn| {
             let n = apply_seed_updates(conn, &updates)?;
             save_import_state(conn, &import_state)?;
             Ok(n)
@@ -778,6 +803,7 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
     let max_batches = max_batches.unwrap_or(50).clamp(1, 500);
     let concurrency = concurrency.unwrap_or(4).clamp(1, 32) as usize;
     let requested_strategy = parse_import_strategy(strategy.as_deref())?;
+
     import_cloud_seed_one_round(
         db.inner(),
         &ctx,
