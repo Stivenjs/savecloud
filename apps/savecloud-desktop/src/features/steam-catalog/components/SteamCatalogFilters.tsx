@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Accordion, AccordionItem, Button, Checkbox, Chip, Input, Skeleton } from "@heroui/react";
 import type { CatalogFilterFacet } from "@services/tauri";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
@@ -18,8 +18,9 @@ function normalizeFilter(s: string): string {
   return s.trim().toLowerCase();
 }
 
-/** Solo el cuerpo del panel; el `AccordionItem` debe ser hijo directo de `Accordion`. */
-function FacetFilterPanel({
+/** Panel de filtros con estado optimista: el checkbox se marca de inmediato
+ *  sin esperar a que el padre propague el nuevo estado. */
+const FacetFilterPanel = memo(function FacetFilterPanel({
   items,
   selected,
   onToggle,
@@ -33,6 +34,30 @@ function FacetFilterPanel({
   const [filterText, setFilterText] = useState("");
   const debouncedFilterText = useDebouncedValue(filterText, 300);
   const needle = normalizeFilter(debouncedFilterText);
+
+  const [optimisticPending, setOptimisticPending] = useState<Map<string, boolean>>(new Map());
+
+  const handleToggle = useCallback(
+    (label: string) => {
+      const currentValue = selected.has(label);
+      setOptimisticPending((prev) => {
+        const next = new Map(prev);
+        next.set(label, !currentValue);
+        return next;
+      });
+
+      onToggle(label);
+
+      setTimeout(() => {
+        setOptimisticPending((prev) => {
+          const next = new Map(prev);
+          next.delete(label);
+          return next;
+        });
+      }, 300);
+    },
+    [selected, onToggle]
+  );
 
   const filtered = useMemo(() => {
     if (!needle) return items;
@@ -61,26 +86,32 @@ function FacetFilterPanel({
           <p className="px-1 py-2 text-center text-xs text-default-400">Sin coincidencias</p>
         ) : (
           <ul className="flex flex-col gap-1">
-            {filtered.map((f) => (
-              <li key={f.label}>
-                <Checkbox
-                  size="sm"
-                  classNames={{ label: "w-full max-w-full text-xs" }}
-                  isSelected={selected.has(f.label)}
-                  onValueChange={() => onToggle(f.label)}>
-                  <span className="flex w-full min-w-0 items-center justify-between gap-2">
-                    <span className="truncate">{f.label}</span>
-                    <span className="shrink-0 tabular-nums text-default-400">{f.count}</span>
-                  </span>
-                </Checkbox>
-              </li>
-            ))}
+            {filtered.map((f) => {
+              const isSelected = optimisticPending.has(f.label)
+                ? optimisticPending.get(f.label)!
+                : selected.has(f.label);
+
+              return (
+                <li key={f.label}>
+                  <Checkbox
+                    size="sm"
+                    classNames={{ label: "w-full max-w-full text-xs" }}
+                    isSelected={isSelected}
+                    onValueChange={() => handleToggle(f.label)}>
+                    <span className="flex w-full min-w-0 items-center justify-between gap-2">
+                      <span className="truncate">{f.label}</span>
+                      <span className="shrink-0 tabular-nums text-default-400">{f.count}</span>
+                    </span>
+                  </Checkbox>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
     </div>
   );
-}
+});
 
 export function SteamCatalogFilters({
   genres,
@@ -95,6 +126,10 @@ export function SteamCatalogFilters({
   const genreSet = useMemo(() => new Set(selectedGenres), [selectedGenres]);
   const tagSet = useMemo(() => new Set(selectedTags), [selectedTags]);
   const hasSelection = selectedGenres.length > 0 || selectedTags.length > 0;
+
+  const handleToggleGenre = useCallback((label: string) => onToggleGenre(label), [onToggleGenre]);
+  const handleToggleTag = useCallback((label: string) => onToggleTag(label), [onToggleTag]);
+  const handleClearAll = useCallback(() => onClearAll(), [onClearAll]);
 
   const defaultExpandedKeys = useMemo(
     () => [genres.length > 0 ? "genres" : null, tags.length > 0 ? "tags" : null].filter(Boolean) as string[],
@@ -119,7 +154,12 @@ export function SteamCatalogFilters({
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-wider text-default-500">Filtros</p>
         {hasSelection ? (
-          <Button size="sm" variant="light" color="warning" className="h-7 min-w-0 px-2 text-xs" onPress={onClearAll}>
+          <Button
+            size="sm"
+            variant="light"
+            color="warning"
+            className="h-7 min-w-0 px-2 text-xs"
+            onPress={handleClearAll}>
             Quitar filtros
           </Button>
         ) : null}
@@ -158,7 +198,7 @@ export function SteamCatalogFilters({
               <FacetFilterPanel
                 items={genres}
                 selected={genreSet}
-                onToggle={onToggleGenre}
+                onToggle={handleToggleGenre}
                 filterPlaceholder="Filtrar…"
               />
             </AccordionItem>
@@ -176,7 +216,12 @@ export function SteamCatalogFilters({
                   </Chip>
                 </span>
               }>
-              <FacetFilterPanel items={tags} selected={tagSet} onToggle={onToggleTag} filterPlaceholder="Filtrar…" />
+              <FacetFilterPanel
+                items={tags}
+                selected={tagSet}
+                onToggle={handleToggleTag}
+                filterPlaceholder="Filtrar…"
+              />
             </AccordionItem>
           ) : null}
         </Accordion>
