@@ -1,10 +1,14 @@
 /**
  * Animación de aparición de la lista de juegos (búsqueda/filtros).
  * Entrada en escalonado (stagger): cada tarjeta hace fade-in + slide up con un pequeño retraso.
+ *
+ * IMPORTANTE: no usar key={listKey} en el contenedor — eso desmonta y remonta
+ * todo el árbol destruyendo memo en los hijos. En su lugar usamos useAnimationControls
+ * para re-ejecutar la animación de forma imperativa sin tocar el DOM.
  */
 
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect } from "react";
+import { motion, useAnimationControls } from "framer-motion";
 import type { ReactNode } from "react";
 
 const STAGGER_DELAY = 0.05;
@@ -38,34 +42,28 @@ export const gamesListItemVariants = {
 
 export interface GamesListMotionContainerProps {
   children: ReactNode;
-  /** Clase del contenedor (ej. grid). */
   className?: string;
-  /** Clave para re-ejecutar la animación cuando cambie la lista (ej. ids de juegos filtrados). */
+  /**
+   * Cuando cambia este valor se re-ejecuta la animación de entrada.
+   * Ya no se usa como `key` del nodo — el árbol DOM se preserva para
+   * que memo en los hijos funcione correctamente.
+   */
   listKey?: string;
 }
 
-/**
- * Contenedor que anima la aparición de los hijos en escalonado.
- * Si cambia `listKey` (p. ej. al filtrar búsqueda), la animación se vuelve a ejecutar.
- */
 export function GamesListMotionContainer({ children, className, listKey }: GamesListMotionContainerProps) {
-  const [shouldAnimate, setShouldAnimate] = useState(false);
+  const controls = useAnimationControls();
 
   useEffect(() => {
-    setShouldAnimate(false);
+    controls.set("hidden");
     const id = requestAnimationFrame(() => {
-      setShouldAnimate(true);
+      void controls.start("visible");
     });
     return () => cancelAnimationFrame(id);
-  }, [listKey]);
+  }, [listKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <motion.div
-      key={listKey}
-      className={className}
-      variants={gamesListContainerVariants}
-      initial="hidden"
-      animate={shouldAnimate ? "visible" : "hidden"}>
+    <motion.div className={className} variants={gamesListContainerVariants} initial="hidden" animate={controls}>
       {children}
     </motion.div>
   );
@@ -75,9 +73,6 @@ export interface GamesListMotionItemProps {
   children: ReactNode;
 }
 
-/**
- * Envuelve cada ítem de la lista para que use la variante de entrada en escalonado.
- */
 export function GamesListMotionItem({ children }: GamesListMotionItemProps) {
   return <motion.div variants={gamesListItemVariants}>{children}</motion.div>;
 }
