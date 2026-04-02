@@ -1,6 +1,8 @@
 //! Parser y normalización de catálogos JSON heterogéneos.
 
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 use serde_json::Value;
 
@@ -26,7 +28,9 @@ pub fn parse_catalog(raw: &str, source_url: Option<String>) -> Result<SourceCata
         .map(str::trim)
         .filter(|v| !v.is_empty())
         .unwrap_or("source");
-    let source_id = slugify(source_name);
+    let base_slug = slugify(source_name);
+    // Sufijo estable: varios JSONs con el mismo `name` no deben compartir id (merge sobrescribiría).
+    let source_id = unique_catalog_id(&base_slug, source_url.as_deref(), raw);
 
     let mut items: Vec<SourceItem> = Vec::new();
     for (idx, item) in downloads.iter().enumerate() {
@@ -39,7 +43,11 @@ pub fn parse_catalog(raw: &str, source_url: Option<String>) -> Result<SourceCata
             .map(str::trim)
             .filter(|v| !v.is_empty())
             .map(ToOwned::to_owned);
-        let uris = obj.get("uris").and_then(Value::as_array).cloned().unwrap_or_default();
+        let uris = obj
+            .get("uris")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
 
         let Some(title) = title else {
             continue;
@@ -79,13 +87,19 @@ pub fn parse_catalog(raw: &str, source_url: Option<String>) -> Result<SourceCata
                 .get("uploadDate")
                 .and_then(Value::as_str)
                 .map(ToOwned::to_owned),
-            file_size: obj.get("fileSize").and_then(Value::as_str).map(ToOwned::to_owned),
+            file_size: obj
+                .get("fileSize")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
             metadata,
         });
     }
 
     if items.is_empty() {
-        return Err("No se encontraron items válidos en `downloads[]` (requiere `title` + `uris[]`)".to_string());
+        return Err(
+            "No se encontraron items válidos en `downloads[]` (requiere `title` + `uris[]`)"
+                .to_string(),
+        );
     }
 
     Ok(SourceCatalog {
@@ -124,3 +138,44 @@ pub fn slugify(input: &str) -> String {
     out.trim_matches('-').to_string()
 }
 
+/// Id de catálogo único: `slug` + hash de origen (URL) o del contenido del JSON (import local sin URL).
+fn unique_catalog_id(base_slug: &str, source_url: Option<&str>, raw: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    match source_url {
+        Some(u) => {
+            u.hash(&mut hasher);
+        }
+        None => {
+            0u8.hash(&mut hasher);
+            raw.len().hash(&mut hasher);
+            for chunk in raw.as_bytes().chunks(4096) {
+                chunk.hash(&mut hasher);
+            }
+        }
+    }
+    let h = hasher.finish();
+    format!("{}-{:x}", base_slug, h & 0xFFFF_FFFF)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_name_different_json_body_yields_different_catalog_id() {
+        let a = r#"{"name":"Hydra","downloads":[{"title":"G","uris":["https://a.example/x"]}]}"#;
+        let b = r#"{"name":"Hydra","downloads":[{"title":"G","uris":["https://b.example/y"]}]}"#;
+        let ca = parse_catalog(a, Some("https://cdn.example/a.json".to_string())).expect("a");
+        let cb = parse_catalog(b, Some("https://cdn.example/b.json".to_string())).expect("b");
+        assert_ne!(ca.id, cb.id);
+    }
+
+    #[test]
+    fn same_url_and_raw_is_idempotent() {
+        let raw = r#"{"name":"X","downloads":[{"title":"G","uris":["https://z.example/"]}]}"#;
+        let url = "https://same.example/list.json".to_string();
+        let c1 = parse_catalog(raw, Some(url.clone())).expect("c1");
+        let c2 = parse_catalog(raw, Some(url)).expect("c2");
+        assert_eq!(c1.id, c2.id);
+    }
+}

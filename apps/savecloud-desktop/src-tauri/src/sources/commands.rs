@@ -249,9 +249,9 @@ fn find_matches_from_index(
         }
     }
 
-    // Ordena por score descendente y trunca a los 5 mejores
+    // Ordena por score descendente y trunca (selector en UI con varias fuentes)
     matches.sort_unstable_by(|a, b| b.score.total_cmp(&a.score));
-    matches.truncate(5);
+    matches.truncate(12);
 
     let best = matches.first().cloned();
     SourceMatchResult {
