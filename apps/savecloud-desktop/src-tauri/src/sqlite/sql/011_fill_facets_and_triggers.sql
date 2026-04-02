@@ -50,7 +50,3 @@ BEGIN
     SELECT NEW.app_id, CASE WHEN json_valid(t.value) AND json_type(t.value) = 'object' THEN COALESCE(NULLIF(json_extract(t.value, '$.description'), ''), t.value) ELSE t.value END
     FROM json_each(CASE WHEN json_valid(NEW.details_json) AND json_type(json_extract(NEW.details_json, '$.categories')) = 'array' THEN json_extract(NEW.details_json, '$.categories') ELSE '[]' END) AS t;
 END;
-
--- Índice acelera la ordenación por defecto cuando el usuario abre el catálogo
-CREATE INDEX IF NOT EXISTS idx_catalog_pagination 
-ON steam_catalog_apps(last_sync_batch_at DESC, app_id DESC);
