@@ -84,25 +84,8 @@ pub fn count_catalog_filtered(
     Ok(count as u64)
 }
 
-/// Fragmento `ORDER BY` compartido entre listado paginado y búsqueda (después de tendencia).
-///
-/// Tras las filas de [`steam_catalog_trending`], el orden ya no es solo `app_id` (eso mezcla IDs altos
-/// recientes con títulos irrelevantes). Priorizamos ficha enriquecida (`details_json`), luego
-/// `enriched_at`, luego actividad del seed, y `app_id` solo como desempate.
-/// Fragmento `ORDER BY` compartido entre listado paginado y búsqueda (después de tendencia).
-fn order_by_after_trending(table_alias: &str) -> String {
-    format!(
-        "(tr.rank IS NOT NULL) DESC, tr.rank ASC, \
-         ({alias}.details_json IS NOT NULL) DESC, \
-         {alias}.enriched_at DESC NULLS LAST, \
-         {alias}.last_sync_batch_at DESC, \
-         {alias}.app_id DESC",
-        alias = table_alias
-    )
-}
-
-/// Listado: primero juegos con ranking de tendencia (`steam_catalog_trending`, sync desde la tienda),
-/// luego el resto con mejor orden que un simple `app_id` descendente (ver [`order_by_after_trending`]).
+//// Listado ultra-optimizado usando Split Queries.
+/// Calcula la paginación en Rust para evitar que SQLite tenga que ordenar todo el catálogo en memoria.
 pub fn list_catalog_page_filtered(
     conn: &Connection,
     offset: u32,
@@ -110,28 +93,82 @@ pub fn list_catalog_page_filtered(
     genres: &[String],
     tags: &[String],
 ) -> Result<Vec<CatalogListItem>, rusqlite::Error> {
-    let mut sql = String::from(
-        "SELECT a.app_id, a.name FROM steam_catalog_apps a \
-         LEFT JOIN steam_catalog_trending tr ON tr.app_id = a.app_id \
+    let mut results = Vec::new();
+
+    // 1. OBTENER TENDENCIAS (Aislado, súper rápido porque son pocos registros)
+    let mut t_sql = String::from(
+        "SELECT a.app_id, a.name FROM steam_catalog_trending tr \
+         JOIN steam_catalog_apps a ON a.app_id = tr.app_id \
          WHERE 1=1",
     );
-    let mut params: Vec<String> = Vec::new();
-    append_genre_filter(&mut sql, &mut params, genres, "a");
-    append_tag_filter(&mut sql, &mut params, tags, "a");
-    sql.push_str(" ORDER BY ");
-    sql.push_str(&order_by_after_trending("a"));
-    sql.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
+    let mut t_params: Vec<String> = Vec::new();
+    append_genre_filter(&mut t_sql, &mut t_params, genres, "a");
+    append_tag_filter(&mut t_sql, &mut t_params, tags, "a");
+    t_sql.push_str(" ORDER BY tr.rank ASC");
 
-    let mut stmt = conn.prepare(&sql)?;
-    let rows = if params.is_empty() {
-        stmt.query_map([], map_catalog_row)?
+    let mut stmt_t = conn.prepare(&t_sql)?;
+    let trending_items: Vec<CatalogListItem> = if t_params.is_empty() {
+        stmt_t
+            .query_map([], map_catalog_row)?
+            .filter_map(Result::ok)
+            .collect()
     } else {
-        stmt.query_map(
-            params_from_iter(params.iter().map(|s| s.as_str())),
-            map_catalog_row,
-        )?
+        stmt_t
+            .query_map(params_from_iter(t_params.iter()), map_catalog_row)?
+            .filter_map(Result::ok)
+            .collect()
     };
-    rows.collect()
+
+    let t_count = trending_items.len() as u32;
+
+    // Lógica inteligente de paginación para las tendencias
+    if offset < t_count {
+        let take = std::cmp::min(limit, t_count - offset);
+        results.extend(
+            trending_items
+                .into_iter()
+                .skip(offset as usize)
+                .take(take as usize),
+        );
+    }
+
+    // 2. OBTENER EL RESTO DEL CATÁLOGO (Usa nuestro nuevo Índice B-Tree pre-calculado)
+    if results.len() < limit as usize {
+        let remaining_limit = limit - results.len() as u32;
+        let normal_offset = if offset >= t_count {
+            offset - t_count
+        } else {
+            0
+        };
+
+        let mut n_sql = String::from(
+            "SELECT a.app_id, a.name FROM steam_catalog_apps a \
+             WHERE NOT EXISTS (SELECT 1 FROM steam_catalog_trending WHERE app_id = a.app_id)",
+        );
+        let mut n_params: Vec<String> = Vec::new();
+        append_genre_filter(&mut n_sql, &mut n_params, genres, "a");
+        append_tag_filter(&mut n_sql, &mut n_params, tags, "a");
+
+        // Esto coincide EXACTAMENTE con `idx_catalog_fast_sort`. SQLite responderá en milisegundos.
+        n_sql.push_str(" ORDER BY (a.details_json IS NOT NULL) DESC, a.enriched_at DESC, a.last_sync_batch_at DESC, a.app_id DESC");
+        n_sql.push_str(&format!(
+            " LIMIT {} OFFSET {}",
+            remaining_limit, normal_offset
+        ));
+
+        let mut stmt_n = conn.prepare(&n_sql)?;
+        let normal_items = if n_params.is_empty() {
+            stmt_n.query_map([], map_catalog_row)?
+        } else {
+            stmt_n.query_map(params_from_iter(n_params.iter()), map_catalog_row)?
+        };
+
+        for item in normal_items {
+            results.push(item?);
+        }
+    }
+
+    Ok(results)
 }
 
 pub fn catalog_page_filtered(
@@ -183,7 +220,8 @@ pub fn search_catalog_filtered(
     sql.push_str("(CASE WHEN a.name_normalized LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END) ASC, ");
     sql.push_str("COALESCE(NULLIF(instr(a.name_normalized, ?), 0), 999999) ASC, ");
     sql.push_str("length(a.name_normalized) ASC, ");
-    sql.push_str(&order_by_after_trending("a"));
+    sql.push_str("(tr.rank IS NOT NULL) DESC, tr.rank ASC, ");
+    sql.push_str("(a.details_json IS NOT NULL) DESC, a.enriched_at DESC, a.last_sync_batch_at DESC, a.app_id DESC ");
     sql.push_str(" LIMIT ");
     sql.push_str(&limit.to_string());
 

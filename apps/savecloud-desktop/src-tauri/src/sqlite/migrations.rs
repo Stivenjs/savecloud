@@ -22,7 +22,7 @@ const MIGRATIONS: &[&str] = &[
         include_str!("sql/010_steam_app_tags.sql")
     ), // 10
     include_str!("sql/011_fill_facets_and_triggers.sql"),
-    include_str!("sql/012_idx_catalog_pagination.sql"),
+    include_str!("sql/012_fast_sort_index.sql"),
 ];
 
 /// Aplica migraciones pendientes de forma idempotente.
