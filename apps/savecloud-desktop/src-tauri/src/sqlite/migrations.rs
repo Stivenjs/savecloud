@@ -46,6 +46,10 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         conn.pragma_update(None, "user_version", "8")?;
     }
 
+    if version < 9 {
+        conn.pragma_update(None, "user_version", "9")?;
+    }
+
     Ok(())
 }
 

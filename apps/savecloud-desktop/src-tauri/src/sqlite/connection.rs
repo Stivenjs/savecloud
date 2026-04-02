@@ -7,6 +7,7 @@ use rusqlite::Connection;
 use crate::config::paths;
 use crate::sqlite::error::SqliteError;
 use crate::sqlite::migrations::run_migrations;
+use crate::steam_catalog::normalize::backfill_name_normalized_if_needed;
 
 /// Estado compartido de la base SQLite del catálogo (un proceso → una conexión escrita aquí).
 ///
@@ -35,6 +36,7 @@ impl AppDb {
         conn.pragma_update(None, "synchronous", "NORMAL")?;
 
         run_migrations(&conn)?;
+        backfill_name_normalized_if_needed(&conn)?;
 
         Ok(Self {
             inner: Arc::new(Mutex::new(conn)),

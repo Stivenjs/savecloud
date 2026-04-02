@@ -17,6 +17,7 @@ use tauri::State;
 use crate::network::STEAM_CLIENT;
 use crate::sqlite::error::SqliteError;
 use crate::sqlite::AppDb;
+use crate::steam_catalog::normalize::normalize_catalog_name;
 use crate::steam::appdetails::fetch_steam_app_details_from_store;
 use crate::steam::appdetails::fetch_steam_appdetails_media_from_store;
 use crate::steam::appdetails::parse_media_from_data;
@@ -222,10 +223,6 @@ fn load_catalog_names_map(
     Ok(out)
 }
 
-fn normalize_display_name_for_catalog(name: &str) -> String {
-    name.trim().to_lowercase()
-}
-
 fn upsert_catalog_details_from_store(
     conn: &Connection,
     app_id: &str,
@@ -243,7 +240,7 @@ fn upsert_catalog_details_from_store(
     } else {
         details.name.trim().to_string()
     };
-    let name_normalized = normalize_display_name_for_catalog(&name);
+    let name_normalized = normalize_catalog_name(&name);
     let details_json = serde_json::to_string(details).unwrap_or_else(|_| "{}".to_string());
 
     conn.execute(

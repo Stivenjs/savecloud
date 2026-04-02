@@ -11,6 +11,7 @@ use crate::sqlite::AppDb;
 
 use super::api::{fetch_app_list_page, GET_APP_LIST_QUERY_INCLUDES};
 use super::error::CatalogSyncError;
+use super::normalize::normalize_catalog_name;
 use super::meta::{
     delete_meta, get_meta, set_meta, META_APP_LIST_SCOPE, META_CATALOG_SYNC_LOGIC_VERSION,
     META_FULL_CATALOG_COMPLETED_AT, META_FULL_SYNC_DONE, META_LAST_INCREMENTAL_AT,
@@ -61,13 +62,6 @@ fn now_unix_secs() -> u64 {
         .unwrap_or(0)
 }
 
-fn normalize_display_name(name: &str) -> String {
-    name.to_lowercase()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 fn resolve_api_key() -> Result<String, CatalogSyncError> {
     let s = load_settings();
     s.steam_web_api_key
@@ -94,7 +88,7 @@ fn upsert_apps_batch(conn: &Connection, rows: &[(u32, String)]) -> Result<u64, r
            last_sync_batch_at = unixepoch()",
     )?;
     for (app_id, name) in rows {
-        let nn = normalize_display_name(name);
+        let nn = normalize_catalog_name(name);
         stmt.execute(rusqlite::params![app_id, name, nn])?;
         n += 1;
     }
