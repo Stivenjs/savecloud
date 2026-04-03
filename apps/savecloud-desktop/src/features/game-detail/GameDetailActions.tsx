@@ -27,34 +27,46 @@ export function GameDetailActions({
       ? "El juego parece estar en ejecución"
       : undefined;
 
+  const hasActions = Boolean(menuProps.onEdit || menuProps.onRemove || menuProps.onOpenFolder);
+
+  if (!onPlay && !hasActions) {
+    return null;
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button
-        color="primary"
-        startContent={<Play size={18} />}
-        isDisabled={playDisabled}
-        title={playTitle}
-        onPress={() => onPlay?.(game)}>
-        Jugar
-      </Button>
+      {/* Solo mostramos el botón Jugar si la vista padre autorizó la función onPlay */}
+      {onPlay && (
+        <Button
+          color="primary"
+          startContent={<Play size={18} />}
+          isDisabled={playDisabled}
+          title={playTitle}
+          onPress={() => onPlay(game)}>
+          Jugar
+        </Button>
+      )}
 
-      <Dropdown placement="bottom-end">
-        <DropdownTrigger>
-          <Button variant="bordered" endContent={<ChevronDown size={16} />}>
-            Acciones
-          </Button>
-        </DropdownTrigger>
-        <GameActionsDropdownMenu
-          surface="detail"
-          game={game}
-          isGameRunning={isGameRunning}
-          isUploadTooLarge={isUploadTooLarge}
-          isSyncing={isSyncing}
-          isDownloading={isDownloading}
-          isFullBackupUploading={isFullBackupUploading}
-          {...menuProps}
-        />
-      </Dropdown>
+      {/* Solo mostramos el Dropdown si hay acciones válidas */}
+      {hasActions && (
+        <Dropdown placement="bottom-end">
+          <DropdownTrigger>
+            <Button variant="bordered" endContent={<ChevronDown size={16} />}>
+              Acciones
+            </Button>
+          </DropdownTrigger>
+          <GameActionsDropdownMenu
+            surface="detail"
+            game={game}
+            isGameRunning={isGameRunning}
+            isUploadTooLarge={isUploadTooLarge}
+            isSyncing={isSyncing}
+            isDownloading={isDownloading}
+            isFullBackupUploading={isFullBackupUploading}
+            {...menuProps}
+          />
+        </Dropdown>
+      )}
     </div>
   );
 }
