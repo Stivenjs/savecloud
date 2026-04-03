@@ -567,7 +567,10 @@ pub(crate) async fn upload_one_file_multipart(
 }
 
 /// Reanuda una subida multipart desde el estado guardado en disco con concurrencia.
-pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), String> {
+pub(crate) async fn resume_paused_upload(
+    app: tauri::AppHandle,
+    cancel: Option<std::sync::Arc<crate::tray::tray_state::TrayStateInner>>,
+) -> Result<(), String> {
     let state = load_paused_state().ok_or("No hay ninguna subida pausada")?;
 
     let api_ctx = super::context::resolve_api_context()?;
@@ -591,7 +594,6 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
         .filter(|n| !completed_set.contains(n))
         .collect();
 
-    // Si ya no faltan partes, completamos
     if remaining.is_empty() {
         multipart_complete(
             api_base,
@@ -607,6 +609,8 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
         )
         .await?;
         remove_paused_state_file();
+
+        // Emitir 100% de progreso al frontend
         emit_sync_upload_progress(
             &app,
             SyncProgressPayload {
@@ -618,8 +622,8 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
                 total: state.total_size,
                 downloaded_bytes: Some(state.total_size),
                 total_bytes: Some(state.total_size),
-                can_pause: None,
-                can_cancel: None,
+                can_pause: Some(true),
+                can_cancel: Some(true),
                 can_resume: None,
                 strategy: Some(SyncOperationStrategy::Multipart),
                 state: None,
@@ -629,7 +633,6 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
         return Ok(());
     }
 
-    // Productor-Consumidor para la reanudación
     let (tx, rx) = mpsc::channel::<(u32, u64, u64, String)>(MULTIPART_PUT_CONCURRENCY * 2);
 
     spawn_url_prefetcher(
@@ -641,7 +644,7 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
         state.total_size,
         remaining,
         tx,
-        None,
+        cancel.clone(),
     );
 
     let mut all_parts: Vec<(u32, String)> = state
@@ -653,7 +656,6 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
     let path_buf = PathBuf::from(&state.absolute_path);
     let mut loaded = (all_parts.len() as u64) * PART_SIZE;
 
-    // Concurrencia para la reanudación
     let mut stream = ReceiverStream::new(rx)
         .map(|(part_number, start, part_len, url)| {
             let path = path_buf.clone();
@@ -694,7 +696,37 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
     let required_parts_len = num_parts as usize;
 
     while let Some(result) = stream.next().await {
-        let (part_number, etag, part_len) = result?;
+        if let Some(ref t) = cancel {
+            if t.upload_cancel_requested() {
+                let _ =
+                    multipart_abort(api_base, user_id, api_key, &state.key, &state.upload_id).await;
+                remove_paused_state_file();
+                return Err("Subida cancelada".to_string());
+            }
+            if t.upload_pause_requested() {
+                let mut new_state = state.clone();
+                new_state.completed_parts = all_parts
+                    .iter()
+                    .map(|(n, e)| CompletedPartState {
+                        part_number: *n,
+                        etag: e.clone(),
+                    })
+                    .collect();
+                save_paused_state(&new_state).map_err(|e| format!("guardar pausa: {}", e))?;
+                return Err(PAUSED_ERR_MSG.to_string());
+            }
+        }
+
+        let (part_number, etag, part_len) = match result {
+            Ok(x) => x,
+            Err(e) => {
+                let _ =
+                    multipart_abort(api_base, user_id, api_key, &state.key, &state.upload_id).await;
+                remove_paused_state_file();
+                return Err(e);
+            }
+        };
+
         all_parts.push((part_number, etag));
         loaded = std::cmp::min(loaded + part_len, state.total_size);
 
@@ -709,8 +741,8 @@ pub(crate) async fn resume_paused_upload(app: tauri::AppHandle) -> Result<(), St
                 total: state.total_size,
                 downloaded_bytes: Some(loaded),
                 total_bytes: Some(state.total_size),
-                can_pause: None,
-                can_cancel: None,
+                can_pause: Some(true),
+                can_cancel: Some(true),
                 can_resume: None,
                 strategy: Some(SyncOperationStrategy::Multipart),
                 state: None,
