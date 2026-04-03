@@ -12,6 +12,6 @@ pub enum SqliteError {
     #[error("SQLite: {0}")]
     Rusqlite(#[from] rusqlite::Error),
 
-    #[error("Mutex de conexión SQLite envenenado tras pánico en otro hilo")]
-    MutexPoisoned,
+    #[error("Pool de conexiones SQLite: {0}")]
+    Pool(String),
 }
