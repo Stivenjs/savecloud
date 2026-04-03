@@ -9,6 +9,7 @@ use crate::system::game_exit_sync;
 //use crate::system::watch_sync;
 use crate::controller::start_gamepad_loop;
 use crate::plugins::{log_buffer::new_log_buffer, AppPluginManager};
+use crate::sources::queue;
 use crate::sqlite::AppDb;
 use crate::system::process_check::start_process_watcher;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
@@ -93,15 +94,51 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     });
 
     // 6. Inicialización del motor P2P (BitTorrent)
-    let torrent_engine = tauri::async_runtime::block_on(TorrentEngine::new(
-        std::env::temp_dir().join("SaveCloud-torrents"),
-    ))
-    .expect("fallo crítico al inicializar TorrentEngine");
+    //
+    // El directorio de sesión se nombra con un timestamp para que cada arranque
+    // comience con un directorio propio. Un hilo paralelo limpia los directorios
+    // huérfanos de sesiones anteriores para no acumular basura en %TEMP%.
+    // Si `TorrentEngine::new` falla incluso tras el intento de recuperación
+    // automática (ver `engine.rs`), se propaga el error y Tauri cancela el
+    // arranque mostrando un mensaje de error al usuario en lugar de silenciar
+    // el fallo o entrar en pánico de forma no controlada.
+    let temp_base = std::env::temp_dir();
+
+    let current_timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    let session_name = format!("SaveCloud-torrents-{}", current_timestamp);
+    let torrent_dir = temp_base.join(&session_name);
+
+    let session_name_for_cleaner = session_name.clone();
+
+    std::thread::spawn(move || {
+        if let Ok(entries) = std::fs::read_dir(&temp_base) {
+            for entry in entries.flatten() {
+                let file_name = entry.file_name();
+                let name_str = file_name.to_string_lossy();
+
+                if name_str.starts_with("SaveCloud-torrents-")
+                    && name_str != session_name_for_cleaner
+                {
+                    let _ = std::fs::remove_dir_all(entry.path());
+                }
+            }
+        }
+    });
+
+    let torrent_engine =
+        tauri::async_runtime::block_on(async { TorrentEngine::new(torrent_dir).await })
+            .map_err(|e| format!("No se pudo inicializar TorrentEngine: {e}"))?;
 
     app.manage(TorrentState {
         engine: std::sync::Arc::new(tokio::sync::Mutex::new(torrent_engine)),
     });
-    app.manage(crate::sources::queue::SourcesState::new_from_disk());
+    app.manage(queue::SourcesState::new_from_disk());
+
+    // Reanuda jobs pendientes al reiniciar la app.
+    queue::resume_pending_jobs(&app.handle());
 
     // 7. Extracción de estados compartidos
     let tray_state = app.state::<TrayState>();

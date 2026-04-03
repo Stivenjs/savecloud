@@ -195,14 +195,56 @@ pub async fn sync_upload_resume(app: AppHandle) -> Result<SyncResultDto, String>
     tray_state.0.syncing_inc();
     tray_state.0.update_tooltip();
 
-    let result = multipart_upload::resume_paused_upload(app.clone()).await;
+    let paused_info = get_paused_upload_info();
+    let op_id = paused_info
+        .as_ref()
+        .map(|info| format!("sync-upload-{}", info.game_id))
+        .unwrap_or_else(|| "sync-upload-resume".to_string());
+
+    let result =
+        multipart_upload::resume_paused_upload(app.clone(), Some(tray_state.0.clone())).await;
 
     tray_state.0.syncing_dec();
     tray_state.0.clone().refresh_unsynced_async();
-    let op_id = load_paused_operation_id();
-    let status = sync_status_from_result(&result);
-    emit_sync_terminal(&app, op_id, status, "upload", None, None, None);
+
+    let cancelled = tray_state.0.upload_cancel_requested();
+    let paused = tray_state.0.upload_pause_requested();
+
+    let status = if cancelled {
+        "cancelled"
+    } else if paused
+        || result
+            .as_ref()
+            .err()
+            .map_or(false, |e| e == multipart_upload::PAUSED_ERR_MSG)
+    {
+        "paused"
+    } else {
+        sync_status_from_result(&result)
+    };
+
+    if status == "paused" {
+        if let Some(ref info) = paused_info {
+            emit_sync_upload_paused(&app, &info.game_id, &info.filename);
+        }
+    } else {
+        let reason_code = if cancelled {
+            Some("CANCELLED_BY_USER".to_string())
+        } else {
+            None
+        };
+        emit_sync_terminal(&app, op_id, status, "upload", None, None, reason_code);
+    }
+
     emit_sync_upload_done(&app);
+
+    if status == "paused" || status == "cancelled" {
+        return Ok(SyncResultDto {
+            ok_count: 0,
+            err_count: 0,
+            errors: vec![],
+        });
+    }
 
     result.map(|()| SyncResultDto {
         ok_count: 1,
@@ -680,10 +722,4 @@ pub async fn sync_upload_all_games(
     emit_sync_upload_done(&app);
 
     Ok(results)
-}
-
-fn load_paused_operation_id() -> String {
-    multipart_upload::load_paused_state()
-        .map(|s| format!("sync-upload-{}", s.game_id))
-        .unwrap_or_else(|| "sync-upload-resume".to_string())
 }

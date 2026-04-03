@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Button, Select, SelectItem, Spinner, Tab, Tabs } from "@heroui/react";
+import { Button, Select, SelectItem, Spinner, Tab, Tabs, Skeleton } from "@heroui/react";
 import { ArrowLeft, Cpu, Gamepad2, LayoutList, ScrollText } from "lucide-react";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { launchGame, openSaveFolder, removeGame, scheduleConfigBackupToCloud } from "@services/tauri";
@@ -146,7 +146,7 @@ export function GameDetailPage() {
 
   const showRequirementsTab = steamDetails ? hasSteamRequirements(steamDetails) : false;
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
-  const { data: sourceMatch } = useQuery({
+  const { data: sourceMatch, isPending: isMatchingPending } = useQuery({
     queryKey: ["sources-match-detail", gameId],
     queryFn: () => {
       const nameForMatch = steamDetails?.name ?? formatGameDisplayName(gameId);
@@ -264,7 +264,20 @@ export function GameDetailPage() {
         onFullBackupUpload={!isSteamCatalogOnly && hasSyncConfig ? setGameToFullBackupConfirm : undefined}
       />
 
-      {sourceMatch?.best ? (
+      {isMatchingPending ? (
+        <section className="rounded-xl border border-default-200/50 bg-default-50/50 p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+            <div className="min-w-0 flex-1 space-y-3 w-full">
+              {/* Título falso */}
+              <Skeleton className="h-5 w-48 rounded-lg" />
+              {/* Selector falso */}
+              <Skeleton className="h-12 w-full max-w-md rounded-lg" />
+            </div>
+            {/* Botón falso */}
+            <Skeleton className="h-10 w-full sm:w-24 rounded-lg" />
+          </div>
+        </section>
+      ) : sourceMatch?.best ? (
         <section className="rounded-xl border border-primary/30 bg-primary/5 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
             <div className="min-w-0 flex-1 space-y-2">

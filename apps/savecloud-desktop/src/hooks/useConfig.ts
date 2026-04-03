@@ -13,7 +13,9 @@ export function useConfig() {
   } = useQuery({
     queryKey: CONFIG_QUERY_KEY,
     queryFn: getConfig,
-    staleTime: 2 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
     retry: 1,
   });
 

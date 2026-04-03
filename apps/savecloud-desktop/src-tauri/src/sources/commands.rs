@@ -13,7 +13,7 @@ use super::domain::{
     SourceJobStatus, SourceMatchCandidate, SourceMatchResult,
 };
 use super::parser::parse_catalog;
-use super::queue::{cancel_job, new_job_id, now_iso, spawn_job, SourcesState};
+use super::queue::{new_job_id, now_iso, spawn_job, SourcesState};
 use super::store;
 
 /// Entrada del índice de matching almacenada en memoria.
@@ -519,7 +519,7 @@ pub async fn start_source_download(
 #[tauri::command]
 pub async fn cancel_source_download(
     job_id: String,
-    state: tauri::State<'_, SourcesState>,
+    state: tauri::State<'_, super::queue::SourcesState>,
     app: AppHandle,
 ) -> Result<(), String> {
     let mut job = state
@@ -535,56 +535,78 @@ pub async fn cancel_source_download(
         return Ok(());
     }
 
-    if matches!(
-        job.protocol,
-        DownloadProtocol::TorrentMagnet | DownloadProtocol::TorrentFile
-    ) {
-        if let Some(info_hash) = job.external_id.clone() {
-            let torrent_state = app.state::<crate::torrent::state::TorrentState>();
-            let session = {
-                let mut engine = torrent_state.engine.lock().await;
-                engine.unregister_active(&info_hash);
-                engine.session()
-            };
-            crate::torrent::engine::cancel_via_session(&session, &info_hash)
-                .await
-                .map_err(|e| e.to_string())?;
-            let _ = app.emit(crate::torrent::engine::TORRENT_CANCELLED_EVENT, &info_hash);
+    match job.protocol {
+        DownloadProtocol::TorrentMagnet | DownloadProtocol::TorrentFile => {
+            if let Some(info_hash) = job.external_id.clone() {
+                let torrent_state = app.state::<crate::torrent::state::TorrentState>();
+                let session = {
+                    let mut engine = torrent_state.engine.lock().await;
+                    engine.unregister_active(&info_hash);
+                    engine.session()
+                };
+
+                let info_hash_clone = info_hash.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = crate::torrent::engine::cancel_via_session(&session, &info_hash_clone)
+                        .await;
+                });
+
+                let _ = app.emit(crate::torrent::engine::TORRENT_CANCELLED_EVENT, &info_hash);
+            }
         }
+        DownloadProtocol::Http => {
+            let path = std::path::PathBuf::from(&job.destination_dir).join(
+                super::http_runner::build_output_name(&job.title, &job.selected_uri),
+            );
+            let _ = tokio::fs::remove_file(path).await;
+        }
+        _ => {}
     }
 
     job.status = SourceJobStatus::Cancelled;
-    job.updated_at = now_iso();
+    job.updated_at = super::queue::now_iso();
     job.error = None;
     state.upsert_job(job.clone())?;
     super::events::emit_progress(&app, &job);
     super::events::emit_terminal(&app, &job);
-    cancel_job(&state, &job_id);
+    super::queue::cancel_job(&state, &job_id);
     Ok(())
 }
 
 /// Pausa un job torrent activo enviando la señal al motor de torrents.
 #[tauri::command]
 pub async fn pause_source_download(job_id: String, app: AppHandle) -> Result<(), String> {
-    let sources = app.state::<SourcesState>();
+    let sources = app.state::<super::queue::SourcesState>();
     let mut job = sources
         .list_jobs()
         .into_iter()
         .find(|j| j.job_id == job_id)
         .ok_or_else(|| "Job no encontrado".to_string())?;
-    let Some(info_hash) = job.external_id.clone() else {
-        return Err("El job no tiene info_hash activo".to_string());
-    };
-    let torrent_state = app.state::<crate::torrent::state::TorrentState>();
-    let session = {
-        let engine = torrent_state.engine.lock().await;
-        engine.session()
-    };
-    crate::torrent::engine::pause_via_session(&session, &info_hash)
-        .await
-        .map_err(|e| e.to_string())?;
+
+    match job.protocol {
+        DownloadProtocol::Http => {
+            sources.cancel(&job_id);
+        }
+        DownloadProtocol::TorrentMagnet | DownloadProtocol::TorrentFile => {
+            if let Some(info_hash) = job.external_id.clone() {
+                let torrent_state = app.state::<crate::torrent::state::TorrentState>();
+                let session = {
+                    let engine = torrent_state.engine.lock().await;
+                    engine.session()
+                };
+
+                let info_hash_clone = info_hash.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ =
+                        crate::torrent::engine::pause_via_session(&session, &info_hash_clone).await;
+                });
+            }
+        }
+        _ => {}
+    }
+
     job.status = SourceJobStatus::Paused;
-    job.updated_at = now_iso();
+    job.updated_at = super::queue::now_iso();
     sources.upsert_job(job.clone())?;
     super::events::emit_progress(&app, &job);
     Ok(())
@@ -593,26 +615,48 @@ pub async fn pause_source_download(job_id: String, app: AppHandle) -> Result<(),
 /// Reanuda un job torrent previamente pausado.
 #[tauri::command]
 pub async fn resume_source_download(job_id: String, app: AppHandle) -> Result<(), String> {
-    let sources = app.state::<SourcesState>();
+    let sources = app.state::<super::queue::SourcesState>();
     let mut job = sources
         .list_jobs()
         .into_iter()
         .find(|j| j.job_id == job_id)
         .ok_or_else(|| "Job no encontrado".to_string())?;
-    let Some(info_hash) = job.external_id.clone() else {
-        return Err("El job no tiene info_hash activo".to_string());
-    };
-    let torrent_state = app.state::<crate::torrent::state::TorrentState>();
-    let session = {
-        let engine = torrent_state.engine.lock().await;
-        engine.session()
-    };
-    crate::torrent::engine::resume_via_session(&session, &info_hash)
-        .await
-        .map_err(|e| e.to_string())?;
-    job.status = SourceJobStatus::Running;
-    job.updated_at = now_iso();
+
+    job.status = SourceJobStatus::Queued;
+    job.updated_at = super::queue::now_iso();
     sources.upsert_job(job.clone())?;
-    super::events::emit_progress(&app, &job);
+
+    let is_torrent = matches!(
+        job.protocol,
+        DownloadProtocol::TorrentMagnet | DownloadProtocol::TorrentFile
+    );
+    let mut resumed_via_session = false;
+
+    // Si es torrent, intentamos reanudar la sesión existente (si la app no se ha cerrado)
+    if is_torrent {
+        if let Some(info_hash) = &job.external_id {
+            let torrent_state = app.state::<crate::torrent::state::TorrentState>();
+            let session = {
+                let engine = torrent_state.engine.lock().await;
+                engine.session()
+            };
+            if crate::torrent::engine::resume_via_session(&session, info_hash)
+                .await
+                .is_ok()
+            {
+                resumed_via_session = true;
+                job.status = SourceJobStatus::Running;
+                job.updated_at = super::queue::now_iso();
+                sources.upsert_job(job.clone())?;
+                super::events::emit_progress(&app, &job);
+            }
+        }
+    }
+
+    // Si fue HTTP o si la sesión del torrent expiró (reinicio de app), levantamos un nuevo worker.
+    if !resumed_via_session {
+        super::queue::spawn_job(app, job_id);
+    }
+
     Ok(())
 }

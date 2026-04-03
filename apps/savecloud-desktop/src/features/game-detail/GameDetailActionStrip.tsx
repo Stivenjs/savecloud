@@ -19,6 +19,11 @@ export interface GameDetailActionStripProps extends GameDetailActionsProps {
 
 export function GameDetailActionStrip({ stats, isGameRunning, ...actionsProps }: GameDetailActionStripProps) {
   const hasMeta = isGameRunning || !!stats;
+  const hasActions = Boolean(actionsProps.onPlay || actionsProps.onEdit || actionsProps.onRemove);
+
+  if (!hasActions && !hasMeta) {
+    return null;
+  }
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-default-200/70 bg-default-100/95 px-4 py-3 shadow-sm backdrop-blur-sm dark:border-default-100/20 dark:bg-default-50/15 lg:flex-row lg:items-center lg:justify-between lg:gap-6">

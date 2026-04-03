@@ -101,6 +101,17 @@ impl TorrentEngine {
     ///   torrents compitan por ancho de banda durante su fase de handshake,
     ///   que es cuando los slots de peer y el establecimiento de conexión
     ///   dominan el rendimiento.
+    ///
+    /// # Recuperación ante estado DHT corrupto
+    ///
+    /// Si la aplicación se cierra abruptamente mientras hay torrents activos,
+    /// el archivo de estado persistente del DHT puede quedar en un estado
+    /// inválido. En ese caso librqbit devuelve un error `SessionInit` al
+    /// intentar cargarlo. Esta función detecta ese escenario, elimina el
+    /// directorio de sesión corrupto y reintenta la inicialización con un
+    /// directorio limpio, garantizando que la app siempre arranque.
+    /// El segundo intento se realiza sin `fastresume` para evitar cargar
+    /// cualquier otro estado persistente potencialmente dañado.
     pub async fn new(output_folder: PathBuf) -> Result<Self, TorrentError> {
         let options = SessionOptions {
             listen_port_range: Some(LISTEN_PORT_RANGE),
@@ -110,14 +121,56 @@ impl TorrentEngine {
             ..Default::default()
         };
 
-        let session = Session::new_with_opts(output_folder, options)
-            .await
-            .map_err(|e| TorrentError::SessionInit(e.to_string()))?;
+        match Session::new_with_opts(output_folder.clone(), options).await {
+            Ok(session) => Ok(Self {
+                session,
+                active: HashSet::new(),
+            }),
+            Err(initial_err) => {
+                // El estado DHT persistente ha quedado corrupto tras un cierre
+                // abrupto. Se elimina el directorio de sesión y se reintenta
+                // con configuración limpia para garantizar que la app arranque.
+                sync_logger::log_error(
+                    "TorrentEngine::new",
+                    &format!(
+                        "Fallo en la inicialización de la sesión: {}. Intentando recuperación.",
+                        initial_err
+                    ),
+                    "El estado DHT persistente está corrupto. Limpiando y reintentando.",
+                );
 
-        Ok(Self {
-            session,
-            active: HashSet::new(),
-        })
+                if output_folder.exists() {
+                    std::fs::remove_dir_all(&output_folder).map_err(|e| {
+                        TorrentError::SessionInit(format!(
+                            "No se pudo limpiar el directorio de sesión corrupto: {e}"
+                        ))
+                    })?;
+                }
+
+                // El segundo intento arranca sin fastresume para evitar cargar
+                // cualquier otro estado persistente potencialmente dañado.
+                let recovery_options = SessionOptions {
+                    listen_port_range: Some(LISTEN_PORT_RANGE),
+                    enable_upnp_port_forwarding: true,
+                    fastresume: false,
+                    concurrent_init_limit: Some(3),
+                    ..Default::default()
+                };
+
+                let session = Session::new_with_opts(output_folder, recovery_options)
+                    .await
+                    .map_err(|e| {
+                        TorrentError::SessionInit(format!(
+                            "Fallo irrecuperable tras limpiar estado DHT: {e}"
+                        ))
+                    })?;
+
+                Ok(Self {
+                    session,
+                    active: HashSet::new(),
+                })
+            }
+        }
     }
 
     /// Devuelve un clon del handle de sesión envuelto en [`Arc`].
@@ -302,6 +355,7 @@ pub async fn add_magnet_to_session(
 
     let add_options = AddTorrentOptions {
         output_folder: Some(save_path.into()),
+        overwrite: true,
         ..Default::default()
     };
 
@@ -350,11 +404,13 @@ pub async fn add_file_to_session(
 
     let add_options_main = AddTorrentOptions {
         output_folder: Some(save_path.into()),
+        overwrite: true,
         ..Default::default()
     };
 
     let add_options_fallback = AddTorrentOptions {
         output_folder: Some(save_path.into()),
+        overwrite: true,
         ..Default::default()
     };
 
