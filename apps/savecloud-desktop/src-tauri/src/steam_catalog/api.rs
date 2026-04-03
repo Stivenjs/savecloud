@@ -6,7 +6,7 @@
 
 use serde_json::Value;
 
-use crate::network::API_CLIENT;
+use crate::network::STEAM_CLIENT;
 
 use super::error::CatalogSyncError;
 
@@ -38,7 +38,7 @@ pub async fn fetch_app_list_page(
         url.push_str(&format!("&if_modified_since={ts}"));
     }
 
-    let res = API_CLIENT.get(url).send().await?;
+    let res = STEAM_CLIENT.get(url).send().await?;
     let status = res.status();
     if !status.is_success() {
         return Err(CatalogSyncError::HttpStatus(status.as_u16()));

@@ -13,7 +13,6 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
-/// Estado persistido del import local (cursor lexicográfico o watermark para modo recientes).
 #[derive(Debug, Clone)]
 struct SteamSeedImportState {
     strategy: String,
@@ -252,6 +251,25 @@ fn list_trending_app_ids(conn: &Connection) -> Result<Vec<u32>, rusqlite::Error>
     Ok(out)
 }
 
+/// Hace upsert masivo de apps enriquecidas y sincroniza facets + FTS en una
+/// sola pasada SQL al final del batch, en lugar de disparar triggers por fila.
+///
+/// # Estrategia
+/// 1. Deshabilita triggers en la sesión con `PRAGMA recursive_triggers = OFF`
+///    para evitar O(n) disparos de parseo JSON durante el upsert.
+/// 2. Registra los `app_id` procesados en una tabla temporal `_seed_batch_ids`.
+/// 3. Al finalizar el upsert, sincroniza géneros, tags y FTS en una sola
+///    pasada SQL sobre las apps del batch.
+///
+/// # Parameters
+/// - `conn`: Conexión SQLite activa.
+/// - `updates`: Tuplas `(app_id, details_json)` a insertar o actualizar.
+///
+/// # Returns
+/// Número de filas insertadas o actualizadas en `steam_catalog_apps`.
+///
+/// # Errors
+/// Propaga cualquier [`rusqlite::Error`] de la transacción o los statements.
 fn apply_seed_updates(
     conn: &Connection,
     updates: &[(u32, String)],
@@ -259,44 +277,120 @@ fn apply_seed_updates(
     if updates.is_empty() {
         return Ok(0);
     }
+
     let tx = conn.unchecked_transaction()?;
+
+    // Deshabilitamos triggers para esta sesión: los triggers de facets y FTS
+    // se dispararían por cada fila del batch (O(n) con parseo JSON cada vez).
+    // Los sincronizamos manualmente al final en una sola pasada SQL.
+    tx.execute_batch(
+        "PRAGMA recursive_triggers = OFF;
+         CREATE TEMP TABLE IF NOT EXISTS _seed_batch_ids (app_id INTEGER PRIMARY KEY);
+         DELETE FROM _seed_batch_ids;",
+    )?;
+
     let mut updated: u32 = 0;
+
     {
-        let mut stmt = tx.prepare(
+        let mut upsert = tx.prepare_cached(
             "INSERT INTO steam_catalog_apps (
-                app_id,
-                name,
-                name_normalized,
-                details_json,
-                enriched_at,
-                last_sync_batch_at
+                app_id, name, name_normalized, details_json, enriched_at, last_sync_batch_at
              )
              VALUES (?1, ?2, ?3, ?4, unixepoch(), unixepoch())
              ON CONFLICT(app_id) DO UPDATE SET
-                details_json = excluded.details_json,
-                enriched_at = unixepoch(),
-                name = CASE
-                    WHEN steam_catalog_apps.name IS NULL OR steam_catalog_apps.name = '' THEN excluded.name
-                    ELSE steam_catalog_apps.name
-                END,
+                details_json    = excluded.details_json,
+                enriched_at     = unixepoch(),
+                name            = CASE
+                                      WHEN steam_catalog_apps.name IS NULL
+                                        OR steam_catalog_apps.name = ''
+                                      THEN excluded.name
+                                      ELSE steam_catalog_apps.name
+                                  END,
                 name_normalized = CASE
-                    WHEN steam_catalog_apps.name_normalized IS NULL OR steam_catalog_apps.name_normalized = '' THEN excluded.name_normalized
-                    ELSE steam_catalog_apps.name_normalized
-                END",
+                                      WHEN steam_catalog_apps.name_normalized IS NULL
+                                        OR steam_catalog_apps.name_normalized = ''
+                                      THEN excluded.name_normalized
+                                      ELSE steam_catalog_apps.name_normalized
+                                  END",
         )?;
+
+        // Rastreamos cada app_id del batch para la sync posterior de facets y FTS.
+        let mut track =
+            tx.prepare_cached("INSERT OR IGNORE INTO _seed_batch_ids (app_id) VALUES (?1)")?;
+
         for (app_id, json) in updates {
-            let inferred_name =
+            let name =
                 infer_name_from_details_json(json).unwrap_or_else(|| format!("App {}", app_id));
-            let inferred_name_norm = normalize_catalog_name(&inferred_name);
-            let n = stmt.execute(rusqlite::params![
-                app_id,
-                inferred_name,
-                inferred_name_norm,
-                json
-            ])?;
+            let name_norm = normalize_catalog_name(&name);
+            let n = upsert.execute(rusqlite::params![app_id, name, name_norm, json])?;
             updated = updated.saturating_add(n as u32);
+            track.execute(rusqlite::params![app_id])?;
         }
     }
+
+    // Sincronizamos géneros, tags y FTS en una sola pasada sobre el batch completo,
+    // equivalente a lo que harían los triggers pero sin el overhead fila-a-fila.
+    tx.execute_batch(
+        "
+        DELETE FROM steam_app_genres
+        WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
+
+        INSERT OR IGNORE INTO steam_app_genres (app_id, label)
+        SELECT
+            a.app_id,
+            CASE
+                WHEN json_valid(g.value) AND json_type(g.value) = 'object'
+                THEN COALESCE(NULLIF(json_extract(g.value, '$.description'), ''), g.value)
+                ELSE g.value
+            END
+        FROM steam_catalog_apps a,
+             json_each(
+                 CASE
+                     WHEN json_valid(a.details_json)
+                       AND json_type(json_extract(a.details_json, '$.genres')) = 'array'
+                     THEN json_extract(a.details_json, '$.genres')
+                     ELSE '[]'
+                 END
+             ) AS g
+        WHERE a.app_id IN (SELECT app_id FROM _seed_batch_ids)
+          AND a.details_json IS NOT NULL
+          AND length(trim(a.details_json)) > 0;
+
+        DELETE FROM steam_app_tags
+        WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
+
+        INSERT OR IGNORE INTO steam_app_tags (app_id, label)
+        SELECT
+            a.app_id,
+            CASE
+                WHEN json_valid(t.value) AND json_type(t.value) = 'object'
+                THEN COALESCE(NULLIF(json_extract(t.value, '$.description'), ''), t.value)
+                ELSE t.value
+            END
+        FROM steam_catalog_apps a,
+             json_each(
+                 CASE
+                     WHEN json_valid(a.details_json)
+                       AND json_type(json_extract(a.details_json, '$.categories')) = 'array'
+                     THEN json_extract(a.details_json, '$.categories')
+                     ELSE '[]'
+                 END
+             ) AS t
+        WHERE a.app_id IN (SELECT app_id FROM _seed_batch_ids)
+          AND a.details_json IS NOT NULL
+          AND length(trim(a.details_json)) > 0;
+
+        DELETE FROM steam_catalog_search
+        WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
+
+        INSERT INTO steam_catalog_search (app_id, name_normalized)
+        SELECT app_id, name_normalized
+        FROM steam_catalog_apps
+        WHERE app_id IN (SELECT app_id FROM _seed_batch_ids)
+          AND name_normalized IS NOT NULL;
+        ",
+    )?;
+
     tx.commit()?;
     Ok(updated)
 }

@@ -25,6 +25,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("sql/012_fast_sort_index.sql"),
     include_str!("sql/013_fts_search.sql"),
     include_str!("sql/014_covering_indexes.sql"),
+    include_str!("sql/015_fix_fts_triggers.sql"),
 ];
 
 /// Aplica migraciones pendientes de forma idempotente.
