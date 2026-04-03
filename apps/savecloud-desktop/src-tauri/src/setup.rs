@@ -96,31 +96,29 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     // 6. Inicialización del motor P2P (BitTorrent)
     let temp_base = std::env::temp_dir();
 
-    // Limpiador en segundo plano: borra carpetas de caché de sesiones anteriores
-    // que hayan quedado huérfanas tras un cierre brusco. Ignora errores si Windows las tiene bloqueadas.
+    let current_timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+    let session_name = format!("SaveCloud-torrents-{}", current_timestamp);
+    let torrent_dir = temp_base.join(&session_name);
+
+    let session_name_for_cleaner = session_name.clone();
+
     std::thread::spawn(move || {
         if let Ok(entries) = std::fs::read_dir(&temp_base) {
             for entry in entries.flatten() {
-                if entry
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with("SaveCloud-torrents-")
+                let file_name = entry.file_name();
+                let name_str = file_name.to_string_lossy();
+
+                if name_str.starts_with("SaveCloud-torrents-")
+                    && name_str != session_name_for_cleaner
                 {
                     let _ = std::fs::remove_dir_all(entry.path());
                 }
             }
         }
     });
-
-    // Carpeta única garantizada para evitar cualquier bloqueo (File Lock) del SO.
-    let session_name = format!(
-        "SaveCloud-torrents-{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis()
-    );
-    let torrent_dir = std::env::temp_dir().join(session_name);
 
     let torrent_engine =
         tauri::async_runtime::block_on(async { TorrentEngine::new(torrent_dir).await })
