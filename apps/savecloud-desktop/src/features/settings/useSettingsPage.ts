@@ -258,6 +258,7 @@ export function useSettingsPage() {
       });
     }
   }, [state.createConfigModalOpen, config?.apiBaseUrl, config?.apiKey, config?.userId, config?.steamWebApiKey]);
+
   const handleExportConfig = async () => {
     dispatch({ type: "SET_EXPORTING", payload: true });
     try {
@@ -458,6 +459,11 @@ export function useSettingsPage() {
   };
 
   const handleSyncSteamCatalog = async () => {
+    if (state.steamCatalogBusy || state.steamSeedBusy) {
+      toastError("Sincronización en curso", "Por favor, espera a que terminen los procesos actuales.");
+      return;
+    }
+
     dispatch({ type: "SET_STEAM_CATALOG_BUSY", payload: true });
     setSteamCatalogSyncProgress(null);
     let unlisten: (() => void) | undefined;
@@ -486,6 +492,11 @@ export function useSettingsPage() {
   };
 
   const confirmResetSteamCatalogSync = async () => {
+    if (state.steamCatalogBusy || state.steamSeedBusy) {
+      toastError("Operación bloqueada", "Por favor, espera a que terminen los procesos actuales antes de reiniciar.");
+      return;
+    }
+
     dispatch({ type: "SET_STEAM_CATALOG_BUSY", payload: true });
     try {
       await resetSteamCatalogSync();
@@ -499,6 +510,14 @@ export function useSettingsPage() {
   };
 
   const handleExportSteamSeedManifest = async () => {
+    if (state.steamCatalogBusy || state.steamSeedBusy) {
+      toastError(
+        "Operación bloqueada",
+        "Por favor, espera a que terminen los procesos actuales antes de exportar a la nube."
+      );
+      return;
+    }
+
     dispatch({ type: "SET_STEAM_SEED_BUSY", payload: true });
     try {
       const result = await exportSteamSeedManifestToCloud();
@@ -514,6 +533,14 @@ export function useSettingsPage() {
   };
 
   const handleResetCloudSeed = async () => {
+    if (state.steamCatalogBusy || state.steamSeedBusy) {
+      toastError(
+        "Operación bloqueada",
+        "Por favor, espera a que terminen los procesos actuales antes de borrar el progreso."
+      );
+      return;
+    }
+
     dispatch({ type: "SET_STEAM_SEED_BUSY", payload: true });
     try {
       await resetCloudSeedState();
@@ -530,6 +557,14 @@ export function useSettingsPage() {
   };
 
   const handleImportCloudSeedFromCloud = async () => {
+    if (state.steamCatalogBusy || state.steamSeedBusy) {
+      toastError(
+        "Sincronización en curso",
+        "Por favor, espera a que terminen los procesos actuales antes de descargar."
+      );
+      return;
+    }
+
     dispatch({ type: "SET_STEAM_SEED_BUSY", payload: true });
     setSteamSeedImportProgress(null);
     let unlisten: (() => void) | undefined;
