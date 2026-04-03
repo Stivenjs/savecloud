@@ -137,24 +137,19 @@ pub fn enrich_magnet(magnet: &str, new_trackers: &[String]) -> String {
     let mut existing_trackers = HashSet::new();
     let mut has_dn = false;
 
-    // --- CÓDIGO CORREGIDO ---
     for (key, value) in parsed_url.query_pairs() {
-        // 1. Convertimos el Cow a String una sola vez al inicio
         let k_str = key.into_owned();
         let v_str = value.into_owned();
 
         if k_str == "tr" {
-            // Clonamos el String para el HashSet, manteniendo v_str vivo
             existing_trackers.insert(v_str.clone());
         }
         if k_str == "dn" {
             has_dn = true;
         }
 
-        // 2. Movemos ambos Strings al Vector sin problemas
         query_pairs.push((k_str, v_str));
     }
-    // -------------------------
 
     let mut added_count = 0;
 
