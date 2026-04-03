@@ -9,6 +9,7 @@ use crate::system::game_exit_sync;
 //use crate::system::watch_sync;
 use crate::controller::start_gamepad_loop;
 use crate::plugins::{log_buffer::new_log_buffer, AppPluginManager};
+use crate::sources::queue;
 use crate::sqlite::AppDb;
 use crate::system::process_check::start_process_watcher;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
@@ -93,15 +94,45 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     });
 
     // 6. Inicialización del motor P2P (BitTorrent)
-    let torrent_engine = tauri::async_runtime::block_on(TorrentEngine::new(
-        std::env::temp_dir().join("SaveCloud-torrents"),
-    ))
-    .expect("fallo crítico al inicializar TorrentEngine");
+    let temp_base = std::env::temp_dir();
+
+    // Limpiador en segundo plano: borra carpetas de caché de sesiones anteriores
+    // que hayan quedado huérfanas tras un cierre brusco. Ignora errores si Windows las tiene bloqueadas.
+    std::thread::spawn(move || {
+        if let Ok(entries) = std::fs::read_dir(&temp_base) {
+            for entry in entries.flatten() {
+                if entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("SaveCloud-torrents-")
+                {
+                    let _ = std::fs::remove_dir_all(entry.path());
+                }
+            }
+        }
+    });
+
+    // Carpeta única garantizada para evitar cualquier bloqueo (File Lock) del SO.
+    let session_name = format!(
+        "SaveCloud-torrents-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
+    let torrent_dir = std::env::temp_dir().join(session_name);
+
+    let torrent_engine =
+        tauri::async_runtime::block_on(async { TorrentEngine::new(torrent_dir).await })
+            .expect("Fallo crítico e irrecuperable al inicializar TorrentEngine");
 
     app.manage(TorrentState {
         engine: std::sync::Arc::new(tokio::sync::Mutex::new(torrent_engine)),
     });
-    app.manage(crate::sources::queue::SourcesState::new_from_disk());
+    app.manage(queue::SourcesState::new_from_disk());
+
+    // Reanuda jobs pendientes al reiniciar la app.
+    queue::resume_pending_jobs(&app.handle());
 
     // 7. Extracción de estados compartidos
     let tray_state = app.state::<TrayState>();

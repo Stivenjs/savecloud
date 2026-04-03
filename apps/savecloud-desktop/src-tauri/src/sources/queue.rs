@@ -74,14 +74,33 @@ impl SourcesState {
     }
 }
 
-/// Ejecuta un job en segundo plano según protocolo.
+/// Rehidrata y relanza trabajos que quedaron a medias al cerrar la app
+pub fn resume_pending_jobs(app: &AppHandle) {
+    let state = app.state::<SourcesState>();
+    let jobs = state.list_jobs();
+
+    for mut job in jobs {
+        if job.status == SourceJobStatus::Running || job.status == SourceJobStatus::Queued {
+            job.status = SourceJobStatus::Queued;
+            job.updated_at = now_iso();
+            if state.upsert_job(job.clone()).is_ok() {
+                spawn_job(app.clone(), job.job_id.clone());
+            }
+        }
+    }
+}
+
 pub fn spawn_job(app: AppHandle, job_id: String) {
     tauri::async_runtime::spawn(async move {
         let state = app.state::<SourcesState>();
         let result = run_job(&app, &state, &job_id).await;
+
         if let Err(err) = result {
             if let Ok(mut job) = find_job(&state, &job_id) {
-                if job.status != SourceJobStatus::Cancelled {
+                if err != "stopped_by_user"
+                    && job.status != SourceJobStatus::Cancelled
+                    && job.status != SourceJobStatus::Paused
+                {
                     job.status = SourceJobStatus::Failed;
                     job.error = Some(err);
                     job.updated_at = now_iso();
@@ -134,13 +153,12 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
                     emit_progress(app, &done_job);
                     emit_terminal(app, &done_job);
                 }
-                Err(err) if err == "cancelled" => {
-                    let mut cancelled = find_job(state, job_id)?;
-                    cancelled.status = SourceJobStatus::Cancelled;
-                    cancelled.updated_at = now_iso();
-                    state.upsert_job(cancelled.clone())?;
-                    emit_progress(app, &cancelled);
-                    emit_terminal(app, &cancelled);
+                Err(err) if err == "stopped_by_user" => {
+                    let current = find_job(state, job_id)?;
+                    if current.status == SourceJobStatus::Cancelled {
+                        emit_terminal(app, &current);
+                    }
+                    return Err(err);
                 }
                 Err(err) => return Err(err),
             }
@@ -153,7 +171,37 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
                 &job.destination_dir,
             )
             .await?;
+
             let mut running = find_job(state, job_id)?;
+
+            if running.status == SourceJobStatus::Cancelled
+                || running.status == SourceJobStatus::Paused
+            {
+                running.external_id = Some(start.info_hash.clone());
+                running.updated_at = now_iso();
+                state.upsert_job(running.clone())?;
+
+                let torrent_state = app.state::<TorrentState>();
+                let session = {
+                    let engine = torrent_state.engine.lock().await;
+                    engine.session()
+                };
+
+                if running.status == SourceJobStatus::Cancelled {
+                    let _ = crate::torrent::engine::cancel_via_session(&session, &start.info_hash)
+                        .await;
+                } else {
+                    let _ =
+                        crate::torrent::engine::pause_via_session(&session, &start.info_hash).await;
+                }
+
+                emit_progress(app, &running);
+                if running.status == SourceJobStatus::Cancelled {
+                    emit_terminal(app, &running);
+                }
+                return Ok(());
+            }
+
             running.external_id = Some(start.info_hash.clone());
             running.updated_at = now_iso();
             state.upsert_job(running.clone())?;
@@ -187,6 +235,7 @@ fn spawn_torrent_monitor(app: AppHandle, job_id: String, info_hash: String) {
                 Ok(v) => v,
                 Err(_) => break,
             };
+
             if job.status == SourceJobStatus::Cancelled || job.status == SourceJobStatus::Failed {
                 break;
             }
