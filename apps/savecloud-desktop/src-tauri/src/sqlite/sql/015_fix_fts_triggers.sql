@@ -1,22 +1,10 @@
--- Los triggers trg_insert_facets, trg_update_facets, trg_catalog_search_insert
--- y trg_catalog_search_update se disparaban fila a fila durante el sembrado masivo,
--- multiplicando el trabajo de parseo JSON y escrituras en FTS por cada app.
---
--- Nueva estrategia:
---   - INSERT individual (enriquecimiento de 1 app): los triggers siguen actuando.
---   - Import masivo (apply_seed_updates): desactiva los triggers con una sesión
---     PRAGMA y sincroniza facets + FTS en una sola pasada SQL al final del batch.
---
--- El trigger de UPDATE de facets solo actúa si details_json cambió realmente,
--- evitando trabajo inútil en upserts donde el JSON no se modificó.
-
 DROP TRIGGER IF EXISTS trg_insert_facets;
 DROP TRIGGER IF EXISTS trg_update_facets;
 DROP TRIGGER IF EXISTS trg_catalog_search_insert;
 DROP TRIGGER IF EXISTS trg_catalog_search_update;
 DROP TRIGGER IF EXISTS trg_catalog_search_delete;
 
--- Facets en INSERT: solo si viene con details_json.
+-- Facets en INSERT
 CREATE TRIGGER IF NOT EXISTS trg_insert_facets
 AFTER INSERT ON steam_catalog_apps
 WHEN NEW.details_json IS NOT NULL AND length(trim(NEW.details_json)) > 0
@@ -46,7 +34,7 @@ BEGIN
     ) AS t;
 END;
 
--- Facets en UPDATE: solo si details_json cambió de valor efectivamente.
+-- Facets en UPDATE
 CREATE TRIGGER IF NOT EXISTS trg_update_facets
 AFTER UPDATE OF details_json ON steam_catalog_apps
 WHEN NEW.details_json IS NOT NULL
@@ -81,7 +69,7 @@ BEGIN
     ) AS t;
 END;
 
--- FTS en INSERT: solo si name_normalized está presente.
+-- FTS en INSERT
 CREATE TRIGGER IF NOT EXISTS trg_catalog_search_insert
 AFTER INSERT ON steam_catalog_apps
 WHEN NEW.name_normalized IS NOT NULL
@@ -90,7 +78,7 @@ BEGIN
     VALUES (NEW.app_id, NEW.name_normalized);
 END;
 
--- FTS en UPDATE: solo si name_normalized cambió de valor efectivamente.
+-- FTS en UPDATE
 CREATE TRIGGER IF NOT EXISTS trg_catalog_search_update
 AFTER UPDATE OF name_normalized ON steam_catalog_apps
 WHEN NEW.name_normalized IS NOT NULL
