@@ -5241,6 +5241,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "unicode-normalization",
+ "url",
  "urlencoding",
  "uuid",
  "walkdir",
