@@ -25,6 +25,10 @@ use tokio::sync::Mutex;
 
 use super::errors::TorrentError;
 use super::models::{TorrentDownloadState, TorrentProgressPayload};
+use super::torrent_enrichment::{
+    build_magnet_from_info_hash, enrich_magnet, fetch_trackers, TrackerTier,
+};
+use crate::commands::logs::sync_logger;
 
 /// Evento emitido periódicamente mientras un torrent está activo.
 ///
@@ -292,13 +296,17 @@ pub async fn add_magnet_to_session(
     magnet_link: &str,
     save_path: &str,
 ) -> Result<(String, String, usize), TorrentError> {
+    let trackers = fetch_trackers(TrackerTier::Best).await;
+
+    let enriched_magnet = enrich_magnet(magnet_link, &trackers);
+
     let add_options = AddTorrentOptions {
         output_folder: Some(save_path.into()),
         ..Default::default()
     };
 
     let response = session
-        .add_torrent(AddTorrent::from_url(magnet_link), Some(add_options))
+        .add_torrent(AddTorrent::from_url(&enriched_magnet), Some(add_options))
         .await
         .map_err(|e| TorrentError::AddMagnet(e.to_string()))?;
 
@@ -328,28 +336,60 @@ pub async fn add_file_to_session(
     file_path: &str,
     save_path: &str,
 ) -> Result<(String, String, usize), TorrentError> {
-    let add_options = AddTorrentOptions {
+    let bytes =
+        std::fs::read(file_path).map_err(|e| TorrentError::ReadTorrentFile(e.to_string()))?;
+
+    let torrent_meta: librqbit::TorrentMetaV1<Vec<u8>> = librqbit::torrent_from_bytes(&bytes)
+        .map_err(|e| TorrentError::ReadTorrentFile(e.to_string()))?;
+
+    let info_hash = torrent_meta.info_hash.as_string();
+
+    let base_magnet = build_magnet_from_info_hash(&info_hash);
+    let trackers = fetch_trackers(TrackerTier::Best).await;
+    let enriched_magnet = enrich_magnet(&base_magnet, &trackers);
+
+    let add_options_main = AddTorrentOptions {
         output_folder: Some(save_path.into()),
         ..Default::default()
     };
 
-    let add = AddTorrent::from_local_filename(file_path)
-        .map_err(|e| TorrentError::ReadTorrentFile(e.to_string()))?;
+    let add_options_fallback = AddTorrentOptions {
+        output_folder: Some(save_path.into()),
+        ..Default::default()
+    };
 
-    let response = session
-        .add_torrent(add, Some(add_options))
-        .await
-        .map_err(|e| TorrentError::AddTorrent(e.to_string()))?;
+    let add_request = AddTorrent::from_url(&enriched_magnet);
+    let response_result = session
+        .add_torrent(add_request, Some(add_options_main))
+        .await;
+
+    let response = match response_result {
+        Ok(res) => res,
+        Err(_) => {
+            sync_logger::log_error(
+                "add_file_to_session",
+                "Fallo al usar magnet enriquecido. Retrocediendo a archivo .torrent.",
+                "No se pudo usar el magnet enriquecido. Retrocediendo a archivo .torrent.",
+            );
+            let fallback_add = AddTorrent::from_local_filename(file_path)
+                .map_err(|e| TorrentError::ReadTorrentFile(e.to_string()))?;
+
+            session
+                .add_torrent(fallback_add, Some(add_options_fallback))
+                .await
+                .map_err(|e| TorrentError::AddTorrent(e.to_string()))?
+        }
+    };
 
     let handle = response.into_handle().ok_or(TorrentError::ListOnly)?;
-    let info_hash = handle.info_hash().as_string();
+    let final_info_hash = handle.info_hash().as_string();
     let name = handle
         .name()
         .map(|s| s.to_string())
-        .unwrap_or_else(|| info_hash.clone());
+        .unwrap_or_else(|| final_info_hash.clone());
     let id = handle.id();
 
-    Ok((info_hash, name, id))
+    Ok((final_info_hash, name, id))
 }
 
 /// Lanza una tarea en segundo plano que emite eventos de progreso periódicamente.
