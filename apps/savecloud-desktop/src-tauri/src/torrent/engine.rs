@@ -302,6 +302,7 @@ pub async fn add_magnet_to_session(
 
     let add_options = AddTorrentOptions {
         output_folder: Some(save_path.into()),
+        overwrite: true,
         ..Default::default()
     };
 
@@ -350,11 +351,13 @@ pub async fn add_file_to_session(
 
     let add_options_main = AddTorrentOptions {
         output_folder: Some(save_path.into()),
+        overwrite: true,
         ..Default::default()
     };
 
     let add_options_fallback = AddTorrentOptions {
         output_folder: Some(save_path.into()),
+        overwrite: true,
         ..Default::default()
     };
 
