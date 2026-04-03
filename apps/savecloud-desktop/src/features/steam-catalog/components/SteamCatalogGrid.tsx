@@ -10,11 +10,15 @@ import { Button, Select, SelectItem } from "@heroui/react";
 import { startSourceDownload } from "@services/tauri";
 import { pickCandidate, sourceCandidateKey } from "@utils/sourceMatch";
 import { toastError, toastSuccess } from "@utils/toast";
+import { useNavigate } from "react-router-dom";
+import { useConfig } from "@hooks/useConfig";
+import type { ConfiguredGame } from "@app-types/config";
 
 type PickByGame = Record<string, string>;
 
 type CatalogGridItemProps = {
   item: CatalogListItem;
+  libraryGame?: ConfiguredGame;
   mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null;
   match: SourceMatchResult | undefined;
   selectKey: string | undefined;
@@ -33,6 +37,7 @@ type CatalogGridItemProps = {
  */
 const CatalogGridItem = memo(function CatalogGridItem({
   item,
+  libraryGame,
   mediaBySteamAppId,
   match,
   selectKey,
@@ -40,7 +45,8 @@ const CatalogGridItem = memo(function CatalogGridItem({
   onPickChange,
   onInstall,
 }: CatalogGridItemProps) {
-  const game = catalogListItemToConfiguredGame(item);
+  const game = libraryGame ?? catalogListItemToConfiguredGame(item);
+  const navigate = useNavigate();
   const candidates = match?.candidates ?? [];
   const best = match?.best;
 
@@ -53,10 +59,20 @@ const CatalogGridItem = memo(function CatalogGridItem({
           cardTitle={item.name}
           mediaBySteamAppId={mediaBySteamAppId ?? null}
           mediaFromBatch
+          onCardNavigate={libraryGame ? () => navigate(`/games/${libraryGame.id}`) : undefined}
         />
         <div className="min-h-8 space-y-2">
           {isMatchingPending ? (
             <div className="h-8 w-full animate-pulse rounded-medium bg-default-200/70" />
+          ) : libraryGame ? (
+            <Button
+              size="sm"
+              color="success"
+              variant="flat"
+              className="h-8 w-full font-medium"
+              onPress={() => navigate(`/games/${libraryGame.id}`)}>
+              En Biblioteca
+            </Button>
           ) : best ? (
             <>
               {candidates.length > 1 ? (
@@ -107,6 +123,7 @@ export function SteamCatalogGrid({
   matchByGameName,
   isMatchingPending,
 }: SteamCatalogGridProps) {
+  const { config } = useConfig();
   const [pickByGame, setPickByGame] = useState<PickByGame>({});
 
   const matchByGameNameRef = useRef(matchByGameName);
@@ -175,18 +192,25 @@ export function SteamCatalogGrid({
 
   return (
     <GamesListMotionContainer className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5" listKey={listKey}>
-      {items.map((item) => (
-        <CatalogGridItem
-          key={item.name}
-          item={item}
-          mediaBySteamAppId={mediaBySteamAppId}
-          match={matchByGameName[item.name]}
-          selectKey={pickByGame[item.name]}
-          isMatchingPending={isMatchingPending}
-          onPickChange={handlePickChange}
-          onInstall={handleInstall}
-        />
-      ))}
+      {items.map((item) => {
+        const libraryGame = config?.games?.find(
+          (g) => (g.steamAppId && g.steamAppId === item.steamAppId) || g.id.toLowerCase() === item.name.toLowerCase()
+        );
+
+        return (
+          <CatalogGridItem
+            key={item.name}
+            item={item}
+            libraryGame={libraryGame}
+            mediaBySteamAppId={mediaBySteamAppId}
+            match={matchByGameName[item.name]}
+            selectKey={pickByGame[item.name]}
+            isMatchingPending={isMatchingPending}
+            onPickChange={handlePickChange}
+            onInstall={handleInstall}
+          />
+        );
+      })}
     </GamesListMotionContainer>
   );
 }
