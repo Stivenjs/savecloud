@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useState } from "react";
 import { Button, Spinner } from "@heroui/react";
 import { RefreshCw } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
@@ -22,14 +22,8 @@ import { useGameStats } from "@hooks/useGameStats";
 import { scheduleConfigBackupToCloud } from "@services/tauri";
 import { countGamesOverSizeThreshold } from "@utils/packageRecommendation";
 import { createShareLink } from "@services/share.service";
-import { UserBadge } from "@features/games/UserBadge";
-import { prefetchProfileDrawer } from "@features/profile/profileDrawerPrefetch";
-
-const ProfileDrawer = lazy(() => import("@features/profile/ProfileDrawer").then((m) => ({ default: m.ProfileDrawer })));
 import { toastError, toastSuccess } from "@utils/toast";
 import { useNavigationStore } from "@features/input/store";
-import { useShellUiStore } from "@store/ShellUiStore";
-import { useGamification } from "@hooks/useGamification";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 
 export function GamesPage() {
@@ -46,7 +40,6 @@ export function GamesPage() {
     cloudGames,
     totalCloudSize,
     lastSyncLoading,
-    connectionStatus,
     searchTerm,
     setSearchTerm,
     originFilter,
@@ -71,7 +64,7 @@ export function GamesPage() {
     syncing,
     downloading,
     fullBackupUploadingGameId,
-    /*  operationResult, */
+    /* operationResult, */
     handleScanSelect,
     handleConfigureFromCloud,
     handleRemoveGame,
@@ -97,36 +90,11 @@ export function GamesPage() {
     filteredGames,
     emptyFilterMessage,
     unsyncedGameIds,
-    /*  handleDismissOperationError, */
-    /*  handleRetryOperationError, */
+    /* handleDismissOperationError, */
+    /* handleRetryOperationError, */
   } = useGamesPage();
 
-  const { data: gamification } = useGamification();
-
   const { statsByGameId } = useGameStats(!!config?.games?.length);
-
-  const [profileDrawerOpen, setProfileDrawerOpen] = useState(false);
-
-  useEffect(() => {
-    let last = useShellUiStore.getState().profileOpenRequest;
-    return useShellUiStore.subscribe((state) => {
-      const n = state.profileOpenRequest;
-      if (n > last) {
-        last = n;
-        setProfileDrawerOpen(true);
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    if (loading || !config) return;
-    if (typeof window.requestIdleCallback === "function") {
-      const id = window.requestIdleCallback(() => prefetchProfileDrawer(), { timeout: 2500 });
-      return () => window.cancelIdleCallback(id);
-    }
-    const t = window.setTimeout(() => prefetchProfileDrawer(), 400);
-    return () => clearTimeout(t);
-  }, [loading, config]);
 
   const [gameToEdit, setGameToEdit] = useState<ConfiguredGame | null>(null);
   const [gameForTorrent, setGameForTorrent] = useState<ConfiguredGame | null>(null);
@@ -134,9 +102,6 @@ export function GamesPage() {
 
   useRegisterGlobalBack(() => {
     switch (true) {
-      case profileDrawerOpen:
-        setProfileDrawerOpen(false);
-        return true;
       case scanModalOpen:
         setConfigureFromCloudGameId(null);
         setScanModalOpen(false);
@@ -220,18 +185,6 @@ export function GamesPage() {
                 {unsyncedGameIds.length} con cambios sin subir
               </span>
             )}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <UserBadge
-              userId={config?.userId}
-              profileAvatar={config?.profileAvatar}
-              profileFrame={config?.profileFrame}
-              hasSyncConfig={hasSyncConfig}
-              connectionStatus={connectionStatus}
-              onOpenProfile={() => setProfileDrawerOpen(true)}
-              onIntentOpenProfile={prefetchProfileDrawer}
-            />{" "}
           </div>
         </div>
 
@@ -414,17 +367,6 @@ export function GamesPage() {
           hasSyncConfig={hasSyncConfig}
         />
       </section>
-
-      <Suspense fallback={null}>
-        <ProfileDrawer
-          isOpen={profileDrawerOpen}
-          onClose={() => setProfileDrawerOpen(false)}
-          config={config}
-          gamification={gamification}
-          hasSyncConfig={hasSyncConfig}
-          connectionStatus={connectionStatus}
-        />
-      </Suspense>
 
       {/* operationResult && operationResult.result.errors.length > 0 && (
         <OperationErrorCard
