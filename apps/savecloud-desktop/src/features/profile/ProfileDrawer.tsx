@@ -12,16 +12,24 @@ import {
 } from "@heroui/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
+  ArrowUpCircle,
   CircleHelp,
+  Clock,
+  CloudUpload,
+  Flame,
   FolderOpen,
+  Gamepad2,
   ImageIcon,
   Layers,
   Link2,
   MonitorPlay,
+  RefreshCw,
   Save,
   Shield,
+  Star,
   Trophy,
   User,
+  Zap,
 } from "lucide-react";
 import { ProfileHeroBackground } from "@features/profile/PublicProfileHero";
 import { useQueryClient } from "@tanstack/react-query";
@@ -65,6 +73,14 @@ function connectionLabel(status: ConnectionStatus | undefined): { text: string; 
   }
 }
 
+function AchievementIcon({ id, size = 14 }: { id: string; size?: number }) {
+  if (id === "first_upload") return <CloudUpload size={size} className="text-primary" />;
+  if (id.startsWith("syncs_")) return <RefreshCw size={size} className="text-success" />;
+  if (id.startsWith("level_")) return <ArrowUpCircle size={size} className="text-warning" />;
+  if (id.startsWith("streak_")) return <Flame size={size} className="text-danger" />;
+  return <Star size={size} className="text-default-400" />;
+}
+
 export function ProfileDrawer({
   isOpen,
   onClose,
@@ -96,16 +112,23 @@ export function ProfileDrawer({
   const displayName = userId || "Usuario";
   const conn = connectionLabel(hasSyncConfig ? connectionStatus : undefined);
 
+  const lp = gamification?.levelProgress;
   const fallbackLevel = useMemo(
     () => Math.min(99, Math.max(1, Math.floor(Math.sqrt(Math.max(1, totalSeconds / 3600))) + 1)),
     [totalSeconds]
   );
-  const lp = gamification?.levelProgress;
   const level = lp?.level ?? fallbackLevel;
   const nextLevel = lp?.nextLevel;
   const progressToNext = lp?.progressToNextLevel ?? 0;
   const secondsToNext = lp?.secondsToNextLevel ?? 0;
   const atMaxLevel = (lp?.level ?? 0) >= 99;
+  const progressPct = Math.round(progressToNext * 100);
+
+  const uploadSuccessCount = gamification?.uploadSuccessCount ?? 0;
+  const syncStreakDays = gamification?.syncStreakDays ?? 0;
+  const playStreakDays = gamification?.playStreakDays ?? 0;
+  const weeklyPlaytimeSeconds = gamification?.weeklyPlaytimeSeconds ?? 0;
+  const achievementsUnlocked = gamification?.achievementsUnlocked ?? [];
 
   const avatarResolved = useMemo(() => resolveProfileAsset(avatar || undefined), [avatar]);
   const frameResolved = useMemo(() => resolveProfileAsset(frame || undefined), [frame]);
@@ -141,9 +164,7 @@ export function ProfileDrawer({
             { name: "Imagen o vídeo", extensions: ["jpg", "jpeg", "png", "gif", "webp", "mp4", "webm", "mov"] },
           ],
         });
-        if (typeof selected === "string") {
-          setBg(selected);
-        }
+        if (typeof selected === "string") setBg(selected);
         return;
       }
       const selected = await open({
@@ -188,7 +209,9 @@ export function ProfileDrawer({
               <div className="absolute inset-0 bg-[linear-gradient(125deg,#1b2838_0%,#0e1621_45%,#1b2838_100%)]" />
             )}
             <div className="absolute inset-0 bg-linear-to-t from-content1 via-content1/45 to-transparent" />
+
             <div className="absolute inset-x-0 bottom-0 flex items-end gap-4 px-4 pb-3">
+              {/* Avatar */}
               <div className="relative size-[72px] shrink-0">
                 <div className="relative size-full overflow-hidden rounded-md border border-white/10 bg-black/30 shadow-lg">
                   {avatarResolved ? (
@@ -208,6 +231,8 @@ export function ProfileDrawer({
                   />
                 )}
               </div>
+
+              {/* Name + meta */}
               <div className="min-w-0 flex-1 pb-1">
                 <h2 className="truncate text-lg font-semibold text-foreground">{displayName}</h2>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
@@ -220,6 +245,8 @@ export function ProfileDrawer({
                   </span>
                 </div>
               </div>
+
+              {/* Level badge */}
               <div className="flex shrink-0 flex-col items-end gap-1 pb-0.5">
                 <div className="flex items-center gap-1.5 rounded-full border border-default-200/80 bg-default-100/80 px-2.5 py-0.5 text-xs dark:bg-default-50/10">
                   <span className="text-default-500">Nivel</span>
@@ -233,10 +260,49 @@ export function ProfileDrawer({
         </DrawerHeader>
 
         <DrawerBody className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
+          <div className="grid grid-cols-4 gap-2">
+            <div className="flex flex-col items-center gap-1 rounded-lg border border-default-200 bg-default-50/60 py-2.5 dark:bg-default-100/5">
+              <Gamepad2 size={14} className="text-default-400" />
+              <span className="text-sm font-semibold text-foreground">{gamesCount}</span>
+              <span className="text-[10px] text-default-500">Juegos</span>
+            </div>
+            <div className="flex flex-col items-center gap-1 rounded-lg border border-default-200 bg-default-50/60 py-2.5 dark:bg-default-100/5">
+              <Trophy size={14} className="text-warning" />
+              <span className="text-sm font-semibold text-foreground">{achievementsUnlocked.length}</span>
+              <span className="text-[10px] text-default-500">Logros</span>
+            </div>
+            <div className="flex flex-col items-center gap-1 rounded-lg border border-default-200 bg-default-50/60 py-2.5 dark:bg-default-100/5">
+              <CloudUpload size={14} className="text-primary" />
+              <span className="text-sm font-semibold text-foreground">{uploadSuccessCount}</span>
+              <span className="text-[10px] text-default-500">Subidas</span>
+            </div>
+            <div className="flex flex-col items-center gap-1 rounded-lg border border-default-200 bg-default-50/60 py-2.5 dark:bg-default-100/5">
+              <Flame size={14} className={syncStreakDays > 0 ? "text-danger" : "text-default-400"} />
+              <span className="text-sm font-semibold text-foreground">{syncStreakDays}</span>
+              <span className="text-[10px] text-default-500">{syncStreakDays === 1 ? "día racha" : "días racha"}</span>
+            </div>
+          </div>
+
+          {(weeklyPlaytimeSeconds > 0 || playStreakDays > 0) && (
+            <div className="flex items-center gap-3 rounded-lg border border-default-200 bg-default-50/60 px-3 py-2 dark:bg-default-100/5">
+              <Zap size={14} className="shrink-0 text-warning" />
+              <span className="flex-1 text-xs text-default-600">
+                Esta semana:{" "}
+                <span className="font-medium text-foreground">{formatPlaytime(weeklyPlaytimeSeconds)}</span> jugados
+              </span>
+              {playStreakDays > 0 && (
+                <span className="flex items-center gap-1 text-xs text-default-500">
+                  <Flame size={12} className="text-danger" />
+                  {playStreakDays} {playStreakDays === 1 ? "día" : "días"} seguidos
+                </span>
+              )}
+            </div>
+          )}
+
           <div className="rounded-lg border border-default-200 bg-default-50/60 p-3 dark:bg-default-100/5">
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <Trophy size={16} className="text-warning" />
+                <Trophy size={15} className="text-warning" />
                 Progreso de nivel
               </span>
               {!atMaxLevel && nextLevel != null ? (
@@ -247,33 +313,43 @@ export function ProfileDrawer({
                 <span className="text-xs text-default-500">Nivel máximo</span>
               )}
             </div>
+
             {!atMaxLevel ? (
               <>
                 <div className="h-2 overflow-hidden rounded-full bg-default-200 dark:bg-default-100/20">
                   <div
                     className="h-full rounded-full bg-primary transition-[width]"
-                    style={{ width: `${Math.min(100, Math.max(0, progressToNext * 100))}%` }}
+                    style={{ width: `${Math.min(100, Math.max(0, progressPct))}%` }}
                   />
                 </div>
-                <p className="mt-1.5 text-xs text-default-500">
-                  Faltan {formatHoursToNextLevel(secondsToNext)} para el nivel {nextLevel ?? "—"}
-                </p>
+                <div className="mt-1.5 flex items-center justify-between">
+                  <span className="text-xs text-default-500">{progressPct}% completado</span>
+                  <span className="flex items-center gap-1 text-xs text-default-500">
+                    <Clock size={11} />
+                    {formatHoursToNextLevel(secondsToNext)} para nivel {nextLevel ?? "—"}
+                  </span>
+                </div>
               </>
             ) : (
               <p className="text-xs text-default-500">Has alcanzado el nivel 99.</p>
             )}
-            {gamification?.achievementsUnlocked?.length ? (
+
+            {/* Achievements list */}
+            {achievementsUnlocked.length > 0 && (
               <div className="mt-3 border-t border-default-200 pt-3">
-                <p className="mb-2 text-xs font-medium text-default-600">Logros</p>
-                <ul className="flex flex-col gap-1.5">
-                  {gamification.achievementsUnlocked.map((id) => (
-                    <li key={id} className="text-xs text-default-600">
-                      · {achievementLabel(id)}
+                <p className="mb-2 text-xs font-medium text-default-600">Logros desbloqueados</p>
+                <ul className="flex flex-col gap-2">
+                  {achievementsUnlocked.map((id) => (
+                    <li key={id} className="flex items-center gap-2">
+                      <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-default-200 bg-default-100 dark:bg-default-50/10">
+                        <AchievementIcon id={id} size={14} />
+                      </span>
+                      <span className="text-xs text-default-600">{achievementLabel(id)}</span>
                     </li>
                   ))}
                 </ul>
               </div>
-            ) : null}
+            )}
           </div>
 
           <Accordion
@@ -287,54 +363,6 @@ export function ProfileDrawer({
               trigger: "py-2",
               content: "pb-3 pt-0",
             }}>
-            <AccordionItem
-              key="help"
-              aria-label="Ayuda"
-              title={
-                <span className="flex items-center gap-2">
-                  <CircleHelp size={15} className="text-default-500" />
-                  Ayuda
-                </span>
-              }>
-              <p className="text-[11px] leading-snug text-default-500">
-                Puedes usar enlaces https o rutas a archivos locales. Las rutas locales dependen del archivo en disco;
-                si mueves o borras el archivo, el perfil dejará de mostrarlo.
-              </p>
-            </AccordionItem>
-            <AccordionItem
-              key="sharing"
-              aria-label="Privacidad en la nube"
-              title={
-                <span className="flex items-center gap-2">
-                  <Shield size={15} className="text-default-500" />
-                  Privacidad en la nube
-                </span>
-              }>
-              <div className="flex flex-col gap-2">
-                <Switch
-                  isSelected={shareVisualWithHosts}
-                  onValueChange={setShareVisualWithHosts}
-                  size="sm"
-                  classNames={{ label: "text-sm text-foreground" }}>
-                  Compartir perfil visual con anfitriones de nubes compartidas
-                </Switch>
-                <p className="text-[11px] leading-snug text-default-500">
-                  Si lo activas, quienes te invitaron como miembro podrán ver fondo, avatar y marco al cargar tu usuario
-                  en Amigos (no aplica a cualquier persona que escriba tu ID).
-                </p>
-                <Switch
-                  isSelected={shareVisualWithMembers}
-                  onValueChange={setShareVisualWithMembers}
-                  size="sm"
-                  classNames={{ label: "text-sm text-foreground" }}>
-                  Compartir perfil visual con miembros de tu nube
-                </Switch>
-                <p className="text-[11px] leading-snug text-default-500">
-                  Si eres anfitrión y lo activas, quienes están en tu nube como miembros podrán ver tu perfil visual al
-                  cargar tu usuario en Amigos.
-                </p>
-              </div>
-            </AccordionItem>
             <AccordionItem
               key="bg"
               aria-label="Fondo"
@@ -364,9 +392,10 @@ export function ProfileDrawer({
                 </Button>
               </div>
             </AccordionItem>
+
             <AccordionItem
               key="avatar"
-              aria-label="Avatar"
+              aria-label="Foto de perfil"
               title={
                 <span className="flex items-center gap-2">
                   <ImageIcon size={15} className="text-default-500" />
@@ -393,6 +422,7 @@ export function ProfileDrawer({
                 </Button>
               </div>
             </AccordionItem>
+
             <AccordionItem
               key="frame"
               aria-label="Marco"
@@ -421,6 +451,54 @@ export function ProfileDrawer({
                   Imagen local…
                 </Button>
               </div>
+            </AccordionItem>
+
+            <AccordionItem
+              key="sharing"
+              aria-label="Privacidad en la nube"
+              title={
+                <span className="flex items-center gap-2">
+                  <Shield size={15} className="text-default-500" />
+                  Privacidad en la nube
+                </span>
+              }>
+              <div className="flex flex-col gap-2">
+                <Switch
+                  isSelected={shareVisualWithHosts}
+                  onValueChange={setShareVisualWithHosts}
+                  size="sm"
+                  classNames={{ label: "text-sm text-foreground" }}>
+                  Compartir con anfitriones
+                </Switch>
+                <p className="text-[11px] leading-snug text-default-500">
+                  Quienes te invitaron como miembro podrán ver fondo, avatar y marco al cargar tu usuario en Amigos.
+                </p>
+                <Switch
+                  isSelected={shareVisualWithMembers}
+                  onValueChange={setShareVisualWithMembers}
+                  size="sm"
+                  classNames={{ label: "text-sm text-foreground" }}>
+                  Compartir con miembros de tu nube
+                </Switch>
+                <p className="text-[11px] leading-snug text-default-500">
+                  Si eres anfitrión, los miembros de tu nube podrán ver tu perfil visual en Amigos.
+                </p>
+              </div>
+            </AccordionItem>
+
+            <AccordionItem
+              key="help"
+              aria-label="Ayuda"
+              title={
+                <span className="flex items-center gap-2">
+                  <CircleHelp size={15} className="text-default-500" />
+                  Ayuda
+                </span>
+              }>
+              <p className="text-[11px] leading-snug text-default-500">
+                Puedes usar enlaces https o rutas a archivos locales. Las rutas locales dependen del archivo en disco;
+                si mueves o borras el archivo, el perfil dejará de mostrarlo.
+              </p>
             </AccordionItem>
           </Accordion>
 
