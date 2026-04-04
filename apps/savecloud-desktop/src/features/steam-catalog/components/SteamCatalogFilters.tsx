@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo, useState } from "react";
 import { Accordion, AccordionItem, Button, Checkbox, Chip, Input, Skeleton } from "@heroui/react";
 import type { CatalogFilterFacet } from "@services/tauri";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
+import { Search, TagsIcon, Swords } from "lucide-react";
 
 type SteamCatalogFiltersProps = {
   genres: CatalogFilterFacet[];
@@ -19,7 +20,7 @@ function normalizeFilter(s: string): string {
 }
 
 /** Panel de filtros con estado optimista: el checkbox se marca de inmediato
- *  sin esperar a que el padre propague el nuevo estado. */
+ * sin esperar a que el padre propague el nuevo estado. */
 const FacetFilterPanel = memo(function FacetFilterPanel({
   items,
   selected,
@@ -41,9 +42,7 @@ const FacetFilterPanel = memo(function FacetFilterPanel({
     (label: string) => {
       setOptimisticPending((prev) => {
         const next = new Map(prev);
-
         const currentlySelected = prev.has(label) ? prev.get(label) : selected.has(label);
-
         next.set(label, !currentlySelected);
         return next;
       });
@@ -72,22 +71,29 @@ const FacetFilterPanel = memo(function FacetFilterPanel({
       : `${items.length} disponible${items.length === 1 ? "" : "s"}`;
 
   return (
-    <div className="flex flex-col gap-2 pt-1">
-      <p className="text-xs text-default-500">{subtitle}</p>
-      <Input
-        size="sm"
-        placeholder={filterPlaceholder}
-        value={filterText}
-        onValueChange={setFilterText}
-        variant="bordered"
-        classNames={{ input: "text-xs" }}
-        aria-label="Filtrar lista"
-      />
-      <div className="max-h-60 overflow-y-auto rounded-medium border border-default-200/80 bg-default-50/30 px-2 py-2 dark:border-default-100/15 dark:bg-default-50/10">
+    <div className="flex flex-col gap-3 pt-1">
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-default-500">{subtitle}</p>
+        <Input
+          size="sm"
+          placeholder={filterPlaceholder}
+          value={filterText}
+          startContent={<Search size={18} className="text-default-400" />}
+          onValueChange={setFilterText}
+          variant="bordered"
+          classNames={{
+            input: "text-xs",
+            inputWrapper: "h-8 min-h-8",
+          }}
+          aria-label="Filtrar lista"
+        />
+      </div>
+
+      <div className="custom-scrollbar max-h-64 overflow-y-auto pr-2">
         {filtered.length === 0 ? (
-          <p className="px-1 py-2 text-center text-xs text-default-400">Sin coincidencias</p>
+          <p className="py-4 text-center text-xs text-default-400">Sin coincidencias</p>
         ) : (
-          <ul className="flex flex-col gap-1">
+          <ul className="flex flex-col gap-1.5">
             {filtered.map((f) => {
               const isSelected = optimisticPending.has(f.label)
                 ? optimisticPending.get(f.label)!
@@ -97,12 +103,15 @@ const FacetFilterPanel = memo(function FacetFilterPanel({
                 <li key={f.label}>
                   <Checkbox
                     size="sm"
-                    classNames={{ label: "w-full max-w-full text-xs" }}
+                    classNames={{
+                      base: "max-w-full w-full p-1 -m-1 rounded-md hover:bg-default-100/50 transition-colors",
+                      label: "w-full text-xs",
+                    }}
                     isSelected={isSelected}
                     onValueChange={() => handleToggle(f.label)}>
                     <span className="flex w-full min-w-0 items-center justify-between gap-2">
                       <span className="truncate">{f.label}</span>
-                      <span className="shrink-0 tabular-nums text-default-400">{f.count}</span>
+                      <span className="shrink-0 tabular-nums text-default-400/80 text-[10px]">{f.count}</span>
                     </span>
                   </Checkbox>
                 </li>
@@ -190,7 +199,7 @@ export function SteamCatalogFilters({
               aria-label="Géneros"
               title={
                 <span className="flex w-full min-w-0 items-center gap-2 pr-1">
-                  <span className="size-2 shrink-0 rounded-full bg-secondary" />
+                  <Swords className="size-4 shrink-0 text-secondary" />
                   <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">Géneros</span>
                   <Chip size="sm" variant="flat" className="shrink-0">
                     {genres.length}
@@ -211,7 +220,7 @@ export function SteamCatalogFilters({
               aria-label="Etiquetas"
               title={
                 <span className="flex w-full min-w-0 items-center gap-2 pr-1">
-                  <span className="size-2 shrink-0 rounded-full bg-success" />
+                  <TagsIcon className="size-4 shrink-0 text-success" />
                   <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">Etiquetas</span>
                   <Chip size="sm" variant="flat" className="shrink-0">
                     {tags.length}
