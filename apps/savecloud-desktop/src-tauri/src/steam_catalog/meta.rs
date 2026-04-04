@@ -17,6 +17,14 @@ pub const META_CATALOG_SYNC_LOGIC_VERSION: &str = "catalog_sync_logic_version";
 /// Valor de [`set_meta`] cuando el backfill de `name_normalized` (lógica v2) ya se aplicó; ver [`crate::steam_catalog::normalize`].
 pub const META_NAME_NORMALIZED_BACKFILL: &str = "name_normalized_backfill";
 
+/// Valor de [`set_meta`] cuando el backfill de `catalog_rank_score` (scoring v1) ya se aplicó.
+/// Una vez escrito, el backfill nunca vuelve a correr aunque haya apps con score = 0
+/// (esas apps tienen JSON sin datos útiles y su score es 0 de forma permanente).
+pub const META_RANK_SCORE_BACKFILL: &str = "rank_score_backfill";
+/// Versión actual del backfill de scoring; incrementar si cambia la fórmula de scoring
+/// para forzar un recálculo global en el próximo arranque.
+pub const RANK_SCORE_BACKFILL_VERSION: &str = "0.1.1";
+
 pub fn get_meta(conn: &Connection, key: &str) -> Result<Option<String>, rusqlite::Error> {
     conn.query_row(
         "SELECT value FROM catalog_sync_meta WHERE key = ?1",

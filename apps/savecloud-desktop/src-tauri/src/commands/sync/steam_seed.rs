@@ -314,7 +314,6 @@ fn apply_seed_updates(
                                   END",
         )?;
 
-        // Rastreamos cada app_id del batch para la sync posterior de facets y FTS.
         let mut track =
             tx.prepare_cached("INSERT OR IGNORE INTO _seed_batch_ids (app_id) VALUES (?1)")?;
 
@@ -334,7 +333,7 @@ fn apply_seed_updates(
         "
         DELETE FROM steam_app_genres
         WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
-
+ 
         INSERT OR IGNORE INTO steam_app_genres (app_id, label)
         SELECT
             a.app_id,
@@ -355,10 +354,10 @@ fn apply_seed_updates(
         WHERE a.app_id IN (SELECT app_id FROM _seed_batch_ids)
           AND a.details_json IS NOT NULL
           AND length(trim(a.details_json)) > 0;
-
+ 
         DELETE FROM steam_app_tags
         WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
-
+ 
         INSERT OR IGNORE INTO steam_app_tags (app_id, label)
         SELECT
             a.app_id,
@@ -379,10 +378,10 @@ fn apply_seed_updates(
         WHERE a.app_id IN (SELECT app_id FROM _seed_batch_ids)
           AND a.details_json IS NOT NULL
           AND length(trim(a.details_json)) > 0;
-
+ 
         DELETE FROM steam_catalog_search
         WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
-
+ 
         INSERT INTO steam_catalog_search (app_id, name_normalized)
         SELECT app_id, name_normalized
         FROM steam_catalog_apps
@@ -390,6 +389,12 @@ fn apply_seed_updates(
           AND name_normalized IS NOT NULL;
         ",
     )?;
+
+    // Se calcula en Rust (no en SQL) porque la lógica de scoring requiere parsear
+    // `release_date` con múltiples formatos y ponderar señales heterogéneas.
+    // La tabla temporal `_seed_batch_ids` sigue activa en esta conexión,
+    // así que `update_rank_scores_for_batch` la usa directamente.
+    crate::steam_catalog::scoring::update_rank_scores_for_batch(&tx)?;
 
     tx.commit()?;
     Ok(updated)

@@ -1,4 +1,22 @@
 //! Consultas de solo lectura sobre [`steam_catalog_apps`](crate::sqlite).
+//!
+//! # Estrategia de ordenamiento
+//!
+//! El listado paginado usa `catalog_rank_score DESC` como criterio principal,
+//! garantizando que **todas las páginas** mantengan la misma calidad relativa.
+//! El score es un entero `[0, 1_000_000]` calculado por [`crate::steam_catalog::scoring`]
+//! usando únicamente los datos de `details_json` ya persistidos.
+//!
+//! ## Orden de prioridad en el listado
+//!
+//! 1. **Tendencias** (`steam_catalog_trending`): siempre al frente, ordenadas por `rank ASC`.
+//! 2. **Resto del catálogo enriquecido**: `catalog_rank_score DESC` → `enriched_at DESC` → `app_id DESC`.
+//! 3. **Sin enriquecer** (`details_json IS NULL`, `score = 0`): al final, por `app_id DESC`.
+//!
+//! ## Paginación estable
+//!
+//! El score se persiste en disco; no varía entre peticiones, por lo que el offset
+//! sobre la lista ordenada es determinístico y no produce "saltos" entre páginas.
 
 use rusqlite::{params_from_iter, Connection, Row};
 
@@ -84,8 +102,17 @@ pub fn count_catalog_filtered(
     Ok(count as u64)
 }
 
-//// Listado ultra-optimizado usando Split Queries.
-/// Calcula la paginación en Rust para evitar que SQLite tenga que ordenar todo el catálogo en memoria.
+/// Listado paginado usando split queries para máximo rendimiento.
+///
+/// # Algoritmo
+///
+/// 1. **Tendencias** — se extraen completas (pocos registros), se aplica el slice de paginación.
+/// 2. **Catálogo general** — ordenado por `catalog_rank_score DESC, enriched_at DESC, app_id DESC`.
+///    Este orden coincide con el índice `idx_catalog_rank_sort` definido en la migración,
+///    por lo que SQLite responde con un B-Tree scan sin `filesort`.
+///
+/// El resultado compuesto preserva calidad en todas las páginas: la página 100 tendrá
+/// juegos con score similar a la página 2, en lugar de mostrar apps sin metadatos.
 pub fn list_catalog_page_filtered(
     conn: &Connection,
     offset: u32,
@@ -95,7 +122,8 @@ pub fn list_catalog_page_filtered(
 ) -> Result<Vec<CatalogListItem>, rusqlite::Error> {
     let mut results = Vec::new();
 
-    // 1. OBTENER TENDENCIAS (Aislado, súper rápido porque son pocos registros)
+    // Tendencias
+    // Ordenadas por rank de la tienda (más vendidos primero).
     let mut t_sql = String::from(
         "SELECT a.app_id, a.name FROM steam_catalog_trending tr \
          JOIN steam_catalog_apps a ON a.app_id = tr.app_id \
@@ -121,7 +149,6 @@ pub fn list_catalog_page_filtered(
 
     let t_count = trending_items.len() as u32;
 
-    // Lógica inteligente de paginación para las tendencias
     if offset < t_count {
         let take = std::cmp::min(limit, t_count - offset);
         results.extend(
@@ -132,7 +159,20 @@ pub fn list_catalog_page_filtered(
         );
     }
 
-    // 2. OBTENER EL RESTO DEL CATÁLOGO (Usa nuestro nuevo Índice B-Tree pre-calculado)
+    // Catálogo general ordenado por score
+    //
+    // ORDER BY usa `catalog_rank_score DESC` como criterio principal.
+    // Desempate por `enriched_at DESC` (enriquecido más recientemente primero)
+    // y `app_id DESC` (ids más altos → juegos más nuevos en Steam).
+    //
+    // Este orden DEBE coincidir exactamente con el índice `idx_catalog_rank_sort`
+    // para que SQLite use el B-Tree sin filesort:
+    //
+    //   CREATE INDEX idx_catalog_rank_sort ON steam_catalog_apps
+    //     (catalog_rank_score DESC, enriched_at DESC, app_id DESC);
+    //
+    // Las apps sin `details_json` tienen `catalog_rank_score = 0` y `enriched_at = NULL`,
+    // por lo que quedan naturalmente al final de la lista sin necesidad de un filtro extra.
     if results.len() < limit as usize {
         let remaining_limit = limit - results.len() as u32;
         let normal_offset = if offset >= t_count {
@@ -149,8 +189,10 @@ pub fn list_catalog_page_filtered(
         append_genre_filter(&mut n_sql, &mut n_params, genres, "a");
         append_tag_filter(&mut n_sql, &mut n_params, tags, "a");
 
-        // Esto coincide EXACTAMENTE con `idx_catalog_fast_sort`. SQLite responderá en milisegundos.
-        n_sql.push_str(" ORDER BY (a.details_json IS NOT NULL) DESC, a.enriched_at DESC, a.last_sync_batch_at DESC, a.app_id DESC");
+        // Orden primario: score derivado de metadatos (recencia + calidad + medios).
+        // Desempate 1: fecha de enriquecimiento (apps recién procesadas suben temporalmente).
+        // Desempate 2: app_id descendente (ids mayores = juegos más nuevos en Steam).
+        n_sql.push_str(" ORDER BY a.catalog_rank_score DESC, a.enriched_at DESC, a.app_id DESC");
         n_sql.push_str(&format!(
             " LIMIT {} OFFSET {}",
             remaining_limit, normal_offset
@@ -188,7 +230,10 @@ pub fn catalog_page_filtered(
     })
 }
 
-/// Búsqueda por tokens
+/// Búsqueda por tokens con orden: relevancia FTS → tendencia → score → recencia de enriquecimiento.
+///
+/// El `catalog_rank_score` actúa como criterio de desempate entre resultados con igual relevancia FTS,
+/// priorizando juegos de mayor calidad cuando hay múltiples coincidencias exactas del token.
 pub fn search_catalog_filtered(
     conn: &Connection,
     q: &str,
@@ -218,8 +263,14 @@ pub fn search_catalog_filtered(
     append_genre_filter(&mut sql, &mut params, genres, "a");
     append_tag_filter(&mut sql, &mut params, tags, "a");
 
+    // Orden de búsqueda:
+    // 1. Relevancia FTS (rank ASC — en FTS5, rank es negativo; menor = más relevante).
+    // 2. Si hay empate FTS: trending primero (mayor presencia en tienda).
+    // 3. Luego: score de calidad general (recencia + riqueza de ficha).
+    // 4. Desempate final: enriquecido más recientemente.
     sql.push_str(
-        " ORDER BY s.rank ASC, (tr.rank IS NOT NULL) DESC, tr.rank ASC, a.enriched_at DESC ",
+        " ORDER BY s.rank ASC, (tr.rank IS NOT NULL) DESC, tr.rank ASC, \
+          a.catalog_rank_score DESC, a.enriched_at DESC",
     );
     sql.push_str(" LIMIT ");
     sql.push_str(&limit.to_string());
