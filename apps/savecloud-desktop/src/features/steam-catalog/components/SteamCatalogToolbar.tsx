@@ -17,6 +17,8 @@ export function SteamCatalogToolbar({ searchTerm, onSearchTermChange }: SteamCat
       startContent={<Search size={18} className="text-default-400" />}
       classNames={{ input: "text-sm" }}
       variant="bordered"
+      isClearable
+      onClear={() => onSearchTermChange("")}
     />
   );
 }
