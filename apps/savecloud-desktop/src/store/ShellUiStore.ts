@@ -21,6 +21,10 @@ interface ShellUiStore {
   /** Registra un manejador; devuelve función para desregistrar al desmontar. */
   registerBackHandler: (handler: () => boolean) => () => void;
   requestGlobalBack: () => void;
+  /** Posición del scroll del catálogo. */
+  catalogScrollPosition: number;
+  /** Establece la posición del scroll del catálogo. */
+  setCatalogScrollPosition: (position: number) => void;
 }
 
 export const useShellUiStore = create<ShellUiStore>((set, get) => ({
@@ -45,4 +49,6 @@ export const useShellUiStore = create<ShellUiStore>((set, get) => ({
       if (list[i]()) return;
     }
   },
+  catalogScrollPosition: 0,
+  setCatalogScrollPosition: (position) => set({ catalogScrollPosition: position }),
 }));
