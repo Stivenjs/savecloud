@@ -72,6 +72,14 @@ export class S3SaveRepository implements SaveRepository {
     private readonly bucketName: string
   ) {}
 
+  /** Descarga y devuelve el contenido de un archivo en texto plano desde S3 */
+  async getFileContent(key: string): Promise<string> {
+    const command = new GetObjectCommand({ Bucket: this.bucketName, Key: key });
+    const response = await this.s3.send(command);
+    if (!response.Body) throw new Error("S3 did not return Body");
+    return await response.Body.transformToString("utf-8");
+  }
+
   /**
    * Construye URL de CloudFront solo para backups (prefijo /backups/).
    *

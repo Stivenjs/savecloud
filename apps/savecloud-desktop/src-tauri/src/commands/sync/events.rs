@@ -70,13 +70,13 @@ pub(crate) fn emit_sync_terminal(
 
 pub(crate) fn emit_sync_upload_progress(app: &AppHandle, mut payload: SyncProgressPayload) {
     if payload.can_pause.is_none() {
-        payload.can_pause = Some(true);
+        payload.can_pause = Some(false);
     }
     if payload.can_cancel.is_none() {
-        payload.can_cancel = Some(true);
+        payload.can_cancel = Some(false);
     }
     if payload.can_resume.is_none() {
-        payload.can_resume = Some(false);
+        payload.can_resume = Some(true);
     }
     if payload.state.is_none() {
         payload.state = Some(SyncOperationState::Running);

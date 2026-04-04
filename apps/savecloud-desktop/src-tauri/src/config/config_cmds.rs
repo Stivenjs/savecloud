@@ -4,7 +4,6 @@
 //! almacenamiento S3, importación/exportación de estado y manipulaciones
 //! del árbol de juegos.
 
-use crate::commands::share::invites;
 use crate::commands::sync::api::{api_request, get_download_urls, sync_list_remote_saves_for_user};
 use crate::commands::sync::context::resolve_api_context;
 use crate::config::gamification::GamificationStateDto;
@@ -15,6 +14,7 @@ use crate::utils::launch_exe;
 use base64::Engine;
 use chrono::Utc;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -785,7 +785,6 @@ pub async fn backup_config_to_cloud() -> Result<(), String> {
 pub async fn restore_config_from_cloud() -> Result<(), String> {
     let ctx = resolve_api_context()?;
 
-    // Optimización: el config vive bajo el juego especial "__config__".
     let saves =
         crate::commands::sync::api::sync_list_remote_saves_for_game("__config__".to_string())
             .await?;
@@ -830,9 +829,34 @@ pub async fn restore_config_from_cloud() -> Result<(), String> {
     config::apply_combined_config(&imported)
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FriendProfileDto {
+    pub user_id: String,
+    pub total_playtime: u64,
+    pub profile_background: Option<String>,
+    pub profile_avatar: Option<String>,
+    pub profile_frame: Option<String>,
+    pub share_visual_profile_with_hosts: bool,
+    pub share_visual_profile_with_members: bool,
+    pub games: Vec<FriendGameDto>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FriendGameDto {
+    pub id: String,
+    pub steam_app_id: Option<String>,
+    pub image_url: Option<String>,
+    pub edition_label: Option<String>,
+    pub playtime_seconds: u64,
+    pub paths: Vec<String>,
+    pub source_url: Option<String>,
+}
+
 /// Realiza una solicitud pasiva para parsear el bloque público alojado por otro usuario.
 #[tauri::command]
-pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, String> {
+pub async fn get_friend_config(friend_user_id: String) -> Result<FriendProfileDto, String> {
     let friend_id = friend_user_id.trim();
     if friend_id.is_empty() {
         return Err("Escribe el usuario del amigo.".into());
@@ -840,94 +864,38 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
 
     let ctx = resolve_api_context()?;
 
-    let saves = sync_list_remote_saves_for_user(friend_id.to_string()).await?;
-    let mut config_saves: Vec<_> = saves
-        .into_iter()
-        .filter(|s| s.game_id == "__config__" && s.filename.ends_with("config.json"))
-        .collect();
-    if config_saves.is_empty() {
-        return Err(
-            "Ese usuario no tiene configuración respaldada en la nube (no se encontró config.json)."
-                .into(),
-        );
+    let endpoint = format!(
+        "{}/users/{}/profile",
+        ctx.base_url.trim_end_matches('/'),
+        friend_id
+    );
+
+    let response = crate::network::API_CLIENT
+        .get(&endpoint)
+        .header("x-api-key", ctx.api_key)
+        .header("x-user-id", ctx.user_id)
+        .send()
+        .await
+        .map_err(|e| format!("Fallo de red: {}", e))?;
+
+    if response.status().as_u16() == 404 {
+        return Err("Ese usuario no tiene configuración respaldada en la nube.".into());
     }
 
-    config_saves.sort_by(|a, b| a.last_modified.cmp(&b.last_modified));
-    let latest = config_saves.pop().unwrap();
+    if !response.status().is_success() {
+        return Err(format!(
+            "Error del servidor ({}): {}",
+            response.status(),
+            response.text().await.unwrap_or_default()
+        ));
+    }
 
-    let bytes = s3_transfer(
-        &ctx.base_url,
-        &ctx.user_id,
-        &ctx.api_key,
-        &latest.key,
-        None,
-        false,
-    )
-    .await?;
-    let imported: Config = serde_json::from_slice(&bytes)
-        .map_err(|e| format!("El archivo de configuración descargado no es válido: {}", e))?;
+    let profile = response
+        .json::<FriendProfileDto>()
+        .await
+        .map_err(|e| format!("Error al procesar el perfil del amigo: {}", e))?;
 
-    let allow_host_sees_member = imported.share_visual_profile_with_hosts
-        && invites::viewer_is_host_of_member(friend_id).await?;
-    let allow_member_sees_host = imported.share_visual_profile_with_members
-        && invites::viewer_is_member_of_host(friend_id).await?;
-    let allow_visual = allow_host_sees_member || allow_member_sees_host;
-
-    let friend_total_playtime: u64 = imported.games.iter().map(|g| g.playtime_seconds).sum();
-
-    let (profile_background, profile_avatar, profile_frame, total_playtime, share_visual_profile_with_hosts) =
-        if allow_visual {
-            (
-                imported.profile_background.clone(),
-                imported.profile_avatar.clone(),
-                imported.profile_frame.clone(),
-                friend_total_playtime,
-                true,
-            )
-        } else {
-            (
-                None,
-                None,
-                None,
-                0u64,
-                false,
-            )
-        };
-
-    Ok(ConfigDto {
-        api_base_url: None,
-        api_key: None,
-        user_id: Some(friend_id.to_string()),
-        active_cloud_host_user_id: None,
-        custom_scan_paths: vec![],
-        keep_backups_per_game: None,
-        full_backup_streaming: None,
-        full_backup_streaming_dry_run: None,
-        default_source_download_dir: None,
-        total_playtime,
-        profile_background,
-        profile_avatar,
-        profile_frame,
-        steam_web_api_key: None,
-        share_visual_profile_with_hosts,
-        share_visual_profile_with_members: false,
-        games: imported
-            .games
-            .into_iter()
-            .map(|g| GameDto {
-                id: g.id,
-                paths: g.paths,
-                steam_app_id: g.steam_app_id,
-                image_url: g.image_url,
-                edition_label: g.edition_label,
-                source_url: g.source_url,
-                magnet_link: g.magnet_link,
-                executable_names: g.executable_names.clone(),
-                launch_executable_path: g.launch_executable_path.clone(),
-                playtime_seconds: g.playtime_seconds,
-            })
-            .collect(),
-    })
+    Ok(profile)
 }
 
 /// Anexa en bucle una matriz serializada enviada por la interfaz correspondiente al perfil amigo.

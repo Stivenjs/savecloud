@@ -449,29 +449,3 @@ pub async fn list_cloud_memberships() -> Result<CloudMembershipsResponseDto, Str
         member_memberships,
     })
 }
-
-/// True si el usuario autenticado es anfitrión y `member_user_id` es miembro activo de su nube.
-pub async fn viewer_is_host_of_member(member_user_id: &str) -> Result<bool, String> {
-    let trim = member_user_id.trim();
-    if trim.is_empty() {
-        return Ok(false);
-    }
-    let res = list_cloud_memberships().await?;
-    Ok(res
-        .host_memberships
-        .iter()
-        .any(|m| m.active && m.member_user_id == trim))
-}
-
-/// True si el usuario autenticado es miembro activo de la nube de `host_user_id`.
-pub async fn viewer_is_member_of_host(host_user_id: &str) -> Result<bool, String> {
-    let trim = host_user_id.trim();
-    if trim.is_empty() {
-        return Ok(false);
-    }
-    let res = list_cloud_memberships().await?;
-    Ok(res
-        .member_memberships
-        .iter()
-        .any(|m| m.active && m.host_user_id == trim))
-}
