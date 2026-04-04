@@ -29,7 +29,9 @@ import { registerSavesRoutes } from "@interfaces/http/routes/saves.routes";
 import { registerShareRoutes } from "@interfaces/http/routes/share.routes";
 import { registerNotificationRoutes } from "@interfaces/http/routes/notifications.routes";
 import { registerInviteRoutes } from "@interfaces/http/routes/invites.routes";
+import { registerProfileRoutes } from "@interfaces/http/routes/users.routes";
 import { verifyUserAccessToken } from "@shared/accessToken";
+import { GetFriendProfileUseCase } from "@application/use-cases/GetFriendProfileUseCase";
 
 export interface AppDependencies {
   saveRepository: SaveRepository;
@@ -126,6 +128,16 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       respondCloudInviteUseCase: new RespondCloudInviteUseCase(deps.cloudInviteRepository),
       setCloudGameShareUseCase: new SetCloudGameShareUseCase(deps.cloudInviteRepository),
       cloudInviteRepository: deps.cloudInviteRepository,
+    });
+  }
+
+  if (deps.cloudInviteRepository && resolveCloudStorageScopeUseCase) {
+    await registerProfileRoutes(app, {
+      getFriendProfileUseCase: new GetFriendProfileUseCase(
+        deps.saveRepository,
+        deps.cloudInviteRepository,
+        resolveCloudStorageScopeUseCase
+      ),
     });
   }
 

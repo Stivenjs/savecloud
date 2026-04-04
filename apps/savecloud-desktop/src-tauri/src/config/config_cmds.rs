@@ -4,7 +4,6 @@
 //! almacenamiento S3, importación/exportación de estado y manipulaciones
 //! del árbol de juegos.
 
-use crate::commands::share::invites;
 use crate::commands::sync::api::{api_request, get_download_urls, sync_list_remote_saves_for_user};
 use crate::commands::sync::context::resolve_api_context;
 use crate::config::gamification::GamificationStateDto;
@@ -15,7 +14,7 @@ use crate::utils::launch_exe;
 use base64::Engine;
 use chrono::Utc;
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -830,7 +829,7 @@ pub async fn restore_config_from_cloud() -> Result<(), String> {
     config::apply_combined_config(&imported)
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FriendProfileDto {
     pub user_id: String,
@@ -843,7 +842,7 @@ pub struct FriendProfileDto {
     pub games: Vec<FriendGameDto>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FriendGameDto {
     pub id: String,
@@ -865,89 +864,38 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<FriendProfileDt
 
     let ctx = resolve_api_context()?;
 
-    let saves = sync_list_remote_saves_for_user(friend_id.to_string()).await?;
-    let mut config_saves: Vec<_> = saves
-        .into_iter()
-        .filter(|s| s.game_id == "__config__" && s.filename.ends_with("config.json"))
-        .collect();
+    let endpoint = format!(
+        "{}/users/{}/profile",
+        ctx.base_url.trim_end_matches('/'),
+        friend_id
+    );
 
-    if config_saves.is_empty() {
+    let response = crate::network::API_CLIENT
+        .get(&endpoint)
+        .header("x-api-key", ctx.api_key)
+        .header("x-user-id", ctx.user_id)
+        .send()
+        .await
+        .map_err(|e| format!("Fallo de red: {}", e))?;
+
+    if response.status().as_u16() == 404 {
         return Err("Ese usuario no tiene configuración respaldada en la nube.".into());
     }
 
-    config_saves.sort_by(|a, b| a.last_modified.cmp(&b.last_modified));
-    let latest = config_saves.pop().unwrap();
+    if !response.status().is_success() {
+        return Err(format!(
+            "Error del servidor ({}): {}",
+            response.status(),
+            response.text().await.unwrap_or_default()
+        ));
+    }
 
-    let bytes = s3_transfer(
-        &ctx.base_url,
-        &ctx.user_id,
-        &ctx.api_key,
-        &latest.key,
-        None,
-        false,
-    )
-    .await?;
+    let profile = response
+        .json::<FriendProfileDto>()
+        .await
+        .map_err(|e| format!("Error al procesar el perfil del amigo: {}", e))?;
 
-    let imported: Config = serde_json::from_slice(&bytes)
-        .map_err(|e| format!("El archivo de configuración descargado no es válido: {}", e))?;
-
-    let allow_visual =
-        if imported.share_visual_profile_with_hosts || imported.share_visual_profile_with_members {
-            if let Ok(memberships) = invites::list_cloud_memberships().await {
-                let host_sees_member = imported.share_visual_profile_with_hosts
-                    && memberships
-                        .host_memberships
-                        .iter()
-                        .any(|m| m.active && m.member_user_id == friend_id);
-
-                let member_sees_host = imported.share_visual_profile_with_members
-                    && memberships
-                        .member_memberships
-                        .iter()
-                        .any(|m| m.active && m.host_user_id == friend_id);
-
-                host_sees_member || member_sees_host
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-
-    let friend_total_playtime: u64 = imported.games.iter().map(|g| g.playtime_seconds).sum();
-
-    let (profile_background, profile_avatar, profile_frame) = if allow_visual {
-        (
-            imported.profile_background,
-            imported.profile_avatar,
-            imported.profile_frame,
-        )
-    } else {
-        (None, None, None)
-    };
-
-    Ok(FriendProfileDto {
-        user_id: friend_id.to_string(),
-        total_playtime: friend_total_playtime,
-        share_visual_profile_with_hosts: imported.share_visual_profile_with_hosts,
-        share_visual_profile_with_members: imported.share_visual_profile_with_members,
-        profile_background,
-        profile_avatar,
-        profile_frame,
-        games: imported
-            .games
-            .into_iter()
-            .map(|g| FriendGameDto {
-                id: g.id,
-                steam_app_id: g.steam_app_id,
-                image_url: g.image_url,
-                edition_label: g.edition_label,
-                playtime_seconds: g.playtime_seconds,
-                paths: g.paths,
-                source_url: g.source_url,
-            })
-            .collect(),
-    })
+    Ok(profile)
 }
 
 /// Anexa en bucle una matriz serializada enviada por la interfaz correspondiente al perfil amigo.
