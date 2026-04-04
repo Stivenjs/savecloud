@@ -851,6 +851,8 @@ pub struct FriendGameDto {
     pub image_url: Option<String>,
     pub edition_label: Option<String>,
     pub playtime_seconds: u64,
+    pub paths: Vec<String>,
+    pub source_url: Option<String>,
 }
 
 /// Realiza una solicitud pasiva para parsear el bloque público alojado por otro usuario.
@@ -941,6 +943,8 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<FriendProfileDt
                 image_url: g.image_url,
                 edition_label: g.edition_label,
                 playtime_seconds: g.playtime_seconds,
+                paths: g.paths,
+                source_url: g.source_url,
             })
             .collect(),
     })
