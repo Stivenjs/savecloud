@@ -15,6 +15,7 @@ use crate::utils::launch_exe;
 use base64::Engine;
 use chrono::Utc;
 use regex::Regex;
+use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -785,7 +786,6 @@ pub async fn backup_config_to_cloud() -> Result<(), String> {
 pub async fn restore_config_from_cloud() -> Result<(), String> {
     let ctx = resolve_api_context()?;
 
-    // Optimización: el config vive bajo el juego especial "__config__".
     let saves =
         crate::commands::sync::api::sync_list_remote_saves_for_game("__config__".to_string())
             .await?;
@@ -830,9 +830,32 @@ pub async fn restore_config_from_cloud() -> Result<(), String> {
     config::apply_combined_config(&imported)
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FriendProfileDto {
+    pub user_id: String,
+    pub total_playtime: u64,
+    pub profile_background: Option<String>,
+    pub profile_avatar: Option<String>,
+    pub profile_frame: Option<String>,
+    pub share_visual_profile_with_hosts: bool,
+    pub share_visual_profile_with_members: bool,
+    pub games: Vec<FriendGameDto>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FriendGameDto {
+    pub id: String,
+    pub steam_app_id: Option<String>,
+    pub image_url: Option<String>,
+    pub edition_label: Option<String>,
+    pub playtime_seconds: u64,
+}
+
 /// Realiza una solicitud pasiva para parsear el bloque público alojado por otro usuario.
 #[tauri::command]
-pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, String> {
+pub async fn get_friend_config(friend_user_id: String) -> Result<FriendProfileDto, String> {
     let friend_id = friend_user_id.trim();
     if friend_id.is_empty() {
         return Err("Escribe el usuario del amigo.".into());
@@ -845,11 +868,9 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
         .into_iter()
         .filter(|s| s.game_id == "__config__" && s.filename.ends_with("config.json"))
         .collect();
+
     if config_saves.is_empty() {
-        return Err(
-            "Ese usuario no tiene configuración respaldada en la nube (no se encontró config.json)."
-                .into(),
-        );
+        return Err("Ese usuario no tiene configuración respaldada en la nube.".into());
     }
 
     config_saves.sort_by(|a, b| a.last_modified.cmp(&b.last_modified));
@@ -864,66 +885,61 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<ConfigDto, Stri
         false,
     )
     .await?;
+
     let imported: Config = serde_json::from_slice(&bytes)
         .map_err(|e| format!("El archivo de configuración descargado no es válido: {}", e))?;
 
-    let allow_host_sees_member = imported.share_visual_profile_with_hosts
-        && invites::viewer_is_host_of_member(friend_id).await?;
-    let allow_member_sees_host = imported.share_visual_profile_with_members
-        && invites::viewer_is_member_of_host(friend_id).await?;
-    let allow_visual = allow_host_sees_member || allow_member_sees_host;
+    let allow_visual =
+        if imported.share_visual_profile_with_hosts || imported.share_visual_profile_with_members {
+            if let Ok(memberships) = invites::list_cloud_memberships().await {
+                let host_sees_member = imported.share_visual_profile_with_hosts
+                    && memberships
+                        .host_memberships
+                        .iter()
+                        .any(|m| m.active && m.member_user_id == friend_id);
+
+                let member_sees_host = imported.share_visual_profile_with_members
+                    && memberships
+                        .member_memberships
+                        .iter()
+                        .any(|m| m.active && m.host_user_id == friend_id);
+
+                host_sees_member || member_sees_host
+            } else {
+                false
+            }
+        } else {
+            false
+        };
 
     let friend_total_playtime: u64 = imported.games.iter().map(|g| g.playtime_seconds).sum();
 
-    let (profile_background, profile_avatar, profile_frame, total_playtime, share_visual_profile_with_hosts) =
-        if allow_visual {
-            (
-                imported.profile_background.clone(),
-                imported.profile_avatar.clone(),
-                imported.profile_frame.clone(),
-                friend_total_playtime,
-                true,
-            )
-        } else {
-            (
-                None,
-                None,
-                None,
-                0u64,
-                false,
-            )
-        };
+    let (profile_background, profile_avatar, profile_frame) = if allow_visual {
+        (
+            imported.profile_background,
+            imported.profile_avatar,
+            imported.profile_frame,
+        )
+    } else {
+        (None, None, None)
+    };
 
-    Ok(ConfigDto {
-        api_base_url: None,
-        api_key: None,
-        user_id: Some(friend_id.to_string()),
-        active_cloud_host_user_id: None,
-        custom_scan_paths: vec![],
-        keep_backups_per_game: None,
-        full_backup_streaming: None,
-        full_backup_streaming_dry_run: None,
-        default_source_download_dir: None,
-        total_playtime,
+    Ok(FriendProfileDto {
+        user_id: friend_id.to_string(),
+        total_playtime: friend_total_playtime,
+        share_visual_profile_with_hosts: imported.share_visual_profile_with_hosts,
+        share_visual_profile_with_members: imported.share_visual_profile_with_members,
         profile_background,
         profile_avatar,
         profile_frame,
-        steam_web_api_key: None,
-        share_visual_profile_with_hosts,
-        share_visual_profile_with_members: false,
         games: imported
             .games
             .into_iter()
-            .map(|g| GameDto {
+            .map(|g| FriendGameDto {
                 id: g.id,
-                paths: g.paths,
                 steam_app_id: g.steam_app_id,
                 image_url: g.image_url,
                 edition_label: g.edition_label,
-                source_url: g.source_url,
-                magnet_link: g.magnet_link,
-                executable_names: g.executable_names.clone(),
-                launch_executable_path: g.launch_executable_path.clone(),
                 playtime_seconds: g.playtime_seconds,
             })
             .collect(),
