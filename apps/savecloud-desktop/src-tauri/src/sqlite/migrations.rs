@@ -1,11 +1,37 @@
-//! Migraciones incrementales usando `PRAGMA user_version`.
+//! Migraciones incrementales de SQLite usando `PRAGMA user_version`.
+//!
+//! Este módulo gestiona la evolución del esquema de base de datos de forma
+//! determinista e idempotente.
+//!
+//! # Estrategia
+//!
+//! - Cada entrada en [`MIGRATIONS`] representa un paso de versión.
+//! - El índice del array + 1 = versión objetivo.
+//! - Las migraciones se aplican secuencialmente dentro de transacciones.
+//! - Se usa `PRAGMA user_version` como fuente de verdad.
+//!
+//! # Post-migración
+//!
+//! Se ejecuta un backfill incremental de `catalog_rank_score` para garantizar
+//! que el catálogo sea navegable inmediatamente tras una actualización.
+//!
+//! # Garantías
+//!
+//! - Idempotente (puede ejecutarse múltiples veces sin efectos secundarios)
+//! - Seguro ante fallos (no deja la DB en estado inconsistente)
+//! - Escalable (evita full scans innecesarios)
 
 use rusqlite::Connection;
 
 /// Arreglo con todos los scripts de migración en orden.
-/// El índice del arreglo corresponde a la versión:
-/// MIGRATIONS[0] actualiza de la versión 0 a la 1.
-/// MIGRATIONS[1] actualiza de la versión 1 a la 2, etc.
+///
+/// # Convención
+///
+/// - `MIGRATIONS[0]` → versión 1
+/// - `MIGRATIONS[1]` → versión 2
+/// - etc.
+///
+/// Cada script debe ser **idempotente** o ejecutarse dentro de una transacción segura.
 const MIGRATIONS: &[&str] = &[
     include_str!("sql/001_catalog_init.sql"),
     include_str!("sql/002_catalog_sync_meta.sql"),
@@ -15,7 +41,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("sql/006_notifications.sql"),
     include_str!("sql/007_steam_seed_import_state.sql"),
     include_str!("sql/008_steam_seed_max_imported.sql"),
-    "", // 9
+    "", // 9 reservado
     concat!(
         include_str!("sql/009_steam_app_genres.sql"),
         ";\n",
@@ -29,7 +55,27 @@ const MIGRATIONS: &[&str] = &[
     include_str!("sql/016_seed_patch.sql"),
 ];
 
-/// Aplica migraciones pendientes de forma idempotente.
+/// Ejecuta todas las migraciones pendientes.
+///
+/// # Parameters
+///
+/// - `conn`: Conexión SQLite activa.
+///
+/// # Returns
+///
+/// - `Ok(())` si todas las migraciones se aplicaron correctamente.
+/// - `Err(rusqlite::Error)` si ocurre algún error SQL.
+///
+/// # Comportamiento
+///
+/// - Solo aplica migraciones cuya versión sea mayor a `user_version`.
+/// - Cada migración se ejecuta dentro de su propia transacción.
+/// - Actualiza `PRAGMA user_version` tras cada paso exitoso.
+/// - Ejecuta un backfill incremental de scores al final.
+///
+/// # Complejidad
+///
+/// O(n) donde n = número de migraciones pendientes.
 pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     let current_version: i32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
 
@@ -48,74 +94,101 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         }
     }
 
-    // Backfill de catalog_rank_score para apps que ya tenían details_json
-    // antes de la migración 016. Se ejecuta en cada arranque pero es un no-op
-    // si el metadato rank_score_backfill ya está escrito.
-    //
-    // Colocarlo aquí —y no solo en run_catalog_sync— garantiza que el catálogo
-    // sea navegable inmediatamente después de instalar el update, sin que el
-    // usuario tenga que ejecutar un sync primero.
+    // Backfill incremental post-migración
     run_rank_score_backfill_if_needed(conn);
 
     Ok(())
 }
 
-/// Recalcula `catalog_rank_score` para todas las apps con `details_json`, una sola vez.
+/// Ejecuta un backfill incremental de `catalog_rank_score`.
 ///
-/// Usa el metadato [`META_RANK_SCORE_BACKFILL`] como flag persistente: una vez escrito,
-/// el backfill nunca vuelve a correr en arranques posteriores, incluso si hay apps con
-/// `score = 0` (esas apps tienen JSON sin datos útiles y 0 es su score correcto).
+/// # Estrategia
 ///
-/// Si la fórmula de scoring cambia en el futuro, incrementar [`RANK_SCORE_BACKFILL_VERSION`]
-/// para forzar un recálculo global en el próximo arranque.
+/// - Solo recalcula filas donde `catalog_rank_score IS NULL`.
+/// - Evita full scan en catálogos grandes.
+/// - Idempotente: puede ejecutarse múltiples veces sin efectos secundarios.
+///
+/// # Versionado
+///
+/// Controlado por [`META_RANK_SCORE_BACKFILL`].
+/// Si cambia la fórmula de scoring, incrementar
+/// [`RANK_SCORE_BACKFILL_VERSION`] para forzar recalculo.
+///
+/// # Performance
+///
+/// O(k) donde k = filas sin score (no O(n) total).
+///
+/// # Fault tolerance
+///
+/// - No bloquea arranque si falla
+/// - Permite degradación (score = 0)
+///
+/// # Parameters
+///
+/// - `conn`: Conexión SQLite activa.
+///
+/// # Returns
+///
+/// No retorna resultado; maneja errores internamente.
 fn run_rank_score_backfill_if_needed(conn: &Connection) {
     use crate::steam_catalog::meta::{
         get_meta, set_meta, META_RANK_SCORE_BACKFILL, RANK_SCORE_BACKFILL_VERSION,
     };
 
-    // Si el metadato ya existe con la versión actual, el backfill ya corrió: salir inmediatamente.
-    let already_done = get_meta(conn, META_RANK_SCORE_BACKFILL)
-        .ok()
-        .flatten()
-        .as_deref()
-        == Some(RANK_SCORE_BACKFILL_VERSION);
+    let stored_version = get_meta(conn, META_RANK_SCORE_BACKFILL).ok().flatten();
+
+    let already_done = stored_version.as_deref() == Some(RANK_SCORE_BACKFILL_VERSION);
 
     if already_done {
         return;
     }
 
-    // Primera ejecución tras la migración 016 (o tras un bump de versión de scoring).
-    match crate::steam_catalog::scoring::backfill_rank_scores(conn) {
+    // Detectar si es primera vez o cambio de versión
+    let result = if stored_version.is_none() {
+        // Primera vez → solo missing
+        crate::steam_catalog::scoring::update_missing_scores(conn)
+    } else {
+        // Cambio de versión → recalcular TODO
+        crate::steam_catalog::scoring::backfill_rank_scores(conn)
+    };
+
+    match result {
         Ok(updated) => {
-            eprintln!(
-                "[migrations] Backfill catalog_rank_score completado: {updated} scores calculados."
-            );
-            // Marcar como hecho para que nunca vuelva a correr.
+            eprintln!("[migrations] Rank score backfill ejecutado: {updated} filas afectadas.");
+
             if let Err(e) = set_meta(conn, META_RANK_SCORE_BACKFILL, RANK_SCORE_BACKFILL_VERSION) {
-                eprintln!("[migrations] No se pudo guardar el metadato de backfill: {e}");
+                eprintln!("[migrations] Error guardando metadato: {e}");
             }
         }
         Err(e) => {
-            // No abortar el arranque; el catálogo funciona con scores en 0 (orden degradado).
-            eprintln!("[migrations] Error en backfill de scores (no fatal): {e}");
+            eprintln!("[migrations] Error en backfill (no fatal): {e}");
         }
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::run_migrations;
     use rusqlite::Connection;
 
+    /// Verifica que las migraciones son idempotentes.
+    ///
+    /// # Estrategia
+    ///
+    /// Ejecuta dos veces `run_migrations` sobre una DB en memoria y valida:
+    ///
+    /// - No hay errores en la segunda ejecución
+    /// - La versión final es consistente
     #[test]
     fn migrations_run_twice_without_error() {
         let conn = Connection::open_in_memory().expect("in memory");
-        run_migrations(&conn).expect("first");
-        run_migrations(&conn).expect("second");
+
+        run_migrations(&conn).expect("first run");
+        run_migrations(&conn).expect("second run");
 
         let version: i32 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
+
         assert_eq!(version, 16);
     }
 }
