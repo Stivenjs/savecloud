@@ -67,13 +67,12 @@ export function SteamCatalogPage() {
   }, [isReady, catalogScrollPosition]);
 
   useEffect(() => {
-    let timeout: NodeJS.Timeout;
-
+    let scrollTimeout: ReturnType<typeof setTimeout>;
     const handleScroll = () => {
       if (!isReady || !hasRestored.current) return;
 
-      clearTimeout(timeout);
-      timeout = setTimeout(() => {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
         const currentY = window.scrollY || document.documentElement.scrollTop;
         setCatalogScrollPosition(currentY);
       }, 150);
@@ -83,7 +82,7 @@ export function SteamCatalogPage() {
 
     return () => {
       window.removeEventListener("scroll", handleScroll);
-      clearTimeout(timeout);
+      clearTimeout(scrollTimeout);
     };
   }, [isReady, setCatalogScrollPosition]);
 
