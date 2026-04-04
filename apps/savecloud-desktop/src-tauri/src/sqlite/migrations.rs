@@ -26,6 +26,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("sql/013_fts_search.sql"),
     include_str!("sql/014_covering_indexes.sql"),
     include_str!("sql/015_fix_fts_triggers.sql"),
+    include_str!("sql/016_seed_patch.sql"),
 ];
 
 /// Aplica migraciones pendientes de forma idempotente.
@@ -47,7 +48,58 @@ pub fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         }
     }
 
+    // Backfill de catalog_rank_score para apps que ya tenían details_json
+    // antes de la migración 016. Se ejecuta en cada arranque pero es un no-op
+    // si el metadato rank_score_backfill ya está escrito.
+    //
+    // Colocarlo aquí —y no solo en run_catalog_sync— garantiza que el catálogo
+    // sea navegable inmediatamente después de instalar el update, sin que el
+    // usuario tenga que ejecutar un sync primero.
+    run_rank_score_backfill_if_needed(conn);
+
     Ok(())
+}
+
+/// Recalcula `catalog_rank_score` para todas las apps con `details_json`, una sola vez.
+///
+/// Usa el metadato [`META_RANK_SCORE_BACKFILL`] como flag persistente: una vez escrito,
+/// el backfill nunca vuelve a correr en arranques posteriores, incluso si hay apps con
+/// `score = 0` (esas apps tienen JSON sin datos útiles y 0 es su score correcto).
+///
+/// Si la fórmula de scoring cambia en el futuro, incrementar [`RANK_SCORE_BACKFILL_VERSION`]
+/// para forzar un recálculo global en el próximo arranque.
+fn run_rank_score_backfill_if_needed(conn: &Connection) {
+    use crate::steam_catalog::meta::{
+        get_meta, set_meta, META_RANK_SCORE_BACKFILL, RANK_SCORE_BACKFILL_VERSION,
+    };
+
+    // Si el metadato ya existe con la versión actual, el backfill ya corrió: salir inmediatamente.
+    let already_done = get_meta(conn, META_RANK_SCORE_BACKFILL)
+        .ok()
+        .flatten()
+        .as_deref()
+        == Some(RANK_SCORE_BACKFILL_VERSION);
+
+    if already_done {
+        return;
+    }
+
+    // Primera ejecución tras la migración 016 (o tras un bump de versión de scoring).
+    match crate::steam_catalog::scoring::backfill_rank_scores(conn) {
+        Ok(updated) => {
+            eprintln!(
+                "[migrations] Backfill catalog_rank_score completado: {updated} scores calculados."
+            );
+            // Marcar como hecho para que nunca vuelva a correr.
+            if let Err(e) = set_meta(conn, META_RANK_SCORE_BACKFILL, RANK_SCORE_BACKFILL_VERSION) {
+                eprintln!("[migrations] No se pudo guardar el metadato de backfill: {e}");
+            }
+        }
+        Err(e) => {
+            // No abortar el arranque; el catálogo funciona con scores en 0 (orden degradado).
+            eprintln!("[migrations] Error en backfill de scores (no fatal): {e}");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -64,6 +116,6 @@ mod tests {
         let version: i32 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 16);
     }
 }

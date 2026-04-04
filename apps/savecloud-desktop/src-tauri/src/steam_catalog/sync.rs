@@ -291,6 +291,31 @@ pub async fn run_catalog_sync(
     invalidate_sync_if_logic_version_mismatch(db)?;
     invalidate_sync_if_full_catalog_stale(db)?;
 
+    // Backfill de catalog_rank_score para apps enriquecidas antes de la migración 016.
+    // Solo corre si hay filas con score = 0 y details_json presente; en ejecuciones
+    // posteriores la query devuelve 0 y el spawn_blocking termina instantáneamente.
+    let db_score = db.clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        db_score.with_conn(|conn| {
+            let needs_backfill: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM steam_catalog_apps \
+                     WHERE catalog_rank_score = 0 \
+                       AND details_json IS NOT NULL \
+                       AND length(trim(details_json)) > 2",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(0);
+
+            if needs_backfill > 0 {
+                let _ = crate::steam_catalog::scoring::backfill_rank_scores(conn);
+            }
+            Ok::<_, rusqlite::Error>(())
+        })
+    })
+    .await;
+
     let full_done = db
         .with_conn(|c| get_meta(c, META_FULL_SYNC_DONE))?
         .as_deref()
