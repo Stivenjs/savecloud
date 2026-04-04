@@ -3,7 +3,13 @@ import { User } from "lucide-react";
 import { formatPlaytime } from "@utils/format";
 import { isProfileVideoSource, resolveProfileAsset } from "@utils/profileMedia";
 
-export const ProfileHeroBackground = memo(function ProfileHeroBackground({ rawUrl }: { rawUrl: string }) {
+export const ProfileHeroBackground = memo(function ProfileHeroBackground({
+  rawUrl,
+  imageMode = "contain",
+}: {
+  rawUrl: string;
+  imageMode?: "cover" | "contain";
+}) {
   const resolved = useMemo(() => resolveProfileAsset(rawUrl), [rawUrl]);
   const isVideo = isProfileVideoSource(rawUrl);
 
@@ -11,25 +17,47 @@ export const ProfileHeroBackground = memo(function ProfileHeroBackground({ rawUr
 
   if (isVideo) {
     return (
-      <video
-        src={resolved}
-        className="absolute inset-0 size-full object-cover"
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="none"
-      />
+      <>
+        {imageMode === "contain" && (
+          <video
+            src={resolved}
+            className="absolute inset-0 size-full object-cover opacity-40 blur-2xl scale-110"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="none"
+          />
+        )}
+        <video
+          src={resolved}
+          className={`absolute inset-0 size-full object-${imageMode} drop-shadow-2xl`}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="none"
+        />
+      </>
     );
   }
   return (
-    <img
-      src={resolved}
-      alt=""
-      decoding="async"
-      fetchPriority="low"
-      className="absolute inset-0 size-full object-cover"
-    />
+    <>
+      {imageMode === "contain" && (
+        <img
+          src={resolved}
+          alt=""
+          decoding="async"
+          className="absolute inset-0 size-full object-cover opacity-40 blur-2xl scale-110"
+        />
+      )}
+      <img
+        src={resolved}
+        alt=""
+        decoding="async"
+        className={`absolute inset-0 size-full object-${imageMode} drop-shadow-2xl`}
+      />
+    </>
   );
 });
 
