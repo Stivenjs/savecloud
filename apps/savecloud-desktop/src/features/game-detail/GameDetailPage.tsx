@@ -1,4 +1,4 @@
-import { addTransitionType, startTransition, useCallback, useEffect, useRef, useState } from "react";
+import { addTransitionType, startTransition, useCallback, useEffect, useRef, useState, useLayoutEffect } from "react";
 import { pickCandidate, sourceCandidateKey } from "@utils/sourceMatch";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigate } from "react-router-dom";
@@ -56,6 +56,10 @@ export function GameDetailPage() {
   const [gameForTorrent, setGameForTorrent] = useState<ConfiguredGame | null>(null);
   const [gameToFullBackupConfirm, setGameToFullBackupConfirm] = useState<ConfiguredGame | null>(null);
   const [gameToRestoreBackup, setGameToRestoreBackup] = useState<ConfiguredGame | null>(null);
+
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, []);
 
   const goBackFromDetail = useCallback(() => {
     if (backToPath) {

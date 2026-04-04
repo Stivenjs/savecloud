@@ -7,9 +7,17 @@ import { SteamCatalogGrid } from "@features/steam-catalog/components/SteamCatalo
 import { SteamCatalogPagination } from "@features/steam-catalog/components/SteamCatalogPagination";
 import { SteamCatalogToolbar } from "@features/steam-catalog/components/SteamCatalogToolbar";
 import { useSteamCatalogQueries } from "@features/steam-catalog/hooks/useSteamCatalogQueries";
+import { useShellUiStore } from "@store/ShellUiStore";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 export function SteamCatalogPage() {
   const navigate = useNavigate();
+
+  const catalogScrollPosition = useShellUiStore((state) => state.catalogScrollPosition);
+  const setCatalogScrollPosition = useShellUiStore((state) => state.setCatalogScrollPosition);
+
+  const hasRestored = useRef(false);
+
   const {
     searchTerm,
     setSearchTerm,
@@ -46,6 +54,38 @@ export function SteamCatalogPage() {
     navigate("/");
     return true;
   });
+
+  const isReady = !isLoading && items.length > 0;
+
+  useLayoutEffect(() => {
+    if (!isReady || hasRestored.current) return;
+
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: catalogScrollPosition, behavior: "instant" });
+      hasRestored.current = true;
+    });
+  }, [isReady, catalogScrollPosition]);
+
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+
+    const handleScroll = () => {
+      if (!isReady || !hasRestored.current) return;
+
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        const currentY = window.scrollY || document.documentElement.scrollTop;
+        setCatalogScrollPosition(currentY);
+      }, 150);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      clearTimeout(timeout);
+    };
+  }, [isReady, setCatalogScrollPosition]);
 
   return (
     <div className="space-y-6">
