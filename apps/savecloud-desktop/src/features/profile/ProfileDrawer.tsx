@@ -176,7 +176,6 @@ export function ProfileDrawer({
       }}>
       <DrawerContent className="flex max-h-dvh flex-col bg-content1">
         <DrawerHeader className="flex shrink-0 flex-col gap-0 border-b border-default-200 p-0">
-          {/* Zona de fondo: más alta cuando hay media (hasta ~55vh / 28rem) */}
           <div
             className={`relative w-full overflow-hidden ${
               bg.trim()
@@ -184,7 +183,7 @@ export function ProfileDrawer({
                 : "min-h-[min(42vh,18rem)] max-h-[min(50vh,22rem)]"
             }`}>
             {bg.trim() ? (
-              <ProfileHeroBackground rawUrl={bg.trim()} />
+              <ProfileHeroBackground rawUrl={bg.trim()} imageMode="cover" />
             ) : (
               <div className="absolute inset-0 bg-[linear-gradient(125deg,#1b2838_0%,#0e1621_45%,#1b2838_100%)]" />
             )}

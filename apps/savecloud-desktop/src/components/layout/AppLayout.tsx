@@ -1,4 +1,4 @@
-import { type ReactNode, startTransition } from "react";
+import { type ReactNode, startTransition, lazy, Suspense, useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@heroui/react";
 import { Moon, Sun } from "lucide-react";
@@ -7,6 +7,14 @@ import type { NavItem } from "@components/layout/Sidebar";
 import { StaggeredMenu } from "@components/external/StaggeredMenu";
 import { NotificationCenter } from "@components/layout/NotificationCenter";
 import { useShellUiStore } from "@store/ShellUiStore";
+import { UserBadge } from "@features/games/UserBadge";
+import { prefetchProfileDrawer } from "@features/profile/profileDrawerPrefetch";
+import { useConfig } from "@hooks/useConfig";
+import { useGamification } from "@hooks/useGamification";
+import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
+import { hasUsableCloudConnection } from "@utils/cloudConnection";
+
+const ProfileDrawer = lazy(() => import("@features/profile/ProfileDrawer").then((m) => ({ default: m.ProfileDrawer })));
 
 interface AppLayoutProps {
   navItems: NavItem[];
@@ -28,6 +36,36 @@ export function AppLayout({ navItems, children }: AppLayoutProps) {
   const location = useLocation();
   const isDark = resolvedTheme === "dark";
   const setSideMenuOpen = useShellUiStore((s) => s.setSideMenuOpen);
+
+  const { config, loading: configLoading } = useConfig();
+  const { data: gamification } = useGamification();
+
+  const hasSyncConfig = hasUsableCloudConnection(config);
+
+  const { connectionStatus } = useLastSyncInfo(hasSyncConfig);
+
+  const [profileDrawerOpen, setProfileDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    let last = useShellUiStore.getState().profileOpenRequest;
+    return useShellUiStore.subscribe((state) => {
+      const n = state.profileOpenRequest;
+      if (n > last) {
+        last = n;
+        setProfileDrawerOpen(true);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (configLoading || !config) return;
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(() => prefetchProfileDrawer(), { timeout: 2500 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(() => prefetchProfileDrawer(), 400);
+    return () => clearTimeout(t);
+  }, [configLoading, config]);
 
   const handleNavigation = (link: string) => {
     if (location.pathname === link) return;
@@ -62,7 +100,20 @@ export function AppLayout({ navItems, children }: AppLayoutProps) {
             handleNavigation(item.link);
           }, 320);
         }}
-        headerActions={<NotificationCenter />}
+        headerActions={
+          <div className="flex items-center gap-4">
+            <UserBadge
+              userId={config?.userId}
+              profileAvatar={config?.profileAvatar}
+              profileFrame={config?.profileFrame}
+              hasSyncConfig={hasSyncConfig}
+              connectionStatus={connectionStatus}
+              onOpenProfile={() => setProfileDrawerOpen(true)}
+              onIntentOpenProfile={prefetchProfileDrawer}
+            />
+            <NotificationCenter />
+          </div>
+        }
         panelFooter={
           <Button
             isIconOnly
@@ -77,6 +128,17 @@ export function AppLayout({ navItems, children }: AppLayoutProps) {
           </Button>
         }
       />
+
+      <Suspense fallback={null}>
+        <ProfileDrawer
+          isOpen={profileDrawerOpen}
+          onClose={() => setProfileDrawerOpen(false)}
+          config={config ?? null}
+          gamification={gamification ?? null}
+          hasSyncConfig={hasSyncConfig}
+          connectionStatus={connectionStatus}
+        />
+      </Suspense>
     </div>
   );
 }
