@@ -44,9 +44,6 @@ export function GamesStatsCompact({
 
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
 
-  /**
-   * 🔹 Contenido reutilizable para modal/popover
-   */
   const cloudDetailContent = (
     <ul className="space-y-2">
       {cloudGames.map((g) => (
@@ -98,7 +95,6 @@ export function GamesStatsCompact({
         rounded-lg border border-default-200 bg-default-50
         px-3 py-3 sm:px-4 sm:py-4
       ">
-      {/* 🔥 GRID RESPONSIVE (FIX PRINCIPAL) */}
       <div
         className="
           grid gap-3
@@ -107,9 +103,6 @@ export function GamesStatsCompact({
           lg:grid-cols-3
           text-sm
         ">
-        {/* ========================= */}
-        {/* 🎮 Juegos configurados */}
-        {/* ========================= */}
         <div className="flex items-center gap-2 rounded-md bg-transparent">
           <Gamepad2 size={16} className="text-primary shrink-0" />
 
@@ -121,9 +114,6 @@ export function GamesStatsCompact({
           </span>
         </div>
 
-        {/* ========================= */}
-        {/* ☁️ Última sincronización */}
-        {/* ========================= */}
         <div className="flex flex-wrap items-center gap-2">
           {lastSyncLoading ? (
             <Spinner size="sm" color="primary" />
@@ -144,9 +134,6 @@ export function GamesStatsCompact({
           )}
         </div>
 
-        {/* ========================= */}
-        {/* 💾 Nube */}
-        {/* ========================= */}
         {showCloudSection && (
           <div className="flex flex-wrap items-center gap-2">
             {lastSyncLoading ? (
@@ -167,7 +154,6 @@ export function GamesStatsCompact({
                   : "en la nube"}
             </span>
 
-            {/* 🔹 Detalle */}
             {hasCloudGames &&
               (useModal ? (
                 <>
