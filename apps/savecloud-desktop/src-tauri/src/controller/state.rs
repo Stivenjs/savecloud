@@ -16,6 +16,10 @@ impl InputState {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.active_actions.clear();
+    }
+
     pub fn press(&mut self, player: usize, action: SemanticAction) -> bool {
         // Retorna true si es la primera pulsación
         if !self.active_actions.contains_key(&(player, action)) {

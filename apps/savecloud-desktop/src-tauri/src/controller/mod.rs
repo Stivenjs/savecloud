@@ -17,7 +17,7 @@ use gilrs::{Event as GilrsEvent, EventType, Gilrs};
 use state::InputState;
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 pub fn start_gamepad_loop(app_handle: AppHandle) {
     thread::spawn(move || {
@@ -28,7 +28,22 @@ pub fn start_gamepad_loop(app_handle: AppHandle) {
         let mut input_state = InputState::new();
 
         loop {
+            let is_focused = app_handle
+                .get_webview_window("main")
+                .and_then(|w| w.is_focused().ok())
+                .unwrap_or(false);
+
+            if !is_focused {
+                input_state.clear();
+            }
+
             while let Some(GilrsEvent { id, event, .. }) = gilrs.next_event() {
+                // siempre debemos sacar los eventos de gilrs para vaciar su cola,
+                // pero si la ventana no tiene el foco, simplemente los ignoramos.
+                if !is_focused {
+                    continue;
+                }
+
                 let player_id = id.into();
 
                 match event {
@@ -66,8 +81,11 @@ pub fn start_gamepad_loop(app_handle: AppHandle) {
                 }
             }
 
-            for (player_id, action) in input_state.get_repeats() {
-                emit_action(&app_handle, player_id, action);
+            // Solo emitimos las repeticiones continuas si la ventana está activa
+            if is_focused {
+                for (player_id, action) in input_state.get_repeats() {
+                    emit_action(&app_handle, player_id, action);
+                }
             }
 
             gilrs.inc();
