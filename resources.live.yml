@@ -1,6 +1,5 @@
 Resources:
-  # Transfer Acceleration: subidas/descargas más rápidas vía edge de CloudFront.
-  # Tras el deploy puede tardar ~20 min en activarse. Coste extra por transferencia (ver S3 pricing).
+  # Bucket principal para saves en Producción
   SavesBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -44,49 +43,29 @@ Resources:
             Effect: Allow
             Principal:
               CanonicalUser:
-                Fn::GetAtt:
-                  - CloudFrontOriginAccessIdentity
-                  - S3CanonicalUserId
+                Fn::GetAtt: [CloudFrontOriginAccessIdentity, S3CanonicalUserId]
             Action: "s3:GetObject"
             Resource:
-              - Fn::Sub: "arn:aws:s3:::${SavesBucket}/*/backups/*"
+              Fn::Sub: "arn:aws:s3:::${SavesBucket}/*"
 
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
     Properties:
       DistributionConfig:
         Enabled: true
-        Comment:
-          Fn::Sub: "CloudFront distribution for SaveCloud - ${sls:stage, 'dev'}"
-        DefaultRootObject: ""
-        HttpVersion: http2
-        PriceClass: PriceClass_100
         Origins:
-          - Id: SavesBucketOrigin
+          - Id: S3Origin
             DomainName:
-              Fn::GetAtt:
-                - SavesBucket
-                - RegionalDomainName
+              Fn::GetAtt: [SavesBucket, RegionalDomainName]
             S3OriginConfig:
               OriginAccessIdentity:
-                Fn::Sub: "origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}"
+                Fn::Join: ["", ["origin-access-identity/cloudfront/", Ref: CloudFrontOriginAccessIdentity]]
         DefaultCacheBehavior:
-          TargetOriginId: SavesBucketOrigin
+          TargetOriginId: S3Origin
           ViewerProtocolPolicy: redirect-to-https
-          AllowedMethods:
-            - GET
-            - HEAD
-          CachedMethods:
-            - GET
-            - HEAD
-          FunctionAssociations:
-            - EventType: viewer-request
-              FunctionARN:
-                Fn::GetAtt:
-                  - CloudFrontAllowBackupsOnlyFunction
-                  - FunctionARN
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD]
           Compress: true
-          MinTTL: 31536000
           DefaultTTL: 31536000
           MaxTTL: 31536000
           ForwardedValues:
@@ -123,6 +102,37 @@ Resources:
             body: "Forbidden"
           };
         }
+
+  # Tabla Efímera para WebSockets
+  ActiveConnectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-ActiveConnections
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      AttributeDefinitions:
+        - AttributeName: connectionId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: connectionId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
 
 Outputs:
   CloudFrontDistributionDomainName:

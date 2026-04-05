@@ -2,6 +2,9 @@ service: sync-games
 
 frameworkVersion: "4"
 
+package:
+  individually: true
+
 # Stage = entorno separado: cada uno tiene su propio stack (API Gateway, Lambda, S3 bucket).
 # deploy --stage dev  → stack sync-games-dev, bucket y API de desarrollo.
 # deploy --stage live → stack sync-games-live, bucket y API de producción.
@@ -15,6 +18,14 @@ provider:
     BUCKET_NAME: { Ref: SavesBucket }
     API_KEY: ${env:SYNC_GAMES_API_KEY, ''}
     DOWNLOAD_BASE_URL: ${self:custom.downloadBaseUrl.${sls:stage}, ''}
+    CONNECTIONS_TABLE: { Ref: ActiveConnectionsTable }
+    WS_ENDPOINT:
+      Fn::Join:
+        - ""
+        - - "https://"
+          - Ref: WebsocketsApi
+          - ".execute-api.${self:provider.region}.amazonaws.com/${sls:stage}"
+
   httpApi:
     authorizers:
       apiKeyAuthorizer:
@@ -22,6 +33,7 @@ provider:
         functionName: apiAuthorizer
         enableSimpleResponses: true
         resultTtlInSeconds: 0
+
   iam:
     role:
       statements:
@@ -39,29 +51,35 @@ provider:
             - Fn::Sub: "arn:aws:s3:::${SavesBucket}"
             - Fn::Sub: "arn:aws:s3:::${SavesBucket}/*"
 
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
+          Resource:
+            - Fn::GetAtt: [ActiveConnectionsTable, Arn]
+            - Fn::Join: ["/", [Fn::GetAtt: [ActiveConnectionsTable, Arn], "index", "*"]]
+
+        - Effect: Allow
+          Action:
+            - execute-api:ManageConnections
+          Resource:
+            - "arn:aws:execute-api:*:*:**/@connections/*"
+
 build:
   esbuild:
     bundle: true
+    minify: true # Añadido para reducir aún más el tamaño de los .zip
     sourcemap: true
-    target: node22
+    target: "node22"
 
 custom:
   downloadBaseUrl:
     dev: ""
-    live:
-      Fn::Join:
-        - ""
-        - - "https://"
-          - Fn::GetAtt: [CloudFrontDistribution, DomainName]
-  # Seed Steam: dev sin schedule por defecto; live con regla barata (ajustar rate si hace falta).
-  steamSeedScheduleEnabled:
-    dev: false
-    live: true
-  steamSeedScheduleRate:
-    dev: rate(24 hours)
-    live: rate(5 minutes)
-  # Valor por defecto de filtros appdetails.
-  steamSeedFiltersDefault: "basic,developers,publishers,genres,categories,release_date,screenshots,movies"
+    live: ${cf:sync-games-live.CloudFrontDistributionUrl, ''}
+
+resources:
+  - ${file(resources.${sls:stage, 'dev'}.yml)}
 
 functions:
   apiAuthorizer:
@@ -69,6 +87,7 @@ functions:
     description: Autorizador por API key para savecloud - entorno ${sls:stage, 'dev'}
     environment:
       API_KEY: ${env:SYNC_GAMES_API_KEY, ''}
+
   api:
     handler: src/interfaces/lambda/handler.handler
     description: API de guardados en la nube (savecloud) - entorno ${sls:stage, 'dev'}
@@ -100,10 +119,24 @@ functions:
       STEAM_429_BASE_DELAY_MS: "1500"
       STEAM_BACKOFF_MINUTES: "30"
       STEAM_LANG: spanish
-      STEAM_FILTERS: ${env:STEAM_FILTERS, self:custom.steamSeedFiltersDefault}
-    events:
-      - schedule:
-          rate: ${self:custom.steamSeedScheduleRate.${sls:stage}, 'rate(15 minutes)'}
-          enabled: ${self:custom.steamSeedScheduleEnabled.${sls:stage}, false}
 
-resources: ${file(./resources.${sls:stage}.yml)}
+  wsConnect:
+    handler: src/interfaces/lambda/websocket/connect.handler
+    description: Maneja conexiones WebSocket entrantes - ${sls:stage}
+    events:
+      - websocket:
+          route: $connect
+
+  wsDisconnect:
+    handler: src/interfaces/lambda/websocket/disconnect.handler
+    description: Limpia conexiones en DynamoDB - ${sls:stage}
+    events:
+      - websocket:
+          route: $disconnect
+
+  wsBroadcast:
+    handler: src/interfaces/lambda/websocket/broadcast.handler
+    description: Recibe el evento "playing" y lo reparte a amigos - ${sls:stage}
+    events:
+      - websocket:
+          route: broadcast
