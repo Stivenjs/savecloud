@@ -1,6 +1,6 @@
-import type { CloudInviteRepository } from "../../domain/ports/CloudInviteRepository";
-import type { ConnectionRepository } from "../../domain/ports/ConnectionRepository";
-import type { WebSocketNotifier } from "../../domain/ports/WebSocketNotifier";
+import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
+import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
+import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
 
 export interface BroadcastActivityInput {
   broadcasterUserId: string;
@@ -11,6 +11,7 @@ export interface BroadcastActivityInput {
 /**
  * @class BroadcastActivityUseCase
  * @description Reparte una notificación efímera a todos los compañeros de la misma nube.
+ * Soporta usuarios existentes: detecta automáticamente si son Hosts o Invitados.
  */
 export class BroadcastActivityUseCase {
   constructor(
@@ -19,27 +20,23 @@ export class BroadcastActivityUseCase {
     private readonly notifier: WebSocketNotifier
   ) {}
 
-  /**
-   * Ejecuta la propagación del evento.
-   * @param {BroadcastActivityInput} input
-   */
   async execute(input: BroadcastActivityInput): Promise<void> {
     const broadcasterId = input.broadcasterUserId;
 
-    let cloudHostId = broadcasterId;
+    let activeCloudHostId = broadcasterId;
 
     const membershipsAsMember = await this.inviteRepository.listMembershipsForMember(broadcasterId);
-    const activeHost = membershipsAsMember.find((m) => m.active)?.hostUserId;
+    const activeMembership = membershipsAsMember.find((m) => m.active);
 
-    if (activeHost) {
-      cloudHostId = activeHost;
+    if (activeMembership) {
+      activeCloudHostId = activeMembership.hostUserId;
     }
 
-    const cloudMemberships = await this.inviteRepository.listMembershipsForHost(cloudHostId);
+    const cloudMemberships = await this.inviteRepository.listMembershipsForHost(activeCloudHostId);
 
     const activeMemberIds = cloudMemberships.filter((m) => m.active).map((m) => m.memberUserId);
 
-    const allPeersInCloud = [cloudHostId, ...activeMemberIds];
+    const allPeersInCloud = [activeCloudHostId, ...activeMemberIds];
 
     const payload = {
       type: "FRIEND_PLAYING",
@@ -57,8 +54,8 @@ export class BroadcastActivityUseCase {
       const connectionIds = await this.connectionRepository.getConnectionsByUser(targetUserId);
 
       for (const connectionId of connectionIds) {
-        this.notifier.sendToConnection(connectionId, payload).catch((error) => {
-          console.error(`Error enviando a ${connectionId}:`, error);
+        this.notifier.sendToConnection(connectionId, payload).catch((err) => {
+          console.warn(`[WS] Fallo al enviar a ${connectionId} (${targetUserId}):`, err.message);
         });
       }
     }
