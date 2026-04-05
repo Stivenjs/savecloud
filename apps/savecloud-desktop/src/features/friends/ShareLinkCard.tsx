@@ -35,6 +35,13 @@ export function ShareLinkCard({
             onValueChange={onShareLinkChange}
             variant="bordered"
             className="sm:max-w-md"
+            isClearable
+            onClear={() => onShareLinkChange("")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                onImportPress();
+              }
+            }}
           />
           <Button variant="flat" color="primary" onPress={onImportPress} isLoading={loading} isDisabled={disabled}>
             Ver archivos e importar
