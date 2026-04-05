@@ -137,6 +137,10 @@ export class GetFriendProfileUseCase {
    * @private
    */
   private async checkPrivacyPermissions(requesterId: string, targetId: string, data: any): Promise<boolean> {
+    if (requesterId === targetId) {
+      return true;
+    }
+
     if (data.shareVisualProfileWithHosts) {
       const m = await this.inviteRepository.getMembership(requesterId, targetId);
       if (m?.active) return true;
@@ -145,6 +149,7 @@ export class GetFriendProfileUseCase {
       const m = await this.inviteRepository.getMembership(targetId, requesterId);
       if (m?.active) return true;
     }
+
     return false;
   }
 }
