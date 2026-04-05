@@ -40,6 +40,7 @@ export async function registerInviteRoutes(
           inviteeUserId: request.body.inviteeUserId?.trim() || undefined,
           expiresInDays: request.body.expiresInDays,
           withToken: request.body.withToken ?? true,
+          wsUrl: request.body.wsUrl?.trim() || undefined,
         });
         const baseUrl = resolvePublicBaseUrl(request);
         return reply.send({
@@ -98,6 +99,7 @@ export async function registerInviteRoutes(
           accessToken,
           apiUrl: `${request.protocol}://${request.hostname}`,
           hostUserId: invite.hostUserId,
+          wsUrl: invite.wsUrl,
         });
       } catch (err) {
         const message = getErrorMessage(err);

@@ -5,6 +5,7 @@ export interface CloudInvite {
   hostUserId: string;
   inviteeUserId: string | null;
   token: string | null;
+  wsUrl?: string | null;
   status: CloudInviteStatus;
   createdAt: string;
   updatedAt: string;

@@ -5,6 +5,7 @@ export interface CreateInviteInput {
   inviteeUserId?: string;
   ttlSeconds: number;
   withToken: boolean;
+  wsUrl?: string;
 }
 
 export interface CloudInviteRepository {
