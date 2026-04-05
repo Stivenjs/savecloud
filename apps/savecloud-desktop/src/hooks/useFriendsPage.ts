@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useReducer } from "react";
+// src/hooks/useFriendsPage.ts
+import { useCallback, useEffect, useMemo, useReducer } from "react";
 import type { Config, ConfiguredGame } from "@app-types/config";
 import type { CopyFriendFilePlan } from "@services/tauri";
 import type { RemoteSaveInfo } from "@services/tauri";
@@ -92,10 +93,7 @@ type FriendsPageAction =
   | { type: "SET_SHARE_LINK_LOADING"; payload: boolean }
   | { type: "SET_SHARE_LINK_CONFIRM_LOADING"; payload: boolean }
   | { type: "SET_SHARE_LINK_PREVIEW"; payload: ShareLinkPreview | null }
-  | {
-      type: "SET_COPY_CONFIRM_PREVIEW";
-      payload: CopyFriendSavesPreview | null;
-    }
+  | { type: "SET_COPY_CONFIRM_PREVIEW"; payload: CopyFriendSavesPreview | null }
   | { type: "SET_INVITEE_USER_ID_INPUT"; payload: string }
   | { type: "SET_INVITE_TOKEN_INPUT"; payload: string }
   | { type: "SET_INVITE_BUSY"; payload: boolean }
@@ -131,6 +129,32 @@ const initialState: FriendsPageState = {
   invitesStatsLoading: false,
 };
 
+const SESSION_KEY = "friendsPageState";
+
+const getInitialState = (): FriendsPageState => {
+  try {
+    const saved = sessionStorage.getItem(SESSION_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        ...initialState,
+        ...parsed,
+        loading: false,
+        shareLinkLoading: false,
+        shareLinkConfirmLoading: false,
+        inviteBusy: false,
+        invitesStatsLoading: false,
+        templateOpen: false,
+        addFriendGamesOpen: false,
+        shareLinkPreview: null,
+        copyConfirmPreview: null,
+        copyingGameId: null,
+      };
+    }
+  } catch {}
+  return initialState;
+};
+
 function friendsPageReducer(state: FriendsPageState, action: FriendsPageAction): FriendsPageState {
   switch (action.type) {
     case "SET_FRIEND_ID_INPUT":
@@ -140,11 +164,7 @@ function friendsPageReducer(state: FriendsPageState, action: FriendsPageAction):
     case "SET_ERROR":
       return { ...state, error: action.payload };
     case "SET_FRIEND_DATA":
-      return {
-        ...state,
-        friendConfig: action.config,
-        friendSaves: action.saves,
-      };
+      return { ...state, friendConfig: action.config, friendSaves: action.saves };
     case "SET_COPYING_GAME_ID":
       return { ...state, copyingGameId: action.payload };
     case "SET_MY_SAVES":
@@ -186,7 +206,7 @@ function friendsPageReducer(state: FriendsPageState, action: FriendsPageAction):
 
 export function useFriendsPage() {
   const queryClient = useQueryClient();
-  const [state, dispatch] = useReducer(friendsPageReducer, initialState);
+  const [state, dispatch] = useReducer(friendsPageReducer, initialState, getInitialState);
   const {
     friendIdInput,
     loading,
@@ -215,6 +235,31 @@ export function useFriendsPage() {
 
   const { config: ourConfig } = useConfig();
   const activeCloudHostUserId = ourConfig?.activeCloudHostUserId?.trim() || null;
+
+  useEffect(() => {
+    try {
+      const stateToSave = {
+        friendIdInput,
+        friendConfig,
+        friendSaves,
+        mySaves,
+        shareLinkInput,
+        inviteeUserIdInput,
+        inviteTokenInput,
+        lastCreatedInviteToken,
+      };
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(stateToSave));
+    } catch {}
+  }, [
+    friendIdInput,
+    friendConfig,
+    friendSaves,
+    mySaves,
+    shareLinkInput,
+    inviteeUserIdInput,
+    inviteTokenInput,
+    lastCreatedInviteToken,
+  ]);
 
   const summaries: FriendGameSummary[] = useMemo(() => {
     if (!friendConfig) return [];
@@ -255,19 +300,25 @@ export function useFriendsPage() {
   }, [ourConfig?.games]);
 
   const loadFriendProfileById = useCallback(async (userId: string) => {
-    const id = userId.trim();
-    if (!id) {
-      dispatch({
-        type: "SET_ERROR",
-        payload: "Escribe el usuario de tu amigo.",
-      });
+    const inputId = userId.trim();
+    if (!inputId) {
+      dispatch({ type: "SET_ERROR", payload: "Escribe el usuario de tu amigo." });
       return;
     }
-    dispatch({ type: "SET_FRIEND_ID_INPUT", payload: id });
+
+    dispatch({ type: "SET_FRIEND_ID_INPUT", payload: inputId });
     dispatch({ type: "SET_LOADING", payload: true });
     dispatch({ type: "SET_ERROR", payload: null });
+
     try {
-      const [cfg, saves] = await Promise.all([getFriendConfig(id), syncListRemoteSavesForUser(id)]);
+      const cfg = await getFriendConfig(inputId);
+
+      const exactFriendId = cfg.userId;
+
+      dispatch({ type: "SET_FRIEND_ID_INPUT", payload: exactFriendId ?? "" });
+
+      const saves = await syncListRemoteSavesForUser(exactFriendId ?? "");
+
       dispatch({ type: "SET_FRIEND_DATA", config: cfg, saves });
     } catch (e) {
       dispatch({ type: "SET_FRIEND_DATA", config: null, saves: [] });
@@ -280,10 +331,7 @@ export function useFriendsPage() {
   const handleLoadFriend = async () => {
     const id = friendIdInput.trim();
     if (!id) {
-      dispatch({
-        type: "SET_ERROR",
-        payload: "Escribe el usuario de tu amigo.",
-      });
+      dispatch({ type: "SET_ERROR", payload: "Escribe el usuario de tu amigo." });
       return;
     }
     await loadFriendProfileById(id);
@@ -301,14 +349,8 @@ export function useFriendsPage() {
   const loadMemberships = useCallback(async () => {
     try {
       const result = await listCloudMemberships();
-      dispatch({
-        type: "SET_HOST_MEMBERSHIPS",
-        payload: result.hostMemberships.filter((x) => x.active),
-      });
-      dispatch({
-        type: "SET_MEMBER_MEMBERSHIPS",
-        payload: result.memberMemberships.filter((x) => x.active),
-      });
+      dispatch({ type: "SET_HOST_MEMBERSHIPS", payload: result.hostMemberships.filter((x) => x.active) });
+      dispatch({ type: "SET_MEMBER_MEMBERSHIPS", payload: result.memberMemberships.filter((x) => x.active) });
     } catch {
       dispatch({ type: "SET_HOST_MEMBERSHIPS", payload: [] });
       dispatch({ type: "SET_MEMBER_MEMBERSHIPS", payload: [] });
@@ -328,10 +370,7 @@ export function useFriendsPage() {
     dispatch({ type: "SET_INVITE_BUSY", payload: true });
     try {
       const invitee = inviteeUserIdInput.trim();
-      const invite = await createCloudInvite({
-        inviteeUserId: invitee || undefined,
-        withToken: true,
-      });
+      const invite = await createCloudInvite({ inviteeUserId: invitee || undefined, withToken: true });
       const shareLinkOrToken = invite.inviteUrl?.trim() || invite.token?.trim() || null;
       if (shareLinkOrToken) {
         dispatch({ type: "SET_LAST_CREATED_INVITE_TOKEN", payload: shareLinkOrToken });
@@ -424,7 +463,7 @@ export function useFriendsPage() {
       if (hostUserId?.trim()) {
         toastInfo("Nube activa actualizada", `Ahora usarás la nube de ${hostUserId}.`);
       } else {
-        toastInfo("Nube activa actualizada", "Ahora usar?s tu nube propia.");
+        toastInfo("Nube activa actualizada", "Ahora usarás tu nube propia.");
       }
       await queryClient.invalidateQueries({ queryKey: ["config"] });
     } catch (e) {
@@ -495,10 +534,7 @@ export function useFriendsPage() {
               editionLabel: friendGame.editionLabel ?? undefined,
               sourceUrl: friendGame.sourceUrl ?? undefined,
             }
-          : {
-              id: gameId,
-              paths: ["(editar ruta en Configuración)"],
-            };
+          : { id: gameId, paths: ["(editar ruta en Configuración)"] };
         await addGamesFromFriend([gameToAdd]);
       }
       scheduleConfigBackupToCloud();
@@ -525,9 +561,7 @@ export function useFriendsPage() {
       try {
         const saves = await syncListRemoteSaves();
         dispatch({ type: "SET_MY_SAVES", payload: saves });
-      } catch {
-        // en caso de error, seguimos sin bloqueo
-      }
+      } catch {}
     }
 
     let myAllSaves = mySaves;
@@ -553,7 +587,6 @@ export function useFriendsPage() {
 
     type Strategy = "overwrite" | "rename";
     const strategy: Strategy = conflictFiles.length > 0 ? "rename" : "overwrite";
-
     const plan: CopyFriendFilePlan[] = [];
     const usedNames = new Set<string>([...myFilenames, ...friendGameSaves.map((s) => s.filename)]);
 
@@ -576,29 +609,12 @@ export function useFriendsPage() {
       }
     };
 
-    for (const s of newFiles) {
-      plan.push({
-        key: s.key,
-        filename: s.filename,
-        targetFilename: s.filename,
-      });
-    }
+    for (const s of newFiles) plan.push({ key: s.key, filename: s.filename, targetFilename: s.filename });
     if (strategy === "overwrite") {
-      for (const s of conflictFiles) {
-        plan.push({
-          key: s.key,
-          filename: s.filename,
-          targetFilename: s.filename,
-        });
-      }
+      for (const s of conflictFiles) plan.push({ key: s.key, filename: s.filename, targetFilename: s.filename });
     } else {
-      for (const s of conflictFiles) {
-        plan.push({
-          key: s.key,
-          filename: s.filename,
-          targetFilename: makeUniqueName(s.filename),
-        });
-      }
+      for (const s of conflictFiles)
+        plan.push({ key: s.key, filename: s.filename, targetFilename: makeUniqueName(s.filename) });
     }
 
     if (plan.length === 0) {
@@ -639,7 +655,7 @@ export function useFriendsPage() {
       toastSyncResult(result, `${gameId}${suffix}`);
       queryClient.invalidateQueries({ queryKey: ["last-sync-info"] });
     } catch (e) {
-      toastError("No se pudieron copiar los guardados", e instanceof Error ? e.message : "Ocurri? un error inesperado");
+      toastError("No se pudieron copiar los guardados", e instanceof Error ? e.message : "Ocurrió un error inesperado");
     } finally {
       dispatch({ type: "SET_COPYING_GAME_ID", payload: null });
     }

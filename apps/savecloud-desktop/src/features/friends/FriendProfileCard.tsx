@@ -40,6 +40,13 @@ export function FriendProfileCard({
             onValueChange={onFriendIdChange}
             variant="bordered"
             className="sm:max-w-xs"
+            isClearable
+            onClear={() => onFriendIdChange("")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                onLoadPress();
+              }
+            }}
           />
           <Button color="primary" onPress={onLoadPress} isLoading={loading} startContent={<Users size={18} />}>
             Cargar perfil

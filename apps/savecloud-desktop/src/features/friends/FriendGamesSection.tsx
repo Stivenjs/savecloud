@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
+import { addTransitionType, startTransition, useCallback, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Card, CardBody } from "@heroui/react";
 import { Download, Settings2, UserPlus } from "lucide-react";
@@ -9,6 +10,7 @@ import { formatSize } from "@utils/format";
 import { getSteamAppId } from "@utils/gameImage";
 import type { FriendGameSummary } from "@hooks/useFriendsPage";
 import { PublicProfileHero } from "@features/profile/PublicProfileHero";
+import { STEAM_CATALOG_GAME_ID_PREFIX } from "@utils/steamCatalogGameId";
 
 interface FriendProfileBannerProps {
   userIdDisplay: string;
@@ -64,6 +66,9 @@ export function FriendGamesSection({
   onCopySaves,
   onUseAsTemplate,
 }: FriendGamesSectionProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const steamAppIdsForBatch = useMemo(() => {
     const ids = summaries.map((s) => getSteamAppId(s.game, s.game.steamAppId)).filter((id): id is string => !!id);
     return [...new Set(ids)];
@@ -77,9 +82,24 @@ export function FriendGamesSection({
   });
 
   const [openActionsGameId, setOpenActionsGameId] = useState<string | null>(null);
+
   const handleActionsMenuOpenChange = useCallback((open: boolean, gameId: string) => {
     setOpenActionsGameId(open ? gameId : null);
   }, []);
+
+  const handleCardNavigate = useCallback(
+    (game: ConfiguredGame) => {
+      const targetId = game.steamAppId ? `${STEAM_CATALOG_GAME_ID_PREFIX}${game.steamAppId}` : game.id;
+
+      startTransition(() => {
+        addTransitionType("game-detail");
+        navigate(`/games/${targetId}`, {
+          state: { resolvedSteamAppId: game.steamAppId, from: `${location.pathname}${location.search}` },
+        });
+      });
+    },
+    [navigate, location]
+  );
 
   const profileHeader =
     friendVisualProfile != null ? (
@@ -136,6 +156,7 @@ export function FriendGamesSection({
                 mediaFromBatch
                 actionsMenuOpen={openActionsGameId === game.id}
                 onActionsMenuOpenChange={handleActionsMenuOpenChange}
+                onCardNavigate={handleCardNavigate}
               />
               <div className="space-y-1">
                 <div className="flex items-center justify-between gap-2">

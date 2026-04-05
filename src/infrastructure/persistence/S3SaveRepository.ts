@@ -72,6 +72,18 @@ export class S3SaveRepository implements SaveRepository {
     private readonly bucketName: string
   ) {}
 
+  /** Lista todos los usuarios en la nube (carpetas en el bucket) */
+  async listAllUsers(): Promise<string[]> {
+    const command = new ListObjectsV2Command({
+      Bucket: this.bucketName,
+      Delimiter: "/",
+    });
+
+    const response = await this.s3.send(command);
+
+    return (response.CommonPrefixes || []).map((p) => p.Prefix?.replace(/\/$/, "")).filter((p): p is string => !!p);
+  }
+
   /** Descarga y devuelve el contenido de un archivo en texto plano desde S3 */
   async getFileContent(key: string): Promise<string> {
     const command = new GetObjectCommand({ Bucket: this.bucketName, Key: key });

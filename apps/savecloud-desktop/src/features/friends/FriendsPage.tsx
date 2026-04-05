@@ -16,7 +16,14 @@ import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 
 type FriendsTabKey = "link" | "user" | "invites";
 export function FriendsPage() {
-  const [friendsTab, setFriendsTab] = useState<FriendsTabKey>("link");
+  const [friendsTab, setFriendsTab] = useState<FriendsTabKey>(() => {
+    try {
+      return (sessionStorage.getItem("friendsPageTab") as FriendsTabKey) || "link";
+    } catch {
+      return "link";
+    }
+  });
+
   const popLayer = useNavigationStore((s) => s.popLayer);
   const {
     friendIdInput,
@@ -107,7 +114,6 @@ export function FriendsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold">Amigos</h1>
@@ -122,12 +128,14 @@ export function FriendsPage() {
         </p>
       </div>
 
-      {/* Tabs */}
       <Tabs
         selectedKey={friendsTab}
         onSelectionChange={(k) => {
           const nextTab = (String(k) as FriendsTabKey) || "link";
           setFriendsTab(nextTab);
+          try {
+            sessionStorage.setItem("friendsPageTab", nextTab);
+          } catch {}
           if (nextTab === "invites") {
             void refreshInvitesState();
           }
@@ -227,7 +235,6 @@ export function FriendsPage() {
         </Tab>
       </Tabs>
 
-      {/* Modals */}
       <AddFriendGamesModal
         isOpen={addFriendGamesOpen}
         onClose={() => setAddFriendGamesOpen(false)}
