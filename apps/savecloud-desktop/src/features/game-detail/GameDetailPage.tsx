@@ -49,6 +49,7 @@ export function GameDetailPage() {
     hasSyncConfig,
     isSteamCatalogOnly,
     backToPath,
+    videoUrl,
   } = useGameDetail();
   const [activeTab, setActiveTab] = useState("summary");
   const tabsShellRef = useRef<HTMLDivElement>(null);
@@ -239,6 +240,7 @@ export function GameDetailPage() {
         headerImage={steamDetails?.headerImage}
         libraryHeroFallbackUrl={libraryHeroFallbackUrl}
         customImageUrl={game.imageUrl}
+        videoUrl={videoUrl}
         gameName={displayName}
         editionLabel={game.editionLabel}
         gameId={gameId}
