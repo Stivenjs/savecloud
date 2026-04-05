@@ -151,13 +151,11 @@ export function GameDetailPage() {
 
   const showRequirementsTab = steamDetails ? hasSteamRequirements(steamDetails) : false;
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
+  const nameForMatch = steamDetails?.name ?? formatGameDisplayName(gameId);
   const { data: sourceMatch, isPending: isMatchingPending } = useQuery({
-    queryKey: ["sources-match-detail", gameId],
-    queryFn: () => {
-      const nameForMatch = steamDetails?.name ?? formatGameDisplayName(gameId);
-      return sourcesFindMatchForGame(nameForMatch);
-    },
-    enabled: !!steamDetails?.name,
+    queryKey: ["sources-match-detail", gameId, nameForMatch],
+    queryFn: () => sourcesFindMatchForGame(nameForMatch),
+    enabled: !!nameForMatch,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     refetchOnMount: false,
