@@ -1,3 +1,4 @@
+// src/hooks/useFriendsPage.ts
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 import type { Config, ConfiguredGame } from "@app-types/config";
 import type { CopyFriendFilePlan } from "@services/tauri";
@@ -299,16 +300,25 @@ export function useFriendsPage() {
   }, [ourConfig?.games]);
 
   const loadFriendProfileById = useCallback(async (userId: string) => {
-    const id = userId.trim().toLowerCase();
-    if (!id) {
+    const inputId = userId.trim();
+    if (!inputId) {
       dispatch({ type: "SET_ERROR", payload: "Escribe el usuario de tu amigo." });
       return;
     }
-    dispatch({ type: "SET_FRIEND_ID_INPUT", payload: id });
+
+    dispatch({ type: "SET_FRIEND_ID_INPUT", payload: inputId });
     dispatch({ type: "SET_LOADING", payload: true });
     dispatch({ type: "SET_ERROR", payload: null });
+
     try {
-      const [cfg, saves] = await Promise.all([getFriendConfig(id), syncListRemoteSavesForUser(id)]);
+      const cfg = await getFriendConfig(inputId);
+
+      const exactFriendId = cfg.userId;
+
+      dispatch({ type: "SET_FRIEND_ID_INPUT", payload: exactFriendId ?? "" });
+
+      const saves = await syncListRemoteSavesForUser(exactFriendId ?? "");
+
       dispatch({ type: "SET_FRIEND_DATA", config: cfg, saves });
     } catch (e) {
       dispatch({ type: "SET_FRIEND_DATA", config: null, saves: [] });
