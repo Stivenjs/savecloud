@@ -69,7 +69,7 @@ provider:
 build:
   esbuild:
     bundle: true
-    minify: true # Añadido para reducir aún más el tamaño de los .zip
+    minify: true 
     sourcemap: true
     target: "node22"
 
@@ -77,6 +77,15 @@ custom:
   downloadBaseUrl:
     dev: ""
     live: ${cf:sync-games-live.CloudFrontDistributionUrl, ''}
+  # Seed Steam: dev sin schedule por defecto; live con regla (ajustar rate si hace falta).
+  steamSeedScheduleEnabled:
+    dev: false
+    live: true
+  steamSeedScheduleRate:
+    dev: rate(24 hours)
+    live: rate(5 minutes)
+  # Valor por defecto de filtros appdetails.
+  steamSeedFiltersDefault: "basic,developers,publishers,genres,categories,release_date,screenshots,movies"
 
 resources:
   - ${file(resources.${sls:stage, 'dev'}.yml)}
@@ -119,6 +128,10 @@ functions:
       STEAM_429_BASE_DELAY_MS: "1500"
       STEAM_BACKOFF_MINUTES: "30"
       STEAM_LANG: spanish
+    events:
+      - schedule:
+          rate: ${self:custom.steamSeedScheduleRate.${sls:stage}, 'rate(15 minutes)'}
+          enabled: ${self:custom.steamSeedScheduleEnabled.${sls:stage}, false} 
 
   wsConnect:
     handler: src/interfaces/lambda/websocket/connect.handler
