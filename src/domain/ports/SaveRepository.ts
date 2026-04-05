@@ -82,6 +82,8 @@ export interface SaveRepository {
   renameGame(userId: string, oldGameId: string, newGameId: string): Promise<void>;
   /** Descarga y devuelve el contenido de un archivo en texto plano desde S3 */
   getFileContent(key: string): Promise<string>;
+  /** Lista todos los usuarios en la nube. */
+  listAllUsers(): Promise<string[]>;
 
   // --- Multipart upload (archivos grandes, pausar/cancelar) ---
   /** Inicia una subida multipart; devuelve uploadId y key para las siguientes llamadas. */
