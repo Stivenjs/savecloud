@@ -122,7 +122,6 @@ export function FriendsPage() {
         </p>
       </div>
 
-      {/* Tabs */}
       <Tabs
         selectedKey={friendsTab}
         onSelectionChange={(k) => {
