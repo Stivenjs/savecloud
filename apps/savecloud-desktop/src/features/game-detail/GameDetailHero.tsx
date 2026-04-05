@@ -1,10 +1,9 @@
-import { useState, useCallback, ViewTransition } from "react";
-import { Swiper, SwiperSlide } from "swiper/react";
-import { Autoplay, EffectFade } from "swiper/modules";
+import { ViewTransition } from "react";
 import { Button, Skeleton } from "@heroui/react";
 import { ArrowLeft, Gamepad2 } from "lucide-react";
-import "swiper/css";
-import "swiper/css/effect-fade";
+import { GameMediaViewer, MediaThumbnailGallery, buildMediaItems } from "@/features/game-detail/media-viewer";
+import { useState, useCallback } from "react";
+import type { Swiper as SwiperType } from "swiper";
 
 interface GameDetailHeroProps {
   mediaUrls: string[];
@@ -14,6 +13,8 @@ interface GameDetailHeroProps {
   libraryHeroFallbackUrl?: string | null;
   /** Imagen personalizada del juego (no Steam). */
   customImageUrl?: string | null;
+  /** URL del video del juego (opcional). Se mostrará primero si está disponible. */
+  videoUrl?: string | null;
   gameName: string;
   editionLabel?: string | null;
   gameId: string;
@@ -27,13 +28,15 @@ export function GameDetailHero({
   headerImage,
   libraryHeroFallbackUrl,
   customImageUrl,
+  videoUrl,
   gameName,
   editionLabel,
   gameId,
   isLoading,
   onBack,
 }: GameDetailHeroProps) {
-  const [loadedSlides, setLoadedSlides] = useState<Set<number>>(new Set());
+  const [swiper, setSwiper] = useState<SwiperType | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
 
   const heroSlides =
     mediaUrls.length > 0
@@ -46,9 +49,20 @@ export function GameDetailHero({
             ? [headerImage]
             : [];
 
-  const handleSlideLoad = useCallback((index: number) => {
-    setLoadedSlides((prev) => new Set(prev).add(index));
+  // Construir items de media para thumbnails
+  const mediaItems = buildMediaItems(videoUrl, heroSlides);
+  const hasMultipleItems = mediaItems.length > 1;
+
+  const handleSlideChange = useCallback((index: number) => {
+    setActiveIndex(index);
   }, []);
+
+  const handleThumbnailSelect = useCallback(
+    (index: number) => {
+      swiper?.slideTo(index);
+    },
+    [swiper]
+  );
 
   if (isLoading) {
     return (
@@ -60,7 +74,7 @@ export function GameDetailHero({
     );
   }
 
-  if (!heroSlides.length) {
+  if (!heroSlides.length && !videoUrl) {
     return (
       <ViewTransition name={`game-hero-${gameId}`} share="hero-morph" default="none">
         <div className="group/hero relative -mx-6 -mt-16 w-[calc(100%+3rem)] overflow-hidden">
@@ -75,51 +89,33 @@ export function GameDetailHero({
     );
   }
 
-  const useSwiper = heroSlides.length > 1;
-
   return (
     <ViewTransition name={`game-hero-${gameId}`} share="hero-morph" default="none">
-      <div className="group/hero relative -mx-6 -mt-16 w-[calc(100%+3rem)] overflow-hidden">
-        {useSwiper ? (
-          <Swiper
-            modules={[Autoplay, EffectFade]}
-            effect="fade"
-            fadeEffect={{ crossFade: true }}
-            autoplay={{ delay: 2800, disableOnInteraction: false, pauseOnMouseEnter: true }}
-            speed={1100}
-            loop={heroSlides.length > 1}
-            className="aspect-21/9 w-full">
-            {heroSlides.map((url, i) => (
-              <SwiperSlide key={url}>
-                {!loadedSlides.has(i) && <Skeleton className="absolute inset-0 z-10 size-full" />}
-                <img
-                  src={url}
-                  alt={`${gameName} captura ${i + 1}`}
-                  className="size-full object-cover object-center"
-                  decoding="async"
-                  fetchPriority={i === 0 ? "high" : "auto"}
-                  onLoad={() => handleSlideLoad(i)}
-                />
-              </SwiperSlide>
-            ))}
-          </Swiper>
-        ) : (
-          <div className="relative aspect-21/9 w-full">
-            {!loadedSlides.has(0) && <Skeleton className="absolute inset-0 z-10 size-full" />}
-            <img
-              src={heroSlides[0]}
-              alt={gameName}
-              className="size-full object-cover object-center"
-              decoding="async"
-              fetchPriority="high"
-              onLoad={() => handleSlideLoad(0)}
-            />
+      <div className="relative -mx-6 -mt-16 w-[calc(100%+3rem)]">
+        {/* Hero con media viewer (sin thumbnails internos) */}
+        <div className="group/hero relative overflow-hidden">
+          <GameMediaViewer
+            imageUrls={heroSlides}
+            videoUrl={videoUrl}
+            gameName={gameName}
+            videoFirst={true}
+            showThumbnails={false}
+            onSwiper={setSwiper}
+            onSlideChange={handleSlideChange}
+            className="relative"
+          />
+
+          <HeroGradient />
+          <TitleOverlay editionLabel={editionLabel} gameName={gameName} />
+          <BackButton onPress={onBack} />
+        </div>
+
+        {/* Thumbnails debajo del hero */}
+        {hasMultipleItems && (
+          <div className="px-6 pt-3">
+            <MediaThumbnailGallery items={mediaItems} activeIndex={activeIndex} onSelect={handleThumbnailSelect} />
           </div>
         )}
-
-        <HeroGradient />
-        <TitleOverlay editionLabel={editionLabel} gameName={gameName} />
-        <BackButton onPress={onBack} />
       </div>
     </ViewTransition>
   );
@@ -128,7 +124,6 @@ export function GameDetailHero({
 function HeroGradient() {
   return (
     <>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-40 bg-linear-to-t from-background via-background/40 to-transparent" />
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-24 bg-linear-to-b from-black/50 to-transparent" />
     </>
   );
@@ -136,7 +131,7 @@ function HeroGradient() {
 
 function TitleOverlay({ gameName, editionLabel }: { gameName: string; editionLabel?: string | null }) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-5 pb-5 pt-20 sm:px-6 sm:pb-6">
+    <div className="pointer-events-none absolute inset-x-0 bottom-20 z-20 px-5 sm:px-6">
       <h1 className="text-balance text-2xl font-bold tracking-tight text-white drop-shadow-md sm:text-3xl md:text-4xl">
         {gameName}
       </h1>
