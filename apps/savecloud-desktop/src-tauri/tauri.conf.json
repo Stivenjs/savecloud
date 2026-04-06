@@ -22,7 +22,8 @@
         "title": "SaveCloud"
       }
     ],
-    "withGlobalTauri": false
+    "withGlobalTauri": false,
+    "macOSPrivateApi": true
   },
   "build": {
     "beforeBuildCommand": "bun run build",
