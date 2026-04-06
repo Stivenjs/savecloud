@@ -89,7 +89,7 @@ const FacetFilterPanel = memo(function FacetFilterPanel({
         />
       </div>
 
-      <div className="custom-scrollbar max-h-64 overflow-y-auto pr-2">
+      <div className="max-h-64 overflow-y-auto pr-2">
         {filtered.length === 0 ? (
           <p className="py-4 text-center text-xs text-default-400">Sin coincidencias</p>
         ) : (
