@@ -27,13 +27,14 @@ export interface StaggeredMenuProps {
   openMenuButtonColor?: string;
   accentColor?: string;
   isFixed?: boolean;
-  changeMenuColorOnOpen?: boolean;
-  onItemClick?: (item: StaggeredMenuItem) => void;
   closeOnClickAway?: boolean;
+  onItemClick?: (item: StaggeredMenuItem) => void;
   onMenuOpen?: () => void;
   onMenuClose?: () => void;
   panelFooter?: React.ReactNode;
   headerActions?: React.ReactNode;
+  headerOffset?: number;
+  changeMenuColorOnOpen?: boolean;
 }
 
 const STAGGERED_MENU_STYLES = `
@@ -115,7 +116,6 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
   showLogo = true,
   menuButtonColor = "var(--sm-toggle-color)",
   openMenuButtonColor = "var(--sm-toggle-open-color)",
-  changeMenuColorOnOpen = true,
   accentColor = "#5227FF",
   isFixed = false,
   closeOnClickAway = true,
@@ -124,6 +124,8 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
   onItemClick,
   panelFooter,
   headerActions,
+  headerOffset = 0,
+  changeMenuColorOnOpen = true,
 }: StaggeredMenuProps) => {
   const [open, setOpen] = useState(false);
   const openRef = useRef(false);
@@ -536,7 +538,8 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
         </div>
 
         <header
-          className="staggered-menu-header absolute top-0 left-0 w-full flex items-center justify-between p-4 bg-transparent pointer-events-none z-20"
+          className="staggered-menu-header absolute left-0 w-full flex items-center justify-between p-4 bg-transparent pointer-events-none z-20"
+          style={{ top: `${headerOffset}px` }}
           aria-label="Main navigation header">
           {showLogo ? (
             <div className="sm-logo flex items-center select-none pointer-events-auto" aria-label="Logo">

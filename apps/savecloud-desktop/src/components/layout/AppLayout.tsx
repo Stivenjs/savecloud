@@ -6,6 +6,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import type { NavItem } from "@components/layout/Sidebar";
 import { StaggeredMenu } from "@components/external/StaggeredMenu";
 import { NotificationCenter } from "@components/layout/NotificationCenter";
+import { TitleBar } from "@components/layout/TitleBar";
 import { useShellUiStore } from "@store/ShellUiStore";
 import { UserBadge } from "@features/games/UserBadge";
 import { prefetchProfileDrawer } from "@features/profile/profileDrawerPrefetch";
@@ -77,11 +78,13 @@ export function AppLayout({ navItems, children }: AppLayoutProps) {
 
   return (
     <div className="relative min-h-screen">
-      <main className="min-h-screen overflow-auto pt-16 px-6 pb-6">{children}</main>
+      <TitleBar />
+      <main className="min-h-screen overflow-auto pt-[104px] px-6 pb-6">{children}</main>
 
       <StaggeredMenu
         isFixed
         position="left"
+        headerOffset={40}
         items={menuItemsFromNav(navItems, location.pathname)}
         displaySocials={true}
         displayItemNumbering

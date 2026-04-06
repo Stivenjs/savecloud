@@ -2,16 +2,17 @@ mod cloud;
 mod commands;
 mod compat;
 mod config;
-mod notifications;
 mod controller;
 mod ipc;
 #[cfg(target_os = "windows")]
 mod manifest;
 mod network;
+mod notifications;
+mod overlay;
 mod plugins;
 mod setup;
-mod sqlite;
 mod sources;
+mod sqlite;
 mod steam;
 mod steam_cache;
 mod steam_catalog;
@@ -20,7 +21,6 @@ mod time;
 mod torrent;
 mod tray;
 mod utils;
-mod overlay;
 use tauri::Manager;
 
 fn load_dotenv() {
@@ -47,6 +47,7 @@ pub fn run() {
 
     builder
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())

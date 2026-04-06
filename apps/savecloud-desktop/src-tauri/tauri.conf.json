@@ -15,7 +15,8 @@
     },
     "windows": [
       {
-        "decorations": true,
+        "decorations": false,
+        "transparent": true,
         "label": "main",
         "maximized": true,
         "resizable": true,
