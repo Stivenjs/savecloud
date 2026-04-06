@@ -1,7 +1,7 @@
 import { lazy, useMemo, useState, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, Spinner } from "@heroui/react";
-import { FolderOpen, Plus, Search } from "lucide-react";
+import { FolderOpen, Plus, Search, HardDrive, Gamepad2 } from "lucide-react";
 import { scanPathCandidates } from "@services/tauri";
 import type { PathCandidate } from "@services/tauri";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
@@ -41,18 +41,24 @@ function CandidateRow({
 
   return (
     <div
-      className={`flex items-center justify-between gap-4 rounded-lg border border-default-200 bg-default-50/50 px-4 py-3 dark:bg-default-100/20 transition-all ${
-        navAdd.isFocused && navAdd.inputMode === "gamepad" ? "border-primary bg-primary/10" : ""
+      className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-default-200 bg-default-50/50 px-5 py-4 transition-all hover:bg-default-100/50 dark:bg-default-100/20 dark:hover:bg-default-200/30 shadow-sm ${
+        navAdd.isFocused && navAdd.inputMode === "gamepad" ? "border-primary ring-2 ring-primary/50 bg-primary/10" : ""
       }`}>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium text-foreground">
-          {displayName}
-          {isLoading && <Spinner size="sm" className="ml-2 inline-block" color="primary" />}
-        </p>
-        <p className="truncate text-sm text-default-500" title={candidate.path}>
-          {candidate.path}
-        </p>
-        <p className="text-xs text-default-400">{candidate.basePath}</p>
+        <div className="flex items-center gap-2">
+          <Gamepad2 size={20} className="text-primary shrink-0" />
+          <p className="truncate text-base font-semibold text-foreground tracking-tight">
+            {displayName}
+            {isLoading && <Spinner size="sm" className="ml-3 inline-block" color="primary" />}
+          </p>
+        </div>
+
+        <div className="mt-1 flex items-center gap-1.5 text-default-400">
+          <HardDrive size={14} className="shrink-0" />
+          <p className="truncate text-xs" title={candidate.path}>
+            {candidate.path}
+          </p>
+        </div>
       </div>
 
       <Button
@@ -133,7 +139,7 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
       <ModalContent>
         <ModalHeader className="flex items-center gap-2">
           <FolderOpen size={22} />
-          Analizar rutas
+          Buscar juegos automáticamente
         </ModalHeader>
 
         <ModalBody>
@@ -166,7 +172,13 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
                   />
                 </Suspense>
               </div>
-              <p className="text-default-500 animate-pulse">Buscando carpetas de guardados en el sistema...</p>
+              <p className="text-default-500 animate-pulse text-center max-w-md">
+                Estamos revisando tu PC para encontrar juegos y sus guardados...
+                <br />
+                <span className="text-xs text-default-400">
+                  Esto puede tardar unos segundos dependiendo de tu sistema
+                </span>
+              </p>
             </div>
           ) : candidates && candidates.length > 0 ? (
             <>
@@ -175,9 +187,9 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
                 className={`rounded-lg transition-all p-1 ${navSearch.isFocused && navSearch.inputMode === "gamepad" ? "ring-2 ring-primary bg-primary/10" : ""}`}
                 {...navSearch.navProps}>
                 <Input
-                  aria-label="Buscar en los resultados"
+                  aria-label="Buscar juegos encontrados"
                   classNames={{ inputWrapper: "bg-default-100" }}
-                  placeholder="Buscar en los resultados..."
+                  placeholder="Buscar juego, carpeta o ruta..."
                   startContent={<Search size={18} className="text-default-400" />}
                   value={searchQuery}
                   onValueChange={setSearchQuery}
@@ -187,7 +199,13 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
                 />
               </div>
 
-              <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-2">
+              <div
+                className="max-h-[60vh] space-y-2 overflow-y-auto pr-2 
+                  [&::-webkit-scrollbar]:w-1.5
+                  [&::-webkit-scrollbar-track]:bg-transparent
+                  [&::-webkit-scrollbar-thumb]:bg-default-300
+                  [&::-webkit-scrollbar-thumb]:rounded-full
+                  hover:[&::-webkit-scrollbar-thumb]:bg-default-400">
                 {filteredCandidates.length > 0 ? (
                   filteredCandidates.map((c: PathCandidate, idx: number) => (
                     <CandidateRow

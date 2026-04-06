@@ -74,27 +74,27 @@ export function GamesPageHeader({
   return (
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div className="flex items-center gap-3">
-        {/* BOTÓN: Analizar Rutas */}
+        {/* Buscar juegos instalados */}
         <Button
-          variant="bordered"
+          variant="flat"
           startContent={<Search size={18} />}
           onPress={onScanPress}
-          className={`h-10 min-w-[120px] ${getGamepadFocusClass(navScan.isFocused, navScan.inputMode)}`}
+          className={`h-10 min-w-[150px] ${getGamepadFocusClass(navScan.isFocused, navScan.inputMode)}`}
           {...navScan.navProps}>
-          Analizar rutas
+          Buscar juegos
         </Button>
 
-        {/* BOTÓN: Añadir Juego */}
+        {/* CTA principal */}
         <Button
           color="primary"
           startContent={<Plus size={18} />}
           onPress={onAddPress}
-          className={`h-10 min-w-[120px] ${getGamepadFocusClass(navAdd.isFocused, navAdd.inputMode)}`}
+          className={`h-10 min-w-[150px] font-semibold ${getGamepadFocusClass(navAdd.isFocused, navAdd.inputMode)}`}
           {...navAdd.navProps}>
-          Añadir juego
+          Añadir a tu biblioteca
         </Button>
 
-        {/* DROPDOWN COMPLETO: Acciones Rápidas */}
+        {/* Acciones rápidas */}
         {hasSyncConfig && (
           <Dropdown placement="bottom-end" isOpen={isDropdownOpen} onOpenChange={handleDropdownChange}>
             <DropdownTrigger>
@@ -102,14 +102,17 @@ export function GamesPageHeader({
                 variant="bordered"
                 endContent={<ChevronDown size={16} />}
                 isDisabled={!gamesCount || isOperationRunning}
-                className={`h-10 min-w-[140px] ${getGamepadFocusClass(navDropdownTrigger.isFocused, navDropdownTrigger.inputMode)}`}
+                className={`h-10 min-w-[160px] ${getGamepadFocusClass(
+                  navDropdownTrigger.isFocused,
+                  navDropdownTrigger.inputMode
+                )}`}
                 {...navDropdownTrigger.navProps}>
-                <Zap size={18} className="mr-1" />
-                Acciones rápidas
+                <Zap size={18} className="mr-1 text-yellow-400" />
+                Sincronización
               </Button>
             </DropdownTrigger>
 
-            <DropdownMenu aria-label="Acciones rápidas">
+            <DropdownMenu aria-label="Acciones de sincronización">
               <DropdownItem
                 key="download-all"
                 startContent={
@@ -122,7 +125,7 @@ export function GamesPageHeader({
                 }}
                 className={navDlAll.isFocused && navDlAll.inputMode === "gamepad" ? "bg-default-100 text-primary" : ""}
                 {...navDlAll.navProps}>
-                Descargar todos
+                Descargar guardados (nube → PC)
               </DropdownItem>
 
               <DropdownItem
@@ -135,22 +138,22 @@ export function GamesPageHeader({
                 }}
                 className={navUpAll.isFocused && navUpAll.inputMode === "gamepad" ? "bg-default-100 text-primary" : ""}
                 {...navUpAll.navProps}>
-                Subir todos
+                Subir guardados (PC → nube)
               </DropdownItem>
             </DropdownMenu>
           </Dropdown>
         )}
 
-        {/* BOTÓN: Actualizar */}
+        {/* Refrescar */}
         <Button
-          variant="bordered"
+          variant="light"
           startContent={!isRefreshing ? <RefreshCw size={18} /> : undefined}
           onPress={onRefreshPress}
           isLoading={isRefreshing}
           isDisabled={isRefreshing}
           className={`h-10 min-w-[120px] ${getGamepadFocusClass(navRefresh.isFocused, navRefresh.inputMode)}`}
           {...navRefresh.navProps}>
-          Actualizar
+          Actualizar lista
         </Button>
       </div>
     </div>
