@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { ThemeProvider } from "next-themes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HeroUIProvider, ToastProvider } from "@heroui/react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AppErrorBoundary } from "@components/error/AppErrorBoundary";
 import App from "./App";
 import "./index.css";
@@ -105,7 +106,7 @@ async function renderOverlayApp(): Promise<void> {
 /**
  * Renderiza la aplicación principal
  */
-function renderMainApp(): void {
+async function renderMainApp(): Promise<void> {
   try {
     const root = ReactDOM.createRoot(getRootElement());
 
@@ -114,10 +115,21 @@ function renderMainApp(): void {
         <App />
       </MainAppWrapper>
     );
+
+    // Mostrar ventana cuando React esté listo
+    await showMainWindow();
   } catch (error) {
     console.error("[Render] Error cargando aplicación principal:", error);
     throw error;
   }
+}
+
+/**
+ * Muestra la ventana principal de la aplicación
+ */
+async function showMainWindow(): Promise<void> {
+  const appWindow = getCurrentWindow();
+  await appWindow.show();
 }
 
 /**
@@ -129,7 +141,7 @@ async function bootstrap(): Promise<void> {
     if (isOverlayMode()) {
       await renderOverlayApp();
     } else {
-      renderMainApp();
+      await renderMainApp();
     }
   } catch (error) {
     console.error("[Bootstrap] Error fatal inicializando la aplicación:", error);

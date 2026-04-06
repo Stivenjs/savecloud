@@ -20,7 +20,8 @@
         "label": "main",
         "maximized": true,
         "resizable": true,
-        "title": "SaveCloud"
+        "title": "SaveCloud",
+        "visible": false
       }
     ],
     "withGlobalTauri": false,
