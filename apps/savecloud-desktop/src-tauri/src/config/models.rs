@@ -16,6 +16,8 @@ use std::collections::BTreeMap;
 pub struct AppSettings {
     #[serde(default)]
     pub api_base_url: Option<String>,
+    #[serde(default)]
+    pub ws_base_url: Option<String>,
     /// Clave de autenticación de la API.
     ///
     /// Se excluye intencionalmente de la serialización JSON para evitar
@@ -149,6 +151,8 @@ pub struct GamificationConfig {
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     pub api_base_url: Option<String>,
+    #[serde(default)]
+    pub ws_base_url: Option<String>,
     pub api_key: Option<String>,
     pub user_id: Option<String>,
     #[serde(default)]
@@ -183,6 +187,8 @@ pub struct Config {
 #[serde(rename_all = "camelCase")]
 pub struct ConfigDto {
     pub api_base_url: Option<String>,
+    #[serde(default)]
+    pub ws_base_url: Option<String>,
     pub api_key: Option<String>,
     pub user_id: Option<String>,
     #[serde(default)]

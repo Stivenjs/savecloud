@@ -71,6 +71,7 @@ pub fn get_config() -> ConfigDto {
 
     ConfigDto {
         api_base_url: combined.api_base_url,
+        ws_base_url: combined.ws_base_url,
         api_key: combined.api_key.map(|_| config::MASKED_API_KEY.to_string()),
         user_id: combined.user_id,
         active_cloud_host_user_id: combined.active_cloud_host_user_id,
@@ -150,6 +151,7 @@ pub fn list_operation_history() -> Vec<OperationLogEntryDto> {
 #[tauri::command]
 pub fn create_config_file(
     api_base_url: Option<String>,
+    ws_base_url: Option<String>,
     api_key: Option<String>,
     user_id: Option<String>,
     steam_web_api_key: Option<String>,
@@ -162,6 +164,14 @@ pub fn create_config_file(
         .filter(|s| !s.is_empty())
     {
         settings.api_base_url = Some(url.to_string());
+    }
+
+    if let Some(url) = ws_base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        settings.ws_base_url = Some(url.to_string());
     }
 
     if let Some(key) = api_key

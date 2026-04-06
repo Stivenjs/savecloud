@@ -38,6 +38,7 @@ export function SettingsPage() {
     s3TransferEndpointType,
     createConfigModalOpen,
     createApiBaseUrl,
+    createWsBaseUrl,
     createApiKey,
     createUserId,
     createSteamWebApiKey,
@@ -73,6 +74,7 @@ export function SettingsPage() {
     handleImportCloudSeedFromCloud,
     openCreateConfigModal,
     setCreateApiBaseUrl,
+    setCreateWsBaseUrl,
     setCreateApiKey,
     setCreateUserId,
     setCreateSteamWebApiKey,
@@ -228,12 +230,14 @@ export function SettingsPage() {
       <CreateConfigModal
         isOpen={createConfigModalOpen}
         apiBaseUrl={createApiBaseUrl}
+        wsBaseUrl={createWsBaseUrl}
         apiKey={createApiKey}
         userId={createUserId}
         steamWebApiKey={createSteamWebApiKey}
         error={createConfigError}
         creating={creatingConfig}
         onApiBaseUrlChange={setCreateApiBaseUrl}
+        onWsBaseUrlChange={setCreateWsBaseUrl}
         onApiKeyChange={setCreateApiKey}
         onUserIdChange={setCreateUserId}
         onSteamWebApiKeyChange={setCreateSteamWebApiKey}

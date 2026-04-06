@@ -307,6 +307,7 @@ pub fn get_combined_config() -> Config {
 
     Config {
         api_base_url: settings.api_base_url,
+        ws_base_url: settings.ws_base_url,
         api_key: settings.api_key,
         user_id: settings.user_id,
         active_cloud_host_user_id: settings.active_cloud_host_user_id,

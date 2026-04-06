@@ -5,12 +5,14 @@ import { ExternalLink } from "lucide-react";
 interface CreateConfigModalProps {
   isOpen: boolean;
   apiBaseUrl: string;
+  wsBaseUrl: string;
   apiKey: string;
   userId: string;
   steamWebApiKey: string;
   error: string | null;
   creating: boolean;
   onApiBaseUrlChange: (value: string) => void;
+  onWsBaseUrlChange: (value: string) => void;
   onApiKeyChange: (value: string) => void;
   onUserIdChange: (value: string) => void;
   onSteamWebApiKeyChange: (value: string) => void;
@@ -21,12 +23,14 @@ interface CreateConfigModalProps {
 export function CreateConfigModal({
   isOpen,
   apiBaseUrl,
+  wsBaseUrl,
   apiKey,
   userId,
   steamWebApiKey,
   error,
   creating,
   onApiBaseUrlChange,
+  onWsBaseUrlChange,
   onApiKeyChange,
   onUserIdChange,
   onSteamWebApiKeyChange,
@@ -53,6 +57,14 @@ export function CreateConfigModal({
             placeholder="https://tu-api.ejemplo.com"
             value={apiBaseUrl}
             onValueChange={onApiBaseUrlChange}
+            variant="bordered"
+          />
+          <Input
+            label="URL de WebSocket (wsBaseUrl)"
+            placeholder="wss://tu-api.ejemplo.com/dev"
+            description="Requerida para actualizaciones en tiempo real (ej. Amigos jugando)"
+            value={wsBaseUrl}
+            onValueChange={onWsBaseUrlChange}
             variant="bordered"
           />
           <Input

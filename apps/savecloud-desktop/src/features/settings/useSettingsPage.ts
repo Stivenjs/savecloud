@@ -43,6 +43,7 @@ type SettingsPageState = {
   pullFriendUserId: string;
   pullingFriendConfig: boolean;
   createApiBaseUrl: string;
+  createWsBaseUrl: string;
   createApiKey: string;
   createUserId: string;
   createSteamWebApiKey: string;
@@ -68,6 +69,7 @@ type SettingsPageAction =
       type: "SET_CREATE_MODAL";
       open: boolean;
       apiBaseUrl?: string;
+      wsBaseUrl?: string;
       apiKey?: string;
       userId?: string;
       steamWebApiKey?: string;
@@ -78,11 +80,13 @@ type SettingsPageAction =
   | {
       type: "SET_CREATE_FORM_FROM_CONFIG";
       apiBaseUrl: string;
+      wsBaseUrl: string;
       apiKey: string;
       userId: string;
       steamWebApiKey: string;
     }
   | { type: "SET_CREATE_API_BASE_URL"; payload: string }
+  | { type: "SET_CREATE_WS_BASE_URL"; payload: string }
   | { type: "SET_CREATE_API_KEY"; payload: string }
   | { type: "SET_CREATE_USER_ID"; payload: string }
   | { type: "SET_CREATE_STEAM_WEB_API_KEY"; payload: string }
@@ -108,6 +112,7 @@ const initialState: SettingsPageState = {
   pullFriendUserId: "",
   pullingFriendConfig: false,
   createApiBaseUrl: "",
+  createWsBaseUrl: "",
   createApiKey: "",
   createUserId: "",
   createSteamWebApiKey: "",
@@ -147,6 +152,9 @@ function settingsPageReducer(state: SettingsPageState, action: SettingsPageActio
         ...(action.apiBaseUrl !== undefined && {
           createApiBaseUrl: action.apiBaseUrl,
         }),
+        ...(action.wsBaseUrl !== undefined && {
+          createWsBaseUrl: action.wsBaseUrl,
+        }),
         ...(action.apiKey !== undefined && { createApiKey: action.apiKey }),
         ...(action.userId !== undefined && { createUserId: action.userId }),
         ...(action.steamWebApiKey !== undefined && { createSteamWebApiKey: action.steamWebApiKey }),
@@ -156,12 +164,15 @@ function settingsPageReducer(state: SettingsPageState, action: SettingsPageActio
       return {
         ...state,
         createApiBaseUrl: action.apiBaseUrl,
+        createWsBaseUrl: action.wsBaseUrl,
         createApiKey: action.apiKey,
         createUserId: action.userId,
         createSteamWebApiKey: action.steamWebApiKey,
       };
     case "SET_CREATE_API_BASE_URL":
       return { ...state, createApiBaseUrl: action.payload };
+    case "SET_CREATE_WS_BASE_URL":
+      return { ...state, createWsBaseUrl: action.payload };
     case "SET_CREATE_API_KEY":
       return { ...state, createApiKey: action.payload };
     case "SET_CREATE_USER_ID":
@@ -252,12 +263,20 @@ export function useSettingsPage() {
       dispatch({
         type: "SET_CREATE_FORM_FROM_CONFIG",
         apiBaseUrl: config.apiBaseUrl ?? "",
+        wsBaseUrl: config.wsBaseUrl ?? "",
         apiKey: state.createApiKey || config.apiKey || "",
         userId: config.userId ?? "",
         steamWebApiKey: state.createSteamWebApiKey || config.steamWebApiKey || "",
       });
     }
-  }, [state.createConfigModalOpen, config?.apiBaseUrl, config?.apiKey, config?.userId, config?.steamWebApiKey]);
+  }, [
+    state.createConfigModalOpen,
+    config?.apiBaseUrl,
+    config?.wsBaseUrl,
+    config?.apiKey,
+    config?.userId,
+    config?.steamWebApiKey,
+  ]);
 
   const handleExportConfig = async () => {
     dispatch({ type: "SET_EXPORTING", payload: true });
@@ -382,6 +401,7 @@ export function useSettingsPage() {
       const steamWebApiKeyArg = steamUnchanged ? null : state.createSteamWebApiKey.trim() || null;
       const path = await createConfigFile(
         state.createApiBaseUrl,
+        state.createWsBaseUrl,
         apiKeyToSave ?? "",
         state.createUserId,
         steamWebApiKeyArg
@@ -676,6 +696,7 @@ export function useSettingsPage() {
     steamSeedImportProgress,
     openCreateConfigModal,
     setCreateApiBaseUrl: (v: string) => dispatch({ type: "SET_CREATE_API_BASE_URL", payload: v }),
+    setCreateWsBaseUrl: (v: string) => dispatch({ type: "SET_CREATE_WS_BASE_URL", payload: v }),
     setCreateApiKey: (v: string) => dispatch({ type: "SET_CREATE_API_KEY", payload: v }),
     setCreateUserId: (v: string) => dispatch({ type: "SET_CREATE_USER_ID", payload: v }),
     setCreateSteamWebApiKey: (v: string) => dispatch({ type: "SET_CREATE_STEAM_WEB_API_KEY", payload: v }),
