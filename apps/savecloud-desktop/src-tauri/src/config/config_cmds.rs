@@ -222,6 +222,74 @@ pub fn set_cloud_host_ws_url(host_user_id: String, ws_url: String) -> Result<(),
     Ok(())
 }
 
+/// Devuelve la URL completa de conexión WS con credenciales incluidas (apiKey o accessToken).
+/// Las credenciales se leen desde el keyring y nunca se exponen al JS del WebView.
+///
+/// Formato resultante:
+///  - Host (nube propia):   wss://...?userId=X&apiKey=<key>
+///  - Invitado (nube host): wss://...?userId=X&token=<access_token>
+#[tauri::command]
+pub fn get_ws_connection_url() -> Result<String, String> {
+    let settings = config::load_settings();
+
+    let user_id = settings
+        .user_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or("Configura tu usuario en Configuración")?
+        .to_string();
+
+    let active_host = settings
+        .active_cloud_host_user_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+
+    if let Some(host) = active_host {
+        let ws_base = settings
+            .cloud_host_ws_base_urls
+            .get(&host)
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .ok_or("No hay WS URL para este host. Acepta la invitación nuevamente.")?;
+
+        let token = crate::config::get_secure_api_key_for_cloud_host(&host)
+            .ok_or("No hay credenciales para este host. Acepta la invitación nuevamente.")?;
+
+        return Ok(format!(
+            "{}?userId={}&token={}",
+            ws_base.trim_end_matches('/'),
+            urlencoding::encode(&user_id),
+            urlencoding::encode(&token),
+        ));
+    }
+
+    let ws_base = settings
+        .ws_base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or("Configura la URL del WebSocket en Configuración")?
+        .to_string();
+
+    let api_key = settings
+        .api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or("Configura tu clave de acceso (apiKey)")?
+        .to_string();
+
+    Ok(format!(
+        "{}?userId={}&apiKey={}",
+        ws_base.trim_end_matches('/'),
+        urlencoding::encode(&user_id),
+        urlencoding::encode(&api_key),
+    ))
+}
+
 /// Modifica la política local de retención máxima de respaldos por juego.
 #[tauri::command]
 pub fn set_keep_backups_per_game(keep_last_n: u32) -> Result<(), String> {

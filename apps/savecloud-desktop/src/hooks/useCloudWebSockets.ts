@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useConfig } from "@hooks/useConfig";
 import { listen, emitTo } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { getFriendConfig, setCloudHostWsUrl } from "@services/tauri/config.service";
 
@@ -96,14 +97,23 @@ export function useCloudWebSockets() {
         return;
       }
 
-      connect();
+      // Obtener URL autenticada desde Rust (credenciales nunca pasan por JS)
+      let signedWsUrl: string;
+      try {
+        signedWsUrl = await invoke<string>("get_ws_connection_url");
+      } catch (e) {
+        console.warn("[WS] No se pudo obtener URL de conexión:", e);
+        return;
+      }
+
+      connect(signedWsUrl);
     }
 
     /**
      * Establece la conexión WebSocket y configura los event handlers
      */
-    function connect() {
-      if (!isComponentMounted || !activeWsBaseUrl || !config?.userId) return;
+    function connect(wsUrl: string) {
+      if (!isComponentMounted) return;
 
       // Evitar múltiples conexiones simultáneas
       if (
@@ -113,7 +123,6 @@ export function useCloudWebSockets() {
         return;
       }
 
-      const wsUrl = `${activeWsBaseUrl}?userId=${encodeURIComponent(config?.userId)}`;
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
@@ -140,11 +149,10 @@ export function useCloudWebSockets() {
       };
 
       ws.onclose = () => {
-        console.log("[WS] Conexión cerrada, reintentando...");
         wsRef.current = null;
 
         if (isComponentMounted) {
-          reconnectTimeoutRef.current = setTimeout(connect, RECONNECT_DELAY);
+          reconnectTimeoutRef.current = setTimeout(ensureWsUrlAndConnect, RECONNECT_DELAY);
         }
       };
 

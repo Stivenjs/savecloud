@@ -1,5 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand, DeleteCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, DeleteCommand, QueryCommand, GetCommand } from "@aws-sdk/lib-dynamodb";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 
 /**
@@ -44,5 +44,17 @@ export class DynamoDbConnectionRepository implements ConnectionRepository {
       })
     );
     return (response.Items || []).map((item) => item.connectionId);
+  }
+
+  /** Lookup inverso: dado un connectionId, devuelve el userId verificado guardado en $connect. */
+  async getUserByConnection(connectionId: string): Promise<string | null> {
+    const response = await this.docClient.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: { connectionId },
+        ProjectionExpression: "userId",
+      })
+    );
+    return (response.Item?.userId as string) ?? null;
   }
 }
