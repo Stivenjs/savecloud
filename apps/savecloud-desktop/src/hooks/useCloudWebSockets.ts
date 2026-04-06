@@ -6,28 +6,16 @@ import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { getFriendConfig, setCloudHostWsUrl } from "@services/tauri/config.service";
 
 /**
- * Mensaje recibido desde el WebSocket del servidor cloud
+ * Mensaje recibido desde el WebSocket de la nube (Rust -> TS)
  */
-interface CloudWebSocketMessage {
-  type: "FRIEND_PLAYING";
+interface CloudIncomingMessage {
+  type: "FRIEND_PLAYING" | "ERROR";
   data: {
-    friendUserId: string;
-    gameName: string;
+    friendUserId?: string;
+    gameName?: string;
+    message?: string;
   };
 }
-
-/**
- * Payload enviado al servidor cuando el usuario inicia un juego
- */
-interface BroadcastPayload {
-  action: "broadcast";
-  broadcasterUserId: string;
-  gameId: string;
-  gameName: string;
-}
-
-/** Tiempo de espera antes de reintentar conexión (ms) */
-const RECONNECT_DELAY = 5000;
 
 /**
  * Hook personalizado para gestionar conexiones WebSocket con el servidor cloud.
@@ -47,17 +35,12 @@ const RECONNECT_DELAY = 5000;
  */
 export function useCloudWebSockets() {
   const { config, refetch } = useConfig();
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevGameStatusRef = useRef<Record<string, boolean>>({});
+  const lastBroadcastedGameIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // Guard: verificar que tenemos usuario y conexión cloud válida
     if (!config?.userId || !hasUsableCloudConnection(config)) {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
+      invoke("stop_cloud_ws").catch(() => {});
       return;
     }
 
@@ -66,72 +49,34 @@ export function useCloudWebSockets() {
     let activeWsBaseUrl = isUsingHostCloud ? config.cloudHostWsBaseUrls?.[hostId] : config.wsBaseUrl;
 
     let isComponentMounted = true;
+    let unlistenIncoming: (() => void) | undefined;
 
-    /**
-     * Asegura que tenemos una URL de WebSocket válida antes de conectar.
-     * Si estamos usando cloud de host y no tenemos la URL, la descubre primero.
-     */
-    async function ensureWsUrlAndConnect() {
+    async function setupCloudService() {
       if (!isComponentMounted) return;
 
-      // Descubrir URL del WebSocket del host si es necesario
       if (isUsingHostCloud && hostId && !activeWsBaseUrl) {
         try {
           const friendCfg = await getFriendConfig(hostId);
           if (friendCfg?.wsBaseUrl) {
             await setCloudHostWsUrl(hostId, friendCfg.wsBaseUrl);
-            activeWsBaseUrl = friendCfg.wsBaseUrl;
             refetch();
           }
-        } catch (error) {
-          console.warn("[WS] Error descubriendo WS de host:", error);
+        } catch (e) {
+          // Error silencioso
         }
       }
 
-      // Si no hay URL disponible, cerrar conexión existente y salir
-      if (!activeWsBaseUrl) {
-        if (wsRef.current) {
-          wsRef.current.close();
-          wsRef.current = null;
-        }
-        return;
-      }
-
-      // Obtener URL autenticada desde Rust (credenciales nunca pasan por JS)
-      let signedWsUrl: string;
+      // Iniciar el servicio en Rust (las credenciales se gestionan internamente)
       try {
-        signedWsUrl = await invoke<string>("get_ws_connection_url");
+        await invoke("start_cloud_ws");
       } catch (e) {
-        console.warn("[WS] No se pudo obtener URL de conexión:", e);
-        return;
+        // Error silencioso
       }
 
-      connect(signedWsUrl);
-    }
-
-    /**
-     * Establece la conexión WebSocket y configura los event handlers
-     */
-    function connect(wsUrl: string) {
-      if (!isComponentMounted) return;
-
-      // Evitar múltiples conexiones simultáneas
-      if (
-        wsRef.current &&
-        (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)
-      ) {
-        return;
-      }
-
-      const ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        console.log("[WS] Conexión establecida");
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data) as CloudWebSocketMessage;
+      // Escuchar mensajes entrantes desde Rust
+      if (isComponentMounted) {
+        unlistenIncoming = await listen<CloudIncomingMessage>("cloud-ws-incoming", (event) => {
+          const msg = event.payload;
 
           if (msg.type === "FRIEND_PLAYING") {
             const { friendUserId, gameName } = msg.data;
@@ -139,119 +84,77 @@ export function useCloudWebSockets() {
             emitTo("overlay", "show-overlay-notification", {
               title: "Amigo jugando",
               body: `${friendUserId} está jugando ${gameName}`,
-            }).catch((error) => {
-              console.warn("[WS] Error emitiendo notificación overlay:", error);
-            });
+            }).catch(() => {});
           }
-        } catch (error) {
-          console.warn("[WS] Error parseando mensaje:", error);
-        }
-      };
-
-      ws.onclose = () => {
-        wsRef.current = null;
-
-        if (isComponentMounted) {
-          reconnectTimeoutRef.current = setTimeout(ensureWsUrlAndConnect, RECONNECT_DELAY);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.warn("[WS] Error en el socket:", error);
-      };
-
-      wsRef.current = ws;
+        });
+      }
     }
 
-    ensureWsUrlAndConnect();
+    setupCloudService();
 
     return () => {
       isComponentMounted = false;
-
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-
-      if (wsRef.current) {
-        wsRef.current.onclose = null;
-        wsRef.current.close();
-        wsRef.current = null;
-      }
+      unlistenIncoming?.();
     };
   }, [config?.activeCloudHostUserId, config?.wsBaseUrl, config?.cloudHostWsBaseUrls, config?.userId, refetch]);
 
   useEffect(() => {
     if (!config?.userId) return;
 
-    let unlisten: (() => void) | undefined;
+    let unlistenStatus: (() => void) | undefined;
 
-    /**
-     * Escucha eventos de cambios en el estado de juegos ejecutándose
-     * y emite broadcasts cuando se inicia un nuevo juego
-     */
     const setupListener = async () => {
       try {
-        unlisten = await listen<Record<string, boolean>>("games-running-status", (event) => {
+        unlistenStatus = await listen<Record<string, boolean>>("games-running-status", (event) => {
           const currentStatus = event.payload;
           const prevStatus = prevGameStatusRef.current;
 
-          // Detectar juegos que acaban de iniciarse
           for (const [gameId, isRunning] of Object.entries(currentStatus)) {
             const wasNotRunning = !prevStatus[gameId];
 
             if (isRunning && wasNotRunning) {
-              broadcastGameStart(gameId);
+              if (lastBroadcastedGameIdRef.current !== gameId) {
+                lastBroadcastedGameIdRef.current = gameId;
+                broadcastGameStart(gameId);
+
+                // Resetear el lock después de un tiempo para permitir re-detección si el juego se cierra y abre
+                setTimeout(() => {
+                  if (lastBroadcastedGameIdRef.current === gameId) {
+                    lastBroadcastedGameIdRef.current = null;
+                  }
+                }, 10000);
+              }
             }
           }
 
-          // Actualizar referencia del estado previo
           prevGameStatusRef.current = { ...currentStatus };
         });
-      } catch (error) {
-        console.error("[WS] Error suscribiendo a games-running-status:", error);
+      } catch (e) {
+        // Error silencioso en UI
       }
     };
 
-    /**
-     * Envía un broadcast al servidor cuando se inicia un juego
-     * @param gameId - ID del juego iniciado
-     */
     function broadcastGameStart(gameId: string) {
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN || !config?.userId) {
-        return;
-      }
+      if (!config?.userId) return;
 
       const gameNode = config.games?.find((g) => g.id === gameId);
       const gameName = gameNode?.editionLabel ? `${gameId} (${gameNode.editionLabel})` : gameId;
 
-      const payload: BroadcastPayload = {
-        action: "broadcast",
-        broadcasterUserId: config.userId,
-        gameId,
-        gameName,
-      };
+      invoke("send_cloud_broadcast", { gameId, gameName }).catch(() => {});
 
-      try {
-        wsRef.current.send(JSON.stringify(payload));
-        // Solo notificar si estamos en dev
-        if (import.meta.env.DEV) {
-          emitTo("overlay", "show-overlay-notification", {
-            title: "Tú estás jugando",
-            body: `Iniciaste ${gameName}`,
-          }).catch((error) => {
-            console.warn("[WS] Error emitiendo notificación local:", error);
-          });
-        }
-      } catch (error) {
-        console.warn("[WS] Error enviando broadcast:", error);
+      // El mensaje decorativo "Tú estás jugando" solo se muestra en desarrollo para pruebas.
+      if (import.meta.env.DEV) {
+        emitTo("overlay", "show-overlay-notification", {
+          title: "Tú estás jugando",
+          body: `Iniciaste ${gameName}`,
+        }).catch(() => {});
       }
     }
 
     setupListener();
 
     return () => {
-      unlisten?.();
+      unlistenStatus?.();
     };
   }, [config?.userId, config?.games]);
 }

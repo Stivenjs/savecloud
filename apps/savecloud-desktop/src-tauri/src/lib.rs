@@ -1,3 +1,4 @@
+mod cloud;
 mod commands;
 mod compat;
 mod config;

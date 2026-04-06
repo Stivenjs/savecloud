@@ -139,6 +139,7 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
         engine: std::sync::Arc::new(tokio::sync::Mutex::new(torrent_engine)),
     });
     app.manage(queue::SourcesState::new_from_disk());
+    app.manage(crate::cloud::CloudWsState::new());
 
     // Reanuda jobs pendientes al reiniciar la app.
     queue::resume_pending_jobs(&app.handle());
