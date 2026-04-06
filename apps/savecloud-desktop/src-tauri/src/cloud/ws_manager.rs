@@ -9,6 +9,7 @@ use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 
 use super::ws_client::{start_ws_loop, CloudBroadcastPayload};
+use crate::plugins::log_buffer::AppLogs;
 
 /// Estado compartido del WebSocket de la nube gestionado por Tauri.
 ///
@@ -38,13 +39,13 @@ impl CloudWsState {
     /// # Arguments
     /// * `app_handle` - Instancia de Tauri para la comunicación IPC.
     /// * `url_str` - URL autenticada generada en el backend de Rust.
-    pub async fn start(&self, app_handle: AppHandle, url_str: String) {
+    /// * `logs` - Buffer de logs en memoria para el usuario.
+    pub async fn start(&self, app_handle: AppHandle, url_str: String, logs: AppLogs) {
         let mut tx_guard = self.tx.lock().await;
         let mut handle_guard = self.handle.lock().await;
 
         // Evitar múltiples hilos de conexión simultáneos.
         if tx_guard.is_some() {
-            println!("[CloudWS] El servicio ya está iniciado o iniciándose.");
             return;
         }
 
@@ -55,11 +56,10 @@ impl CloudWsState {
 
         // Spawnear la tarea de fondo en el runtime de tokio de Tauri.
         let join_handle = tokio::spawn(async move {
-            start_ws_loop(app_handle_clone, url_str, rx).await;
+            start_ws_loop(app_handle_clone, url_str, rx, logs).await;
         });
 
         *handle_guard = Some(join_handle);
-        println!("[CloudWS] Hilo de servicio de red lanzado con éxito.");
     }
 
     /// Detiene la conexión WebSocket y libera los recursos del hilo de fondo.
@@ -69,7 +69,6 @@ impl CloudWsState {
 
         if let Some(handle) = handle_guard.take() {
             handle.abort();
-            println!("[CloudWS] Conexión abortada manualmente.");
         }
 
         *tx_guard = None;

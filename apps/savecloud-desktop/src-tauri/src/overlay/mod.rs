@@ -27,7 +27,6 @@ pub fn setup_overlay_window(app: &AppHandle) -> Result<(), Box<dyn std::error::E
 
     let win_clone = window.clone();
     app.listen_any("overlay-ready", move |_| {
-        println!("[Overlay] Received 'overlay-ready' signal. Showing window.");
         let _ = win_clone.show();
     });
 

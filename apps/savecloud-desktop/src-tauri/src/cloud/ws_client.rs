@@ -3,6 +3,7 @@
 //! Este archivo gestiona la conexión cruda, el handshake TLS y el bucle de eventos
 //! de lectura/escritura para comunicarse con el servidor AWS WebSocket.
 
+use crate::plugins::log_buffer::{AppLogs, LogEntry};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -49,15 +50,17 @@ pub struct CloudBroadcastPayload {
 /// * `app_handle` - Instancia de Tauri para emitir eventos al frontend.
 /// * `url_str` - URL completa del WebSocket (con apiKey/token ya incluidos).
 /// * `rx` - Canal de recepción de mensajes de salida desde el frontend.
+/// * `logs` - Buffer de logs en memoria para el usuario.
 pub async fn start_ws_loop(
     app_handle: AppHandle,
     url_str: String,
     mut rx: mpsc::UnboundedReceiver<CloudBroadcastPayload>,
+    logs: AppLogs,
 ) {
     let _url = match Url::parse(&url_str) {
         Ok(u) => u,
         Err(e) => {
-            log_error(&app_handle, &format!("URL inválida: {}", e));
+            log_cloud(&app_handle, &logs, "error", &format!("URL inválida: {}", e)).await;
             return;
         }
     };
@@ -68,6 +71,13 @@ pub async fn start_ws_loop(
         match connect_async(url_str.as_str()).await {
             Ok((ws_stream, _)) => {
                 backoff = Duration::from_secs(2); // Reset backoff
+                log_cloud(
+                    &app_handle,
+                    &logs,
+                    "info",
+                    "Conexión WebSocket establecida con éxito.",
+                )
+                .await;
 
                 let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
@@ -77,26 +87,24 @@ pub async fn start_ws_loop(
                         Some(msg) = ws_receiver.next() => {
                             match msg {
                                 Ok(Message::Text(text)) => {
-                                    println!("[CloudWS] RAW RECEIVED: {}", text);
                                     match serde_json::from_str::<CloudIncomingMessage>(&text) {
                                         Ok(incoming) => {
-                                            println!("[CloudWS] Successfully parsed: {:?}", incoming);
-                                            match app_handle.emit("cloud-ws-incoming", &incoming) {
-                                                Ok(_) => println!("[CloudWS] Event emitted to frontend"),
-                                                Err(e) => println!("[CloudWS] ERROR emitting event: {}", e),
+                                            if let CloudIncomingMessage::FriendPlaying { data } = &incoming {
+                                                log_cloud(&app_handle, &logs, "info", &format!("Amigo jugando: {} a {}", data.friend_user_id, data.game_name)).await;
                                             }
+                                            let _ = app_handle.emit("cloud-ws-incoming", &incoming);
                                         }
-                                        Err(e) => {
-                                            println!("[CloudWS] JSON PARSE ERROR: {}. Target text: {}", e, text);
+                                        Err(_e) => {
+                                            // Silencioso en producción si el formato es desconocido por ahora
                                         }
                                     }
                                 }
                                 Ok(Message::Close(_)) => {
-                                    println!("[CloudWS] Connection closed by server");
+                                    log_cloud(&app_handle, &logs, "info", "Conexión cerrada por el servidor.").await;
                                     break;
                                 }
                                 Err(e) => {
-                                    println!("[CloudWS] Network error: {}", e);
+                                    log_cloud(&app_handle, &logs, "error", &format!("Error de red: {}", e)).await;
                                     break;
                                 }
                                 _ => {}
@@ -106,18 +114,22 @@ pub async fn start_ws_loop(
                         // 2. Mensajes salientes de la UI (broadcasts)
                         Some(payload) = rx.recv() => {
                             if let Ok(text) = serde_json::to_string(&payload) {
-                                let _ = ws_sender.send(Message::Text(text.into())).await;
+                                if let Err(e) = ws_sender.send(Message::Text(text.into())).await {
+                                    log_cloud(&app_handle, &logs, "error", &format!("Error enviando broadcast: {}", e)).await;
+                                }
                             }
                         }
                     }
                 }
             }
             Err(e) => {
-                println!(
-                    "[CloudWS] Error conectando: {}. Reintentando en {}s...",
-                    e,
-                    backoff.as_secs()
-                );
+                log_cloud(
+                    &app_handle,
+                    &logs,
+                    "error",
+                    &format!("Error conectando: {}. Reintentando...", e),
+                )
+                .await;
             }
         }
 
@@ -127,7 +139,18 @@ pub async fn start_ws_loop(
     }
 }
 
-/// Helper para registrar errores en la consola.
-fn log_error(_handle: &AppHandle, msg: &str) {
-    eprintln!("[CloudWS] ERROR: {}", msg);
+/// Helper para añadir logs al sistema interno de SaveCloud.
+async fn log_cloud(handle: &AppHandle, logs: &AppLogs, level: &str, message: &str) {
+    let entry = LogEntry {
+        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+        level: level.to_string(),
+        plugin: "Cloud".to_string(),
+        message: message.to_string(),
+    };
+
+    // 1. Guardar en el buffer persistente en memoria
+    logs.lock().await.push(entry.clone());
+
+    // 2. Emitir a la UI para que se vea en tiempo real
+    let _ = handle.emit("plugin_log", entry);
 }
