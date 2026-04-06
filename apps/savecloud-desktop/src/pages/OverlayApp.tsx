@@ -9,6 +9,7 @@ import { Gamepad2 } from "lucide-react";
 interface NotificationPayload {
   title: string;
   body: string;
+  avatar?: string;
 }
 
 /**
@@ -24,48 +25,46 @@ const NOTIFICATION_DURATION = 5000;
 /** Número máximo de notificaciones simultáneas */
 const MAX_NOTIFICATIONS = 5;
 
-/** Configuración de animación de las notificaciones */
+/** Configuración de animación - estilo Steam: slide desde la derecha */
 const ANIMATION_CONFIG: {
-  initial: { opacity: number; x: number; y: number };
-  animate: { opacity: number; x: number; y: number };
-  exit: { opacity: number; x: number; scale: number };
+  initial: { opacity: number; x: number };
+  animate: { opacity: number; x: number };
+  exit: { opacity: number; x: number };
   transition: Transition;
 } = {
-  initial: { opacity: 0, x: 50, y: 20 },
-  animate: { opacity: 1, x: 0, y: 0 },
-  exit: { opacity: 0, x: 50, scale: 0.95 },
-  transition: { type: "spring", stiffness: 300, damping: 25 },
+  initial: { opacity: 0, x: 320 },
+  animate: { opacity: 1, x: 0 },
+  exit: { opacity: 0, x: 320 },
+  transition: { type: "tween", duration: 0.3, ease: [0.4, 0, 0.2, 1] },
 } as const;
 
-/**
- * Componente de ícono de notificación
- */
-const NotificationIcon: React.FC = () => (
-  <div className="w-12 h-12 rounded-full bg-[#1b80db]/20 flex items-center justify-center shrink-0">
-    <Gamepad2 className="w-6 h-6 text-[#1b80db]" />
-  </div>
-);
+const NotificationCard: React.FC<OverlayNotification> = ({ id, title, body, avatar }) => (
+  <motion.div key={id} {...ANIMATION_CONFIG} className="pointer-events-auto">
+    {/* Contenedor principal */}
+    <div className="flex bg-[#1a1a1a] rounded-[4px] overflow-hidden shadow-[0_3px_12px_rgba(0,0,0,0.55)]">
+      {/* Barra verde lateral */}
+      <div className="w-[4px] bg-[#5c7e10] shrink-0" />
 
-/**
- * Componente de contenido de notificación
- */
-const NotificationContent: React.FC<NotificationPayload> = ({ title, body }) => (
-  <div className="flex flex-col flex-1 overflow-hidden">
-    <h4 className="text-white font-semibold text-sm m-0 truncate leading-tight tracking-wide">{title}</h4>
-    <p className="text-gray-300/80 text-xs m-0 mt-1 truncate">{body}</p>
-  </div>
-);
+      {/* Contenido de la notificación */}
+      <div className="flex items-center gap-[12px] py-[12px] px-[14px]">
+        {/* Avatar cuadrado con esquinas ligeramente redondeadas */}
+        <div className="w-[36px] h-[36px] rounded-[3px] bg-[#3d3d3d] overflow-hidden shrink-0 flex items-center justify-center">
+          {avatar ? (
+            <img src={avatar} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <Gamepad2 className="w-[20px] h-[20px] text-[#67707b]" />
+          )}
+        </div>
 
-/**
- * Componente de tarjeta de notificación individual
- */
-const NotificationCard: React.FC<OverlayNotification> = ({ id, title, body }) => (
-  <motion.div
-    key={id}
-    {...ANIMATION_CONFIG}
-    className="bg-black/80 backdrop-blur-xl border border-white/15 shadow-2xl rounded-2xl p-4 flex items-center gap-4 w-[340px] pointer-events-auto">
-    <NotificationIcon />
-    <NotificationContent title={title} body={body} />
+        {/* Texto */}
+        <div className="flex flex-col min-w-0">
+          {/* Nombre del amigo */}
+          <span className="text-[#c6d4df] text-[14px] font-normal leading-[1.2] truncate max-w-[220px]">{title}</span>
+          {/* Estado */}
+          <span className="text-[#5c7e10] text-[13px] font-normal leading-[1.3] truncate max-w-[220px]">{body}</span>
+        </div>
+      </div>
+    </div>
   </motion.div>
 );
 
@@ -185,7 +184,7 @@ export function OverlayApp() {
     <div className="fixed inset-0 m-0 p-0 pointer-events-none bg-transparent overflow-hidden">
       {/* Contenedor de notificaciones - esquina inferior derecha */}
       <div
-        className="absolute bottom-10 right-10 flex flex-col items-end gap-3 pointer-events-none"
+        className="absolute bottom-4 right-4 flex flex-col items-end gap-2 pointer-events-none"
         role="region"
         aria-label="Notificaciones de overlay"
         aria-live="polite">
