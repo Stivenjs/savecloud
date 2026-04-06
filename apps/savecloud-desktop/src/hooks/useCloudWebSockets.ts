@@ -77,14 +77,22 @@ export function useCloudWebSockets() {
       if (isComponentMounted) {
         unlistenIncoming = await listen<CloudIncomingMessage>("cloud-ws-incoming", (event) => {
           const msg = event.payload;
+          console.info("[WS:Hook] Received 'cloud-ws-incoming' event:", msg);
 
           if (msg.type === "FRIEND_PLAYING") {
             const { friendUserId, gameName } = msg.data;
+            console.info(`[WS:Hook] Emitting overlay notification for friend: ${friendUserId}`);
 
             emitTo("overlay", "show-overlay-notification", {
               title: "Amigo jugando",
               body: `${friendUserId} está jugando ${gameName}`,
-            }).catch(() => {});
+            })
+              .then(() => {
+                console.info("[WS:Hook] emitTo('overlay') successful");
+              })
+              .catch((err) => {
+                console.error("[WS:Hook] emitTo('overlay') FAILED:", err);
+              });
           }
         });
       }
