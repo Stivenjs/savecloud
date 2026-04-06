@@ -75,7 +75,7 @@ const NotificationCard: React.FC<OverlayNotification> = ({ id, title, body, avat
  */
 function useOverlayNotifications() {
   const [notifications, setNotifications] = useState<OverlayNotification[]>([]);
-  const timeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const timeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   /**
    * Agrega una nueva notificación y programa su eliminación automática
