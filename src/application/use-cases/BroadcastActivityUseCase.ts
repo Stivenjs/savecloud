@@ -37,11 +37,6 @@ export class BroadcastActivityUseCase {
     const activeMemberIds = cloudMemberships.filter((m) => m.active).map((m) => m.memberUserId);
 
     const allPeersInCloud = [activeCloudHostId, ...activeMemberIds];
-    console.info(
-      `[ws:broadcast] Found ${allPeersInCloud.length} peers in cloud ${activeCloudHostId}:`,
-      allPeersInCloud
-    );
-
     const payload = {
       type: "FRIEND_PLAYING",
       data: {
@@ -52,18 +47,12 @@ export class BroadcastActivityUseCase {
       },
     };
 
-    console.info(
-      `[ws:broadcast] Preparing to send payload to ${allPeersInCloud.length - 1} peers (excluding broadcaster)`
-    );
-
     for (const targetUserId of allPeersInCloud) {
       if (targetUserId === broadcasterId) continue;
 
       const connectionIds = await this.connectionRepository.getConnectionsByUser(targetUserId);
-      console.info(`[ws:broadcast] target ${targetUserId} has ${connectionIds.length} active connections`);
 
       for (const connectionId of connectionIds) {
-        console.info(`[ws:broadcast] Sending notification to ${targetUserId} at connection ${connectionId}`);
         this.notifier.sendToConnection(connectionId, payload).catch((err) => {
           console.warn(`[WS] Fallo al enviar a ${connectionId} (${targetUserId}):`, err.message);
         });

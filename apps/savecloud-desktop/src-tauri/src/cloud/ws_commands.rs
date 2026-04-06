@@ -6,6 +6,7 @@
 use super::ws_client::CloudBroadcastPayload;
 use super::ws_manager::CloudWsState;
 use crate::config;
+use crate::plugins::log_buffer::AppLogs;
 use tauri::{command, AppHandle, State};
 
 /// Inicia la conexión WebSocket segura con la infraestructura de la nube.
@@ -21,6 +22,7 @@ use tauri::{command, AppHandle, State};
 pub async fn start_cloud_ws(
     app_handle: AppHandle,
     cloud_state: State<'_, CloudWsState>,
+    logs: State<'_, AppLogs>,
 ) -> Result<(), String> {
     let settings = config::load_settings();
 
@@ -82,7 +84,9 @@ pub async fn start_cloud_ws(
     };
 
     // 3. Delegar el inicio al gestor de estado.
-    cloud_state.start(app_handle, final_url).await;
+    cloud_state
+        .start(app_handle, final_url, logs.inner().clone())
+        .await;
 
     Ok(())
 }
