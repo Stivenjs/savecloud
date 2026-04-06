@@ -28,24 +28,46 @@ function safeCompare(a: string, b: string): boolean {
  * Retorna null si las credenciales no son válidas o no coinciden con el userId declarado.
  */
 function resolveVerifiedUserId(params: Record<string, string> | undefined): string | null {
-  if (!params) return null;
+  if (!params) {
+    console.debug("[ws:connect] NO PARAMS — reject");
+    return null;
+  }
 
   const declaredUserId = (params.userId ?? "").trim();
-  if (!declaredUserId) return null;
+  if (!declaredUserId) {
+    console.debug("[ws:connect] NO userId — reject", { params: Object.keys(params) });
+    return null;
+  }
 
   // Modo host: valida contra el API key global del entorno
   const apiKey = (params.apiKey ?? "").trim();
   if (apiKey && expectedApiKey && safeCompare(apiKey, expectedApiKey)) {
+    console.info("[ws:connect] HOST AUTHORIZED", { userId: declaredUserId });
     return declaredUserId;
   }
 
   // Modo invitado: valida access token HMAC emitido al aceptar la invitación
-  const token = (params.token ?? "").trim();
+  // Probamos con "token" y "accessToken" por robustez ante variaciones del cliente
+  const token = (params.token || params.accessToken || "").trim();
   if (token) {
     const verified = verifyUserAccessToken(token);
-    if (verified && verified.userId === declaredUserId) {
-      return declaredUserId;
+    if (verified) {
+      if (verified.userId === declaredUserId) {
+        console.info("[ws:connect] GUEST AUTHORIZED", { userId: declaredUserId });
+        return declaredUserId;
+      } else {
+        console.warn("[ws:connect] TOKEN MISMATCH — token sub does not match declared userId", {
+          declared: declaredUserId,
+          verified: verified.userId,
+        });
+      }
+    } else {
+      console.warn("[ws:connect] TOKEN INVALID — verifyUserAccessToken failed (check secret/exp)", {
+        tokenPrefix: token.substring(0, 8),
+      });
     }
+  } else {
+    console.debug("[ws:connect] NO token/apiKey — reject");
   }
 
   return null;
@@ -64,7 +86,13 @@ export const handler = async (event: APIGatewayWebsocketConnectEvent) => {
   }
 
   const ttl = Math.floor(Date.now() / 1000) + 24 * 60 * 60;
-  await connectionRepo.saveConnection(connectionId, verifiedUserId, ttl);
+  try {
+    await connectionRepo.saveConnection(connectionId, verifiedUserId, ttl);
+    console.info("[ws:connect] Connection saved to DynamoDB", { connectionId, userId: verifiedUserId });
+  } catch (error) {
+    console.error("[ws:connect] FATAL: Error saving connection to DynamoDB", error);
+    return { statusCode: 500, body: "Internal Server Error" };
+  }
 
   return { statusCode: 200, body: "Connected" };
 };

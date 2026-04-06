@@ -214,17 +214,27 @@ export class S3CloudInviteRepository implements CloudInviteRepository {
 
   async listMembershipsForMember(memberUserId: string): Promise<CloudMembership[]> {
     const inviteeKeys = await this.listKeys(`cloud-invites/invitees/${memberUserId}/`);
-    const hosts = new Set<string>();
+    const hosts = new Map<string, string | null | undefined>();
+
     for (const idxKey of inviteeKeys) {
       const marker = await this.getJsonOrNull<{ inviteId: string }>(idxKey);
       if (!marker?.inviteId) continue;
       const invite = await this.getInviteById(marker.inviteId);
-      if (invite?.inviteeUserId === memberUserId) hosts.add(invite.hostUserId);
+      if (invite?.inviteeUserId === memberUserId) {
+        hosts.set(invite.hostUserId, invite.wsUrl);
+      }
     }
+
     const out: CloudMembership[] = [];
-    for (const host of hosts) {
+    for (const [host, wsUrl] of hosts.entries()) {
       const membership = await this.getMembership(host, memberUserId);
-      if (membership) out.push(membership);
+      if (membership) {
+        // "Patch" en caliente si el archivo de membresía es viejo y no tenía wsUrl
+        if (!membership.wsUrl && wsUrl) {
+          membership.wsUrl = wsUrl;
+        }
+        out.push(membership);
+      }
     }
     return out;
   }
