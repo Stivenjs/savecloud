@@ -22,6 +22,8 @@ export const handler = async (event: APIGatewayProxyWebsocketEventV2) => {
     return { statusCode: 403, body: "Forbidden" };
   }
 
+  console.info("[ws:broadcast] Authorized request", { connectionId, userId: verifiedUserId });
+
   const body = JSON.parse(event.body || "{}");
   const wsEndpoint =
     process.env.WS_ENDPOINT || `https://${event.requestContext.domainName}/${event.requestContext.stage}`;

@@ -35,6 +35,7 @@ pub struct ErrorData {
 
 /// Mensajes de salida que enviamos al servidor (broadcasts).
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct CloudBroadcastPayload {
     pub action: String,
     pub broadcaster_user_id: String,
@@ -76,13 +77,26 @@ pub async fn start_ws_loop(
                         Some(msg) = ws_receiver.next() => {
                             match msg {
                                 Ok(Message::Text(text)) => {
-                                    if let Ok(incoming) = serde_json::from_str::<CloudIncomingMessage>(&text) {
-                                        let _ = app_handle.emit("cloud-ws-incoming", incoming);
+                                    println!("[CloudWS] RAW RECEIVED: {}", text);
+                                    match serde_json::from_str::<CloudIncomingMessage>(&text) {
+                                        Ok(incoming) => {
+                                            println!("[CloudWS] Successfully parsed: {:?}", incoming);
+                                            match app_handle.emit("cloud-ws-incoming", &incoming) {
+                                                Ok(_) => println!("[CloudWS] Event emitted to frontend"),
+                                                Err(e) => println!("[CloudWS] ERROR emitting event: {}", e),
+                                            }
+                                        }
+                                        Err(e) => {
+                                            println!("[CloudWS] JSON PARSE ERROR: {}. Target text: {}", e, text);
+                                        }
                                     }
                                 }
-                                Ok(Message::Close(_)) => break,
+                                Ok(Message::Close(_)) => {
+                                    println!("[CloudWS] Connection closed by server");
+                                    break;
+                                }
                                 Err(e) => {
-                                    println!("[CloudWS] Error de red: {}", e);
+                                    println!("[CloudWS] Network error: {}", e);
                                     break;
                                 }
                                 _ => {}

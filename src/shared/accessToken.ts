@@ -45,7 +45,10 @@ export function issueUserAccessToken(userId: string, ttlSeconds: number): string
 
 export function verifyUserAccessToken(token: string): { userId: string; exp: number } | null {
   const secret = getSecret();
-  if (!secret) return null;
+  if (!secret) {
+    console.error("[auth:token] FATAL: ACCESS_TOKEN_SECRET/API_KEY is not set — cannot verify tokens");
+    return null;
+  }
 
   const raw = token.trim();
   const parts = raw.split(".");

@@ -156,8 +156,10 @@ export function OverlayApp() {
     let unlisten: (() => void) | undefined;
 
     const setupListener = async () => {
+      console.info("[OverlayApp] Setting up 'show-overlay-notification' listener...");
       try {
         unlisten = await listen<NotificationPayload>("show-overlay-notification", (event) => {
+          console.info("[OverlayApp] Received 'show-overlay-notification' event:", event.payload);
           const { title, body } = event.payload;
 
           if (!title?.trim() || !body?.trim()) {
@@ -166,7 +168,9 @@ export function OverlayApp() {
           }
 
           addNotification({ title, body });
+          console.info("[OverlayApp] Notification added to list");
         });
+        console.info("[OverlayApp] Listener is active");
       } catch (error) {
         console.error("[Overlay] Error configurando listener de notificaciones:", error);
       }

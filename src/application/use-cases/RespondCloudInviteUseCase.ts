@@ -41,6 +41,7 @@ export class RespondCloudInviteUseCase {
         hostUserId: invite.hostUserId,
         memberUserId: invite.inviteeUserId,
         invitedById: invite.id,
+        wsUrl: invite.wsUrl,
         createdAt: now,
         updatedAt: now,
         active: true,

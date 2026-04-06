@@ -231,6 +231,7 @@ export function FriendsPage() {
               setFriendsTab("user");
               void loadFriendProfileById(userId);
             }}
+            ourConfig={ourConfig}
           />
         </Tab>
       </Tabs>

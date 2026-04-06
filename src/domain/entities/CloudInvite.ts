@@ -19,6 +19,7 @@ export interface CloudMembership {
   hostUserId: string;
   memberUserId: string;
   invitedById: string;
+  wsUrl?: string | null;
   createdAt: string;
   updatedAt: string;
   active: boolean;
