@@ -28,6 +28,7 @@ const menuItemsFromNav = (navItems: NavItem[], currentPath: string) =>
     ariaLabel: `Ir a ${n.label}`,
     link: n.id,
     disabled: currentPath === n.id,
+    icon: n.icon,
   }));
 
 export function AppLayout({ navItems, children }: AppLayoutProps) {
