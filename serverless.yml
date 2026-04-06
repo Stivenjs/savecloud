@@ -54,6 +54,7 @@ provider:
         - Effect: Allow
           Action:
             - dynamodb:PutItem
+            - dynamodb:GetItem
             - dynamodb:DeleteItem
             - dynamodb:Query
           Resource:
