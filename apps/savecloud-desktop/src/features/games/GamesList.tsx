@@ -158,7 +158,7 @@ export function GamesList({
                   variant="bordered"
                   startContent={<FolderSearch size={18} />}
                   onPress={onEmptyScanPress}>
-                  Analizar rutas
+                  Buscar juegos automáticamente
                 </Button>
               )}
               {onEmptyAddPress && (

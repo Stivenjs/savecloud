@@ -133,7 +133,7 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
       <ModalContent>
         <ModalHeader className="flex items-center gap-2">
           <FolderOpen size={22} />
-          Analizar rutas
+          Buscar juegos automáticamente
         </ModalHeader>
 
         <ModalBody>
@@ -166,7 +166,13 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
                   />
                 </Suspense>
               </div>
-              <p className="text-default-500 animate-pulse">Buscando carpetas de guardados en el sistema...</p>
+              <p className="text-default-500 animate-pulse text-center max-w-md">
+                Estamos revisando tu PC para encontrar juegos y sus guardados...
+                <br />
+                <span className="text-xs text-default-400">
+                  Esto puede tardar unos segundos dependiendo de tu sistema
+                </span>
+              </p>
             </div>
           ) : candidates && candidates.length > 0 ? (
             <>
@@ -175,9 +181,9 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
                 className={`rounded-lg transition-all p-1 ${navSearch.isFocused && navSearch.inputMode === "gamepad" ? "ring-2 ring-primary bg-primary/10" : ""}`}
                 {...navSearch.navProps}>
                 <Input
-                  aria-label="Buscar en los resultados"
+                  aria-label="Buscar juegos encontrados"
                   classNames={{ inputWrapper: "bg-default-100" }}
-                  placeholder="Buscar en los resultados..."
+                  placeholder="Buscar juego, carpeta o ruta..."
                   startContent={<Search size={18} className="text-default-400" />}
                   value={searchQuery}
                   onValueChange={setSearchQuery}
