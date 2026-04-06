@@ -61,6 +61,7 @@ hex = "0.4"
 r2d2 = "0.8.10"
 r2d2_sqlite = "0.33.0"
 url = "2.5.8"
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-native-roots"] }
 
 
 [dev-dependencies]

@@ -4,6 +4,7 @@ export const CreateInviteSchema = Type.Object({
   inviteeUserId: Type.Optional(Type.String({ minLength: 1 })),
   withToken: Type.Optional(Type.Boolean()),
   expiresInDays: Type.Optional(Type.Integer({ minimum: 1, maximum: 365 })),
+  wsUrl: Type.Optional(Type.String()),
 });
 export type CreateInviteBody = Static<typeof CreateInviteSchema>;
 

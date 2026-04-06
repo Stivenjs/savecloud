@@ -71,9 +71,11 @@ pub fn get_config() -> ConfigDto {
 
     ConfigDto {
         api_base_url: combined.api_base_url,
+        ws_base_url: combined.ws_base_url,
         api_key: combined.api_key.map(|_| config::MASKED_API_KEY.to_string()),
         user_id: combined.user_id,
         active_cloud_host_user_id: combined.active_cloud_host_user_id,
+        cloud_host_ws_base_urls: combined.cloud_host_ws_base_urls,
         custom_scan_paths: combined.custom_scan_paths,
         keep_backups_per_game: combined.keep_backups_per_game,
         full_backup_streaming: combined.full_backup_streaming,
@@ -150,6 +152,7 @@ pub fn list_operation_history() -> Vec<OperationLogEntryDto> {
 #[tauri::command]
 pub fn create_config_file(
     api_base_url: Option<String>,
+    ws_base_url: Option<String>,
     api_key: Option<String>,
     user_id: Option<String>,
     steam_web_api_key: Option<String>,
@@ -162,6 +165,14 @@ pub fn create_config_file(
         .filter(|s| !s.is_empty())
     {
         settings.api_base_url = Some(url.to_string());
+    }
+
+    if let Some(url) = ws_base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        settings.ws_base_url = Some(url.to_string());
     }
 
     if let Some(key) = api_key
@@ -196,6 +207,20 @@ pub fn set_active_cloud_host_user_id(host_user_id: Option<String>) -> Result<(),
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
+    config::save_settings(&settings)
+}
+
+#[tauri::command]
+pub fn set_cloud_host_ws_url(host_user_id: String, ws_url: String) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    let host = host_user_id.trim();
+    let url = ws_url.trim();
+    if !host.is_empty() && !url.is_empty() {
+        settings
+            .cloud_host_ws_base_urls
+            .insert(host.to_string(), url.to_string());
+        config::save_settings(&settings)?;
+    }
     config::save_settings(&settings)
 }
 
@@ -396,13 +421,13 @@ pub fn rename_game(old_game_id: String, new_game_id: String) -> Result<(), Strin
     if old_id.is_empty() || new_id.is_empty() {
         return Err("Requiere argumentos mutables plenos".to_string());
     }
-    if old_id.eq_ignore_ascii_case(&new_id) {
+    if old_id == new_id {
         return Ok(());
     }
     if library
         .games
         .iter()
-        .any(|g| g.id.eq_ignore_ascii_case(&new_id))
+        .any(|g| g.id.eq_ignore_ascii_case(&new_id) && !g.id.eq_ignore_ascii_case(old_id))
     {
         return Err(format!("Colisión de clave primaria '{}'", new_id));
     }

@@ -1,3 +1,4 @@
+mod cloud;
 mod commands;
 mod compat;
 mod config;
@@ -19,6 +20,7 @@ mod time;
 mod torrent;
 mod tray;
 mod utils;
+mod overlay;
 use tauri::Manager;
 
 fn load_dotenv() {

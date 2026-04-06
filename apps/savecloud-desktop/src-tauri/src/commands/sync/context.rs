@@ -4,9 +4,11 @@
 //! 1) Si hay host activo de nube compartida, usa su base URL + token seguro por host.
 //! 2) Si no, usa la configuración de nube propia (api_base_url + api_key).
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct ApiContext {
     pub(crate) base_url: String,
+    #[allow(dead_code)]
+    pub(crate) ws_base_url: Option<String>,
     pub(crate) user_id: String,
     pub(crate) api_key: String,
 }
@@ -38,12 +40,22 @@ pub(crate) fn resolve_api_context() -> Result<ApiContext, String> {
         let host_api_key = crate::config::get_secure_api_key_for_cloud_host(active_host).ok_or(
             "La nube compartida activa no tiene credenciales guardadas. Reacepta la invitación.",
         )?;
+        let host_ws_base_url = settings
+            .cloud_host_ws_base_urls
+            .get(active_host)
+            .map(|s| s.clone());
         return Ok(ApiContext {
             base_url: host_base_url.trim_end_matches('/').to_string(),
+            ws_base_url: host_ws_base_url,
             user_id,
             api_key: host_api_key,
         });
     }
+
+    let ws_base_url = settings
+        .ws_base_url
+        .clone()
+        .filter(|s| !s.trim().is_empty());
 
     let base_url = settings
         .api_base_url
@@ -61,6 +73,7 @@ pub(crate) fn resolve_api_context() -> Result<ApiContext, String> {
 
     Ok(ApiContext {
         base_url,
+        ws_base_url,
         user_id,
         api_key,
     })

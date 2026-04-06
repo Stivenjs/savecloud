@@ -1,6 +1,5 @@
 Resources:
-  # Transfer Acceleration: subidas/descargas más rápidas vía edge de CloudFront.
-  # Tras el deploy puede tardar ~20 min en activarse. Coste extra por transferencia (ver S3 pricing).
+  # Bucket principal para saves en Desarrollo
   SavesBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -25,3 +24,34 @@ Resources:
             Status: Enabled
             Prefix: cloud-invites/
             ExpirationInDays: 7
+
+  # Tabla Efímera para WebSockets
+  ActiveConnectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-ActiveConnections
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      AttributeDefinitions:
+        - AttributeName: connectionId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: connectionId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true

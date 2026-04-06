@@ -6,6 +6,7 @@ export interface CreateCloudInviteInput {
   inviteeUserId?: string;
   expiresInDays?: number;
   withToken?: boolean;
+  wsUrl?: string;
 }
 
 export class CreateCloudInviteUseCase {
@@ -25,6 +26,7 @@ export class CreateCloudInviteUseCase {
       inviteeUserId: invitee || undefined,
       ttlSeconds: ttlDays * 24 * 60 * 60,
       withToken: input.withToken ?? true,
+      wsUrl: input.wsUrl,
     });
   }
 }

@@ -16,6 +16,8 @@ use std::collections::BTreeMap;
 pub struct AppSettings {
     #[serde(default)]
     pub api_base_url: Option<String>,
+    #[serde(default)]
+    pub ws_base_url: Option<String>,
     /// Clave de autenticación de la API.
     ///
     /// Se excluye intencionalmente de la serialización JSON para evitar
@@ -31,6 +33,9 @@ pub struct AppSettings {
     /// Las credenciales secretas (`apiKey`/accessToken) se guardan aparte en el Keyring por `hostUserId`.
     #[serde(default)]
     pub cloud_host_api_base_urls: BTreeMap<String, String>,
+    /// Mapea `hostUserId` (anfitrión) -> `wsBaseUrl` del servidor de WebSocket.
+    #[serde(default)]
+    pub cloud_host_ws_base_urls: BTreeMap<String, String>,
     #[serde(default)]
     pub custom_scan_paths: Vec<String>,
     #[serde(default)]
@@ -149,10 +154,14 @@ pub struct GamificationConfig {
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     pub api_base_url: Option<String>,
+    #[serde(default)]
+    pub ws_base_url: Option<String>,
     pub api_key: Option<String>,
     pub user_id: Option<String>,
     #[serde(default)]
     pub active_cloud_host_user_id: Option<String>,
+    #[serde(default)]
+    pub cloud_host_ws_base_urls: BTreeMap<String, String>,
     pub custom_scan_paths: Vec<String>,
     pub keep_backups_per_game: Option<u32>,
     pub full_backup_streaming: Option<bool>,
@@ -183,10 +192,14 @@ pub struct Config {
 #[serde(rename_all = "camelCase")]
 pub struct ConfigDto {
     pub api_base_url: Option<String>,
+    #[serde(default)]
+    pub ws_base_url: Option<String>,
     pub api_key: Option<String>,
     pub user_id: Option<String>,
     #[serde(default)]
     pub active_cloud_host_user_id: Option<String>,
+    #[serde(default)]
+    pub cloud_host_ws_base_urls: BTreeMap<String, String>,
     pub games: Vec<GameDto>,
     pub custom_scan_paths: Vec<String>,
     pub keep_backups_per_game: Option<u32>,

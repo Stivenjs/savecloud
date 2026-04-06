@@ -446,16 +446,25 @@ export async function getSteamCatalogAppDetails(appId: string): Promise<SteamApp
 /** Crea o actualiza el archivo de configuración con apiBaseUrl, apiKey y userId. Opcionalmente la clave Steam Web API (se guarda en el almacén seguro del SO). Devuelve la ruta del archivo. */
 export async function createConfigFile(
   apiBaseUrl: string,
+  wsBaseUrl: string,
   apiKey: string,
   userId: string,
   steamWebApiKey?: string | null
 ): Promise<string> {
   return invoke<string>("create_config_file", {
     apiBaseUrl: apiBaseUrl.trim() || null,
+    wsBaseUrl: wsBaseUrl.trim() || null,
     apiKey: apiKey.trim() || null,
     userId: userId.trim() || null,
     steamWebApiKey: steamWebApiKey === undefined || steamWebApiKey === null ? null : steamWebApiKey.trim() || null,
   });
+}
+
+/**
+ * Establece la URL del servidor WebSocket para un host específico.
+ */
+export async function setCloudHostWsUrl(hostUserId: string, wsUrl: string): Promise<void> {
+  return invoke("set_cloud_host_ws_url", { hostUserId, wsUrl });
 }
 
 /** Selecciona la nube activa para sync: `null` = nube propia, string = nube del host. */

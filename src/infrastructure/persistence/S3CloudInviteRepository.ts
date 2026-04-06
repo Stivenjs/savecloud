@@ -130,6 +130,7 @@ export class S3CloudInviteRepository implements CloudInviteRepository {
       hostUserId: input.hostUserId.trim(),
       inviteeUserId: input.inviteeUserId?.trim() || null,
       token: input.withToken ? crypto.randomBytes(24).toString("hex") : null,
+      wsUrl: input.wsUrl,
       status: "pending",
       createdAt: now,
       updatedAt: now,
