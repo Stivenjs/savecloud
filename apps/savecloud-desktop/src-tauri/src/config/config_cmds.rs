@@ -421,13 +421,13 @@ pub fn rename_game(old_game_id: String, new_game_id: String) -> Result<(), Strin
     if old_id.is_empty() || new_id.is_empty() {
         return Err("Requiere argumentos mutables plenos".to_string());
     }
-    if old_id.eq_ignore_ascii_case(&new_id) {
+    if old_id == new_id {
         return Ok(());
     }
     if library
         .games
         .iter()
-        .any(|g| g.id.eq_ignore_ascii_case(&new_id))
+        .any(|g| g.id.eq_ignore_ascii_case(&new_id) && !g.id.eq_ignore_ascii_case(old_id))
     {
         return Err(format!("Colisión de clave primaria '{}'", new_id));
     }
