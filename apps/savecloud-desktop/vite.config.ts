@@ -34,6 +34,13 @@ export default defineConfig(() => ({
   },
 
   clearScreen: false,
+  esbuild: {
+    drop: process.env.TAURI_ENV_DEBUG ? [] : ["console", "debugger"],
+  },
+
+  optimizeDeps: {
+    include: ["react", "react-dom", "@tanstack/react-query"],
+  },
 
   build: {
     cssCodeSplit: true,
@@ -51,6 +58,14 @@ export default defineConfig(() => ({
       }
 
       return "vendor";
+    },
+
+    rollupOptions: {
+      output: {
+        chunkFileNames: "chunks/[name]-[hash].js",
+        entryFileNames: "entry/[name]-[hash].js",
+        assetFileNames: "assets/[name]-[hash][extname]",
+      },
     },
   },
 

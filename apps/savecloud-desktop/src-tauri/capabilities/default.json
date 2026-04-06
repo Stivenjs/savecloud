@@ -20,6 +20,7 @@
     "core:window:allow-maximize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-show",
      {
       "identifier": "opener:allow-open-url",
       "allow": [
