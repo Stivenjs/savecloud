@@ -63,6 +63,8 @@ interface FriendsInvitesTabProps {
   invitesStatsLoading: boolean;
   /** Carga el perfil (miembro o anfitrión) en la pestaña Buscar por usuario. */
   onViewCloudPeerProfile: (userId: string) => void;
+  /** Opcional: Configuración local para comparar URLs de WebSocket descifradas. */
+  ourConfig?: any;
 }
 
 export function FriendsInvitesTab({
@@ -86,6 +88,7 @@ export function FriendsInvitesTab({
   handleCopyLastToken,
   invitesStatsLoading,
   onViewCloudPeerProfile,
+  ourConfig,
 }: FriendsInvitesTabProps) {
   const [view, setView] = useState<"requests" | "cloud">("requests");
 
@@ -337,6 +340,16 @@ export function FriendsInvitesTab({
                             </div>
                           </div>
                           <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                            {m.wsUrl && ourConfig?.cloudHostWsBaseUrls?.[m.hostUserId] !== m.wsUrl && (
+                              <Button
+                                size="sm"
+                                variant="flat"
+                                color="warning"
+                                startContent={<RefreshCcw className="h-3.5 w-3.5" />}
+                                onPress={() => void handleUseHostCloud(m.hostUserId)}>
+                                Sincronizar conexión
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="flat"

@@ -22,6 +22,7 @@ import {
   type CloudMembership,
   listCloudMemberships,
   setActiveCloudHostUserId,
+  setCloudHostWsUrl,
 } from "@services/tauri";
 import { extractShareTokenFromUrl, resolveShareToken } from "@services/share.service";
 import { toastError, toastInfo, toastSyncResult } from "@utils/toast";
@@ -459,6 +460,12 @@ export function useFriendsPage() {
   const handleUseHostCloud = async (hostUserId: string | null) => {
     dispatch({ type: "SET_INVITE_BUSY", payload: true });
     try {
+      if (hostUserId) {
+        const membership = memberMemberships.find((m) => m.hostUserId === hostUserId);
+        if (membership?.wsUrl && ourConfig?.cloudHostWsBaseUrls?.[hostUserId] !== membership.wsUrl) {
+          await setCloudHostWsUrl(hostUserId, membership.wsUrl);
+        }
+      }
       await setActiveCloudHostUserId(hostUserId);
       if (hostUserId?.trim()) {
         toastInfo("Nube activa actualizada", `Ahora usarás la nube de ${hostUserId}.`);
