@@ -7,6 +7,7 @@ export interface StaggeredMenuItem {
   ariaLabel: string;
   link: string;
   id?: string;
+  icon?: React.ReactNode;
 }
 export interface StaggeredMenuSocialItem {
   label: string;
@@ -92,12 +93,12 @@ const STAGGERED_MENU_STYLES = `
 .sm-scope .sm-socials-link { font-size: 1.2rem; font-weight: 500; color: var(--sm-social-text); text-decoration: none; position: relative; padding: 2px 0; display: inline-block; transition: color 0.3s ease, opacity 0.3s ease; }
 .sm-scope .sm-socials-link:hover { color: var(--sm-accent, #ff0000); }
 .sm-scope .sm-panel-title { margin: 0; font-size: 1rem; font-weight: 600; color: var(--sm-panel-text); text-transform: uppercase; }
-.sm-scope .sm-panel-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
-.sm-scope .sm-panel-item { position: relative; color: var(--sm-panel-text); font-weight: 600; font-size: 1.5rem; cursor: pointer; line-height: 1; letter-spacing: -0.025em; text-transform: uppercase; transition: background 0.25s, color 0.25s; display: inline-block; text-decoration: none; padding-right: 2rem; }
-.sm-scope .sm-panel-itemLabel { display: inline-block; will-change: transform; transform-origin: 50% 100%; }
-.sm-scope .sm-panel-item:hover { color: var(--sm-accent, #ff0000); }
+.sm-scope .sm-panel-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.sm-scope .sm-panel-item { position: relative; color: var(--sm-panel-text); font-weight: 500; font-size: 1rem; cursor: pointer; line-height: 1.2; letter-spacing: -0.01em; transition: background 0.2s, color 0.2s; display: flex !important; align-items: center; text-decoration: none; padding: 0.6rem 0.75rem; border-radius: 0.5rem; width: 100%; }
+.sm-scope .sm-panel-itemLabel { display: flex !important; align-items: center; gap: 0.75rem; will-change: transform; transform-origin: 50% 100%; width: 100%; }
+.sm-scope .sm-panel-item:hover { background: color-mix(in oklab, var(--sm-panel-text) 8%, transparent); }
 .sm-scope .sm-panel-list[data-numbering] { counter-reset: smItem; }
-.sm-scope .sm-panel-list[data-numbering] .sm-panel-item::after { counter-increment: smItem; content: counter(smItem, decimal-leading-zero); position: absolute; top: 0; right: 0; font-size: 0.875rem; font-weight: 400; color: var(--sm-accent, #ff0000); letter-spacing: 0; pointer-events: none; user-select: none; opacity: var(--sm-num-opacity, 0); }
+.sm-scope .sm-panel-list[data-numbering] .sm-panel-item::after { counter-increment: smItem; content: counter(smItem, decimal-leading-zero); position: absolute; top: 50%; right: 0.75rem; transform: translateY(-50%); font-size: 0.75rem; font-weight: 400; color: var(--sm-accent, #ff0000); letter-spacing: 0; pointer-events: none; user-select: none; opacity: var(--sm-num-opacity, 0); }
 @media (max-width: 1024px) { .sm-scope .staggered-menu-panel { width: 100%; left: 0; right: 0; } .sm-scope .staggered-menu-wrapper[data-open] .sm-logo-img { filter: invert(100%); } }
 @media (max-width: 640px) { .sm-scope .staggered-menu-panel { width: 100%; left: 0; right: 0; } .sm-scope .staggered-menu-wrapper[data-open] .sm-logo-img { filter: invert(100%); } }
 `;
@@ -609,25 +610,27 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
                     {onItemClick ? (
                       <button
                         type="button"
-                        className="sm-panel-item relative font-semibold text-2xl cursor-pointer leading-none tracking-tight uppercase transition-[background,color] duration-150 ease-linear inline-block no-underline pr-8 border-0 bg-transparent w-full text-left"
+                        className="sm-panel-item border-0 bg-transparent"
                         aria-label={it.ariaLabel}
                         data-index={idx + 1}
                         onClick={() => {
                           onItemClick(it);
                           closeMenu();
                         }}>
-                        <span className="sm-panel-itemLabel inline-block origin-[50%_100%] will-change-transform">
-                          {it.label}
+                        <span className="sm-panel-itemLabel">
+                          {it.icon && (
+                            <span className="sm-item-icon opacity-90 inline-flex items-center shrink-0">{it.icon}</span>
+                          )}
+                          <span className="truncate">{it.label}</span>
                         </span>
                       </button>
                     ) : (
-                      <a
-                        className="sm-panel-item relative font-semibold text-2xl cursor-pointer leading-none tracking-tight uppercase transition-[background,color] duration-150 ease-linear inline-block no-underline pr-8"
-                        href={it.link}
-                        aria-label={it.ariaLabel}
-                        data-index={idx + 1}>
-                        <span className="sm-panel-itemLabel inline-block origin-[50%_100%] will-change-transform">
-                          {it.label}
+                      <a className="sm-panel-item" href={it.link} aria-label={it.ariaLabel} data-index={idx + 1}>
+                        <span className="sm-panel-itemLabel">
+                          {it.icon && (
+                            <span className="sm-item-icon opacity-90 inline-flex items-center shrink-0">{it.icon}</span>
+                          )}
+                          <span className="truncate">{it.label}</span>
                         </span>
                       </a>
                     )}

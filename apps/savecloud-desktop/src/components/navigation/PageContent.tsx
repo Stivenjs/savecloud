@@ -7,6 +7,7 @@ const GamesPage = lazy(() => import("@features/games").then((m) => ({ default: m
 const FriendsPage = lazy(() => import("@features/friends/FriendsPage").then((m) => ({ default: m.FriendsPage })));
 const HistoryPage = lazy(() => import("@features/history/HistoryPage").then((m) => ({ default: m.HistoryPage })));
 const SettingsPage = lazy(() => import("@features/settings").then((m) => ({ default: m.SettingsPage })));
+const AboutPage = lazy(() => import("@features/about/AboutPage").then((m) => ({ default: m.AboutPage })));
 const GameDetailPage = lazy(() => preloadGameDetailModule().then((m) => ({ default: m.GameDetailPage })));
 const PlaceholderPage = lazy(() =>
   import("@components/navigation/PlaceholderPage").then((m) => ({ default: m.PlaceholderPage }))
@@ -83,6 +84,14 @@ export function AppRoutes() {
           element={
             <AnimatedPage>
               <SettingsPage />
+            </AnimatedPage>
+          }
+        />
+        <Route
+          path="/about"
+          element={
+            <AnimatedPage>
+              <AboutPage />
             </AnimatedPage>
           }
         />
