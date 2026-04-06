@@ -311,6 +311,7 @@ pub fn get_combined_config() -> Config {
         api_key: settings.api_key,
         user_id: settings.user_id,
         active_cloud_host_user_id: settings.active_cloud_host_user_id,
+        cloud_host_ws_base_urls: settings.cloud_host_ws_base_urls,
         custom_scan_paths: settings.custom_scan_paths,
         keep_backups_per_game: settings.keep_backups_per_game,
         full_backup_streaming: settings.full_backup_streaming,
@@ -372,6 +373,7 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
         .active_cloud_host_user_id
         .clone()
         .or(current_settings.active_cloud_host_user_id);
+    current_settings.cloud_host_ws_base_urls = cfg.cloud_host_ws_base_urls.clone();
     current_settings.custom_scan_paths = cfg.custom_scan_paths.clone();
     current_settings.keep_backups_per_game = cfg.keep_backups_per_game;
     current_settings.full_backup_streaming = cfg.full_backup_streaming;

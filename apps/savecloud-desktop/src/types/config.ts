@@ -31,6 +31,7 @@ export interface Config {
   readonly userId?: string;
   /** ID del usuario que está usando la nube como host. */
   readonly activeCloudHostUserId?: string;
+  readonly cloudHostWsBaseUrls?: Record<string, string>;
   readonly games: readonly ConfiguredGame[];
   readonly customScanPaths?: readonly string[];
   /** Tiempo de juego total acumulado (segundos). */

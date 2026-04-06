@@ -21,6 +21,7 @@ fn normalize_base_url(input: &str) -> String {
 pub struct AcceptInviteProvisionResponseDto {
     pub access_token: String,
     pub api_url: String,
+    pub ws_url: Option<String>,
     pub host_user_id: String,
 }
 
@@ -149,6 +150,15 @@ pub async fn create_cloud_invite(
             serde_json::Value::String(invitee),
         );
     }
+    
+    let settings = config::load_settings();
+    if let Some(ws_url) = settings.ws_base_url.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        payload.insert(
+            "wsUrl".to_string(),
+            serde_json::Value::String(ws_url.to_string()),
+        );
+    }
+
     let response = API_CLIENT
         .post(&endpoint)
         .header("x-api-key", api_key)
@@ -304,6 +314,15 @@ pub async fn accept_cloud_invite_by_url(invite_url: String) -> Result<(), String
         parsed.host_user_id.clone(),
         resolved_host_api_url.trim_end_matches('/').to_string(),
     );
+    if let Some(ws_url) = parsed.ws_url {
+        let ws = ws_url.trim();
+        if !ws.is_empty() {
+             next.cloud_host_ws_base_urls.insert(
+                 parsed.host_user_id.clone(),
+                 ws.to_string(),
+             );
+        }
+    }
     next.active_cloud_host_user_id = Some(parsed.host_user_id);
     config::set_secure_api_key_for_cloud_host(
         next.active_cloud_host_user_id

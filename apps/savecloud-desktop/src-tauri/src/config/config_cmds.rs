@@ -75,6 +75,7 @@ pub fn get_config() -> ConfigDto {
         api_key: combined.api_key.map(|_| config::MASKED_API_KEY.to_string()),
         user_id: combined.user_id,
         active_cloud_host_user_id: combined.active_cloud_host_user_id,
+        cloud_host_ws_base_urls: combined.cloud_host_ws_base_urls,
         custom_scan_paths: combined.custom_scan_paths,
         keep_backups_per_game: combined.keep_backups_per_game,
         full_backup_streaming: combined.full_backup_streaming,
@@ -207,6 +208,18 @@ pub fn set_active_cloud_host_user_id(host_user_id: Option<String>) -> Result<(),
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
     config::save_settings(&settings)
+}
+
+#[tauri::command]
+pub fn set_cloud_host_ws_url(host_user_id: String, ws_url: String) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    let host = host_user_id.trim();
+    let url = ws_url.trim();
+    if !host.is_empty() && !url.is_empty() {
+        settings.cloud_host_ws_base_urls.insert(host.to_string(), url.to_string());
+        config::save_settings(&settings)?;
+    }
+    Ok(())
 }
 
 /// Modifica la política local de retención máxima de respaldos por juego.

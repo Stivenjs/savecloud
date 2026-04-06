@@ -25,6 +25,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::config::config_cmds::set_share_visual_profile_with_hosts,
         crate::config::config_cmds::set_share_visual_profile_with_members,
         crate::config::config_cmds::set_active_cloud_host_user_id,
+        crate::config::config_cmds::set_cloud_host_ws_url,
         crate::steam::steam_search::get_steam_app_name,
         crate::steam::steam_search::get_steam_appdetails_media,
         crate::steam::steam_search::get_steam_appdetails_media_batch,

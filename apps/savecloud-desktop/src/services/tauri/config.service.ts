@@ -460,6 +460,13 @@ export async function createConfigFile(
   });
 }
 
+/**
+ * Establece la URL del servidor WebSocket para un host específico.
+ */
+export async function setCloudHostWsUrl(hostUserId: string, wsUrl: string): Promise<void> {
+  return invoke("set_cloud_host_ws_url", { hostUserId, wsUrl });
+}
+
 /** Selecciona la nube activa para sync: `null` = nube propia, string = nube del host. */
 export async function setActiveCloudHostUserId(hostUserId: string | null): Promise<void> {
   await invoke("set_active_cloud_host_user_id", {
