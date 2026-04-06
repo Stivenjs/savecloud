@@ -20,7 +20,7 @@ export function MediaThumbnailGallery({ items, activeIndex, onSelect }: MediaThu
   return (
     <div className="relative">
       <div
-        className="thumbnail-scroll flex gap-3 pb-3 pt-1 px-1 snap-x snap-mandatory"
+        className="flex gap-3 pb-3 pt-1 px-1 snap-x snap-mandatory overflow-x-auto"
         role="tablist"
         aria-label="Navegación de media">
         {items.map((item, index) => (
