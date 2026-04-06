@@ -553,6 +553,9 @@ pub fn spawn_progress_monitor(
                     let mut eng = engine.lock().await;
                     eng.unregister_active(&info_hash);
                 }
+                // Liberar el torrent de la sesión para que no mantenga los archivos abiertos.
+                // Esto permite que el usuario pueda instalar el juego inmediatamente.
+                let _ = session.delete(id, false).await;
                 break;
             }
         }
