@@ -138,6 +138,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::sources::commands::list_source_items_page,
         crate::sources::commands::remove_source,
         crate::sources::commands::import_source_from_file,
+        crate::sources::commands::import_sources_from_files_batch,
         crate::sources::commands::import_source_from_url,
         crate::sources::commands::list_source_download_jobs,
         crate::sources::commands::start_source_download,

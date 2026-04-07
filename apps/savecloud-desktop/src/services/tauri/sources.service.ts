@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type DownloadProtocol = "http" | "torrentMagnet" | "torrentFile" | "unknown";
 export type SourceJobStatus = "queued" | "running" | "paused" | "cancelled" | "completed" | "failed";
-export type ImportMode = "merge" | "replace";
+export type ImportMode = "merge" | "replace" | "updateorcreate";
 
 export interface SourceUri {
   uri: string;
@@ -85,6 +85,22 @@ export interface SourceMatchResult {
   candidates: SourceMatchCandidate[];
 }
 
+export interface BatchImportItemResult {
+  path: string;
+  success: boolean;
+  catalogId?: string | null;
+  catalogName?: string | null;
+  error?: string | null;
+  wasUpdated: boolean;
+}
+
+export interface BatchImportResult {
+  total: number;
+  succeeded: number;
+  failed: number;
+  items: BatchImportItemResult[];
+}
+
 export function listSources(): Promise<SourceCatalog[]> {
   return invoke<SourceCatalog[]>("list_sources");
 }
@@ -111,6 +127,10 @@ export function importSourceFromFile(path: string, mode: ImportMode): Promise<So
 
 export function importSourceFromUrl(url: string, mode: ImportMode): Promise<SourceCatalog> {
   return invoke<SourceCatalog>("import_source_from_url", { url, mode });
+}
+
+export function importSourcesFromFilesBatch(paths: string[], mode: ImportMode): Promise<BatchImportResult> {
+  return invoke<BatchImportResult>("import_sources_from_files_batch", { paths, mode });
 }
 
 export function listSourceDownloadJobs(): Promise<SourceDownloadJob[]> {

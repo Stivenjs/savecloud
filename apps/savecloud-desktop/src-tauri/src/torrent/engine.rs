@@ -521,7 +521,8 @@ pub fn spawn_progress_monitor(
             // El flag `finished` tiene prioridad sobre `stats.state` porque
             // librqbit puede reportar un estado intermedio en el tick exacto en
             // que el último piece es verificado y escrito.
-            let state = if stats.finished {
+            let is_finished = stats.finished;
+            let state = if is_finished {
                 TorrentDownloadState::Completed
             } else {
                 match stats.state {
@@ -544,11 +545,15 @@ pub fn spawn_progress_monitor(
                 peers_connected,
             };
 
-            let _ = app.emit(TORRENT_PROGRESS_EVENT, &payload);
-
-            if stats.finished {
+            // Si el torrent está terminado, no emitir evento de progreso para evitar
+            // condiciones de carrera en el frontend. Solo emitir el evento de done.
+            if is_finished {
                 let _ = app.emit(TORRENT_DONE_EVENT, &payload);
                 crate::notifications::writer::try_record_torrent_done(&app, &name, &info_hash);
+
+                // Notificar al sistema de sources que este torrent ha completado
+                crate::sources::torrent_complete_notify(&app, &info_hash, total_bytes);
+
                 if let Some(engine) = &engine_state {
                     let mut eng = engine.lock().await;
                     eng.unregister_active(&info_hash);
@@ -558,6 +563,8 @@ pub fn spawn_progress_monitor(
                 let _ = session.delete(id, false).await;
                 break;
             }
+
+            let _ = app.emit(TORRENT_PROGRESS_EVENT, &payload);
         }
     });
 }

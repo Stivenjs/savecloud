@@ -102,8 +102,13 @@ pub struct SourceDownloadJob {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ImportMode {
+    /// Agrega nuevo o reemplaza si el ID coincide exactamente.
     Merge,
+    /// Reemplaza todo el catálogo existente con el nuevo.
     Replace,
+    /// Busca por nombre de fuente: actualiza si existe, crea si no.
+    /// Útil para archivos locales que cambian de contenido (generan ID diferente).
+    UpdateOrCreate,
 }
 
 /// Resumen liviano de catálogo para listados.
@@ -147,4 +152,26 @@ pub struct SourceMatchResult {
     pub game_name: String,
     pub best: Option<SourceMatchCandidate>,
     pub candidates: Vec<SourceMatchCandidate>,
+}
+
+/// Resultado de importación batch para un archivo individual.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchImportItemResult {
+    pub path: String,
+    pub success: bool,
+    pub catalog_id: Option<String>,
+    pub catalog_name: Option<String>,
+    pub error: Option<String>,
+    pub was_updated: bool,
+}
+
+/// Resultado completo de importación batch.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchImportResult {
+    pub total: usize,
+    pub succeeded: usize,
+    pub failed: usize,
+    pub items: Vec<BatchImportItemResult>,
 }

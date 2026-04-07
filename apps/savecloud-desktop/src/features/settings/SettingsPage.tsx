@@ -10,6 +10,7 @@ import { NotificationsCard } from "@features/settings/NotificationsCard";
 import { ReleaseNotesCard } from "@features/settings/ReleaseNotesCard";
 import { RestoreConfigModal } from "@features/settings/RestoreConfigModal";
 import { ResetSteamCatalogModal } from "@features/settings/ResetSteamCatalogModal";
+import { ResetCloudSeedModal } from "@features/settings/ResetCloudSeedModal";
 import { PullFriendConfigModal } from "@/features/settings/PullFriendConfigModal";
 import { UpdatesCard } from "@features/settings/UpdatesCard";
 import { useSettingsPage } from "@features/settings/useSettingsPage";
@@ -24,6 +25,7 @@ const ReleaseNotesDialogLazy = lazy(() =>
 
 export function SettingsPage() {
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+  const [resetCloudSeedModalOpen, setResetCloudSeedModalOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<string>("account");
   const {
     autostart,
@@ -91,8 +93,11 @@ export function SettingsPage() {
     setDefaultSourceDownloadDir,
     handleImportSourceByUrl,
     handleImportSourceByFile,
+    handleImportSourcesBatch,
     handleSelectDefaultSourceDownloadDir,
     handleSaveDefaultSourceDownloadDir,
+    deletingSourceIds,
+    handleDeleteSource,
   } = useSettingsPage();
 
   const popLayer = useNavigationStore((s) => s.popLayer);
@@ -101,6 +106,9 @@ export function SettingsPage() {
     switch (true) {
       case releaseNotesOpen:
         setReleaseNotesOpen(false);
+        return true;
+      case resetCloudSeedModalOpen:
+        setResetCloudSeedModalOpen(false);
         return true;
       case restoreConfirmOpen:
         setRestoreConfirmOpen(false);
@@ -174,6 +182,7 @@ export function SettingsPage() {
             onExportSteamSeedManifest={handleExportSteamSeedManifest}
             onResetCloudSeedState={handleResetCloudSeed}
             onImportCloudSeedFromCloud={handleImportCloudSeedFromCloud}
+            onOpenResetCloudSeedModal={() => setResetCloudSeedModalOpen(true)}
           />
         </Tab>
 
@@ -192,12 +201,15 @@ export function SettingsPage() {
               defaultDownloadDir={defaultSourceDownloadDir}
               sourcesBusy={sourcesBusy}
               sources={sourcesSummary}
+              deletingSourceIds={deletingSourceIds}
               onSourceUrlChange={setSourceUrl}
               onDefaultDownloadDirChange={setDefaultSourceDownloadDir}
               onImportUrl={() => handleImportSourceByUrl("merge")}
               onImportFile={() => handleImportSourceByFile("merge")}
+              onImportBatch={() => handleImportSourcesBatch("updateorcreate")}
               onPickFolder={handleSelectDefaultSourceDownloadDir}
               onSaveDefaultDir={handleSaveDefaultSourceDownloadDir}
+              onDeleteSource={handleDeleteSource}
             />
             <div className="grid gap-4 sm:grid-cols-2">
               <UpdatesCard checkingUpdate={checkingUpdate} onCheckUpdates={handleCheckUpdates} />
@@ -258,6 +270,15 @@ export function SettingsPage() {
         busy={steamCatalogBusy}
         onCancel={() => setResetSteamCatalogConfirmOpen(false)}
         onConfirm={confirmResetSteamCatalogSync}
+      />
+      <ResetCloudSeedModal
+        isOpen={resetCloudSeedModalOpen}
+        busy={steamSeedBusy}
+        onCancel={() => setResetCloudSeedModalOpen(false)}
+        onConfirm={async () => {
+          await handleResetCloudSeed();
+          setResetCloudSeedModalOpen(false);
+        }}
       />
       <PullFriendConfigModal
         isOpen={pullFriendConfigModalOpen}
