@@ -188,7 +188,7 @@ export function DownloadsPanel() {
 
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 z-50 w-[360px] max-w-[90vw]">
-      <div className="pointer-events-auto rounded-xl border border-default-200 bg-content1/95 p-3 shadow-lg backdrop-blur-sm transition-all duration-200 ease-out">
+      <div className="pointer-events-auto rounded-xl border border-default-200 bg-content p-3 shadow-lg backdrop-blur-sm transition-all duration-200 ease-out">
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Download size={16} className="text-primary" />
