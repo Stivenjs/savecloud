@@ -138,24 +138,10 @@ function useOverlayNotifications() {
 export function OverlayApp() {
   const { notifications, addNotification, cleanup } = useOverlayNotifications();
 
-  // Emitir señal de que el overlay está listo
-  useEffect(() => {
-    const signalReady = async () => {
-      try {
-        await emit("overlay-ready");
-      } catch (error) {
-        console.error("[Overlay] Error emitiendo señal de ready:", error);
-      }
-    };
-
-    signalReady();
-  }, []);
-
-  // Escuchar eventos de notificación
   useEffect(() => {
     let unlisten: (() => void) | undefined;
 
-    const setupListener = async () => {
+    const setupListenerAndSignalReady = async () => {
       try {
         unlisten = await listen<NotificationPayload>("show-overlay-notification", (event) => {
           const { title, body } = event.payload;
@@ -166,12 +152,14 @@ export function OverlayApp() {
 
           addNotification({ title, body });
         });
+
+        await emit("overlay-ready");
       } catch (error) {
-        console.error("[Overlay] Error configurando listener de notificaciones:", error);
+        console.error("[Overlay] Error en setup inicial:", error);
       }
     };
 
-    setupListener();
+    setupListenerAndSignalReady();
 
     return () => {
       unlisten?.();

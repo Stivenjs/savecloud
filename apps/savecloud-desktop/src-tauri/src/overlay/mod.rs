@@ -1,5 +1,16 @@
 use tauri::{AppHandle, Emitter, Listener, Manager, WebviewUrl, WebviewWindowBuilder};
 
+#[cfg(target_os = "windows")]
+use {
+    raw_window_handle::{HasWindowHandle, RawWindowHandle},
+    windows::Win32::{
+        Foundation::HWND,
+        UI::WindowsAndMessaging::{
+            SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+        },
+    },
+};
+
 pub fn setup_overlay_window(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     if app.get_webview_window("overlay").is_some() {
         return Ok(());
@@ -22,8 +33,25 @@ pub fn setup_overlay_window(app: &AppHandle) -> Result<(), Box<dyn std::error::E
     .build()?;
 
     let _ = window.set_ignore_cursor_events(true);
-
     let _ = window.maximize();
+
+    #[cfg(target_os = "windows")]
+    if let Ok(handle) = window.window_handle() {
+        if let RawWindowHandle::Win32(h) = handle.as_raw() {
+            let hwnd = HWND(h.hwnd.get() as *mut std::ffi::c_void);
+            unsafe {
+                let _ = SetWindowPos(
+                    hwnd,
+                    HWND_TOPMOST,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
+            }
+        }
+    }
 
     let win_clone = window.clone();
     app.listen_any("overlay-ready", move |_| {
@@ -33,16 +61,12 @@ pub fn setup_overlay_window(app: &AppHandle) -> Result<(), Box<dyn std::error::E
     Ok(())
 }
 
-/// Muestra el overlay y emite la notificación al frontend.
-/// Este comando se invoca desde el frontend cuando llega un mensaje WebSocket
-/// para asegurar que la ventana esté visible y al frente.
 #[tauri::command]
 pub async fn show_overlay_notification(
     app: AppHandle,
     title: String,
     body: String,
 ) -> Result<(), String> {
-    // Asegurar que la ventana overlay existe
     if app.get_webview_window("overlay").is_none() {
         setup_overlay_window(&app).map_err(|e| e.to_string())?;
     }
@@ -51,15 +75,28 @@ pub async fn show_overlay_notification(
         return Err("Overlay window not found".to_string());
     };
 
-    // Asegurar que la ventana esté visible
     if let Ok(false) = window.is_visible() {
         let _ = window.show();
     }
 
-    // Traer al frente - usar request_user_attention y set_focus para forzar
-    let _ = window.set_focus();
+    #[cfg(target_os = "windows")]
+    if let Ok(handle) = window.window_handle() {
+        if let RawWindowHandle::Win32(h) = handle.as_raw() {
+            let hwnd = HWND(h.hwnd.get() as *mut std::ffi::c_void);
+            unsafe {
+                let _ = SetWindowPos(
+                    hwnd,
+                    HWND_TOPMOST,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
+            }
+        }
+    }
 
-    // Emitir la notificación al frontend del overlay
     app.emit_to(
         "overlay",
         "show-overlay-notification",
