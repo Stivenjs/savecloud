@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useConfig } from "@hooks/useConfig";
-import { listen, emitTo } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { getFriendConfig, setCloudHostWsUrl } from "@services/tauri/config.service";
@@ -81,7 +81,7 @@ export function useCloudWebSockets() {
           if (msg.type === "FRIEND_PLAYING") {
             const { friendUserId, gameName } = msg.data;
 
-            emitTo("overlay", "show-overlay-notification", {
+            invoke("show_overlay_notification", {
               title: "Amigo jugando",
               body: `${friendUserId} está jugando ${gameName}`,
             }).catch(() => {});
@@ -144,7 +144,7 @@ export function useCloudWebSockets() {
 
       // El mensaje decorativo "Tú estás jugando" solo se muestra en desarrollo para pruebas.
       if (import.meta.env.DEV) {
-        emitTo("overlay", "show-overlay-notification", {
+        invoke("show_overlay_notification", {
           title: "Tú estás jugando",
           body: `Iniciaste ${gameName}`,
         }).catch(() => {});

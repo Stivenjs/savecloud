@@ -146,5 +146,6 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::sources::commands::resume_source_download,
         crate::sources::commands::sources_find_match_for_game,
         crate::sources::commands::sources_find_matches_batch,
+        crate::overlay::show_overlay_notification,
     ])
 }
