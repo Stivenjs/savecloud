@@ -63,6 +63,7 @@ impl SteamApiCache {
         if !is_valid_steam_app_id(&app_id) {
             return;
         }
-        self.details.insert(app_id, normalize_steam_app_details(value));
+        self.details
+            .insert(app_id, normalize_steam_app_details(value));
     }
 }
