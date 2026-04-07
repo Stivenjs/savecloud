@@ -6,6 +6,7 @@ export { ExperimentalFeaturesCard } from "./ExperimentalFeaturesCard";
 export { LocalBackupInfoCard } from "./LocalBackupInfoCard";
 export { NotificationsCard } from "./NotificationsCard";
 export { ReleaseNotesCard } from "./ReleaseNotesCard";
+export { ResetCloudSeedModal } from "./ResetCloudSeedModal";
 export { RestoreConfigModal } from "./RestoreConfigModal";
 export { PullFriendConfigModal } from "./PullFriendConfigModal";
 export { UpdatesCard } from "./UpdatesCard";

@@ -32,6 +32,10 @@ interface ConfigSectionProps {
   onExportSteamSeedManifest?: () => void | Promise<void>;
   onResetCloudSeedState?: () => void | Promise<void>;
   onImportCloudSeedFromCloud?: () => void | Promise<void>;
+  /** Controla la visibilidad del modal de reinicio de cloud seed */
+  isResetCloudSeedModalOpen?: boolean;
+  /** Abre el modal de reinicio de cloud seed */
+  onOpenResetCloudSeedModal?: () => void;
 }
 
 export function ConfigSection({
@@ -58,8 +62,8 @@ export function ConfigSection({
   onSyncSteamCatalog,
   onResetSteamCatalogSync,
   onExportSteamSeedManifest,
-  onResetCloudSeedState,
   onImportCloudSeedFromCloud,
+  onOpenResetCloudSeedModal,
 }: ConfigSectionProps) {
   const showS3TransferBlock = isLoadingData || (s3TransferEndpointType != null && s3TransferEndpointType !== "unknown");
 
@@ -265,7 +269,7 @@ export function ConfigSection({
               variant="light"
               color="warning"
               isDisabled={steamSeedBusy}
-              onPress={() => onResetCloudSeedState?.()}>
+              onPress={() => onOpenResetCloudSeedModal?.()}>
               Reiniciar descarga en la nube
             </Button>
           </div>

@@ -9,8 +9,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::network::API_CLIENT;
 
 use super::domain::{
-    DownloadProtocol, ImportMode, SourceCatalogSummary, SourceDownloadJob, SourceItemsPage,
-    SourceJobStatus, SourceMatchCandidate, SourceMatchResult,
+    BatchImportItemResult, BatchImportResult, DownloadProtocol, ImportMode, SourceCatalogSummary,
+    SourceDownloadJob, SourceItemsPage, SourceJobStatus, SourceMatchCandidate, SourceMatchResult,
 };
 use super::parser::parse_catalog;
 use super::queue::{new_job_id, now_iso, spawn_job, SourcesState};
@@ -338,6 +338,119 @@ pub async fn import_source_from_file(
     // Nuevo catálogo disponible: fuerza reconstrucción del índice
     invalidate_index();
     Ok(result)
+}
+
+/// Importa múltiples fuentes desde archivos JSON en paralelo.
+///
+/// Procesa todos los archivos en paralelo usando tokio, acumula resultados,
+/// e invalida el índice una sola vez al final (no por cada archivo).
+/// Los errores individuales no detienen el procesamiento de otros archivos.
+#[tauri::command]
+pub async fn import_sources_from_files_batch(
+    paths: Vec<String>,
+    mode: ImportMode,
+) -> Result<BatchImportResult, String> {
+    let total = paths.len();
+
+    let mut parse_tasks = Vec::with_capacity(total);
+    for path in paths {
+        let task = tokio::spawn(async move {
+            let raw = match tokio::fs::read_to_string(&path).await {
+                Ok(content) => content,
+                Err(e) => return Err((path, format!("No se pudo leer archivo: {e}"))),
+            };
+            match parse_catalog(&raw, Some(format!("file://{path}"))) {
+                Ok(catalog) => Ok((path, catalog)),
+                Err(e) => Err((path, format!("JSON inválido: {e}"))),
+            }
+        });
+        parse_tasks.push(task);
+    }
+
+    // Recolectar resultados del parseo
+    let mut parsed = Vec::new();
+    let mut items = Vec::with_capacity(total);
+    let mut failed = 0usize;
+
+    for task in parse_tasks {
+        match task.await {
+            Ok(Ok((path, catalog))) => parsed.push((path, catalog)),
+            Ok(Err((path, error))) => {
+                failed += 1;
+                items.push(BatchImportItemResult {
+                    path,
+                    success: false,
+                    catalog_id: None,
+                    catalog_name: None,
+                    error: Some(error),
+                    was_updated: false,
+                });
+            }
+            Err(e) => {
+                failed += 1;
+                items.push(BatchImportItemResult {
+                    path: "<unknown>".to_string(),
+                    success: false,
+                    catalog_id: None,
+                    catalog_name: None,
+                    error: Some(format!("Task panicked: {e}")),
+                    was_updated: false,
+                });
+            }
+        }
+    }
+
+    let mut succeeded = 0usize;
+
+    for (path, catalog) in parsed {
+        let catalog_id = catalog.id.clone();
+        let catalog_name = catalog.name.clone();
+
+        let was_updated = match store::load_sources() {
+            Ok(sources) => sources.iter().any(|s| match mode {
+                ImportMode::Merge => s.id == catalog_id,
+                ImportMode::UpdateOrCreate => s.name == catalog_name,
+                ImportMode::Replace => false,
+            }),
+            Err(_) => false,
+        };
+
+        match store::upsert_catalog(catalog, mode.clone()) {
+            Ok(_) => {
+                succeeded += 1;
+                items.push(BatchImportItemResult {
+                    path,
+                    success: true,
+                    catalog_id: Some(catalog_id),
+                    catalog_name: Some(catalog_name),
+                    error: None,
+                    was_updated,
+                });
+            }
+            Err(e) => {
+                failed += 1;
+                items.push(BatchImportItemResult {
+                    path,
+                    success: false,
+                    catalog_id: Some(catalog_id),
+                    catalog_name: Some(catalog_name),
+                    error: Some(format!("Error al guardar: {e}")),
+                    was_updated: false,
+                });
+            }
+        }
+    }
+
+    if succeeded > 0 {
+        invalidate_index();
+    }
+
+    Ok(BatchImportResult {
+        total,
+        succeeded,
+        failed,
+        items,
+    })
 }
 
 /// Importa una fuente desde una URL JSON remota e invalida el índice.

@@ -39,7 +39,7 @@ pub fn save_sources(sources: &[SourceCatalog]) -> Result<(), String> {
     std::fs::write(path, payload).map_err(|e| e.to_string())
 }
 
-/// Aplica merge/replace sobre fuentes existentes.
+/// Aplica merge/replace/update sobre fuentes existentes.
 pub fn upsert_catalog(catalog: SourceCatalog, mode: ImportMode) -> Result<SourceCatalog, String> {
     let mut sources = load_sources()?;
     match mode {
@@ -49,6 +49,17 @@ pub fn upsert_catalog(catalog: SourceCatalog, mode: ImportMode) -> Result<Source
         ImportMode::Merge => {
             if let Some(existing) = sources.iter_mut().find(|s| s.id == catalog.id) {
                 *existing = catalog.clone();
+            } else {
+                sources.push(catalog.clone());
+            }
+        }
+        ImportMode::UpdateOrCreate => {
+            // Busca por nombre: si existe fuente con el mismo nombre, la reemplaza
+            // (mantiene el ID original para no romper referencias)
+            if let Some(existing) = sources.iter_mut().find(|s| s.name == catalog.name) {
+                let old_id = existing.id.clone();
+                *existing = catalog.clone();
+                existing.id = old_id; // Conserva el ID estable
             } else {
                 sources.push(catalog.clone());
             }
@@ -81,4 +92,3 @@ pub fn save_jobs(jobs: &[SourceDownloadJob]) -> Result<(), String> {
     let payload = serde_json::to_vec_pretty(jobs).map_err(|e| e.to_string())?;
     std::fs::write(path, payload).map_err(|e| e.to_string())
 }
-

@@ -25,7 +25,13 @@ import {
   getDefaultSourceDownloadDir,
   setDefaultSourceDownloadDir,
 } from "@services/tauri";
-import { importSourceFromFile, importSourceFromUrl, listSourcesSummary } from "@services/tauri/sources.service";
+import {
+  importSourceFromFile,
+  importSourceFromUrl,
+  importSourcesFromFilesBatch,
+  listSourcesSummary,
+  removeSource,
+} from "@services/tauri/sources.service";
 import { MASKED_CONFIG_SECRET } from "@/constants/configMask";
 import { useConfig } from "@hooks/useConfig";
 import { STEAM_SEED_FRESHNESS_QUERY_KEY } from "@features/steam-catalog/hooks/useSteamSeedFreshness";
@@ -212,6 +218,7 @@ export function useSettingsPage() {
     null
   );
   const [steamSeedImportProgress, setSteamSeedImportProgress] = useState<SteamSeedImportProgressPayload | null>(null);
+  const [deletingSourceIds, setDeletingSourceIds] = useState<Set<string>>(new Set());
   const { config, loading: loadingUseConfig, refetch: refetchConfig } = useConfig();
   const queryClient = useQueryClient();
 
@@ -625,7 +632,7 @@ export function useSettingsPage() {
     }
   };
 
-  const handleImportSourceByFile = async (mode: "merge" | "replace") => {
+  const handleImportSourceByFile = async (mode: "merge" | "replace" | "updateorcreate") => {
     dispatch({ type: "SET_SOURCES_BUSY", payload: true });
     try {
       const path = await open({
@@ -637,6 +644,40 @@ export function useSettingsPage() {
       if (!path || typeof path !== "string") return;
       await importSourceFromFile(path, mode);
       toastSuccess("Fuente importada", "Se importó correctamente desde archivo.");
+      queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
+    } catch (e) {
+      toastError("Error al importar", e instanceof Error ? e.message : String(e));
+    } finally {
+      dispatch({ type: "SET_SOURCES_BUSY", payload: false });
+    }
+  };
+
+  const handleImportSourcesBatch = async (mode: "merge" | "replace" | "updateorcreate") => {
+    dispatch({ type: "SET_SOURCES_BUSY", payload: true });
+    try {
+      const paths = await open({
+        title: "Seleccionar múltiples JSONs de fuentes",
+        directory: false,
+        multiple: true,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!paths || !Array.isArray(paths) || paths.length === 0) return;
+
+      const result = await importSourcesFromFilesBatch(paths, mode);
+
+      if (result.failed === 0) {
+        toastSuccess(`${result.succeeded} fuentes importadas`, `Se importaron todos los archivos correctamente.`);
+      } else if (result.succeeded === 0) {
+        toastError("Error al importar", `Ningún archivo se pudo importar. ${result.items[0]?.error ?? ""}`);
+      } else {
+        const updated = result.items.filter((i) => i.wasUpdated).length;
+        const newOnes = result.succeeded - updated;
+        toastSuccess(
+          `${result.succeeded} importadas, ${result.failed} fallidas`,
+          `${newOnes} nuevas, ${updated} actualizadas. ${result.failed > 0 ? "Revisa los detalles." : ""}`
+        );
+      }
+
       queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
     } catch (e) {
       toastError("Error al importar", e instanceof Error ? e.message : String(e));
@@ -664,6 +705,23 @@ export function useSettingsPage() {
       toastSuccess("Ruta guardada", "Carpeta por defecto actualizada.");
     } catch (e) {
       toastError("Error al guardar ruta", e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleDeleteSource = async (sourceId: string) => {
+    setDeletingSourceIds((prev) => new Set(prev).add(sourceId));
+    try {
+      await removeSource(sourceId);
+      toastSuccess("Fuente eliminada", "El catálogo ha sido eliminado correctamente.");
+      queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
+    } catch (e) {
+      toastError("Error al eliminar", e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeletingSourceIds((prev) => {
+        const next = new Set(prev);
+        next.delete(sourceId);
+        return next;
+      });
     }
   };
 
@@ -711,7 +769,10 @@ export function useSettingsPage() {
     setDefaultSourceDownloadDir: (v: string) => dispatch({ type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR", payload: v }),
     handleImportSourceByUrl,
     handleImportSourceByFile,
+    handleImportSourcesBatch,
     handleSelectDefaultSourceDownloadDir,
     handleSaveDefaultSourceDownloadDir,
+    deletingSourceIds,
+    handleDeleteSource,
   };
 }
