@@ -183,119 +183,175 @@ export function DownloadsPanel() {
   const keepPanelVisibleForBatch = syncOperation?.mode === "batch";
   if (totalActive === 0 && !keepPanelVisibleForBatch) return null;
   const visibleRows = rows.length > 0 ? rows.length : keepPanelVisibleForBatch ? 1 : 0;
-  const estimatedRowHeightPx = 86;
-  const listMaxHeightPx = collapsed ? 0 : Math.min(visibleRows * estimatedRowHeightPx, 176);
+  const estimatedRowHeightPx = 140;
+  const listMaxHeightPx = collapsed ? 0 : Math.min(visibleRows * estimatedRowHeightPx, 320);
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-50 w-[360px] max-w-[90vw]">
-      <div className="pointer-events-auto rounded-xl border border-default-200 bg-content p-3 shadow-lg backdrop-blur-sm transition-all duration-200 ease-out">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Download size={16} className="text-primary" />
-            <p className="text-sm font-semibold">Descargas activas ({totalActive})</p>
+    <div className="pointer-events-none fixed bottom-4 right-4 z-50 w-[380px] max-w-[90vw]">
+      <div className="pointer-events-auto rounded-2xl border border-default-200/60 bg-content1/95 p-4 shadow-xl backdrop-blur-md transition-all duration-200 ease-out">
+        {/* Header */}
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+              <Download size={16} className="text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold leading-tight">Descargas</p>
+              <p className="text-xs text-default-400">
+                {totalActive} {totalActive === 1 ? "activa" : "activas"}
+              </p>
+            </div>
           </div>
           <Button
             isIconOnly
             size="sm"
-            variant="light"
+            variant="flat"
+            radius="lg"
             aria-label={collapsed ? "Expandir descargas" : "Colapsar descargas"}
             onPress={() => setCollapsed((v) => !v)}>
             {collapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </Button>
         </div>
 
-        <Progress
-          size="sm"
-          value={
-            aggregate.total + sourcesAggregate.total > 0
-              ? Math.min(
-                  100,
-                  Math.round(
-                    ((aggregate.loaded + sourcesAggregate.loaded) / (aggregate.total + sourcesAggregate.total)) * 100
+        {/* Barra de progreso global */}
+        <div className="mb-3 rounded-lg bg-default-100/50 p-2.5">
+          <div className="mb-1.5 flex items-center justify-between text-xs">
+            <span className="text-default-500">Progreso total</span>
+            <span className="font-medium tabular-nums">
+              {aggregate.total + sourcesAggregate.total > 0
+                ? Math.min(
+                    100,
+                    Math.round(
+                      ((aggregate.loaded + sourcesAggregate.loaded) / (aggregate.total + sourcesAggregate.total)) * 100
+                    )
                   )
-                )
-              : aggregate.percent
-          }
-          aria-label="Progreso agregado de descargas"
-          className="mb-2"
-          showValueLabel
-        />
+                : aggregate.percent}
+              %
+            </span>
+          </div>
+          <Progress
+            size="sm"
+            value={
+              aggregate.total + sourcesAggregate.total > 0
+                ? Math.min(
+                    100,
+                    Math.round(
+                      ((aggregate.loaded + sourcesAggregate.loaded) / (aggregate.total + sourcesAggregate.total)) * 100
+                    )
+                  )
+                : aggregate.percent
+            }
+            aria-label="Progreso agregado de descargas"
+            classNames={{
+              track: "bg-default-200",
+              indicator: "bg-gradient-to-r from-primary to-primary-400",
+            }}
+          />
+        </div>
 
         <div
           className="overflow-hidden transition-[max-height,opacity] duration-300 ease-out"
           style={{ maxHeight: `${listMaxHeightPx}px`, opacity: collapsed ? 0 : 1 }}>
-          <ScrollShadow hideScrollBar className="max-h-44 space-y-1.5 pr-1" size={18} orientation="vertical">
+          <ScrollShadow hideScrollBar className="max-h-80 space-y-2.5 pr-1" size={20} orientation="vertical">
             {rows.length === 0 && keepPanelVisibleForBatch ? (
-              <div className="rounded-lg border border-default-100 bg-default-50/50 px-2 py-2">
-                <p className="text-xs font-medium">Preparando siguiente juego…</p>
-                <p className="text-[11px] text-default-500">
-                  La subida por lotes sigue activa aunque este instante no tenga archivo en vuelo.
-                </p>
+              <div className="flex items-center gap-3 rounded-xl border border-default-200/40 bg-default-50/80 p-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <Download size={18} className="animate-pulse text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Preparando siguiente juego…</p>
+                  <p className="mt-0.5 text-xs text-default-400">La subida por lotes sigue activa</p>
+                </div>
               </div>
             ) : null}
             {rows.map((row) => (
-              <div key={row.id} className="rounded-lg border border-default-100 bg-default-50/50 px-2 py-2">
-                <p className="truncate text-xs font-medium">{row.label}</p>
-                <p className="truncate text-[11px] text-default-500">{row.subtitle}</p>
-                {row.source === "sync" && (row.canPause || row.canCancel) ? (
-                  <div className="mt-1 flex items-center gap-2 text-[10px] text-default-500">
-                    {row.canPause ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5 cursor-pointer">
-                        <Pause size={10} />
-                        Pausa
-                      </span>
-                    ) : null}
-                    {row.canCancel ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5 cursor-pointer">
-                        <X size={10} />
-                        Cancelar
-                      </span>
-                    ) : null}
+              <div
+                key={row.id}
+                className="group rounded-xl border border-default-200/40 bg-default-50/80 p-3 transition-colors hover:bg-default-100/60">
+                {/* Título y subtítulo */}
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium leading-tight">{row.label}</p>
+                    <p className="mt-0.5 truncate text-xs text-default-400">{row.subtitle}</p>
                   </div>
-                ) : null}
-                {row.source === "sources" && row.jobId ? (
-                  <div className="mt-1 flex items-center gap-2 text-[10px] text-default-500">
-                    {row.canPause ? (
-                      <span
-                        className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5"
-                        onClick={() => void pauseSourceDownload(row.jobId!)}>
-                        <Pause size={10} />
-                        Pausa
-                      </span>
-                    ) : null}
-                    {row.isPaused ? (
-                      <span
-                        className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5"
-                        onClick={() => void resumeSourceDownload(row.jobId!)}>
-                        <Zap size={10} />
-                        Reanudar
-                      </span>
-                    ) : null}
-                    {row.canCancel ? (
-                      <span
-                        className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-default-200 px-1.5 py-0.5"
-                        onClick={() => void cancelSourceDownload(row.jobId!)}>
-                        <X size={10} />
-                        Cancelar
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-default-500">
+                  <span className="shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
+                    {row.value}%
+                  </span>
+                </div>
+
+                {/* Barra de progreso */}
+                <Progress
+                  size="sm"
+                  value={row.value}
+                  classNames={{
+                    track: "h-1.5 bg-default-200",
+                    indicator: "bg-primary",
+                  }}
+                />
+
+                {/* Stats */}
+                <div className="mt-2 flex items-center gap-3 text-xs text-default-500">
                   <span className="tabular-nums">
                     {formatBytes(row.loaded ?? 0)}
                     {(row.total ?? 0) > 0 ? ` / ${formatBytes(row.total ?? 0)}` : ""}
                   </span>
                   <span className="inline-flex items-center gap-1">
-                    <Zap size={10} />
-                    {formatSpeed(row.speedBps ?? null)}
+                    <Zap size={12} className="text-primary/70" />
+                    <span className="tabular-nums">{formatSpeed(row.speedBps ?? null)}</span>
                   </span>
                   <span className="inline-flex items-center gap-1">
-                    <Clock size={10} />
-                    {formatEta(row.etaSeconds ?? null)}
+                    <Clock size={12} className="text-default-400" />
+                    <span className="tabular-nums">{formatEta(row.etaSeconds ?? null)}</span>
                   </span>
                 </div>
-                <Progress size="sm" value={row.value} className="mt-1" />
+
+                {/* Acciones para sync */}
+                {row.source === "sync" && (row.canPause || row.canCancel) ? (
+                  <div className="mt-2.5 flex items-center gap-2">
+                    {row.canPause ? (
+                      <button className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-default-100 px-2.5 py-1.5 text-xs font-medium text-default-600 transition-colors hover:bg-default-200">
+                        <Pause size={12} />
+                        Pausar
+                      </button>
+                    ) : null}
+                    {row.canCancel ? (
+                      <button className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-danger-50 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger-100">
+                        <X size={12} />
+                        Cancelar
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {/* Acciones para sources */}
+                {row.source === "sources" && row.jobId ? (
+                  <div className="mt-2.5 flex items-center gap-2">
+                    {row.canPause ? (
+                      <button
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-default-100 px-2.5 py-1.5 text-xs font-medium text-default-600 transition-colors hover:bg-default-200"
+                        onClick={() => void pauseSourceDownload(row.jobId!)}>
+                        <Pause size={12} />
+                        Pausar
+                      </button>
+                    ) : null}
+                    {row.isPaused ? (
+                      <button
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-success-50 px-2.5 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success-100"
+                        onClick={() => void resumeSourceDownload(row.jobId!)}>
+                        <Zap size={12} />
+                        Reanudar
+                      </button>
+                    ) : null}
+                    {row.canCancel ? (
+                      <button
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-danger-50 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger-100"
+                        onClick={() => void cancelSourceDownload(row.jobId!)}>
+                        <X size={12} />
+                        Cancelar
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ))}
           </ScrollShadow>
