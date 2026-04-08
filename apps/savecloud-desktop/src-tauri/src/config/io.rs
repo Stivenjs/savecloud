@@ -250,10 +250,11 @@ pub fn save_history(history: &OperationHistory) -> Result<(), String> {
 /// Agrega un evento al registro histórico limitando el tamaño del archivo.
 ///
 /// El flujo es el siguiente:
-/// 1. Carga el historial existente en memoria.
+/// 1. Carga el historial y la gamificación en una sola pasada.
 /// 2. Adjunta el nuevo evento serializado con un timestamp UTC.
 /// 3. Si el vector resultante supera los 200 elementos, purga los más antiguos.
-/// 4. Escribe la estructura mutada de regreso a disco.
+/// 4. Actualiza la gamificación en memoria y escribe ambos subsistemas a disco
+///    de forma independiente (evita recargar gamification desde disco por segunda vez).
 ///
 /// # Arguments
 ///
@@ -271,7 +272,10 @@ pub fn append_operation_log(
     file_count: u32,
     err_count: u32,
 ) -> Result<(), String> {
+    // Carga ambos subsistemas de una vez antes de cualquier escritura.
     let mut history = load_history();
+    let mut g = load_gamification();
+
     history.entries.push(OperationLogEntry {
         timestamp: Utc::now().to_rfc3339(),
         kind: kind.to_string(),
@@ -286,11 +290,11 @@ pub fn append_operation_log(
         history.entries.drain(0..drop);
     }
 
+    // Mutación en memoria antes de escribir — sin segunda lectura de disco.
+    super::gamification::on_operation_logged_inner(&mut g, kind, file_count, err_count);
+
     let path = paths::history_path().ok_or("Ruta no disponible")?;
     save_json(&path, &history)?;
-
-    let mut g = load_gamification();
-    super::gamification::on_operation_logged_inner(&mut g, kind, file_count, err_count);
     save_gamification(&g)?;
 
     Ok(())
