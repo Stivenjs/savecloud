@@ -59,6 +59,14 @@ const COPY_CONCURRENCY = 20;
 const DELETE_BATCH_SIZE = 1000;
 
 /**
+ * Máximo de requests DeleteObjects en paralelo.
+ * Se fija en 10 para no saturar la cuota de requests por segundo de S3
+ * (3500 DELETE/s por prefijo), que con batches de 1000 equivale a
+ * 10.000 borrados/s simultáneos —muy por debajo del límite real.
+ */
+const DELETE_BATCH_CONCURRENCY = 10;
+
+/**
  * Implementación del puerto SaveRepository usando AWS S3.
  *
  * Pertenece a la capa de infraestructura; el dominio no la conoce.
@@ -139,6 +147,33 @@ export class S3SaveRepository implements SaveRepository {
       chunks.push(items.slice(i, i + batchSize));
     }
     return chunks;
+  }
+
+  /**
+   * Ejecuta DeleteObjects en paralelo (acotado) sobre un array de keys.
+   * @param keys - Array de strings con las keys a eliminar.
+   */
+  private async deleteKeys(keys: string[]): Promise<void> {
+    if (keys.length === 0) return;
+
+    const batches = S3SaveRepository.chunk(
+      keys.map((Key) => ({ Key })),
+      DELETE_BATCH_SIZE
+    );
+
+    const limit = pLimit(DELETE_BATCH_CONCURRENCY);
+    await Promise.all(
+      batches.map((batch) =>
+        limit(() =>
+          this.s3.send(
+            new DeleteObjectsCommand({
+              Bucket: this.bucketName,
+              Delete: { Objects: batch, Quiet: true },
+            })
+          )
+        )
+      )
+    );
   }
 
   async getUploadUrl(userId: string, gameId: string, filename: string): Promise<string> {
@@ -294,12 +329,11 @@ export class S3SaveRepository implements SaveRepository {
    * al directorio del juego (todo lo que hay después de `userId/gameId/`),
    * preservando subdirectorios para que el cliente Rust pueda reconstruir
    * la ruta local correctamente.
-   *
    * @param userId - Identificador del usuario.
    */
   async listByUser(userId: string): Promise<GameSave[]> {
     const prefix = `${userId}/`;
-    const allContents: { Key: string; LastModified?: Date; Size?: number }[] = [];
+    const result: GameSave[] = [];
     let continuationToken: string | undefined;
 
     do {
@@ -310,30 +344,27 @@ export class S3SaveRepository implements SaveRepository {
           ContinuationToken: continuationToken,
         })
       );
-      const contents = (response.Contents ?? []).filter(
-        (obj): obj is { Key: string; LastModified?: Date; Size?: number } => !!obj.Key
-      );
-      allContents.push(...contents);
+
+      for (const obj of response.Contents ?? []) {
+        if (!obj.Key) continue;
+        const withoutUser = obj.Key.slice(prefix.length);
+        const slashIdx = withoutUser.indexOf("/");
+        const gameId = slashIdx >= 0 ? withoutUser.slice(0, slashIdx) : withoutUser;
+        const gamePrefix = `${prefix}${gameId}/`;
+
+        result.push({
+          gameId,
+          key: obj.Key,
+          filename: S3SaveRepository.relativeFilename(obj.Key, gamePrefix),
+          lastModified: obj.LastModified ?? new Date(0),
+          size: obj.Size,
+        });
+      }
+
       continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
     } while (continuationToken);
 
-    return allContents.map((obj) => {
-      // La key tiene la forma userId/gameId/rel/path/to/file.
-      // gameId es el segundo segmento; filename es todo lo que sigue,
-      // incluyendo subdirectorios, para que Rust reconstruya la ruta local.
-      const withoutUser = obj.Key.slice(prefix.length);
-      const slashIdx = withoutUser.indexOf("/");
-      const gameId = slashIdx >= 0 ? withoutUser.slice(0, slashIdx) : withoutUser;
-      const gamePrefix = `${prefix}${gameId}/`;
-
-      return {
-        gameId,
-        key: obj.Key,
-        filename: S3SaveRepository.relativeFilename(obj.Key, gamePrefix),
-        lastModified: obj.LastModified ?? new Date(0),
-        size: obj.Size,
-      };
-    });
+    return result;
   }
 
   /**
@@ -342,12 +373,15 @@ export class S3SaveRepository implements SaveRepository {
    * Utiliza un prefijo más específico (`userId/gameId/`) para evitar tener
    * que recorrer todos los objetos del usuario cuando solo interesa un juego.
    *
+   * igual que en {@link listByUser}, se mapea directamente en
+   * el loop de paginado sin acumular en un array intermedio.
+   *
    * @param userId - Identificador del usuario.
    * @param gameId - Identificador del juego.
    */
   async listByUserAndGame(userId: string, gameId: string): Promise<GameSave[]> {
     const prefix = `${userId}/${gameId}/`;
-    const allContents: { Key: string; LastModified?: Date; Size?: number }[] = [];
+    const result: GameSave[] = [];
     let continuationToken: string | undefined;
 
     do {
@@ -358,20 +392,22 @@ export class S3SaveRepository implements SaveRepository {
           ContinuationToken: continuationToken,
         })
       );
-      const contents = (response.Contents ?? []).filter(
-        (obj): obj is { Key: string; LastModified?: Date; Size?: number } => !!obj.Key
-      );
-      allContents.push(...contents);
+
+      for (const obj of response.Contents ?? []) {
+        if (!obj.Key) continue;
+        result.push({
+          gameId,
+          key: obj.Key,
+          filename: S3SaveRepository.relativeFilename(obj.Key, prefix),
+          lastModified: obj.LastModified ?? new Date(0),
+          size: obj.Size,
+        });
+      }
+
       continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
     } while (continuationToken);
 
-    return allContents.map((obj) => ({
-      gameId,
-      key: obj.Key,
-      filename: S3SaveRepository.relativeFilename(obj.Key, prefix),
-      lastModified: obj.LastModified ?? new Date(0),
-      size: obj.Size,
-    }));
+    return result;
   }
 
   /**
@@ -381,12 +417,15 @@ export class S3SaveRepository implements SaveRepository {
    * `filename` contiene solo el nombre del archivo de backup (sin el
    * prefijo de carpeta), que es lo que el cliente usa para mostrarlo.
    *
+   * igual que en {@link listByUser}, se elimina el array
+   * intermedio `allContents` y se mapea directamente página a página.
+   *
    * @param userId - Identificador del usuario.
    * @param gameId - Identificador del juego.
    */
   async listBackups(userId: string, gameId: string): Promise<BackupMetadata[]> {
     const prefix = `${userId}/${gameId}/backups/`;
-    const allContents: { Key: string; LastModified?: Date; Size?: number }[] = [];
+    const result: BackupMetadata[] = [];
     let continuationToken: string | undefined;
 
     do {
@@ -397,19 +436,21 @@ export class S3SaveRepository implements SaveRepository {
           ContinuationToken: continuationToken,
         })
       );
-      const contents = (response.Contents ?? []).filter(
-        (obj): obj is { Key: string; LastModified?: Date; Size?: number } => !!obj.Key
-      );
-      allContents.push(...contents);
+
+      for (const obj of response.Contents ?? []) {
+        if (!obj.Key) continue;
+        result.push({
+          key: obj.Key,
+          lastModified: obj.LastModified ?? new Date(0),
+          size: obj.Size,
+          filename: obj.Key.slice(prefix.length) || obj.Key,
+        });
+      }
+
       continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
     } while (continuationToken);
 
-    return allContents.map((obj) => ({
-      key: obj.Key,
-      lastModified: obj.LastModified ?? new Date(0),
-      size: obj.Size,
-      filename: obj.Key.slice(prefix.length) || obj.Key,
-    }));
+    return result;
   }
 
   private static backupKeyPrefix(userId: string, gameId: string): string {
@@ -457,16 +498,15 @@ export class S3SaveRepository implements SaveRepository {
 
   /**
    * Elimina todos los objetos de un juego del bucket.
-   *
-   * Pagina sobre ListObjectsV2 y elimina en lotes de hasta
-   * {@link DELETE_BATCH_SIZE} con DeleteObjects, que es el máximo que
-   * acepta la API de S3 en un solo request.
-   *
    * @param userId - Identificador del usuario.
    * @param gameId - Identificador del juego a eliminar.
    */
   async deleteGame(userId: string, gameId: string): Promise<void> {
     const prefix = `${userId}/${gameId}/`;
+    const deleteLimit = pLimit(DELETE_BATCH_CONCURRENCY);
+
+    const deletePromises: Promise<unknown>[] = [];
+
     let continuationToken: string | undefined;
 
     do {
@@ -481,22 +521,24 @@ export class S3SaveRepository implements SaveRepository {
       const keys = (list.Contents ?? []).filter((c): c is { Key: string } => !!c.Key).map((c) => ({ Key: c.Key }));
 
       if (keys.length > 0) {
-        // DeleteObjects acepta hasta DELETE_BATCH_SIZE keys por request.
-        // ListObjectsV2 devuelve máximo 1000 por página, así que normalmente
-        // un solo DeleteObjects cubre toda la página. El chunk garantiza
-        // el invariante si algún día se aumenta el page size.
         for (const batch of S3SaveRepository.chunk(keys, DELETE_BATCH_SIZE)) {
-          await this.s3.send(
-            new DeleteObjectsCommand({
-              Bucket: this.bucketName,
-              Delete: { Objects: batch, Quiet: true },
-            })
+          deletePromises.push(
+            deleteLimit(() =>
+              this.s3.send(
+                new DeleteObjectsCommand({
+                  Bucket: this.bucketName,
+                  Delete: { Objects: batch, Quiet: true },
+                })
+              )
+            )
           );
         }
       }
 
       continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
     } while (continuationToken);
+
+    await Promise.all(deletePromises);
   }
 
   /**
@@ -504,19 +546,6 @@ export class S3SaveRepository implements SaveRepository {
    *
    * S3 no tiene operación de rename nativa; la operación equivalente es
    * copiar cada objeto a la nueva key y luego eliminar el original.
-   *
-   * Estrategia de dos fases para minimizar la latencia total:
-   *
-   * 1. **Copia en paralelo** con concurrencia acotada a {@link COPY_CONCURRENCY}.
-   *    Todas las copias se lanzan a la vez (dentro del límite) en lugar de
-   *    esperar cada una en secuencia. Para N archivos esto reduce el tiempo
-   *    de O(N × RTT) a O(ceil(N / COPY_CONCURRENCY) × RTT).
-   *
-   * 2. **Eliminación en batch** una vez confirmadas todas las copias.
-   *    Se agrupa en requests de {@link DELETE_BATCH_SIZE} para respetar el
-   *    límite de la API de S3 y reducir el número de round trips.
-   *    La eliminación ocurre solo después de que todas las copias han
-   *    terminado con éxito, evitando pérdida de datos si alguna copia falla.
    *
    * @param userId    - Identificador del usuario.
    * @param oldGameId - Identificador actual del juego.
@@ -529,8 +558,6 @@ export class S3SaveRepository implements SaveRepository {
     const allKeys: string[] = [];
     let continuationToken: string | undefined;
 
-    // Recorre todas las páginas para recopilar las keys antes de operar,
-    // evitando mezclar listado y modificación sobre el mismo prefijo.
     do {
       const list = await this.s3.send(
         new ListObjectsV2Command({
@@ -547,11 +574,10 @@ export class S3SaveRepository implements SaveRepository {
 
     if (allKeys.length === 0) return;
 
-    // Fase 1: copias en paralelo con concurrencia acotada.
-    const limit = pLimit(COPY_CONCURRENCY);
+    const copyLimit = pLimit(COPY_CONCURRENCY);
     await Promise.all(
       allKeys.map((oldKey) =>
-        limit(() => {
+        copyLimit(() => {
           const filename = oldKey.slice(prefix.length);
           const newKey = `${userId}/${newGameId}/${filename}`;
           return this.s3.send(
@@ -565,17 +591,6 @@ export class S3SaveRepository implements SaveRepository {
       )
     );
 
-    // Fase 2: eliminación en batch solo si todas las copias tuvieron éxito.
-    for (const batch of S3SaveRepository.chunk(
-      allKeys.map((Key) => ({ Key })),
-      DELETE_BATCH_SIZE
-    )) {
-      await this.s3.send(
-        new DeleteObjectsCommand({
-          Bucket: this.bucketName,
-          Delete: { Objects: batch, Quiet: true },
-        })
-      );
-    }
+    await this.deleteKeys(allKeys);
   }
 }
