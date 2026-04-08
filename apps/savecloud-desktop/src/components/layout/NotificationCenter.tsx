@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Badge, Button, Popover, PopoverContent, PopoverTrigger, ScrollShadow, Spinner } from "@heroui/react";
 import { AlertTriangle, Bell, CheckCheck, Info, Trash2 } from "lucide-react";
-import { useNotificationStore } from "@store/NotificationStore";
+import {
+  useNotificationsQuery,
+  useUnreadCountQuery,
+  useNotificationActions,
+} from "@hooks/queries/useNotificationsQueries";
 import type { NotificationRecord } from "@services/tauri/notifications.service";
 import { formatRelativeDate } from "@utils/format";
 import { formatDayGroupHeading, getLocalDayKey } from "@utils/operationHistory";
@@ -93,20 +97,11 @@ function NotificationRow({
 }
 
 export function NotificationCenter() {
-  const unreadCount = useNotificationStore((s) => s.unreadCount);
-  const items = useNotificationStore((s) => s.items);
-  const loading = useNotificationStore((s) => s.loading);
-  const refreshUnreadCount = useNotificationStore((s) => s.refreshUnreadCount);
-  const markAllRead = useNotificationStore((s) => s.markAllRead);
-  const markRead = useNotificationStore((s) => s.markRead);
-  const dismiss = useNotificationStore((s) => s.dismiss);
-  const syncWithCloud = useNotificationStore((s) => s.syncWithCloud);
+  const { data: items = [], isLoading: loading } = useNotificationsQuery();
+  const { data: unreadCount = 0 } = useUnreadCountQuery();
+  const { markRead, markAllRead, dismiss, dismissAll, syncWithCloud } = useNotificationActions();
 
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    void refreshUnreadCount();
-  }, [refreshUnreadCount]);
 
   const onOpenChange = useCallback(
     (next: boolean) => {
@@ -170,6 +165,15 @@ export function NotificationCenter() {
               startContent={<CheckCheck size={16} />}
               onPress={() => void markAllRead()}>
               Todas leídas
+            </Button>
+            <Button
+              size="sm"
+              variant="flat"
+              isDisabled={items.length === 0}
+              color="danger"
+              startContent={<Trash2 size={16} />}
+              onPress={() => void dismissAll()}>
+              Limpiar
             </Button>
           </div>
         </div>

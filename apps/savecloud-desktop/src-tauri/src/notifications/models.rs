@@ -84,6 +84,14 @@ fn default_limit() -> i64 {
     50
 }
 
+/// Respuesta combinada para evitar múltiples round-trips al abrir el centro de notificaciones.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationSyncFullResponse {
+    pub items: Vec<NotificationRecordDto>,
+    pub unread_count: i64,
+}
+
 /// Normaliza `read_at` / `dismissed_at`: cadenas vacías no son equivalentes a NULL en SQLite y excluyen filas con `IS NULL`.
 pub fn normalize_notification_record_for_storage(rec: &mut NotificationRecordDto) {
     rec.read_at = rec.read_at.take().filter(|s| !s.trim().is_empty());

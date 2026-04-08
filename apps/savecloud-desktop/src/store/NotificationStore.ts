@@ -1,113 +1,50 @@
 import { create } from "zustand";
-import {
-  listNotifications,
-  markAllNotificationsRead,
-  markNotificationRead,
-  dismissNotification,
-  notificationUnreadCount,
-  syncNotificationsPull,
-  syncNotificationsPush,
-  type NotificationRecord,
-} from "@services/tauri/notifications.service";
+import { syncNotificationsFull } from "@services/tauri/notifications.service";
+import { queryClient } from "@lib/queryClient";
+import { NOTIFICATION_KEYS } from "@hooks/queries/useNotificationsQueries";
 
 interface NotificationStoreState {
-  unreadCount: number;
-  items: NotificationRecord[];
-  loading: boolean;
-  setUnreadCount: (n: number) => void;
-  refreshUnreadCount: () => Promise<void>;
-  /** Carga lista para el panel. `silent`: no pone loading (evita ocultar la lista al refrescar tras sync). */
-  loadItems: (opts?: { unreadOnly?: boolean; silent?: boolean }) => Promise<void>;
-  markRead: (id: string) => Promise<void>;
-  markAllRead: () => Promise<void>;
-  dismiss: (id: string) => Promise<void>;
-  /** Sincroniza con la API (requiere userId + API configurados). */
+  lastSyncTime: number;
+  /**
+   * Sincroniza con la API.
+   * Se mantiene en el store para ser llamado desde hooks globales como useAppInitialization
+   * de forma centralizada y protegida por cooldown.
+   */
   syncWithCloud: () => Promise<void>;
+  /** Refresca solo el contador (útil para el badge) */
+  refreshUnreadCount: () => Promise<void>;
 }
 
 export const useNotificationStore = create<NotificationStoreState>((set, get) => ({
-  unreadCount: 0,
-  items: [],
-  loading: false,
-
-  setUnreadCount: (n) => set({ unreadCount: n }),
+  lastSyncTime: 0,
 
   refreshUnreadCount: async () => {
-    try {
-      const n = await notificationUnreadCount();
-      set({ unreadCount: n });
-    } catch (e) {
-      // Si no hay userId/API configurados, simplemente no actualizamos el badge.
-    }
-  },
-
-  loadItems: async (opts) => {
-    if (!opts?.silent) {
-      set({ loading: true });
-    }
-    try {
-      const items = await listNotifications({
-        limit: 80,
-        offset: 0,
-        unreadOnly: opts?.unreadOnly ?? false,
-      });
-      set({ items });
-    } catch (e) {
-      // Fallo al listar: no interrumpimos la UI.
-    } finally {
-      if (!opts?.silent) {
-        set({ loading: false });
-      }
-    }
-  },
-
-  markRead: async (id) => {
-    await markNotificationRead(id);
-    await get().refreshUnreadCount();
-    await get().loadItems({ unreadOnly: false, silent: true });
-  },
-
-  markAllRead: async () => {
-    await markAllNotificationsRead();
-    set({ unreadCount: 0 });
-    await get().loadItems({ unreadOnly: false, silent: true });
-  },
-
-  dismiss: async (id) => {
-    await dismissNotification(id);
-    await get().refreshUnreadCount();
-    await get().loadItems({ unreadOnly: false, silent: true });
+    await queryClient.invalidateQueries({ queryKey: NOTIFICATION_KEYS.unreadCount() });
   },
 
   syncWithCloud: async () => {
-    set({ loading: true });
+    const now = Date.now();
+    // Protección contra ráfagas y concurrencia.
+    // Usamos el estado interno de Query para saber si ya hay algo en vuelo.
+    const isFetching = queryClient.isFetching({ queryKey: NOTIFICATION_KEYS.all }) > 0;
+
+    if (isFetching || now - get().lastSyncTime < 2000) return;
+
+    set({ lastSyncTime: now });
+
     try {
-      try {
-        await syncNotificationsPush();
-        await syncNotificationsPull();
-      } catch (e) {
-        // Si falla push/pull (red/API), mantenemos el listado local.
-      }
-      await get().refreshUnreadCount();
-      const items = await listNotifications({
+      const res = await syncNotificationsFull({
         limit: 80,
         offset: 0,
         unreadOnly: false,
       });
-      set({ items });
+
+      // Actualizamos la caché de React Query manualmente con el resultado atómico
+      queryClient.setQueryData(NOTIFICATION_KEYS.list(), res.items);
+      queryClient.setQueryData(NOTIFICATION_KEYS.unreadCount(), res.unreadCount);
     } catch (e) {
-      try {
-        const items = await listNotifications({
-          limit: 80,
-          offset: 0,
-          unreadOnly: false,
-        });
-        set({ items });
-      } catch (e2) {
-        // Si falla incluso el reintento, dejamos la lista como estaba.
-      }
-    } finally {
-      set({ loading: false });
+      // Si el sync atómico falla, forzamos un refetch de los datos locales
+      await queryClient.invalidateQueries({ queryKey: NOTIFICATION_KEYS.all });
     }
   },
 }));

@@ -259,6 +259,16 @@ pub fn dismiss(conn: &Connection, user_id: &str, id: &str) -> Result<(), rusqlit
     Ok(())
 }
 
+pub fn dismiss_all(conn: &Connection, user_id: &str) -> Result<(), rusqlite::Error> {
+    let now = Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE notification_events SET dismissed_at = ?1, updated_at = ?1, pending_sync = 1, sync_version = sync_version + 1
+         WHERE user_id = ?2 AND (dismissed_at IS NULL OR trim(dismissed_at) = '')",
+        params![now, user_id],
+    )?;
+    Ok(())
+}
+
 pub fn list_pending_sync(
     conn: &Connection,
     user_id: &str,

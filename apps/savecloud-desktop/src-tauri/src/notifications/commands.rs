@@ -115,7 +115,35 @@ pub fn dismiss_notification(db: State<'_, AppDb>, id: String) -> Result<(), Stri
 }
 
 #[tauri::command]
+pub fn dismiss_all_notifications(db: State<'_, AppDb>) -> Result<(), String> {
+    let user_id = config::load_config()
+        .user_id
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura tu usuario en Configuración")?;
+
+    let ids: Vec<String> = db
+        .with_conn(|conn| {
+            let rows = db::list_notifications(conn, &user_id, 10_000, 0, false)?;
+            Ok(rows.into_iter().map(|r| r.id).collect())
+        })
+        .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
+
+    db.with_conn(|conn| db::dismiss_all(conn, &user_id))
+        .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
+
+    tauri::async_runtime::spawn(async move {
+        let _ = sync_http::ack_remote(ids, false, true).await;
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn sync_notifications_push(db: State<'_, AppDb>) -> Result<usize, String> {
+    sync_notifications_push_internal(&db).await
+}
+
+async fn sync_notifications_push_internal(db: &AppDb) -> Result<usize, String> {
     let user_id = config::load_config()
         .user_id
         .filter(|s| !s.trim().is_empty())
@@ -142,12 +170,16 @@ pub async fn sync_notifications_pull(
     app: AppHandle,
     db: State<'_, AppDb>,
 ) -> Result<usize, String> {
+    sync_notifications_pull_internal(&app, &db, true).await
+}
+
+async fn sync_notifications_pull_internal(app: &AppHandle, db: &AppDb, emit: bool) -> Result<usize, String> {
     let user_id = config::load_config()
         .user_id
         .filter(|s| !s.trim().is_empty())
         .ok_or("Configura tu usuario en Configuración")?;
 
-    let cursor = db::get_meta(&db, "last_pull_cursor")
+    let cursor = db::get_meta(db, "last_pull_cursor")
         .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?
         .filter(|s| !s.trim().is_empty());
 
@@ -175,13 +207,49 @@ pub async fn sync_notifications_pull(
     }
 
     if let Some(c) = next {
-        db::set_meta(&db, "last_pull_cursor", &c)
+        db::set_meta(db, "last_pull_cursor", &c)
             .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
     }
 
-    if merged > 0 {
-        emit_notifications_changed(&app);
+    if merged > 0 && emit {
+        emit_notifications_changed(app);
     }
 
     Ok(merged)
+}
+
+#[tauri::command]
+pub async fn sync_notifications_full(
+    app: AppHandle,
+    db: State<'_, AppDb>,
+    params: ListNotificationsParams,
+) -> Result<super::models::NotificationSyncFullResponse, String> {
+    // 1. Push
+    let _ = sync_notifications_push_internal(&db).await;
+    // 2. Pull (silent: we will return the data ourselves)
+    let _ = sync_notifications_pull_internal(&app, &db, false).await;
+
+    // 3. Get latest data
+    let user_id = config::load_config()
+        .user_id
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Configura tu usuario en Configuración")?;
+
+    let items = db.with_conn(|conn| {
+        db::list_notifications(
+            conn,
+            &user_id,
+            params.limit.max(1).min(200),
+            params.offset.max(0),
+            params.unread_only,
+        )
+    }).map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
+
+    let unread_count = db.with_conn(|conn| db::unread_count(conn, &user_id))
+        .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
+
+    Ok(super::models::NotificationSyncFullResponse {
+        items,
+        unread_count,
+    })
 }

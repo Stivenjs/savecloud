@@ -28,7 +28,8 @@
       "@services/*": ["src/services/*"],
       "@utils/*": ["src/utils/*"],
       "@app-types/*": ["src/types/*"],
-      "@store/*": ["src/store/*"]
+      "@store/*": ["src/store/*"],
+      "@lib/*": ["src/lib/*"]
     }
   },
   "include": ["src"],
