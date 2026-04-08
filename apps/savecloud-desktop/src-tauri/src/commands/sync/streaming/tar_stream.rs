@@ -1,23 +1,22 @@
-//! Streaming de directorios como archivos TAR hacia un canal de chunks en memoria.
+//! Streaming de directorios como archivos TAR comprimidos con ZSTD hacia un canal de chunks.
 //!
-//! Este módulo integra `tar-rs` con un `tokio::sync::mpsc` para producir un
-//! flujo de chunks (`bytes::Bytes`) a medida que se genera el archivo TAR,
+//! Este módulo integra `tar-rs` con `zstd` y un `tokio::sync::mpsc` para producir un
+//! flujo de chunks (`bytes::Bytes`) comprimidos a medida que se genera el archivo,
 //! evitando almacenamiento intermedio en disco.
 //!
-//! La generación del TAR se ejecuta en un hilo blocking mediante
-//! [`tokio::task::spawn_blocking`], ya que `tar-rs` opera de forma síncrona
-//! sobre el sistema de archivos. Los datos producidos se escriben en un
+//! La generación del TAR y la compresión se ejecutan en un hilo blocking mediante
+//! [`tokio::task::spawn_blocking`]. Los datos comprimidos se escriben en un
 //! [`ChannelWriter`], que implementa [`std::io::Write`] y se encarga de
 //! fragmentarlos en chunks de tamaño fijo antes de enviarlos al canal.
 //!
 //! El consumidor recibe una secuencia de [`TarStreamMsg`] que representa:
 //!
-//! - [`TarStreamMsg::Chunk`]: datos del TAR en orden de generación.
+//! - [`TarStreamMsg::Chunk`]: datos del archivo comprimido en orden de generación.
 //! - [`TarStreamMsg::Done`]: finalización correcta del stream.
-//! - [`TarStreamMsg::Err`]: fallo durante el empaquetado o envío.
+//! - [`TarStreamMsg::Err`]: fallo durante el empaquetado, compresión o envío.
 //!
 //! El canal actúa como mecanismo de backpressure, limitando la producción
-//! según su capacidad configurada.
+//! según su capacidad configurada e impidiendo que la compresión llene la RAM.
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -30,12 +29,13 @@ use super::upload_strategy::TAR_STREAM_CHUNK_BYTES;
 /// Mensajes que el hilo TAR envía al consumidor async.
 #[derive(Debug)]
 pub(crate) enum TarStreamMsg {
-    /// Chunk de bytes listos para subir. El tamaño es exactamente
-    /// [`TAR_STREAM_CHUNK_BYTES`] salvo para el último chunk del stream.
-    Chunk(bytes::Bytes),
-    /// El TAR se generó y todos los bytes fueron enviados correctamente.
+    /// Chunk de bytes comprimidos listos para subir.
+    /// Incluye la cantidad total de bytes originales [`TAR_STREAM_CHUNK_BYTES`] (sin comprimir) procesados hasta ahora
+    /// para que el contador de progreso sea exacto.
+    Chunk(bytes::Bytes, u64),
+    /// El archivo se generó y comprimió totalmente; todos los bytes fueron enviados.
     Done,
-    /// Error irrecuperable durante la generación o el envío al canal.
+    /// Error irrecuperable durante la generación, compresión o envío al canal.
     Err(String),
 }
 
@@ -47,14 +47,20 @@ struct ChannelWriter {
     tx: tokio::sync::mpsc::Sender<TarStreamMsg>,
     /// Buffer pre-reservado con capacidad para al menos un chunk completo.
     buf: BytesMut,
+    /// Referencia compartida al contador de bytes originales procesados.
+    original_processed: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl ChannelWriter {
-    /// Crea un nuevo `ChannelWriter` con buffer pre-reservado para un chunk.
-    fn new(tx: tokio::sync::mpsc::Sender<TarStreamMsg>) -> Self {
+    /// Crea un nuevo `ChannelWriter` con buffer pre-reservado y contador de progreso.
+    fn new(
+        tx: tokio::sync::mpsc::Sender<TarStreamMsg>,
+        original_processed: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    ) -> Self {
         Self {
             tx,
             buf: BytesMut::with_capacity(TAR_STREAM_CHUNK_BYTES),
+            original_processed,
         }
     }
 
@@ -68,8 +74,12 @@ impl ChannelWriter {
             return Ok(());
         }
         let chunk = self.buf.split_to(self.buf.len()).freeze();
+        let processed = self
+            .original_processed
+            .load(std::sync::atomic::Ordering::Relaxed);
+
         self.tx
-            .blocking_send(TarStreamMsg::Chunk(chunk))
+            .blocking_send(TarStreamMsg::Chunk(chunk, processed))
             .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "receptor descartado"))?;
         // Pre-reservar para el siguiente ciclo. No-op si `split_to` dejó
         // capacidad contigua disponible en el bloque existente.
@@ -87,8 +97,12 @@ impl Write for ChannelWriter {
         // el buffer intermedio.
         if self.buf.is_empty() && data.len() >= TAR_STREAM_CHUNK_BYTES {
             let chunk = bytes::Bytes::copy_from_slice(data);
+            let processed = self
+                .original_processed
+                .load(std::sync::atomic::Ordering::Relaxed);
+
             self.tx
-                .blocking_send(TarStreamMsg::Chunk(chunk))
+                .blocking_send(TarStreamMsg::Chunk(chunk, processed))
                 .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "receptor descartado"))?;
             return Ok(data.len());
         }
@@ -163,8 +177,45 @@ fn run_tar_pipeline(
     source_dir: &Path,
     tx: tokio::sync::mpsc::Sender<TarStreamMsg>,
 ) -> Result<(), String> {
-    let writer = ChannelWriter::new(tx);
-    let mut builder = tar::Builder::new(writer);
+    // Contador compartido para trackear el progreso original (crudo) mientras zstd comprime.
+    let original_counter = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+
+    // Pipeline: tar::Builder -> ProgressWrapper -> zstd::Encoder -> ChannelWriter -> mpsc
+    let writer = ChannelWriter::new(tx, original_counter.clone());
+
+    // Nivel 3: Equilibrio óptimo entre ratio de compresión y uso de CPU (rendimiento).
+    let mut encoder = zstd::Encoder::new(writer, 5)
+        .map_err(|e| format!("fallo al inicializar encoder Zstd: {}", e))?;
+
+    let threads = (num_cpus::get() - 1).max(1) as u32;
+
+    encoder
+        .multithread(threads)
+        .map_err(|e| format!("fallo activando multithread en zstd: {}", e))?;
+
+    // Un simple wrapper que incrementa el contador por cada byte que el TAR escribe al encoder.
+    struct ProgressWrapper<W: Write> {
+        inner: W,
+        counter: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    }
+    impl<W: Write> Write for ProgressWrapper<W> {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            let n = self.inner.write(buf)?;
+            self.counter
+                .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+            Ok(n)
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            self.inner.flush()
+        }
+    }
+
+    let progress_writer = ProgressWrapper {
+        inner: encoder,
+        counter: original_counter,
+    };
+
+    let mut builder = tar::Builder::new(progress_writer);
     builder.follow_symlinks(false);
 
     // `WalkDir` itera en orden DFS. `min_depth(0)` incluye el directorio raíz
@@ -225,15 +276,22 @@ fn run_tar_pipeline(
         // representación significativa en un backup de saves de juego.
     }
 
-    // `into_inner` llama a `finish` internamente (escribe los dos bloques de
-    // terminación de 512 bytes cada uno) y devuelve el writer.
-    let mut channel_writer = builder
+    // `into_inner` devuelve el ProgressWrapper.
+    let progress_writer = builder
         .into_inner()
         .map_err(|e| format!("error finalizando TAR: {}", e))?;
 
-    // Flush explícito de defensa: garantiza que cualquier byte residual que
-    // `into_inner` no haya drenado llegue al canal. Es un no-op si el buffer
-    // ya está vacío, que es el caso habitual.
+    // Drenar el ProgressWrapper para recuperar el encoder Zstd.
+    let zstd_encoder = progress_writer.inner;
+
+    // `finish` garantiza que Zstd vacíe todos los bloques comprimidos pendientes y
+    // escriba el footer del frame Zstd, devolviendo el ChannelWriter original.
+    let mut channel_writer = zstd_encoder
+        .finish()
+        .map_err(|e| format!("error finalizando compresión Zstd: {}", e))?;
+
+    // Flush final de defensa para garantizar que el último chunk incompleto
+    // (si existe) se envíe al canal.
     channel_writer
         .flush_chunk()
         .map_err(|e| format!("error vaciando buffer final: {}", e))?;
