@@ -48,8 +48,6 @@ export function useAppInitialization() {
    * Contador de notificaciones + sync periódico con la API (multi-dispositivo).
    */
   useEffect(() => {
-    let cancelled = false;
-
     const refresh = async () => {
       try {
         const cfg = await getConfig();
@@ -61,9 +59,6 @@ export function useAppInitialization() {
           return;
         }
         await useNotificationStore.getState().syncWithCloud();
-        if (!cancelled) {
-          await useNotificationStore.getState().refreshUnreadCount();
-        }
       } catch (e) {
         console.warn("[SaveCloud:useAppInitialization] refresh notificaciones error", e);
       }
@@ -81,23 +76,37 @@ export function useAppInitialization() {
     const interval = setInterval(refresh, 120_000);
 
     return () => {
-      cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
       clearInterval(interval);
     };
   }, []);
 
-  /** Badge y lista del centro de notificaciones cuando el backend inserta o hace pull. */
+  /** Badge y lista del centro de notificaciones. Debounceado 500ms para evitar ráfagas de peticiones. */
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    void listen(NOTIFICATIONS_CHANGED_EVENT, () => {
-      void useNotificationStore.getState().refreshUnreadCount();
-      void useNotificationStore.getState().loadItems({ unreadOnly: false, silent: true });
-    }).then((fn) => {
-      unlisten = fn;
+    let active = true;
+    let unlistenFn: (() => void) | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const handleEvent = () => {
+      if (!active) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void useNotificationStore.getState().syncWithCloud();
+      }, 500);
+    };
+
+    void listen(NOTIFICATIONS_CHANGED_EVENT, handleEvent).then((fn) => {
+      if (!active) {
+        fn();
+      } else {
+        unlistenFn = fn;
+      }
     });
+
     return () => {
-      unlisten?.();
+      active = false;
+      if (timer) clearTimeout(timer);
+      if (unlistenFn) unlistenFn();
     };
   }, []);
   /**

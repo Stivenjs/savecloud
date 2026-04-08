@@ -82,6 +82,14 @@ export async function dismissNotification(id: string): Promise<void> {
   }
 }
 
+export async function dismissAllNotifications(): Promise<void> {
+  try {
+    await invoke("dismiss_all_notifications");
+  } catch (e) {
+    throw e;
+  }
+}
+
 export async function syncNotificationsPush(): Promise<number> {
   try {
     const n = await invoke<number>("sync_notifications_push");
@@ -95,6 +103,28 @@ export async function syncNotificationsPull(): Promise<number> {
   try {
     const n = await invoke<number>("sync_notifications_pull");
     return n;
+  } catch (e) {
+    throw e;
+  }
+}
+
+export interface SyncNotificationsFullResponse {
+  items: NotificationRecord[];
+  unreadCount: number;
+}
+
+export async function syncNotificationsFull(
+  params: ListNotificationsParams = {}
+): Promise<SyncNotificationsFullResponse> {
+  const payload = {
+    params: {
+      limit: params.limit ?? 50,
+      offset: params.offset ?? 0,
+      unreadOnly: params.unreadOnly ?? false,
+    },
+  };
+  try {
+    return await invoke<SyncNotificationsFullResponse>("sync_notifications_full", payload);
   } catch (e) {
     throw e;
   }

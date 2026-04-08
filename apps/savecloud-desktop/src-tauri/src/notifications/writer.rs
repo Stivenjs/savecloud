@@ -22,7 +22,20 @@ fn sync_ver() -> i64 {
     Utc::now().timestamp_millis()
 }
 
+/// Última vez que se emitió el evento de cambio (en ms) para throttling.
+static LAST_EMISSION_MS: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
 pub fn emit_notifications_changed(app: &AppHandle) {
+    let now = Utc::now().timestamp_millis();
+    let last = LAST_EMISSION_MS.load(std::sync::atomic::Ordering::Relaxed);
+
+    // Evitar ráfagas de refresco en el frontend durante operaciones batch (ej. sync upload all).
+    // Si emitimos hace menos de 1.5 segundos, ignoramos la nueva petición de emisión.
+    if now - last < 1500 {
+        return;
+    }
+
+    LAST_EMISSION_MS.store(now, std::sync::atomic::Ordering::Relaxed);
     let _ = app.emit(NOTIFICATIONS_CHANGED_EVENT, serde_json::Value::Null);
 }
 

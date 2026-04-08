@@ -1,23 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { ThemeProvider } from "next-themes";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { HeroUIProvider, ToastProvider } from "@heroui/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AppErrorBoundary } from "@components/error/AppErrorBoundary";
+import { queryClient } from "@lib/queryClient";
 import App from "./App";
 import "./index.css";
-
-/** Configuración del cliente de React Query */
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30_000,
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
 
 /** Configuración del tema */
 const THEME_CONFIG = {
