@@ -434,18 +434,18 @@ async fn drain_upload_tasks(
 }
 
 /// Recoge sin bloquear las tareas que ya finalizaron.
-/// Actualiza `completed_parts`, `loaded` y alimenta el `ConcurrencyController`.
-/// Devuelve los bytes recién completados para que el llamador decida si emitir progreso.
+/// Actualiza `completed_parts`, `uploaded_bytes` y alimenta el `ConcurrencyController`.
+/// Devuelve los bytes recién completados (comprimidos) para métricas.
 async fn collect_finished_tasks(
     tasks: &mut tokio::task::JoinSet<
         Result<(u32, String, u64, u128, tokio::sync::OwnedSemaphorePermit), String>,
     >,
     ctx: &UploadCtx<'_>,
     completed_parts: &mut Vec<(u32, String)>,
-    loaded: &mut u64,
+    uploaded_bytes: &mut u64,
     concurrency: &mut ConcurrencyController,
 ) -> Result<u64, String> {
-    let mut newly_loaded: u64 = 0;
+    let mut newly_uploaded: u64 = 0;
     while let Some(res) = tasks.try_join_next() {
         match normalize_join_result(res) {
             TaskResult::Part {
@@ -456,8 +456,8 @@ async fn collect_finished_tasks(
                 ..
             } => {
                 completed_parts.push((part_number, etag));
-                *loaded += bytes_sent;
-                newly_loaded += bytes_sent;
+                *uploaded_bytes += bytes_sent;
+                newly_uploaded += bytes_sent;
                 concurrency.record_part(bytes_sent, elapsed_ms);
             }
             TaskResult::Err(e) => {
@@ -467,7 +467,7 @@ async fn collect_finished_tasks(
             }
         }
     }
-    Ok(newly_loaded)
+    Ok(newly_uploaded)
 }
 
 /// Espera a que un slot de concurrencia se libere cuando el JoinSet está lleno.
@@ -477,7 +477,7 @@ async fn wait_for_one_slot(
     >,
     ctx: &UploadCtx<'_>,
     completed_parts: &mut Vec<(u32, String)>,
-    loaded: &mut u64,
+    uploaded_bytes: &mut u64,
     concurrency: &mut ConcurrencyController,
 ) -> Result<u64, String> {
     if tasks.len() < concurrency.current() {
@@ -493,7 +493,7 @@ async fn wait_for_one_slot(
                 ..
             } => {
                 completed_parts.push((part_number, etag));
-                *loaded += bytes_sent;
+                *uploaded_bytes += bytes_sent;
                 concurrency.record_part(bytes_sent, elapsed_ms);
                 return Ok(bytes_sent);
             }
@@ -644,7 +644,7 @@ pub(crate) async fn upload_tar_stream_multipart(
     let mut part_buf = BytesMut::with_capacity(strategy.part_size);
 
     let mut completed_parts: Vec<(u32, String)> = Vec::new();
-    let mut loaded: u64 = 0;
+    let mut uploaded_bytes: u64 = 0;
     let mut last_pct: u8 = 0;
 
     let mut upload_tasks: tokio::task::JoinSet<
@@ -675,29 +675,29 @@ pub(crate) async fn upload_tar_stream_multipart(
             }
         }
 
-        let newly_loaded = collect_finished_tasks(
+        let _newly_uploaded = collect_finished_tasks(
             &mut upload_tasks,
             &ctx,
             &mut completed_parts,
-            &mut loaded,
+            &mut uploaded_bytes,
             &mut concurrency,
         )
         .await?;
 
-        if newly_loaded > 0 {
-            maybe_emit_progress(
-                &app,
-                game_id,
-                &display_name,
-                loaded,
-                estimated_total,
-                &mut last_pct,
-                false,
-            );
-        }
-
         match msg {
-            TarStreamMsg::Chunk(bytes) => {
+            TarStreamMsg::Chunk(bytes, original_processed) => {
+                // Emitir progreso basado en los bytes crudos procesados (lectura disco/empaquetado).
+                // Esto garantiza que la barra llegue al 100% independientemente del ratio de compresión.
+                maybe_emit_progress(
+                    &app,
+                    game_id,
+                    &display_name,
+                    original_processed,
+                    estimated_total,
+                    &mut last_pct,
+                    false,
+                );
+
                 let mut offset = 0usize;
                 while offset < bytes.len() {
                     let space = strategy.part_size - part_buf.len();
@@ -723,26 +723,14 @@ pub(crate) async fn upload_tar_stream_multipart(
                         // `Bytes::clone` es O(1) (Arc interno), seguro en el closure de retry.
                         let bytes_to_send = part_buf.split_to(strategy.part_size).freeze();
 
-                        let slot_bytes = wait_for_one_slot(
+                        let _slot_bytes = wait_for_one_slot(
                             &mut upload_tasks,
                             &ctx,
                             &mut completed_parts,
-                            &mut loaded,
+                            &mut uploaded_bytes,
                             &mut concurrency,
                         )
                         .await?;
-
-                        if slot_bytes > 0 {
-                            maybe_emit_progress(
-                                &app,
-                                game_id,
-                                &display_name,
-                                loaded,
-                                estimated_total,
-                                &mut last_pct,
-                                false,
-                            );
-                        }
 
                         spawn_part_upload(
                             &mut upload_tasks,
@@ -797,15 +785,16 @@ pub(crate) async fn upload_tar_stream_multipart(
     let remaining = drain_upload_tasks(&mut upload_tasks, &ctx).await?;
     for (pn, etag, bytes_sent, elapsed_ms) in remaining {
         completed_parts.push((pn, etag));
-        loaded += bytes_sent;
+        uploaded_bytes += bytes_sent;
         concurrency.record_part(bytes_sent, elapsed_ms);
     }
 
+    // Emit final forzado al 100% una vez el TAR termina.
     maybe_emit_progress(
         &app,
         game_id,
         &display_name,
-        loaded,
+        estimated_total,
         estimated_total,
         &mut last_pct,
         true,
@@ -814,23 +803,24 @@ pub(crate) async fn upload_tar_stream_multipart(
     completed_parts.sort_by_key(|p| p.0);
     with_retry(|| multipart_complete(&ctx, &completed_parts)).await?;
 
-    let final_ctx = format!(
-        "{} | parts={} bytes={} concurrency=[{}]",
+    let ctx_stats = format!(
+        "{} | original_mb={:.1} uploaded_mb={:.1} ratio={:.2}x concurrency=[{}]",
         log_ctx,
-        completed_parts.len(),
-        loaded,
+        estimated_total as f64 / (1024.0 * 1024.0),
+        uploaded_bytes as f64 / (1024.0 * 1024.0),
+        if uploaded_bytes > 0 {
+            estimated_total as f64 / uploaded_bytes as f64
+        } else {
+            1.0
+        },
         concurrency.describe(),
     );
-    sync_logger::log_operation("full_backup_streaming_complete", &final_ctx);
+    sync_logger::log_operation("full_backup_streaming_complete", &ctx_stats);
 
     Ok(())
 }
 
-/// Dry-run: consume el stream TAR y emite progreso sin subir nada a S3.
-///
-/// El throttle de progreso usa el mismo mecanismo que el path real (porcentaje
-/// entero), alineando la frecuencia de eventos con la experiencia del usuario
-/// durante una subida real.
+/// Ejecuta una simulación de subida sin tocar el API ni S3, midiendo el impacto comprimido.
 pub(crate) async fn upload_tar_stream_multipart_dry_run(
     mut rx: tokio::sync::mpsc::Receiver<TarStreamMsg>,
     game_id: &str,
@@ -849,7 +839,7 @@ pub(crate) async fn upload_tar_stream_multipart_dry_run(
     );
     sync_logger::log_operation("full_backup_streaming_dry_run_start", &log_ctx);
 
-    let mut loaded: u64 = 0;
+    let mut uploaded_bytes: u64 = 0;
     let mut last_pct: u8 = 0;
 
     maybe_emit_progress(
@@ -865,24 +855,21 @@ pub(crate) async fn upload_tar_stream_multipart_dry_run(
     while let Some(msg) = rx.recv().await {
         if let Some(ref t) = cancel {
             if t.upload_cancel_requested() {
-                let ctx = format!("{} | cancelled_after_bytes={}", log_ctx, loaded);
+                let ctx = format!("{} | cancelled_after_bytes={}", log_ctx, uploaded_bytes);
                 sync_logger::log_operation("full_backup_streaming_dry_run_cancelled", &ctx);
                 return Err("subida de prueba cancelada".to_string());
-            }
-            if t.upload_pause_requested() {
-                let ctx = format!("{} | pause_requested_bytes={}", log_ctx, loaded);
-                sync_logger::log_operation("full_backup_streaming_dry_run_pause_ignored", &ctx);
             }
         }
 
         match msg {
-            TarStreamMsg::Chunk(bytes) => {
-                loaded += bytes.len() as u64;
+            TarStreamMsg::Chunk(bytes, original_processed) => {
+                uploaded_bytes += bytes.len() as u64;
+
                 maybe_emit_progress(
                     &app,
                     game_id,
                     &display_name,
-                    loaded,
+                    original_processed,
                     estimated_total,
                     &mut last_pct,
                     false,
@@ -901,13 +888,18 @@ pub(crate) async fn upload_tar_stream_multipart_dry_run(
         &app,
         game_id,
         &display_name,
-        loaded,
+        estimated_total,
         estimated_total,
         &mut last_pct,
         true,
     );
 
-    let final_ctx = format!("{} | bytes={}", log_ctx, loaded);
+    let final_ctx = format!(
+        "{} | original_mb={:.1} compressed_mb={:.1}",
+        log_ctx,
+        estimated_total as f64 / (1024.0 * 1024.0),
+        uploaded_bytes as f64 / (1024.0 * 1024.0)
+    );
     sync_logger::log_operation("full_backup_streaming_dry_run_complete", &final_ctx);
     Ok(())
 }

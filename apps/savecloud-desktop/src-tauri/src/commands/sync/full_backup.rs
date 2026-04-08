@@ -331,13 +331,16 @@ pub async fn download_and_restore_full_backup_impl(
 
     let dest_dir_clone = dest_dir.clone();
 
-    // Hilo dedicado a la descompresión. Se ejecuta en paralelo a la descarga.
+    // Hilo dedicado a la descompresión y extracción. Se ejecuta en paralelo a la descarga.
     let extract_task = tokio::task::spawn_blocking(move || {
-        // SyncIoBridge convierte el canal asíncrono 'rx' en un lector implementando std::io::Read
-        // Esto permite usar la librería sincrónica 'tar' de forma nativa.
+        // SyncIoBridge convierte el canal asíncrono 'rx' en un lector implementando std::io::Read.
         let sync_reader = SyncIoBridge::new(rx);
-        let mut archive = tar::Archive::new(sync_reader);
 
+        // Capa de descompresión: extrae los datos Zstd antes de pasarlos al TAR.
+        let zstd_decoder = zstd::stream::read::Decoder::new(sync_reader)
+            .map_err(|e| format!("fallo al inicializar descompresor Zstd: {}", e))?;
+
+        let mut archive = tar::Archive::new(zstd_decoder);
         unpack_archive_resilient(&mut archive, &dest_dir_clone)
     });
 
