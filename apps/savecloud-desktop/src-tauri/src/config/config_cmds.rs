@@ -57,12 +57,14 @@ fn expand_path(raw: &str) -> Option<PathBuf> {
 
 /// Extrae y compone el objeto de configuración principal para ser entregado a la UI.
 ///
-/// Resuelve de forma asíncrona la correspondencia de Steam App IDs para rellenar
-/// metadatos de juegos faltantes sin bloquear la carga principal.
+/// — Una sola lectura de disco vía `load_settings()` + `load_library()`.
+/// — El mapa Steam se construye una única vez y se reutiliza para todos los juegos.
+/// — Los campos `profile_*` y las claves enmascaradas se extraen del mismo `settings`
+///   sin necesidad de una segunda llamada a `get_combined_config`.
 #[tauri::command]
 pub fn get_config() -> ConfigDto {
-    let combined = config::get_combined_config();
     let settings = config::load_settings();
+    let library = config::load_library();
 
     #[cfg(target_os = "windows")]
     let steam_map = steam::get_steam_path_to_appid_map();
@@ -70,17 +72,21 @@ pub fn get_config() -> ConfigDto {
     let steam_map = std::collections::HashMap::new();
 
     ConfigDto {
-        api_base_url: combined.api_base_url,
-        ws_base_url: combined.ws_base_url,
-        api_key: combined.api_key.map(|_| config::MASKED_API_KEY.to_string()),
-        user_id: combined.user_id,
-        active_cloud_host_user_id: combined.active_cloud_host_user_id,
-        cloud_host_ws_base_urls: combined.cloud_host_ws_base_urls,
-        custom_scan_paths: combined.custom_scan_paths,
-        keep_backups_per_game: combined.keep_backups_per_game,
-        full_backup_streaming: combined.full_backup_streaming,
-        full_backup_streaming_dry_run: combined.full_backup_streaming_dry_run,
-        default_source_download_dir: combined.default_source_download_dir,
+        api_base_url: settings.api_base_url.clone(),
+        ws_base_url: settings.ws_base_url.clone(),
+        api_key: settings
+            .api_key
+            .as_ref()
+            .filter(|k| !k.trim().is_empty())
+            .map(|_| config::MASKED_API_KEY.to_string()),
+        user_id: settings.user_id.clone(),
+        active_cloud_host_user_id: settings.active_cloud_host_user_id.clone(),
+        cloud_host_ws_base_urls: settings.cloud_host_ws_base_urls.clone(),
+        custom_scan_paths: settings.custom_scan_paths.clone(),
+        keep_backups_per_game: settings.keep_backups_per_game,
+        full_backup_streaming: settings.full_backup_streaming,
+        full_backup_streaming_dry_run: settings.full_backup_streaming_dry_run,
+        default_source_download_dir: settings.default_source_download_dir.clone(),
         total_playtime: time::get_total_playtime(),
         profile_background: settings.profile_background.clone(),
         profile_avatar: settings.profile_avatar.clone(),
@@ -92,7 +98,7 @@ pub fn get_config() -> ConfigDto {
             .map(|_| config::MASKED_STEAM_WEB_API_KEY.to_string()),
         share_visual_profile_with_hosts: settings.share_visual_profile_with_hosts,
         share_visual_profile_with_members: settings.share_visual_profile_with_members,
-        games: combined
+        games: library
             .games
             .into_iter()
             .map(|g| {
@@ -221,7 +227,7 @@ pub fn set_cloud_host_ws_url(host_user_id: String, ws_url: String) -> Result<(),
             .insert(host.to_string(), url.to_string());
         config::save_settings(&settings)?;
     }
-    config::save_settings(&settings)
+    Ok(())
 }
 
 /// Modifica la política local de retención máxima de respaldos por juego.
