@@ -5,6 +5,7 @@ import { Moon, Sun } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import type { NavItem } from "@components/layout/Sidebar";
 import { StaggeredMenu } from "@components/external/StaggeredMenu";
+import { MenuGamesList } from "@components/layout/Menugameslist";
 import { NotificationCenter } from "@components/layout/NotificationCenter";
 import { TitleBar } from "@components/layout/TitleBar";
 import { useShellUiStore } from "@store/ShellUiStore";
@@ -14,14 +15,39 @@ import { useConfig } from "@hooks/useConfig";
 import { useGamification } from "@hooks/useGamification";
 import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
+import type { ConfiguredGame } from "@app-types/config";
 
 const ProfileDrawer = lazy(() => import("@features/profile/ProfileDrawer").then((m) => ({ default: m.ProfileDrawer })));
 
+/**
+ * Props del componente {@link AppLayout}.
+ */
 interface AppLayoutProps {
+  /** Ítems de navegación principal mostrados en el menú lateral. */
   navItems: NavItem[];
+  /** Contenido de la página activa. */
   children: ReactNode;
+  /**
+   * Lista de juegos configurados para mostrar en la sección
+   * de juegos del panel del menú. Opcional: si no se proporciona
+   * la sección de juegos no se renderiza.
+   */
+  games?: readonly ConfiguredGame[];
+  /**
+   * Callback que se ejecuta al pulsar un juego en el panel del menú.
+   * Recibe el `ConfiguredGame` seleccionado.
+   */
+  onMenuGameClick?: (game: ConfiguredGame) => void;
 }
 
+/**
+ * Convierte los ítems de navegación al formato esperado por `StaggeredMenu`,
+ * marcando como deshabilitado el ítem que corresponde a la ruta activa.
+ *
+ * @param navItems - Ítems de navegación de la aplicación.
+ * @param currentPath - Pathname actual de React Router.
+ * @returns Array de ítems formateados para `StaggeredMenu`.
+ */
 const menuItemsFromNav = (navItems: NavItem[], currentPath: string) =>
   navItems.map((n) => ({
     id: n.id,
@@ -32,7 +58,31 @@ const menuItemsFromNav = (navItems: NavItem[], currentPath: string) =>
     icon: n.icon,
   }));
 
-export function AppLayout({ navItems, children }: AppLayoutProps) {
+/**
+ * Layout principal de la aplicación.
+ *
+ * Renderiza:
+ * - {@link TitleBar} fija en la parte superior.
+ * - Contenido de página (`children`) con el padding correcto.
+ * - {@link StaggeredMenu} lateral con navegación, lista de juegos (opcional),
+ *   controles de usuario y toggle de tema.
+ * - {@link ProfileDrawer} lazy con apertura controlada por el store global
+ *   y por el badge de usuario.
+ *
+ * ### Integración de juegos en el menú
+ *
+ * Pasa `games` y `onMenuGameClick` para activar la sección de juegos dentro
+ * del panel lateral. El componente {@link MenuGamesList} se encarga
+ * internamente del filtrado con debounce y la carga de media en batch.
+ *
+ * @example
+ * ```tsx
+ * <AppLayout navItems={NAV_ITEMS} games={configuredGames} onMenuGameClick={handleGameNav}>
+ *   <Outlet />
+ * </AppLayout>
+ * ```
+ */
+export function AppLayout({ navItems, children, games, onMenuGameClick }: AppLayoutProps) {
   const { resolvedTheme, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -43,7 +93,6 @@ export function AppLayout({ navItems, children }: AppLayoutProps) {
   const { data: gamification } = useGamification();
 
   const hasSyncConfig = hasUsableCloudConnection(config);
-
   const { connectionStatus } = useLastSyncInfo(hasSyncConfig);
 
   const [profileDrawerOpen, setProfileDrawerOpen] = useState(false);
@@ -69,6 +118,10 @@ export function AppLayout({ navItems, children }: AppLayoutProps) {
     return () => clearTimeout(t);
   }, [configLoading, config]);
 
+  /**
+   * Navega a una ruta usando `startTransition` para no bloquear la UI.
+   * Ignora la navegación si ya estamos en esa ruta.
+   */
   const handleNavigation = (link: string) => {
     if (location.pathname === link) return;
     startTransition(() => {
@@ -79,7 +132,8 @@ export function AppLayout({ navItems, children }: AppLayoutProps) {
   return (
     <div className="relative min-h-screen">
       <TitleBar />
-      <main className="min-h-screen overflow-auto pt-[104px] px-6 pb-6">{children}</main>
+
+      <main className="min-h-screen overflow-x-clip pt-[104px] px-6 pb-6">{children}</main>
 
       <StaggeredMenu
         isFixed
@@ -99,10 +153,7 @@ export function AppLayout({ navItems, children }: AppLayoutProps) {
         onMenuClose={() => setSideMenuOpen(false)}
         onItemClick={(item) => {
           if (!item.link) return;
-
-          setTimeout(() => {
-            handleNavigation(item.link);
-          }, 320);
+          setTimeout(() => handleNavigation(item.link), 320);
         }}
         headerActions={
           <div className="flex items-center gap-4">
@@ -117,6 +168,30 @@ export function AppLayout({ navItems, children }: AppLayoutProps) {
             />
             <NotificationCenter />
           </div>
+        }
+        /**
+         * Sección de juegos inyectada en el panel del menú.
+         * Solo se renderiza si se pasan juegos al layout.
+         * El separador visual (border-top) separa esta sección
+         * de los ítems de navegación principales.
+         */
+        panelSection={
+          games && games.length > 0 ? (
+            <div
+              style={{
+                borderTop: "1px solid color-mix(in oklab, currentColor 12%, transparent)",
+                paddingTop: "1.25rem",
+                marginTop: "0.5rem",
+              }}>
+              <MenuGamesList
+                games={games}
+                onGameClick={(game) => {
+                  useShellUiStore.getState().requestCloseSideMenu();
+                  onMenuGameClick?.(game);
+                }}
+              />
+            </div>
+          ) : undefined
         }
         panelFooter={
           <Button

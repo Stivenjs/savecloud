@@ -1,4 +1,3 @@
-// src/hooks/useFriendsPage.ts
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 import type { Config, ConfiguredGame } from "@app-types/config";
 import type { CopyFriendFilePlan } from "@services/tauri";

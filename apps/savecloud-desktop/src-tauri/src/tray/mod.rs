@@ -11,9 +11,11 @@
 
 pub mod tray_state;
 pub mod tray_tooltip;
+
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{App, Emitter, Manager};
+
 use tray_state::TrayState;
 
 pub fn create_tray(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
@@ -57,23 +59,50 @@ pub fn create_tray(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
         .tooltip("Listo")
         .on_menu_event(move |app, event| {
             let id = event.id.as_ref();
+
             match id {
                 "show" => {
                     if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.show();
+                        if let Err(e) = window.show() {
+                            eprintln!("Error mostrando ventana: {}", e);
+                        }
                         let _ = window.set_focus();
                     }
                 }
-                "quit" => app.exit(0),
+
+                "quit" => {
+                    let handle = app.app_handle().clone();
+
+                    std::thread::spawn(move || {
+                        println!("Iniciando cierre limpio...");
+
+                        handle.exit(0);
+
+                        std::thread::sleep(std::time::Duration::from_secs(5));
+
+                        eprintln!("Forzando cierre de la aplicación...");
+                        std::process::exit(0);
+                    });
+                }
+
                 "upload_all" => {
-                    let _ = app.emit("tray-action-upload-all", ());
+                    if let Err(e) = app.emit("tray-action-upload-all", ()) {
+                        eprintln!("Error emitiendo upload_all: {}", e);
+                    }
                 }
+
                 "download_all" => {
-                    let _ = app.emit("tray-action-download-all", ());
+                    if let Err(e) = app.emit("tray-action-download-all", ()) {
+                        eprintln!("Error emitiendo download_all: {}", e);
+                    }
                 }
+
                 "backup_first" => {
-                    let _ = app.emit("tray-action-backup-first", ());
+                    if let Err(e) = app.emit("tray-action-backup-first", ()) {
+                        eprintln!("Error emitiendo backup_first: {}", e);
+                    }
                 }
+
                 _ => {}
             }
         })

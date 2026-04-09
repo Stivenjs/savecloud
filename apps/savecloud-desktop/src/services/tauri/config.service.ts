@@ -87,6 +87,8 @@ export interface SteamAppdetailsMediaResult {
   genres?: string[];
   /** Nombre oficial en Steam (locale del backend, p. ej. español). */
   name?: string;
+  /** URL de la imagen de cápsula (icono pequeño, típicamente 231x87). */
+  capsuleImage?: string | null;
 }
 
 /** Obtiene URLs de medios (portada, capturas, thumbnails de vídeos) desde la Store API para el hovercard. */

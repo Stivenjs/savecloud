@@ -20,6 +20,7 @@ pub fn normalize_steam_appdetails_media(mut m: SteamAppdetailsMedia) -> SteamApp
         .map(|u| normalize_steam_cdn_url(&u))
         .collect();
     m.video_url = m.video_url.map(|u| normalize_steam_cdn_url(&u));
+    m.capsule_image = m.capsule_image.map(|u| normalize_steam_cdn_url(&u));
     m
 }
 
@@ -44,6 +45,9 @@ pub struct SteamAppdetailsMedia {
     /// Nombre en tienda (locale de la petición); puede vaciarse si el filtro no incluye `basic`.
     #[serde(default)]
     pub name: String,
+    /// URL de la imagen de cápsula (icono pequeño, típicamente 231x87 o 184x69).
+    #[serde(default)]
+    pub capsule_image: Option<String>,
 }
 
 /// Ficha completa de una aplicación de Steam.

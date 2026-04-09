@@ -14,7 +14,7 @@ const bucketName = process.env.BUCKET_NAME ?? "";
 
 const httpsAgent = new Agent({
   keepAlive: true,
-  maxSockets: 50,
+  maxSockets: 250,
 });
 
 const s3 = new S3Client({

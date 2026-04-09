@@ -11,6 +11,8 @@ const STEAM_CDN_BASE = "https://cdn.cloudflare.steamstatic.com/steam/apps";
  * 3. App ID extraído del id (ej. empress-re4-2050650 → 2050650)
  * 4. id numérico puro
  * 5. null → fallback al frontend (Gamepad icon)
+ *
+ * @deprecated Usa gameMedia hook para manejo correcto de medios con fallback de API de Steam, o construye URLs de CDN de Steam directamente.
  */
 export function getGameImageUrl(game: ConfiguredGame, resolvedSteamAppId?: string | null): string | null {
   if (game.imageUrl?.trim()) {

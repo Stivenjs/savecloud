@@ -540,9 +540,22 @@ export async function registerSavesRoutes(
       if (!deps.steamSeedRepository) {
         return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
       }
+
+      const { key, keys } = request.body;
+      if (!key && (!keys || keys.length === 0)) {
+        return reply.status(400).send({ error: "Bad Request", message: "either 'key' or 'keys' is required" });
+      }
+
       try {
         const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
-        const downloadUrl = await deps.steamSeedRepository.getBatchDownloadUrl(ownerId, request.body.key.trim());
+
+        // Bulk mode: keys array
+        if (keys) {
+          const results = await deps.steamSeedRepository.getBatchDownloadUrl(ownerId, keys);
+          return reply.send({ results });
+        }
+
+        const downloadUrl = await deps.steamSeedRepository.getBatchDownloadUrl(ownerId, key!.trim());
         return reply.send({ downloadUrl });
       } catch (err) {
         const message = getErrorMessage(err);

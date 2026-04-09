@@ -38,75 +38,23 @@ struct SteamSeedBatchesResponse {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SteamSeedBatchDownloadUrlResponse {
-    download_url: String,
+struct SteamSeedBatchDownloadUrlResult {
+    key: String,
+    url: Option<String>,
+    #[allow(dead_code)]
+    error: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SteamSeedBatchDownloadUrlsResponse {
+    results: Vec<SteamSeedBatchDownloadUrlResult>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SteamSeedPriorityDownloadUrlResponse {
     download_url: String,
-}
-
-/// Descarga `priority_appids.jsonl` desde la nube y reemplaza `steam_catalog_trending`.
-/// Si el archivo no existe o la API falla, devuelve `Ok(0)` sin error (mejor esfuerzo).
-pub async fn sync_apply_cloud_priority_trending(
-    db: &AppDb,
-    ctx: &ApiContext,
-) -> Result<usize, String> {
-    let url_res = api_request(
-        &ctx.base_url,
-        &ctx.user_id,
-        &ctx.api_key,
-        "POST",
-        "/steam-seed/priority/download-url",
-        None,
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-
-    if !url_res.status().is_success() {
-        return Ok(0);
-    }
-
-    let dl: SteamSeedPriorityDownloadUrlResponse =
-        url_res.json().await.map_err(|e| e.to_string())?;
-
-    let content = API_CLIENT
-        .get(&dl.download_url)
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if !content.status().is_success() {
-        return Ok(0);
-    }
-
-    let text = content.text().await.map_err(|e| e.to_string())?;
-    let ids: Vec<u32> = text
-        .lines()
-        .filter_map(|line| line.trim().parse::<u32>().ok())
-        .filter(|&id| id > 0)
-        .collect();
-
-    if ids.is_empty() {
-        return Ok(0);
-    }
-
-    let n = ids.len();
-    let db_clone = db.clone();
-
-    tokio::task::spawn_blocking(move || {
-        db_clone.with_conn(|c| {
-            replace_trending_app_ids(c, &ids)?;
-            Ok(())
-        })
-    })
-    .await
-    .map_err(|e| e.to_string())?
-    .map_err(|e: SqliteError| e.to_string())?;
-
-    Ok(n)
 }
 
 #[derive(Deserialize)]
@@ -173,6 +121,18 @@ pub struct SteamSeedFreshnessDto {
     pub error: Option<String>,
 }
 
+/// Límite de rondas por ejecución para prevenir bucles infinitos ante respuestas
+/// anómalas de la API.
+const STEAM_SEED_IMPORT_MAX_ROUNDS: u32 = 5000;
+
+/// Devuelve la clave de batch local más avanzada conocida, priorizando
+/// `max_imported_batch_key` sobre `cursor_last_key`.
+///
+/// # Parameters
+/// - `state`: Estado de importación actual leído desde SQLite.
+///
+/// # Returns
+/// `Some(key)` con la clave más alta conocida, o `None` si no hay historial.
 fn effective_local_max_imported(state: &SteamSeedImportState) -> Option<String> {
     state
         .max_imported_batch_key
@@ -180,13 +140,34 @@ fn effective_local_max_imported(state: &SteamSeedImportState) -> Option<String> 
         .or_else(|| state.cursor_last_key.clone())
 }
 
-/// Prefijo `steam-seed/{ownerId}` antes de `/batches/` (misma convención que S3).
+/// Extrae el prefijo `steam-seed/{ownerId}` de una clave S3 completa.
+///
+/// El prefijo termina justo antes del segmento `/batches/`, que marca la
+/// frontera entre el scope del propietario y el nombre del batch.
+///
+/// # Parameters
+/// - `key`: Clave S3 completa, p.ej. `steam-seed/abc123/batches/00000001.jsonl`.
+///
+/// # Returns
+/// `Some(&str)` con el prefijo hasta (sin incluir) `/batches/`, o `None` si
+/// la clave no contiene ese segmento.
 fn steam_seed_scope_prefix(key: &str) -> Option<&str> {
     key.find("/batches/").map(|i| &key[..i])
 }
 
-/// Solo compara con el máximo local si pertenece al **mismo** prefijo S3 que la nube actual.
-/// Así un invitado que cambia de nube propia al host (o entre hosts) no mezcla claves ajenas.
+/// Valida que `local_max` y `cloud_last` pertenecen al mismo scope S3
+/// (`steam-seed/{ownerId}`) antes de usarlos en la comparación de frescura.
+///
+/// Impide que un invitado que cambia de nube propia a la del anfitrión
+/// (o entre anfitriones) mezcle claves de propietarios distintos.
+///
+/// # Parameters
+/// - `cloud_last`: Clave del último batch en la nube, o `None`.
+/// - `local_max`: Clave local máxima importada, o `None`.
+///
+/// # Returns
+/// `Some(local_max)` si ambas claves comparten el mismo prefijo de scope;
+/// `None` en cualquier otro caso.
 fn local_max_if_same_scope_as_cloud<'a>(
     cloud_last: Option<&'a str>,
     local_max: Option<&'a str>,
@@ -202,6 +183,18 @@ fn local_max_if_same_scope_as_cloud<'a>(
     }
 }
 
+/// Calcula el estado de frescura del seed comparando la clave de nube con la local.
+///
+/// # Parameters
+/// - `cloud_last`: Último batch publicado en la nube, o `None` si no existe.
+/// - `local_max`: Máxima clave de batch importada localmente, o `None`.
+///
+/// # Returns
+/// Uno de los literales estáticos:
+/// - `"no_cloud_batches"`: la nube no tiene batches.
+/// - `"no_local_import"`: hay batches en la nube pero ninguno importado aún.
+/// - `"stale"`: la nube tiene batches más nuevos que el máximo local.
+/// - `"up_to_date"`: el local está a la par o por delante de la nube.
 fn compute_steam_seed_freshness_status(
     cloud_last: Option<&str>,
     local_max: Option<&str>,
@@ -218,24 +211,62 @@ fn compute_steam_seed_freshness_status(
     }
 }
 
-/// Límite de vueltas por ejecución para evitar bucles ante respuestas anómalas de la API.
-const STEAM_SEED_IMPORT_MAX_ROUNDS: u32 = 5000;
+/// Valida y normaliza el nombre de la estrategia de importación.
+///
+/// # Parameters
+/// - `s`: Valor crudo del parámetro `strategy`, o `None` para usar el defecto.
+///
+/// # Returns
+/// `Ok("cursor")` o `Ok("newest_first")` según corresponda;
+/// `Err(String)` con mensaje descriptivo si el valor no es reconocido.
+fn parse_import_strategy(s: Option<&str>) -> Result<String, String> {
+    match s.map(str::trim).filter(|x| !x.is_empty()) {
+        None => Ok("cursor".to_string()),
+        Some(x) if x.eq_ignore_ascii_case("cursor") => Ok("cursor".to_string()),
+        Some(x) if x.eq_ignore_ascii_case("newest_first") => Ok("newest_first".to_string()),
+        Some(x) => Err(format!(
+            "strategy inválida: {} (usa 'cursor' o 'newest_first')",
+            x
+        )),
+    }
+}
 
+/// Lee todos los `app_id` del catálogo Steam en orden ascendente.
+///
+/// # Parameters
+/// - `conn`: Conexión SQLite activa.
+///
+/// # Returns
+/// `Vec<u32>` con los IDs; excluye valores ≤ 0.
+///
+/// # Errors
+/// Propaga cualquier [`rusqlite::Error`] de la consulta.
 fn list_all_catalog_app_ids(conn: &Connection) -> Result<Vec<u32>, rusqlite::Error> {
-    let mut stmt = conn.prepare("SELECT app_id FROM steam_catalog_apps ORDER BY app_id ASC")?;
+    let mut stmt =
+        conn.prepare_cached("SELECT app_id FROM steam_catalog_apps ORDER BY app_id ASC")?;
     let rows = stmt.query_map([], |row| row.get::<_, i64>(0))?;
     let mut out = Vec::new();
     for r in rows {
-        let id_i64 = r?;
-        if id_i64 > 0 {
-            out.push(id_i64 as u32);
+        let id = r?;
+        if id > 0 {
+            out.push(id as u32);
         }
     }
     Ok(out)
 }
 
+/// Lee los IDs de las apps en tendencia, ordenados por rango ascendente.
+///
+/// # Parameters
+/// - `conn`: Conexión SQLite activa.
+///
+/// # Returns
+/// `Vec<u32>` con los IDs; excluye valores ≤ 0.
+///
+/// # Errors
+/// Propaga cualquier [`rusqlite::Error`] de la consulta.
 fn list_trending_app_ids(conn: &Connection) -> Result<Vec<u32>, rusqlite::Error> {
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare_cached(
         "SELECT app_id FROM steam_catalog_trending
          WHERE app_id > 0
          ORDER BY rank ASC, app_id ASC",
@@ -243,33 +274,98 @@ fn list_trending_app_ids(conn: &Connection) -> Result<Vec<u32>, rusqlite::Error>
     let rows = stmt.query_map([], |row| row.get::<_, i64>(0))?;
     let mut out = Vec::new();
     for r in rows {
-        let id_i64 = r?;
-        if id_i64 > 0 {
-            out.push(id_i64 as u32);
+        let id = r?;
+        if id > 0 {
+            out.push(id as u32);
         }
     }
     Ok(out)
 }
 
-/// Hace upsert masivo de apps enriquecidas y sincroniza facets + FTS en una
-/// sola pasada SQL al final del batch, en lugar de disparar triggers por fila.
+/// Carga el estado de importación desde SQLite, creando la fila inicial si no existe.
 ///
-/// # Estrategia
-/// 1. Deshabilita triggers en la sesión con `PRAGMA recursive_triggers = OFF`
-///    para evitar O(n) disparos de parseo JSON durante el upsert.
-/// 2. Registra los `app_id` procesados en una tabla temporal `_seed_batch_ids`.
-/// 3. Al finalizar el upsert, sincroniza géneros, tags y FTS en una sola
-///    pasada SQL sobre las apps del batch.
+/// Se usa un enfoque iterativo en lugar de recursivo para evitar stack overflow
+/// en entornos con límites de pila ajustados.
 ///
 /// # Parameters
 /// - `conn`: Conexión SQLite activa.
-/// - `updates`: Tuplas `(app_id, details_json)` a insertar o actualizar.
 ///
 /// # Returns
-/// Número de filas insertadas o actualizadas en `steam_catalog_apps`.
+/// El [`SteamSeedImportState`] persistido, o un estado vacío recién insertado.
 ///
 /// # Errors
-/// Propaga cualquier [`rusqlite::Error`] de la transacción o los statements.
+/// Propaga [`rusqlite::Error`] de cualquier operación de lectura o escritura.
+fn load_or_init_import_state(conn: &Connection) -> Result<SteamSeedImportState, rusqlite::Error> {
+    // Intenta INSERT OR IGNORE para garantizar que la fila existe, luego lee.
+    // Evita la recursión del patrón original (query → no row → insert → recurse).
+    conn.execute(
+        "INSERT OR IGNORE INTO steam_seed_import_state (id) VALUES (1)",
+        [],
+    )?;
+    conn.query_row(
+        "SELECT strategy, cursor_last_key, newest_watermark, max_imported_batch_key
+         FROM steam_seed_import_state WHERE id = 1",
+        [],
+        |row| {
+            Ok(SteamSeedImportState {
+                strategy: row.get(0)?,
+                cursor_last_key: row.get(1)?,
+                newest_watermark: row.get(2)?,
+                max_imported_batch_key: row.get(3)?,
+            })
+        },
+    )
+}
+
+/// Persiste el estado de importación en SQLite.
+///
+/// # Parameters
+/// - `conn`: Conexión SQLite activa.
+/// - `state`: Estado actualizado a escribir.
+///
+/// # Errors
+/// Propaga [`rusqlite::Error`] si el UPDATE falla.
+fn save_import_state(
+    conn: &Connection,
+    state: &SteamSeedImportState,
+) -> Result<(), rusqlite::Error> {
+    conn.execute(
+        "UPDATE steam_seed_import_state
+         SET strategy = ?1, cursor_last_key = ?2, newest_watermark = ?3,
+             max_imported_batch_key = ?4, updated_at = unixepoch()
+         WHERE id = 1",
+        rusqlite::params![
+            state.strategy,
+            state.cursor_last_key,
+            state.newest_watermark,
+            state.max_imported_batch_key,
+        ],
+    )?;
+    Ok(())
+}
+
+/// Hace upsert masivo de apps enriquecidas y sincroniza facets + FTS en una
+/// sola pasada SQL al final del batch.
+///
+/// # Estrategia
+/// 1. Deshabilita triggers recursivos con `PRAGMA recursive_triggers = OFF`
+///    para evitar O(n) disparos de parseo JSON durante el upsert.
+/// 2. Registra los `app_id` procesados en `_seed_batch_ids` (tabla temporal).
+/// 3. Sincroniza géneros, tags y FTS en una sola pasada SQL sobre el batch.
+/// 4. Delega el cálculo de `rank_score` a
+///    [`crate::steam_catalog::scoring::update_rank_scores_for_batch`], que
+///    requiere lógica Rust (parseo de `release_date` con múltiples formatos y
+///    ponderación de señales heterogéneas).
+///
+/// # Parameters
+/// - `conn`: Conexión SQLite activa.
+/// - `updates`: Slice de tuplas `(app_id, details_json)` a insertar o actualizar.
+///
+/// # Returns
+/// Número de filas afectadas en `steam_catalog_apps`.
+///
+/// # Errors
+/// Propaga [`rusqlite::Error`] de cualquier operación dentro de la transacción.
 fn apply_seed_updates(
     conn: &Connection,
     updates: &[(u32, String)],
@@ -280,9 +376,6 @@ fn apply_seed_updates(
 
     let tx = conn.unchecked_transaction()?;
 
-    // Deshabilitamos triggers para esta sesión: los triggers de facets y FTS
-    // se dispararían por cada fila del batch (O(n) con parseo JSON cada vez).
-    // Los sincronizamos manualmente al final en una sola pasada SQL.
     tx.execute_batch(
         "PRAGMA recursive_triggers = OFF;
          CREATE TEMP TABLE IF NOT EXISTS _seed_batch_ids (app_id INTEGER PRIMARY KEY);
@@ -292,6 +385,7 @@ fn apply_seed_updates(
     let mut updated: u32 = 0;
 
     {
+        // Upsert principal: conserva el nombre ya existente si no era nulo/vacío.
         let mut upsert = tx.prepare_cached(
             "INSERT INTO steam_catalog_apps (
                 app_id, name, name_normalized, details_json, enriched_at, last_sync_batch_at
@@ -314,6 +408,7 @@ fn apply_seed_updates(
                                   END",
         )?;
 
+        // Registro de IDs procesados para la sincronización de facets posterior.
         let mut track =
             tx.prepare_cached("INSERT OR IGNORE INTO _seed_batch_ids (app_id) VALUES (?1)")?;
 
@@ -327,13 +422,14 @@ fn apply_seed_updates(
         }
     }
 
-    // Sincronizamos géneros, tags y FTS en una sola pasada sobre el batch completo,
-    // equivalente a lo que harían los triggers pero sin el overhead fila-a-fila.
+    // Sincronización de géneros, tags y FTS en una sola pasada sobre el batch,
+    // equivalente a los triggers fila-a-fila pero sin su overhead O(n).
     tx.execute_batch(
         "
+        -- Géneros: reemplazar solo los del batch actual
         DELETE FROM steam_app_genres
         WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
- 
+
         INSERT OR IGNORE INTO steam_app_genres (app_id, label)
         SELECT
             a.app_id,
@@ -354,10 +450,11 @@ fn apply_seed_updates(
         WHERE a.app_id IN (SELECT app_id FROM _seed_batch_ids)
           AND a.details_json IS NOT NULL
           AND length(trim(a.details_json)) > 0;
- 
+
+        -- Tags: reemplazar solo los del batch actual
         DELETE FROM steam_app_tags
         WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
- 
+
         INSERT OR IGNORE INTO steam_app_tags (app_id, label)
         SELECT
             a.app_id,
@@ -378,10 +475,11 @@ fn apply_seed_updates(
         WHERE a.app_id IN (SELECT app_id FROM _seed_batch_ids)
           AND a.details_json IS NOT NULL
           AND length(trim(a.details_json)) > 0;
- 
+
+        -- FTS: reemplazar entradas del batch
         DELETE FROM steam_catalog_search
         WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
- 
+
         INSERT INTO steam_catalog_search (app_id, name_normalized)
         SELECT app_id, name_normalized
         FROM steam_catalog_apps
@@ -390,16 +488,23 @@ fn apply_seed_updates(
         ",
     )?;
 
-    // Se calcula en Rust (no en SQL) porque la lógica de scoring requiere parsear
-    // `release_date` con múltiples formatos y ponderar señales heterogéneas.
-    // La tabla temporal `_seed_batch_ids` sigue activa en esta conexión,
-    // así que `update_rank_scores_for_batch` la usa directamente.
     crate::steam_catalog::scoring::update_rank_scores_for_batch(&tx)?;
 
     tx.commit()?;
     Ok(updated)
 }
 
+/// Extrae el campo `name` del JSON de detalles de una app Steam.
+///
+/// Se realiza en Rust (no en SQL) para reutilizar el valor ya parseado en el
+/// upsert y evitar un `json_extract` adicional por fila en SQLite.
+///
+/// # Parameters
+/// - `details_json`: JSON crudo de detalles de la app.
+///
+/// # Returns
+/// `Some(name)` si el campo existe y no está vacío; `None` en caso contrario.
+#[inline]
 fn infer_name_from_details_json(details_json: &str) -> Option<String> {
     let v: serde_json::Value = serde_json::from_str(details_json).ok()?;
     let name = v.get("name")?.as_str()?.trim();
@@ -410,69 +515,30 @@ fn infer_name_from_details_json(details_json: &str) -> Option<String> {
     }
 }
 
-fn parse_import_strategy(s: Option<&str>) -> Result<String, String> {
-    match s.map(str::trim).filter(|x| !x.is_empty()) {
-        None => Ok("cursor".to_string()),
-        Some(x) if x.eq_ignore_ascii_case("cursor") => Ok("cursor".to_string()),
-        Some(x) if x.eq_ignore_ascii_case("newest_first") => Ok("newest_first".to_string()),
-        Some(x) => Err(format!(
-            "strategy inválida: {} (usa 'cursor' o 'newest_first')",
-            x
-        )),
-    }
-}
-
-fn load_or_init_import_state(conn: &Connection) -> Result<SteamSeedImportState, rusqlite::Error> {
-    let result = conn.query_row(
-        "SELECT strategy, cursor_last_key, newest_watermark, max_imported_batch_key FROM steam_seed_import_state WHERE id = 1",
-        [],
-        |row| {
-            Ok(SteamSeedImportState {
-                strategy: row.get(0)?,
-                cursor_last_key: row.get(1)?,
-                newest_watermark: row.get(2)?,
-                max_imported_batch_key: row.get(3)?,
-            })
-        },
-    );
-    match result {
-        Ok(s) => Ok(s),
-        Err(rusqlite::Error::QueryReturnedNoRows) => {
-            conn.execute("INSERT INTO steam_seed_import_state (id) VALUES (1)", [])?;
-            load_or_init_import_state(conn)
-        }
-        Err(e) => Err(e),
-    }
-}
-
-fn save_import_state(
-    conn: &Connection,
-    state: &SteamSeedImportState,
-) -> Result<(), rusqlite::Error> {
-    conn.execute(
-        "UPDATE steam_seed_import_state SET strategy = ?1, cursor_last_key = ?2, newest_watermark = ?3, max_imported_batch_key = ?4, updated_at = unixepoch() WHERE id = 1",
-        rusqlite::params![
-            state.strategy,
-            state.cursor_last_key,
-            state.newest_watermark,
-            state.max_imported_batch_key,
-        ],
-    )?;
-    Ok(())
-}
-
+/// Obtiene una página del listado de batches S3.
+///
+/// # Parameters
+/// - `ctx`: Contexto de autenticación con `base_url`, `user_id` y `api_key`.
+/// - `list_cursor`: Cursor de paginación de la llamada anterior, o `None` para
+///   la primera página.
+///
+/// # Returns
+/// [`SteamSeedBatchesResponse`] con las claves de la página y el cursor siguiente.
+///
+/// # Errors
+/// Devuelve `Err(String)` si la petición falla o la API responde con error HTTP.
 async fn list_batch_page(
     ctx: &ApiContext,
     list_cursor: Option<&str>,
 ) -> Result<SteamSeedBatchesResponse, String> {
-    let path = if let Some(c) = list_cursor {
-        format!(
+    let path = match list_cursor {
+        Some(c) => format!(
             "/steam-seed/batches?maxKeys=200&cursor={}",
             urlencoding::encode(c)
-        )
-    } else {
-        "/steam-seed/batches?maxKeys=200".to_string()
+        ),
+        None => "/steam-seed/batches?maxKeys=200".to_string(),
     };
+
     let list_res = api_request(
         &ctx.base_url,
         &ctx.user_id,
@@ -494,68 +560,130 @@ async fn list_batch_page(
     list_res.json().await.map_err(|e| e.to_string())
 }
 
-/// Avanza por el listado S3 en orden lexicográfico ascendente, sin repetir batches ya importados.
+/// Recopila claves de batch en orden lexicográfico ascendente desde el cursor actual.
+///
+/// Solo incluye claves estrictamente mayores que `last_key` y detiene la
+/// paginación en cuanto se alcanza `max_batches`.
+///
+/// # Parameters
+/// - `ctx`: Contexto de autenticación.
+/// - `last_key`: Última clave ya procesada (exclusiva), o `None` para iniciar
+///   desde el principio.
+/// - `max_batches`: Límite máximo de claves a devolver.
+///
+/// # Returns
+/// `Vec<String>` con las claves seleccionadas, en orden ascendente.
+///
+/// # Errors
+/// Propaga errores de [`list_batch_page`].
 async fn collect_cursor_keys(
     ctx: &ApiContext,
     last_key: Option<&str>,
     max_batches: u32,
 ) -> Result<Vec<String>, String> {
-    let mut collected = Vec::new();
+    let mut collected = Vec::with_capacity(max_batches as usize);
     let mut list_cursor: Option<String> = None;
-    loop {
+
+    'pages: loop {
         let page = list_batch_page(ctx, list_cursor.as_deref()).await?;
         for k in page.keys {
-            if let Some(lk) = last_key {
-                if k.as_str() <= lk {
-                    continue;
-                }
+            if last_key.map_or(false, |lk| k.as_str() <= lk) {
+                continue;
             }
             collected.push(k);
             if collected.len() as u32 >= max_batches {
-                return Ok(collected);
+                break 'pages;
             }
         }
-        list_cursor = page.next_cursor;
-        if list_cursor.is_none() {
-            break;
+        match page.next_cursor {
+            Some(c) => list_cursor = Some(c),
+            None => break,
         }
     }
     Ok(collected)
 }
 
+/// Obtiene la lista completa de claves de batch disponibles en la nube.
+///
+/// Pagina hasta agotar todos los resultados; no aplica ningún filtro.
+///
+/// # Parameters
+/// - `ctx`: Contexto de autenticación.
+///
+/// # Returns
+/// `Vec<String>` con todas las claves, en el orden devuelto por la API.
+///
+/// # Errors
+/// Propaga errores de [`list_batch_page`].
 async fn fetch_all_batch_keys(ctx: &ApiContext) -> Result<Vec<String>, String> {
     let mut all = Vec::new();
     let mut list_cursor: Option<String> = None;
     loop {
         let page = list_batch_page(ctx, list_cursor.as_deref()).await?;
         all.extend(page.keys);
-        list_cursor = page.next_cursor;
-        if list_cursor.is_none() {
-            break;
+        match page.next_cursor {
+            Some(c) => list_cursor = Some(c),
+            None => break,
         }
     }
     Ok(all)
 }
 
-/// Prioriza los batches más recientes (sufijo numérico con padding: orden lexicográfico = cronológico).
+/// Recopila claves de batch priorizando las más recientes.
+///
+/// Ordena descendentemente por clave (sufijo numérico con padding →
+/// orden lexicográfico = cronológico), descarta las anteriores al watermark y
+/// trunca al límite indicado.
+///
+/// # Parameters
+/// - `ctx`: Contexto de autenticación.
+/// - `watermark`: Clave mínima ya procesada (exclusiva), o `None` para incluir
+///   todas las disponibles.
+/// - `max_batches`: Número máximo de claves a devolver.
+///
+/// # Returns
+/// `Vec<String>` con hasta `max_batches` claves en orden descendente.
+///
+/// # Errors
+/// Propaga errores de [`fetch_all_batch_keys`].
 async fn collect_newest_first_keys(
     ctx: &ApiContext,
     watermark: Option<&str>,
     max_batches: u32,
 ) -> Result<Vec<String>, String> {
     let mut all = fetch_all_batch_keys(ctx).await?;
-    all.sort_unstable();
-    let mut descending: Vec<String> = all.into_iter().rev().collect();
+    // Orden lexicográfico descendente (más reciente primero).
+    all.sort_unstable_by(|a, b| b.cmp(a));
     if let Some(w) = watermark {
-        descending.retain(|k| k.as_str() < w);
+        all.retain(|k| k.as_str() < w);
     }
-    descending.truncate(max_batches as usize);
-    Ok(descending)
+    all.truncate(max_batches as usize);
+    Ok(all)
 }
 
-async fn fetch_one_batch(ctx: &ApiContext, key: &str) -> Result<Vec<(u32, String)>, String> {
-    let body = serde_json::json!({ "key": key }).to_string();
-    let url_res = api_request(
+/// Resuelve las URLs de descarga pre-firmadas para un conjunto de claves en una
+/// sola llamada al API (bulk), evitando N round-trips seriales.
+///
+/// # Parameters
+/// - `ctx`: Contexto de autenticación.
+/// - `keys`: Slice de claves S3 para las que se solicitan URLs.
+///
+/// # Returns
+/// `HashMap<String, String>` de `key → download_url` para las claves con éxito;
+/// las que la API reportó como error quedan excluidas silenciosamente.
+///
+/// # Errors
+/// Devuelve `Err(String)` si la petición HTTP falla o la API responde con error.
+async fn resolve_batch_download_urls(
+    ctx: &ApiContext,
+    keys: &[String],
+) -> Result<std::collections::HashMap<String, String>, String> {
+    if keys.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+
+    let body = serde_json::json!({ "keys": keys }).to_string();
+    let res = api_request(
         &ctx.base_url,
         &ctx.user_id,
         &ctx.api_key,
@@ -564,19 +692,45 @@ async fn fetch_one_batch(ctx: &ApiContext, key: &str) -> Result<Vec<(u32, String
         Some(body.as_bytes()),
     )
     .await
-    .map_err(|e| format!("steam-seed/batch/download-url: {}", e))?;
+    .map_err(|e| format!("steam-seed/batch/download-url (bulk): {}", e))?;
 
-    if !url_res.status().is_success() {
+    if !res.status().is_success() {
         return Err(format!(
-            "API steam-seed/batch/download-url: {} {}",
-            url_res.status(),
-            url_res.text().await.unwrap_or_default()
+            "API steam-seed/batch/download-url (bulk): {} {}",
+            res.status(),
+            res.text().await.unwrap_or_default()
         ));
     }
 
-    let dl: SteamSeedBatchDownloadUrlResponse = url_res.json().await.map_err(|e| e.to_string())?;
+    let bulk: SteamSeedBatchDownloadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
+
+    Ok(bulk
+        .results
+        .into_iter()
+        .filter_map(|r| r.url.map(|u| (r.key, u)))
+        .collect())
+}
+
+/// Descarga y parsea el contenido JSONL de un batch desde su URL pre-firmada.
+///
+/// Solo retiene las líneas donde `steam_success == true` y `data` no es nulo.
+///
+/// # Parameters
+/// - `key`: Clave S3 del batch (usada solo en mensajes de error).
+/// - `download_url`: URL pre-firmada de descarga.
+///
+/// # Returns
+/// `Vec<(app_id, details_json)>` con las entradas válidas del batch.
+///
+/// # Errors
+/// Devuelve `Err(String)` si la descarga HTTP falla o alguna línea JSONL no se
+/// puede deserializar.
+async fn fetch_one_batch_from_url(
+    key: &str,
+    download_url: &str,
+) -> Result<Vec<(u32, String)>, String> {
     let content = API_CLIENT
-        .get(&dl.download_url)
+        .get(download_url)
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -603,19 +757,45 @@ async fn fetch_one_batch(ctx: &ApiContext, key: &str) -> Result<Vec<(u32, String
     Ok(out)
 }
 
+/// Descarga múltiples batches en paralelo con un límite de concurrencia.
+///
+/// Flujo optimizado en 2 fases:
+/// 1. Una sola llamada al API para resolver todas las URLs pre-firmadas (bulk).
+/// 2. Descarga concurrente de los contenidos con `buffer_unordered`.
+///
+/// Comparado con el flujo secuencial original (2 round-trips por batch),
+/// la latencia baja de O(n) a O(1 + n/concurrency).
+///
+/// # Parameters
+/// - `ctx`: Contexto de autenticación.
+/// - `keys`: Claves S3 a descargar.
+/// - `concurrency`: Número máximo de descargas simultáneas.
+///
+/// # Returns
+/// `Vec<(app_id, details_json)>` con todas las entradas de todos los batches.
+///
+/// # Errors
+/// Devuelve `Err(String)` en el primer fallo de resolución o descarga.
 async fn fetch_batches_concurrent(
     ctx: &ApiContext,
     keys: &[String],
     concurrency: usize,
 ) -> Result<Vec<(u32, String)>, String> {
-    let results: Vec<Result<Vec<(u32, String)>, String>> =
-        stream::iter(keys.iter().cloned().map(|key| {
-            let ctx = ctx.clone();
-            async move { fetch_one_batch(&ctx, &key).await }
-        }))
-        .buffer_unordered(concurrency)
-        .collect()
-        .await;
+    let url_map = resolve_batch_download_urls(ctx, keys).await?;
+
+    let fetch_tasks: Vec<(String, String)> = keys
+        .iter()
+        .filter_map(|key| url_map.get(key).map(|url| (key.clone(), url.clone())))
+        .collect();
+
+    let results: Vec<Result<Vec<(u32, String)>, String>> = stream::iter(
+        fetch_tasks
+            .into_iter()
+            .map(|(key, url)| async move { fetch_one_batch_from_url(&key, &url).await }),
+    )
+    .buffer_unordered(concurrency)
+    .collect()
+    .await;
 
     let mut updates = Vec::new();
     for r in results {
@@ -624,6 +804,99 @@ async fn fetch_batches_concurrent(
     Ok(updates)
 }
 
+/// Descarga `priority_appids.jsonl` desde la nube y reemplaza
+/// `steam_catalog_trending` en SQLite con los IDs recibidos.
+///
+/// Opera en modo "mejor esfuerzo": si el archivo no existe o la API falla,
+/// devuelve `Ok(0)` sin propagar el error, preservando el último trending
+/// persistido.
+///
+/// # Parameters
+/// - `db`: Handle de la base de datos de la aplicación.
+/// - `ctx`: Contexto de autenticación de la API.
+///
+/// # Returns
+/// Número de IDs de tendencia importados (0 si el archivo no existe o hubo error).
+///
+/// # Errors
+/// Solo propaga errores críticos de red o de escritura en SQLite; los errores
+/// de "archivo no encontrado" se absorben devolviendo `Ok(0)`.
+pub async fn sync_apply_cloud_priority_trending(
+    db: &AppDb,
+    ctx: &ApiContext,
+) -> Result<usize, String> {
+    let url_res = api_request(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        "POST",
+        "/steam-seed/priority/download-url",
+        None,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if !url_res.status().is_success() {
+        return Ok(0);
+    }
+
+    let dl: SteamSeedPriorityDownloadUrlResponse =
+        url_res.json().await.map_err(|e| e.to_string())?;
+
+    let content = API_CLIENT
+        .get(&dl.download_url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !content.status().is_success() {
+        return Ok(0);
+    }
+
+    let text = content.text().await.map_err(|e| e.to_string())?;
+    let ids: Vec<u32> = text
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .filter(|&id| id > 0)
+        .collect();
+
+    if ids.is_empty() {
+        return Ok(0);
+    }
+
+    let n = ids.len();
+    let db_clone = db.clone();
+
+    tokio::task::spawn_blocking(move || {
+        db_clone.with_conn(|c| {
+            replace_trending_app_ids(c, &ids)?;
+            Ok(())
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e: SqliteError| e.to_string())?;
+
+    Ok(n)
+}
+
+/// Exporta el manifest de apps locales y las tendencias de tienda a S3 vía API.
+///
+/// Flujo:
+/// 1. Sincroniza tendencias de la Store Steam (mejor esfuerzo).
+/// 2. Sube el catálogo completo en partes de `part_size` IDs cada una.
+/// 3. Sube los IDs de tendencia como `priority_appids`.
+///
+/// # Parameters
+/// - `db`: Handle de la base de datos.
+/// - `part_size`: Tamaño de cada parte del manifest (1–100 000; defecto 50 000).
+///
+/// # Returns
+/// [`SteamSeedExportResultDto`] con el conteo de IDs exportados, partes subidas
+/// e IDs de prioridad subidos.
+///
+/// # Errors
+/// Devuelve `Err(String)` ante cualquier fallo de red o de la API.
 #[tauri::command]
 pub async fn sync_export_steam_manifest_to_cloud_seed(
     db: State<'_, AppDb>,
@@ -632,8 +905,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
     let ctx = resolve_api_context()?;
     let db_ref = db.inner().clone();
 
-    // Refresca tendencias Store y las persiste en SQLite antes de exportar prioridad.
-    // Si falla, no bloqueamos la exportación completa: se mantiene el último trending persistido.
+    // Mejor esfuerzo: fallo aquí no bloquea la exportación.
     let _ = sync_store_trending(&db_ref).await;
 
     let db_manifest = db.inner().clone();
@@ -653,14 +925,9 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
 
     let size = part_size.unwrap_or(50_000).clamp(1, 100_000) as usize;
     let mut parts_uploaded: u32 = 0;
-    let mut offset = 0usize;
 
-    while offset < app_ids.len() {
-        let end = (offset + size).min(app_ids.len());
-        let chunk = &app_ids[offset..end];
-        let part_index = (offset / size) as u32;
-
-        let body = serde_json::json!({ "partIndex": part_index }).to_string();
+    for (part_index, chunk) in app_ids.chunks(size).enumerate() {
+        let body = serde_json::json!({ "partIndex": part_index as u32 }).to_string();
         let res = api_request(
             &ctx.base_url,
             &ctx.user_id,
@@ -681,12 +948,12 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
         }
 
         let upload: SteamSeedUploadUrlResponse = res.json().await.map_err(|e| e.to_string())?;
-        let payload = chunk
+        let mut payload = chunk
             .iter()
             .map(|id| id.to_string())
             .collect::<Vec<_>>()
-            .join("\n")
-            + "\n";
+            .join("\n");
+        payload.push('\n');
 
         let put = API_CLIENT
             .put(&upload.upload_url)
@@ -705,10 +972,8 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
             ));
         }
         parts_uploaded += 1;
-        offset = end;
     }
 
-    // Tendencias de la tienda: se suben como prioridad para adelantarlas en el worker cloud.
     let db_trending = db.inner().clone();
     let trending_ids =
         tokio::task::spawn_blocking(move || db_trending.with_conn(list_trending_app_ids))
@@ -741,12 +1006,13 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
     let priority_payload = if trending_ids.is_empty() {
         String::new()
     } else {
-        trending_ids
+        let mut s = trending_ids
             .iter()
             .map(|id| id.to_string())
             .collect::<Vec<_>>()
-            .join("\n")
-            + "\n"
+            .join("\n");
+        s.push('\n');
+        s
     };
 
     let put_priority = API_CLIENT
@@ -772,6 +1038,11 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
     })
 }
 
+/// Resetea el estado del seed en la nube llamando al endpoint `/steam-seed/reset`.
+///
+/// # Errors
+/// Devuelve `Err(String)` si la llamada HTTP falla o la API responde con un
+/// código distinto de 2xx/204.
 #[tauri::command]
 pub async fn sync_reset_cloud_seed_state() -> Result<(), String> {
     let ctx = resolve_api_context()?;
@@ -796,6 +1067,25 @@ pub async fn sync_reset_cloud_seed_state() -> Result<(), String> {
     Ok(())
 }
 
+/// Ejecuta una única ronda de importación de batches del seed en la nube.
+///
+/// Carga el estado previo, descarga hasta `max_batches` batches nuevos según
+/// la estrategia indicada, los aplica a SQLite y persiste el estado actualizado.
+///
+/// # Parameters
+/// - `db`: Handle de la base de datos.
+/// - `ctx`: Contexto de autenticación.
+/// - `max_batches`: Máximo de batches a procesar en esta ronda.
+/// - `requested_strategy`: `"cursor"` (ascendente desde el último procesado) o
+///   `"newest_first"` (descendente desde el más reciente).
+/// - `concurrency`: Número máximo de descargas en paralelo.
+///
+/// # Returns
+/// [`SteamSeedImportResultDto`] con el conteo de batches procesados y filas
+/// actualizadas en esta ronda. Devuelve ceros si no hay batches nuevos.
+///
+/// # Errors
+/// Propaga cualquier error de la API o de SQLite.
 async fn import_cloud_seed_one_round(
     db: &AppDb,
     ctx: &ApiContext,
@@ -810,6 +1100,7 @@ async fn import_cloud_seed_one_round(
             .map_err(|e| e.to_string())?
             .map_err(|e: SqliteError| e.to_string())?;
 
+    // Resetear cursores si la estrategia cambió desde la última ronda.
     if import_state.strategy != requested_strategy {
         import_state.cursor_last_key = None;
         import_state.newest_watermark = None;
@@ -824,9 +1115,7 @@ async fn import_cloud_seed_one_round(
             collect_newest_first_keys(ctx, import_state.newest_watermark.as_deref(), max_batches)
                 .await?
         }
-        _ => {
-            return Err("estrategia de import no soportada".to_string());
-        }
+        _ => return Err("estrategia de import no soportada".to_string()),
     };
 
     if to_process.is_empty() {
@@ -838,36 +1127,25 @@ async fn import_cloud_seed_one_round(
 
     let updates = fetch_batches_concurrent(ctx, &to_process, concurrency).await?;
 
+    // Avanzar cursor/watermark según la estrategia.
     match requested_strategy {
         "cursor" => {
-            import_state.cursor_last_key = Some(
-                to_process
-                    .iter()
-                    .max()
-                    .expect("to_process no vacío")
-                    .clone(),
-            );
+            import_state.cursor_last_key = to_process.iter().max().cloned();
         }
         "newest_first" => {
-            import_state.newest_watermark = Some(
-                to_process
-                    .iter()
-                    .min()
-                    .expect("to_process no vacío")
-                    .clone(),
-            );
+            import_state.newest_watermark = to_process.iter().min().cloned();
         }
         _ => {}
     }
     import_state.strategy = requested_strategy.to_string();
 
+    // Mantener el high-watermark global del máximo batch importado.
     let batch_max = to_process
         .iter()
         .max()
-        .expect("to_process no vacío")
-        .clone();
-
-    import_state.max_imported_batch_key = Some(match import_state.max_imported_batch_key.clone() {
+        .cloned()
+        .expect("to_process no vacío");
+    import_state.max_imported_batch_key = Some(match import_state.max_imported_batch_key.take() {
         None => batch_max,
         Some(prev) if batch_max > prev => batch_max,
         Some(prev) => prev,
@@ -891,6 +1169,22 @@ async fn import_cloud_seed_one_round(
     })
 }
 
+/// Importa una ronda de batches del seed en la nube hacia SQLite.
+///
+/// Versión de un solo disparo de [`sync_import_cloud_seed_run_until_done`]:
+/// procesa exactamente una ronda y devuelve el resultado sin bucle.
+///
+/// # Parameters
+/// - `db`: Handle de la base de datos.
+/// - `max_batches`: Máximo de batches a procesar (1–500; defecto 50).
+/// - `strategy`: `"cursor"` (defecto) o `"newest_first"`.
+/// - `concurrency`: Descargas en paralelo (1–32; defecto 4).
+///
+/// # Returns
+/// [`SteamSeedImportResultDto`] con el resultado de la ronda.
+///
+/// # Errors
+/// Devuelve `Err(String)` ante fallos de red o SQLite.
 #[tauri::command]
 pub async fn sync_import_cloud_seed_batches_to_sqlite(
     db: State<'_, AppDb>,
@@ -913,6 +1207,29 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
     .await
 }
 
+/// Importa batches del seed en la nube de forma continua hasta agotar todos los disponibles.
+///
+/// Emite eventos `"steam-seed-import-progress"` en cada ronda para que el
+/// frontend pueda mostrar progreso en tiempo real. Al finalizar emite un evento
+/// final con `done: true` y aplica el trending de prioridad.
+///
+/// Tiene un límite de [`STEAM_SEED_IMPORT_MAX_ROUNDS`] rondas para prevenir
+/// bucles infinitos ante respuestas anómalas de la API.
+///
+/// # Parameters
+/// - `app`: Handle de la aplicación Tauri (usado para emitir eventos).
+/// - `db`: Handle de la base de datos.
+/// - `max_batches`: Batches por ronda (1–500; defecto 50).
+/// - `strategy`: `"cursor"` (defecto) o `"newest_first"`.
+/// - `concurrency`: Descargas en paralelo por ronda (1–32; defecto 4).
+///
+/// # Returns
+/// [`SteamSeedImportRunResultDto`] con totales acumulados de rondas, batches,
+/// filas actualizadas e IDs de trending aplicados.
+///
+/// # Errors
+/// Devuelve `Err(String)` si se supera el límite de rondas o ante fallos
+/// de red o SQLite en cualquier ronda.
 #[tauri::command]
 pub async fn sync_import_cloud_seed_run_until_done(
     app: AppHandle,
@@ -992,9 +1309,24 @@ pub async fn sync_import_cloud_seed_run_until_done(
     })
 }
 
-/// Frescura del seed vs SQLite. Usa el mismo [`resolve_api_context`] e [`super::api::api_request`] que el resto de
-/// steam-seed (incluye `x-cloud-host-user-id` cuando hay nube compartida activa), así que invitados ven el estado del
-/// anfitrión. La comparación local solo cuenta si el prefijo `steam-seed/{owner}` coincide con la respuesta actual.
+/// Consulta el estado de frescura del seed local versus la nube.
+///
+/// Usa [`resolve_api_context`] e incluye `x-cloud-host-user-id` cuando hay
+/// nube compartida activa, por lo que los invitados ven el estado del anfitrión.
+/// La comparación local solo aplica cuando el prefijo `steam-seed/{owner}`
+/// coincide entre la respuesta remota y la clave local (evita mezclar scopes).
+///
+/// # Parameters
+/// - `db`: Handle de la base de datos.
+///
+/// # Returns
+/// [`SteamSeedFreshnessDto`] con el estado (`"up_to_date"`, `"stale"`,
+/// `"no_local_import"`, `"no_cloud_batches"` o `"unknown"`), las claves de
+/// referencia y, en caso de error, su descripción en `error`.
+///
+/// # Errors
+/// Esta función no propaga errores: los encapsula en el campo `error` del DTO
+/// y devuelve `status = "unknown"` para que el frontend lo maneje.
 #[tauri::command]
 pub async fn sync_get_steam_seed_freshness(
     db: State<'_, AppDb>,
@@ -1027,7 +1359,7 @@ pub async fn sync_get_steam_seed_freshness(
                 cloud_last_batch_key: None,
                 local_max_batch_key: None,
                 error: Some(e.to_string()),
-            });
+            })
         }
         Err(e) => {
             return Ok(SteamSeedFreshnessDto {
@@ -1035,7 +1367,7 @@ pub async fn sync_get_steam_seed_freshness(
                 cloud_last_batch_key: None,
                 local_max_batch_key: None,
                 error: Some(e.to_string()),
-            });
+            })
         }
     };
 
@@ -1054,7 +1386,7 @@ pub async fn sync_get_steam_seed_freshness(
             return Ok(SteamSeedFreshnessDto {
                 status: "unknown".to_string(),
                 cloud_last_batch_key: None,
-                local_max_batch_key: local_max.clone(),
+                local_max_batch_key: local_max,
                 error: Some(e),
             });
         }
@@ -1083,7 +1415,7 @@ pub async fn sync_get_steam_seed_freshness(
         }
     };
 
-    let cloud_last = remote.last_batch_key.clone();
+    let cloud_last = remote.last_batch_key;
     let local_for_compare =
         local_max_if_same_scope_as_cloud(cloud_last.as_deref(), local_max.as_deref());
     let status =
@@ -1099,8 +1431,7 @@ pub async fn sync_get_steam_seed_freshness(
 
 #[cfg(test)]
 mod freshness_tests {
-    use super::compute_steam_seed_freshness_status;
-    use super::local_max_if_same_scope_as_cloud;
+    use super::{compute_steam_seed_freshness_status, local_max_if_same_scope_as_cloud};
 
     #[test]
     fn scope_mismatch_ignores_local_max() {
