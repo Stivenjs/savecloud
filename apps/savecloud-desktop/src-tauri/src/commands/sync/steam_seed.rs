@@ -36,10 +36,21 @@ struct SteamSeedBatchesResponse {
     next_cursor: Option<String>,
 }
 
+/// Un ítem dentro de `{ "results": [...] }` para el overload bulk.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SteamSeedBatchDownloadUrlResponse {
-    download_url: String,
+struct SteamSeedBatchDownloadUrlResult {
+    key: String,
+    url: Option<String>,
+    #[allow(dead_code)]
+    error: Option<String>,
+}
+
+/// Respuesta bulk del endpoint  `{ "results": [...] }`
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SteamSeedBatchDownloadUrlsResponse {
+    results: Vec<SteamSeedBatchDownloadUrlResult>,
 }
 
 #[derive(Deserialize)]
@@ -553,9 +564,19 @@ async fn collect_newest_first_keys(
     Ok(descending)
 }
 
-async fn fetch_one_batch(ctx: &ApiContext, key: &str) -> Result<Vec<(u32, String)>, String> {
-    let body = serde_json::json!({ "key": key }).to_string();
-    let url_res = api_request(
+/// Resuelve las URLs de descarga para todas las claves en una sola llamada al API
+/// (bulk overload `{ keys: [...] }`), evitando N round-trips seriales.
+/// Devuelve un mapa `key → download_url` solo para las claves que tuvieron éxito.
+async fn resolve_batch_download_urls(
+    ctx: &ApiContext,
+    keys: &[String],
+) -> Result<std::collections::HashMap<String, String>, String> {
+    if keys.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+
+    let body = serde_json::json!({ "keys": keys }).to_string();
+    let res = api_request(
         &ctx.base_url,
         &ctx.user_id,
         &ctx.api_key,
@@ -564,19 +585,34 @@ async fn fetch_one_batch(ctx: &ApiContext, key: &str) -> Result<Vec<(u32, String
         Some(body.as_bytes()),
     )
     .await
-    .map_err(|e| format!("steam-seed/batch/download-url: {}", e))?;
+    .map_err(|e| format!("steam-seed/batch/download-url (bulk): {}", e))?;
 
-    if !url_res.status().is_success() {
+    if !res.status().is_success() {
         return Err(format!(
-            "API steam-seed/batch/download-url: {} {}",
-            url_res.status(),
-            url_res.text().await.unwrap_or_default()
+            "API steam-seed/batch/download-url (bulk): {} {}",
+            res.status(),
+            res.text().await.unwrap_or_default()
         ));
     }
 
-    let dl: SteamSeedBatchDownloadUrlResponse = url_res.json().await.map_err(|e| e.to_string())?;
+    let bulk: SteamSeedBatchDownloadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
+
+    let map = bulk
+        .results
+        .into_iter()
+        .filter_map(|r| r.url.map(|u| (r.key, u)))
+        .collect();
+
+    Ok(map)
+}
+
+/// Descarga el contenido de un batch a partir de su URL pre-firmada ya resuelta.
+async fn fetch_one_batch_from_url(
+    key: &str,
+    download_url: &str,
+) -> Result<Vec<(u32, String)>, String> {
     let content = API_CLIENT
-        .get(&dl.download_url)
+        .get(download_url)
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -603,19 +639,31 @@ async fn fetch_one_batch(ctx: &ApiContext, key: &str) -> Result<Vec<(u32, String
     Ok(out)
 }
 
+/// Resuelve todas las URLs en una sola llamada al API y luego descarga todos
+/// los batches en paralelo. Comparado con el flujo anterior (2 round-trips por
+/// batch en serie), esto reduce la latencia de N×2 a 1 + N/concurrency.
 async fn fetch_batches_concurrent(
     ctx: &ApiContext,
     keys: &[String],
     concurrency: usize,
 ) -> Result<Vec<(u32, String)>, String> {
-    let results: Vec<Result<Vec<(u32, String)>, String>> =
-        stream::iter(keys.iter().cloned().map(|key| {
-            let ctx = ctx.clone();
-            async move { fetch_one_batch(&ctx, &key).await }
-        }))
-        .buffer_unordered(concurrency)
-        .collect()
-        .await;
+    // 1. Una sola llamada al API para obtener todas las URLs pre-firmadas.
+    let url_map = resolve_batch_download_urls(ctx, keys).await?;
+
+    // 2. Descargar los contenidos en paralelo con el límite de concurrencia.
+    let fetch_tasks: Vec<(String, String)> = keys
+        .iter()
+        .filter_map(|key| url_map.get(key).map(|url| (key.clone(), url.clone())))
+        .collect();
+
+    let results: Vec<Result<Vec<(u32, String)>, String>> = stream::iter(
+        fetch_tasks
+            .into_iter()
+            .map(|(key, url)| async move { fetch_one_batch_from_url(&key, &url).await }),
+    )
+    .buffer_unordered(concurrency)
+    .collect()
+    .await;
 
     let mut updates = Vec::new();
     for r in results {

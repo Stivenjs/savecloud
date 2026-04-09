@@ -108,7 +108,8 @@ export const SteamSeedManifestUploadUrlSchema = Type.Object({
 export type SteamSeedManifestUploadUrlBody = Static<typeof SteamSeedManifestUploadUrlSchema>;
 
 export const SteamSeedBatchDownloadUrlSchema = Type.Object({
-  key: Type.String({ minLength: 1 }),
+  key: Type.Optional(Type.String({ minLength: 1 })),
+  keys: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 500 })),
 });
 export type SteamSeedBatchDownloadUrlBody = Static<typeof SteamSeedBatchDownloadUrlSchema>;
 
