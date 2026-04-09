@@ -137,10 +137,10 @@ const MENU_GAMES_STYLES = `
 }
 
 .mg-thumb-wrap {
-  flex: 0 0 var(--mg-img-size);
-  width: var(--mg-img-size);
-  height: var(--mg-img-size);
-  border-radius: 6px;
+  flex: 0 0 auto;
+  width: 64px;
+  height: 36px;
+  border-radius: calc(var(--mg-radius) * 0.75);
   overflow: hidden;
   background: var(--mg-skeleton-bg);
   position: relative;
@@ -149,6 +149,7 @@ const MENU_GAMES_STYLES = `
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
   display: block;
   transition: opacity 0.2s ease;
 }
@@ -191,10 +192,10 @@ const MENU_GAMES_STYLES = `
   padding: var(--mg-item-pad);
 }
 .mg-skeleton-thumb {
-  flex: 0 0 var(--mg-img-size);
-  width: var(--mg-img-size);
-  height: var(--mg-img-size);
-  border-radius: 6px;
+  flex: 0 0 auto;
+  width: 64px;
+  height: 36px;
+  border-radius: calc(var(--mg-radius) * 0.75);
   background: var(--mg-skeleton-bg);
   animation: mg-pulse 1.4s ease-in-out infinite;
 }
@@ -268,14 +269,15 @@ function MenuGamesSkeletons({ count }: { count: number }) {
  * individuales duplicadas.
  */
 function MenuGameItem({ game, resolvedSteamAppId, mediaBySteamAppId, onClick }: MenuGameItemProps) {
-  const { displayImageUrl, imgLoaded, imgError, handleImgLoad, handleImgError } = useGameMedia({
+  const { capsuleImage, imgLoaded, imgError, handleImgLoad, handleImgError } = useGameMedia({
     game,
     resolvedSteamAppId,
     mediaBySteamAppId,
     mediaFromBatch: true,
   });
 
-  const showFallback = !displayImageUrl || imgError;
+  const imageUrl = capsuleImage || game.imageUrl || null;
+  const showFallback = !imageUrl || imgError;
 
   return (
     <li>
@@ -288,7 +290,7 @@ function MenuGameItem({ game, resolvedSteamAppId, mediaBySteamAppId, onClick }: 
         <div className="mg-thumb-wrap" aria-hidden="true">
           {!showFallback && (
             <img
-              src={displayImageUrl!}
+              src={imageUrl}
               alt=""
               className="mg-thumb"
               data-loaded={imgLoaded ? "true" : "false"}

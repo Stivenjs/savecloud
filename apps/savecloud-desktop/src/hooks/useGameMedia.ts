@@ -43,6 +43,8 @@ interface UseGameMediaOptions {
 export interface UseGameMediaResult {
   /** URL de la imagen principal a mostrar, o `null` mientras carga. */
   displayImageUrl: string | null;
+  /** URL de la imagen de cápsula (icono pequeño) desde la DB, o `null` si no existe. */
+  capsuleImage: string | null;
   /** Lista completa de URLs de media disponibles para el juego. */
   mediaUrls: string[];
   /** URL del primer vídeo del juego en Steam, o `null` si no existe. */
@@ -164,9 +166,11 @@ export function useGameMedia({
 
   const genres = mediaSource?.genres?.filter(Boolean) ?? [];
   const steamStoreName = mediaSource?.name?.trim() ?? "";
+  const capsuleImage = mediaSource?.capsuleImage ?? null;
 
   return {
     displayImageUrl,
+    capsuleImage,
     mediaUrls,
     videoUrl: mediaSource?.videoUrl ?? null,
     genres,

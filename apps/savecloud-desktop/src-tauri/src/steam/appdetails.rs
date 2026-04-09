@@ -110,7 +110,7 @@ fn extract_best_video_url(movie: &serde_json::Value) -> Option<String> {
         .or_else(|| nested("mp4"))
 }
 
-/// Parsea portada, capturas, vídeo, géneros y nombre desde el campo `data` de `appdetails`.
+/// Parsea portada, capturas, vídeo, cápsula, géneros y nombre desde el campo `data` de `appdetails`.
 pub fn parse_media_from_data(data: &serde_json::Value) -> SteamAppdetailsMedia {
     let mut media_urls: Vec<String> = Vec::new();
     let mut video_url: Option<String> = None;
@@ -147,11 +147,18 @@ pub fn parse_media_from_data(data: &serde_json::Value) -> SteamAppdetailsMedia {
 
     let genres = extract_keyed_string_array(data, "genres", "description");
 
+    let capsule_image = data
+        .get("capsule_image")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(String::from);
+
     normalize_steam_appdetails_media(SteamAppdetailsMedia {
         media_urls,
         video_url,
         genres,
         name,
+        capsule_image,
     })
 }
 
@@ -235,6 +242,7 @@ pub async fn fetch_steam_appdetails_media_from_store(
             video_url: None,
             genres: Vec::new(),
             name: String::new(),
+            capsule_image: None,
         }))
 }
 

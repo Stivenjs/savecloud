@@ -633,6 +633,7 @@ pub async fn get_steam_appdetails_media_batch(
         video_url: None,
         genres: Vec::new(),
         name: String::new(),
+        capsule_image: None,
     };
 
     let stream = stream::iter(ids_to_fetch.into_iter().map(|app_id| async move {
@@ -747,6 +748,7 @@ mod media_cache_tests {
             video_url: None,
             genres: vec!["Acción".to_string()],
             name: "Test".to_string(),
+            capsule_image: None,
         };
         upsert_persistent_media_cache_batch(&conn, &[("730".to_string(), m.clone())])
             .expect("upsert");
@@ -764,6 +766,7 @@ mod media_cache_tests {
             video_url: None,
             genres: vec![],
             name: "FromDisk".to_string(),
+            capsule_image: None,
         };
         upsert_persistent_media_cache_batch(&conn, &[("440".to_string(), m)]).expect("upsert");
         let map = load_combined_media_from_db(&conn, &["440".to_string()]).expect("combined");
