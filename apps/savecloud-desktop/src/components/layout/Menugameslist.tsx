@@ -358,7 +358,7 @@ export function MenuGamesList({ games, onGameClick }: MenuGamesListProps) {
           ref={inputRef}
           type="search"
           className="mg-search-input"
-          placeholder="Filtrar librería"
+          placeholder="Filtrar biblioteca"
           value={searchValue}
           onChange={handleSearchChange}
           aria-label="Filtrar juegos"
