@@ -162,6 +162,7 @@ export function VideoPlayer({
       muted={muted}
       loop={loop}
       playsInline
+      controlsList="nofullscreen"
       controls
       preload={preload}
       onPlay={handlePlay}
