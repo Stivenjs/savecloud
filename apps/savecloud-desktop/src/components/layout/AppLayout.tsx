@@ -79,8 +79,7 @@ export function AppLayout({ navItems, children }: AppLayoutProps) {
   return (
     <div className="relative min-h-screen">
       <TitleBar />
-      <main className="min-h-screen overflow-auto pt-[104px] px-6 pb-6">{children}</main>
-
+      <main className="min-h-screen overflow-x-clip pt-[104px] px-6 pb-6">{children}</main>
       <StaggeredMenu
         isFixed
         position="left"
