@@ -1,4 +1,3 @@
--- 1. Llenar los datos existentes que ya tenías guardados (Backfill)
 INSERT OR IGNORE INTO steam_app_genres (app_id, label)
 SELECT 
     a.app_id, 
@@ -21,7 +20,6 @@ FROM steam_catalog_apps a,
      json_each(CASE WHEN json_valid(a.details_json) AND json_type(json_extract(a.details_json, '$.categories')) = 'array' THEN json_extract(a.details_json, '$.categories') ELSE '[]' END) AS t
 WHERE a.details_json IS NOT NULL AND length(trim(a.details_json)) > 0;
 
--- 2. Crear Triggers (Para que se llenen automáticamente con los juegos futuros)
 CREATE TRIGGER IF NOT EXISTS trg_insert_facets
 AFTER INSERT ON steam_catalog_apps
 WHEN NEW.details_json IS NOT NULL AND length(trim(NEW.details_json)) > 0

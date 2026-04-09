@@ -41,18 +41,15 @@ const MIGRATIONS: &[&str] = &[
     include_str!("sql/006_notifications.sql"),
     include_str!("sql/007_steam_seed_import_state.sql"),
     include_str!("sql/008_steam_seed_max_imported.sql"),
-    "", // 9 reservado
-    concat!(
-        include_str!("sql/009_steam_app_genres.sql"),
-        ";\n",
-        include_str!("sql/010_steam_app_tags.sql")
-    ), // 10
+    include_str!("sql/009_steam_app_genres.sql"),
+    include_str!("sql/010_steam_app_tags.sql"),
     include_str!("sql/011_fill_facets_and_triggers.sql"),
     include_str!("sql/012_fast_sort_index.sql"),
     include_str!("sql/013_fts_search.sql"),
     include_str!("sql/014_covering_indexes.sql"),
     include_str!("sql/015_fix_fts_triggers.sql"),
     include_str!("sql/016_seed_patch.sql"),
+    include_str!("sql/017_catalog_rank_score.sql"),
 ];
 
 /// Ejecuta todas las migraciones pendientes.

@@ -11,7 +11,7 @@ use crate::steam_cache::{normalize_steam_app_id, steam_api_cache, SteamAppDetail
 fn catalog_contains_app(conn: &Connection, app_id: u32) -> Result<bool, rusqlite::Error> {
     let n: i64 = conn.query_row(
         "SELECT COUNT(*) FROM steam_catalog_apps WHERE app_id = ?1",
-        [app_id],
+        [app_id], 
         |row| row.get(0),
     )?;
     Ok(n > 0)

@@ -23,6 +23,10 @@ use rusqlite::{params_from_iter, Connection, Row};
 use super::normalize::search_phrase_and_tokens;
 use super::types::{CatalogFilterFacet, CatalogFilterFacets, CatalogListItem, CatalogPage};
 
+/// Número máximo de filas que COUNT evalúa cuando hay filtros activos.
+/// Suficiente para la paginación de UI; evita un full-scan sobre el catálogo completo.
+const COUNT_CAP: u64 = 50_000;
+
 fn map_catalog_row(row: &Row<'_>) -> Result<CatalogListItem, rusqlite::Error> {
     let id: i64 = row.get(0)?;
     Ok(CatalogListItem {
@@ -31,74 +35,79 @@ fn map_catalog_row(row: &Row<'_>) -> Result<CatalogListItem, rusqlite::Error> {
     })
 }
 
-/// Filtro por género desde `steam_app_genres`.
+/// Añade un EXISTS por cada género (semántica AND: la app debe tener TODOS).
+///
+/// Usa la subquery correlacionada:
+/// `EXISTS (SELECT 1 FROM steam_app_genres WHERE app_id = <alias>.app_id AND label = ?)`
+///
+/// Requiere el índice `idx_steam_app_genres_appid_label (app_id, label)` para que
+/// SQLite resuelva cada EXISTS con una búsqueda puntual en O(log n).
 fn append_genre_filter(
     sql: &mut String,
     params: &mut Vec<String>,
     genres: &[String],
     table_alias: &str,
 ) {
-    if genres.is_empty() {
-        return;
-    }
-    sql.push_str(&format!(
-        " AND {}.app_id IN (SELECT app_id FROM steam_app_genres WHERE label IN (",
-        table_alias
-    ));
-    for (i, genre) in genres.iter().enumerate() {
-        if i > 0 {
-            sql.push_str(", ");
-        }
-        sql.push('?');
+    for genre in genres {
+        sql.push_str(&format!(
+            " AND EXISTS (SELECT 1 FROM steam_app_genres \
+              WHERE app_id = {table_alias}.app_id AND label = ?)"
+        ));
         params.push(genre.clone());
     }
-    sql.push_str("))");
 }
 
-/// Filtro por etiqueta desde `steam_app_tags`.
+/// Añade un EXISTS por cada tag (semántica AND: la app debe tener TODOS).
+///
+/// Mismo patrón que `append_genre_filter`; requiere
+/// `idx_steam_app_tags_appid_label (app_id, label)`.
 fn append_tag_filter(
     sql: &mut String,
     params: &mut Vec<String>,
     tags: &[String],
     table_alias: &str,
 ) {
-    if tags.is_empty() {
-        return;
-    }
-    sql.push_str(&format!(
-        " AND {}.app_id IN (SELECT app_id FROM steam_app_tags WHERE label IN (",
-        table_alias
-    ));
-    for (i, tag) in tags.iter().enumerate() {
-        if i > 0 {
-            sql.push_str(", ");
-        }
-        sql.push('?');
+    for tag in tags {
+        sql.push_str(&format!(
+            " AND EXISTS (SELECT 1 FROM steam_app_tags \
+              WHERE app_id = {table_alias}.app_id AND label = ?)"
+        ));
         params.push(tag.clone());
     }
-    sql.push_str("))");
 }
 
-/// Recuento de filas que cumplen filtros.
+/// Recuento de filas que cumplen los filtros, acotado a `COUNT_CAP`.
+///
+/// Cuando no hay filtros activos el total exacto es inmediato (stat de SQLite).
+/// Con filtros se recorre hasta `COUNT_CAP` filas; si las hay más, se devuelve
+/// `COUNT_CAP` como estimación conservadora (suficiente para la UI).
+///
+/// Esto elimina el full-scan que en el código original bloqueaba durante segundos
+/// cuando un tag popular tenía decenas de miles de resultados.
 pub fn count_catalog_filtered(
     conn: &Connection,
     genres: &[String],
     tags: &[String],
 ) -> Result<u64, rusqlite::Error> {
-    let mut sql = String::from("SELECT COUNT(*) FROM steam_catalog_apps WHERE 1=1");
+    if genres.is_empty() && tags.is_empty() {
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM steam_catalog_apps", [], |r| r.get(0))?;
+        return Ok(n as u64);
+    }
+
+    let mut sql = format!(
+        "SELECT COUNT(*) FROM (\
+           SELECT 1 FROM steam_catalog_apps WHERE 1=1"
+    );
     let mut params: Vec<String> = Vec::new();
     append_genre_filter(&mut sql, &mut params, genres, "steam_catalog_apps");
     append_tag_filter(&mut sql, &mut params, tags, "steam_catalog_apps");
+    sql.push_str(&format!(" LIMIT {COUNT_CAP})"));
 
-    let count: i64 = if params.is_empty() {
-        conn.query_row(&sql, [], |row| row.get(0))?
-    } else {
-        conn.query_row(
-            &sql,
-            params_from_iter(params.iter().map(|s| s.as_str())),
-            |row| row.get(0),
-        )?
-    };
+    let count: i64 = conn.query_row(
+        &sql,
+        params_from_iter(params.iter().map(|s| s.as_str())),
+        |r| r.get(0),
+    )?;
     Ok(count as u64)
 }
 
@@ -122,10 +131,9 @@ pub fn list_catalog_page_filtered(
 ) -> Result<Vec<CatalogListItem>, rusqlite::Error> {
     let mut results = Vec::new();
 
-    // Tendencias
-    // Ordenadas por rank de la tienda (más vendidos primero).
     let mut t_sql = String::from(
-        "SELECT a.app_id, a.name FROM steam_catalog_trending tr \
+        "SELECT a.app_id, a.name \
+         FROM steam_catalog_trending tr \
          JOIN steam_catalog_apps a ON a.app_id = tr.app_id \
          WHERE 1=1",
     );
@@ -159,20 +167,6 @@ pub fn list_catalog_page_filtered(
         );
     }
 
-    // Catálogo general ordenado por score
-    //
-    // ORDER BY usa `catalog_rank_score DESC` como criterio principal.
-    // Desempate por `enriched_at DESC` (enriquecido más recientemente primero)
-    // y `app_id DESC` (ids más altos → juegos más nuevos en Steam).
-    //
-    // Este orden DEBE coincidir exactamente con el índice `idx_catalog_rank_sort`
-    // para que SQLite use el B-Tree sin filesort:
-    //
-    //   CREATE INDEX idx_catalog_rank_sort ON steam_catalog_apps
-    //     (catalog_rank_score DESC, enriched_at DESC, app_id DESC);
-    //
-    // Las apps sin `details_json` tienen `catalog_rank_score = 0` y `enriched_at = NULL`,
-    // por lo que quedan naturalmente al final de la lista sin necesidad de un filtro extra.
     if results.len() < limit as usize {
         let remaining_limit = limit - results.len() as u32;
         let normal_offset = if offset >= t_count {
@@ -182,21 +176,17 @@ pub fn list_catalog_page_filtered(
         };
 
         let mut n_sql = String::from(
-            "SELECT a.app_id, a.name FROM steam_catalog_apps a \
-             WHERE NOT EXISTS (SELECT 1 FROM steam_catalog_trending WHERE app_id = a.app_id)",
+            "SELECT a.app_id, a.name \
+             FROM steam_catalog_apps a \
+             WHERE NOT EXISTS \
+               (SELECT 1 FROM steam_catalog_trending WHERE app_id = a.app_id)",
         );
         let mut n_params: Vec<String> = Vec::new();
         append_genre_filter(&mut n_sql, &mut n_params, genres, "a");
         append_tag_filter(&mut n_sql, &mut n_params, tags, "a");
 
-        // Orden primario: score derivado de metadatos (recencia + calidad + medios).
-        // Desempate 1: fecha de enriquecimiento (apps recién procesadas suben temporalmente).
-        // Desempate 2: app_id descendente (ids mayores = juegos más nuevos en Steam).
         n_sql.push_str(" ORDER BY a.catalog_rank_score DESC, a.enriched_at DESC, a.app_id DESC");
-        n_sql.push_str(&format!(
-            " LIMIT {} OFFSET {}",
-            remaining_limit, normal_offset
-        ));
+        n_sql.push_str(&format!(" LIMIT {remaining_limit} OFFSET {normal_offset}"));
 
         let mut stmt_n = conn.prepare(&n_sql)?;
         let normal_items = if n_params.is_empty() {
@@ -213,6 +203,7 @@ pub fn list_catalog_page_filtered(
     Ok(results)
 }
 
+/// Página completa: total acotado + items.
 pub fn catalog_page_filtered(
     conn: &Connection,
     offset: u32,
@@ -234,6 +225,8 @@ pub fn catalog_page_filtered(
 ///
 /// El `catalog_rank_score` actúa como criterio de desempate entre resultados con igual relevancia FTS,
 /// priorizando juegos de mayor calidad cuando hay múltiples coincidencias exactas del token.
+///
+/// Los filtros de género/tag se aplican con EXISTS correlacionado, igual que en el listado.
 pub fn search_catalog_filtered(
     conn: &Connection,
     q: &str,
@@ -247,33 +240,30 @@ pub fn search_catalog_filtered(
 
     let fts_match_query = tokens
         .iter()
-        .map(|t| format!("\"{}\"*", t.replace('\"', "")))
+        .map(|t| format!("\"{}\"*", t.replace('"', "")))
         .collect::<Vec<_>>()
         .join(" AND ");
 
     let mut sql = String::from(
-        "SELECT a.app_id, a.name FROM steam_catalog_search s \
+        "SELECT a.app_id, a.name \
+         FROM steam_catalog_search s \
          JOIN steam_catalog_apps a ON a.app_id = s.app_id \
          LEFT JOIN steam_catalog_trending tr ON tr.app_id = a.app_id \
          WHERE steam_catalog_search MATCH ?",
     );
 
     let mut params: Vec<String> = vec![fts_match_query];
-
     append_genre_filter(&mut sql, &mut params, genres, "a");
     append_tag_filter(&mut sql, &mut params, tags, "a");
 
-    // Orden de búsqueda:
-    // 1. Relevancia FTS (rank ASC — en FTS5, rank es negativo; menor = más relevante).
-    // 2. Si hay empate FTS: trending primero (mayor presencia en tienda).
-    // 3. Luego: score de calidad general (recencia + riqueza de ficha).
-    // 4. Desempate final: enriquecido más recientemente.
     sql.push_str(
-        " ORDER BY s.rank ASC, (tr.rank IS NOT NULL) DESC, tr.rank ASC, \
-          a.catalog_rank_score DESC, a.enriched_at DESC",
+        " ORDER BY s.rank ASC, \
+          (tr.rank IS NOT NULL) DESC, \
+          tr.rank ASC, \
+          a.catalog_rank_score DESC, \
+          a.enriched_at DESC",
     );
-    sql.push_str(" LIMIT ");
-    sql.push_str(&limit.to_string());
+    sql.push_str(&format!(" LIMIT {limit}"));
 
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map(
@@ -285,23 +275,30 @@ pub fn search_catalog_filtered(
 }
 
 /// Facetas desde las tablas indexadas `steam_app_genres` y `steam_app_tags`.
+///
+/// Se limita a las primeras 200 etiquetas más populares para que la UI no se
+/// sature; ajustar `FACET_LIMIT` si se necesitan más.
 pub fn filter_facets(conn: &Connection) -> Result<CatalogFilterFacets, rusqlite::Error> {
+    const FACET_LIMIT: usize = 200;
+
     let genres_sql = "
-        SELECT label, COUNT(app_id) AS cnt 
-        FROM steam_app_genres 
-        GROUP BY label 
+        SELECT label, COUNT(app_id) AS cnt
+        FROM steam_app_genres
+        GROUP BY label
         ORDER BY cnt DESC, label COLLATE NOCASE ASC
+        LIMIT ?1
     ";
 
     let tags_sql = "
-        SELECT label, COUNT(app_id) AS cnt 
-        FROM steam_app_tags 
-        GROUP BY label 
+        SELECT label, COUNT(app_id) AS cnt
+        FROM steam_app_tags
+        GROUP BY label
         ORDER BY cnt DESC, label COLLATE NOCASE ASC
+        LIMIT ?1
     ";
 
-    let genres = collect_facet_rows(conn, genres_sql)?;
-    let tags = collect_facet_rows(conn, tags_sql)?;
+    let genres = collect_facet_rows(conn, genres_sql, FACET_LIMIT)?;
+    let tags = collect_facet_rows(conn, tags_sql, FACET_LIMIT)?;
 
     Ok(CatalogFilterFacets { genres, tags })
 }
@@ -309,9 +306,10 @@ pub fn filter_facets(conn: &Connection) -> Result<CatalogFilterFacets, rusqlite:
 fn collect_facet_rows(
     conn: &Connection,
     sql: &str,
+    limit: usize,
 ) -> Result<Vec<CatalogFilterFacet>, rusqlite::Error> {
     let mut stmt = conn.prepare(sql)?;
-    let rows = stmt.query_map([], |row| {
+    let rows = stmt.query_map([limit as i64], |row| {
         Ok(CatalogFilterFacet {
             label: row.get(0)?,
             count: row.get::<_, i64>(1)? as u64,
