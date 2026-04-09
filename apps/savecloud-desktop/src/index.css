@@ -53,3 +53,7 @@
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+video::-webkit-media-controls-fullscreen-button {
+  display: none;
+}
