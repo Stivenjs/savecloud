@@ -1,15 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Button, Card, CardBody, Code } from "@heroui/react";
 import { FolderSearch, Gamepad2, PlusCircle } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import type { GameStats } from "@services/tauri";
-import { getSteamAppdetailsMediaBatch } from "@services/tauri";
 import { useCloudBackupCounts } from "@hooks/useCloudBackupCounts";
 import { useGameStats } from "@hooks/useGameStats";
 import { useGameRunningStatus } from "@hooks/useGameRunningStatus";
 import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
-import { getSteamAppId, needsSteamSearch } from "@utils/gameImage";
+import { useGameMediaBatch, getIsResolvingIds } from "@hooks/useGameMedia"; // <-- Ajusta esta ruta según tu proyecto
+import { needsSteamSearch } from "@utils/gameImage";
 import { GameCard } from "@features/games/GameCard";
 import { GamesListMotionContainer, GamesListMotionItem } from "@features/games/GamesListMotion";
 
@@ -98,21 +97,12 @@ export function GamesList({
   hasSyncConfig = false,
 }: GamesListProps) {
   const resolvedSteamAppIds = useResolvedSteamAppIds(games);
-  const isResolvingIds = useMemo(() => {
-    return games.some((game) => needsSteamSearch(game) && resolvedSteamAppIds[game.id] === undefined);
-  }, [games, resolvedSteamAppIds]);
 
-  const steamAppIdsForBatch = useMemo(() => {
-    const ids = games.map((g) => getSteamAppId(g, resolvedSteamAppIds[g.id])).filter((id): id is string => !!id);
-    return [...new Set(ids)].sort();
-  }, [games, resolvedSteamAppIds]);
-
-  const { data: mediaBySteamAppId } = useQuery({
-    queryKey: ["steam-appdetails-media-batch", steamAppIdsForBatch.join(",")],
-    queryFn: () => getSteamAppdetailsMediaBatch(steamAppIdsForBatch),
-    enabled: steamAppIdsForBatch.length > 0 && !isResolvingIds,
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+  const isResolvingIds = getIsResolvingIds(games, resolvedSteamAppIds);
+  const { mediaBySteamAppId } = useGameMediaBatch({
+    games,
+    resolvedSteamAppIds,
+    isResolvingIds,
   });
 
   const { statsByGameId } = useGameStats(games.length > 0);

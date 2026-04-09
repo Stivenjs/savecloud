@@ -2,6 +2,7 @@ import React, { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { useShellUiStore } from "@store/ShellUiStore";
 
+/** Ítem de navegación del menú. */
 export interface StaggeredMenuItem {
   label: string;
   ariaLabel: string;
@@ -9,31 +10,64 @@ export interface StaggeredMenuItem {
   id?: string;
   icon?: React.ReactNode;
 }
+
+/** Ítem de red social del menú. */
 export interface StaggeredMenuSocialItem {
   label: string;
   link: string;
 }
+
+/**
+ * Props del componente {@link StaggeredMenu}.
+ */
 export interface StaggeredMenuProps {
+  /** Lado de la pantalla donde aparece el panel. Por defecto `"right"`. */
   position?: "left" | "right";
+  /** Colores de las capas decorativas pre-panel (de atrás a delante). */
   colors?: string[];
+  /** Ítems de navegación principal. */
   items?: StaggeredMenuItem[];
+  /** Ítems de redes sociales. */
   socialItems?: StaggeredMenuSocialItem[];
+  /** Muestra la sección de redes sociales. */
   displaySocials?: boolean;
+  /** Muestra el número de ítem al hacer hover. */
   displayItemNumbering?: boolean;
+  /** Clase CSS adicional para el wrapper. */
   className?: string;
+  /** URL del logo. */
   logoUrl?: string;
+  /** Muestra el logo en el header del panel. */
   showLogo?: boolean;
+  /** Color del botón toggle en estado cerrado. */
   menuButtonColor?: string;
+  /** Color del botón toggle en estado abierto. */
   openMenuButtonColor?: string;
+  /** Color de acento para números y hover de socials. */
   accentColor?: string;
+  /** Usa `position: fixed` para cubrir toda la ventana. */
   isFixed?: boolean;
+  /** Cierra el panel al hacer clic fuera de él. */
   closeOnClickAway?: boolean;
-  onItemClick?: (item: StaggeredMenuItem) => void;
+  /** Callback cuando el menú se abre. */
   onMenuOpen?: () => void;
+  /** Callback cuando el menú se cierra. */
   onMenuClose?: () => void;
+  /** Callback cuando se hace clic en un ítem de navegación. */
+  onItemClick?: (item: StaggeredMenuItem) => void;
+  /** Nodo renderizado al final del panel, encima del footer. */
   panelFooter?: React.ReactNode;
+  /**
+   * Sección adicional renderizada entre la lista de ítems de navegación
+   * y el footer del panel. Ideal para listas secundarias como juegos,
+   * colecciones, favoritos, etc.
+   */
+  panelSection?: React.ReactNode;
+  /** Acciones renderizadas en el header (junto al botón toggle). */
   headerActions?: React.ReactNode;
+  /** Desplazamiento vertical del header en px. */
   headerOffset?: number;
+  /** Cambia el color del botón al abrir. */
   changeMenuColorOnOpen?: boolean;
 }
 
@@ -100,10 +134,37 @@ const STAGGERED_MENU_STYLES = `
 .sm-scope .sm-panel-item:hover { background: color-mix(in oklab, var(--sm-panel-text) 8%, transparent); }
 .sm-scope .sm-panel-list[data-numbering] { counter-reset: smItem; }
 .sm-scope .sm-panel-list[data-numbering] .sm-panel-item::after { counter-increment: smItem; content: counter(smItem, decimal-leading-zero); position: absolute; top: 50%; right: 0.75rem; transform: translateY(-50%); font-size: 0.75rem; font-weight: 400; color: var(--sm-accent, #ff0000); letter-spacing: 0; pointer-events: none; user-select: none; opacity: var(--sm-num-opacity, 0); }
+
+.sm-scope .sm-panel-section { flex-shrink: 0; }
+
 @media (max-width: 1024px) { .sm-scope .staggered-menu-panel { width: 100%; left: 0; right: 0; } .sm-scope .staggered-menu-wrapper[data-open] .sm-logo-img { filter: invert(100%); } }
 @media (max-width: 640px) { .sm-scope .staggered-menu-panel { width: 100%; left: 0; right: 0; } .sm-scope .staggered-menu-wrapper[data-open] .sm-logo-img { filter: invert(100%); } }
 `;
 
+/**
+ * Menú lateral animado con capas decorativas tipo "stagger".
+ *
+ * El panel se divide en tres zonas verticales:
+ * 1. **Lista de navegación principal** — ítems con animación de entrada.
+ * 2. **Sección adicional** (`panelSection`) — renderizada debajo de la nav;
+ *    útil para listas secundarias como juegos, colecciones, etc.
+ * 3. **Footer del panel** (`panelFooter`) — fijado al fondo (toggle de tema, etc.)
+ *    seguido opcionalmente de la sección de redes sociales.
+ *
+ * Las animaciones de apertura/cierre usan GSAP y se orquestan mediante refs
+ * para evitar re-renders innecesarios.
+ *
+ * @example
+ * ```tsx
+ * <StaggeredMenu
+ *   isFixed
+ *   position="left"
+ *   items={navItems}
+ *   panelSection={<MenuGamesList games={games} onGameClick={handleClick} />}
+ *   panelFooter={<ThemeToggle />}
+ * />
+ * ```
+ */
 export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
   position = "right",
   colors = ["#B19EEF", "#5227FF"],
@@ -123,6 +184,7 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
   onMenuClose,
   onItemClick,
   panelFooter,
+  panelSection,
   headerActions,
   headerOffset = 0,
   changeMenuColorOnOpen = true,
@@ -157,7 +219,6 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
     const ctx = gsap.context(() => {
       const panel = panelRef.current;
       const preContainer = preLayersRef.current;
-
       const plusH = plusHRef.current;
       const plusV = plusVRef.current;
       const icon = iconRef.current;
@@ -233,8 +294,7 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
     );
 
     if (itemEls.length) {
-      const itemsStartRatio = 0.15;
-      const itemsStart = panelInsertTime + panelDuration * itemsStartRatio;
+      const itemsStart = panelInsertTime + panelDuration * 0.15;
 
       tl.to(
         itemEls,
@@ -264,7 +324,6 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
 
     if (socialTitle || socialLinks.length) {
       const socialsStart = panelInsertTime + panelDuration * 0.4;
-
       if (socialTitle) tl.to(socialTitle, { opacity: 1, duration: 0.5, ease: "power2.out" }, socialsStart);
       if (socialLinks.length) {
         tl.to(
@@ -311,12 +370,10 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
     const layers = preLayerElsRef.current;
     if (!panel) return;
 
-    const all: HTMLElement[] = [...layers, panel];
     closeTweenRef.current?.kill();
-
     const offscreen = position === "left" ? -100 : 100;
 
-    closeTweenRef.current = gsap.to(all, {
+    closeTweenRef.current = gsap.to([...layers, panel], {
       xPercent: offscreen,
       duration: 0.32,
       ease: "power3.in",
@@ -369,9 +426,8 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
       if (!btn) return;
       colorTweenRef.current?.kill();
       if (changeMenuColorOnOpen) {
-        const targetColor = opening ? openMenuButtonColor : menuButtonColor;
         colorTweenRef.current = gsap.to(btn, {
-          color: targetColor,
+          color: opening ? openMenuButtonColor : menuButtonColor,
           delay: 0.18,
           duration: 0.3,
           ease: "power2.out",
@@ -385,12 +441,8 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
 
   React.useEffect(() => {
     if (toggleBtnRef.current) {
-      if (changeMenuColorOnOpen) {
-        const targetColor = openRef.current ? openMenuButtonColor : menuButtonColor;
-        gsap.set(toggleBtnRef.current, { color: targetColor });
-      } else {
-        gsap.set(toggleBtnRef.current, { color: menuButtonColor });
-      }
+      const target = changeMenuColorOnOpen && openRef.current ? openMenuButtonColor : menuButtonColor;
+      gsap.set(toggleBtnRef.current, { color: target });
     }
   }, [changeMenuColorOnOpen, menuButtonColor, openMenuButtonColor]);
 
@@ -499,9 +551,7 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
     };
 
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [closeOnClickAway, open, closeMenu]);
 
   return (
@@ -568,7 +618,7 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
               type="button">
               <span
                 ref={textWrapRef}
-                className="sm-toggle-textWrap relative inline-block h-[1em] overflow-hidden whitespace-nowrap w-(--sm-toggle-width,auto) min-w-(--sm-toggle-width,auto)"
+                className="sm-toggle-textWrap relative inline-block h-[1em] overflow-hidden whitespace-nowrap"
                 aria-hidden="true">
                 <span ref={textInnerRef} className="sm-toggle-textInner flex flex-col leading-none">
                   {textLines.map((l, i) => (
@@ -641,7 +691,7 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
                 ))
               ) : (
                 <li className="sm-panel-itemWrap relative overflow-hidden leading-none" aria-hidden="true">
-                  <span className="sm-panel-item relative font-semibold text-2xl cursor-pointer leading-none tracking-tight uppercase transition-[background,color] duration-150 ease-linear inline-block no-underline pr-8">
+                  <span className="sm-panel-item relative font-semibold text-2xl cursor-pointer">
                     <span className="sm-panel-itemLabel inline-block origin-[50%_100%] will-change-transform">
                       No items
                     </span>
@@ -650,11 +700,23 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
               )}
             </ul>
 
+            {/*
+             * Sección adicional (ej. lista de juegos)
+             * Se renderiza entre la nav principal y el footer del panel.
+             * No participa en las animaciones GSAP de ítems de nav para
+             * no interferir con los selectores de `.sm-panel-itemLabel`.
+             */}
+            {panelSection && (
+              <div className="sm-panel-section" aria-label="Sección adicional del menú">
+                {panelSection}
+              </div>
+            )}
+
             {panelFooter && <div className="sm-panel-footer mt-auto pt-6">{panelFooter}</div>}
 
             {displaySocials && socialItems && socialItems.length > 0 && (
               <div className="sm-socials mt-auto pt-8 flex flex-col gap-3" aria-label="Social links">
-                <h3 className="sm-socials-title m-0 text-base font-medium text-(--sm-accent,#ff0000)">Socials</h3>
+                <h3 className="sm-socials-title m-0 text-base font-medium">Socials</h3>
                 <ul
                   className="sm-socials-list list-none m-0 p-0 flex flex-row items-center gap-4 flex-wrap"
                   role="list">
