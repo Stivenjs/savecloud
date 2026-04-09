@@ -95,6 +95,7 @@ export function GameVideoModal({ isOpen, onClose, videoUrl }: GameVideoModalProp
             loop
             playsInline
             controls
+            controlsList="nofullscreen"
             preload="auto"
           />
           <div className="absolute right-2 top-2 z-10">
