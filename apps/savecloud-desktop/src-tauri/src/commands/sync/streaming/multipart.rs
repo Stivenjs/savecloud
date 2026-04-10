@@ -605,6 +605,7 @@ pub(crate) async fn upload_tar_stream_multipart(
     api_key: &str,
     app: tauri::AppHandle,
     cancel: Option<std::sync::Arc<crate::tray::tray_state::TrayStateInner>>,
+    shutdown_token: Option<tokio_util::sync::CancellationToken>,
 ) -> Result<(), String> {
     let strategy = UploadStrategy::for_file(estimated_total);
     let mut concurrency = ConcurrencyController::new(&strategy);
@@ -672,6 +673,15 @@ pub(crate) async fn upload_tar_stream_multipart(
                 upload_tasks.abort_all();
                 let _ = multipart_abort(&ctx).await;
                 return Err("pausa no soportada en backups streaming (usa cancelar)".to_string());
+            }
+        }
+
+        if let Some(ref token) = shutdown_token {
+            if token.is_cancelled() {
+                upload_tasks.abort_all();
+                let _ = multipart_abort(&ctx).await;
+                sync_logger::log_operation("full_backup_streaming_aborted_shutdown", &log_ctx);
+                return Err("subida abortada por cierre de la aplicación".to_string());
             }
         }
 
@@ -828,6 +838,7 @@ pub(crate) async fn upload_tar_stream_multipart_dry_run(
     estimated_total: u64,
     app: tauri::AppHandle,
     cancel: Option<std::sync::Arc<crate::tray::tray_state::TrayStateInner>>,
+    shutdown_token: Option<tokio_util::sync::CancellationToken>,
 ) -> Result<(), String> {
     let strategy = UploadStrategy::for_file(estimated_total);
     let display_name = format!("{} (stream dry-run)", relative_filename);
@@ -858,6 +869,16 @@ pub(crate) async fn upload_tar_stream_multipart_dry_run(
                 let ctx = format!("{} | cancelled_after_bytes={}", log_ctx, uploaded_bytes);
                 sync_logger::log_operation("full_backup_streaming_dry_run_cancelled", &ctx);
                 return Err("subida de prueba cancelada".to_string());
+            }
+        }
+
+        if let Some(ref token) = shutdown_token {
+            if token.is_cancelled() {
+                sync_logger::log_operation(
+                    "full_backup_streaming_dry_run_aborted_shutdown",
+                    &log_ctx,
+                );
+                return Err("subida de prueba abortada por cierre de la aplicación".to_string());
             }
         }
 

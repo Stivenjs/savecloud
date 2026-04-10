@@ -65,6 +65,7 @@ tokio-tungstenite = { version = "0.26", features = ["rustls-tls-native-roots"] }
 tauri-plugin-os = "2.3.2"
 zstd = { version = "0.13.3", features = ["zstdmt"] }
 num_cpus = "1.17.0"
+log = "0.4.29"
 
 
 [dev-dependencies]

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::network::{API_CLIENT, DATA_CLIENT};
 use crate::torrent::engine;
@@ -95,6 +95,21 @@ pub async fn cancel_torrent(
     engine::cancel_via_session(&session, &info_hash).await?;
     let _ = app.emit(engine::TORRENT_CANCELLED_EVENT, &info_hash);
     crate::notifications::writer::try_record_torrent_cancelled(&app, &info_hash, &info_hash);
+
+    // Si no quedan torrents activos tras la cancelación, completar el guard.
+    {
+        let eng = state.engine.lock().await;
+        if eng.active_hashes().is_empty() {
+            if let Some(guard_state) = app.try_state::<crate::setup::TorrentShutdownGuard>() {
+                if let Ok(mut g) = guard_state.0.lock() {
+                    if let Some(guard) = g.take() {
+                        guard.complete();
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 

@@ -5341,6 +5341,7 @@ dependencies = [
  "hex 0.4.3",
  "keyring",
  "librqbit",
+ "log",
  "mlua",
  "moka",
  "notify",
