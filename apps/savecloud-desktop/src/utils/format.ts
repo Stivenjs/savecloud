@@ -103,3 +103,18 @@ export function getSourceDisplayName(sourceUrl: string): string {
     return "";
   }
 }
+
+export function mapTorrentState(state: string) {
+  switch (state) {
+    case "checking":
+      return "Preparando descarga...";
+    case "starting":
+      return "Iniciando...";
+    case "downloading":
+      return "Descargando";
+    case "paused":
+      return "Pausado";
+    default:
+      return state;
+  }
+}

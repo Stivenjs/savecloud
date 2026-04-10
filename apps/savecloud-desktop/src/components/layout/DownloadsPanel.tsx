@@ -5,7 +5,7 @@ import { cancelSourceDownload, pauseSourceDownload, resumeSourceDownload } from 
 import { useSourcesDownloadsStore } from "@store/SourcesDownloadsStore";
 import { useSyncStore } from "@store/SyncStore";
 import { useTorrentStore } from "@store/TorrentStore";
-import { formatBytes } from "@utils/format";
+import { formatBytes, mapTorrentState } from "@utils/format";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { formatEta, formatSpeed } from "@utils/progress";
 
@@ -92,6 +92,7 @@ export function DownloadsPanel() {
   const rows = useMemo<DownloadRow[]>(() => {
     const syncRows = Object.entries(syncTasks).map(([id, task]) => {
       const value = task.total > 0 ? Math.min(100, Math.round((task.loaded / task.total) * 100)) : 0;
+
       const gameName = task.gameId ? formatGameDisplayName(task.gameId) : "Descarga";
       return {
         id,
@@ -125,7 +126,7 @@ export function DownloadsPanel() {
       .map((task) => ({
         id: `torrent-${task.infoHash}`,
         label: task.name || "Torrent",
-        subtitle: task.state,
+        subtitle: mapTorrentState(task.state),
         value: Math.max(0, Math.min(100, Math.round(task.progressPercent))),
         source: "torrent" as const,
         loaded: task.downloadedBytes,
@@ -136,10 +137,12 @@ export function DownloadsPanel() {
 
     const sourceRows = Object.values(sourcesTasks).map((task) => {
       const isTorrentBacked = task.protocol === "torrentMagnet" || task.protocol === "torrentFile";
+
       const torrent = isTorrentBacked && task.externalId ? torrentTasks[task.externalId] : undefined;
 
       let loaded = task.loaded;
       let total = task.total;
+
       if (torrent) {
         if (torrent.totalBytes > 0) {
           loaded = torrent.downloadedBytes;
@@ -158,7 +161,10 @@ export function DownloadsPanel() {
               ? Math.min(100, Math.round((task.loaded / task.total) * 100))
               : 0;
 
-      const subtitle = `${task.protocol} · ${task.status}`;
+      const subtitle = isTorrentBacked
+        ? `${task.protocol} · ${torrent ? mapTorrentState(torrent.state) : "Preparando descarga..."}`
+        : `${task.protocol} · ${task.status}`;
+
       return {
         id: `sources-${task.jobId}`,
         jobId: task.jobId,
