@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
 import { getActiveTorrentDownloads } from "@services/tauri/config.service";
 
-export type TorrentDownloadState = "starting" | "downloading" | "paused" | "completed";
+export type TorrentDownloadState = "starting" | "checking" | "downloading" | "paused" | "completed";
 
 export interface TorrentProgressState {
   infoHash: string;
@@ -33,18 +33,38 @@ export const useTorrentStore = create<TorrentStore>((set) => ({
   setProgress: (progress) => {
     set((state) => {
       const next = { ...state.activeByHash };
-      if (progress?.infoHash && progress.state !== "completed") {
-        next[progress.infoHash] = progress;
-      } else if (progress?.infoHash) {
-        delete next[progress.infoHash];
+
+      if (progress?.infoHash) {
+        const isChecking =
+          progress.state === "starting" &&
+          progress.downloadSpeedBytes === 0 &&
+          progress.downloadedBytes === 0 &&
+          progress.totalBytes > 0;
+
+        const normalizedState = isChecking ? "checking" : progress.state;
+
+        const updated = {
+          ...progress,
+          state: normalizedState,
+        };
+
+        if (normalizedState !== "completed") {
+          next[progress.infoHash] = updated;
+        } else {
+          delete next[progress.infoHash];
+        }
       }
-      const nextProgress =
-        progress?.state === "completed"
-          ? state.progress?.infoHash === progress.infoHash
-            ? null
-            : state.progress
-          : progress;
-      return { progress: nextProgress, activeByHash: next, activeCount: Object.keys(next).length };
+
+      return {
+        activeByHash: next,
+        activeCount: Object.keys(next).length,
+        progress:
+          progress?.state === "completed"
+            ? state.progress?.infoHash === progress.infoHash
+              ? null
+              : state.progress
+            : progress,
+      };
     });
   },
   removeByHash: (infoHash) =>
