@@ -1,9 +1,4 @@
 //! Detección de procesos de juego y monitoreo de actividad en tiempo real.
-//!
-//! Este módulo provee la lógica para identificar si los juegos configurados están
-//! en ejecución, permitiendo evitar colisiones de archivos durante la sincronización.
-//! Además, gestiona el rastreo de tiempo de juego (playtime) emitiendo eventos
-//! reactivos hacia el frontend.
 
 use crate::config;
 use crate::time;
@@ -13,12 +8,10 @@ use std::sync::OnceLock;
 use std::time::Instant;
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tauri::{AppHandle, Emitter};
+use tokio_util::sync::CancellationToken;
 
-/// Instancia global de `System` compartida para evitar sobrecarga de memoria
-/// al re-inicializar el árbol de procesos en cada consulta.
 static GLOBAL_SYS: OnceLock<Mutex<System>> = OnceLock::new();
 
-/// Recupera un guardia del Mutex que contiene la instancia global de `sysinfo::System`.
 pub(crate) fn get_sys() -> std::sync::MutexGuard<'static, System> {
     GLOBAL_SYS
         .get_or_init(|| Mutex::new(System::new()))
@@ -53,13 +46,11 @@ pub fn is_game_running(game_id: &str, _paths: &[String]) -> bool {
     if names.is_empty() {
         return false;
     }
-
     let mut sys = get_sys();
     sys.refresh_processes_specifics(
         ProcessesToUpdate::All,
         ProcessRefreshKind::new().with_exe(UpdateKind::OnlyIfNotSet),
     );
-
     for process in sys.processes().values() {
         let proc_name = process.name().to_string_lossy().to_lowercase();
         for check in &names {
@@ -134,7 +125,6 @@ pub fn are_games_running(game_ids: &[String]) -> HashMap<String, bool> {
             if result[game_id] {
                 continue;
             }
-
             if let Some(check_names) = names_by_game.get(game_id) {
                 if check_names.contains(&proc_name) {
                     result.insert(game_id.clone(), true);
@@ -145,65 +135,98 @@ pub fn are_games_running(game_ids: &[String]) -> HashMap<String, bool> {
     result
 }
 
-/// Orquesta el monitoreo continuo de procesos en segundo plano.
+/// Comando Tauri original — sin cambios en su firma pública.
 ///
-/// Este hilo realiza tres tareas principales:
-/// 1. Emite eventos de estado de ejecución ("games-running-status").
-/// 2. Acumula tiempo de juego (Playtime) cada 60 segundos de actividad.
-/// 3. Sincroniza el tiempo restante al detectar el cierre de un proceso.
+/// Se conserva para que el `invoke_handler` del builder no necesite
+/// modificarse. Internamente delega en `run_watcher_loop_with_token`
+/// sin token (nunca cancela por shutdown, pero tampoco bloquea el cierre
+/// porque el runtime de Tokio lo mata igualmente al salir).
+///
+/// En setups donde se usa el ShutdownCoordinator, NO llamar a este comando
+/// desde setup.rs — llamar a `run_watcher_loop_with_token` directamente.
+#[allow(dead_code)]
 #[tauri::command]
 pub fn start_process_watcher(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
-        let mut previous_state: HashMap<String, bool> = HashMap::new();
-        let mut last_checkpoint: HashMap<String, Instant> = HashMap::new();
-
-        loop {
-            let cfg = config::load_config();
-            let game_ids: Vec<String> = cfg.games.iter().map(|g| g.id.clone()).collect();
-            let current_state = are_games_running(&game_ids);
-
-            // Notificar cambios de estado (Ej. Un juego se abrió o se cerró)
-            if current_state != previous_state {
-                let _ = app.emit("games-running-status", &current_state);
-            }
-
-            for (game_id, &is_running) in &current_state {
-                let was_running = *previous_state.get(game_id).unwrap_or(&false);
-
-                if is_running {
-                    if !was_running {
-                        last_checkpoint.insert(game_id.clone(), Instant::now());
-                    } else if let Some(start) = last_checkpoint.get(game_id) {
-                        let elapsed = start.elapsed().as_secs();
-
-                        // Guardar tiempo acumulado cada minuto de juego activo
-                        if elapsed >= 60 {
-                            let _ = time::add_playtime(game_id, elapsed);
-                            last_checkpoint.insert(game_id.clone(), Instant::now());
-                            emit_playtime_update(&app, game_id);
-                        }
-                    }
-                } else if was_running {
-                    // El juego acaba de cerrarse: procesar tiempo final
-                    if let Some(start) = last_checkpoint.remove(game_id) {
-                        let remaining = start.elapsed().as_secs();
-                        if remaining > 0 {
-                            let _ = time::add_playtime(game_id, remaining);
-                            emit_playtime_update(&app, game_id);
-                        }
-                    }
-                }
-            }
-
-            previous_state = current_state;
-            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-        }
+        run_watcher_loop_with_token(&app, CancellationToken::new()).await;
     });
 }
 
-/// Despacha eventos IPC para actualizar los contadores de tiempo en la UI.
+/// Bucle del process watcher con punto de salida limpia via CancellationToken.
+///
+/// Llamar desde `setup.rs` pasando el token del ShutdownBus:
+///
+/// ```rust
+/// let token = shutdown_bus.token();
+/// tauri::async_runtime::spawn(async move {
+///     process_check::run_watcher_loop_with_token(&app_handle, token).await;
+///     guard.complete();
+/// });
+/// ```
+///
+/// El select! interno garantiza que cuando el token es cancelado, el loop
+/// sale inmediatamente aunque esté en medio del sleep de 10 segundos.
+pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationToken) {
+    let mut previous_state: HashMap<String, bool> = HashMap::new();
+    let mut last_checkpoint: HashMap<String, Instant> = HashMap::new();
+
+    loop {
+        // Punto de salida al inicio de cada ciclo (sin coste si no está cancelado).
+        if token.is_cancelled() {
+            log::info!("[process_watcher] Token cancelado, terminando bucle.");
+            break;
+        }
+
+        let cfg = config::load_config();
+        let game_ids: Vec<String> = cfg.games.iter().map(|g| g.id.clone()).collect();
+        let current = are_games_running(&game_ids);
+
+        if current != previous_state {
+            let _ = app.emit("games-running-status", &current);
+        }
+
+        for (game_id, &is_running) in &current {
+            let was_running = *previous_state.get(game_id).unwrap_or(&false);
+
+            if is_running {
+                if !was_running {
+                    last_checkpoint.insert(game_id.clone(), Instant::now());
+                } else if let Some(start) = last_checkpoint.get(game_id) {
+                    let elapsed = start.elapsed().as_secs();
+                    if elapsed >= 60 {
+                        let _ = time::add_playtime(game_id, elapsed);
+                        last_checkpoint.insert(game_id.clone(), Instant::now());
+                        emit_playtime_update(app, game_id);
+                    }
+                }
+            } else if was_running {
+                if let Some(start) = last_checkpoint.remove(game_id) {
+                    let remaining = start.elapsed().as_secs();
+                    if remaining > 0 {
+                        let _ = time::add_playtime(game_id, remaining);
+                        emit_playtime_update(app, game_id);
+                    }
+                }
+            }
+        }
+
+        previous_state = current;
+
+        // Sleep interruptible: si el token se cancela durante la espera,
+        // el select! sale de inmediato sin bloquear el shutdown 10 segundos.
+        tokio::select! {
+            _ = token.cancelled() => {
+                log::info!("[process_watcher] Token cancelado durante sleep, terminando.");
+                break;
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {}
+        }
+    }
+}
+
 fn emit_playtime_update(app: &AppHandle, game_id: &str) {
     let new_time = time::get_game_playtime(game_id);
+    let total_time = time::get_total_playtime();
     let _ = app.emit(
         "playtime-updated",
         Payload {
@@ -211,8 +234,6 @@ fn emit_playtime_update(app: &AppHandle, game_id: &str) {
             new_time,
         },
     );
-
-    let total_time = time::get_total_playtime();
     let _ = app.emit("total-playtime-updated", total_time);
 }
 
@@ -224,6 +245,11 @@ struct Payload {
 }
 
 /// Obtiene la lista de nombres de ejecutables a monitorear para un ID de juego.
+///
+/// # Arguments
+/// * `game_id` - Identificador único del juego.
+/// # Returns
+/// Una lista de nombres de ejecutables a monitorear para el juego.
 fn get_executable_names_to_check(game_id: &str) -> Vec<String> {
     let cfg = config::load_config();
     if let Some(game) = cfg
@@ -250,7 +276,12 @@ fn get_executable_names_to_check(game_id: &str) -> Vec<String> {
     infer_exe_candidates(game_id)
 }
 
-/// Asegura que el nombre del ejecutable tenga la extensión apropiada según el SO.
+/// Añade la extensión de ejecutable `.exe` si es necesario.
+///
+/// # Arguments
+/// * `s` - Nombre de ejecutable.
+/// # Returns
+/// El nombre de ejecutable con la extensión `.exe` si es necesario.
 fn ensure_exe_ext(s: &str) -> String {
     let s = s.trim();
     #[cfg(target_os = "windows")]
@@ -267,10 +298,12 @@ fn ensure_exe_ext(s: &str) -> String {
     }
 }
 
-/// Deduce posibles nombres de ejecutables basándose en el identificador del juego.
+/// Infiere posibles nombres de ejecutables basándose en el texto del juego.
 ///
-/// Genera variaciones como el nombre compacto y acrónimos para mejorar la
-/// tasa de éxito en la detección automática.
+/// # Arguments
+/// * `text` - Texto del juego.
+/// # Returns
+/// Una lista de posibles nombres de ejecutables.
 fn infer_exe_candidates(text: &str) -> Vec<String> {
     let mut candidates = Vec::new();
     let text = text.trim();
@@ -278,7 +311,6 @@ fn infer_exe_candidates(text: &str) -> Vec<String> {
         return candidates;
     }
 
-    // Candidato 1: Nombre base sin símbolos ni espacios
     let base = text.replace(['\'', '"', ':', '-'], "").replace(' ', "");
     if !base.is_empty() {
         #[cfg(target_os = "windows")]
@@ -287,17 +319,13 @@ fn infer_exe_candidates(text: &str) -> Vec<String> {
             candidates.push(format!("{}-Win64-Shipping.exe", base));
         }
         #[cfg(not(target_os = "windows"))]
-        {
-            candidates.push(base.clone());
-        }
+        candidates.push(base.clone());
     }
 
-    // Candidato 2: Acrónimo (Ej: "Grand Theft Auto" -> "gta")
     let mut acronym = String::new();
     let words = text
         .split(|c: char| !c.is_alphanumeric())
         .filter(|w| !w.is_empty());
-
     for word in words {
         if word.chars().all(|c| c.is_ascii_digit()) {
             acronym.push_str(word);

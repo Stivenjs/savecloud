@@ -9,15 +9,23 @@ use crate::system::game_exit_sync;
 //use crate::system::watch_sync;
 use crate::controller::start_gamepad_loop;
 use crate::plugins::{log_buffer::new_log_buffer, AppPluginManager};
+use crate::shutdown::coordinator::ShutdownPhase;
+use crate::shutdown::{ShutdownBus, ShutdownCoordinator, ShutdownGuard};
 use crate::sources::queue;
 use crate::sqlite::AppDb;
-use crate::system::process_check::start_process_watcher;
+use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray::tray_state::TrayState;
 
 use std::sync::Arc;
 use tauri::{App, Manager};
 use tokio::sync::Mutex;
+
+/// Wrapper de estado de Tauri para el guard del TorrentSession.
+///
+/// Se registra con `app.manage()` para que `engine.rs` pueda completarlo
+/// cuando la última sesión de librqbit queda vacía al cerrar.
+pub struct TorrentShutdownGuard(pub std::sync::Mutex<Option<ShutdownGuard>>);
 
 /// Ejecuta la secuencia de arranque de los demonios y vincula los estados globales.
 ///
@@ -26,13 +34,17 @@ use tokio::sync::Mutex;
 /// * `app` - Referencia mutable a la instancia principal de la aplicación Tauri.
 pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     // 1. Herramientas de desarrollo
-    // Habilitar DevTools automáticamente en el frontend si compilamos en modo debug.
     #[cfg(debug_assertions)]
     {
         if let Some(window) = app.get_webview_window("main") {
             window.open_devtools();
         }
     }
+
+    // Crear bus y coordinator UNA sola vez, antes de cualquier subsistema,
+    // para que los guards puedan registrarse desde el principio.
+    let shutdown_bus = ShutdownBus::new();
+    let coordinator = ShutdownCoordinator::new(shutdown_bus.clone());
 
     // 2. Inicialización del sistema de Plugins
     let plugins_dir = app
@@ -50,16 +62,14 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     db.ping()?;
 
     let db_for_maintenance = db.clone();
-
     app.manage(db);
-    // 4. Inicialización del hilo de mantenimiento de la base de datos
+
+    // 4. Hilo de mantenimiento de la base de datos
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-
         if let Ok((total, free)) = db_for_maintenance.stats() {
             if total > 0 {
                 let fragmentation = (free as f64 / total as f64) * 100.0;
-
                 if fragmentation > 25.0 && total > 500 {
                     println!(
                         "Optimizando base de datos... ({:.2}% fragmentación)",
@@ -71,10 +81,10 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
         }
     });
 
-    // 4.5 Inicialización de la ventana abstracta Overlay para notificaciones
+    // 4.5 Ventana abstracta Overlay para notificaciones
     let _ = crate::overlay::setup_overlay_window(&app.handle());
 
-    // 5. Inicialización del buffer de logs
+    // 5. Buffer de logs y plugin manager
     let logs = new_log_buffer();
     app.manage(logs.clone());
 
@@ -85,35 +95,22 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     let tokio_handle = tauri::async_runtime::handle();
     let handle = app.handle().clone();
 
-    // La carga de plugins se delega a un hilo de fondo para no bloquear
-    // el renderizado inicial de la interfaz de usuario.
     std::thread::spawn(move || {
         let mut manager = crate::plugins::manager::PluginManager::new();
         manager.load_all(plugins_dir, handle, logs);
-
         tokio_handle.block_on(async {
             *shared_manager.lock().await = manager;
         });
     });
 
     // 6. Inicialización del motor P2P (BitTorrent)
-    //
-    // El directorio de sesión se nombra con un timestamp para que cada arranque
-    // comience con un directorio propio. Un hilo paralelo limpia los directorios
-    // huérfanos de sesiones anteriores para no acumular basura en %TEMP%.
-    // Si `TorrentEngine::new` falla incluso tras el intento de recuperación
-    // automática (ver `engine.rs`), se propaga el error y Tauri cancela el
-    // arranque mostrando un mensaje de error al usuario en lugar de silenciar
-    // el fallo o entrar en pánico de forma no controlada.
     let temp_base = std::env::temp_dir();
-
     let current_timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis();
     let session_name = format!("SaveCloud-torrents-{}", current_timestamp);
     let torrent_dir = temp_base.join(&session_name);
-
     let session_name_for_cleaner = session_name.clone();
 
     std::thread::spawn(move || {
@@ -121,7 +118,6 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
             for entry in entries.flatten() {
                 let file_name = entry.file_name();
                 let name_str = file_name.to_string_lossy();
-
                 if name_str.starts_with("SaveCloud-torrents-")
                     && name_str != session_name_for_cleaner
                 {
@@ -141,26 +137,78 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     app.manage(queue::SourcesState::new_from_disk());
     app.manage(crate::cloud::CloudWsState::new());
 
-    // Reanuda jobs pendientes al reiniciar la app.
     queue::resume_pending_jobs(&app.handle());
 
-    // 7. Extracción de estados compartidos
+    // 7. Estados compartidos del tray
     let tray_state = app.state::<TrayState>();
 
-    // 8. Arranque de los observadores y demonios en segundo plano
+    // El watcher necesita un token para poder salir limpiamente antes de los
+    // 2 s de timeout sin que el coordinator tenga que esperar a su próximo tick.
+    {
+        let (guard, handle) = ShutdownGuard::new("process_watcher", &shutdown_bus.token());
+        let coord = coordinator.clone();
+        tauri::async_runtime::block_on(async move {
+            coord.register(ShutdownPhase::UiAndWatchers, handle).await;
+        });
 
-    // Sincronización Reactiva: Sube archivos cuando detecta que el proceso de un juego termina.
-    game_exit_sync::spawn_exit_watcher(app.handle().clone(), tray_state.inner().0.clone());
+        let token = guard.token();
+        let app_handle = app.handle().clone();
 
-    // Sincronización Activa (Nuestro nuevo módulo): Vigila cambios en el disco duro
-    // y los encola con un debounce de 5 minutos para subidas silenciosas.
-    // comentado temporalmente para evitar bugs:
-    // watch_sync::spawn_watcher(app.handle().clone(), tray_state.inner().0.clone());
+        tauri::async_runtime::spawn(async move {
+            process_check::run_watcher_loop_with_token(&app_handle, token).await;
+            // El guard se completa por Drop si run_watcher_loop_with_token retorna,
+            // pero llamamos complete() explícitamente para ser explícitos.
+            guard.complete();
+        });
+    }
 
-    // Observador de Procesos: Audita la memoria del SO y emite eventos IPC al frontend.
-    start_process_watcher(app.handle().clone());
+    // spawn_exit_watcher registra un listener de evento y no bloquea.
+    // El guard se completa cuando el token del bus es cancelado.
+    {
+        let (guard, handle) = ShutdownGuard::new("game_exit_sync", &shutdown_bus.token());
+        let coord = coordinator.clone();
+        tauri::async_runtime::block_on(async move {
+            coord.register(ShutdownPhase::BackgroundTasks, handle).await;
+        });
 
-    // Bucle del Controlador: Inicia la escucha activa de inputs de mandos/gamepads.
+        let tray_inner = tray_state.inner().0.clone();
+        let app_handle = app.handle().clone();
+        let token = guard.token();
+
+        tauri::async_runtime::spawn(async move {
+            // spawn_exit_watcher es fire-and-forget: registra el listener y retorna.
+            game_exit_sync::spawn_exit_watcher(app_handle, tray_inner);
+
+            // Esperar el shutdown para señalizar al coordinator.
+            token.cancelled().await;
+            guard.complete();
+        });
+    }
+
+    // El guard se pasa a TorrentShutdownGuard (estado de Tauri) para que
+    // engine.rs lo complete cuando active_hashes() quede vacío al cerrar.
+    // Si no hay torrents activos al cerrar, el Drop impl del guard lo marca
+    // como Completed automáticamente.
+    {
+        let (guard, handle) = ShutdownGuard::new("torrent_session", &shutdown_bus.token());
+        let coord = coordinator.clone();
+        tauri::async_runtime::block_on(async move {
+            coord.register(ShutdownPhase::TorrentSession, handle).await;
+        });
+
+        app.manage(TorrentShutdownGuard(std::sync::Mutex::new(Some(guard))));
+    }
+
+    // Los guards de subidas multipart se crean bajo demanda en full_backup.rs
+    // cada vez que se inicia una subida. Ver full_backup.rs para el patrón.
+    // No hay nada que pre-registrar aquí.
+
+    // Deben registrarse DESPUÉS de todos los block_on anteriores para que el
+    // hooks.rs pueda recuperarlos desde app.try_state() al cerrar la ventana.
+    app.manage(shutdown_bus);
+    app.manage(coordinator);
+
+    // 8. Controlador de gamepads (no necesita guard: es stateless)
     start_gamepad_loop(app.handle().clone());
 
     Ok(())

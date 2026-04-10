@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use librqbit::api::TorrentIdOrHash;
 use librqbit::{AddTorrent, AddTorrentOptions, Session, SessionOptions, TorrentStatsState};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 
 use super::errors::TorrentError;
@@ -29,6 +29,7 @@ use super::torrent_enrichment::{
     build_magnet_from_info_hash, enrich_magnet, fetch_trackers, TrackerTier,
 };
 use crate::commands::logs::sync_logger;
+use crate::setup::TorrentShutdownGuard;
 
 /// Evento emitido periódicamente mientras un torrent está activo.
 ///
@@ -557,6 +558,16 @@ pub fn spawn_progress_monitor(
                 if let Some(engine) = &engine_state {
                     let mut eng = engine.lock().await;
                     eng.unregister_active(&info_hash);
+
+                    if eng.active_hashes().is_empty() {
+                        if let Some(guard_state) = app.try_state::<TorrentShutdownGuard>() {
+                            if let Ok(mut g) = guard_state.0.lock() {
+                                if let Some(guard) = g.take() {
+                                    guard.complete();
+                                }
+                            }
+                        }
+                    }
                 }
                 // Liberar el torrent de la sesión para que no mantenga los archivos abiertos.
                 // Esto permite que el usuario pueda instalar el juego inmediatamente.

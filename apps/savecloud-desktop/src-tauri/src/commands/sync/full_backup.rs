@@ -33,7 +33,10 @@ use super::streaming;
 use crate::config;
 use crate::network::DATA_CLIENT;
 use crate::tray::tray_state::TrayState;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
+
+use crate::shutdown::coordinator::{ShutdownCoordinator, ShutdownPhase};
+use crate::shutdown::{ShutdownBus, ShutdownGuard};
 
 /// Prefijo S3 para backups (key = userId/gameId/backups/<filename>.tar).
 const BACKUPS_PREFIX: &str = "backups/";
@@ -429,6 +432,7 @@ pub async fn download_and_restore_full_backup_impl(
 
     Ok(())
 }
+
 #[tauri::command]
 pub async fn create_and_upload_full_backup(
     game_id: String,
@@ -528,6 +532,7 @@ pub async fn create_and_upload_full_backup(
             estimated_total,
             app.clone(),
             Some(tray_state.0.clone()),
+            None,
         )
         .await;
         let _ = tar_handle.await;
@@ -537,6 +542,33 @@ pub async fn create_and_upload_full_backup(
 
         let (rx, tar_handle) =
             streaming::tar_stream::spawn_tar_stream(source_dir, strategy.tar_channel_capacity);
+
+        // ── Registrar guard dinámico en el coordinator ──────────────────────
+        // Esto garantiza que si el usuario cierra la app durante una subida,
+        // el ShutdownCoordinator espera hasta 15 s a que la subida termine
+        // (o la aborta y hace multipart_abort en S3 al cancelar el token).
+        let shutdown_token = {
+            match (
+                app.try_state::<ShutdownCoordinator>(),
+                app.try_state::<ShutdownBus>(),
+            ) {
+                (Some(coord), Some(bus)) => {
+                    let (guard, handle) =
+                        ShutdownGuard::new(format!("multipart_upload_{}", game_id), &bus.token());
+                    let coord_clone = (*coord).clone();
+                    tauri::async_runtime::spawn(async move {
+                        coord_clone
+                            .register(ShutdownPhase::NetworkUploads, handle)
+                            .await;
+                    });
+                    Some(guard)
+                }
+                _ => None,
+            }
+        };
+        let token_for_upload = shutdown_token.as_ref().map(|g| g.token());
+        // ───────────────────────────────────────────────────────────────────
+
         let upload_res = streaming::multipart::upload_tar_stream_multipart(
             rx,
             &game_id,
@@ -547,9 +579,16 @@ pub async fn create_and_upload_full_backup(
             &ctx.api_key,
             app.clone(),
             Some(tray_state.0.clone()),
+            token_for_upload,
         )
         .await;
+
         let _ = tar_handle.await;
+
+        // El guard se dropea aquí → ShutdownGuard::drop() lo marca Completed
+        // automáticamente si la subida ya terminó (éxito o error).
+        drop(shutdown_token);
+
         upload_res
     } else {
         let source_dir_clone = source_dir.clone();
