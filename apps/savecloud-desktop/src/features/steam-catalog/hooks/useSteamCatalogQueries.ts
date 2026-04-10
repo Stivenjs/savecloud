@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CatalogListItem } from "@services/tauri";
-import type { SourceMatchResult } from "@services/tauri";
+import { mapBatchMatchesToRecord } from "@utils/sourceMatch";
 import {
   getSteamAppdetailsMediaBatch,
   getSteamCatalogFilterFacets,
@@ -236,11 +236,7 @@ export function useSteamCatalogQueries() {
     placeholderData: keepPreviousData,
   });
   const matchByGameName = useMemo(() => {
-    const map: Record<string, SourceMatchResult> = {};
-    for (const entry of matchesQuery.data ?? []) {
-      map[entry.gameName] = entry;
-    }
-    return map;
+    return mapBatchMatchesToRecord(matchesQuery.data);
   }, [matchesQuery.data]);
 
   const listQueryPendingNoData = searchMode

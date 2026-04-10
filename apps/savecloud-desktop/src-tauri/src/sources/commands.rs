@@ -10,40 +10,106 @@ use crate::network::API_CLIENT;
 
 use super::domain::{
     BatchImportItemResult, BatchImportResult, DownloadProtocol, ImportMode, SourceCatalogSummary,
-    SourceDownloadJob, SourceItemsPage, SourceJobStatus, SourceMatchCandidate, SourceMatchResult,
+    SourceDownloadJob, SourceItemsPage, SourceJobStatus,
 };
 use super::parser::parse_catalog;
 use super::queue::{new_job_id, now_iso, spawn_job, SourcesState};
 use super::store;
 
-/// Entrada del índice de matching almacenada en memoria.
-///
-/// Los tokens se guardan como hashes FNV-1a (u64) ordenados para que la
-/// intersección/unión Jaccard sea O(n+m) con punteros sobre slices.
-#[derive(Debug, Clone)]
-struct IndexedSourceItem {
-    source_id: String,
-    source_name: String,
-    item_id: String,
-    item_title: String,
-    /// Título normalizado original (para contains-check rápido).
-    normalized_title: String,
-    /// Tokens del título como hashes FNV-1a ordenados de menor a mayor.
-    token_hashes: Vec<u64>,
-    protocols: Vec<DownloadProtocol>,
-}
+use super::matcher::{
+    find_best_per_source, fnv1a, normalize_title, tokenize_sorted_filtered, IndexEntry,
+    MatchConfig, SourceBestMatch,
+};
 
-/// Cache global del índice. Se invalida escribiendo `None`.
-///
-/// Usar `Arc<RwLock<...>>` permite múltiples lectores concurrentes (rayon)
-/// sin bloquear, y escritura exclusiva solo cuando el índice se reconstruye.
+type IndexedSourceItem = IndexEntry;
+
 static INDEX_CACHE: Lazy<Arc<RwLock<Option<Arc<Vec<IndexedSourceItem>>>>>> =
     Lazy::new(|| Arc::new(RwLock::new(None)));
 
+static MATCH_CONFIG: Lazy<Arc<RwLock<Option<MatchConfig>>>> =
+    Lazy::new(|| Arc::new(RwLock::new(None)));
+
+/// Carga un archivo de stopwords y calcula los hashes de sus tokens.
+///
+/// # Arguments
+///
+/// * `path` - Ruta al archivo `stopwords.json`.
+///
+/// # Returns
+///
+/// Un vector con los hashes únicos de las stopwords.
+///
+/// # Errors
+///
+/// Devuelve un error si no se puede leer el archivo en disco o si el formato JSON es inválido.
+pub fn load_stopwords() -> Result<Vec<u64>, String> {
+    let raw = include_str!("./stopwords.json");
+
+    let words: Vec<String> =
+        serde_json::from_str(raw).map_err(|e| format!("stopwords.json inválido: {e}"))?;
+
+    let mut hashes: Vec<u64> = words.iter().map(|w| fnv1a(&normalize_title(w))).collect();
+    hashes.sort_unstable();
+    hashes.dedup();
+
+    Ok(hashes)
+}
+
+/// Inicializa la configuración global para el emparejamiento de títulos.
+///
+/// # Arguments
+///
+/// * `stopwords_path` - Ruta al archivo JSON con las stopwords.
+/// * `threshold` - Límite de similitud base para considerar un match válido.
+///
+/// # Errors
+///
+/// Falla si ocurre un problema al cargar el archivo de stopwords a través de [`load_stopwords`].
+pub fn init_match_config(threshold: f32) -> Result<(), String> {
+    let stopwords = load_stopwords()?;
+    let config = MatchConfig {
+        threshold,
+        stopwords,
+    };
+    if let Ok(mut guard) = MATCH_CONFIG.write() {
+        *guard = Some(config);
+    }
+    Ok(())
+}
+
+/// Devuelve la configuración activa, aplicando un override de threshold si se proporciona.
+///
+/// Si `init_match_config` aún no fue llamado, usa valores predeterminados seguros.
+///
+/// # Arguments
+///
+/// * `threshold_override` - Valor opcional para sobreescribir el límite de similitud actual.
+///
+/// # Returns
+///
+/// Una estructura `MatchConfig` lista para ser usada.
+fn get_match_config(threshold_override: Option<f32>) -> MatchConfig {
+    let base = MATCH_CONFIG
+        .read()
+        .ok()
+        .and_then(|g| g.as_ref().cloned())
+        .unwrap_or_else(|| MatchConfig {
+            threshold: 0.58,
+            stopwords: vec![],
+        });
+
+    match threshold_override {
+        Some(t) => MatchConfig {
+            threshold: t,
+            ..base
+        },
+        None => base,
+    }
+}
+
 /// Invalida el índice en memoria, forzando su reconstrucción en la próxima búsqueda.
 ///
-/// Debe llamarse cada vez que el conjunto de catálogos cambie
-/// (importar, eliminar).
+/// Debe llamarse cada vez que el conjunto de catálogos cambie (al importar o eliminar fuentes).
 fn invalidate_index() {
     if let Ok(mut guard) = INDEX_CACHE.write() {
         *guard = None;
@@ -54,6 +120,14 @@ fn invalidate_index() {
 ///
 /// La construcción lee los catálogos una sola vez del disco y pre-computa
 /// los hashes de tokens de cada título.
+///
+/// # Returns
+///
+/// Una referencia contada atómicamente (`Arc`) al índice cacheado.
+///
+/// # Errors
+///
+/// Falla si los locks de concurrencia están envenenados (poisoned) o si `build_match_index` falla.
 fn get_or_build_index() -> Result<Arc<Vec<IndexedSourceItem>>, String> {
     // Intento de lectura sin bloquear escritores
     {
@@ -77,123 +151,25 @@ fn get_or_build_index() -> Result<Arc<Vec<IndexedSourceItem>>, String> {
         if guard.is_none() {
             *guard = Some(Arc::clone(&new_index));
         }
-        // Si ya fue construido por otro hilo, devolvemos el que ellos pusieron
         return Ok(Arc::clone(guard.as_ref().unwrap()));
     }
 }
 
-/// Calcula el hash FNV-1a de 64 bits de un string de tokens.
+/// Recolecta todos los items de las fuentes locales y genera la estructura de indexación.
 ///
-/// FNV-1a es extremadamente rápido y produce poca colisión para palabras
-/// cortas como las que conforman títulos de juegos.
-#[inline]
-fn fnv1a(s: &str) -> u64 {
-    const OFFSET: u64 = 14695981039346656037;
-    const PRIME: u64 = 1099511628211;
-    let mut hash = OFFSET;
-    for byte in s.bytes() {
-        hash ^= byte as u64;
-        hash = hash.wrapping_mul(PRIME);
-    }
-    hash
-}
-
-/// Normaliza un título a minúsculas, reemplazando no-alfanuméricos con espacios
-/// y colapsando espacios múltiples.
-fn normalize_title(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut last_space = false;
-    for ch in input.chars().flat_map(|c| c.to_lowercase()) {
-        if ch.is_alphanumeric() {
-            out.push(ch);
-            last_space = false;
-        } else if !last_space {
-            out.push(' ');
-            last_space = true;
-        }
-    }
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-/// Tokeniza un título normalizado y devuelve sus hashes FNV-1a **ordenados**.
+/// # Returns
 ///
-/// Ordenar los hashes permite calcular intersección y unión en O(n+m)
-/// con dos punteros, sin usar sets ni allocaciones extra.
-fn tokenize_sorted(normalized: &str) -> Vec<u64> {
-    let mut hashes: Vec<u64> = normalized.split_whitespace().map(fnv1a).collect();
-    hashes.sort_unstable();
-    hashes.dedup(); // elimina duplicados para Jaccard correcto
-    hashes
-}
-
-/// Calcula el coeficiente Jaccard entre dos slices de hashes **ordenados**.
+/// Un vector conteniendo los elementos indexados (`IndexedSourceItem`).
 ///
-/// Complejidad: O(n + m) con dos punteros, cero allocaciones.
-/// Incluye atajos para igualdad exacta y substring.
-#[inline]
-fn similarity_score_fast(
-    left_norm: &str,
-    left_hashes: &[u64],
-    right_norm: &str,
-    right_hashes: &[u64],
-    threshold: f32,
-) -> f32 {
-    if left_norm.is_empty() || right_norm.is_empty() {
-        return 0.0;
-    }
-
-    // Igualdad exacta tras normalización
-    if left_norm == right_norm {
-        return 1.0;
-    }
-
-    // Substring rápido (cubre "GTA V" vs "Grand Theft Auto V - GTA V")
-    if left_norm.contains(right_norm) || right_norm.contains(left_norm) {
-        return 0.96;
-    }
-
-    // Early-exit: cota superior de Jaccard antes de calcular la intersección.
-    // El máximo Jaccard posible es min(|A|, |B|) / max(|A|, |B|).
-    // Si esa cota ya está bajo el umbral, el resultado nunca lo alcanzará.
-    let ln = left_hashes.len();
-    let rn = right_hashes.len();
-    if ln == 0 || rn == 0 {
-        return 0.0;
-    }
-    let upper_bound = ln.min(rn) as f32 / ln.max(rn) as f32;
-    if upper_bound < threshold {
-        return 0.0;
-    }
-
-    // Intersección con dos punteros sobre slices ordenados (O(n+m), sin alloc)
-    let mut i = 0usize;
-    let mut j = 0usize;
-    let mut intersection = 0usize;
-    while i < ln && j < rn {
-        match left_hashes[i].cmp(&right_hashes[j]) {
-            std::cmp::Ordering::Equal => {
-                intersection += 1;
-                i += 1;
-                j += 1;
-            }
-            std::cmp::Ordering::Less => i += 1,
-            std::cmp::Ordering::Greater => j += 1,
-        }
-    }
-
-    let union = ln + rn - intersection;
-    intersection as f32 / union as f32
-}
-
-/// Construye el índice completo de items desde los catálogos en disco.
+/// # Errors
 ///
-/// Esta función es costosa (lee disco) y solo debe llamarse cuando el índice
-/// no está en caché. El resultado se almacena en [`INDEX_CACHE`].
+/// Propaga el error si ocurre un problema al cargar las fuentes con `store::load_sources`.
 fn build_match_index() -> Result<Vec<IndexedSourceItem>, String> {
+    let config = get_match_config(None);
     let mut out: Vec<IndexedSourceItem> = vec![];
+
     for source in store::load_sources()? {
         for item in source.downloads {
-            // Deduplica protocolos en una sola pasada
             let mut protocols: Vec<DownloadProtocol> = vec![];
             for uri in &item.uris {
                 if !protocols.contains(&uri.protocol) {
@@ -201,7 +177,7 @@ fn build_match_index() -> Result<Vec<IndexedSourceItem>, String> {
                 }
             }
             let normalized = normalize_title(&item.title);
-            let token_hashes = tokenize_sorted(&normalized);
+            let token_hashes = tokenize_sorted_filtered(&normalized, &config.stopwords);
             out.push(IndexedSourceItem {
                 source_id: source.id.clone(),
                 source_name: source.name.clone(),
@@ -216,58 +192,21 @@ fn build_match_index() -> Result<Vec<IndexedSourceItem>, String> {
     Ok(out)
 }
 
-/// Busca los mejores candidatos para un juego dentro del índice proporcionado.
+/// Lista todas las fuentes de catálogos completas almacenadas localmente.
 ///
-/// Devuelve hasta 5 resultados ordenados por score descendente.
-/// La función es pura (sin I/O) para poder llamarse en paralelo con rayon.
-fn find_matches_from_index(
-    game_name: &str,
-    normalized_game: &str,
-    game_hashes: &[u64],
-    threshold: f32,
-    index: &[IndexedSourceItem],
-) -> SourceMatchResult {
-    let mut matches: Vec<SourceMatchCandidate> = Vec::new();
-
-    for item in index {
-        let score = similarity_score_fast(
-            normalized_game,
-            game_hashes,
-            &item.normalized_title,
-            &item.token_hashes,
-            threshold,
-        );
-        if score >= threshold {
-            matches.push(SourceMatchCandidate {
-                source_id: item.source_id.clone(),
-                source_name: item.source_name.clone(),
-                item_id: item.item_id.clone(),
-                item_title: item.item_title.clone(),
-                score,
-                protocols: item.protocols.clone(),
-            });
-        }
-    }
-
-    // Ordena por score descendente y trunca (selector en UI con varias fuentes)
-    matches.sort_unstable_by(|a, b| b.score.total_cmp(&a.score));
-    matches.truncate(12);
-
-    let best = matches.first().cloned();
-    SourceMatchResult {
-        game_name: game_name.to_string(),
-        best,
-        candidates: matches,
-    }
-}
-
-/// Lista todos los catálogos de fuentes importados.
+/// # Returns
+///
+/// Un vector de `SourceCatalog`.
 #[tauri::command]
 pub async fn list_sources() -> Result<Vec<super::domain::SourceCatalog>, String> {
     store::load_sources()
 }
 
-/// Lista catálogos en modo resumen para evitar cargas pesadas en la UI.
+/// Genera un resumen de todas las fuentes instaladas.
+///
+/// # Returns
+///
+/// Una lista con un conteo rápido de descargas por catálogo en formato `SourceCatalogSummary`.
 #[tauri::command]
 pub async fn list_sources_summary() -> Result<Vec<SourceCatalogSummary>, String> {
     let sources = store::load_sources()?;
@@ -283,7 +222,17 @@ pub async fn list_sources_summary() -> Result<Vec<SourceCatalogSummary>, String>
         .collect())
 }
 
-/// Devuelve una página de items de un catálogo para evitar freezes de UI.
+/// Obtiene una página específica de resultados (items) para un catálogo dado.
+///
+/// # Arguments
+///
+/// * `source_id` - Identificador de la fuente a consultar.
+/// * `offset` - Posición inicial para la paginación (por defecto `0`).
+/// * `limit` - Límite máximo de elementos a devolver (por defecto `50`, se acota entre `1` y `200`).
+///
+/// # Errors
+///
+/// Returns an error if no source is found with the provided ID.
 #[tauri::command]
 pub async fn list_source_items_page(
     source_id: String,
@@ -315,16 +264,32 @@ pub async fn list_source_items_page(
     })
 }
 
-/// Elimina un catálogo por ID e invalida el índice en memoria.
+/// Elimina un catálogo por ID y asegura la limpieza de la caché de índices.
+///
+/// # Arguments
+///
+/// * `source_id` - Identificador del catálogo a eliminar del almacenamiento.
 #[tauri::command]
 pub async fn remove_source(source_id: String) -> Result<(), String> {
     let result = store::remove_catalog(&source_id);
-    // El índice debe regenerarse sin el catálogo eliminado
     invalidate_index();
     result
 }
 
-/// Importa una fuente desde un archivo JSON local e invalida el índice.
+/// Importa una fuente única desde un archivo JSON en disco local.
+///
+/// # Arguments
+///
+/// * `path` - Ruta absoluta o relativa del archivo JSON.
+/// * `mode` - Estrategia de importación (`Merge`, `UpdateOrCreate`, o `Replace`).
+///
+/// # Returns
+///
+/// El catálogo final que ha sido persistido exitosamente en disco.
+///
+/// # Errors
+///
+/// Si falla la lectura del archivo, el parsing del JSON o la escritura en almacenamiento.
 #[tauri::command]
 pub async fn import_source_from_file(
     path: String,
@@ -335,16 +300,24 @@ pub async fn import_source_from_file(
         .map_err(|e| format!("No se pudo leer JSON: {e}"))?;
     let catalog = parse_catalog(&raw, Some(format!("file://{path}")))?;
     let result = store::upsert_catalog(catalog, mode)?;
-    // Nuevo catálogo disponible: fuerza reconstrucción del índice
     invalidate_index();
     Ok(result)
 }
 
-/// Importa múltiples fuentes desde archivos JSON en paralelo.
+/// Importa múltiples fuentes desde archivos JSON de manera concurrente.
 ///
-/// Procesa todos los archivos en paralelo usando tokio, acumula resultados,
-/// e invalida el índice una sola vez al final (no por cada archivo).
-/// Los errores individuales no detienen el procesamiento de otros archivos.
+/// Procesa todos los archivos en tareas paralelas (`tokio::spawn`), acumulando los
+/// resultados de éxito/fracaso, e invalida el índice global de búsqueda una sola
+/// vez al concluir el proceso total.
+///
+/// # Arguments
+///
+/// * `paths` - Vector que contiene las rutas hacia los archivos a importar.
+/// * `mode` - Modo de importación que se aplicará sistemáticamente a cada fuente procesada.
+///
+/// # Returns
+///
+/// Un objeto `BatchImportResult` detallando qué fuentes se importaron bien y cuáles fallaron.
 #[tauri::command]
 pub async fn import_sources_from_files_batch(
     paths: Vec<String>,
@@ -367,7 +340,6 @@ pub async fn import_sources_from_files_batch(
         parse_tasks.push(task);
     }
 
-    // Recolectar resultados del parseo
     let mut parsed = Vec::new();
     let mut items = Vec::with_capacity(total);
     let mut failed = 0usize;
@@ -453,7 +425,19 @@ pub async fn import_sources_from_files_batch(
     })
 }
 
-/// Importa una fuente desde una URL JSON remota e invalida el índice.
+/// Descarga e importa una fuente remota a través de una petición HTTP.
+///
+/// Si la URL indica una página HTML de error de Cloudflare en vez de JSON limpio,
+/// la operación abortará de forma segura y devolverá un error.
+///
+/// # Arguments
+///
+/// * `url` - El origen web de los datos de catálogo.
+/// * `mode` - La forma en que debe mezclarse o reemplazarse la información previa.
+///
+/// # Errors
+///
+/// Retorna error ante fallos de red (`reqwest`), status HTTP erróneos o bloqueos anti-bot.
 #[tauri::command]
 pub async fn import_source_from_url(
     url: String,
@@ -492,61 +476,84 @@ pub async fn import_source_from_url(
     }
     let catalog = parse_catalog(&raw, Some(url))?;
     let result = store::upsert_catalog(catalog, mode)?;
-    // Nuevo catálogo disponible: fuerza reconstrucción del índice
     invalidate_index();
     Ok(result)
 }
 
-/// Busca el mejor match para un juego contra las fuentes importadas.
+/// Busca las mejores coincidencias a lo largo de todos los catálogos para un título concreto.
 ///
-/// Usa el índice cacheado en memoria; si fue invalidado, lo reconstruye
-/// una sola vez antes de buscar.
+/// Este motor de indexado garantiza como máximo un resultado (`SourceBestMatch`) por catálogo instalado.
+///
+/// # Arguments
+///
+/// * `game_name` - Cadena de texto origen introducida por el usuario a buscar.
+/// * `threshold` - Porcentaje opcional de exactitud para los tokens admitidos.
+///
+/// # Returns
+///
+/// Un vector plano con los mejores "matches" listados para cada fuente.
 #[tauri::command]
 pub async fn sources_find_match_for_game(
     game_name: String,
     threshold: Option<f32>,
-) -> Result<SourceMatchResult, String> {
+) -> Result<Vec<SourceBestMatch>, String> {
     let index = get_or_build_index()?;
-    let normalized_game = normalize_title(&game_name);
-    let game_hashes = tokenize_sorted(&normalized_game);
-    let score_threshold = threshold.unwrap_or(0.58);
-    Ok(find_matches_from_index(
+    let config = get_match_config(threshold);
+    let normalized = normalize_title(&game_name);
+    let hashes = tokenize_sorted_filtered(&normalized, &config.stopwords);
+
+    Ok(find_best_per_source(
         &game_name,
-        &normalized_game,
-        &game_hashes,
-        score_threshold,
+        &normalized,
+        &hashes,
+        &config,
         &index,
     ))
 }
 
-/// Busca matches para una lista de juegos en paralelo usando rayon.
+/// Evalúa un listado de múltiples títulos de forma concurrente buscando el mejor "match" por fuente.
 ///
-/// Todos los juegos comparten el mismo índice cacheado (lectura concurrente
-/// sin bloqueo). El resultado conserva el orden de entrada.
+/// Evita relecturas forzando el mismo índice cacheado para todos los procesos. El orden de salida
+/// corresponde estrictamente al orden de las queries solicitadas.
+///
+/// # Arguments
+///
+/// * `game_names` - Vector con los diferentes títulos objetivo a encontrar simultáneamente.
+/// * `threshold` - Sensibilidad general opcional a inyectar al comparador de textos.
+///
+/// # Returns
+///
+/// Tuplas estructuradas asociando cada título evaluado junto con su matriz de `SourceBestMatch`.
 #[tauri::command]
 pub async fn sources_find_matches_batch(
     game_names: Vec<String>,
     threshold: Option<f32>,
-) -> Result<Vec<SourceMatchResult>, String> {
-    // Construir (o reutilizar) el índice fuera del par_iter para no
-    // intentar I/O desde múltiples hilos rayon simultáneamente
+) -> Result<Vec<(String, Vec<SourceBestMatch>)>, String> {
     let index = get_or_build_index()?;
-    let score_threshold = threshold.unwrap_or(0.58);
+    let config = get_match_config(threshold);
 
-    // rayon procesa todos los juegos en paralelo sobre el mismo Arc<Vec<...>>
-    let results: Vec<SourceMatchResult> = game_names
+    let results: Vec<(String, Vec<SourceBestMatch>)> = game_names
         .par_iter()
         .map(|name| {
             let normalized = normalize_title(name);
-            let hashes = tokenize_sorted(&normalized);
-            find_matches_from_index(name, &normalized, &hashes, score_threshold, &index)
+            let hashes = tokenize_sorted_filtered(&normalized, &config.stopwords);
+            let matches = find_best_per_source(name, &normalized, &hashes, &config, &index);
+            (name.clone(), matches)
         })
         .collect();
 
     Ok(results)
 }
 
-/// Lista los jobs activos del motor de fuentes.
+/// Recupera del estado global de Tauri la lista actual de tareas de descarga.
+///
+/// # Arguments
+///
+/// * `state` - Manager de contexto con `SourcesState` inyectado automáticamente.
+///
+/// # Returns
+///
+/// Vector representando un snapshot del estado `SourceDownloadJob` listado en sistema.
 #[tauri::command]
 pub async fn list_source_download_jobs(
     state: tauri::State<'_, SourcesState>,
@@ -554,7 +561,27 @@ pub async fn list_source_download_jobs(
     Ok(state.list_jobs())
 }
 
-/// Encola e inicia un job de descarga para un item de fuente.
+/// Empaqueta una petición de descarga y la encola como tarea activa en el manejador local.
+///
+/// Elige inteligentemente el protocolo óptimo a servir (P2P vs HTTP) en función
+/// de las opciones empaquetadas por la fuente, o forzado por `preferred_protocol`.
+///
+/// # Arguments
+///
+/// * `source_id` - Catálogo matriz donde localizar el objeto virtual de descarga.
+/// * `item_id` - ID específico del paquete virtual.
+/// * `destination_dir` - Directorio base donde aterrizará la persistencia final.
+/// * `preferred_protocol` - Intento de sobreescribir la opción de URI (`Torrent` vs `HTTP`).
+/// * `app` - Handle puente con el emisor global Tauri de eventos.
+/// * `state` - Contexto inyectado en ejecución con la cola en memoria RAM.
+///
+/// # Returns
+///
+/// El Hash/UUID alfanumérico generado aleatoriamente en el momento asignado para seguir este job.
+///
+/// # Errors
+///
+/// Produce error si no encuentra la fuente nativa, el paquete sub-id o no contiene URIs admitidas.
 #[tauri::command]
 pub async fn start_source_download(
     source_id: String,
@@ -628,7 +655,20 @@ pub async fn start_source_download(
     Ok(job_id)
 }
 
-/// Solicita la cancelación de un job en curso.
+/// Corta de raíz la ejecución en progreso y emite eventos globales de terminación por cliente.
+///
+/// Desencadena rutinas de limpieza como detener sesiones en P2P y borrar del disco los archivos
+/// incompletos si se trata de un stream web puro.
+///
+/// # Arguments
+///
+/// * `job_id` - Identidad asignada y registrada del Job a detener y catalogar como abortado.
+/// * `state` - Árbol de contexto general para persistir flags del estado alterado a `Cancelled`.
+/// * `app` - Handle interno para disparar `TORRENT_CANCELLED_EVENT` en IPC al front-end.
+///
+/// # Errors
+///
+/// Fallará exclusivamente si intenta cancelarse una tarea huérfana (inexistente dentro del `state`).
 #[tauri::command]
 pub async fn cancel_source_download(
     job_id: String,
@@ -686,7 +726,18 @@ pub async fn cancel_source_download(
     Ok(())
 }
 
-/// Pausa un job torrent activo enviando la señal al motor de torrents.
+/// Congela momentáneamente el flujo de paquetes de descarga sobre P2P sin cancelar la tarea real.
+///
+/// Las descargas HTTP caerán inmediatamente a cancelación pues el backend nativo no asume streams HTTP resumibles.
+///
+/// # Arguments
+///
+/// * `job_id` - Identificación rastreable local del paquete torrent bajo control de sesión.
+/// * `app` - `AppHandle` portando los estados para comunicarse cruzado con el `torrent_engine`.
+///
+/// # Errors
+///
+/// Si el `job_id` rastreable pierde validez u orfandad con la RAM.
 #[tauri::command]
 pub async fn pause_source_download(job_id: String, app: AppHandle) -> Result<(), String> {
     let sources = app.state::<super::queue::SourcesState>();
@@ -725,7 +776,19 @@ pub async fn pause_source_download(job_id: String, app: AppHandle) -> Result<(),
     Ok(())
 }
 
-/// Reanuda un job torrent previamente pausado.
+/// Resucita y relanza un subproceso de sesión detenido a su curso normal.
+///
+/// Evaluará primero si la sesión de C++ en memoria está fresca y reanudable para reconexión exprés.
+/// De no ser posible por limpieza global (reinicio de Tauri), lanza un worker nuevo delegándolo al stack de colas original.
+///
+/// # Arguments
+///
+/// * `job_id` - Instancia pausada en lista de espera.
+/// * `app` - Acceso a utilidades `spawn_job` o puentes `TorrentState`.
+///
+/// # Errors
+///
+/// Si el `job_id` está ausente de la colección compartida `SourcesState`.
 #[tauri::command]
 pub async fn resume_source_download(job_id: String, app: AppHandle) -> Result<(), String> {
     let sources = app.state::<super::queue::SourcesState>();

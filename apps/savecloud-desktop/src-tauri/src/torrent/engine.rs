@@ -285,17 +285,29 @@ pub fn emit_starting_event(app: &AppHandle, info_hash: &str, name: &str) {
 /// pasar `false` conserva lo que ya se haya escrito en disco, que corresponde
 /// a la semántica habitual de "cancelar descarga" en clientes torrent.
 pub async fn cancel_via_session(
-    session: &Arc<Session>,
+    session: &std::sync::Arc<librqbit::Session>,
     info_hash: &str,
 ) -> Result<(), TorrentError> {
     let id = parse_info_hash(info_hash)?;
     let handle = session
         .get(id)
         .ok_or_else(|| TorrentError::NotFound(info_hash.to_string()))?;
-    session
-        .delete(TorrentIdOrHash::Id(handle.id()), false)
-        .await
-        .map_err(|e| TorrentError::Cancel(e.to_string()))
+
+    let _ = session.pause(&handle).await;
+
+    let delete_future = session.delete(librqbit::api::TorrentIdOrHash::Id(handle.id()), false);
+
+    match tokio::time::timeout(std::time::Duration::from_secs(3), delete_future).await {
+        Ok(result) => result.map_err(|e| TorrentError::Cancel(e.to_string())),
+        Err(_) => {
+            crate::commands::logs::sync_logger::log_error(
+                "cancel_via_session",
+                "Timeout al eliminar torrent de la sesión, forzando cierre",
+                &format!("El torrent {} tardó demasiado en eliminarse", info_hash),
+            );
+            Ok(())
+        }
+    }
 }
 
 /// Suspende la actividad de I/O y peers del torrent indicado sin eliminarlo.

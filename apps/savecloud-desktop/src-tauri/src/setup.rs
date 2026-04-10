@@ -7,10 +7,12 @@
 
 use crate::system::game_exit_sync;
 //use crate::system::watch_sync;
+use crate::cloud;
 use crate::controller::start_gamepad_loop;
 use crate::plugins::{log_buffer::new_log_buffer, AppPluginManager};
 use crate::shutdown::coordinator::ShutdownPhase;
 use crate::shutdown::{ShutdownBus, ShutdownCoordinator, ShutdownGuard};
+use crate::sources::commands;
 use crate::sources::queue;
 use crate::sqlite::AppDb;
 use crate::system::process_check;
@@ -134,8 +136,16 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     app.manage(TorrentState {
         engine: std::sync::Arc::new(tokio::sync::Mutex::new(torrent_engine)),
     });
+
+    if let Err(e) = commands::init_match_config(0.58) {
+        log::warn!(
+        "[Setup] No se pudieron cargar las stopwords embebidas. El motor de búsqueda funcionará con valores por defecto. Error: {}",
+        e
+    );
+    }
+
     app.manage(queue::SourcesState::new_from_disk());
-    app.manage(crate::cloud::CloudWsState::new());
+    app.manage(cloud::CloudWsState::new());
 
     queue::resume_pending_jobs(&app.handle());
 
