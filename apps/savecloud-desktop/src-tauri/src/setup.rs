@@ -16,6 +16,8 @@ use crate::sqlite::AppDb;
 use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray::tray_state::TrayState;
+use crate::sources::commands;
+use crate::cloud;
 
 use std::sync::Arc;
 use tauri::{App, Manager};
@@ -134,8 +136,22 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     app.manage(TorrentState {
         engine: std::sync::Arc::new(tokio::sync::Mutex::new(torrent_engine)),
     });
+
+    let stopwords_path = app
+        .path()
+        .data_dir()
+        .map(|base| base.join("SaveCloud").join("data").join("stopwords.json"))
+        .unwrap_or_else(|_| std::env::current_dir().unwrap().join("data").join("stopwords.json"));
+
+    if let Err(e) = commands::init_match_config(&stopwords_path, 0.58) {
+        log::warn!(
+            "[Setup] No se pudo cargar stopwords.json. El motor de búsqueda funcionará con valores por defecto. Error: {}",
+            e
+        );
+    }
+
     app.manage(queue::SourcesState::new_from_disk());
-    app.manage(crate::cloud::CloudWsState::new());
+    app.manage(cloud::CloudWsState::new());
 
     queue::resume_pending_jobs(&app.handle());
 

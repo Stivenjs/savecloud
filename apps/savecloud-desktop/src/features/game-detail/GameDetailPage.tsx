@@ -152,7 +152,7 @@ export function GameDetailPage() {
   const showRequirementsTab = steamDetails ? hasSteamRequirements(steamDetails) : false;
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
   const nameForMatch = steamDetails?.name ?? formatGameDisplayName(gameId);
-  const { data: sourceMatch, isPending: isMatchingPending } = useQuery({
+  const { data: sourceCandidates, isPending: isMatchingPending } = useQuery({
     queryKey: ["sources-match-detail", gameId, nameForMatch],
     queryFn: () => sourcesFindMatchForGame(nameForMatch),
     enabled: !!nameForMatch,
@@ -162,13 +162,14 @@ export function GameDetailPage() {
     refetchOnWindowFocus: false,
   });
 
-  const sourceCandidates = sourceMatch?.candidates ?? [];
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
 
+  // Derivar el "best" explícitamente basado en el arreglo
+  const bestSourceMatch = sourceCandidates && sourceCandidates.length > 0 ? sourceCandidates[0] : undefined;
+
   useEffect(() => {
-    const list = sourceMatch?.candidates ?? [];
-    const best = sourceMatch?.best;
-    if (!best || list.length === 0) {
+    const list = sourceCandidates ?? [];
+    if (!bestSourceMatch || list.length === 0) {
       setSelectedSourceKey(null);
       return;
     }
@@ -176,9 +177,9 @@ export function GameDetailPage() {
       if (prev && list.some((c) => sourceCandidateKey(c) === prev)) {
         return prev;
       }
-      return sourceCandidateKey(best);
+      return sourceCandidateKey(bestSourceMatch);
     });
-  }, [sourceMatch]);
+  }, [sourceCandidates, bestSourceMatch]);
 
   const handleInstallFromSources = useCallback(async () => {
     const chosen = pickCandidate(sourceCandidates, selectedSourceKey);
@@ -193,9 +194,10 @@ export function GameDetailPage() {
     }
     try {
       await startSourceDownload({
-        sourceId: chosen.sourceId,
-        itemId: chosen.itemId,
+        sourceId: chosen.source_id,
+        itemId: chosen.item_id,
         destinationDir: selectedPath.trim(),
+        preferredProtocol: null,
       });
       toastSuccess("Descarga iniciada", `Instalacion iniciada para ${displayName}.`);
     } catch (e) {
@@ -281,7 +283,7 @@ export function GameDetailPage() {
             <Skeleton className="h-10 w-full sm:w-24 rounded-lg" />
           </div>
         </section>
-      ) : sourceMatch?.best ? (
+      ) : bestSourceMatch && sourceCandidates ? (
         <section className="rounded-xl border border-primary/30 bg-primary/5 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
             <div className="min-w-0 flex-1 space-y-2">
@@ -294,7 +296,7 @@ export function GameDetailPage() {
                   variant="bordered"
                   className="mt-1 max-w-md"
                   selectionMode="single"
-                  selectedKeys={new Set([selectedSourceKey ?? sourceCandidateKey(sourceMatch.best)])}
+                  selectedKeys={new Set([selectedSourceKey ?? sourceCandidateKey(bestSourceMatch)])}
                   onSelectionChange={(keys) => {
                     const next = [...keys][0];
                     if (next !== undefined) setSelectedSourceKey(String(next));
@@ -302,14 +304,14 @@ export function GameDetailPage() {
                   {sourceCandidates.map((c) => (
                     <SelectItem
                       key={sourceCandidateKey(c)}
-                      textValue={`${c.sourceName} ${c.itemTitle} ${Math.round(c.score * 100)}`}>
-                      {c.sourceName} — {c.itemTitle} ({Math.round(c.score * 100)}%)
+                      textValue={`${c.source_name} ${c.item_title} ${Math.round(c.score * 100)}`}>
+                      {c.source_name} — {c.item_title} ({Math.round(c.score * 100)}%)
                     </SelectItem>
                   ))}
                 </Select>
               ) : (
                 <p className="text-xs text-default-500">
-                  Coincidencia: {sourceMatch.best.itemTitle} ({sourceMatch.best.sourceName})
+                  Coincidencia: {bestSourceMatch.item_title} ({bestSourceMatch.source_name})
                 </p>
               )}
             </div>

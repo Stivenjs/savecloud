@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { CatalogListItem } from "@services/tauri";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
-import type { SourceMatchResult } from "@services/tauri";
+import type { SourceBestMatch } from "@services/tauri";
 import { open } from "@tauri-apps/plugin-dialog";
 import { GameCard } from "@features/games/GameCard";
 import { GamesListMotionContainer, GamesListMotionItem } from "@features/games/GamesListMotion";
@@ -20,7 +20,7 @@ type CatalogGridItemProps = {
   item: CatalogListItem;
   libraryGame?: ConfiguredGame;
   mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null;
-  match: SourceMatchResult | undefined;
+  match: SourceBestMatch[] | undefined;
   selectKey: string | undefined;
   isMatchingPending: boolean;
   onPickChange: (gameName: string, key: string) => void;
@@ -47,8 +47,8 @@ const CatalogGridItem = memo(function CatalogGridItem({
 }: CatalogGridItemProps) {
   const game = libraryGame ?? catalogListItemToConfiguredGame(item);
   const navigate = useNavigate();
-  const candidates = match?.candidates ?? [];
-  const best = match?.best;
+  const candidates = match ?? [];
+  const best = candidates.length > 0 ? candidates[0] : undefined;
 
   return (
     <GamesListMotionItem key={game.id}>
@@ -80,7 +80,7 @@ const CatalogGridItem = memo(function CatalogGridItem({
                   size="sm"
                   variant="bordered"
                   className="w-full"
-                  placeholder="Fuente"
+                  placeholder={best ? `${best.source_name} — ${best.item_title}` : "Fuente"}
                   aria-label={`Elegir fuente para ${item.name}`}
                   selectionMode="single"
                   selectedKeys={new Set([selectKey ?? sourceCandidateKey(best)])}
@@ -89,8 +89,8 @@ const CatalogGridItem = memo(function CatalogGridItem({
                     onPickChange(item.name, next !== undefined ? String(next) : sourceCandidateKey(best));
                   }}>
                   {candidates.map((c) => (
-                    <SelectItem key={sourceCandidateKey(c)} textValue={`${c.sourceName} ${c.itemTitle}`}>
-                      {c.sourceName} — {c.itemTitle}
+                    <SelectItem key={sourceCandidateKey(c)} textValue={`${c.source_name} ${c.item_title}`}>
+                      {c.source_name} — {c.item_title}
                     </SelectItem>
                   ))}
                 </Select>
@@ -112,7 +112,7 @@ type SteamCatalogGridProps = {
   items: CatalogListItem[];
   listKey: string;
   mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null;
-  matchByGameName: Record<string, SourceMatchResult>;
+  matchByGameName: Record<string, SourceBestMatch[]>;
   isMatchingPending: boolean;
 };
 
@@ -140,16 +140,18 @@ export function SteamCatalogGrid({
       const next = { ...prev };
       for (const item of items) {
         const match = matchByGameName[item.name];
-        const list = match?.candidates ?? [];
-        const best = match?.best;
-        if (!best || list.length === 0) {
+        const list = match ?? [];
+        const best = list.length > 0 ? list[0] : undefined;
+
+        if (best) {
+          const currentPick = next[item.name];
+          const isValidPick = currentPick && list.some((c) => sourceCandidateKey(c) === currentPick);
+
+          if (!isValidPick) {
+            next[item.name] = sourceCandidateKey(best);
+          }
+        } else {
           delete next[item.name];
-          continue;
-        }
-        const cur = next[item.name];
-        const valid = cur !== undefined && list.some((c) => sourceCandidateKey(c) === cur);
-        if (!valid) {
-          next[item.name] = sourceCandidateKey(best);
         }
       }
       for (const k of Object.keys(next)) {
@@ -167,7 +169,7 @@ export function SteamCatalogGrid({
 
   const handleInstall = useCallback(async (gameName: string) => {
     const match = matchByGameNameRef.current[gameName];
-    const chosen = pickCandidate(match?.candidates, pickByGameRef.current[gameName]);
+    const chosen = pickCandidate(match, pickByGameRef.current[gameName]);
     if (!chosen) return;
 
     const selectedPath = await open({
@@ -179,8 +181,8 @@ export function SteamCatalogGrid({
 
     try {
       await startSourceDownload({
-        sourceId: chosen.sourceId,
-        itemId: chosen.itemId,
+        sourceId: chosen.source_id,
+        itemId: chosen.item_id,
         destinationDir: selectedPath.trim(),
         preferredProtocol: null,
       });

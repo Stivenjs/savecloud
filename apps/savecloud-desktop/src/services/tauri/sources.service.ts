@@ -79,10 +79,13 @@ export interface SourceMatchCandidate {
   protocols: DownloadProtocol[];
 }
 
-export interface SourceMatchResult {
-  gameName: string;
-  best?: SourceMatchCandidate | null;
-  candidates: SourceMatchCandidate[];
+export interface SourceBestMatch {
+  source_id: string;
+  source_name: string;
+  item_id: string;
+  item_title: string;
+  score: number;
+  protocols: string[];
 }
 
 export interface BatchImportItemResult {
@@ -158,11 +161,11 @@ export function resumeSourceDownload(jobId: string): Promise<void> {
   return invoke("resume_source_download", { jobId });
 }
 
-export function sourcesFindMatchForGame(gameName: string, threshold?: number | null): Promise<SourceMatchResult> {
-  return invoke<SourceMatchResult>("sources_find_match_for_game", { gameName, threshold: threshold ?? null });
+export function sourcesFindMatchForGame(gameName: string, threshold?: number | null): Promise<SourceBestMatch[]> {
+  return invoke<SourceBestMatch[]>("sources_find_match_for_game", { gameName, threshold: threshold ?? null });
 }
 
-export function sourcesFindMatchesBatch(gameNames: string[], threshold?: number | null): Promise<SourceMatchResult[]> {
+export function sourcesFindMatchesBatch(gameNames: string[], threshold?: number | null): Promise<SourceBestMatch[]> {
   if (!gameNames.length) return Promise.resolve([]);
-  return invoke<SourceMatchResult[]>("sources_find_matches_batch", { gameNames, threshold: threshold ?? null });
+  return invoke<SourceBestMatch[]>("sources_find_matches_batch", { gameNames, threshold: threshold ?? null });
 }

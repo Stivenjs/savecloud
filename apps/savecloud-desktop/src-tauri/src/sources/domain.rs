@@ -133,27 +133,6 @@ pub struct SourceItemsPage {
     pub items: Vec<SourceItem>,
 }
 
-/// Coincidencia detectada entre un juego del catálogo y una entrada de fuentes.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SourceMatchCandidate {
-    pub source_id: String,
-    pub source_name: String,
-    pub item_id: String,
-    pub item_title: String,
-    pub score: f32,
-    pub protocols: Vec<DownloadProtocol>,
-}
-
-/// Resultado de matching para un juego individual.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SourceMatchResult {
-    pub game_name: String,
-    pub best: Option<SourceMatchCandidate>,
-    pub candidates: Vec<SourceMatchCandidate>,
-}
-
 /// Resultado de importación batch para un archivo individual.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

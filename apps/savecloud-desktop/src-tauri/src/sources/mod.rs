@@ -10,5 +10,6 @@ pub mod queue;
 pub mod store;
 pub mod torrent_notify;
 pub mod torrent_runner;
+pub mod matcher;
 
 pub use torrent_notify::torrent_complete_notify;
