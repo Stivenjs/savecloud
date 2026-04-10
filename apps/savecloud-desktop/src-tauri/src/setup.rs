@@ -7,17 +7,17 @@
 
 use crate::system::game_exit_sync;
 //use crate::system::watch_sync;
+use crate::cloud;
 use crate::controller::start_gamepad_loop;
 use crate::plugins::{log_buffer::new_log_buffer, AppPluginManager};
 use crate::shutdown::coordinator::ShutdownPhase;
 use crate::shutdown::{ShutdownBus, ShutdownCoordinator, ShutdownGuard};
+use crate::sources::commands;
 use crate::sources::queue;
 use crate::sqlite::AppDb;
 use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray::tray_state::TrayState;
-use crate::sources::commands;
-use crate::cloud;
 
 use std::sync::Arc;
 use tauri::{App, Manager};
@@ -137,17 +137,11 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
         engine: std::sync::Arc::new(tokio::sync::Mutex::new(torrent_engine)),
     });
 
-    let stopwords_path = app
-        .path()
-        .data_dir()
-        .map(|base| base.join("SaveCloud").join("data").join("stopwords.json"))
-        .unwrap_or_else(|_| std::env::current_dir().unwrap().join("data").join("stopwords.json"));
-
-    if let Err(e) = commands::init_match_config(&stopwords_path, 0.58) {
+    if let Err(e) = commands::init_match_config(0.58) {
         log::warn!(
-            "[Setup] No se pudo cargar stopwords.json. El motor de búsqueda funcionará con valores por defecto. Error: {}",
-            e
-        );
+        "[Setup] No se pudieron cargar las stopwords embebidas. El motor de búsqueda funcionará con valores por defecto. Error: {}",
+        e
+    );
     }
 
     app.manage(queue::SourcesState::new_from_disk());

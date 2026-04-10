@@ -42,14 +42,16 @@ static MATCH_CONFIG: Lazy<Arc<RwLock<Option<MatchConfig>>>> =
 /// # Errors
 ///
 /// Devuelve un error si no se puede leer el archivo en disco o si el formato JSON es inválido.
-pub fn load_stopwords(path: &std::path::Path) -> Result<Vec<u64>, String> {
-    let raw = std::fs::read_to_string(path)
-        .map_err(|e| format!("No se pudo leer stopwords.json: {e}"))?;
+pub fn load_stopwords() -> Result<Vec<u64>, String> {
+    let raw = include_str!("./stopwords.json");
+
     let words: Vec<String> =
-        serde_json::from_str(&raw).map_err(|e| format!("stopwords.json inválido: {e}"))?;
+        serde_json::from_str(raw).map_err(|e| format!("stopwords.json inválido: {e}"))?;
+
     let mut hashes: Vec<u64> = words.iter().map(|w| fnv1a(&normalize_title(w))).collect();
     hashes.sort_unstable();
     hashes.dedup();
+
     Ok(hashes)
 }
 
@@ -63,8 +65,8 @@ pub fn load_stopwords(path: &std::path::Path) -> Result<Vec<u64>, String> {
 /// # Errors
 ///
 /// Falla si ocurre un problema al cargar el archivo de stopwords a través de [`load_stopwords`].
-pub fn init_match_config(stopwords_path: &std::path::Path, threshold: f32) -> Result<(), String> {
-    let stopwords = load_stopwords(stopwords_path)?;
+pub fn init_match_config(threshold: f32) -> Result<(), String> {
+    let stopwords = load_stopwords()?;
     let config = MatchConfig {
         threshold,
         stopwords,
