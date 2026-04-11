@@ -1,7 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Progress, ScrollShadow } from "@heroui/react";
-import { ChevronDown, ChevronUp, Clock, Download, Pause, X, Zap } from "lucide-react";
-import { cancelSourceDownload, pauseSourceDownload, resumeSourceDownload } from "@services/tauri";
+import { ChevronDown, ChevronUp, Clock, Download, Pause, Play, Upload, Users, X, Zap } from "lucide-react";
+import {
+  cancelSourceDownload,
+  cancelTorrent,
+  pauseSourceDownload,
+  pauseTorrent,
+  resumeSourceDownload,
+  resumeTorrent,
+} from "@services/tauri";
 import { useSourcesDownloadsStore } from "@store/SourcesDownloadsStore";
 import { useSyncStore } from "@store/SyncStore";
 import { useTorrentStore } from "@store/TorrentStore";
@@ -16,6 +23,7 @@ type DownloadRow = {
   value: number;
   source: "sync" | "torrent" | "sources";
   jobId?: string;
+  infoHash?: string;
   isPaused?: boolean;
   canPause?: boolean;
   canCancel?: boolean;
@@ -23,6 +31,12 @@ type DownloadRow = {
   total?: number;
   speedBps?: number | null;
   etaSeconds?: number | null;
+  /** Solo para filas de tipo torrent */
+  torrentExtra?: {
+    uploadSpeedBytes: number;
+    peersConnected: number;
+    state: string;
+  };
 };
 
 export function DownloadsPanel() {
@@ -39,6 +53,10 @@ export function DownloadsPanel() {
   const [syncMetrics, setSyncMetrics] = useState<
     Record<string, { speedBps: number | null; etaSeconds: number | null }>
   >({});
+
+  // Estado de toggle de pausa por torrent para deshabilitar el botón mientras la
+  // llamada está en vuelo y evitar doble-click.
+  const [togglingHash, setTogglingHash] = useState<string | null>(null);
 
   useEffect(() => {
     const now = performance.now();
@@ -80,7 +98,7 @@ export function DownloadsPanel() {
       nextMetrics[id] = { speedBps, etaSeconds };
     }
 
-    // limpia filas eliminadas
+    // Limpia filas eliminadas del mapa de métricas para liberar memoria.
     const activeIds = new Set(Object.keys(syncTasks));
     for (const id of Object.keys(metricsRef.current)) {
       if (!activeIds.has(id)) delete metricsRef.current[id];
@@ -89,10 +107,30 @@ export function DownloadsPanel() {
     setSyncMetrics(nextMetrics);
   }, [syncTasks]);
 
+  const onToggleTorrentPause = useCallback(async (infoHash: string, isPaused: boolean) => {
+    setTogglingHash(infoHash);
+    try {
+      if (isPaused) {
+        await resumeTorrent(infoHash);
+      } else {
+        await pauseTorrent(infoHash);
+      }
+    } catch {
+      // Silenciar: el estado se actualizará via evento en vivo.
+    } finally {
+      setTogglingHash(null);
+    }
+  }, []);
+
+  const onCancelTorrent = useCallback((infoHash: string) => {
+    cancelTorrent(infoHash)
+      .then(() => useTorrentStore.getState().removeByHash(infoHash))
+      .catch(() => {});
+  }, []);
+
   const rows = useMemo<DownloadRow[]>(() => {
     const syncRows = Object.entries(syncTasks).map(([id, task]) => {
       const value = task.total > 0 ? Math.min(100, Math.round((task.loaded / task.total) * 100)) : 0;
-
       const gameName = task.gameId ? formatGameDisplayName(task.gameId) : "Descarga";
       return {
         id,
@@ -125,19 +163,27 @@ export function DownloadsPanel() {
       .filter((task) => !sourceTorrentHashes.has(task.infoHash))
       .map((task) => ({
         id: `torrent-${task.infoHash}`,
+        infoHash: task.infoHash,
         label: task.name || "Torrent",
         subtitle: mapTorrentState(task.state),
         value: Math.max(0, Math.min(100, Math.round(task.progressPercent))),
         source: "torrent" as const,
+        isPaused: task.state === "paused",
+        canPause: task.state !== "completed",
+        canCancel: task.state !== "completed",
         loaded: task.downloadedBytes,
         total: task.totalBytes,
         speedBps: task.downloadSpeedBytes,
         etaSeconds: task.etaSeconds,
+        torrentExtra: {
+          uploadSpeedBytes: task.uploadSpeedBytes,
+          peersConnected: task.peersConnected,
+          state: task.state,
+        },
       }));
 
     const sourceRows = Object.values(sourcesTasks).map((task) => {
       const isTorrentBacked = task.protocol === "torrentMagnet" || task.protocol === "torrentFile";
-
       const torrent = isTorrentBacked && task.externalId ? torrentTasks[task.externalId] : undefined;
 
       let loaded = task.loaded;
@@ -179,6 +225,15 @@ export function DownloadsPanel() {
         total,
         speedBps: torrent ? torrent.downloadSpeedBytes : undefined,
         etaSeconds: torrent ? torrent.etaSeconds : undefined,
+        // Las filas de sources con torrent también exponen peers y upload
+        // para que el panel muestre la misma riqueza de información.
+        torrentExtra: torrent
+          ? {
+              uploadSpeedBytes: torrent.uploadSpeedBytes,
+              peersConnected: torrent.peersConnected,
+              state: torrent.state,
+            }
+          : undefined,
       };
     });
 
@@ -189,8 +244,12 @@ export function DownloadsPanel() {
   const keepPanelVisibleForBatch = syncOperation?.mode === "batch";
   if (totalActive === 0 && !keepPanelVisibleForBatch) return null;
   const visibleRows = rows.length > 0 ? rows.length : keepPanelVisibleForBatch ? 1 : 0;
-  const estimatedRowHeightPx = 140;
-  const listMaxHeightPx = collapsed ? 0 : Math.min(visibleRows * estimatedRowHeightPx, 320);
+  // Las filas de torrent tienen una línea extra de stats (upload + peers) y
+  // los botones de acción, por lo que necesitan más espacio que las filas de sync.
+  // Se usa 168 px como estimación conservadora para que el panel no corte ningún
+  // elemento aunque haya una sola fila activa.
+  const estimatedRowHeightPx = 168;
+  const listMaxHeightPx = collapsed ? 0 : Math.min(visibleRows * estimatedRowHeightPx, 420);
 
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 z-50 w-[380px] max-w-[90vw]">
@@ -258,7 +317,7 @@ export function DownloadsPanel() {
         <div
           className="overflow-hidden transition-[max-height,opacity] duration-300 ease-out"
           style={{ maxHeight: `${listMaxHeightPx}px`, opacity: collapsed ? 0 : 1 }}>
-          <ScrollShadow hideScrollBar className="max-h-80 space-y-2.5 pr-1" size={20} orientation="vertical">
+          <ScrollShadow hideScrollBar className="max-h-[420px] space-y-2.5 pr-1" size={20} orientation="vertical">
             {rows.length === 0 && keepPanelVisibleForBatch ? (
               <div className="flex items-center gap-3 rounded-xl border border-default-200/40 bg-default-50/80 p-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -270,11 +329,12 @@ export function DownloadsPanel() {
                 </div>
               </div>
             ) : null}
+
             {rows.map((row) => (
               <div
                 key={row.id}
                 className="group rounded-xl border border-default-200/40 bg-default-50/80 p-3 transition-colors hover:bg-default-100/60">
-                {/* Título y subtítulo */}
+                {/* Título, subtítulo y porcentaje */}
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium leading-tight">{row.label}</p>
@@ -291,11 +351,11 @@ export function DownloadsPanel() {
                   value={row.value}
                   classNames={{
                     track: "h-1.5 bg-default-200",
-                    indicator: "bg-primary",
+                    indicator: row.torrentExtra?.state === "paused" ? "bg-warning" : "bg-primary",
                   }}
                 />
 
-                {/* Stats */}
+                {/* Stats comunes: bytes, velocidad de bajada y ETA */}
                 <div className="mt-2 flex items-center gap-3 text-xs text-default-500">
                   <span className="tabular-nums">
                     {formatBytes(row.loaded ?? 0)}
@@ -310,6 +370,22 @@ export function DownloadsPanel() {
                     <span className="tabular-nums">{formatEta(row.etaSeconds ?? null)}</span>
                   </span>
                 </div>
+
+                {/* Stats extra exclusivos de torrents: subida y peers */}
+                {row.torrentExtra ? (
+                  <div className="mt-1.5 flex items-center gap-3 text-xs text-default-400">
+                    <span className="inline-flex items-center gap-1">
+                      <Upload size={11} className="shrink-0 text-default-400" aria-hidden />
+                      <span className="tabular-nums">{formatSpeed(row.torrentExtra.uploadSpeedBytes)}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Users size={11} className="shrink-0 text-default-400" aria-hidden />
+                      <span className="tabular-nums">
+                        {row.torrentExtra.peersConnected} {row.torrentExtra.peersConnected === 1 ? "compi" : "compis"}
+                      </span>
+                    </span>
+                  </div>
+                ) : null}
 
                 {/* Acciones para sync */}
                 {row.source === "sync" && (row.canPause || row.canCancel) ? (
@@ -352,6 +428,29 @@ export function DownloadsPanel() {
                       <button
                         className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-danger-50 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger-100"
                         onClick={() => void cancelSourceDownload(row.jobId!)}>
+                        <X size={12} />
+                        Cancelar
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {/* Acciones para torrents directos (sin job de sources) */}
+                {row.source === "torrent" && row.infoHash && (row.canPause || row.canCancel) ? (
+                  <div className="mt-2.5 flex items-center gap-2">
+                    {row.canPause ? (
+                      <button
+                        disabled={togglingHash === row.infoHash}
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-default-100 px-2.5 py-1.5 text-xs font-medium text-default-600 transition-colors hover:bg-default-200 disabled:opacity-50"
+                        onClick={() => void onToggleTorrentPause(row.infoHash!, !!row.isPaused)}>
+                        {row.isPaused ? <Play size={12} /> : <Pause size={12} />}
+                        {row.isPaused ? "Reanudar" : "Pausar"}
+                      </button>
+                    ) : null}
+                    {row.canCancel ? (
+                      <button
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-danger-50 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger-100"
+                        onClick={() => onCancelTorrent(row.infoHash!)}>
                         <X size={12} />
                         Cancelar
                       </button>
