@@ -723,6 +723,7 @@ pub async fn cancel_source_download(
     super::events::emit_progress(&app, &job);
     super::events::emit_terminal(&app, &job);
     super::queue::cancel_job(&state, &job_id);
+    state.remove_job(&job_id)?;
     Ok(())
 }
 

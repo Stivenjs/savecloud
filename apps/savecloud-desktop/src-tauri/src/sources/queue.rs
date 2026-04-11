@@ -49,6 +49,16 @@ impl SourcesState {
         store::save_jobs(&guard)
     }
 
+    /// Elimina un job del estado y del almacenamiento persistente.
+    pub fn remove_job(&self, job_id: &str) -> Result<(), String> {
+        let mut guard = self
+            .jobs
+            .lock()
+            .map_err(|_| "Mutex de jobs envenenado".to_string())?;
+        guard.retain(|j| j.job_id != job_id);
+        store::save_jobs(&guard)
+    }
+
     /// Marca cancelación solicitada para un job.
     pub fn cancel(&self, job_id: &str) {
         if let Ok(flags) = self.cancel_flags.lock() {
@@ -97,10 +107,12 @@ pub fn spawn_job(app: AppHandle, job_id: String) {
 
         if let Err(err) = result {
             if let Ok(mut job) = find_job(&state, &job_id) {
-                if err != "stopped_by_user"
-                    && job.status != SourceJobStatus::Cancelled
-                    && job.status != SourceJobStatus::Paused
+                if err == "stopped_by_user"
+                    || job.status == SourceJobStatus::Cancelled
+                    || job.status == SourceJobStatus::Paused
                 {
+                    let _ = state.remove_job(&job_id);
+                } else {
                     job.status = SourceJobStatus::Failed;
                     job.error = Some(err);
                     job.updated_at = now_iso();

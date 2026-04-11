@@ -257,6 +257,102 @@ fn compute_eta(total: u64, downloaded: u64, speed_bytes: u64) -> Option<u64> {
     Some(remaining.saturating_add(speed_bytes - 1) / speed_bytes)
 }
 
+/// Comprueba si una carpeta de destino contiene archivos descargables.
+///
+/// Se usa para decidir si librqbit debe ejecutar su fase de verificación de
+/// piezas al añadir un torrent. La lógica es conservadora: cualquier archivo
+/// regular encontrado en cualquier nivel de profundidad de `save_path` es
+/// suficiente para concluir que puede haber progreso previo que merece ser
+/// verificado. Si la carpeta no existe o está vacía, la verificación es
+/// innecesaria y se omite para que la descarga arranque sin demora.
+///
+/// # Comportamiento ante errores de I/O
+///
+/// Si el sistema de archivos devuelve un error al listar el directorio (por
+/// ejemplo, por falta de permisos), la función devuelve `false` de forma
+/// conservadora. Esto garantiza que el caso de error nunca bloquee el inicio
+/// de una descarga, aunque pueda resultar en una verificación omitida en
+/// situaciones excepcionales.
+fn save_path_has_existing_files(save_path: &str) -> bool {
+    let path = std::path::Path::new(save_path);
+
+    if !path.exists() {
+        return false;
+    }
+
+    // Iteramos en profundidad para detectar archivos anidados dentro de
+    // subcarpetas que librqbit haya creado en descargas anteriores.
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return false;
+    };
+
+    for entry in entries.flatten() {
+        let entry_path = entry.path();
+
+        if entry_path.is_file() {
+            return true;
+        }
+
+        // Si hay subcarpetas, buscamos recursivamente al menos un archivo.
+        if entry_path.is_dir() {
+            let Ok(sub_entries) = std::fs::read_dir(&entry_path) else {
+                continue;
+            };
+            if sub_entries
+                .flatten()
+                .any(|e| e.path().is_file())
+            {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+/// Construye las [`AddTorrentOptions`] apropiadas para `save_path`.
+///
+/// Cuando la carpeta de destino está limpia (sin archivos previos), se pasa
+/// `overwrite: false`. Esto evita que librqbit entre en su fase de
+/// verificación de piezas, que abre cada archivo y comprueba los hashes SHA-1
+/// incluso cuando no hay nada que verificar. El resultado es que la descarga
+/// pasa de `Initializing` a `Downloading` de forma casi instantánea en lugar
+/// de tardar varios segundos.
+///
+/// Cuando la carpeta ya contiene archivos (descarga interrumpida o reanudada),
+/// se pasa `overwrite: true` para que librqbit verifique el progreso existente
+/// y reanude desde el punto correcto en lugar de re-descargar piezas ya escritas.
+fn build_add_options(save_path: &str) -> AddTorrentOptions {
+    let has_files = save_path_has_existing_files(save_path);
+
+    if has_files {
+        sync_logger::log_operation(
+            "build_add_options",
+            &format!(
+                "Archivos previos detectados en '{}'. Activando verificación de piezas.",
+                save_path
+            ),
+        );
+    } else {
+        sync_logger::log_operation(
+            "build_add_options",
+            &format!(
+                "Carpeta limpia detectada en '{}'. Omitiendo verificación de piezas.",
+                save_path
+            ),
+        );
+    }
+
+    AddTorrentOptions {
+        output_folder: Some(save_path.into()),
+        // `overwrite: true` solo cuando ya hay archivos en disco. Si la
+        // carpeta está vacía, `false` evita la verificación innecesaria y
+        // reduce el tiempo hasta el primer byte descargado.
+        overwrite: has_files,
+        ..Default::default()
+    }
+}
+
 /// Emite un evento `torrent-download-progress` inicial con métricas en cero.
 ///
 /// Llamar a esta función inmediatamente después de añadir un torrent garantiza
@@ -366,11 +462,9 @@ pub async fn add_magnet_to_session(
 
     let enriched_magnet = enrich_magnet(magnet_link, &trackers);
 
-    let add_options = AddTorrentOptions {
-        output_folder: Some(save_path.into()),
-        overwrite: true,
-        ..Default::default()
-    };
+    // Las opciones se construyen en función de si ya hay archivos en disco.
+    // Una carpeta limpia omite la verificación de piezas para arrancar más rápido.
+    let add_options = build_add_options(save_path);
 
     let response = session
         .add_torrent(AddTorrent::from_url(&enriched_magnet), Some(add_options))
@@ -398,6 +492,15 @@ pub async fn add_magnet_to_session(
 /// de un comando Tauri bloquearía el hilo IPC completo. El frontend recibe
 /// actualizaciones de estado incrementales a través de [`spawn_progress_monitor`]
 /// y es responsable de renderizar el estado `Starting` de forma apropiada.
+///
+/// # Estrategia de fallback
+///
+/// El flujo preferido es construir un magnet link enriquecido a partir del
+/// info-hash del archivo `.torrent` para aprovechar los trackers adicionales
+/// inyectados por [`enrich_magnet`]. Si ese intento falla (por ejemplo, porque
+/// el magnet no resuelve a tiempo), se reintenta añadiendo directamente el
+/// archivo `.torrent` como fallback. En ambos casos se aplica la misma
+/// detección de carpeta limpia para omitir la verificación innecesaria.
 pub async fn add_file_to_session(
     session: &Arc<Session>,
     file_path: &str,
@@ -415,17 +518,11 @@ pub async fn add_file_to_session(
     let trackers = fetch_trackers(TrackerTier::Best).await;
     let enriched_magnet = enrich_magnet(&base_magnet, &trackers);
 
-    let add_options_main = AddTorrentOptions {
-        output_folder: Some(save_path.into()),
-        overwrite: true,
-        ..Default::default()
-    };
-
-    let add_options_fallback = AddTorrentOptions {
-        output_folder: Some(save_path.into()),
-        overwrite: true,
-        ..Default::default()
-    };
+    // Las opciones se construyen en función de si ya hay archivos en disco.
+    // Una carpeta limpia omite la verificación de piezas para arrancar más rápido.
+    // Se clonan las opciones para poder usarlas en el fallback sin mover el valor.
+    let add_options_main = build_add_options(save_path);
+    let add_options_fallback = build_add_options(save_path);
 
     let add_request = AddTorrent::from_url(&enriched_magnet);
     let response_result = session
