@@ -1,11 +1,24 @@
 import { lazy, useMemo, useState, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, Spinner } from "@heroui/react";
-import { FolderOpen, Plus, Search, HardDrive, Gamepad2 } from "lucide-react";
+import {
+  Button,
+  Input,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  Spinner,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@heroui/react";
+import { FolderOpen, Plus, Search, HardDrive, Gamepad2, MoreVertical, EyeOff, Trash2 } from "lucide-react";
 import { scanPathCandidates } from "@services/tauri";
 import type { PathCandidate } from "@services/tauri";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { useResolvedCandidateNames } from "@hooks/useResolvedCandidateNames";
+import { useDismissedCandidates } from "@hooks/useDismissedCandidates";
 import { extractAppIdFromFolderName, toGameId } from "@utils/gameImage";
 import { useNavigable } from "@features/input/useNavigable";
 import { getGamepadFocusClass } from "@features/input/styles";
@@ -18,15 +31,51 @@ interface ScanModalProps {
   onSelectCandidate: (paths: string[], suggestedId: string) => void;
 }
 
+function CandidateMenu({ onDismiss }: { onDismiss: () => void }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover isOpen={open} onOpenChange={setOpen} placement="bottom-end" offset={4}>
+      <PopoverTrigger>
+        <Button
+          isIconOnly
+          size="sm"
+          variant="light"
+          aria-label="Más opciones"
+          className="text-default-400 hover:text-default-600 shrink-0"
+          onPress={() => setOpen((v) => !v)}>
+          <MoreVertical size={16} />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="p-1 min-w-[200px]">
+        <button
+          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-default-700 hover:bg-default-100 transition-colors text-left"
+          onClick={() => {
+            onDismiss();
+            setOpen(false);
+          }}>
+          <EyeOff size={15} className="text-default-400 shrink-0" />
+          <div>
+            <p className="font-medium leading-tight">No es un juego</p>
+            <p className="text-xs text-default-400 leading-tight mt-0.5">No volver a mostrar esto</p>
+          </div>
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function CandidateRow({
   candidate,
   resolvedName,
   onAdd,
+  onDismiss,
   index,
 }: {
   candidate: PathCandidate;
   resolvedName: string | null | undefined;
   onAdd: () => void;
+  onDismiss: () => void;
   index: number;
 }) {
   const hasAppId = !!candidate.steamAppId || !!extractAppIdFromFolderName(candidate.folderName ?? "");
@@ -61,16 +110,20 @@ function CandidateRow({
         </div>
       </div>
 
-      <Button
-        size="sm"
-        color="primary"
-        variant="flat"
-        startContent={<Plus size={16} />}
-        onPress={onAdd}
-        className={getGamepadFocusClass(navAdd.isFocused, navAdd.inputMode)}
-        {...navAdd.navProps}>
-        Añadir
-      </Button>
+      <div className="flex items-center gap-2 shrink-0">
+        <Button
+          size="sm"
+          color="primary"
+          variant="flat"
+          startContent={<Plus size={16} />}
+          onPress={onAdd}
+          className={getGamepadFocusClass(navAdd.isFocused, navAdd.inputMode)}
+          {...navAdd.navProps}>
+          Añadir
+        </Button>
+
+        <CandidateMenu onDismiss={onDismiss} />
+      </div>
     </div>
   );
 }
@@ -86,21 +139,33 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
     enabled: isOpen,
   });
 
+  const { dismissed, dismiss, clearAll } = useDismissedCandidates();
   const resolvedNames = useResolvedCandidateNames(candidates);
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebouncedValue(searchQuery.trim().toLowerCase(), 300);
 
-  const filteredCandidates = useMemo(() => {
+  // Candidatos visibles: excluye los descartados persistentemente
+  const visibleCandidates = useMemo(() => {
     if (!candidates?.length) return [];
-    if (!debouncedSearch) return candidates;
-    return candidates.filter((c: PathCandidate) => {
+    return candidates.filter((c: PathCandidate) => !dismissed.has(c.path));
+  }, [candidates, dismissed]);
+
+  const filteredCandidates = useMemo(() => {
+    if (!visibleCandidates.length) return [];
+    if (!debouncedSearch) return visibleCandidates;
+    return visibleCandidates.filter((c: PathCandidate) => {
       const resolvedName = resolvedNames[c.path];
       const hasAppId = !!c.steamAppId || !!extractAppIdFromFolderName(c.folderName ?? "");
       const displayName = hasAppId && resolvedName ? resolvedName : (c.folderName ?? "");
       const searchIn = [displayName, c.folderName ?? "", c.path, c.basePath ?? ""].join(" ");
       return searchIn.toLowerCase().includes(debouncedSearch);
     });
-  }, [candidates, debouncedSearch, resolvedNames]);
+  }, [visibleCandidates, debouncedSearch, resolvedNames]);
+
+  const dismissedCount = useMemo(
+    () => (candidates ?? []).filter((c: PathCandidate) => dismissed.has(c.path)).length,
+    [candidates, dismissed]
+  );
 
   const handleAdd = (candidate: PathCandidate) => {
     const resolvedName = resolvedNames[candidate.path];
@@ -199,6 +264,24 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
                 />
               </div>
 
+              {/* Banner de descartados */}
+              {dismissedCount > 0 && (
+                <div className="flex items-center justify-between rounded-lg bg-default-100 px-4 py-2.5 text-sm">
+                  <div className="flex items-center gap-2 text-default-500">
+                    <EyeOff size={15} className="shrink-0" />
+                    <span>
+                      {dismissedCount} {dismissedCount === 1 ? "entrada ocultada" : "entradas ocultadas"}
+                    </span>
+                  </div>
+                  <button
+                    className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors cursor-pointer"
+                    onClick={clearAll}>
+                    <Trash2 size={13} />
+                    Restaurar todo
+                  </button>
+                </div>
+              )}
+
               <div
                 className="max-h-[60vh] space-y-2 overflow-y-auto pr-2 
                   [&::-webkit-scrollbar]:w-1.5
@@ -213,13 +296,26 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
                       candidate={c}
                       resolvedName={resolvedNames[c.path]}
                       onAdd={() => handleAdd(c)}
+                      onDismiss={() => dismiss(c.path)}
                       index={idx}
                     />
                   ))
-                ) : (
+                ) : debouncedSearch ? (
                   <p className="py-6 text-center text-sm text-default-500">
                     No hay coincidencias para &quot;{searchQuery}&quot;
                   </p>
+                ) : (
+                  <div className="flex flex-col items-center gap-3 py-10 text-center">
+                    <EyeOff size={36} className="text-default-300" />
+                    <p className="text-default-500 text-sm">Todas las entradas encontradas han sido ocultadas.</p>
+                    {dismissedCount > 0 && (
+                      <button
+                        className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+                        onClick={clearAll}>
+                        Restaurar entradas ocultadas
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </>

@@ -334,8 +334,28 @@ async fn get_steam_app_names_batch_impl(
         return HashMap::new();
     }
 
+    // 1. RAM cache primero — sin tocar disco ni red.
+    let cache = steam_api_cache();
+    let mut final_map: HashMap<String, String> = HashMap::new();
+    let mut ids_missing_ram: Vec<String> = Vec::new();
+
+    for id in &valid_ids {
+        if let Some(media) = cache.get_media(id) {
+            if !media.name.trim().is_empty() {
+                final_map.insert(id.clone(), media.name.clone());
+                continue;
+            }
+        }
+        ids_missing_ram.push(id.clone());
+    }
+
+    if ids_missing_ram.is_empty() {
+        return final_map;
+    }
+
+    // 2. SQLite (catálogo + media cache) para los que no estaban en RAM.
     let db_for_persist = db.clone();
-    let ids_for_db = valid_ids.clone();
+    let ids_for_db = ids_missing_ram.clone();
 
     let from_db = tokio::task::spawn_blocking(move || {
         db.with_conn(|c| {
@@ -359,8 +379,18 @@ async fn get_steam_app_names_batch_impl(
     .and_then(|r| r.ok())
     .unwrap_or_default();
 
-    let mut final_map = from_db;
-    let ids_to_fetch: Vec<String> = valid_ids
+    // Poblar RAM cache con lo que vino de DB.
+    for (id, name) in &from_db {
+        if let Some(mut media) = cache.get_media(id) {
+            if media.name.trim().is_empty() {
+                media.name = name.clone();
+                cache.insert_media(id.clone(), media);
+            }
+        }
+        final_map.insert(id.clone(), name.clone());
+    }
+
+    let ids_to_fetch: Vec<String> = ids_missing_ram
         .into_iter()
         .filter(|id| !final_map.contains_key(id))
         .collect();
@@ -369,14 +399,16 @@ async fn get_steam_app_names_batch_impl(
         return final_map;
     }
 
+    // 3. Steam Store API solo para los que no están en ningún caché.
+    //    Sin sleep entre reintentos en el camino feliz; el retry solo
+    //    ocurre si el primer intento falla (evita +250 ms innecesarios).
     let stream = futures_util::stream::iter(ids_to_fetch.into_iter().map(|app_id| async move {
-        for _ in 0..2 {
-            if let Some(result) = fetch_name_and_media_from_store(&app_id).await {
-                return Some(result);
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        if let Some(result) = fetch_name_and_media_from_store(&app_id).await {
+            return Some(result);
         }
-        None
+        // Un único reintento con backoff mínimo solo si el primer fallo no fue 404.
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        fetch_name_and_media_from_store(&app_id).await
     }))
     .buffer_unordered(STEAM_CONCURRENCY_LIMIT);
 
@@ -385,6 +417,7 @@ async fn get_steam_app_names_batch_impl(
     let mut to_persist: Vec<(String, SteamAppdetailsMedia)> = Vec::new();
     for item in results.into_iter().flatten() {
         let (id, media) = item;
+        cache.insert_media(id.clone(), media.clone());
         final_map.insert(id.clone(), media.name.clone());
         to_persist.push((id, media));
     }

@@ -202,6 +202,12 @@ fn list_subdirs(dir_path: &Path) -> Vec<(PathBuf, String)> {
         .collect()
 }
 
+/// Devuelve `true` si el nombre es un app ID de Steam válido (4-10 dígitos).
+/// Se usa tanto aquí como en `windows_scanners`.
+fn is_steam_app_id_folder(name: &str) -> bool {
+    name.len() >= 4 && name.len() <= 10 && name.chars().all(|c| c.is_ascii_digit())
+}
+
 /// Escanea un directorio base en busca de candidatos con dos niveles de
 /// profundidad (L1 → L2), aplicando heurísticas de filtrado.
 fn scan_base_paths_into_vec(base_path: &str, base_label: &str) -> Vec<PathCandidateDto> {
@@ -212,8 +218,69 @@ fn scan_base_paths_into_vec(base_path: &str, base_label: &str) -> Vec<PathCandid
 
     let mut candidates = Vec::new();
 
+    // Si el directorio base es una carpeta de emulador de Steam (ej. "GSE Saves",
+    // "Goldberg Steam Emu Saves"), sus subdirectorios directos son app IDs numéricos.
+    // Detectamos ese contexto aquí para propagar el steam_app_id al candidato,
+    // permitiendo que el frontend resuelva el número al nombre real del juego.
+    let base_folder_name = base.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    let base_is_steam_emu = filters::folder_name_hints_steam_emu(base_folder_name);
+
     for (l1_path, l1_name) in list_subdirs(base) {
         if is_excluded_folder(&l1_name) {
+            continue;
+        }
+
+        // Caso 1: el base ya es emulador y L1 es directamente un app ID numérico.
+        let l1_is_app_id_in_emu_base = base_is_steam_emu && is_steam_app_id_folder(&l1_name);
+
+        // Caso 2: L1 es él mismo un directorio de emulador Steam (ej. "GSE Saves"
+        // aparece como subdirectorio de %APPDATA%). En este caso hay que descender
+        // un nivel más y tratar sus hijos como app IDs.
+        let l1_is_emu_dir = !base_is_steam_emu && filters::folder_name_hints_steam_emu(&l1_name);
+
+        if l1_is_emu_dir {
+            // Iterar los hijos de L1 como app IDs (L2 = app ID).
+            for (l2_path, l2_name) in list_subdirs(&l1_path) {
+                if l2_name == "steam_settings" || l2_name == "settings" {
+                    continue;
+                }
+                if !is_steam_app_id_folder(&l2_name) {
+                    continue;
+                }
+                let is_empty = fs::read_dir(&l2_path)
+                    .map(|mut i| i.next().is_none())
+                    .unwrap_or(true);
+                if is_empty {
+                    continue;
+                }
+                candidates.push(PathCandidateDto {
+                    path: l2_path.to_string_lossy().to_string(),
+                    folder_name: l2_name.clone(),
+                    base_path: base_label.to_string(),
+                    steam_app_id: Some(l2_name),
+                    paths: None,
+                });
+            }
+            // No emitir la carpeta raíz del emulador como candidato.
+            continue;
+        }
+
+        if l1_is_app_id_in_emu_base {
+            // Emitir la carpeta del app ID directamente sin escanear L2.
+            let is_empty = fs::read_dir(&l1_path)
+                .map(|mut i| i.next().is_none())
+                .unwrap_or(true);
+            if is_empty {
+                continue;
+            }
+            let app_id = l1_name.clone();
+            candidates.push(PathCandidateDto {
+                path: l1_path.to_string_lossy().to_string(),
+                folder_name: l1_name,
+                base_path: base_label.to_string(),
+                steam_app_id: Some(app_id),
+                paths: None,
+            });
             continue;
         }
 
@@ -477,10 +544,6 @@ mod windows_scanners {
         candidate_list.extend(lib_candidates);
     }
 
-    fn is_steam_app_id_folder(name: &str) -> bool {
-        name.len() >= 4 && name.len() <= 10 && name.chars().all(|c| c.is_ascii_digit())
-    }
-
     fn contains_saves_at_any_depth(dir_path: &Path, depth: usize) -> bool {
         if depth > MAX_SCAN_DEPTH || !dir_path.exists() || !dir_path.is_dir() {
             return false;
@@ -523,7 +586,15 @@ mod windows_scanners {
                 }
 
                 if is_steam_app_id_folder(&sub_name) {
-                    if !contains_saves_at_any_depth(&sub_path, 0) {
+                    // Las crack_save_locations son rutas de confianza (emuladores Steam):
+                    // cualquier subcarpeta numérica válida es un candidato, incluso si
+                    // sus archivos de guardado están dentro de "settings/" u otras
+                    // subcarpetas que contains_saves_at_any_depth omite.
+                    // Solo descartamos si el directorio está completamente vacío.
+                    let is_empty = fs::read_dir(&sub_path)
+                        .map(|mut i| i.next().is_none())
+                        .unwrap_or(true);
+                    if is_empty {
                         continue;
                     }
                     if let Some(p) = sub_path.to_str() {
