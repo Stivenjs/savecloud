@@ -105,7 +105,6 @@
     "programs",
     "logs",
     "cache",
-    "SaveCloud",
     "crashreportclient",
     "windowsclient",
     "windowseditor",
@@ -298,5 +297,23 @@
     "_commonredist",
     "levels",
     "maps"
+  ],
+  "steam_emu_folder_hints": [
+    "gse saves",
+    "goldberg steam emu saves",
+    "goldberg",
+    "ali213",
+    "codex saves",
+    "skidrow saves",
+    "flt saves",
+    "rune saves",
+    "tenoke saves",
+    "cpy saves",
+    "rld saves",
+    "reloaded saves",
+    "emu saves",
+    "steam_emu",
+    "steamemu",
+    "sce_sys"
   ]
 }

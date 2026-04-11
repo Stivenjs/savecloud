@@ -20,6 +20,13 @@ struct ExclusionsData {
     excluded_folder_names: Vec<String>,
     excluded_partial_patterns: Vec<String>,
     generic_inner_folders: Vec<String>,
+    /// Subcadenas que, al aparecer en el nombre de una carpeta (o su padre),
+    /// indican que se trata de una ubicación de guardados de un emulador de
+    /// Steam (GSE, Goldberg, CODEX, etc.). El umbral de archivos débiles
+    /// se reduce a 1 cuando alguna de estas cadenas coincide.
+    /// Para añadir soporte a un nuevo emulador basta con agregar su entrada
+    /// aquí; no es necesario tocar el código Rust.
+    steam_emu_folder_hints: Vec<String>,
 }
 
 static EXCLUSIONS_DATA: LazyLock<ExclusionsData> = LazyLock::new(|| {
@@ -38,6 +45,16 @@ pub(super) static EXCLUDED_FOLDER_NAMES: LazyLock<HashSet<String>> = LazyLock::n
 pub(super) static GENERIC_INNER_FOLDERS: LazyLock<HashSet<String>> = LazyLock::new(|| {
     EXCLUSIONS_DATA
         .generic_inner_folders
+        .iter()
+        .map(|s| s.to_lowercase())
+        .collect()
+});
+
+/// Conjunto de subcadenas (en minúsculas) que identifican carpetas de
+/// emuladores de Steam. Se inicializa una sola vez desde el JSON.
+static STEAM_EMU_FOLDER_HINTS: LazyLock<Vec<String>> = LazyLock::new(|| {
+    EXCLUSIONS_DATA
+        .steam_emu_folder_hints
         .iter()
         .map(|s| s.to_lowercase())
         .collect()
@@ -72,12 +89,35 @@ pub(super) fn folder_name_hints_save(folder_name: &str) -> bool {
     save_folder_names().iter().any(|n| *n == lower)
 }
 
+/// Devuelve `true` si el nombre de carpeta coincide con algún hint de emulador
+/// de Steam definido en `exclusions.json → steam_emu_folder_hints`.
+///
+/// Es `pub(super)` para que `mod.rs` pueda usarla al detectar el contexto
+/// del directorio base en `scan_base_paths_into_vec`.
+pub(super) fn folder_name_hints_steam_emu(folder_name: &str) -> bool {
+    let lower = folder_name.to_lowercase();
+    STEAM_EMU_FOLDER_HINTS
+        .iter()
+        .any(|hint| lower.contains(hint.as_str()))
+}
+
 pub(super) fn folder_contains_save_like_files(dir_path: &Path) -> bool {
     if !dir_path.exists() || !dir_path.is_dir() {
         return false;
     }
     let folder_name = dir_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let folder_hints = folder_name_hints_save(folder_name);
+
+    // Comprobamos también el nombre de la carpeta padre para detectar
+    // emuladores de Steam como "GSE Saves" que agrupan carpetas por app_id
+    // (números) con archivos .ini y .bin dentro.
+    let parent_name = dir_path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+    let parent_is_emu =
+        folder_name_hints_steam_emu(parent_name) || folder_name_hints_steam_emu(folder_name);
 
     let files = collect_files(dir_path);
     let mut weak_count = 0usize;
@@ -89,11 +129,18 @@ pub(super) fn folder_contains_save_like_files(dir_path: &Path) -> bool {
             if name_hints_save(name) {
                 return true;
             }
+            // Si la carpeta o su padre es de un emulador de Steam conocido,
+            // cualquier archivo débil (.ini, .bin, .dat…) es suficiente.
+            if parent_is_emu {
+                return true;
+            }
             weak_count += 1;
         }
     }
+
     // Si el nombre de la carpeta sugiere guardados, umbral más bajo (1 en vez de 3).
-    let threshold = if folder_hints { 1 } else { 3 };
+    // Si la carpeta padre sugiere emulador de Steam, umbral también es 1.
+    let threshold = if folder_hints || parent_is_emu { 1 } else { 3 };
     weak_count >= threshold
 }
 
