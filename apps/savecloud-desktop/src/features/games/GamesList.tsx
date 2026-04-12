@@ -7,18 +7,20 @@ import { useCloudBackupCounts } from "@hooks/useCloudBackupCounts";
 import { useGameStats } from "@hooks/useGameStats";
 import { useGameRunningStatus } from "@hooks/useGameRunningStatus";
 import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
-import { useGameMediaBatch, getIsResolvingIds } from "@hooks/useGameMedia"; // <-- Ajusta esta ruta según tu proyecto
+import { useGameMediaBatch, getIsResolvingIds } from "@hooks/useGameMedia";
 import { needsSteamSearch } from "@utils/gameImage";
 import { GameCard } from "@features/games/GameCard";
 import { GamesListMotionContainer, GamesListMotionItem } from "@features/games/GamesListMotion";
+import { GamesViewControls } from "@features/games/Gamesviewcontrols";
+import { useGamesViewPreferences } from "@hooks/useGamesViewPreferences";
+import { useGamesSorter } from "@hooks/Usegamessorter";
 
 type SyncStatus = "pending_upload" | "pending_download" | "in_sync" | null;
 
 /** Diferencia en ms por debajo de la cual consideramos local y nube "en sync" (precisión, reloj). */
-const SYNC_TOLERANCE_MS = 15_000; // 15 segundos
-/** Si la nube es más reciente que local pero por menos de esto, lo tratamos como "en sync":
- * tras subir, S3 pone LastModified = ahora, así que cloud > local; no queremos mostrar "Pendiente descargar". */
-const CLOUD_NEWER_AS_SYNC_MS = 120_000; // 2 minutos
+const SYNC_TOLERANCE_MS = 15_000;
+/** Si la nube es más reciente que local pero por menos de esto, lo tratamos como "en sync" */
+const CLOUD_NEWER_AS_SYNC_MS = 120_000;
 
 function getSyncStatus(gameId: string, stats: GameStats | undefined, unsyncedGameIds: string[]): SyncStatus {
   if (unsyncedGameIds.includes(gameId)) return "pending_upload";
@@ -26,13 +28,23 @@ function getSyncStatus(gameId: string, stats: GameStats | undefined, unsyncedGam
   const cloud = new Date(stats.cloudLastModified).getTime();
   const local = stats.localLastModified ? new Date(stats.localLastModified).getTime() : 0;
   const diff = cloud - local;
-  // Solo "pendiente descargar" si la nube es claramente más reciente (p. ej. otro dispositivo subió).
-  // Si la diferencia es pequeña (p. ej. tras subir nosotros, S3 = ahora, local = antes) → in_sync.
   if (diff > CLOUD_NEWER_AS_SYNC_MS) return "pending_download";
-  // Local más reciente, o diferencia dentro de tolerancia, o nube un poco más reciente (subida reciente) → en sync.
   if (local > 0 || Math.abs(diff) <= SYNC_TOLERANCE_MS || (diff > 0 && diff <= CLOUD_NEWER_AS_SYNC_MS))
     return "in_sync";
   return null;
+}
+
+function getGridClass(layout: "grid-lg" | "grid-md" | "list"): string {
+  switch (layout) {
+    case "grid-lg":
+      return "grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5";
+
+    case "grid-md":
+      return "grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5";
+
+    case "list":
+      return "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4";
+  }
 }
 
 interface GamesListProps {
@@ -96,15 +108,19 @@ export function GamesList({
   onShare,
   hasSyncConfig = false,
 }: GamesListProps) {
+  const { layout, sortBy, sortDir, setLayout, setSortBy, setSortDir } = useGamesViewPreferences();
+
+  const handleSortChange = useCallback(
+    (field: typeof sortBy, dir: typeof sortDir) => {
+      setSortBy(field);
+      setSortDir(dir);
+    },
+    [setSortBy, setSortDir]
+  );
+
   const resolvedSteamAppIds = useResolvedSteamAppIds(games);
-
   const isResolvingIds = getIsResolvingIds(games, resolvedSteamAppIds);
-  const { mediaBySteamAppId } = useGameMediaBatch({
-    games,
-    resolvedSteamAppIds,
-    isResolvingIds,
-  });
-
+  const { mediaBySteamAppId } = useGameMediaBatch({ games, resolvedSteamAppIds, isResolvingIds });
   const { statsByGameId } = useGameStats(games.length > 0);
   const { countByGameId: cloudBackupCountByGameId } = useCloudBackupCounts(
     games.map((g) => g.id),
@@ -112,9 +128,12 @@ export function GamesList({
   );
   const gameRunningStatus = useGameRunningStatus(games.map((g) => g.id));
 
+  const sortedGames = useGamesSorter(games, statsByGameId as unknown as Map<string, GameStats>, sortBy, sortDir);
+
   const stableListKey = useMemo(
-    () => [animationKey ?? "", games.map((g) => g.id).join(",")].join("|"),
-    [animationKey, games.map((g) => g.id).join(",")]
+    () => [animationKey ?? "", layout, sortBy, sortDir, sortedGames.map((g) => g.id).join(",")].join("|"),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [animationKey, layout, sortBy, sortDir, sortedGames.map((g) => g.id).join(",")]
   );
 
   const [openActionsGameId, setOpenActionsGameId] = useState<string | null>(null);
@@ -125,91 +144,118 @@ export function GamesList({
   if (games.length === 0) {
     const isEmptyState = !emptyFilterMessage;
     return (
-      <Card className="border border-dashed border-default-300">
-        <CardBody className="flex flex-col items-center gap-6 py-14 text-center">
-          <Gamepad2 size={56} className="text-default-400" strokeWidth={1.5} />
-          <div className="space-y-2">
-            <p className="text-lg font-medium text-default-700">
-              {emptyFilterMessage ?? "Aún no tienes juegos configurados"}
-            </p>
-            {emptyFilterMessage ? (
-              <p className="text-sm text-default-500">{emptyFilterMessage}</p>
-            ) : (
-              <p className="max-w-sm text-sm text-default-500">
-                Escanea tu PC para detectar carpetas de guardados o añade un juego manualmente con su ruta.
+      <>
+        {/* Siempre mostramos los controles aunque la lista esté vacía */}
+        <div className="mb-4 flex items-center justify-end">
+          <GamesViewControls
+            sortBy={sortBy}
+            sortDir={sortDir}
+            layout={layout}
+            onSortChange={handleSortChange}
+            onLayoutChange={setLayout}
+          />
+        </div>
+        <Card className="border border-dashed border-default-300">
+          <CardBody className="flex flex-col items-center gap-6 py-14 text-center">
+            <Gamepad2 size={56} className="text-default-400" strokeWidth={1.5} />
+            <div className="space-y-2">
+              <p className="text-lg font-medium text-default-700">
+                {emptyFilterMessage ?? "Aún no tienes juegos configurados"}
               </p>
-            )}
-          </div>
-          {isEmptyState && (onEmptyScanPress || onEmptyAddPress) && (
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              {onEmptyScanPress && (
-                <Button
-                  color="primary"
-                  variant="bordered"
-                  startContent={<FolderSearch size={18} />}
-                  onPress={onEmptyScanPress}>
-                  Buscar juegos automáticamente
-                </Button>
-              )}
-              {onEmptyAddPress && (
-                <Button color="primary" startContent={<PlusCircle size={18} />} onPress={onEmptyAddPress}>
-                  Añadir juego
-                </Button>
+              {emptyFilterMessage ? (
+                <p className="text-sm text-default-500">{emptyFilterMessage}</p>
+              ) : (
+                <p className="max-w-sm text-sm text-default-500">
+                  Escanea tu PC para detectar carpetas de guardados o añade un juego manualmente con su ruta.
+                </p>
               )}
             </div>
-          )}
-          {!isEmptyState && !onEmptyScanPress && (
-            <p className="text-xs text-default-400">
-              <Code>savecloud add &lt;game-id&gt; &lt;ruta&gt;</Code>
-            </p>
-          )}
-        </CardBody>
-      </Card>
+            {isEmptyState && (onEmptyScanPress || onEmptyAddPress) && (
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                {onEmptyScanPress && (
+                  <Button
+                    color="primary"
+                    variant="bordered"
+                    startContent={<FolderSearch size={18} />}
+                    onPress={onEmptyScanPress}>
+                    Buscar juegos automáticamente
+                  </Button>
+                )}
+                {onEmptyAddPress && (
+                  <Button color="primary" startContent={<PlusCircle size={18} />} onPress={onEmptyAddPress}>
+                    Añadir juego
+                  </Button>
+                )}
+              </div>
+            )}
+            {!isEmptyState && !onEmptyScanPress && (
+              <p className="text-xs text-default-400">
+                <Code>savecloud add &lt;game-id&gt; &lt;ruta&gt;</Code>
+              </p>
+            )}
+          </CardBody>
+        </Card>
+      </>
     );
   }
 
   return (
-    <GamesListMotionContainer
-      className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5"
-      listKey={stableListKey}>
-      {games.map((game) => (
-        <GamesListMotionItem key={game.id}>
-          <GameCard
-            game={game}
-            stats={statsByGameId.get(game.id) as GameStats | undefined}
-            resolvedSteamAppId={resolvedSteamAppIds[game.id]}
-            mediaBySteamAppId={mediaBySteamAppId ?? null}
-            mediaFromBatch
-            isGameRunning={gameRunningStatus[game.id] ?? false}
-            syncStatus={(() => {
-              const status = getSyncStatus(
-                game.id,
-                statsByGameId.get(game.id) as GameStats | undefined,
-                unsyncedGameIds
-              );
-              const cloudBackups = cloudBackupCountByGameId[game.id] ?? 0;
-              if (status === "pending_upload" && cloudBackups > 0) return null;
-              return status;
-            })()}
-            cloudBackupCount={cloudBackupCountByGameId[game.id] ?? 0}
-            isLoading={needsSteamSearch(game) && resolvedSteamAppIds[game.id] === undefined}
-            onRemove={onRemove}
-            onSync={onSync}
-            isSyncing={syncingId === game.id || syncingId === "all"}
-            onDownload={onDownload}
-            isDownloading={downloadingId === game.id || downloadingId === "all"}
-            onOpenFolder={onOpenFolder}
-            onRestoreBackup={onRestoreBackup}
-            onFullBackupUpload={onFullBackupUpload}
-            isFullBackupUploading={fullBackupUploadingGameId === game.id}
-            onEdit={onEdit}
-            onTorrent={onTorrent}
-            onShare={onShare}
-            actionsMenuOpen={openActionsGameId === game.id}
-            onActionsMenuOpenChange={handleActionsMenuOpenChange}
-          />
-        </GamesListMotionItem>
-      ))}
-    </GamesListMotionContainer>
+    <div className="space-y-4">
+      {/* Controls bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-default-400">
+          {sortedGames.length} {sortedGames.length === 1 ? "juego" : "juegos"}
+        </p>
+        <GamesViewControls
+          sortBy={sortBy}
+          sortDir={sortDir}
+          layout={layout}
+          onSortChange={handleSortChange}
+          onLayoutChange={setLayout}
+        />
+      </div>
+
+      {/* Game grid / list */}
+      <GamesListMotionContainer className={getGridClass(layout)} listKey={stableListKey}>
+        {sortedGames.map((game) => (
+          <GamesListMotionItem key={game.id}>
+            <GameCard
+              game={game}
+              stats={statsByGameId.get(game.id) as GameStats | undefined}
+              resolvedSteamAppId={resolvedSteamAppIds[game.id]}
+              mediaBySteamAppId={mediaBySteamAppId ?? null}
+              mediaFromBatch
+              isGameRunning={gameRunningStatus[game.id] ?? false}
+              syncStatus={(() => {
+                const status = getSyncStatus(
+                  game.id,
+                  statsByGameId.get(game.id) as GameStats | undefined,
+                  unsyncedGameIds
+                );
+                const cloudBackups = cloudBackupCountByGameId[game.id] ?? 0;
+                if (status === "pending_upload" && cloudBackups > 0) return null;
+                return status;
+              })()}
+              cloudBackupCount={cloudBackupCountByGameId[game.id] ?? 0}
+              isLoading={needsSteamSearch(game) && resolvedSteamAppIds[game.id] === undefined}
+              onRemove={onRemove}
+              onSync={onSync}
+              isSyncing={syncingId === game.id || syncingId === "all"}
+              onDownload={onDownload}
+              isDownloading={downloadingId === game.id || downloadingId === "all"}
+              onOpenFolder={onOpenFolder}
+              onRestoreBackup={onRestoreBackup}
+              onFullBackupUpload={onFullBackupUpload}
+              isFullBackupUploading={fullBackupUploadingGameId === game.id}
+              onEdit={onEdit}
+              onTorrent={onTorrent}
+              onShare={onShare}
+              actionsMenuOpen={openActionsGameId === game.id}
+              onActionsMenuOpenChange={handleActionsMenuOpenChange}
+            />
+          </GamesListMotionItem>
+        ))}
+      </GamesListMotionContainer>
+    </div>
   );
 }

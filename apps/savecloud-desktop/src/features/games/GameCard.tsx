@@ -191,6 +191,9 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
                   key={displayImageUrl}
                   src={displayImageUrl}
                   loading="lazy"
+                  decoding="async"
+                  fetchPriority="auto"
+                  draggable={false}
                   alt={game.id}
                   className={`size-full object-cover object-center transition-opacity duration-300 ${
                     imgLoaded ? "opacity-100" : "opacity-0"
