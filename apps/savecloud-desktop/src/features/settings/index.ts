@@ -10,4 +10,4 @@ export { ResetCloudSeedModal } from "./ResetCloudSeedModal";
 export { RestoreConfigModal } from "./RestoreConfigModal";
 export { PullFriendConfigModal } from "./PullFriendConfigModal";
 export { UpdatesCard } from "./UpdatesCard";
-export { useSettingsPage } from "./useSettingsPage";
+export { useSettingsPage } from "../../hooks/useSettingsPage";

@@ -44,20 +44,20 @@ function CandidateMenu({ onDismiss }: { onDismiss: () => void }) {
           aria-label="Más opciones"
           className="text-default-400 hover:text-default-600 shrink-0"
           onPress={() => setOpen((v) => !v)}>
-          <MoreVertical size={16} />
+          <MoreVertical size={15} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="p-1 min-w-[200px]">
+      <PopoverContent className="min-w-[190px] border border-default-200/80 p-1 shadow-sm">
         <button
-          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-default-700 hover:bg-default-100 transition-colors text-left"
+          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-default-100"
           onClick={() => {
             onDismiss();
             setOpen(false);
           }}>
-          <EyeOff size={15} className="text-default-400 shrink-0" />
+          <EyeOff size={14} className="shrink-0 text-default-400" />
           <div>
-            <p className="font-medium leading-tight">No es un juego</p>
-            <p className="text-xs text-default-400 leading-tight mt-0.5">No volver a mostrar esto</p>
+            <p className="font-medium leading-tight text-foreground">No es un juego</p>
+            <p className="mt-0.5 text-[11px] leading-tight text-default-400">No volver a mostrar esto</p>
           </div>
         </button>
       </PopoverContent>
@@ -89,42 +89,40 @@ function CandidateRow({
   });
 
   return (
-    <div
-      className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-default-200 bg-default-50/50 px-5 py-4 transition-all hover:bg-default-100/50 dark:bg-default-100/20 dark:hover:bg-default-200/30 shadow-sm ${
-        navAdd.isFocused && navAdd.inputMode === "gamepad" ? "border-primary ring-2 ring-primary/50 bg-primary/10" : ""
+    <li
+      className={`flex flex-col gap-3 rounded-lg border border-default-200/70 px-4 py-3 transition-colors hover:border-default-300 hover:bg-default-50 outline-none focus-within:ring-0 focus-within:border-default-200/70 sm:flex-row sm:items-center sm:justify-between ${
+        navAdd.isFocused && navAdd.inputMode === "gamepad" ? "border-primary/40 bg-primary/5" : ""
       }`}>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <Gamepad2 size={20} className="text-primary shrink-0" />
-          <p className="truncate text-base font-semibold text-foreground tracking-tight">
+          <Gamepad2 size={15} className="shrink-0 text-primary" />
+          <p className="truncate text-sm font-medium text-foreground">
             {displayName}
-            {isLoading && <Spinner size="sm" className="ml-3 inline-block" color="primary" />}
+            {isLoading && <Spinner size="sm" className="ml-2 inline-block" color="default" />}
           </p>
         </div>
-
-        <div className="mt-1 flex items-center gap-1.5 text-default-400">
-          <HardDrive size={14} className="shrink-0" />
-          <p className="truncate text-xs" title={candidate.path}>
+        <div className="mt-1 flex items-center gap-1.5">
+          <HardDrive size={12} className="shrink-0 text-default-400" />
+          <p className="truncate text-[11px] text-default-400" title={candidate.path}>
             {candidate.path}
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex shrink-0 items-center gap-1.5">
         <Button
           size="sm"
           color="primary"
           variant="flat"
-          startContent={<Plus size={16} />}
+          startContent={<Plus size={14} />}
           onPress={onAdd}
           className={getGamepadFocusClass(navAdd.isFocused, navAdd.inputMode)}
           {...navAdd.navProps}>
           Añadir
         </Button>
-
         <CandidateMenu onDismiss={onDismiss} />
       </div>
-    </div>
+    </li>
   );
 }
 
@@ -144,7 +142,6 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebouncedValue(searchQuery.trim().toLowerCase(), 300);
 
-  // Candidatos visibles: excluye los descartados persistentemente
   const visibleCandidates = useMemo(() => {
     if (!candidates?.length) return [];
     return candidates.filter((c: PathCandidate) => !dismissed.has(c.path));
@@ -182,17 +179,8 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
     onPress: () => document.querySelector<HTMLInputElement>('[data-nav-id="scan-search-input"]')?.focus(),
   });
 
-  const navRefetch = useNavigable({
-    id: "scan-btn-refetch",
-    layerId: "scan-modal",
-    onPress: () => refetch(),
-  });
-
-  const navClose = useNavigable({
-    id: "scan-btn-close",
-    layerId: "scan-modal",
-    onPress: onClose,
-  });
+  const navRefetch = useNavigable({ id: "scan-btn-refetch", layerId: "scan-modal", onPress: () => refetch() });
+  const navClose = useNavigable({ id: "scan-btn-close", layerId: "scan-modal", onPress: onClose });
 
   return (
     <Modal
@@ -200,11 +188,24 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
       onOpenChange={(open) => !open && onClose()}
       size="2xl"
       autoFocus={false}
-      scrollBehavior="inside">
+      scrollBehavior="inside"
+      classNames={{
+        header: "border-b border-default-200/80 pb-3",
+        footer: "border-t border-default-200/80 pt-3",
+        body: "py-3",
+        closeButton: "hidden",
+      }}>
       <ModalContent>
-        <ModalHeader className="flex items-center gap-2">
-          <FolderOpen size={22} />
-          Buscar juegos automáticamente
+        <ModalHeader className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <FolderOpen size={15} className="text-secondary" />
+            Buscar juegos automáticamente
+          </div>
+          <Button isIconOnly size="sm" variant="light" className="size-7 min-w-0 text-default-400" onPress={onClose}>
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" width="12" height="12">
+              <path d="M2 2l8 8M10 2l-8 8" />
+            </svg>
+          </Button>
         </ModalHeader>
 
         <ModalBody>
@@ -237,8 +238,8 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
                   />
                 </Suspense>
               </div>
-              <p className="text-default-500 animate-pulse text-center max-w-md">
-                Estamos revisando tu PC para encontrar juegos y sus guardados...
+              <p className="max-w-md animate-pulse text-center text-sm text-default-500">
+                Revisando tu PC para encontrar juegos y sus guardados...
                 <br />
                 <span className="text-xs text-default-400">
                   Esto puede tardar unos segundos dependiendo de tu sistema
@@ -246,49 +247,46 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
               </p>
             </div>
           ) : candidates && candidates.length > 0 ? (
-            <>
-              {/* Input de Búsqueda Navegable */}
+            <div className="flex flex-col gap-3">
+              {/* Buscador */}
               <div
-                className={`rounded-lg transition-all p-1 ${navSearch.isFocused && navSearch.inputMode === "gamepad" ? "ring-2 ring-primary bg-primary/10" : ""}`}
+                className={`rounded-lg transition-all ${navSearch.isFocused && navSearch.inputMode === "gamepad" ? "ring-2 ring-primary/30" : ""}`}
                 {...navSearch.navProps}>
                 <Input
                   aria-label="Buscar juegos encontrados"
-                  classNames={{ inputWrapper: "bg-default-100" }}
                   placeholder="Buscar juego, carpeta o ruta..."
-                  startContent={<Search size={18} className="text-default-400" />}
+                  size="sm"
+                  radius="lg"
+                  startContent={<Search size={13} className="text-default-400" />}
                   value={searchQuery}
                   onValueChange={setSearchQuery}
-                  onBlur={() => {
-                    if (navSearch.inputMode === "mouse") return;
+                  classNames={{
+                    inputWrapper:
+                      "bg-default-100/60 border border-default-200/80 shadow-none data-[hover=true]:border-default-300 data-[focus-within=true]:!border-default-300 data-[focus=true]:!border-default-300",
                   }}
                 />
               </div>
 
-              {/* Banner de descartados */}
+              {/* Banner descartados */}
               {dismissedCount > 0 && (
-                <div className="flex items-center justify-between rounded-lg bg-default-100 px-4 py-2.5 text-sm">
+                <div className="flex items-center justify-between rounded-lg border border-default-200/70 bg-default-50 px-3 py-2 text-xs">
                   <div className="flex items-center gap-2 text-default-500">
-                    <EyeOff size={15} className="shrink-0" />
+                    <EyeOff size={13} className="shrink-0" />
                     <span>
                       {dismissedCount} {dismissedCount === 1 ? "entrada ocultada" : "entradas ocultadas"}
                     </span>
                   </div>
                   <button
-                    className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors cursor-pointer"
+                    className="flex items-center gap-1 font-medium text-primary transition-colors hover:text-primary/70"
                     onClick={clearAll}>
-                    <Trash2 size={13} />
+                    <Trash2 size={12} />
                     Restaurar todo
                   </button>
                 </div>
               )}
 
-              <div
-                className="max-h-[60vh] space-y-2 overflow-y-auto pr-2 
-                  [&::-webkit-scrollbar]:w-1.5
-                  [&::-webkit-scrollbar-track]:bg-transparent
-                  [&::-webkit-scrollbar-thumb]:bg-default-300
-                  [&::-webkit-scrollbar-thumb]:rounded-full
-                  hover:[&::-webkit-scrollbar-thumb]:bg-default-400">
+              {/* Lista */}
+              <ul className="flex flex-col gap-2 overflow-y-auto pr-0.5 max-h-[55vh] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-default-300 hover:[&::-webkit-scrollbar-thumb]:bg-default-400">
                 {filteredCandidates.length > 0 ? (
                   filteredCandidates.map((c: PathCandidate, idx: number) => (
                     <CandidateRow
@@ -301,50 +299,58 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
                     />
                   ))
                 ) : debouncedSearch ? (
-                  <p className="py-6 text-center text-sm text-default-500">
+                  <li className="py-8 text-center text-sm text-default-400">
                     No hay coincidencias para &quot;{searchQuery}&quot;
-                  </p>
+                  </li>
                 ) : (
-                  <div className="flex flex-col items-center gap-3 py-10 text-center">
-                    <EyeOff size={36} className="text-default-300" />
-                    <p className="text-default-500 text-sm">Todas las entradas encontradas han sido ocultadas.</p>
+                  <li className="flex flex-col items-center gap-3 py-10 text-center">
+                    <EyeOff size={28} className="text-default-300" />
+                    <p className="text-sm text-default-400">Todas las entradas encontradas han sido ocultadas.</p>
                     {dismissedCount > 0 && (
                       <button
-                        className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+                        className="text-xs font-medium text-primary transition-colors hover:text-primary/70"
                         onClick={clearAll}>
                         Restaurar entradas ocultadas
                       </button>
                     )}
-                  </div>
+                  </li>
                 )}
-              </div>
-            </>
+              </ul>
+            </div>
           ) : (
-            <div className="flex flex-col items-center gap-4 py-12 text-center">
-              <FolderOpen size={48} className="text-default-400" />
-              <p className="text-default-500">No se encontraron carpetas candidatas.</p>
-              <p className="text-sm text-default-400">Puedes añadir un juego manualmente con su ruta.</p>
+            <div className="flex flex-col items-center gap-3 py-12 text-center">
+              <FolderOpen size={36} className="text-default-300" />
+              <p className="text-sm text-default-500">No se encontraron carpetas candidatas.</p>
+              <p className="text-xs text-default-400">Puedes añadir un juego manualmente con su ruta.</p>
             </div>
           )}
         </ModalBody>
 
-        <ModalFooter>
-          <Button
-            variant="flat"
-            onPress={() => refetch()}
-            isDisabled={isLoading}
-            className={getGamepadFocusClass(navRefetch.isFocused, navRefetch.inputMode)}
-            {...navRefetch.navProps}>
-            Volver a analizar
-          </Button>
-
-          <Button
-            variant="flat"
-            onPress={onClose}
-            className={getGamepadFocusClass(navClose.isFocused, navClose.inputMode)}
-            {...navClose.navProps}>
-            Cerrar
-          </Button>
+        <ModalFooter className="flex items-center justify-between">
+          <span className="text-xs text-default-400">
+            {!isLoading && candidates
+              ? `${visibleCandidates.length} encontrado${visibleCandidates.length !== 1 ? "s" : ""}`
+              : ""}
+          </span>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="flat"
+              onPress={() => refetch()}
+              isDisabled={isLoading}
+              className={getGamepadFocusClass(navRefetch.isFocused, navRefetch.inputMode)}
+              {...navRefetch.navProps}>
+              Volver a analizar
+            </Button>
+            <Button
+              size="sm"
+              variant="flat"
+              onPress={onClose}
+              className={getGamepadFocusClass(navClose.isFocused, navClose.inputMode)}
+              {...navClose.navProps}>
+              Cerrar
+            </Button>
+          </div>
         </ModalFooter>
       </ModalContent>
     </Modal>

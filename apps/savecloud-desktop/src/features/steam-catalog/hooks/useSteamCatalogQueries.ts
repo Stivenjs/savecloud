@@ -20,7 +20,7 @@ import {
   STEAM_CATALOG_URL_PAGE,
   STEAM_CATALOG_URL_Q,
   STEAM_CATALOG_URL_TAG,
-} from "@features/steam-catalog/constants";
+} from "@/constants/constants";
 
 function selectionKey(labels: string[]): string {
   return [...labels].sort().join("\u0001");
