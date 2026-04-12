@@ -6,8 +6,8 @@ import { HeroUIProvider, ToastProvider } from "@heroui/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AppErrorBoundary } from "@components/error/AppErrorBoundary";
 import { queryClient } from "@lib/queryClient";
-import App from "./App";
-import "./index.css";
+import App from "@/App";
+import "@/styles/index.css";
 
 /** Configuración del tema */
 const THEME_CONFIG = {
@@ -76,7 +76,7 @@ const MainAppWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =
  */
 async function renderOverlayApp(): Promise<void> {
   try {
-    await import("./overlay.css");
+    await import("@styles/overlay.css");
 
     const { OverlayApp } = await import("./pages/OverlayApp");
 

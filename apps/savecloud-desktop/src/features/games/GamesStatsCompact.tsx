@@ -93,9 +93,10 @@ export function GamesStatsCompact({
     </ul>
   );
 
-  const infoButton = (
+  const renderInfoButton = (onClick?: () => void) => (
     <button
       type="button"
+      onClick={onClick}
       className="flex size-5 shrink-0 items-center justify-center rounded-full border border-default-200 text-default-400 transition-all hover:border-default-300 hover:bg-default-100 hover:text-default-600 cursor-pointer">
       <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" width="9" height="9">
         <circle cx="6" cy="6" r="5" />
@@ -165,9 +166,7 @@ export function GamesStatsCompact({
               {hasCloudGames &&
                 (useModal ? (
                   <>
-                    <button type="button" onClick={onOpen}>
-                      {infoButton}
-                    </button>
+                    {renderInfoButton(onOpen)}
 
                     <Modal
                       isOpen={isOpen}
@@ -257,7 +256,8 @@ export function GamesStatsCompact({
                   </>
                 ) : (
                   <Popover placement="bottom" showArrow={false}>
-                    <PopoverTrigger>{infoButton}</PopoverTrigger>
+                    {/* Called sin argumentos para que PopoverTrigger maneje el botón */}
+                    <PopoverTrigger>{renderInfoButton()}</PopoverTrigger>
                     <PopoverContent className="w-[calc(100vw-2rem)] max-w-xs p-0 shadow-sm border border-default-200/80">
                       <div className="border-b border-default-200/80 px-4 py-2.5">
                         <p className="text-xs font-medium text-default-600">Guardados en la nube</p>

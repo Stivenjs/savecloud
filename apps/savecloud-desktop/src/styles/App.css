@@ -1,17 +1,7 @@
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: "Plus Jakarta Sans", system-ui, sans-serif;
-}
-
 :root {
   view-transition-name: none;
 }
 
-/* Page slide transition (enter/exit via <ViewTransition> classes) */
 ::view-transition-old(.page-slide),
 ::view-transition-new(.page-slide) {
   animation-duration: 250ms;
@@ -29,7 +19,6 @@ body {
   animation-timing-function: ease-out, cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* Shared element: card image ↔ hero banner */
 ::view-transition-group(.hero-morph) {
   animation-duration: 350ms;
   animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
