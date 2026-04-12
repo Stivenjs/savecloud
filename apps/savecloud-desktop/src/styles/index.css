@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@config "../tailwind.config.js";
+@config "../../tailwind.config.js";
 
 @layer utilities {
   @keyframes sg-fade-in-up {
@@ -31,7 +31,6 @@
   }
 }
 
-/* Scrollbar global - aplica a toda la app */
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;

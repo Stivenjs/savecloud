@@ -7,7 +7,7 @@ import { UnsyncedSavesModalWithProgress } from "@features/games";
 import { useAppInitialization } from "@hooks/useAppInitialization";
 import { useConfig } from "@hooks/useConfig";
 import type { ConfiguredGame } from "@app-types/config";
-import "./App.css";
+import "@styles/App.css";
 
 function AppContent() {
   const navigate = useNavigate();

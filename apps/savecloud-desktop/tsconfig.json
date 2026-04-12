@@ -29,7 +29,8 @@
       "@utils/*": ["src/utils/*"],
       "@app-types/*": ["src/types/*"],
       "@store/*": ["src/store/*"],
-      "@lib/*": ["src/lib/*"]
+      "@lib/*": ["src/lib/*"],
+      "@styles/*": ["src/styles/*"]
     }
   },
   "include": ["src"],

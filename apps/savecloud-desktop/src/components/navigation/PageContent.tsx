@@ -17,7 +17,7 @@ const SteamCatalogPage = lazy(() =>
 );
 
 const PageLoader = () => (
-  <div className="flex min-h-[40vh] items-center justify-center">
+  <div className="flex min-h-[80vh] items-center justify-center">
     <Spinner size="lg" color="primary" label="Cargando..." />
   </div>
 );

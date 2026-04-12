@@ -1,6 +1,6 @@
 import { Input } from "@heroui/react";
 import { Search } from "lucide-react";
-import { STEAM_CATALOG_SEARCH_MIN } from "@features/steam-catalog/constants";
+import { STEAM_CATALOG_SEARCH_MIN } from "@/constants/constants";
 
 type SteamCatalogToolbarProps = {
   searchTerm: string;

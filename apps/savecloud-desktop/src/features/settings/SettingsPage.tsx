@@ -13,7 +13,7 @@ import { ResetSteamCatalogModal } from "@features/settings/ResetSteamCatalogModa
 import { ResetCloudSeedModal } from "@features/settings/ResetCloudSeedModal";
 import { PullFriendConfigModal } from "@/features/settings/PullFriendConfigModal";
 import { UpdatesCard } from "@features/settings/UpdatesCard";
-import { useSettingsPage } from "@features/settings/useSettingsPage";
+import { useSettingsPage } from "@/hooks/useSettingsPage";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigationStore } from "@features/input/store";
 import { DevSdk } from "@features/settings/DevSdk";

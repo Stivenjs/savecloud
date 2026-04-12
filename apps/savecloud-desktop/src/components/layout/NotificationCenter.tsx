@@ -210,7 +210,7 @@ export function NotificationCenter() {
       </PopoverTrigger>
 
       {/* Contenido */}
-      <PopoverContent className="w-[min(100vw-1rem,400px)] rounded-2xl p-0 shadow-xl overflow-hidden border border-default-200/70">
+      <PopoverContent className="w-[min(100vw-1rem,400px)] rounded-2xl p-0 shadow-xl overflow-hidden ">
         {/* Encabezado */}
         <div className="flex w-full items-center justify-between gap-2 px-4 py-3 border-b border-default-100 bg-default-50/80 backdrop-blur-sm">
           <div className="flex items-center gap-2">

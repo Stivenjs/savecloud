@@ -30,6 +30,7 @@ export default defineConfig(() => ({
       "@utils": resolve(__dirname, "src/utils"),
       "@app-types": resolve(__dirname, "src/types"),
       "@store": resolve(__dirname, "src/store"),
+      "@styles": resolve(__dirname, "src/styles"),
       "@lib": resolve(__dirname, "src/lib"),
     },
   },

@@ -1,6 +1,7 @@
 import {
   Button,
   Code,
+  Input,
   Modal,
   ModalBody,
   ModalContent,
@@ -12,10 +13,12 @@ import {
   Spinner,
   useDisclosure,
 } from "@heroui/react";
-import { Cloud, CloudOff, Gamepad2, HardDrive, Info } from "lucide-react";
+import { Cloud, CloudOff, Database, Gamepad2, RefreshCw, Search, X } from "lucide-react";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { formatLastSync, formatSize } from "@utils/format";
 import type { CloudGameSummary } from "@hooks/useLastSyncInfo";
+import { useDebouncedValue } from "@hooks/useDebouncedValue";
+import { useState } from "react";
 
 interface GamesStatsCompactProps {
   gamesCount: number;
@@ -43,154 +46,227 @@ export function GamesStatsCompact({
   const useModal = cloudGames.length > 8;
 
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
+  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebouncedValue(searchQuery, 250);
 
-  const cloudDetailContent = (
-    <ul className="space-y-2">
-      {cloudGames.map((g) => (
-        <li key={g.gameId} className="flex flex-col gap-1 rounded-lg bg-default-100 px-3 py-2">
-          {/* Nombre + tamaño */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="truncate text-sm font-medium text-foreground">{formatGameDisplayName(g.gameId)}</span>
-            <span className="shrink-0 text-xs text-default-500">
-              {g.fileCount} archivo{g.fileCount !== 1 ? "s" : ""} · {formatSize(g.totalSize)}
-            </span>
-          </div>
+  const filteredGames = cloudGames.filter((g) => {
+    const term = debouncedSearch.trim().toLowerCase();
+    if (!term) return true;
+    return g.gameId.toLowerCase().includes(term) || formatGameDisplayName(g.gameId).toLowerCase().includes(term);
+  });
 
-          {/* ID + acción */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Code size="sm" className="max-w-[200px] truncate">
-              {g.gameId}
-            </Code>
-
-            {onConfigureFromCloud && (
-              <Button size="sm" variant="light" className="h-7 text-xs" onPress={() => onConfigureFromCloud(g.gameId)}>
-                Configurar
-              </Button>
-            )}
-          </div>
+  const cloudGamesList = (games: CloudGameSummary[]) => (
+    <ul className="flex flex-col gap-2">
+      {games.length === 0 ? (
+        <li className="flex flex-col items-center gap-2 py-10 text-default-400">
+          <Search size={22} className="opacity-30" />
+          <span className="text-xs">No se encontraron juegos</span>
         </li>
-      ))}
+      ) : (
+        games.map((g) => (
+          <li
+            key={g.gameId}
+            className="flex flex-col gap-1.5 rounded-lg border border-default-200/70 px-3 py-2.5 transition-colors hover:border-default-300 hover:bg-default-50 outline-none focus-within:ring-0 focus-within:border-default-200/70">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="truncate text-sm font-medium text-foreground">{formatGameDisplayName(g.gameId)}</span>
+              <span className="shrink-0 text-xs text-default-400">
+                {g.fileCount} archivo{g.fileCount !== 1 ? "s" : ""} · {formatSize(g.totalSize)}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Code size="sm" className="max-w-[200px] truncate text-default-400 text-[11px]">
+                {g.gameId}
+              </Code>
+              {onConfigureFromCloud && (
+                <Button
+                  size="sm"
+                  variant="light"
+                  className="h-6 min-w-0 px-2 text-[11px] text-default-500 cursor-pointer"
+                  onPress={() => onConfigureFromCloud(g.gameId)}>
+                  Configurar
+                </Button>
+              )}
+            </div>
+          </li>
+        ))
+      )}
     </ul>
   );
 
-  /**
-   * 🔹 Botón info reutilizable
-   */
-  const infoButton = (
+  const renderInfoButton = (onClick?: () => void) => (
     <button
       type="button"
-      className="
-        flex size-6 shrink-0 items-center justify-center
-        rounded-full bg-default-100 text-default-600
-        transition-all hover:bg-default-200 hover:text-foreground hover:scale-105
-      ">
-      <Info size={14} />
+      onClick={onClick}
+      className="flex size-5 shrink-0 items-center justify-center rounded-full border border-default-200 text-default-400 transition-all hover:border-default-300 hover:bg-default-100 hover:text-default-600 cursor-pointer">
+      <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" width="9" height="9">
+        <circle cx="6" cy="6" r="5" />
+        <path d="M6 5.5v3M6 3.5v.5" />
+      </svg>
     </button>
   );
 
   return (
-    <div
-      className="
-        w-full
-        rounded-lg border border-default-200 bg-default-50
-        px-3 py-3 sm:px-4 sm:py-4
-      ">
-      <div
-        className="
-          grid gap-3
-          grid-cols-1
-          sm:grid-cols-2
-          lg:grid-cols-3
-          text-sm
-        ">
-        <div className="flex items-center gap-2 rounded-md bg-transparent">
-          <Gamepad2 size={16} className="text-primary shrink-0" />
-
-          <span className="font-semibold text-foreground">{gamesCount}</span>
-
-          <span className="text-xs text-default-500">
-            juego{gamesCount !== 1 ? "s" : ""} configurado
-            {gamesCount !== 1 ? "s" : ""}
+    <div className="w-full overflow-hidden rounded-xl bg-default-50">
+      <div className="grid grid-cols-1 divide-y divide-default-200/80 text-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        {/* Juegos configurados */}
+        <div className="flex flex-col gap-1 px-4 py-3.5">
+          <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-default-500">
+            <Gamepad2 size={12} className="text-primary" />
+            juegos
+          </span>
+          <span className="text-xl font-medium text-foreground">
+            {gamesCount}{" "}
+            <span className="text-sm font-normal text-default-500">configurado{gamesCount !== 1 ? "s" : ""}</span>
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {lastSyncLoading ? (
-            <Spinner size="sm" color="primary" />
-          ) : lastSyncAt ? (
-            <Cloud size={16} className="text-primary shrink-0" />
-          ) : (
-            <CloudOff size={16} className="text-default-500 shrink-0" />
-          )}
-
-          <span className="font-semibold text-foreground">
-            {lastSyncLoading ? "cargando..." : lastSyncAt ? formatLastSync(lastSyncAt) : "nunca"}
+        {/* Última sincronización */}
+        <div className="flex flex-col gap-1 px-4 py-3.5">
+          <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-default-500">
+            <RefreshCw size={12} className="text-secondary" />
+            última sincronización
           </span>
-
-          <span className="text-xs text-default-500">última sincronización</span>
-
-          {lastSyncAt && lastSyncGameId && (
-            <span className="text-xs text-default-400 break-all">({formatGameDisplayName(lastSyncGameId)})</span>
-          )}
-        </div>
-
-        {showCloudSection && (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             {lastSyncLoading ? (
-              <Spinner size="sm" color="primary" />
+              <Spinner size="sm" color="default" />
+            ) : lastSyncAt ? (
+              <Cloud size={14} className="shrink-0 text-default-500" />
             ) : (
-              <HardDrive size={16} className="text-secondary shrink-0" />
+              <CloudOff size={14} className="shrink-0 text-default-400" />
             )}
-
-            <span className="font-semibold text-foreground">
-              {lastSyncLoading ? "cargando..." : hasCloudGames ? formatSize(totalCloudSize) : "vacío"}
+            <span className="text-sm font-medium text-foreground">
+              {lastSyncLoading ? "cargando..." : lastSyncAt ? formatLastSync(lastSyncAt) : "nunca"}
             </span>
+            {lastSyncAt && lastSyncGameId && (
+              <span className="truncate text-xs text-default-400">{formatGameDisplayName(lastSyncGameId)}</span>
+            )}
+          </div>
+        </div>
 
-            <span className="text-xs text-default-500">
-              {lastSyncLoading
-                ? ""
-                : hasCloudGames
-                  ? `(${cloudGames.length} juego${cloudGames.length !== 1 ? "s" : ""})`
-                  : "en la nube"}
+        {/* Almacenamiento en nube */}
+        {showCloudSection && (
+          <div className="flex flex-col gap-1 px-4 py-3.5">
+            <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-default-500">
+              <Database size={12} className="text-warning" />
+              almacenamiento
             </span>
-
-            {hasCloudGames &&
-              (useModal ? (
-                <>
-                  <button onClick={onOpen}>{infoButton}</button>
-
-                  <Modal isOpen={isOpen} onOpenChange={onOpenChange} size="3xl" scrollBehavior="inside">
-                    <ModalContent>
-                      <ModalHeader>Guardados ({cloudGames.length})</ModalHeader>
-
-                      <ModalBody>
-                        <div className="max-h-[70vh] overflow-y-auto">{cloudDetailContent}</div>
-                      </ModalBody>
-
-                      <ModalFooter>
-                        <Button onPress={() => onOpenChange()}>Cerrar</Button>
-                      </ModalFooter>
-                    </ModalContent>
-                  </Modal>
-                </>
+            <div className="flex items-center gap-2">
+              {lastSyncLoading ? (
+                <Spinner size="sm" color="default" />
               ) : (
-                <Popover placement="bottom" showArrow>
-                  <PopoverTrigger>{infoButton}</PopoverTrigger>
+                <span className="text-base font-semibold text-foreground">
+                  {hasCloudGames ? formatSize(totalCloudSize) : "vacío"}
+                </span>
+              )}
+              {!lastSyncLoading && hasCloudGames && (
+                <span className="text-xs text-default-400">
+                  {cloudGames.length} juego{cloudGames.length !== 1 ? "s" : ""}
+                </span>
+              )}
+              {hasCloudGames &&
+                (useModal ? (
+                  <>
+                    {renderInfoButton(onOpen)}
 
-                  <PopoverContent
-                    className="
-                      w-[calc(100vw-2rem)]
-                      max-w-sm
-                      p-0
-                    ">
-                    <div className="border-b border-default-200 px-4 py-3">
-                      <p className="text-sm font-medium">Guardados en la nube</p>
-                    </div>
+                    <Modal
+                      isOpen={isOpen}
+                      onOpenChange={(open) => {
+                        if (!open) setSearchQuery("");
+                        onOpenChange();
+                      }}
+                      size="2xl"
+                      scrollBehavior="inside"
+                      classNames={{
+                        header: "border-b border-default-200/80 pb-3",
+                        footer: "border-t border-default-200/80 pt-3",
+                        body: "py-3",
+                        closeButton: "hidden",
+                      }}>
+                      <ModalContent>
+                        <ModalHeader className="flex flex-col gap-2.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-sm font-medium">
+                              <Database size={14} className="text-default-500" />
+                              Guardados en la nube
+                              <span className="rounded-full border border-default-200 px-2 py-0.5 text-[11px] font-normal text-default-500">
+                                {cloudGames.length}
+                              </span>
+                            </div>
+                            <Button
+                              isIconOnly
+                              size="sm"
+                              variant="light"
+                              className="size-7 min-w-0 text-default-400"
+                              onPress={() => {
+                                setSearchQuery("");
+                                onOpenChange();
+                              }}>
+                              <X size={14} />
+                            </Button>
+                          </div>
 
-                    <div className="max-h-72 overflow-y-auto p-3">{cloudDetailContent}</div>
-                  </PopoverContent>
-                </Popover>
-              ))}
+                          <Input
+                            placeholder="Buscar juego..."
+                            size="sm"
+                            radius="lg"
+                            startContent={<Search size={13} className="text-default-400" />}
+                            endContent={
+                              searchQuery ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setSearchQuery("")}
+                                  className="text-default-400 hover:text-default-600">
+                                  <X size={13} />
+                                </button>
+                              ) : null
+                            }
+                            value={searchQuery}
+                            onValueChange={setSearchQuery}
+                            classNames={{
+                              inputWrapper:
+                                "bg-default-100/60 border border-default-200/80 shadow-none data-[hover=true]:border-default-300 data-[focus-within=true]:!border-default-300 data-[focus=true]:!border-default-300",
+                            }}
+                          />
+
+                          {debouncedSearch && (
+                            <p className="text-[11px] font-normal text-default-400">
+                              {filteredGames.length} resultado{filteredGames.length !== 1 ? "s" : ""} para &quot;
+                              {debouncedSearch}&quot;
+                            </p>
+                          )}
+                        </ModalHeader>
+
+                        <ModalBody>{cloudGamesList(filteredGames)}</ModalBody>
+
+                        <ModalFooter className="flex items-center justify-between">
+                          <span className="text-xs text-default-400">{formatSize(totalCloudSize)} en total</span>
+                          <Button
+                            size="sm"
+                            variant="flat"
+                            className="text-default-600"
+                            onPress={() => {
+                              setSearchQuery("");
+                              onOpenChange();
+                            }}>
+                            Cerrar
+                          </Button>
+                        </ModalFooter>
+                      </ModalContent>
+                    </Modal>
+                  </>
+                ) : (
+                  <Popover placement="bottom" showArrow={false}>
+                    {/* Called sin argumentos para que PopoverTrigger maneje el botón */}
+                    <PopoverTrigger>{renderInfoButton()}</PopoverTrigger>
+                    <PopoverContent className="w-[calc(100vw-2rem)] max-w-xs p-0 shadow-sm border border-default-200/80">
+                      <div className="border-b border-default-200/80 px-4 py-2.5">
+                        <p className="text-xs font-medium text-default-600">Guardados en la nube</p>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto p-2.5">{cloudGamesList(cloudGames)}</div>
+                    </PopoverContent>
+                  </Popover>
+                ))}
+            </div>
           </div>
         )}
       </div>
