@@ -26,7 +26,7 @@ export function SourceInstallSettingsCard(props: Props) {
   const totalDownloads = props.sources.reduce((acc, s) => acc + s.downloadsCount, 0);
 
   return (
-    <Card className="border border-default-200 shadow-sm">
+    <Card className="shadow-sm">
       <CardBody className="gap-5 p-5">
         {/* Header */}
         <div className="flex items-start gap-3">
