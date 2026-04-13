@@ -13,6 +13,25 @@
 //! Tauri: una tarea [`tokio`] dedicada por torrent llama a
 //! [`spawn_progress_monitor`] y emite [`TORRENT_PROGRESS_EVENT`] a intervalos
 //! fijos hasta que el torrent finaliza o es eliminado.
+//!
+//! # Estrategia de descubrimiento de peers
+//!
+//! El motor implementa un sistema de tres fases para maximizar la velocidad
+//! de descarga desde el primer momento:
+//!
+//! 1. **Precalentamiento**: al inicializar el engine, los trackers del tier
+//!    `Best` se obtienen en segundo plano y se almacenan en caché. Cuando el
+//!    usuario inicia una descarga, los trackers ya están disponibles sin espera.
+//!
+//! 2. **Arranque con dos tiers en paralelo**: al añadir un torrent se solicitan
+//!    `Best` y `AllUdp` simultáneamente con [`tokio::join!`], duplicando el
+//!    conjunto de trackers disponibles desde el primer segundo sin overhead
+//!    adicional de latencia.
+//!
+//! 3. **Escalado dinámico**: [`spawn_progress_monitor`] evalúa el número de
+//!    peers conectados cada tick. Si tras [`TRACKER_ESCALATION_SECS`] segundos
+//!    hay menos de [`TRACKER_ESCALATION_MIN_PEERS`] peers vivos, inyecta el
+//!    tier `All` para maximizar la red de peers disponibles.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -71,6 +90,29 @@ const PROGRESS_INTERVAL: std::time::Duration = std::time::Duration::from_millis(
 /// sin requerir configuración manual de reenvío de puertos.
 const LISTEN_PORT_RANGE: std::ops::Range<u16> = 6881..6950;
 
+/// Segundos desde el inicio de la descarga tras los cuales el monitor evalúa
+/// si el número de peers conectados es suficiente para escalar al tier `All`.
+///
+/// 45 segundos es tiempo suficiente para que DHT y los trackers iniciales
+/// respondan en condiciones normales. Si para entonces hay pocos peers, es
+/// indicativo de que los trackers `Best` y `AllUdp` no son suficientes para
+/// este torrent en particular.
+const TRACKER_ESCALATION_SECS: u64 = 45;
+
+/// Umbral mínimo de peers vivos por debajo del cual se activa el escalado.
+///
+/// Con menos de 3 peers simultáneos la velocidad de descarga raramente supera
+/// unos pocos KB/s. Escalar en ese punto tiene un coste de red bajo y un
+/// beneficio potencial alto.
+const TRACKER_ESCALATION_MIN_PEERS: u32 = 3;
+
+/// Timeout máximo para el precalentamiento de trackers al inicializar el engine.
+///
+/// Si la red no responde en este tiempo, el caché quedará vacío y la primera
+/// descarga solicitará los trackers de forma síncrona. Esto es preferible a
+/// bloquear el arranque de la aplicación indefinidamente.
+const WARMUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Estado global del subsistema de descargas torrent.
 ///
 /// Existe exactamente una instancia de `TorrentEngine` por proceso, almacenada
@@ -79,14 +121,26 @@ const LISTEN_PORT_RANGE: std::ops::Range<u16> = 6881..6950;
 pub struct TorrentEngine {
     /// La sesión de librqbit que gestiona todos los torrents activos.
     session: Arc<Session>,
+
     /// Info-hashes de torrents que han sido añadidos y aún no han completado
     /// ni sido cancelados. Permite detectar adiciones duplicadas y realizar
     /// operaciones masivas como pausar todo al suspender la aplicación.
     active: HashSet<String>,
+
+    /// Caché de trackers precalentado durante la inicialización del engine.
+    ///
+    /// Contiene la unión de los tiers `Best` y `AllUdp` deduplicada. Al estar
+    /// disponible antes de que el usuario inicie cualquier descarga, elimina
+    /// la latencia de red del camino crítico de [`add_magnet_to_session`] y
+    /// [`add_file_to_session`]. Si el precalentamiento falló por timeout o
+    /// error de red, el vector estará vacío y las funciones de adición
+    /// solicitarán los trackers de forma síncrona como fallback.
+    cached_trackers: Vec<String>,
 }
 
 impl TorrentEngine {
-    /// Crea un nuevo motor e inicializa la sesión subyacente de librqbit.
+    /// Crea un nuevo motor, inicializa la sesión subyacente de librqbit y
+    /// precalienta el caché de trackers en paralelo.
     ///
     /// La sesión se configura para maximizar la accesibilidad a peers:
     ///
@@ -102,6 +156,15 @@ impl TorrentEngine {
     ///   torrents compitan por ancho de banda durante su fase de handshake,
     ///   que es cuando los slots de peer y el establecimiento de conexión
     ///   dominan el rendimiento.
+    ///
+    /// # Precalentamiento del caché de trackers
+    ///
+    /// Tras crear la sesión, se solicitan los tiers `Best` y `AllUdp` en
+    /// paralelo con un timeout de [`WARMUP_TIMEOUT`]. El resultado se almacena
+    /// en `cached_trackers` para que las descargas subsiguientes no tengan que
+    /// esperar la resolución HTTP de ngosang. Si el precalentamiento no
+    /// completa a tiempo, el caché queda vacío y las descargas solicitarán los
+    /// trackers de forma síncrona sin impacto funcional.
     ///
     /// # Recuperación ante estado DHT corrupto
     ///
@@ -122,11 +185,8 @@ impl TorrentEngine {
             ..Default::default()
         };
 
-        match Session::new_with_opts(output_folder.clone(), options).await {
-            Ok(session) => Ok(Self {
-                session,
-                active: HashSet::new(),
-            }),
+        let session = match Session::new_with_opts(output_folder.clone(), options).await {
+            Ok(s) => s,
             Err(initial_err) => {
                 // El estado DHT persistente ha quedado corrupto tras un cierre
                 // abrupto. Se elimina el directorio de sesión y se reintenta
@@ -158,20 +218,57 @@ impl TorrentEngine {
                     ..Default::default()
                 };
 
-                let session = Session::new_with_opts(output_folder, recovery_options)
+                Session::new_with_opts(output_folder, recovery_options)
                     .await
                     .map_err(|e| {
                         TorrentError::SessionInit(format!(
                             "Fallo irrecuperable tras limpiar estado DHT: {e}"
                         ))
-                    })?;
-
-                Ok(Self {
-                    session,
-                    active: HashSet::new(),
-                })
+                    })?
             }
-        }
+        };
+
+        // Precalentar el caché de trackers en paralelo con un timeout estricto.
+        // Se solicitan los tiers Best y AllUdp simultáneamente para que la primera
+        // descarga tenga la lista completa sin espera adicional. Si la red no
+        // responde a tiempo, el vector queda vacío y las descargas obtienen los
+        // trackers de forma síncrona sin impacto funcional.
+        let cached_trackers = match tokio::time::timeout(WARMUP_TIMEOUT, async {
+            let (best, udp) = tokio::join!(
+                fetch_trackers(TrackerTier::Best),
+                fetch_trackers(TrackerTier::AllUdp),
+            );
+            merge_tracker_lists(best, udp)
+        })
+        .await
+        {
+            Ok(trackers) => {
+                sync_logger::log_operation(
+                    "TorrentEngine::new",
+                    &format!(
+                        "Caché de trackers precalentado: {} entradas disponibles.",
+                        trackers.len()
+                    ),
+                );
+                trackers
+            }
+            Err(_) => {
+                // El timeout expiró antes de que la red respondiera.
+                // La primera descarga solicitará los trackers de forma síncrona.
+                sync_logger::log_error(
+                        "TorrentEngine::new",
+                        "Timeout al precalentar trackers. La primera descarga los obtendrá de forma síncrona.",
+                        "Precalentamiento de trackers incompleto por timeout de red.",
+                    );
+                Vec::new()
+            }
+        };
+
+        Ok(Self {
+            session,
+            active: HashSet::new(),
+            cached_trackers,
+        })
     }
 
     /// Devuelve un clon del handle de sesión envuelto en [`Arc`].
@@ -202,9 +299,72 @@ impl TorrentEngine {
         self.active.remove(info_hash);
     }
 
+    /// Devuelve una copia de los info-hashes de todas las descargas activas.
     pub fn active_hashes(&self) -> Vec<String> {
         self.active.iter().cloned().collect()
     }
+
+    /// Devuelve un clon del caché de trackers precalentado.
+    ///
+    /// Si el precalentamiento falló o todavía no se ha completado, devuelve un
+    /// vector vacío. Las funciones de adición de torrents deben tratar un
+    /// vector vacío como señal para solicitar los trackers de forma síncrona.
+    pub fn cached_trackers(&self) -> Vec<String> {
+        self.cached_trackers.clone()
+    }
+}
+
+/// Combina dos listas de trackers en una sola eliminando duplicados.
+///
+/// El orden de inserción se preserva: los trackers de `primary` aparecen
+/// primero, seguidos de los de `secondary` que no estuvieran ya presentes.
+/// Usar un `HashSet` como índice de deduplicación garantiza que la operación
+/// sea O(n) en lugar de O(n²).
+fn merge_tracker_lists(primary: Vec<String>, secondary: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::with_capacity(primary.len() + secondary.len());
+    let mut merged = Vec::with_capacity(primary.len() + secondary.len());
+
+    for tracker in primary.into_iter().chain(secondary) {
+        if seen.insert(tracker.clone()) {
+            merged.push(tracker);
+        }
+    }
+
+    merged
+}
+
+/// Obtiene la lista de trackers para una nueva descarga, priorizando el caché.
+///
+/// Si el engine tiene trackers precalentados, los devuelve directamente sin
+/// ninguna llamada de red. Si el caché está vacío (porque el precalentamiento
+/// falló o expiró su timeout), solicita los tiers `Best` y `AllUdp` en
+/// paralelo de forma síncrona. En ambos casos el resultado es la unión
+/// deduplicada de ambos tiers.
+async fn resolve_trackers_for_download(cached: Vec<String>) -> Vec<String> {
+    if !cached.is_empty() {
+        sync_logger::log_operation(
+            "resolve_trackers_for_download",
+            &format!(
+                "Usando {} trackers del caché precalentado. Sin espera de red.",
+                cached.len()
+            ),
+        );
+        return cached;
+    }
+
+    // El caché no está disponible: solicitar ambos tiers en paralelo para
+    // minimizar la latencia frente a solicitarlos secuencialmente.
+    sync_logger::log_operation(
+        "resolve_trackers_for_download",
+        "Caché vacío. Obteniendo trackers Best y AllUdp en paralelo.",
+    );
+
+    let (best, udp) = tokio::join!(
+        fetch_trackers(TrackerTier::Best),
+        fetch_trackers(TrackerTier::AllUdp),
+    );
+
+    merge_tracker_lists(best, udp)
 }
 
 /// Parsea un info-hash en hexadecimal a un [`TorrentIdOrHash`].
@@ -298,10 +458,7 @@ fn save_path_has_existing_files(save_path: &str) -> bool {
             let Ok(sub_entries) = std::fs::read_dir(&entry_path) else {
                 continue;
             };
-            if sub_entries
-                .flatten()
-                .any(|e| e.path().is_file())
-            {
+            if sub_entries.flatten().any(|e| e.path().is_file()) {
                 return true;
             }
         }
@@ -381,7 +538,7 @@ pub fn emit_starting_event(app: &AppHandle, info_hash: &str, name: &str) {
 /// pasar `false` conserva lo que ya se haya escrito en disco, que corresponde
 /// a la semántica habitual de "cancelar descarga" en clientes torrent.
 pub async fn cancel_via_session(
-    session: &std::sync::Arc<librqbit::Session>,
+    session: &Arc<Session>,
     info_hash: &str,
 ) -> Result<(), TorrentError> {
     let id = parse_info_hash(info_hash)?;
@@ -391,12 +548,12 @@ pub async fn cancel_via_session(
 
     let _ = session.pause(&handle).await;
 
-    let delete_future = session.delete(librqbit::api::TorrentIdOrHash::Id(handle.id()), false);
+    let delete_future = session.delete(TorrentIdOrHash::Id(handle.id()), false);
 
     match tokio::time::timeout(std::time::Duration::from_secs(3), delete_future).await {
         Ok(result) => result.map_err(|e| TorrentError::Cancel(e.to_string())),
         Err(_) => {
-            crate::commands::logs::sync_logger::log_error(
+            sync_logger::log_error(
                 "cancel_via_session",
                 "Timeout al eliminar torrent de la sesión, forzando cierre",
                 &format!("El torrent {} tardó demasiado en eliminarse", info_hash),
@@ -450,16 +607,21 @@ pub async fn resume_via_session(
 /// disponible; de lo contrario, se usa el info-hash en hexadecimal como
 /// fallback.
 ///
-/// En librqbit 8.1.x el número máximo de peers concurrentes por torrent lo fija
-/// la propia biblioteca (semáforo interno); no hay campo equivalente a
-/// `max_peers` en [`AddTorrentOptions`].
+/// # Estrategia de trackers
+///
+/// Se utiliza [`resolve_trackers_for_download`] que prioriza el caché
+/// precalentado. Si el caché contiene datos, la adición del torrent no
+/// incurre en ninguna latencia de red adicional. Si el caché está vacío,
+/// se solicitan `Best` y `AllUdp` en paralelo antes de añadir el torrent.
+/// En ambos casos el magnet es enriquecido con la lista completa antes de
+/// entregarse a librqbit.
 pub async fn add_magnet_to_session(
     session: &Arc<Session>,
     magnet_link: &str,
     save_path: &str,
+    cached_trackers: Vec<String>,
 ) -> Result<(String, String, usize), TorrentError> {
-    let trackers = fetch_trackers(TrackerTier::Best).await;
-
+    let trackers = resolve_trackers_for_download(cached_trackers).await;
     let enriched_magnet = enrich_magnet(magnet_link, &trackers);
 
     // Las opciones se construyen en función de si ya hay archivos en disco.
@@ -493,18 +655,19 @@ pub async fn add_magnet_to_session(
 /// actualizaciones de estado incrementales a través de [`spawn_progress_monitor`]
 /// y es responsable de renderizar el estado `Starting` de forma apropiada.
 ///
-/// # Estrategia de fallback
+/// # Estrategia de trackers y fallback
 ///
-/// El flujo preferido es construir un magnet link enriquecido a partir del
-/// info-hash del archivo `.torrent` para aprovechar los trackers adicionales
-/// inyectados por [`enrich_magnet`]. Si ese intento falla (por ejemplo, porque
-/// el magnet no resuelve a tiempo), se reintenta añadiendo directamente el
-/// archivo `.torrent` como fallback. En ambos casos se aplica la misma
-/// detección de carpeta limpia para omitir la verificación innecesaria.
+/// El flujo preferido construye un magnet link enriquecido a partir del
+/// info-hash del archivo `.torrent`, aprovechando los trackers del caché
+/// o solicitándolos en paralelo si el caché está vacío. Si ese intento falla
+/// (por ejemplo, porque el magnet no resuelve a tiempo), se reintenta añadiendo
+/// directamente el archivo `.torrent` como fallback. En ambos casos se aplica
+/// la misma detección de carpeta limpia para omitir la verificación innecesaria.
 pub async fn add_file_to_session(
     session: &Arc<Session>,
     file_path: &str,
     save_path: &str,
+    cached_trackers: Vec<String>,
 ) -> Result<(String, String, usize), TorrentError> {
     let bytes =
         std::fs::read(file_path).map_err(|e| TorrentError::ReadTorrentFile(e.to_string()))?;
@@ -515,7 +678,7 @@ pub async fn add_file_to_session(
     let info_hash = torrent_meta.info_hash.as_string();
 
     let base_magnet = build_magnet_from_info_hash(&info_hash);
-    let trackers = fetch_trackers(TrackerTier::Best).await;
+    let trackers = resolve_trackers_for_download(cached_trackers).await;
     let enriched_magnet = enrich_magnet(&base_magnet, &trackers);
 
     // Las opciones se construyen en función de si ya hay archivos en disco.
@@ -532,6 +695,8 @@ pub async fn add_file_to_session(
     let response = match response_result {
         Ok(res) => res,
         Err(_) => {
+            // El magnet enriquecido no pudo resolverse. Se reintenta con el
+            // archivo .torrent original para no bloquear la descarga.
             sync_logger::log_error(
                 "add_file_to_session",
                 "Fallo al usar magnet enriquecido. Retrocediendo a archivo .torrent.",
@@ -558,7 +723,8 @@ pub async fn add_file_to_session(
     Ok((final_info_hash, name, id))
 }
 
-/// Lanza una tarea en segundo plano que emite eventos de progreso periódicamente.
+/// Lanza una tarea en segundo plano que emite eventos de progreso periódicamente
+/// y escala el conjunto de trackers si la conectividad inicial es insuficiente.
 ///
 /// La tarea itera a [`PROGRESS_INTERVAL`], muestrea las estadísticas del torrent
 /// desde la sesión y emite un [`TORRENT_PROGRESS_EVENT`] al frontend de Tauri.
@@ -567,6 +733,16 @@ pub async fn add_file_to_session(
 /// está en ejecución (por ejemplo, a través de [`cancel_via_session`]), la única
 /// llamada a `session.get()` en cada tick devuelve `None` y la tarea termina
 /// limpiamente.
+///
+/// # Escalado dinámico de trackers
+///
+/// Tras [`TRACKER_ESCALATION_SECS`] segundos, si el número de peers vivos es
+/// inferior a [`TRACKER_ESCALATION_MIN_PEERS`], se solicita el tier `All` y se
+/// re-enriquece el magnet. Esta estrategia cubre el caso en que los trackers de
+/// arranque no tienen suficientes peers registrados para este torrent concreto,
+/// lo cual es común en torrents poco populares o en redes con restricciones UDP.
+/// El escalado ocurre como máximo una vez por sesión de descarga para no saturar
+/// la red de anuncios.
 ///
 /// # Seguridad ante cancelación
 ///
@@ -588,6 +764,11 @@ pub fn spawn_progress_monitor(
     tokio::spawn(async move {
         let id = TorrentIdOrHash::Id(torrent_id);
         let mut interval = tokio::time::interval(PROGRESS_INTERVAL);
+        let start = tokio::time::Instant::now();
+
+        // Bandera que garantiza que el escalado de trackers ocurre como máximo
+        // una vez durante toda la vida de esta tarea de monitoreo.
+        let mut tracker_escalation_done = false;
 
         loop {
             interval.tick().await;
@@ -614,6 +795,77 @@ pub fn spawn_progress_monitor(
                 } else {
                     (0, 0, 0)
                 };
+
+            // Evaluar si procede el escalado de trackers al tier `All`.
+            // Condiciones: el tiempo de escalado ha transcurrido, aún no se ha
+            // escalado en esta sesión, y los peers conectados están por debajo
+            // del umbral mínimo que garantiza una velocidad aceptable.
+            if !tracker_escalation_done
+                && start.elapsed().as_secs() >= TRACKER_ESCALATION_SECS
+                && peers_connected < TRACKER_ESCALATION_MIN_PEERS
+            {
+                tracker_escalation_done = true;
+
+                // El escalado se ejecuta en su propia tarea para no bloquear
+                // el tick actual del monitor mientras se resuelven los trackers.
+                let session_clone = session.clone();
+                let info_hash_clone = info_hash.clone();
+
+                tokio::spawn(async move {
+                    sync_logger::log_operation(
+                        "spawn_progress_monitor",
+                        &format!(
+                            "Torrent {} lleva {}s con menos de {} peers. Escalando a TrackerTier::All.",
+                            info_hash_clone,
+                            TRACKER_ESCALATION_SECS,
+                            TRACKER_ESCALATION_MIN_PEERS,
+                        ),
+                    );
+
+                    let all_trackers = fetch_trackers(TrackerTier::All).await;
+
+                    // Re-enriquecer el magnet con el tier completo y re-añadir el
+                    // torrent a la sesión. librqbit detectará que ya existe por
+                    // info-hash y fusionará los nuevos trackers con los existentes
+                    // sin duplicar la descarga.
+                    let enriched = enrich_magnet(
+                        &build_magnet_from_info_hash(&info_hash_clone),
+                        &all_trackers,
+                    );
+
+                    // Se usa `overwrite: false` para no interrumpir la descarga
+                    // en curso. El objetivo es únicamente anunciar a más trackers.
+                    let opts = AddTorrentOptions {
+                        overwrite: false,
+                        ..Default::default()
+                    };
+
+                    match session_clone
+                        .add_torrent(AddTorrent::from_url(&enriched), Some(opts))
+                        .await
+                    {
+                        Ok(_) => {
+                            sync_logger::log_operation(
+                                "spawn_progress_monitor",
+                                &format!(
+                                    "Escalado de trackers completado para {}. {} trackers adicionales inyectados.",
+                                    info_hash_clone,
+                                    all_trackers.len(),
+                                ),
+                            );
+                        }
+                        Err(e) => {
+                            // Un error aquí no es crítico: la descarga continúa con
+                            // los trackers originales. Se registra para diagnóstico.
+                            sync_logger::log_error(
+                                "spawn_progress_monitor",
+                                &format!("Error al escalar trackers para {}: {}", info_hash_clone, e),
+                                "No se pudieron inyectar trackers adicionales. La descarga continúa.",
+                            );
+                        }
+                    }
+                });
+            }
 
             let total_bytes = stats.total_bytes;
             let downloaded_bytes = stats.progress_bytes;
@@ -661,7 +913,7 @@ pub fn spawn_progress_monitor(
                 let _ = app.emit(TORRENT_DONE_EVENT, &payload);
                 crate::notifications::writer::try_record_torrent_done(&app, &name, &info_hash);
 
-                // Notificar al sistema de sources que este torrent ha completado
+                // Notificar al sistema de sources que este torrent ha completado.
                 crate::sources::torrent_complete_notify(&app, &info_hash, total_bytes);
 
                 if let Some(engine) = &engine_state {
@@ -678,8 +930,9 @@ pub fn spawn_progress_monitor(
                         }
                     }
                 }
-                // Liberar el torrent de la sesión para que no mantenga los archivos abiertos.
-                // Esto permite que el usuario pueda instalar el juego inmediatamente.
+
+                // Liberar el torrent de la sesión para que no mantenga los archivos
+                // abiertos. Esto permite que el usuario instale el juego de inmediato.
                 let _ = session.delete(id, false).await;
                 break;
             }
