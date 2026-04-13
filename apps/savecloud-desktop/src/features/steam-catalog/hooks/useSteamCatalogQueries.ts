@@ -144,20 +144,38 @@ export function useSteamCatalogQueries() {
     };
   }, []);
 
+  /** Cachea el total de la primera página para reutizarlo al paginar (mismos filtros). */
+  const browseCountCache = useRef<{ key: string; total: number } | null>(null);
+
   const browseQuery = useQuery({
     queryKey: ["steamCatalog", "browse", page, genresKey, tagsKey],
-    queryFn: () =>
-      listSteamCatalogPage(
+    queryFn: () => {
+      // Si los filtros cambiaron, invalidar el caché del total
+      const filterKey = `${genresKey}|${tagsKey}`;
+      const cached = browseCountCache.current;
+      const cachedTotal = cached && cached.key === filterKey ? cached.total : null;
+
+      return listSteamCatalogPage(
         (page - 1) * STEAM_CATALOG_PAGE_SIZE,
         STEAM_CATALOG_PAGE_SIZE,
         selectedGenres.length ? selectedGenres : null,
-        selectedTags.length ? selectedTags : null
-      ),
+        selectedTags.length ? selectedTags : null,
+        cachedTotal
+      );
+    },
     enabled: !searchMode && trendingReady,
     placeholderData: keepPreviousData,
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
   });
+
+  // Actualizar el caché del total cada vez que llega una respuesta con total fresco.
+  useEffect(() => {
+    if (browseQuery.data?.total != null) {
+      const filterKey = `${genresKey}|${tagsKey}`;
+      browseCountCache.current = { key: filterKey, total: browseQuery.data.total };
+    }
+  }, [browseQuery.data?.total, genresKey, tagsKey]);
 
   const searchQuery = useQuery({
     queryKey: ["steamCatalog", "search", debounced, genresKey, tagsKey],
