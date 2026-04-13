@@ -14,6 +14,10 @@ pub struct TorrentStartResult {
 }
 
 /// Inicia un torrent a partir de magnet o URL `.torrent`.
+///
+/// Los trackers se obtienen del caché precalentado del engine para evitar
+/// latencia de red en el camino crítico. Si el caché está vacío, las funciones
+/// del engine los solicitarán de forma síncrona como fallback transparente.
 pub async fn start_torrent(
     app: &AppHandle,
     protocol: DownloadProtocol,
@@ -21,14 +25,17 @@ pub async fn start_torrent(
     destination_dir: &str,
 ) -> Result<TorrentStartResult, String> {
     let torrent_state = app.state::<TorrentState>();
-    let session = {
+
+    // Se extraen la sesión y el caché de trackers en el mismo bloque del mutex
+    // para liberar el lock antes de las operaciones de red lentas.
+    let (session, cached_trackers) = {
         let engine = torrent_state.engine.lock().await;
-        engine.session()
+        (engine.session(), engine.cached_trackers())
     };
 
     let (info_hash, name, id) = match protocol {
         DownloadProtocol::TorrentMagnet => {
-            engine::add_magnet_to_session(&session, uri, destination_dir)
+            engine::add_magnet_to_session(&session, uri, destination_dir, cached_trackers)
                 .await
                 .map_err(|e| e.to_string())?
         }
@@ -53,7 +60,7 @@ pub async fn start_torrent(
                 .await
                 .map_err(|e| format!("No se pudo escribir .torrent temporal: {e}"))?;
             let tmp_path = tmp.to_string_lossy().to_string();
-            engine::add_file_to_session(&session, &tmp_path, destination_dir)
+            engine::add_file_to_session(&session, &tmp_path, destination_dir, cached_trackers)
                 .await
                 .map_err(|e| e.to_string())?
         }

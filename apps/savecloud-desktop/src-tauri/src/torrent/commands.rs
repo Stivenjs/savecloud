@@ -12,6 +12,10 @@ use crate::torrent::state::TorrentState;
 ///
 /// El mutex del engine se libera antes de la operación lenta (resolución DHT),
 /// así cancel/pause pueden actuar inmediatamente.
+///
+/// Los trackers se obtienen del caché precalentado del engine. Si el caché
+/// estaba vacío en el momento de la llamada, [`engine::add_magnet_to_session`]
+/// los solicitará de forma síncrona sin impacto en la firma de este comando.
 #[tauri::command]
 pub async fn start_torrent_download(
     magnet: String,
@@ -19,13 +23,13 @@ pub async fn start_torrent_download(
     state: State<'_, TorrentState>,
     app: AppHandle,
 ) -> Result<String, TorrentError> {
-    let session = {
+    let (session, cached_trackers) = {
         let engine = state.engine.lock().await;
-        engine.session()
+        (engine.session(), engine.cached_trackers())
     };
 
     let (info_hash, name, id) =
-        engine::add_magnet_to_session(&session, &magnet, &save_path).await?;
+        engine::add_magnet_to_session(&session, &magnet, &save_path, cached_trackers).await?;
     engine::emit_starting_event(&app, &info_hash, &name);
 
     {
@@ -46,6 +50,10 @@ pub async fn start_torrent_download(
 }
 
 /// Descarga un torrent a partir de un archivo .torrent del disco.
+///
+/// Los trackers se obtienen del caché precalentado del engine. Si el caché
+/// estaba vacío en el momento de la llamada, [`engine::add_file_to_session`]
+/// los solicitará de forma síncrona sin impacto en la firma de este comando.
 #[tauri::command]
 pub async fn start_torrent_file_download(
     file_path: String,
@@ -53,13 +61,13 @@ pub async fn start_torrent_file_download(
     state: State<'_, TorrentState>,
     app: AppHandle,
 ) -> Result<String, TorrentError> {
-    let session = {
+    let (session, cached_trackers) = {
         let engine = state.engine.lock().await;
-        engine.session()
+        (engine.session(), engine.cached_trackers())
     };
 
     let (info_hash, name, id) =
-        engine::add_file_to_session(&session, &file_path, &save_path).await?;
+        engine::add_file_to_session(&session, &file_path, &save_path, cached_trackers).await?;
     engine::emit_starting_event(&app, &info_hash, &name);
 
     {
@@ -227,6 +235,10 @@ pub async fn list_cloud_torrents(game_id: String) -> Result<Vec<CloudTorrentInfo
 }
 
 /// Descarga un archivo .torrent desde la nube e inicia la descarga P2P.
+///
+/// Los trackers se obtienen del caché precalentado del engine, igual que en
+/// [`start_torrent_file_download`], para evitar latencia de red adicional
+/// en el camino crítico de inicio de descarga.
 #[tauri::command]
 pub async fn download_torrent_from_cloud(
     game_id: String,
@@ -285,13 +297,13 @@ pub async fn download_torrent_from_cloud(
         })?
         .to_string();
 
-    let session = {
+    let (session, cached_trackers) = {
         let engine = state.engine.lock().await;
-        engine.session()
+        (engine.session(), engine.cached_trackers())
     };
 
     let (info_hash, name, id) =
-        engine::add_file_to_session(&session, &temp_path, &save_path).await?;
+        engine::add_file_to_session(&session, &temp_path, &save_path, cached_trackers).await?;
     engine::emit_starting_event(&app, &info_hash, &name);
 
     {

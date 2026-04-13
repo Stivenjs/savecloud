@@ -14,13 +14,19 @@
 //! 2. Parsea y reconstruye magnet links de forma segura, garantizando el URL-encoding.
 //! 3. Filtra esquemas inválidos y evita la duplicación de trackers existentes.
 //!
-//! # Limitaciones
+//! # Estrategia de tiers
 //!
-//! La estrategia de escalado temporal (pasar de `best` a `all_udp` tras 30-60s)
-//! requiere inyectar trackers a una sesión de `librqbit` en pleno vuelo.
-//! Actualmente, este módulo prepara el terreno proporcionando los distintos
-//! niveles (Tiers) de trackers, pero la inyección dinámica en torrents activos
-//! deberá gestionarse en la tarea `spawn_progress_monitor`.
+//! Los trackers se organizan en tres niveles de agresividad creciente:
+//!
+//! - [`TrackerTier::Best`]: Trackers de alta disponibilidad y baja latencia.
+//!   Ideal para el arranque inicial.
+//! - [`TrackerTier::AllUdp`]: Todos los trackers con protocolo UDP. Se usa en
+//!   paralelo con `Best` al iniciar una descarga para maximizar la red desde
+//!   el primer momento.
+//! - [`TrackerTier::All`]: El conjunto completo de trackers conocidos. Se
+//!   reserva para el escalado dinámico en [`spawn_progress_monitor`] cuando
+//!   los tiers anteriores no han proporcionado suficientes peers tras
+//!   [`TRACKER_ESCALATION_SECS`] segundos.
 //!
 //! # Seguridad
 //!
@@ -39,8 +45,14 @@ use url::Url;
 const TRACKER_BASE_URL: &str = "https://raw.githubusercontent.com/ngosang/trackerslist/master";
 
 /// Tiempo máximo de espera para obtener trackers dinámicos.
-/// Evita que el usuario de SaveCloud se quede esperando indefinidamente en la UI.
-const FETCH_TIMEOUT: Duration = Duration::from_secs(4);
+///
+/// 2 segundos es un equilibrio óptimo: suficientemente generoso para redes
+/// con latencia moderada hacia GitHub, y suficientemente corto para que el
+/// fallback local se active rápidamente si la red está degradada. El valor
+/// original de 4 segundos introducía una penalización perceptible al usuario
+/// cuando el precalentamiento del caché fallaba y la descarga debía solicitar
+/// los trackers de forma síncrona.
+const FETCH_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Lista de fallback integrada en caso de que GitHub/ngosang no sea accesible.
 /// Contiene trackers UDP/HTTP conocidos por su alta disponibilidad.
@@ -52,19 +64,29 @@ const FALLBACK_TRACKERS: &[&str] = &[
     "https://tracker.tamersunion.org:443/announce",
 ];
 
-/// Define el nivel de agresividad al obtener trackers, preparado para futuras
-/// extensiones (reintentos dinámicos).
-#[allow(dead_code)]
+/// Define el nivel de agresividad al obtener trackers.
+///
+/// Los tres tiers mapean directamente a los archivos del repositorio ngosang.
+/// El motor los usa en distintas fases del ciclo de vida de una descarga:
+/// `Best` y `AllUdp` al arrancar (en paralelo), y `All` como escalado dinámico
+/// cuando los anteriores no proporcionan peers suficientes.
 pub enum TrackerTier {
-    /// Recomendado: minimiza el overhead de red.
+    /// Trackers de alta disponibilidad y baja latencia. Recomendado para el
+    /// arranque inicial ya que minimizan el overhead de red.
     Best,
-    /// Fallback intermedio tras 30-60 segundos sin peers.
+
+    /// Todos los trackers con protocolo UDP. Usado en paralelo con `Best` al
+    /// iniciar una descarga para ampliar la red de peers desde el primer momento.
     AllUdp,
-    /// Último recurso.
+
+    /// El conjunto completo de trackers conocidos. Reservado para el escalado
+    /// dinámico en descargas que no alcanzan suficientes peers con los tiers
+    /// anteriores tras el tiempo de espera configurado.
     All,
 }
 
 impl TrackerTier {
+    /// Devuelve el nombre de archivo del tier en el repositorio ngosang.
     fn filename(&self) -> &'static str {
         match self {
             TrackerTier::Best => "trackers_best.txt",
@@ -77,9 +99,12 @@ impl TrackerTier {
 /// Obtiene una lista fresca de trackers desde la red o usa el fallback local.
 ///
 /// # Comportamiento
-/// Intenta descargar el archivo de texto correspondiente al `tier`. Divide el
-/// resultado por líneas, filtrando esquemas válidos (`udp`, `http`, `https`) y
-/// descartando líneas vacías. Nunca devuelve un vector vacío.
+///
+/// Intenta descargar el archivo de texto correspondiente al `tier` con un
+/// timeout de [`FETCH_TIMEOUT`]. Divide el resultado por líneas, filtrando
+/// esquemas válidos (`udp`, `http`, `https`) y descartando líneas vacías.
+/// Si la red falla o el resultado está vacío, activa el fallback local para
+/// garantizar que nunca se devuelve un vector vacío.
 pub async fn fetch_trackers(tier: TrackerTier) -> Vec<String> {
     let url = format!("{}/{}", TRACKER_BASE_URL, tier.filename());
 
@@ -103,7 +128,7 @@ pub async fn fetch_trackers(tier: TrackerTier) -> Vec<String> {
         .map(|s| s.to_string())
         .collect();
 
-    // Fallback absoluto si la red falla o el parseo es vacío
+    // Fallback absoluto si la red falla o el parseo devuelve un vector vacío.
     if trackers.is_empty() {
         sync_logger::log_error(
             "fetch_trackers",
@@ -119,10 +144,15 @@ pub async fn fetch_trackers(tier: TrackerTier) -> Vec<String> {
 /// Enriquece un magnet link añadiendo trackers faltantes de forma segura.
 ///
 /// # Comportamiento
+///
 /// Descompone el magnet link usando especificaciones URL estándar. Preserva
 /// todos los parámetros existentes (`xt`, `dn`, etc.) y extrae los trackers
 /// actuales (`tr`). Añade los nuevos trackers asegurando que no haya duplicados
 /// y que el resultado esté correctamente codificado (URL encoded).
+///
+/// La operación es idempotente: llamar a esta función sobre un magnet que ya
+/// contiene todos los trackers de `new_trackers` no añade duplicados ni altera
+/// el orden de los existentes.
 pub fn enrich_magnet(magnet: &str, new_trackers: &[String]) -> String {
     let Ok(mut parsed_url) = Url::parse(magnet) else {
         sync_logger::log_error(
@@ -161,6 +191,9 @@ pub fn enrich_magnet(magnet: &str, new_trackers: &[String]) -> String {
         }
     }
 
+    // Añadir un nombre descriptivo si el magnet no tiene `dn`. Esto ayuda a
+    // identificar la descarga en la UI antes de que librqbit resuelva los
+    // metadatos reales del torrent.
     if !has_dn {
         query_pairs.push(("dn".to_string(), "SaveCloud_Download".to_string()));
     }
@@ -178,7 +211,7 @@ pub fn enrich_magnet(magnet: &str, new_trackers: &[String]) -> String {
             &format!(
                 "Magnet enriquecido exitosamente: añadidos {} trackers.",
                 added_count
-            )[..],
+            ),
         );
     }
 
@@ -186,6 +219,10 @@ pub fn enrich_magnet(magnet: &str, new_trackers: &[String]) -> String {
 }
 
 /// Construye un magnet link base a partir de un info_hash en hexadecimal.
+///
+/// El magnet resultante contiene únicamente el parámetro `xt` y sirve como
+/// punto de partida para [`enrich_magnet`], que añadirá los trackers y el
+/// nombre descriptivo en un paso posterior.
 pub fn build_magnet_from_info_hash(info_hash: &str) -> String {
     format!("magnet:?xt=urn:btih:{}", info_hash)
 }
