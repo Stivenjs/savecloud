@@ -422,18 +422,23 @@ export async function searchSteamCatalog(
 /**
  * Listado paginado: primero tendencia (`syncSteamStoreTrending`); luego entradas con ficha enriquecida,
  * `enriched_at`, actividad del seed y `app_id` como desempate (no solo ID alto).
+ *
+ * `cachedTotal` — si el frontend ya conoce el total (p. ej. de la primera página con los mismos filtros),
+ * lo pasa aquí para omitir la costosa query COUNT en el backend (~50 % de ahorro por página).
  */
 export async function listSteamCatalogPage(
   offset?: number,
   limit?: number,
   genres?: string[] | null,
-  tags?: string[] | null
+  tags?: string[] | null,
+  cachedTotal?: number | null
 ): Promise<CatalogPage> {
   return invoke<CatalogPage>("list_steam_catalog_page", {
     offset: offset ?? null,
     limit: limit ?? null,
     genres: genres?.length ? genres : null,
     tags: tags?.length ? tags : null,
+    cachedTotal: cachedTotal ?? null,
   });
 }
 

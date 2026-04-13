@@ -204,14 +204,22 @@ pub fn list_catalog_page_filtered(
 }
 
 /// Página completa: total acotado + items.
+///
+/// Si `cached_total` es `Some(n)`, se reutiliza ese valor sin ejecutar
+/// el COUNT (evita el full-scan cuando el frontend ya conoce el total
+/// por haber consultado la primera página con los mismos filtros).
 pub fn catalog_page_filtered(
     conn: &Connection,
     offset: u32,
     limit: u32,
     genres: &[String],
     tags: &[String],
+    cached_total: Option<u64>,
 ) -> Result<CatalogPage, rusqlite::Error> {
-    let total = count_catalog_filtered(conn, genres, tags)?;
+    let total = match cached_total {
+        Some(n) => n,
+        None => count_catalog_filtered(conn, genres, tags)?,
+    };
     let items = list_catalog_page_filtered(conn, offset, limit, genres, tags)?;
     Ok(CatalogPage {
         total,

@@ -40,6 +40,10 @@ pub async fn search_steam_catalog(
 }
 
 /// Listado paginado estable por `app_id` + total de filas (total respecto a los mismos filtros).
+///
+/// Si `cached_total` es `Some(n)`, se omite la query de COUNT (costosa con filtros)
+/// y se reutiliza el total proporcionado por el frontend. El frontend pasa el total
+/// obtenido en la primera página al navegar al resto de páginas con los mismos filtros.
 #[tauri::command]
 pub async fn list_steam_catalog_page(
     db: State<'_, AppDb>,
@@ -47,6 +51,7 @@ pub async fn list_steam_catalog_page(
     limit: Option<u32>,
     genres: Option<Vec<String>>,
     tags: Option<Vec<String>>,
+    cached_total: Option<u64>,
 ) -> Result<CatalogPage, String> {
     let offset = offset.unwrap_or(0);
     let limit = limit.unwrap_or(50).min(500);
@@ -54,7 +59,9 @@ pub async fn list_steam_catalog_page(
     let tags = sanitize_filter_list(tags);
     let db = db.deref().clone();
     tokio::task::spawn_blocking(move || {
-        db.with_conn(|c| catalog_query::catalog_page_filtered(c, offset, limit, &genres, &tags))
+        db.with_conn(|c| {
+            catalog_query::catalog_page_filtered(c, offset, limit, &genres, &tags, cached_total)
+        })
     })
     .await
     .map_err(|e| e.to_string())?
