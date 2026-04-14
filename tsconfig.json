@@ -1,8 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
-    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+
     "outDir": "dist",
     "rootDir": "src",
 
@@ -13,21 +14,13 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-
-    "moduleResolution": "node",
-
-    "baseUrl": ".",
     "paths": {
-      "@domain/*": ["src/domain/*"],
-      "@application/*": ["src/application/*"],
-      "@infrastructure/*": ["src/infrastructure/*"],
-      "@interfaces/*": ["src/interfaces/*"],
-      "@shared/*": ["src/shared/*"],
-      "@cli/*": ["src/cli/*"]
+      "@domain/*": ["./src/domain/*"],
+      "@application/*": ["./src/application/*"],
+      "@infrastructure/*": ["./src/infrastructure/*"],
+      "@interfaces/*": ["./src/interfaces/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@cli/*": ["./src/cli/*"]
     }
   },
   "include": ["src/**/*"],

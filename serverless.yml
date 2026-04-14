@@ -71,7 +71,7 @@ build:
   esbuild:
     bundle: true
     minify: true
-    sourcemap: true
+    sourcemap: false
     target: "node24"
 
 custom:
