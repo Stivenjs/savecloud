@@ -12,14 +12,14 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "paths": {
-      "@domain/*": ["./src/domain/*"],
-      "@application/*": ["./src/application/*"],
-      "@infrastructure/*": ["./src/infrastructure/*"],
-      "@interfaces/*": ["./src/interfaces/*"],
-      "@shared/*": ["./src/shared/*"],
+      "@domain/*": ["./apps/api/src/domain/*"],
+      "@application/*": ["./apps/api/src/application/*"],
+      "@infrastructure/*": ["./apps/api/src/infrastructure/*"],
+      "@interfaces/*": ["./apps/api/src/interfaces/*"],
+      "@shared/*": ["./apps/api/src/shared/*"],
       "@cli/*": ["./apps/cli/*"]
     }
   },
-  "include": ["src/**/*", "apps/cli/**/*"],
+  "include": ["apps/api/src/**/*", "apps/cli/**/*"],
   "exclude": ["node_modules", "dist"]
 }

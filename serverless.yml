@@ -93,13 +93,13 @@ resources:
 
 functions:
   apiAuthorizer:
-    handler: src/interfaces/lambda/authorizer.handler
+    handler: apps/api/src/interfaces/lambda/authorizer.handler
     description: Autorizador por API key para savecloud - entorno ${sls:stage, 'dev'}
     environment:
       API_KEY: ${env:SYNC_GAMES_API_KEY, ''}
 
   api:
-    handler: src/interfaces/lambda/handler.handler
+    handler: apps/api/src/interfaces/lambda/handler.handler
     description: API de guardados en la nube (savecloud) - entorno ${sls:stage, 'dev'}
     timeout: 60
     events:
@@ -115,7 +115,7 @@ functions:
             name: apiKeyAuthorizer
 
   steamSeedWorker:
-    handler: src/interfaces/lambda/steam-seed/handler.handler
+    handler: apps/api/src/interfaces/lambda/steam-seed/handler.handler
     description: Seed incremental Steam appdetails (S3 + EventBridge) - ${sls:stage, 'dev'}
     timeout: 900
     memorySize: 256
@@ -135,21 +135,21 @@ functions:
           enabled: ${self:custom.steamSeedScheduleEnabled.${sls:stage}, false}
 
   wsConnect:
-    handler: src/interfaces/lambda/websocket/connect.handler
+    handler: apps/api/src/interfaces/lambda/websocket/connect.handler
     description: Maneja conexiones WebSocket entrantes - ${sls:stage}
     events:
       - websocket:
           route: $connect
 
   wsDisconnect:
-    handler: src/interfaces/lambda/websocket/disconnect.handler
+    handler: apps/api/src/interfaces/lambda/websocket/disconnect.handler
     description: Limpia conexiones en DynamoDB - ${sls:stage}
     events:
       - websocket:
           route: $disconnect
 
   wsBroadcast:
-    handler: src/interfaces/lambda/websocket/broadcast.handler
+    handler: apps/api/src/interfaces/lambda/websocket/broadcast.handler
     description: Recibe el evento "playing" y lo reparte a amigos - ${sls:stage}
     events:
       - websocket:
