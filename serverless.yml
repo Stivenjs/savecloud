@@ -70,7 +70,7 @@ provider:
 build:
   esbuild:
     bundle: true
-    minify: true 
+    minify: true
     sourcemap: true
     target: "node24"
 
@@ -132,7 +132,7 @@ functions:
     events:
       - schedule:
           rate: ${self:custom.steamSeedScheduleRate.${sls:stage}, 'rate(15 minutes)'}
-          enabled: ${self:custom.steamSeedScheduleEnabled.${sls:stage}, false} 
+          enabled: ${self:custom.steamSeedScheduleEnabled.${sls:stage}, false}
 
   wsConnect:
     handler: src/interfaces/lambda/websocket/connect.handler

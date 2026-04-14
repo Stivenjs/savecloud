@@ -1,33 +1,33 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "node16",
+    "module": "commonjs",
     "lib": ["ES2022"],
     "outDir": "dist",
     "rootDir": "src",
+
+    "types": ["node", "bun"],
+
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
+
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "moduleResolution": "node16",
+
+    "moduleResolution": "node",
+
+    "baseUrl": ".",
     "paths": {
-      "@domain/*": ["./src/domain/*"],
-      "@application/*": ["./src/application/*"],
-      "@infrastructure/*": ["./src/infrastructure/*"],
-      "@interfaces/*": ["./src/interfaces/*"],
-      "@shared/*": ["./src/shared/*"],
-      "@cli/*": ["./src/cli/*"],
-      "@cli/domain/*": ["./src/cli/domain/*"],
-      "@cli/application/*": ["./src/cli/application/*"],
-      "@cli/infrastructure/*": ["./src/cli/infrastructure/*"],
-      "@cli/interfaces/*": ["./src/cli/interfaces/*"],
-      "@cli/use-cases/*": ["./src/cli/use-cases/*"],
-      "@cli/entities/*": ["./src/cli/entities/*"],
-      "@cli/ports/*": ["./src/cli/ports/*"]
+      "@domain/*": ["src/domain/*"],
+      "@application/*": ["src/application/*"],
+      "@infrastructure/*": ["src/infrastructure/*"],
+      "@interfaces/*": ["src/interfaces/*"],
+      "@shared/*": ["src/shared/*"],
+      "@cli/*": ["src/cli/*"]
     }
   },
   "include": ["src/**/*"],

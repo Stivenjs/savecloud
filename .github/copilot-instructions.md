@@ -133,3 +133,15 @@ SaveCloud is a cloud-based game save backup system consisting of:
 - **AWS Verification**: Check S3 console for uploaded files, CloudFront for live URLs
 - **Desktop**: Manual testing only (no automated tests)
 - **Integration**: Deploy to dev stage for end-to-end testing
+
+## Agent Hooks
+
+Automated code quality and safety checks on file edits. Configure hooks in `.github/hooks/`:
+
+- **format.json** - Auto-format all edited files (Prettier) after save
+- **lint.json** - Lint backend TypeScript (ESLint) post-edit
+- **build-check.json** - Verify TypeScript compilation after changes
+- **session-context.json** - Inject project context at session start
+- **security.json** - Block dangerous command patterns pre-execution
+
+See [Hooks README](./hooks/README.md) for details. Hooks enforce consistency and catch errors early without manual intervention.

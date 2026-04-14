@@ -2,6 +2,7 @@
   "name": "savecloud",
   "version": "1.12.8",
   "private": true,
+  "type": "module",
   "bin": {
     "savecloud": "./src/cli/index.ts"
   },
@@ -52,7 +53,7 @@
   "devDependencies": {
     "@types/aws-lambda": "^8.10.145",
     "@types/bun": "latest",
-    "@types/node": "^22.0.0",
+    "@types/node": "^25.6.0",
     "esbuild": "^0.24.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
