@@ -1,6 +1,6 @@
 {
   "name": "savecloud",
-  "version": "1.12.8",
+  "version": "1.15.9",
   "private": true,
   "packageManager": "bun@1.3.10",
   "scripts": {
@@ -16,11 +16,11 @@
     "logs:api:dev": "serverless logs -f api --stage dev --tail",
     "logs:seed:dev": "serverless logs -f steamSeedWorker --stage dev --tail",
     "lint": "eslint src --ext .ts",
-    "desktop": "bun run --cwd apps/savecloud-desktop tauri dev",
-    "desktop:dev": "bun run --cwd apps/savecloud-desktop dev",
-    "desktop:build": "bun run --cwd apps/savecloud-desktop tauri build",
-    "cargo:check": "bun run --cwd apps/savecloud-desktop/src-tauri cargo check",
-    "cargo:clean": "bun run --cwd apps/savecloud-desktop/src-tauri cargo clean",
+    "desktop": "bun run --cwd apps/desktop tauri dev",
+    "desktop:dev": "bun run --cwd apps/desktop dev",
+    "desktop:build": "bun run --cwd apps/desktop tauri build",
+    "cargo:check": "bun run --cwd apps/desktop/src-tauri cargo check",
+    "cargo:clean": "bun run --cwd apps/desktop/src-tauri cargo clean",
     "version": "bun run scripts/sync-version.ts",
     "format": "bunx prettier . --write \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
     "prepare": "husky"

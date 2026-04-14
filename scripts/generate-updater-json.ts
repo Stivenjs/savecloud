@@ -58,7 +58,7 @@ if (!notes) {
   let notesPath: string | null = null;
 
   for (const match of notesGlob.scanSync({ cwd, absolute: true })) {
-    if (match.includes("savecloud-desktop")) {
+    if (match.includes("desktop")) {
       notesPath = match;
       break;
     }
