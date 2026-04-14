@@ -2,7 +2,7 @@
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "rust-analyzer.linkedProjects": [
-    "apps/savecloud-desktop/src-tauri/Cargo.toml"
+    "apps/desktop/src-tauri/Cargo.toml"
   ],
   "[rust]": {
     "editor.defaultFormatter": "rust-lang.rust-analyzer"

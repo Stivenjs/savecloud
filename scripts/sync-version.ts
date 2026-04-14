@@ -20,13 +20,9 @@ const version = rawVersion.replace(/^v/, "");
 
 const root = process.cwd();
 
-const jsonFiles = [
-  "package.json",
-  "apps/savecloud-desktop/package.json",
-  "apps/savecloud-desktop/src-tauri/tauri.conf.json",
-];
+const jsonFiles = ["package.json", "apps/desktop/package.json", "apps/desktop/src-tauri/tauri.conf.json"];
 
-const tomlFiles = ["apps/savecloud-desktop/src-tauri/Cargo.toml"];
+const tomlFiles = ["apps/desktop/src-tauri/Cargo.toml"];
 
 let updatedCount = 0;
 
@@ -76,7 +72,7 @@ const releaseVersionRegex = /(?<=^(?:##\s+|###\s+|- Versión\s+|Version\s+))v?\d
 let notesUpdated = false;
 
 for (const match of notesGlob.scanSync({ cwd: root, absolute: true })) {
-  if (!match.includes("savecloud-desktop")) continue;
+  if (!match.includes("desktop")) continue;
 
   const file = Bun.file(match);
 
