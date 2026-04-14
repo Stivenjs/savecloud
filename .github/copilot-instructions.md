@@ -96,11 +96,11 @@ SaveCloud is a cloud-based game save backup system consisting of:
 ## Key Files and Directories
 
 ### Backend
-- `src/interfaces/http/app.ts` - Fastify app setup
-- `src/interfaces/lambda/handler.ts` - AWS Lambda entry
-- `src/application/use-cases/` - Business logic (22 use cases)
-- `src/domain/ports/` - Repository interfaces
-- `src/infrastructure/persistence/` - S3/DynamoDB implementations
+- `apps/api/src/interfaces/http/app.ts` - Fastify app setup
+- `apps/api/src/interfaces/lambda/handler.ts` - AWS Lambda entry
+- `apps/api/src/application/use-cases/` - Business logic (22 use cases)
+- `apps/api/src/domain/ports/` - Repository interfaces
+- `apps/api/src/infrastructure/persistence/` - S3/DynamoDB implementations
 
 ### Desktop App
 - `apps/savecloud-desktop/src/App.tsx` - React entry

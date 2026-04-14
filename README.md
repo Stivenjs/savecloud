@@ -54,7 +54,7 @@ Esta guía cubre la preparación del entorno, generación de API keys, configura
 ## Estructura del backend (Clean Architecture)
 
 ```
-src/
+apps/api/src/
 ├── domain/                 # Entidades y reglas de negocio
 │   ├── entities/
 │   └── ports/
