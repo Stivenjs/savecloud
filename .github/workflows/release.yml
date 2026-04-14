@@ -37,7 +37,7 @@ jobs:
       - name: Build CLI (Windows x64)
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          bun build src/cli/index.ts --compile --outfile dist/savecloud-windows-x64.exe --define $env:DEFINE_API_URL --define $env:DEFINE_API_KEY --minify --windows-icon assets/icon.ico
+          bun build apps/cli/index.ts --compile --outfile dist/savecloud-windows-x64.exe --define $env:DEFINE_API_URL --define $env:DEFINE_API_KEY --minify --windows-icon assets/icon.ico
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -70,17 +70,17 @@ jobs:
       - name: Build CLI (Linux x64)
         run: |
           mkdir -p dist
-          bun build src/cli/index.ts --compile --target=bun-linux-x64 --outfile dist/savecloud-linux-x64 \
+          bun build apps/cli/index.ts --compile --target=bun-linux-x64 --outfile dist/savecloud-linux-x64 \
             --define "$DEFINE_API_URL" --define "$DEFINE_API_KEY" --minify
 
       - name: Build CLI (macOS arm64)
         run: |
-          bun build src/cli/index.ts --compile --target=bun-darwin-arm64 --outfile dist/savecloud-darwin-arm64 \
+          bun build apps/cli/index.ts --compile --target=bun-darwin-arm64 --outfile dist/savecloud-darwin-arm64 \
             --define "$DEFINE_API_URL" --define "$DEFINE_API_KEY" --minify
 
       - name: Build CLI (macOS x64)
         run: |
-          bun build src/cli/index.ts --compile --target=bun-darwin-x64 --outfile dist/savecloud-darwin-x64 \
+          bun build apps/cli/index.ts --compile --target=bun-darwin-x64 --outfile dist/savecloud-darwin-x64 \
             --define "$DEFINE_API_URL" --define "$DEFINE_API_KEY" --minify
 
       - name: Upload artifact
