@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "bun --watch src/interfaces/http/server.ts",
-    "cli": "bun src/cli/index.ts",
+    "cli": "bun apps/cli/index.ts",
     "build:cli": "bun run scripts/build-cli.ts",
     "api-key": "bun run scripts/generate-api-key.ts",
     "api-key:live": "bun run scripts/generate-api-key.ts -- --live",

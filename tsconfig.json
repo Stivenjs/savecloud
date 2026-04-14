@@ -4,7 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": "./",
     "types": ["node", "bun"],
     "strict": true,
     "esModuleInterop": true,
@@ -17,9 +17,9 @@
       "@infrastructure/*": ["./src/infrastructure/*"],
       "@interfaces/*": ["./src/interfaces/*"],
       "@shared/*": ["./src/shared/*"],
-      "@cli/*": ["./src/cli/*"]
+      "@cli/*": ["./apps/cli/*"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "apps/cli/**/*"],
   "exclude": ["node_modules", "dist"]
 }
