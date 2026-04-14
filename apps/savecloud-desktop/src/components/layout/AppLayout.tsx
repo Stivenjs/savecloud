@@ -133,7 +133,7 @@ export function AppLayout({ navItems, children, games, onMenuGameClick }: AppLay
     <div className="relative min-h-screen">
       <TitleBar />
 
-      <main className="min-h-screen overflow-x-clip pt-[104px] px-6 pb-6">{children}</main>
+      <main className="min-h-screen overflow-x-clip pt-26 px-6 pb-6">{children}</main>
 
       <StaggeredMenu
         isFixed

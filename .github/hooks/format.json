@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "type": "command",
+        "command": "bun run format",
+        "cwd": ".",
+        "timeout": 60,
+        "env": {
+          "CI": "true"
+        }
+      }
+    ]
+  }
+}
