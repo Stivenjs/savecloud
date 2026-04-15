@@ -27,12 +27,20 @@ export function GameCardHoverMotion({
 
   const rotateX = useMotionValue(0);
   const rotateY = useMotionValue(0);
-  const rectRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
+  const glareX = useMotionValue(0);
+  const glareY = useMotionValue(0);
+  const parallaxX = useMotionValue(0);
+  const parallaxY = useMotionValue(0);
 
+  const rectRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
   const rafRef = useRef<number | null>(null);
 
   const springRotateX = useSpring(rotateX, SPRING_CONFIG);
   const springRotateY = useSpring(rotateY, SPRING_CONFIG);
+  const springGlareX = useSpring(glareX, SPRING_CONFIG);
+  const springGlareY = useSpring(glareY, SPRING_CONFIG);
+  const springParallaxX = useSpring(parallaxX, SPRING_CONFIG);
+  const springParallaxY = useSpring(parallaxY, SPRING_CONFIG);
 
   const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -65,6 +73,12 @@ export function GameCardHoverMotion({
       rotateY.set((x / width) * TILT_MAX);
       rotateX.set((y / height) * -TILT_MAX);
 
+      glareX.set(x);
+      glareY.set(y);
+
+      parallaxX.set((x / width) * -6);
+      parallaxY.set((y / height) * -6);
+
       isUpdatingRef.current = false;
     });
   };
@@ -74,6 +88,10 @@ export function GameCardHoverMotion({
     rectRef.current = null;
     rotateX.set(0);
     rotateY.set(0);
+    glareX.set(0);
+    glareY.set(0);
+    parallaxX.set(0);
+    parallaxY.set(0);
   };
 
   return (
@@ -93,7 +111,7 @@ export function GameCardHoverMotion({
           transformStyle: "preserve-3d",
           boxShadow: SHADOW_REST,
         }}
-        className="transform-gpu [backface-visibility:hidden] [transform:translateZ(1px)]"
+        className="relative group/motion transform-gpu [backface-visibility:hidden] [transform:translateZ(1px)]"
         initial={false}
         whileHover={{
           y: -14,
@@ -105,7 +123,30 @@ export function GameCardHoverMotion({
           scale: 0.98,
           transition: { type: "spring", stiffness: 500, damping: 30 },
         }}>
-        {children}
+        {/* Capa de Brillo (Glare / Glint) */}
+        <motion.div
+          style={{
+            background: "radial-gradient(circle at center, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 80%)",
+            x: springGlareX,
+            y: springGlareY,
+            translateX: "-50%",
+            translateY: "-50%",
+            opacity: 0,
+          }}
+          whileHover={{ opacity: 1 }}
+          className="pointer-events-none absolute left-[50%] top-[50%] z-50 size-[140%] rounded-full mix-blend-soft-light transition-opacity duration-500"
+        />
+
+        {/* Contenedor Parallax para el contenido */}
+        <motion.div
+          style={{
+            x: springParallaxX,
+            y: springParallaxY,
+            transformStyle: "preserve-3d",
+          }}
+          className="size-full">
+          {children}
+        </motion.div>
       </motion.div>
     </div>
   );
