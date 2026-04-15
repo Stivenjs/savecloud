@@ -168,7 +168,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
         tabIndex={0}
         onKeyDown={(e) => e.key === "Enter" && handleCardClick()}>
         <Card
-          className="relative overflow-hidden border-none shadow-none subpixel-antialiased transform-gpu [backface-visibility:hidden]"
+          className="relative overflow-hidden border-none shadow-none antialiased subpixel-antialiased transform-gpu [backface-visibility:hidden] [transform:translateZ(1px)]"
           radius="lg">
           {!isCatalog && (
             <GameCardActions
@@ -197,7 +197,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
                   fetchPriority="auto"
                   draggable={false}
                   alt={game.id}
-                  className={`size-full object-cover object-center transition-opacity duration-300 ${
+                  className={`size-full object-cover object-center transition-opacity duration-300 subpixel-antialiased [transform:translateZ(1px)] ${
                     imgLoaded ? "opacity-100" : "opacity-0"
                   }`}
                   onLoad={handleImgLoad}

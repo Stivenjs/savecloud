@@ -93,7 +93,7 @@ export function GameCardHoverMotion({
           transformStyle: "preserve-3d",
           boxShadow: SHADOW_REST,
         }}
-        className="transform-gpu [backface-visibility:hidden]"
+        className="transform-gpu [backface-visibility:hidden] [transform:translateZ(1px)]"
         initial={false}
         whileHover={{
           y: -14,
