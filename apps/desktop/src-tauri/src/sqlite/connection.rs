@@ -62,6 +62,7 @@ impl AppDb {
             conn.pragma_update(None, "foreign_keys", "ON")?;
             conn.pragma_update(None, "wal_autocheckpoint", 1000)?;
             conn.pragma_update(None, "temp_store", "MEMORY")?;
+            conn.pragma_update(None, "busy_timeout", 5000)?;
             Ok(())
         });
 
