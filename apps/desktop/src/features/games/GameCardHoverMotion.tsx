@@ -78,7 +78,7 @@ export function GameCardHoverMotion({
 
   return (
     <div
-      className={className}
+      className={`${className} group`}
       style={{
         perspective: PERSPECTIVE,
         transformStyle: "preserve-3d",
@@ -92,8 +92,8 @@ export function GameCardHoverMotion({
           rotateY: springRotateY,
           transformStyle: "preserve-3d",
           boxShadow: SHADOW_REST,
-          willChange: "transform, box-shadow",
         }}
+        className="transform-gpu [backface-visibility:hidden]"
         initial={false}
         whileHover={{
           y: -14,

@@ -160,14 +160,16 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
   const cardContent = (
     <GameCardHoverMotion disableMotion={isCatalog}>
       <div
-        className="cursor-pointer"
+        className="cursor-pointer relative"
         onClick={handleCardClick}
         onMouseEnter={onHoverStart}
         onMouseLeave={onHoverEnd}
         role="link"
         tabIndex={0}
         onKeyDown={(e) => e.key === "Enter" && handleCardClick()}>
-        <Card className="group relative overflow-hidden border-none shadow-none" radius="lg">
+        <Card
+          className="relative overflow-hidden border-none shadow-none subpixel-antialiased transform-gpu [backface-visibility:hidden]"
+          radius="lg">
           {!isCatalog && (
             <GameCardActions
               {...cardRest}

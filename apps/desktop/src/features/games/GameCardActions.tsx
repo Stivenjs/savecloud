@@ -46,7 +46,7 @@ export function GameCardActions({
     onActionsMenuOpenChange != null ? { isOpen: actionsMenuOpen ?? false, onOpenChange: onActionsMenuOpenChange } : {};
 
   return (
-    <div className="absolute right-2 top-2 z-20" onClick={(e) => e.stopPropagation()}>
+    <div className="absolute right-2 top-2 z-30" onClick={(e) => e.stopPropagation()}>
       <Dropdown placement="bottom-end" {...controlledMenu}>
         <DropdownTrigger>
           <Button
