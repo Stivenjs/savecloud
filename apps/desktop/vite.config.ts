@@ -32,6 +32,7 @@ export default defineConfig(() => ({
       "@store": resolve(__dirname, "src/store"),
       "@styles": resolve(__dirname, "src/styles"),
       "@lib": resolve(__dirname, "src/lib"),
+      "@router": resolve(__dirname, "src/router"),
     },
   },
 

@@ -10,7 +10,7 @@ import { ArrowLeft, Cpu, Gamepad2, LayoutList, ScrollText } from "lucide-react";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { launchGame, openSaveFolder, removeGame, scheduleConfigBackupToCloud } from "@services/tauri";
 import { sourcesFindMatchForGame, startSourceDownload } from "@services/tauri";
-import { createShareLink } from "@services/share.service";
+import { createShareLink } from "@/services/tauri/share.service";
 import { toastError, toastSuccess } from "@utils/toast";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
 import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";

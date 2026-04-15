@@ -23,7 +23,7 @@ import {
   setActiveCloudHostUserId,
   setCloudHostWsUrl,
 } from "@services/tauri";
-import { extractShareTokenFromUrl, resolveShareToken } from "@services/share.service";
+import { extractShareTokenFromUrl, resolveShareToken } from "@/services/tauri/share.service";
 import { toastError, toastInfo, toastSyncResult } from "@utils/toast";
 import { useConfig } from "@hooks/useConfig";
 import { useQueryClient } from "@tanstack/react-query";

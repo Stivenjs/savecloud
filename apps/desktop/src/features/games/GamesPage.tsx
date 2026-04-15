@@ -21,7 +21,7 @@ import { useGamesPage } from "@/hooks/useGamesPage";
 import { useGameStats } from "@hooks/useGameStats";
 import { scheduleConfigBackupToCloud } from "@services/tauri";
 import { countGamesOverSizeThreshold } from "@utils/packageRecommendation";
-import { createShareLink } from "@services/share.service";
+import { createShareLink } from "@/services/tauri/share.service";
 import { toastError, toastSuccess } from "@utils/toast";
 import { useNavigationStore } from "@features/input/store";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
