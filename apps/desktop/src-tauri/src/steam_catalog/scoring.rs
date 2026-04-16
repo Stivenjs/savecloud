@@ -184,29 +184,41 @@ pub fn backfill_rank_scores(conn: &Connection) -> Result<u32, rusqlite::Error> {
         "SELECT app_id, details_json FROM steam_catalog_apps WHERE details_json IS NOT NULL",
     )?;
 
-    let rows: Vec<(i64, String)> = stmt
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
-        .collect::<Result<_, _>>()?;
+    let mut rows_iter = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    let mut total_computed = 0;
 
-    let computed: Vec<(i64, i64)> = rows
-        .par_iter()
-        .map(|(app_id, json)| (*app_id, compute_rank_score(json)))
-        .collect();
+    // Procesamos en lotes de 5,000 para no saturar la RAM con strings gigantes de JSON.
+    loop {
+        let batch: Vec<(i64, String)> = rows_iter
+            .by_ref()
+            .take(5000)
+            .collect::<Result<_, _>>()?;
 
-    let tx = conn.unchecked_transaction()?;
-
-    {
-        let mut upd = tx.prepare_cached(
-            "UPDATE steam_catalog_apps SET catalog_rank_score = ?1 WHERE app_id = ?2",
-        )?;
-
-        for (app_id, score) in &computed {
-            upd.execute(rusqlite::params![score, app_id])?;
+        if batch.is_empty() {
+            break;
         }
+
+        let computed: Vec<(i64, i64)> = batch
+            .par_iter()
+            .map(|(app_id, json)| (*app_id, compute_rank_score(json)))
+            .collect();
+
+        // Usamos una transacción por lote para persistencia eficiente.
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut upd = tx.prepare_cached(
+                "UPDATE steam_catalog_apps SET catalog_rank_score = ?1 WHERE app_id = ?2",
+            )?;
+
+            for (app_id, score) in &computed {
+                upd.execute(rusqlite::params![score, app_id])?;
+            }
+        }
+        tx.commit()?;
+        total_computed += computed.len() as u32;
     }
 
-    tx.commit()?;
-    Ok(computed.len() as u32)
+    Ok(total_computed)
 }
 
 /// Incremental: solo recalcula los que NO tienen score
@@ -218,24 +230,39 @@ pub fn update_missing_scores(conn: &Connection) -> Result<u32, rusqlite::Error> 
          AND details_json IS NOT NULL",
     )?;
 
-    let rows: Vec<(i64, String)> = stmt
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
-        .collect::<Result<_, _>>()?;
+    let mut rows_iter = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    let mut total_computed = 0;
 
-    let computed: Vec<(i64, i64)> = rows
-        .par_iter()
-        .map(|(id, json)| (*id, compute_rank_score(json)))
-        .collect();
+    loop {
+        let batch: Vec<(i64, String)> = rows_iter
+            .by_ref()
+            .take(5000)
+            .collect::<Result<_, _>>()?;
 
-    let mut upd = conn.prepare_cached(
-        "UPDATE steam_catalog_apps SET catalog_rank_score = ?1 WHERE app_id = ?2",
-    )?;
+        if batch.is_empty() {
+            break;
+        }
 
-    for (id, score) in &computed {
-        upd.execute(rusqlite::params![score, id])?;
+        let computed: Vec<(i64, i64)> = batch
+            .par_iter()
+            .map(|(id, json)| (*id, compute_rank_score(json)))
+            .collect();
+
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut upd = tx.prepare_cached(
+                "UPDATE steam_catalog_apps SET catalog_rank_score = ?1 WHERE app_id = ?2",
+            )?;
+
+            for (id, score) in &computed {
+                upd.execute(rusqlite::params![score, id])?;
+            }
+        }
+        tx.commit()?;
+        total_computed += computed.len() as u32;
     }
 
-    Ok(computed.len() as u32)
+    Ok(total_computed)
 }
 
 /// Batch específico (mantiene compatibilidad)

@@ -94,21 +94,26 @@ pub fn backfill_name_normalized_if_needed(conn: &Connection) -> Result<(), rusql
     }
 
     let mut stmt = conn.prepare("SELECT app_id, name FROM steam_catalog_apps")?;
-    let rows: Vec<(i64, String)> = stmt
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
-        .collect::<Result<_, _>>()?;
+    let mut rows_iter = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
 
-    let tx = conn.unchecked_transaction()?;
-    {
-        let mut update = tx.prepare_cached(
-            "UPDATE steam_catalog_apps SET name_normalized = ?1 WHERE app_id = ?2",
-        )?;
-        for (app_id, name) in rows {
-            let nn = normalize_catalog_name(&name);
-            update.execute(rusqlite::params![nn, app_id])?;
+    loop {
+        let batch: Vec<(i64, String)> = rows_iter.by_ref().take(5000).collect::<Result<_, _>>()?;
+        if batch.is_empty() {
+            break;
         }
+
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut update = tx.prepare_cached(
+                "UPDATE steam_catalog_apps SET name_normalized = ?1 WHERE app_id = ?2",
+            )?;
+            for (app_id, name) in batch {
+                let nn = normalize_catalog_name(&name);
+                update.execute(rusqlite::params![nn, app_id])?;
+            }
+        }
+        tx.commit()?;
     }
-    tx.commit()?;
     set_meta(
         conn,
         META_NAME_NORMALIZED_BACKFILL,

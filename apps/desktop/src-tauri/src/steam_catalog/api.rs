@@ -1,6 +1,6 @@
 //! Cliente mínimo para [`IStoreService/GetAppList`](https://partner.steamgames.com/doc/webapi/IStoreService).
 //!
-//! Por defecto Steam solo devuelve ítems tipo “Game”. Activamos todos los `include_*` documentados
+//! Por defecto Steam solo devuelve ítems tipo "Game". Activamos todos los `include_*` documentados
 //! (DLC, software, vídeos/series, hardware) para que la búsqueda local se acerque al catálogo visible en la tienda.
 //! Aumenta filas en SQLite y el tiempo del primer sync completo.
 
