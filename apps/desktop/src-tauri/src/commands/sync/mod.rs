@@ -15,7 +15,6 @@ pub mod context;
 pub mod download;
 pub mod events;
 pub mod full_backup;
-pub mod steam_seed;
 mod models;
 pub mod multipart_upload;
 pub mod preview;

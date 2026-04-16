@@ -18,13 +18,14 @@
 //! `steamWebApiKey` en settings o variable de entorno `STEAM_WEB_API_KEY`.
 
 mod api;
-pub mod commands;
 mod enrichment;
 mod error;
+mod types;
+mod query;
 pub mod meta;
 pub mod normalize;
-mod query;
 pub mod scoring;
+pub mod commands;
+pub mod seed;
 pub mod sync;
 pub(crate) mod trending;
-mod types;
