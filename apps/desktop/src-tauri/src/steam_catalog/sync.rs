@@ -1,5 +1,6 @@
 //! Orquestación: sync completo (primera vez o reanudación) vs incremental (`if_modified_since`).
 
+use rayon::prelude::*;
 use rusqlite::Connection;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
@@ -157,9 +158,8 @@ async fn persist_apps(
     let db_clone = db.clone();
 
     tokio::task::spawn_blocking(move || {
-        // Normalización y upsert en una sola pasada de spawn_blocking.
         let rows: Vec<(u32, String, String)> = apps
-            .into_iter()
+            .into_par_iter()
             .map(|(id, name)| {
                 let nn = normalize_catalog_name(&name);
                 (id, name, nn)
@@ -167,8 +167,6 @@ async fn persist_apps(
             .collect();
 
         let mut total = 0u64;
-        // Dividimos en chunks solo para limitar la memoria de cada transacción;
-        // cada chunk sigue siendo una única transacción.
         for chunk in rows.chunks(UPSERT_BATCH_SIZE) {
             total += db_clone.with_conn(|c| upsert_apps_batch(c, chunk))?;
         }
