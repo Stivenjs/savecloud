@@ -3,7 +3,7 @@
 //! cualquier otro bloque con `items` en la misma forma (solo `type == 0` apps, sin subs/bundles).
 //!
 //! La misma tabla puede rellenarse con la lista de prioridad en la nube (`priority_appids.jsonl`),
-//! reflejando el orden que exportó el host (ver `sync_apply_cloud_priority_trending` en sync/steam_seed).
+//! reflejando el orden que exportó el host (ver `sync_apply_cloud_priority_trending` en steam_catalog/seed).
 
 use std::collections::HashSet;
 
