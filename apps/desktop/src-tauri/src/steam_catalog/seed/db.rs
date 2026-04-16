@@ -82,7 +82,7 @@ pub fn save_import_state(
 /// sola pasada SQL al final del batch.
 pub fn apply_seed_updates(
     conn: &Connection,
-    updates: &[(u32, String)],
+    updates: &[(u32, serde_json::Value)],
 ) -> Result<u32, rusqlite::Error> {
     if updates.is_empty() {
         return Ok(0);
@@ -124,9 +124,10 @@ pub fn apply_seed_updates(
         let mut track =
             tx.prepare_cached("INSERT OR IGNORE INTO _seed_batch_ids (app_id) VALUES (?1)")?;
 
-        for (app_id, json) in updates {
+        for (app_id, data) in updates {
+            let json = serde_json::to_string(data).unwrap_or_default();
             let name =
-                infer_name_from_details_json(json).unwrap_or_else(|| format!("App {}", app_id));
+                infer_name_from_details_json(data).unwrap_or_else(|| format!("App {}", app_id));
             let name_norm = normalize_catalog_name(&name);
             let n = upsert.execute(rusqlite::params![app_id, name, name_norm, json])?;
             updated = updated.saturating_add(n as u32);
@@ -206,8 +207,7 @@ pub fn apply_seed_updates(
 
 /// Extrae el campo `name` del JSON de detalles de una app Steam.
 #[inline]
-pub fn infer_name_from_details_json(details_json: &str) -> Option<String> {
-    let v: serde_json::Value = serde_json::from_str(details_json).ok()?;
+pub fn infer_name_from_details_json(v: &serde_json::Value) -> Option<String> {
     let name = v.get("name")?.as_str()?.trim();
     if name.is_empty() {
         None

@@ -8,7 +8,8 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::mpsc;
 use tokio_util::io::StreamReader;
 
-const DEFAULT_CHUNK_SIZE: usize = 1000;
+const DEFAULT_CHUNK_SIZE: usize = 5000;
+const LINE_GROUP_SIZE: usize = 500;
 
 /// Contexto de progreso para la emisión de eventos durante el streaming.
 pub struct StreamProgressContext {
@@ -69,20 +70,35 @@ pub async fn stream_import_batch(
     let mut lines_reader = BufReader::new(stream_reader).lines();
 
     // 2. Definimos los canales de comunicación
-    // Canal para líneas crudas (entrada a workers)
-    let (tx_lines, rx_lines) = mpsc::channel::<String>(worker_count * 2);
+    // Canal para GRUPOS de líneas (entrada a workers) para reducir contención de Mutex
+    let (tx_lines, rx_lines) = mpsc::channel::<Vec<String>>(worker_count * 2);
     // Canal para updates parseados (salida de workers)
-    let (tx_updates, mut rx_updates) = mpsc::channel::<(u32, String)>(chunk_size * 2);
+    let (tx_updates, mut rx_updates) = mpsc::channel::<(u32, serde_json::Value)>(chunk_size * 2);
 
     // 3. Spawneamos el lector de líneas
     let reader_handle = tokio::spawn(async move {
+        let mut group = Vec::with_capacity(LINE_GROUP_SIZE);
         while let Ok(Some(line)) = lines_reader.next_line().await {
-            if line.trim().is_empty() {
+            let line = line.trim();
+            if line.is_empty() {
                 continue;
             }
-            if tx_lines.send(line).await.is_err() {
-                break;
+            group.push(line.to_string());
+            if group.len() >= LINE_GROUP_SIZE {
+                if tx_lines
+                    .send(std::mem::replace(
+                        &mut group,
+                        Vec::with_capacity(LINE_GROUP_SIZE),
+                    ))
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
             }
+        }
+        if !group.is_empty() {
+            let _ = tx_lines.send(group).await;
         }
     });
 
@@ -96,23 +112,23 @@ pub async fn stream_import_batch(
 
         worker_handles.spawn(tokio::spawn(async move {
             loop {
-                let line = {
+                let lines = {
                     let mut rx = rx_lines_clone.lock().await;
                     rx.recv().await
                 };
 
-                match line {
-                    Some(l) => {
-                        if let Ok(parsed) = serde_json::from_str::<SteamSeedBatchLine>(&l) {
-                            if parsed.steam_success == Some(true) {
-                                if let Some(data) = parsed.data {
-                                    if let Ok(json_str) = serde_json::to_string(&data) {
+                match lines {
+                    Some(batch) => {
+                        for l in batch {
+                            if let Ok(parsed) = serde_json::from_str::<SteamSeedBatchLine>(&l) {
+                                if parsed.steam_success == Some(true) {
+                                    if let Some(data) = parsed.data {
                                         if tx_updates_clone
-                                            .send((parsed.app_id, json_str))
+                                            .send((parsed.app_id, data))
                                             .await
                                             .is_err()
                                         {
-                                            break;
+                                            return;
                                         }
                                     }
                                 }
@@ -148,7 +164,7 @@ pub async fn stream_import_batch(
                         total_batches: c.global_total_batches,
                         total_rows_updated: c.global_total_rows.saturating_add(total_updated),
                         status_text: Some(format!(
-                            "Guardando bloque ({} registros) de {}...",
+                            "Guardando {} semillas en {}...",
                             chunk_to_save.len(),
                             batch_key
                         )),
