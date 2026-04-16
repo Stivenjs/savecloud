@@ -63,10 +63,17 @@ impl AppDb {
             conn.pragma_update(None, "wal_autocheckpoint", 1000)?;
             conn.pragma_update(None, "temp_store", "MEMORY")?;
             conn.pragma_update(None, "busy_timeout", 5000)?;
+            conn.pragma_update(None, "cache_size", -65536)?;
+            conn.pragma_update(None, "mmap_size", 536870912)?;
+            conn.pragma_update(None, "page_size", 4096)?;
             Ok(())
         });
 
-        let pool = Pool::new(manager).map_err(|e| SqliteError::Pool(e.to_string()))?;
+        let pool = Pool::builder()
+            .max_size(16)
+            .min_idle(Some(4))
+            .build(manager)
+            .map_err(|e| SqliteError::Pool(e.to_string()))?;
 
         let conn = pool.get().map_err(|e| SqliteError::Pool(e.to_string()))?;
         run_migrations(&conn)?;

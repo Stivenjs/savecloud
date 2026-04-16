@@ -165,6 +165,20 @@ pub fn compute_rank_score(details_json: &str) -> i64 {
     score.min(MAX_SCORE)
 }
 
+pub fn compute_rank_score_from_value(root: &serde_json::Value) -> i64 {
+    let data = root.get("data").unwrap_or(root);
+    let year = current_year();
+
+    let score = community_score(data)
+        + metacritic_score(data)
+        + vip_studio_score(data)
+        + quality_score(data)
+        + media_score(data)
+        + recency_score(data, year);
+
+    score.min(MAX_SCORE)
+}
+
 fn current_year() -> i32 {
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -189,10 +203,7 @@ pub fn backfill_rank_scores(conn: &Connection) -> Result<u32, rusqlite::Error> {
 
     // Procesamos en lotes de 5,000 para no saturar la RAM con strings gigantes de JSON.
     loop {
-        let batch: Vec<(i64, String)> = rows_iter
-            .by_ref()
-            .take(5000)
-            .collect::<Result<_, _>>()?;
+        let batch: Vec<(i64, String)> = rows_iter.by_ref().take(5000).collect::<Result<_, _>>()?;
 
         if batch.is_empty() {
             break;
@@ -234,10 +245,7 @@ pub fn update_missing_scores(conn: &Connection) -> Result<u32, rusqlite::Error> 
     let mut total_computed = 0;
 
     loop {
-        let batch: Vec<(i64, String)> = rows_iter
-            .by_ref()
-            .take(5000)
-            .collect::<Result<_, _>>()?;
+        let batch: Vec<(i64, String)> = rows_iter.by_ref().take(5000).collect::<Result<_, _>>()?;
 
         if batch.is_empty() {
             break;
@@ -263,49 +271,6 @@ pub fn update_missing_scores(conn: &Connection) -> Result<u32, rusqlite::Error> 
     }
 
     Ok(total_computed)
-}
-
-/// Batch específico (mantiene compatibilidad)
-pub fn update_rank_scores_for_batch(conn: &Connection) -> Result<(), rusqlite::Error> {
-    let mut stmt = conn.prepare(
-        "SELECT a.app_id, a.details_json
-         FROM steam_catalog_apps a
-         JOIN _seed_batch_ids b ON b.app_id = a.app_id",
-    )?;
-
-    let rows: Vec<(i64, String)> = stmt
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
-        .collect::<Result<_, _>>()?;
-
-    let computed: Vec<(i64, i64)> = rows
-        .par_iter()
-        .map(|(id, json)| (*id, compute_rank_score(json)))
-        .collect();
-
-    let mut upd = conn.prepare_cached(
-        "UPDATE steam_catalog_apps SET catalog_rank_score = ?1 WHERE app_id = ?2",
-    )?;
-
-    for (id, score) in computed {
-        upd.execute(rusqlite::params![score, id])?;
-    }
-
-    Ok(())
-}
-#[allow(dead_code)]
-pub fn update_rank_score_single(
-    conn: &Connection,
-    app_id: u32,
-    details_json: &str,
-) -> Result<(), rusqlite::Error> {
-    let score = compute_rank_score(details_json);
-
-    conn.execute(
-        "UPDATE steam_catalog_apps SET catalog_rank_score = ?1 WHERE app_id = ?2",
-        rusqlite::params![score, app_id],
-    )?;
-
-    Ok(())
 }
 
 #[cfg(test)]

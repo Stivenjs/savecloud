@@ -73,13 +73,14 @@ pub fn parse_import_strategy(s: Option<&str>) -> Result<String, String> {
 }
 
 /// Ejecuta una única ronda de importación de batches del seed en la nube.
+/// Los batches se descargan y procesan en paralelo según `concurrency`.
 pub async fn import_cloud_seed_one_round(
     app: Option<&tauri::AppHandle>,
     db: &AppDb,
     ctx: &ApiContext,
     max_batches: u32,
     requested_strategy: &str,
-    _concurrency: usize,
+    concurrency: usize,
     iteration: u32,
     total_batches_history: u32,
     total_rows_history: u32,
@@ -139,30 +140,69 @@ pub async fn import_cloud_seed_one_round(
     // Resolvemos las URLs en bloque para ahorrar latencia
     let url_map = api::resolve_batch_download_urls(ctx, &to_process).await?;
 
-    let mut rows_updated = 0u32;
     let total_to_process = to_process.len() as u32;
 
-    for (idx, key) in to_process.iter().enumerate() {
-        if let Some(url) = url_map.get(key) {
-            let progress_ctx = streaming::StreamProgressContext {
-                iteration,
-                total_batches_this_round: total_to_process,
-                global_total_batches: total_batches_history.saturating_add(idx as u32),
-                global_total_rows: total_rows_history.saturating_add(rows_updated),
-            };
+    use futures_util::stream::{self, StreamExt};
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
 
-            let n = streaming::stream_import_batch(
-                app,
-                Some(&progress_ctx),
-                key,
-                db,
-                url,
-                None,
-            )
-            .await?;
-            rows_updated = rows_updated.saturating_add(n);
+    let rows_updated = Arc::new(AtomicU32::new(0));
+
+    // Candado compartido para serializar las escrituras a SQLite
+    let db_write_lock = Arc::new(Mutex::new(()));
+
+    stream::iter(
+        to_process
+            .iter()
+            .enumerate()
+            .map(|(i, k)| (i, k.clone()))
+            .collect::<Vec<_>>(),
+    )
+    .map(|(idx, key)| {
+        let url = url_map.get(&key).cloned();
+        let key = key;
+        let db = db.clone();
+        let app = app.cloned();
+        let rows_updated = Arc::clone(&rows_updated);
+        let write_lock = Arc::clone(&db_write_lock);
+
+        async move {
+            if let Some(url) = url {
+                let progress_ctx = streaming::StreamProgressContext {
+                    iteration,
+                    total_batches_this_round: total_to_process,
+                    global_total_batches: total_batches_history.saturating_add(idx as u32),
+                    global_total_rows: total_rows_history
+                        .saturating_add(rows_updated.load(Ordering::Relaxed)),
+                };
+
+                match streaming::stream_import_batch(
+                    app.as_ref(),
+                    Some(&progress_ctx),
+                    &key,
+                    &db,
+                    &url,
+                    None,
+                    write_lock,
+                )
+                .await
+                {
+                    Ok(n) => {
+                        rows_updated.fetch_add(n, Ordering::Relaxed);
+                    }
+                    Err(e) => {
+                        eprintln!("[steam-seed] Error en batch {}: {}", key, e);
+                    }
+                }
+            }
         }
-    }
+    })
+    .buffer_unordered(concurrency)
+    .collect::<()>()
+    .await;
+
+    let rows_updated = rows_updated.load(Ordering::Relaxed);
 
     match requested_strategy {
         "cursor" => {

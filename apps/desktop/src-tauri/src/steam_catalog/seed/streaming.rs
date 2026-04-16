@@ -3,13 +3,13 @@ use super::types::SteamSeedBatchLine;
 use crate::network::API_CLIENT;
 use crate::sqlite::AppDb;
 use futures_util::StreamExt;
+use std::sync::Arc;
 use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::mpsc;
+use tokio::sync::Mutex;
 use tokio_util::io::StreamReader;
 
-const DEFAULT_CHUNK_SIZE: usize = 5000;
-const LINE_GROUP_SIZE: usize = 500;
+const DEFAULT_CHUNK_SIZE: usize = 50_000;
 
 /// Contexto de progreso para la emisión de eventos durante el streaming.
 pub struct StreamProgressContext {
@@ -19,8 +19,7 @@ pub struct StreamProgressContext {
     pub global_total_rows: u32,
 }
 
-/// Importa un batch de semillas Steam utilizando una estrategia de streaming y
-/// procesamiento paralelo de JSON.
+/// Importa un batch de semillas Steam utilizando streaming HTTP + parsing paralelo.
 pub async fn stream_import_batch(
     app: Option<&tauri::AppHandle>,
     ctx: Option<&StreamProgressContext>,
@@ -28,9 +27,9 @@ pub async fn stream_import_batch(
     db: &AppDb,
     download_url_str: &str,
     chunk_size: Option<usize>,
+    write_lock: Arc<Mutex<()>>,
 ) -> Result<u32, String> {
     let chunk_size = chunk_size.unwrap_or(DEFAULT_CHUNK_SIZE);
-    let worker_count = num_cpus::get().clamp(1, 8);
 
     if let (Some(a), Some(c)) = (app, ctx) {
         let _ = a.emit(
@@ -48,7 +47,6 @@ pub async fn stream_import_batch(
         );
     }
 
-    // 1. Iniciamos la descarga por streaming
     let response = API_CLIENT
         .get(download_url_str)
         .send()
@@ -62,98 +60,76 @@ pub async fn stream_import_batch(
         ));
     }
 
-    // Convertimos el stream de bytes de reqwest en un AsyncRead para usar BufReader
     let bytes_stream = response
         .bytes_stream()
-        .map(|result| result.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)));
+        .map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)));
     let stream_reader = StreamReader::new(bytes_stream);
     let mut lines_reader = BufReader::new(stream_reader).lines();
 
-    // 2. Definimos los canales de comunicación
-    // Canal para GRUPOS de líneas (entrada a workers) para reducir contención de Mutex
-    let (tx_lines, rx_lines) = mpsc::channel::<Vec<String>>(worker_count * 2);
-    // Canal para updates parseados (salida de workers)
-    let (tx_updates, mut rx_updates) = mpsc::channel::<(u32, serde_json::Value)>(chunk_size * 2);
+    let worker_count = num_cpus::get().clamp(2, 8);
 
-    // 3. Spawneamos el lector de líneas
-    let reader_handle = tokio::spawn(async move {
-        let mut group = Vec::with_capacity(LINE_GROUP_SIZE);
-        while let Ok(Some(line)) = lines_reader.next_line().await {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            group.push(line.to_string());
-            if group.len() >= LINE_GROUP_SIZE {
-                if tx_lines
-                    .send(std::mem::replace(
-                        &mut group,
-                        Vec::with_capacity(LINE_GROUP_SIZE),
-                    ))
-                    .await
-                    .is_err()
-                {
-                    break;
-                }
-            }
+    let mut raw_lines: Vec<String> = Vec::with_capacity(4096);
+    while let Ok(Some(line)) = lines_reader.next_line().await {
+        let trimmed = line.trim().to_string();
+        if !trimmed.is_empty() {
+            raw_lines.push(trimmed);
         }
-        if !group.is_empty() {
-            let _ = tx_lines.send(group).await;
-        }
-    });
+    }
 
-    // 4. Spawneamos los workers de procesamiento paralelo
-    let mut worker_handles = Vec::new();
-    let rx_lines = std::sync::Arc::new(tokio::sync::Mutex::new(rx_lines));
+    if raw_lines.is_empty() {
+        return Ok(0);
+    }
 
-    for _ in 0..worker_count {
-        let rx_lines_clone = rx_lines.clone();
-        let tx_updates_clone = tx_updates.clone();
+    // Dividimos las líneas en chunks iguales, uno por worker.
+    // Cada worker tiene su propio subvector → cero contención.
+    let total_lines = raw_lines.len();
+    let chunk_per_worker = (total_lines + worker_count - 1) / worker_count;
 
-        worker_handles.spawn(tokio::spawn(async move {
-            loop {
-                let lines = {
-                    let mut rx = rx_lines_clone.lock().await;
-                    rx.recv().await
-                };
+    let chunks: Vec<Vec<String>> = raw_lines
+        .chunks(chunk_per_worker)
+        .map(|c| c.to_vec())
+        .collect();
 
-                match lines {
-                    Some(batch) => {
-                        for l in batch {
-                            if let Ok(parsed) = serde_json::from_str::<SteamSeedBatchLine>(&l) {
-                                if parsed.steam_success == Some(true) {
-                                    if let Some(data) = parsed.data {
-                                        if tx_updates_clone
-                                            .send((parsed.app_id, data))
-                                            .await
-                                            .is_err()
-                                        {
-                                            return;
-                                        }
-                                    }
-                                }
-                            }
+    let mut parse_handles = Vec::with_capacity(chunks.len());
+    for chunk in chunks {
+        parse_handles.push(tokio::task::spawn_blocking(move || {
+            let mut out: Vec<(u32, serde_json::Value, i64)> = Vec::with_capacity(chunk.len());
+            for line in &chunk {
+                if let Ok(parsed) = serde_json::from_str::<SteamSeedBatchLine>(line) {
+                    if parsed.steam_success == Some(true) {
+                        if let Some(data) = parsed.data {
+                            let score =
+                                crate::steam_catalog::scoring::compute_rank_score_from_value(&data);
+                            out.push((parsed.app_id, data, score));
                         }
                     }
-                    None => break,
                 }
             }
+            out
         }));
     }
-    // Cerramos el sender original para que los workers terminen cuando el reader acabe
-    drop(tx_updates);
 
-    // 5. Consumidor de base de datos (Sink)
+    // Recolectamos todos los resultados
+    let mut all_updates: Vec<(u32, serde_json::Value, i64)> = Vec::with_capacity(total_lines);
+    for handle in parse_handles {
+        match handle.await {
+            Ok(partial) => all_updates.extend(partial),
+            Err(e) => eprintln!("[steam-seed] Worker de parseo falló: {}", e),
+        }
+    }
+
+    if all_updates.is_empty() {
+        return Ok(0);
+    }
+
+    // Procesamos en chunks del tamaño configurado.
     let db_clone = db.clone();
+    let batch_key_owned = batch_key.to_string();
     let mut total_updated = 0u32;
-    let mut current_chunk = Vec::with_capacity(chunk_size);
 
-    while let Some(update) = rx_updates.recv().await {
-        current_chunk.push(update);
-        if current_chunk.len() >= chunk_size {
-            let chunk_to_save =
-                std::mem::replace(&mut current_chunk, Vec::with_capacity(chunk_size));
-
+    for (i, write_chunk) in all_updates.chunks(chunk_size).enumerate() {
+        let chunk_vec = write_chunk.to_vec();
+        if i > 0 {
             if let (Some(a), Some(c)) = (app, ctx) {
                 let _ = a.emit(
                     "steam-seed-import-progress",
@@ -164,43 +140,30 @@ pub async fn stream_import_batch(
                         total_batches: c.global_total_batches,
                         total_rows_updated: c.global_total_rows.saturating_add(total_updated),
                         status_text: Some(format!(
-                            "Guardando {} semillas en {}...",
-                            chunk_to_save.len(),
-                            batch_key
+                            "Guardando chunk {} de {}...",
+                            i + 1,
+                            batch_key_owned
                         )),
-                        current_batch: Some(batch_key.to_string()),
+                        current_batch: Some(batch_key_owned.clone()),
                         done: false,
                     },
                 );
             }
-
-            let n = db_clone
-                .with_conn(|conn| apply_seed_updates(conn, &chunk_to_save))
-                .map_err(|e| format!("Error en batch insert: {}", e))?;
-            total_updated = total_updated.saturating_add(n);
         }
-    }
 
-    // Flush final
-    if !current_chunk.is_empty() {
-        let n = db_clone
-            .with_conn(|conn| apply_seed_updates(conn, &current_chunk))
-            .map_err(|e| format!("Error en flush final: {}", e))?;
+        let db_write = db_clone.clone();
+
+        let _guard = write_lock.lock().await;
+
+        let n = tokio::task::spawn_blocking(move || {
+            db_write.with_conn(|conn| apply_seed_updates(conn, &chunk_vec))
+        })
+        .await
+        .map_err(|e| format!("spawn_blocking falló: {}", e))?
+        .map_err(|e| format!("Error en batch insert: {}", e))?;
+
         total_updated = total_updated.saturating_add(n);
     }
 
-    let _ = reader_handle.await;
-
     Ok(total_updated)
-}
-
-/// Helper para extender un vector de handles (no existe nativo pero lo emulamos)
-trait HandleVecExt {
-    fn spawn(&mut self, handle: tokio::task::JoinHandle<()>);
-}
-
-impl HandleVecExt for Vec<tokio::task::JoinHandle<()>> {
-    fn spawn(&mut self, handle: tokio::task::JoinHandle<()>) {
-        self.push(handle);
-    }
 }
