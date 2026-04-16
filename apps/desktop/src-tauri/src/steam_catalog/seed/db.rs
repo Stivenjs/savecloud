@@ -79,7 +79,7 @@ pub fn save_import_state(
 }
 
 /// Hace upsert masivo de apps enriquecidas y sincroniza facets + FTS en una
-/// sola pasada SQL al final del batch.
+/// sola transacción por batch completo.
 pub fn apply_seed_updates(
     conn: &Connection,
     updates: &[(u32, serde_json::Value)],
@@ -90,9 +90,13 @@ pub fn apply_seed_updates(
 
     let tx = conn.unchecked_transaction()?;
 
+    // Tabla temporal para tracking del batch actual.
+    // WITHOUT ROWID + INTEGER PRIMARY KEY = B-Tree puro, lookups más rápidos.
     tx.execute_batch(
         "PRAGMA recursive_triggers = OFF;
-         CREATE TEMP TABLE IF NOT EXISTS _seed_batch_ids (app_id INTEGER PRIMARY KEY);
+         CREATE TEMP TABLE IF NOT EXISTS _seed_batch_ids (
+             app_id INTEGER PRIMARY KEY
+         ) WITHOUT ROWID;
          DELETE FROM _seed_batch_ids;",
     )?;
 
@@ -105,8 +109,9 @@ pub fn apply_seed_updates(
              )
              VALUES (?1, ?2, ?3, ?4, unixepoch(), unixepoch())
              ON CONFLICT(app_id) DO UPDATE SET
-                details_json    = excluded.details_json,
-                enriched_at     = unixepoch(),
+                details_json        = excluded.details_json,
+                enriched_at         = unixepoch(),
+                last_sync_batch_at  = unixepoch(),
                 name            = CASE
                                       WHEN steam_catalog_apps.name IS NULL
                                         OR steam_catalog_apps.name = ''

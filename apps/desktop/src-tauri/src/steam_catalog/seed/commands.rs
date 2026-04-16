@@ -1,11 +1,11 @@
-use tauri::{State, AppHandle, Emitter};
-use crate::sqlite::AppDb;
-use crate::commands::sync::context::resolve_api_context;
-use super::types::*;
 use super::api::*;
 use super::db::*;
-use crate::steam_catalog::trending::sync_store_trending;
+use super::types::*;
+use crate::commands::sync::context::resolve_api_context;
 use crate::network::API_CLIENT;
+use crate::sqlite::AppDb;
+use crate::steam_catalog::trending::sync_store_trending;
+use tauri::{AppHandle, Emitter, State};
 
 #[tauri::command]
 pub async fn sync_export_steam_manifest_to_cloud_seed(
@@ -15,7 +15,6 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
     let ctx = resolve_api_context()?;
     let db_ref = db.inner().clone();
 
-    // Mejor esfuerzo: fallo aquí no bloquea la exportación.
     let _ = sync_store_trending(&db_ref).await;
 
     let db_manifest = db.inner().clone();
@@ -181,8 +180,8 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
     concurrency: Option<u32>,
 ) -> Result<SteamSeedImportResultDto, String> {
     let ctx = resolve_api_context()?;
-    let max_batches = max_batches.unwrap_or(50).clamp(1, 500);
-    let concurrency = concurrency.unwrap_or(4).clamp(1, 32) as usize;
+    let max_batches = max_batches.unwrap_or(500).clamp(1, 2000);
+    let concurrency = concurrency.unwrap_or(32).clamp(1, 128) as usize;
     let requested_strategy = super::parse_import_strategy(strategy.as_deref())?;
 
     super::import_cloud_seed_one_round(
@@ -208,8 +207,8 @@ pub async fn sync_import_cloud_seed_run_until_done(
     concurrency: Option<u32>,
 ) -> Result<SteamSeedImportRunResultDto, String> {
     let ctx = resolve_api_context()?;
-    let max_batches = max_batches.unwrap_or(50).clamp(1, 500);
-    let concurrency = concurrency.unwrap_or(4).clamp(1, 32) as usize;
+    let max_batches = max_batches.unwrap_or(500).clamp(1, 2000);
+    let concurrency = concurrency.unwrap_or(32).clamp(1, 128) as usize;
     let requested_strategy = super::parse_import_strategy(strategy.as_deref())?;
 
     let mut total_batches = 0u32;
@@ -220,8 +219,7 @@ pub async fn sync_import_cloud_seed_run_until_done(
         round += 1;
         if round > super::STEAM_SEED_IMPORT_MAX_ROUNDS {
             return Err(
-                "Se alcanzó el límite de repeticiones del proceso de descarga. Prueba de nuevo más tarde."
-                    .to_string(),
+                "Se alcanzó el límite de repeticiones. Prueba de nuevo más tarde.".to_string(),
             );
         }
 
@@ -249,7 +247,10 @@ pub async fn sync_import_cloud_seed_run_until_done(
                 rows_this_round: r.rows_updated,
                 total_batches,
                 total_rows_updated: total_rows,
-                status_text: Some(format!("Ronda {} completada.", round)),
+                status_text: Some(format!(
+                    "Ronda {} · {} lotes · {} filas",
+                    round, total_batches, total_rows
+                )),
                 current_batch: None,
                 done: false,
             },
@@ -378,7 +379,8 @@ pub async fn sync_get_steam_seed_freshness(
     let local_for_compare =
         super::local_max_if_same_scope_as_cloud(cloud_last.as_deref(), local_max.as_deref());
     let status =
-        super::compute_steam_seed_freshness_status(cloud_last.as_deref(), local_for_compare).to_string();
+        super::compute_steam_seed_freshness_status(cloud_last.as_deref(), local_for_compare)
+            .to_string();
 
     Ok(SteamSeedFreshnessDto {
         status,
