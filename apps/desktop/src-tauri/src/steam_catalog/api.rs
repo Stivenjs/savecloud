@@ -44,8 +44,18 @@ pub async fn fetch_app_list_page(
         return Err(CatalogSyncError::HttpStatus(status.as_u16()));
     }
 
-    let body: Value = res.json().await?;
-    parse_app_list_response(&body)
+    let bytes = res
+        .bytes()
+        .await
+        .map_err(|_| CatalogSyncError::InvalidResponse)?;
+
+    tokio::task::spawn_blocking(move || {
+        let body: Value =
+            serde_json::from_slice(&bytes).map_err(|_| CatalogSyncError::InvalidResponse)?;
+        parse_app_list_response(&body)
+    })
+    .await
+    .expect("Panic en el worker thread de parseo JSON")
 }
 
 fn parse_app_id(v: &Value) -> Option<u32> {
