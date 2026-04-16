@@ -269,6 +269,31 @@ pub async fn sync_import_cloud_seed_run_until_done(
             rows_this_round: 0,
             total_batches,
             total_rows_updated: total_rows,
+            status_text: Some("Optimizando motor de búsqueda...".to_string()),
+            current_batch: None,
+            done: false,
+        },
+    );
+
+    let db_opt = db.inner().clone();
+    let _ = tokio::task::spawn_blocking(move || {
+        let _ = db_opt.with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO steam_catalog_search(steam_catalog_search) VALUES('optimize')",
+                [],
+            )
+        });
+    })
+    .await;
+
+    let _ = app.emit(
+        "steam-seed-import-progress",
+        SteamSeedImportProgressPayload {
+            iteration: round,
+            batches_this_round: 0,
+            rows_this_round: 0,
+            total_batches,
+            total_rows_updated: total_rows,
             status_text: Some("Sincronización de catálogo finalizada.".to_string()),
             current_batch: None,
             done: true,

@@ -93,12 +93,14 @@ pub async fn stream_import_batch(
     let mut parse_handles = Vec::with_capacity(chunks.len());
     for chunk in chunks {
         parse_handles.push(tokio::task::spawn_blocking(move || {
-            let mut out: Vec<(u32, serde_json::Value)> = Vec::with_capacity(chunk.len());
+            let mut out: Vec<(u32, serde_json::Value, i64)> = Vec::with_capacity(chunk.len());
             for line in &chunk {
                 if let Ok(parsed) = serde_json::from_str::<SteamSeedBatchLine>(line) {
                     if parsed.steam_success == Some(true) {
                         if let Some(data) = parsed.data {
-                            out.push((parsed.app_id, data));
+                            let score =
+                                crate::steam_catalog::scoring::compute_rank_score_from_value(&data);
+                            out.push((parsed.app_id, data, score));
                         }
                     }
                 }
@@ -108,7 +110,7 @@ pub async fn stream_import_batch(
     }
 
     // Recolectamos todos los resultados
-    let mut all_updates: Vec<(u32, serde_json::Value)> = Vec::with_capacity(total_lines);
+    let mut all_updates: Vec<(u32, serde_json::Value, i64)> = Vec::with_capacity(total_lines);
     for handle in parse_handles {
         match handle.await {
             Ok(partial) => all_updates.extend(partial),
@@ -126,8 +128,7 @@ pub async fn stream_import_batch(
     let mut total_updated = 0u32;
 
     for (i, write_chunk) in all_updates.chunks(chunk_size).enumerate() {
-        let chunk_vec: Vec<(u32, serde_json::Value)> = write_chunk.to_vec();
-
+        let chunk_vec = write_chunk.to_vec();
         if i > 0 {
             if let (Some(a), Some(c)) = (app, ctx) {
                 let _ = a.emit(

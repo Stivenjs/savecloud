@@ -1,5 +1,4 @@
 use super::types::SteamSeedImportState;
-use crate::steam_catalog::normalize::normalize_catalog_name;
 use rusqlite::Connection;
 
 /// Lee todos los `app_id` del catálogo Steam en orden ascendente.
@@ -79,10 +78,10 @@ pub fn save_import_state(
 }
 
 /// Hace upsert masivo de apps enriquecidas y sincroniza facets + FTS en una
-/// sola transacción por batch completo.
+/// sola transacción por batch completo, incluyendo el score precalculado.
 pub fn apply_seed_updates(
     conn: &Connection,
-    updates: &[(u32, serde_json::Value)],
+    updates: &[(u32, serde_json::Value, i64)],
 ) -> Result<u32, rusqlite::Error> {
     if updates.is_empty() {
         return Ok(0);
@@ -90,8 +89,6 @@ pub fn apply_seed_updates(
 
     let tx = conn.unchecked_transaction()?;
 
-    // Tabla temporal para tracking del batch actual.
-    // WITHOUT ROWID + INTEGER PRIMARY KEY = B-Tree puro, lookups más rápidos.
     tx.execute_batch(
         "PRAGMA recursive_triggers = OFF;
          CREATE TEMP TABLE IF NOT EXISTS _seed_batch_ids (
@@ -105,11 +102,12 @@ pub fn apply_seed_updates(
     {
         let mut upsert = tx.prepare_cached(
             "INSERT INTO steam_catalog_apps (
-                app_id, name, name_normalized, details_json, enriched_at, last_sync_batch_at
+                app_id, name, name_normalized, details_json, catalog_rank_score, enriched_at, last_sync_batch_at
              )
-             VALUES (?1, ?2, ?3, ?4, unixepoch(), unixepoch())
+             VALUES (?1, ?2, ?3, ?4, ?5, unixepoch(), unixepoch())
              ON CONFLICT(app_id) DO UPDATE SET
                 details_json        = excluded.details_json,
+                catalog_rank_score  = excluded.catalog_rank_score,
                 enriched_at         = unixepoch(),
                 last_sync_batch_at  = unixepoch(),
                 name            = CASE
@@ -129,12 +127,13 @@ pub fn apply_seed_updates(
         let mut track =
             tx.prepare_cached("INSERT OR IGNORE INTO _seed_batch_ids (app_id) VALUES (?1)")?;
 
-        for (app_id, data) in updates {
+        for (app_id, data, score) in updates {
             let json = serde_json::to_string(data).unwrap_or_default();
             let name =
                 infer_name_from_details_json(data).unwrap_or_else(|| format!("App {}", app_id));
-            let name_norm = normalize_catalog_name(&name);
-            let n = upsert.execute(rusqlite::params![app_id, name, name_norm, json])?;
+            let name_norm = crate::steam_catalog::normalize::normalize_catalog_name(&name);
+
+            let n = upsert.execute(rusqlite::params![app_id, name, name_norm, json, score])?;
             updated = updated.saturating_add(n as u32);
             track.execute(rusqlite::params![app_id])?;
         }
@@ -203,8 +202,6 @@ pub fn apply_seed_updates(
           AND name_normalized IS NOT NULL;
         ",
     )?;
-
-    crate::steam_catalog::scoring::update_rank_scores_for_batch(&tx)?;
 
     tx.commit()?;
     Ok(updated)
