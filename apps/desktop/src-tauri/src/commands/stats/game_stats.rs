@@ -197,9 +197,7 @@ async fn build_game_save_graph(game_id: &str) -> Result<GameSaveGraphDto, String
         a_dt.cmp(&b_dt)
     });
 
-    let backups = full_backup::list_full_backups(game_id.to_string())
-        .await
-        .unwrap_or_default();
+    let backups = full_backup::list_full_backups(game_id.to_string()).await?;
 
     let root_id = format!("juego:{}", game_id);
     let game_title = game
@@ -221,10 +219,10 @@ async fn build_game_save_graph(game_id: &str) -> Result<GameSaveGraphDto, String
         let node = build_operation_node(game_id, index, entry);
         let node_id = node.id.clone();
         nodes.push(node);
-        edges.push(build_edge(&root_id, &node_id, "cronologia", index % 2 == 0));
+        edges.push(build_edge(&root_id, &node_id, "cronología", index % 2 == 0));
 
         if let Some(previous_id) = previous_operation_id.as_ref() {
-            edges.push(build_edge(previous_id, &node_id, "cronologia", true));
+            edges.push(build_edge(previous_id, &node_id, "cronología", true));
         }
         previous_operation_id = Some(node_id);
     }
@@ -242,7 +240,7 @@ async fn build_game_save_graph(game_id: &str) -> Result<GameSaveGraphDto, String
             game_id,
             &backup.key,
             "Respaldo completo".to_string(),
-            format!("{} archivos", backup.filename),
+            backup.filename.clone(),
             backup
                 .size
                 .map(|size| format!("{:.1} MB", size as f64 / (1024.0 * 1024.0)))
@@ -303,7 +301,7 @@ fn expand_path(raw: &str) -> Option<PathBuf> {
             result = if rest.is_empty() {
                 home
             } else {
-                format!("{}/{}", home.trim_end_matches(['/', '\\']), rest)
+                format!("{}/{}", home.trim_end_matches(&['/', '\\']), rest)
             };
         }
     }

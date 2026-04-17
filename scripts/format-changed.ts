@@ -4,7 +4,7 @@ import { spawnSync } from "child_process";
 import { extname } from "path";
 
 const cwd = process.cwd();
-const prettierExtensions = new Set([".js", ".jsx", ".ts", ".tsx", ".json", ".css", ".md", ".scss"]);
+const prettierExtensions = new Set([".js", ".jsx", ".ts", ".tsx", ".json", ".css", ".md"]);
 
 function runGit(args: string[]) {
   const result = spawnSync("git", args, {

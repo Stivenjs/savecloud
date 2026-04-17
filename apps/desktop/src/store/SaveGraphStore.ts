@@ -12,7 +12,7 @@ interface SaveGraphUiState {
 }
 
 /**
- * Estado visual efimero de los grafos de guardados.
+ * Estado visual efímero de los grafos de guardados.
  */
 export const useSaveGraphStore = create<SaveGraphUiState>((set) => ({
   selectedNodeId: null,

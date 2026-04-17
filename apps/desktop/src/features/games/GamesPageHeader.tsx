@@ -82,7 +82,7 @@ export function GamesPageHeader({
           variant="flat"
           startContent={<Search size={18} />}
           onPress={onScanPress}
-          className={`h-10 min-w-37.5 ${getGamepadFocusClass(navScan.isFocused, navScan.inputMode)}`}
+          className={`h-10 min-w-[150px] ${getGamepadFocusClass(navScan.isFocused, navScan.inputMode)}`}
           {...navScan.navProps}>
           Buscar juegos
         </Button>
@@ -93,7 +93,7 @@ export function GamesPageHeader({
           variant="flat"
           startContent={<Network size={18} />}
           onPress={onSaveGraphPress}
-          className={`h-10 min-w-37.5 ${getGamepadFocusClass(navGraph.isFocused, navGraph.inputMode)}`}
+          className={`h-10 min-w-[150px] ${getGamepadFocusClass(navGraph.isFocused, navGraph.inputMode)}`}
           {...navGraph.navProps}>
           Mapa general
         </Button>
@@ -101,7 +101,7 @@ export function GamesPageHeader({
           color="primary"
           startContent={<Plus size={18} />}
           onPress={onAddPress}
-          className={`h-10 min-w-37.5 font-semibold ${getGamepadFocusClass(navAdd.isFocused, navAdd.inputMode)}`}
+          className={`h-10 min-w-[150px] font-semibold ${getGamepadFocusClass(navAdd.isFocused, navAdd.inputMode)}`}
           {...navAdd.navProps}>
           Añadir a tu biblioteca
         </Button>
@@ -114,7 +114,7 @@ export function GamesPageHeader({
                 variant="bordered"
                 endContent={<ChevronDown size={16} />}
                 isDisabled={!gamesCount || isOperationRunning}
-                className={`h-10 min-w-40 ${getGamepadFocusClass(
+                className={`h-10 min-w-[160px] ${getGamepadFocusClass(
                   navDropdownTrigger.isFocused,
                   navDropdownTrigger.inputMode
                 )}`}
@@ -163,7 +163,7 @@ export function GamesPageHeader({
           onPress={onRefreshPress}
           isLoading={isRefreshing}
           isDisabled={isRefreshing}
-          className={`h-10 min-w-30 ${getGamepadFocusClass(navRefresh.isFocused, navRefresh.inputMode)}`}
+          className={`h-10 min-w-[120px] ${getGamepadFocusClass(navRefresh.isFocused, navRefresh.inputMode)}`}
           {...navRefresh.navProps}>
           Actualizar lista
         </Button>

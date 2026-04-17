@@ -128,7 +128,7 @@ export function mapGameSaveGraphToModel(graph: GameSaveGraph): SaveGraphModel {
     nodes: graph.nodes.map((node) => ({
       ...node,
       title: node.kind === "juego" && node.gameId ? formatGameDisplayName(node.gameId) : node.title,
-      gameId: node.gameId ? formatGameDisplayName(node.gameId) : null,
+      gameId: node.gameId,
       metric: formatMetric(node.metric),
     })),
     edges: graph.edges,

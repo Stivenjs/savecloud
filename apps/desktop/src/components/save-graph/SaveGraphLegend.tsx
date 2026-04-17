@@ -1,5 +1,5 @@
 /**
- * Leyenda compacta con la taxonomia visual del grafo.
+ * Leyenda compacta con la taxonomía visual del grafo.
  */
 export function SaveGraphLegend() {
   return (
@@ -7,11 +7,11 @@ export function SaveGraphLegend() {
       <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-default-500">Leyenda</p>
       <div className="mt-3 flex flex-wrap gap-2 text-xs text-default-600">
         <span className="rounded-full border border-success/30 bg-success/15 px-3 py-1">Juego</span>
-        <span className="rounded-full border border-primary/30 bg-primary/15 px-3 py-1">Actividad</span>
+        <span className="rounded-full border border-slate-400/30 bg-slate-500/15 px-3 py-1">Actividad</span>
         <span className="rounded-full border border-warning/30 bg-warning/15 px-3 py-1">Respaldo</span>
         <span className="rounded-full border border-secondary/30 bg-secondary/15 px-3 py-1">Biblioteca</span>
-        <span className="rounded-full border border-divider bg-content2 px-3 py-1">cronología</span>
-        <span className="rounded-full border border-divider bg-content2 px-3 py-1">respaldo</span>
+        <span className="rounded-full border border-divider bg-content2 px-3 py-1">Cronología</span>
+        <span className="rounded-full border border-divider bg-content2 px-3 py-1">Respaldo (arista)</span>
       </div>
     </section>
   );
