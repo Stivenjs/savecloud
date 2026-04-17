@@ -48,6 +48,7 @@ Resources:
     Type: AWS::CloudFront::Distribution
     Properties:
       DistributionConfig:
+        Comment: "CloudFront Distribution para SaveCloud (${sls:stage})"
         Enabled: true
         Origins:
           - Id: S3Origin
@@ -74,6 +75,9 @@ Resources:
                 Fn::GetAtt: [CloudFrontAllowBackupsOnlyFunction, FunctionARN]
         ViewerCertificate:
           CloudFrontDefaultCertificate: true
+      Tags:
+        - Key: Name
+          Value: "savecloud-distro-${sls:stage}"
 
   CloudFrontAllowBackupsOnlyFunction:
     Type: AWS::CloudFront::Function
