@@ -88,17 +88,18 @@ export function SteamCatalogPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <div className="flex items-center gap-2">
-          <Library size={22} className="text-primary" />
-          <h1 className="text-2xl font-semibold">Catálogo Steam</h1>
+      <div className="flex items-center gap-3">
+        <div
+          className="flex size-9 items-center justify-center rounded-xl 
+                  bg-primary/10 dark:bg-primary/15">
+          <Library size={20} className="text-primary" />
         </div>
-        <p className="mt-1 text-sm text-default-500">
-          Explora el catálogo local: al abrir esta pantalla se actualiza un orden de tendencia aproximado según las
-          listas públicas de la tienda Steam (más vendidos, ofertas y novedades); el resto va por ID de app. Pulsa un
-          juego para ver su ficha. Si no ves datos, ve a Configuración, revisa la clave de Steam y pulsa «Sincronizar
-          catálogo ahora».
-        </p>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Catálogo Steam</h1>
+          <p className="text-xs text-default-400 mt-0.5">
+            {totalBrowse > 0 ? `${totalBrowse.toLocaleString()} juegos indexados` : ""}
+          </p>
+        </div>
       </div>
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
@@ -136,17 +137,17 @@ export function SteamCatalogPage() {
             </p>
           ) : (
             <>
-              <p className="text-xs text-default-500">
-                {searchMode ? (
-                  <>
-                    Página {page} de {totalPages} · {rangeStart}–{rangeEnd} de {totalForRange}{" "}
-                    {totalForRange === 1 ? "resultado" : "resultados"}
-                  </>
-                ) : (
-                  <>
-                    Página {page} de {totalPages} · {rangeStart}–{rangeEnd} de {totalForRange}
-                  </>
-                )}
+              <p className="text-xs text-default-500 tabular-nums">
+                <span className="font-semibold text-default-700 dark:text-default-300">
+                  {rangeStart}–{rangeEnd}
+                </span>{" "}
+                de{" "}
+                <span className="font-semibold text-default-700 dark:text-default-300">
+                  {totalForRange.toLocaleString()}
+                </span>{" "}
+                {totalForRange === 1 ? "resultado" : "resultados"}
+                <span className="mx-2 text-default-300">·</span>
+                Página {page}/{totalPages}
               </p>
 
               {isMediaBatchPending ? (

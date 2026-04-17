@@ -11,11 +11,19 @@ export function SteamCatalogToolbar({ searchTerm, onSearchTermChange }: SteamCat
   return (
     <Input
       aria-label="Buscar en catálogo"
-      placeholder={`Varias palabras; no hace falta el título exacto (mín. ${STEAM_CATALOG_SEARCH_MIN} caracteres)…`}
+      placeholder={`Varias palabras; mín. ${STEAM_CATALOG_SEARCH_MIN} caracteres…`}
       value={searchTerm}
       onValueChange={onSearchTermChange}
-      startContent={<Search size={18} className="text-default-400" />}
-      classNames={{ input: "text-sm" }}
+      startContent={<Search size={18} className="text-default-400 transition-colors group-focus-within:text-primary" />}
+      classNames={{
+        input: "text-sm",
+        inputWrapper: `
+      h-11 shadow-sm 
+      transition-all duration-200
+      hover:border-default-400 
+      focus-within:border-primary focus-within:shadow-md focus-within:shadow-primary/10
+    `,
+      }}
       variant="bordered"
       isClearable
       onClear={() => onSearchTermChange("")}
