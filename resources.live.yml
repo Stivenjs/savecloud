@@ -68,6 +68,10 @@ Resources:
             QueryString: false
             Cookies:
               Forward: none
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN:
+                Fn::GetAtt: [CloudFrontAllowBackupsOnlyFunction, FunctionARN]
         ViewerCertificate:
           CloudFrontDefaultCertificate: true
 
