@@ -234,7 +234,7 @@ export function buildLibrarySaveGraphModel({
           title: "Guardados en la nube",
           subtitle: `${remote.fileCount} archivos`,
           metric: formatBackupSize(remote.totalSizeBytes),
-          status: remote.lastModified ? formatRelativeDate(remote.lastModified) : "Sin fecha",
+          status: remote.fileCount > 0 ? "Sincronizado" : "Sin archivos",
           timestamp: remote.lastModified,
           gameId,
         })
