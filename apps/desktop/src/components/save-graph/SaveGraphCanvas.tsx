@@ -44,7 +44,6 @@ export function SaveGraphCanvas({ nodes, edges, onNodeSelect }: SaveGraphCanvasP
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.34, includeHiddenNodes: false }}
-        nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable
         onNodeClick={handleNodeClick}

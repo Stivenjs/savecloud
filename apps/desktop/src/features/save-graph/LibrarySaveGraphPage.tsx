@@ -62,8 +62,8 @@ export function LibrarySaveGraphPage() {
   ];
 
   return (
-    <main className="min-h-dvh text-foreground">
-      <div className="mx-auto flex w-full max-w-400 flex-col gap-6 px-4 py-6 md:px-6 lg:px-8">
+    <main className="text-foreground">
+      <div className="flex w-full max-w-400 flex-col gap-6 px-4 py-6 md:px-6 lg:px-8">
         <header>
           <section className="space-y-4 rounded-3xl border border-divider bg-content1 p-5">
             <div className="flex flex-wrap items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.28em] text-default-500">
