@@ -136,6 +136,13 @@ export function GameDetailPage() {
     }
   }, []);
 
+  const handleOpenGraph = useCallback(
+    (g: ConfiguredGame) => {
+      navigate(`/games/${g.id}/graph`);
+    },
+    [navigate]
+  );
+
   const handleRemove = useCallback(
     async (g: ConfiguredGame) => {
       try {
@@ -259,6 +266,7 @@ export function GameDetailPage() {
         isDownloading={isDownloading}
         isFullBackupUploading={fullBackupUploadingGameId === game.id}
         onPlay={isSteamCatalogOnly ? undefined : handlePlay}
+        onOpenGraph={isSteamCatalogOnly ? undefined : handleOpenGraph}
         onOpenFolder={isSteamCatalogOnly ? undefined : handleOpenFolder}
         onEdit={isSteamCatalogOnly ? undefined : setGameToEdit}
         onTorrent={isSteamCatalogOnly ? undefined : setGameForTorrent}

@@ -1,5 +1,5 @@
 import { Button, Dropdown, DropdownTrigger } from "@heroui/react";
-import { ChevronDown, Play } from "lucide-react";
+import { ChevronDown, Network, Play } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import type { GameActionsMenuModelProps } from "@features/games/game-actions";
 import { GameActionsDropdownMenu } from "@features/games/game-actions";
@@ -7,6 +7,8 @@ import { GameActionsDropdownMenu } from "@features/games/game-actions";
 export type GameDetailActionsProps = Omit<GameActionsMenuModelProps, "surface"> & {
   /** Lanza el .exe configurado en el drawer (Ejecución). Deshabilitado si no hay ruta. */
   onPlay?: (game: ConfiguredGame) => void;
+  /** Abre el mapa visual del juego. */
+  onOpenGraph?: (game: ConfiguredGame) => void;
 };
 
 export function GameDetailActions({
@@ -17,6 +19,7 @@ export function GameDetailActions({
   isDownloading,
   isFullBackupUploading,
   onPlay,
+  onOpenGraph,
   ...menuProps
 }: GameDetailActionsProps) {
   const canPlay = Boolean(game.launchExecutablePath?.trim());
@@ -27,7 +30,7 @@ export function GameDetailActions({
       ? "El juego parece estar en ejecución"
       : undefined;
 
-  const hasActions = Boolean(menuProps.onEdit || menuProps.onRemove || menuProps.onOpenFolder);
+  const hasActions = Boolean(menuProps.onEdit || menuProps.onRemove || menuProps.onOpenFolder || onOpenGraph);
 
   if (!onPlay && !hasActions) {
     return null;
@@ -44,6 +47,12 @@ export function GameDetailActions({
           title={playTitle}
           onPress={() => onPlay(game)}>
           Jugar
+        </Button>
+      )}
+
+      {onOpenGraph && (
+        <Button variant="flat" startContent={<Network size={16} />} onPress={() => onOpenGraph(game)}>
+          Ver mapa
         </Button>
       )}
 

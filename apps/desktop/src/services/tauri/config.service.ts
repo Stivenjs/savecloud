@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Config } from "@app-types/config";
+import type { GameSaveGraph } from "@app-types/saveGraph";
 
 export interface PluginLogEntry {
   timestamp: string;
@@ -550,6 +551,11 @@ export interface OperationLogEntry {
 /** Lista el historial de operaciones */
 export async function listOperationHistory(): Promise<OperationLogEntry[]> {
   return invoke<OperationLogEntry[]>("list_operation_history");
+}
+
+/** Devuelve el mapa visual de guardados de un juego concreto. */
+export async function getGameSaveGraph(gameId: string): Promise<GameSaveGraph> {
+  return invoke<GameSaveGraph>("get_game_save_graph", { gameId });
 }
 
 /** Escanea el sistema en busca de carpetas candidatas para guardados */

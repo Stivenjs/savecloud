@@ -19,7 +19,9 @@ export interface GameDetailActionStripProps extends GameDetailActionsProps {
 
 export function GameDetailActionStrip({ stats, isGameRunning, ...actionsProps }: GameDetailActionStripProps) {
   const hasMeta = isGameRunning || !!stats;
-  const hasActions = Boolean(actionsProps.onPlay || actionsProps.onEdit || actionsProps.onRemove);
+  const hasActions = Boolean(
+    actionsProps.onPlay || actionsProps.onOpenGraph || actionsProps.onEdit || actionsProps.onRemove
+  );
 
   if (!hasActions && !hasMeta) {
     return null;

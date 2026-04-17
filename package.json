@@ -23,6 +23,7 @@
     "cargo:clean": "bun run --cwd apps/desktop/src-tauri cargo clean",
     "version": "bun run scripts/sync-version.ts",
     "format": "bunx prettier . --write \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
+    "format:changed": "bun run scripts/format-changed.ts",
     "prepare": "husky"
   },
   "lint-staged": {

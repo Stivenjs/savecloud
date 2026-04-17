@@ -19,7 +19,7 @@ export const SteamCatalogPagination = memo(function SteamCatalogPagination({
   }
 
   return (
-    <div className="flex flex-col items-center gap-2 pt-4 cursor-pointer">
+    <div className="flex flex-col items-center gap-2 pt-6 pb-2 cursor-pointer">
       <Pagination
         aria-label="Páginas del catálogo"
         total={totalPages}
@@ -33,6 +33,9 @@ export const SteamCatalogPagination = memo(function SteamCatalogPagination({
         isDisabled={isDisabled}
         boundaries={1}
         siblings={1}
+        classNames={{
+          wrapper: "shadow-sm",
+        }}
       />
     </div>
   );

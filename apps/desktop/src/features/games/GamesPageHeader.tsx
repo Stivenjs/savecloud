@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button, Dropdown, DropdownItem, DropdownMenu, DropdownTrigger, Spinner } from "@heroui/react";
-import { ChevronDown, CloudDownload, CloudUpload, Search, Plus, Zap, RefreshCw } from "lucide-react";
+import { ChevronDown, CloudDownload, CloudUpload, Network, Search, Plus, Zap, RefreshCw } from "lucide-react";
 import { useNavigable } from "@features/input/useNavigable";
 import { useNavigationStore } from "@features/input/store";
 import { getGamepadFocusClass } from "@features/input/styles";
@@ -15,6 +15,7 @@ interface GamesPageHeaderProps {
   onDownloadAllPress: () => void;
   onSyncAllPress: () => void;
   onRefreshPress: () => void;
+  onSaveGraphPress: () => void;
   isRefreshing?: boolean;
 }
 
@@ -28,6 +29,7 @@ export function GamesPageHeader({
   onDownloadAllPress,
   onSyncAllPress,
   onRefreshPress,
+  onSaveGraphPress,
   isRefreshing = false,
 }: GamesPageHeaderProps) {
   const isOperationRunning = !!syncing || !!downloading;
@@ -47,6 +49,7 @@ export function GamesPageHeader({
   const navScan = useNavigable({ id: "btn-scan", onPress: onScanPress });
   const navAdd = useNavigable({ id: "btn-add", onPress: onAddPress });
   const navRefresh = useNavigable({ id: "btn-refresh", onPress: onRefreshPress });
+  const navGraph = useNavigable({ id: "btn-save-graph", onPress: onSaveGraphPress });
 
   const navDropdownTrigger = useNavigable({
     id: "btn-dropdown",
@@ -85,6 +88,15 @@ export function GamesPageHeader({
         </Button>
 
         {/* CTA principal */}
+
+        <Button
+          variant="flat"
+          startContent={<Network size={18} />}
+          onPress={onSaveGraphPress}
+          className={`h-10 min-w-[150px] ${getGamepadFocusClass(navGraph.isFocused, navGraph.inputMode)}`}
+          {...navGraph.navProps}>
+          Mapa general
+        </Button>
         <Button
           color="primary"
           startContent={<Plus size={18} />}
