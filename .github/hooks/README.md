@@ -6,15 +6,9 @@ Agent hooks automate code quality checks, security validation, and context injec
 
 ### format.json
 **Event**: `PostToolUse`
-**Command**: `bun run format`
+**Command**: `bun run format:changed`
 **Timeout**: 60s
-**Purpose**: Automatically format all modified code files using Prettier after the agent edits them.
-
-### lint.json
-**Event**: `PostToolUse`
-**Command**: `bun run lint`
-**Timeout**: 45s
-**Purpose**: Run ESLint on backend TypeScript files after modifications to catch style/error violations.
+**Purpose**: Automatically format only the files modified in the current git worktree using Prettier after the agent edits them.
 
 ### build-check.json
 **Event**: `PostToolUse`

@@ -1,6 +1,8 @@
 import {
   GamesPage,
   GameDetailPage,
+  LibrarySaveGraphPage,
+  GameSaveGraphPage,
   SteamCatalogPage,
   FriendsPage,
   HistoryPage,
@@ -17,6 +19,8 @@ export interface RouteConfig {
 export const routeConfig: RouteConfig[] = [
   { path: "/", element: <GamesPage /> },
   { path: "/games/:gameId", element: <GameDetailPage /> },
+  { path: "/graph", element: <LibrarySaveGraphPage /> },
+  { path: "/games/:gameId/graph", element: <GameSaveGraphPage /> },
   { path: "/catalog", element: <SteamCatalogPage /> },
   { path: "/friends", element: <FriendsPage /> },
   { path: "/history", element: <HistoryPage /> },

@@ -5,6 +5,18 @@ export const GamesPage = lazy(() => import("@features/games").then((m) => ({ def
 
 export const GameDetailPage = lazy(() => preloadGameDetailModule().then((m) => ({ default: m.GameDetailPage })));
 
+export const LibrarySaveGraphPage = lazy(() =>
+  import("@features/save-graph").then((m) => ({
+    default: m.LibrarySaveGraphPage,
+  }))
+);
+
+export const GameSaveGraphPage = lazy(() =>
+  import("@features/save-graph").then((m) => ({
+    default: m.GameSaveGraphPage,
+  }))
+);
+
 export const SteamCatalogPage = lazy(() =>
   import("@features/steam-catalog/pages/SteamCatalogPage").then((m) => ({
     default: m.SteamCatalogPage,

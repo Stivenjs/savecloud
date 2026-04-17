@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button, Spinner } from "@heroui/react";
 import { RefreshCw } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
+import { useNavigate } from "react-router-dom";
 import { DownloadAllConflictModal } from "@features/games/DownloadAllConflictModal";
 import { GameDrawer } from "@features/games/GameDrawer";
 import { GameTorrentDrawer } from "@features/games/GameTorrentDrawer";
@@ -27,6 +28,7 @@ import { useNavigationStore } from "@features/input/store";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 
 export function GamesPage() {
+  const navigate = useNavigate();
   const pushLayer = useNavigationStore((state) => state.pushLayer);
   const popLayer = useNavigationStore((state) => state.popLayer);
   const {
@@ -205,6 +207,7 @@ export function GamesPage() {
             onDownloadAllPress={openDownloadAllConfirm}
             onSyncAllPress={openSyncAllConfirm}
             onRefreshPress={handleRefresh}
+            onSaveGraphPress={() => navigate("/graph")}
             isRefreshing={refreshing}
           />
 

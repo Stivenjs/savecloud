@@ -3,7 +3,7 @@
     "PostToolUse": [
       {
         "type": "command",
-        "command": "bun run format",
+        "command": "bun run format:changed",
         "cwd": ".",
         "timeout": 60,
         "env": {

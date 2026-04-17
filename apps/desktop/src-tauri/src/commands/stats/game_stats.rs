@@ -8,7 +8,9 @@
 //! - Calcular estadísticas locales para una lista de rutas de un juego.
 
 use crate::commands::sync;
+use crate::commands::sync::full_backup;
 use crate::config;
+use crate::config::OperationLogEntry;
 use futures_util::future::join_all;
 use regex::Regex;
 use serde::Serialize;
@@ -25,6 +27,262 @@ pub struct GameStatsDto {
     pub local_last_modified: Option<String>,
     pub cloud_last_modified: Option<String>,
     pub playtime_seconds: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveGraphNodeDto {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub subtitle: Option<String>,
+    pub metric: Option<String>,
+    pub status: Option<String>,
+    pub tone: String,
+    pub timestamp: Option<String>,
+    pub game_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveGraphEdgeDto {
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    pub relation: String,
+    #[serde(default)]
+    pub animated: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameSaveGraphDto {
+    pub scope: String,
+    pub game_id: String,
+    pub title: String,
+    pub subtitle: String,
+    pub generated_at: String,
+    pub nodes: Vec<SaveGraphNodeDto>,
+    pub edges: Vec<SaveGraphEdgeDto>,
+}
+
+fn parse_timestamp(value: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .or_else(|_| chrono::DateTime::parse_from_rfc2822(value))
+        .ok()
+        .map(|d| d.with_timezone(&chrono::Utc))
+}
+
+fn format_tone(kind: &str) -> &'static str {
+    match kind {
+        "biblioteca" => "indigo",
+        "juego" => "emerald",
+        "actividad" => "slate",
+        "respaldo" => "amber",
+        "resumen" => "rose",
+        _ => "slate",
+    }
+}
+
+fn operation_label(kind: &str) -> &'static str {
+    match kind.to_ascii_lowercase().as_str() {
+        "upload" => "Subida",
+        "download" => "Descarga",
+        "copy_friend" => "Copia de amigo",
+        _ => "Actividad",
+    }
+}
+
+fn operation_status(entry: &OperationLogEntry) -> &'static str {
+    if entry.err_count > 0 {
+        "Con errores"
+    } else {
+        "Correcto"
+    }
+}
+
+fn build_game_node(
+    game_id: &str,
+    title: String,
+    subtitle: String,
+    metric: String,
+) -> SaveGraphNodeDto {
+    SaveGraphNodeDto {
+        id: format!("juego:{}", game_id),
+        kind: "juego".to_string(),
+        title,
+        subtitle: Some(subtitle),
+        metric: Some(metric),
+        status: Some("Nodo principal".to_string()),
+        tone: format_tone("juego").to_string(),
+        timestamp: None,
+        game_id: Some(game_id.to_string()),
+    }
+}
+
+fn build_operation_node(
+    game_id: &str,
+    index: usize,
+    entry: &OperationLogEntry,
+) -> SaveGraphNodeDto {
+    SaveGraphNodeDto {
+        id: format!("actividad:{}:{}", game_id, index),
+        kind: "actividad".to_string(),
+        title: operation_label(&entry.kind).to_string(),
+        subtitle: Some(format!(
+            "{} archivos · {}",
+            entry.file_count,
+            operation_status(entry)
+        )),
+        metric: Some(entry.timestamp.clone()),
+        status: Some(operation_status(entry).to_string()),
+        tone: format_tone("actividad").to_string(),
+        timestamp: Some(entry.timestamp.clone()),
+        game_id: Some(game_id.to_string()),
+    }
+}
+
+fn build_backup_node(
+    game_id: &str,
+    key: &str,
+    title: String,
+    subtitle: String,
+    metric: String,
+    timestamp: String,
+) -> SaveGraphNodeDto {
+    SaveGraphNodeDto {
+        id: format!("respaldo:{}:{}", game_id, key),
+        kind: "respaldo".to_string(),
+        title,
+        subtitle: Some(subtitle),
+        metric: Some(metric),
+        status: Some("Respaldo completo".to_string()),
+        tone: format_tone("respaldo").to_string(),
+        timestamp: Some(timestamp),
+        game_id: Some(game_id.to_string()),
+    }
+}
+
+fn build_edge(source: &str, target: &str, relation: &str, animated: bool) -> SaveGraphEdgeDto {
+    SaveGraphEdgeDto {
+        id: format!("{}->{}:{}", source, target, relation),
+        source: source.to_string(),
+        target: target.to_string(),
+        relation: relation.to_string(),
+        animated,
+    }
+}
+
+async fn build_game_save_graph(game_id: &str) -> Result<GameSaveGraphDto, String> {
+    let cfg = config::load_config();
+    let game = cfg
+        .games
+        .iter()
+        .find(|g| g.id.eq_ignore_ascii_case(game_id))
+        .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
+
+    let history = config::load_history();
+    let mut operations: Vec<OperationLogEntry> = history
+        .entries
+        .into_iter()
+        .filter(|e| e.game_id.eq_ignore_ascii_case(game_id))
+        .collect();
+    operations.sort_by(|a, b| {
+        let a_dt = parse_timestamp(&a.timestamp)
+            .map(|d| d.timestamp())
+            .unwrap_or(0);
+        let b_dt = parse_timestamp(&b.timestamp)
+            .map(|d| d.timestamp())
+            .unwrap_or(0);
+        a_dt.cmp(&b_dt)
+    });
+
+    let backups = full_backup::list_full_backups(game_id.to_string())
+        .await
+        .unwrap_or_default();
+
+    let root_id = format!("juego:{}", game_id);
+    let game_title = game
+        .edition_label
+        .as_ref()
+        .filter(|v| !v.trim().is_empty())
+        .cloned()
+        .unwrap_or_else(|| game.id.clone());
+    let mut nodes = vec![build_game_node(
+        game_id,
+        game_title,
+        "Vista detallada de guardados".to_string(),
+        format!("{} eventos", operations.len()),
+    )];
+    let mut edges = Vec::new();
+
+    let mut previous_operation_id: Option<String> = None;
+    for (index, entry) in operations.iter().enumerate() {
+        let node = build_operation_node(game_id, index, entry);
+        let node_id = node.id.clone();
+        nodes.push(node);
+        edges.push(build_edge(&root_id, &node_id, "cronologia", index % 2 == 0));
+
+        if let Some(previous_id) = previous_operation_id.as_ref() {
+            edges.push(build_edge(previous_id, &node_id, "cronologia", true));
+        }
+        previous_operation_id = Some(node_id);
+    }
+
+    let operation_lookup: Vec<(String, chrono::DateTime<chrono::Utc>)> = operations
+        .iter()
+        .filter_map(|entry| {
+            parse_timestamp(&entry.timestamp).map(|dt| (entry.timestamp.clone(), dt))
+        })
+        .collect();
+
+    for backup in backups {
+        let backup_dt = parse_timestamp(&backup.last_modified).unwrap_or_else(chrono::Utc::now);
+        let node = build_backup_node(
+            game_id,
+            &backup.key,
+            "Respaldo completo".to_string(),
+            format!("{} archivos", backup.filename),
+            backup
+                .size
+                .map(|size| format!("{:.1} MB", size as f64 / (1024.0 * 1024.0)))
+                .unwrap_or_else(|| "Tamaño desconocido".to_string()),
+            backup.last_modified,
+        );
+        let node_id = node.id.clone();
+        nodes.push(node);
+        edges.push(build_edge(&root_id, &node_id, "respaldo", false));
+
+        if let Some((_, nearest_dt)) = operation_lookup
+            .iter()
+            .rev()
+            .find(|(_, dt)| *dt <= backup_dt)
+        {
+            if let Some(operation_node) =
+                operations.iter().enumerate().find_map(|(index, entry)| {
+                    parse_timestamp(&entry.timestamp).and_then(|dt| {
+                        if dt.timestamp() == nearest_dt.timestamp() {
+                            Some(format!("actividad:{}:{}", game_id, index))
+                        } else {
+                            None
+                        }
+                    })
+                })
+            {
+                edges.push(build_edge(&operation_node, &node_id, "respaldo", false));
+            }
+        }
+    }
+
+    Ok(GameSaveGraphDto {
+        scope: "juego".to_string(),
+        game_id: game_id.to_string(),
+        title: game.id.clone(),
+        subtitle: "Datos y backups del juego".to_string(),
+        generated_at: chrono::Utc::now().to_rfc3339(),
+        nodes,
+        edges,
+    })
 }
 
 /// Expande variables de entorno como %APPDATA% o ~ en rutas.
@@ -45,7 +303,7 @@ fn expand_path(raw: &str) -> Option<PathBuf> {
             result = if rest.is_empty() {
                 home
             } else {
-                format!("{}/{}", home.trim_end_matches(&['/', '\\']), rest)
+                format!("{}/{}", home.trim_end_matches(['/', '\\']), rest)
             };
         }
     }
@@ -71,12 +329,10 @@ fn collect_files_with_meta(dir: &Path, base: &Path, out: &mut Vec<(u64, std::tim
             if !e.file_name().to_string_lossy().starts_with('.') {
                 collect_files_with_meta(&full, base, out);
             }
-        } else if meta.is_file() {
-            if full.strip_prefix(base).is_ok() {
-                let size = meta.len();
-                let mtime = meta.modified().unwrap_or(UNIX_EPOCH);
-                out.push((size, mtime));
-            }
+        } else if meta.is_file() && full.strip_prefix(base).is_ok() {
+            let size = meta.len();
+            let mtime = meta.modified().unwrap_or(UNIX_EPOCH);
+            out.push((size, mtime));
         }
     }
 }
@@ -202,4 +458,14 @@ pub async fn get_game_stats() -> Result<Vec<GameStatsDto>, String> {
     }
 
     Ok(result)
+}
+
+/// Devuelve el mapa visual de guardados de un juego concreto.
+#[tauri::command]
+pub async fn get_game_save_graph(game_id: String) -> Result<GameSaveGraphDto, String> {
+    let game_id = game_id.trim();
+    if game_id.is_empty() {
+        return Err("El gameId no puede estar vacío".to_string());
+    }
+    build_game_save_graph(game_id).await
 }
