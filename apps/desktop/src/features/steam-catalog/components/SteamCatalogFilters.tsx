@@ -162,8 +162,10 @@ export function SteamCatalogFilters({
 
   return (
     <div className="space-y-3 rounded-xl border border-default-200/80 bg-content1 p-3 shadow-sm dark:border-default-100/15">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-default-500">Filtros</p>
+      <div
+        className="flex items-center justify-between gap-2 pb-1 
+                border-b border-default-200/60 dark:border-default-100/10">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-default-400">Filtros</p>
         {hasSelection ? (
           <Button
             size="sm"
@@ -171,7 +173,14 @@ export function SteamCatalogFilters({
             color="warning"
             className="h-7 min-w-0 px-2 text-xs"
             onPress={handleClearAll}>
-            Quitar filtros
+            <span className="flex items-center gap-1.5">
+              <span
+                className="flex size-4 items-center justify-center rounded-full 
+                         bg-warning text-[10px] font-bold text-warning-foreground">
+                {selectedGenres.length + selectedTags.length}
+              </span>
+              Quitar filtros
+            </span>
           </Button>
         ) : null}
       </div>

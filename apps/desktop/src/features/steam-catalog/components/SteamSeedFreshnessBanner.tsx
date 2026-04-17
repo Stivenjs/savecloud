@@ -48,6 +48,13 @@ const toneClass: Record<"success" | "warning" | "neutral" | "danger", string> = 
     "border border-danger-300/90 bg-danger-100 text-zinc-900 dark:border-danger-500/45 dark:bg-danger-950/90 dark:text-red-50",
 };
 
+const toneBar: Record<"success" | "warning" | "neutral" | "danger", string> = {
+  success: "border-l-4 border-l-success-500",
+  warning: "border-l-4 border-l-amber-400",
+  neutral: "border-l-4 border-l-default-400",
+  danger: "border-l-4 border-l-danger-500",
+};
+
 const iconClass: Record<"success" | "warning" | "neutral" | "danger", string> = {
   success: "text-green-700 dark:text-green-300",
   warning: "text-amber-800 dark:text-amber-300",
@@ -72,11 +79,14 @@ export function SteamSeedFreshnessBanner() {
 
   return (
     <div
-      className={`flex max-w-3xl flex-wrap items-start gap-3 rounded-medium px-3 py-3 text-sm leading-relaxed shadow-sm ${toneClass[tone]}`}
-      role="status"
-      aria-live="polite">
-      <Icon className={`mt-0.5 size-4.5 shrink-0 ${iconClass[tone]}`} aria-hidden strokeWidth={2.25} />
-      <p className="min-w-0 flex-1 font-medium">{text}</p>
+      className={`
+      flex max-w-3xl flex-wrap items-start gap-3 
+      rounded-medium px-4 py-3 text-sm leading-relaxed shadow-sm
+      ${toneClass[tone]} ${toneBar[tone]}
+      transition-all duration-300
+        `}>
+      <Icon className={`mt-0.5 size-5 shrink-0 ${iconClass[tone]}`} aria-hidden strokeWidth={2} />
+      <p className="min-w-0 flex-1 font-medium text-[13px] leading-relaxed">{text}</p>
       <Button
         size="sm"
         variant="flat"

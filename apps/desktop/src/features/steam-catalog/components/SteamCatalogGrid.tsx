@@ -53,25 +53,40 @@ const CatalogGridItem = memo(function CatalogGridItem({
   return (
     <GamesListMotionItem key={game.id}>
       <div className="space-y-2">
-        <GameCard
-          variant="catalog"
-          game={game}
-          cardTitle={item.name}
-          mediaBySteamAppId={mediaBySteamAppId ?? null}
-          mediaFromBatch
-          onCardNavigate={libraryGame ? () => navigate(`/games/${libraryGame.id}`) : undefined}
-        />
+        <div
+          className="overflow-hidden rounded-xl ring-1 ring-transparent 
+                    transition-all duration-200 
+                    group-hover/card:ring-primary/30 
+                    group-hover/card:shadow-lg group-hover/card:shadow-primary/10
+                    group-hover/card:-translate-y-0.5">
+          <GameCard
+            variant="catalog"
+            game={game}
+            cardTitle={item.name}
+            mediaBySteamAppId={mediaBySteamAppId ?? null}
+            mediaFromBatch
+            onCardNavigate={libraryGame ? () => navigate(`/games/${libraryGame.id}`) : undefined}
+          />
+        </div>
         <div className="min-h-8 space-y-2">
           {isMatchingPending ? (
-            <div className="h-8 w-full animate-pulse rounded-medium bg-default-200/70" />
+            <div
+              className="h-8 w-full rounded-medium 
+                    bg-linear-to-r from-default-200/70 via-default-100/50 to-default-200/70 
+                    bg-size-[200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
+            />
           ) : libraryGame ? (
             <Button
               size="sm"
               color="success"
               variant="flat"
-              className="h-8 w-full font-medium"
-              onPress={() => navigate(`/games/${libraryGame.id}`)}>
-              En Biblioteca
+              className="h-8 w-full font-medium 
+                 border-success-300/60 dark:border-success-500/30
+                 transition-colors duration-150">
+              <span className="flex items-center gap-1.5">
+                <span className="size-1.5 rounded-full bg-success-500 animate-pulse" />
+                En Biblioteca
+              </span>
             </Button>
           ) : best ? (
             <>
@@ -95,7 +110,15 @@ const CatalogGridItem = memo(function CatalogGridItem({
                   ))}
                 </Select>
               ) : null}
-              <Button size="sm" color="primary" className="h-8 w-full" onPress={() => onInstall(item.name)}>
+              <Button
+                size="sm"
+                color="primary"
+                className="h-8 w-full font-semibold tracking-wide 
+                 shadow-sm shadow-primary/20 
+                 transition-all duration-150
+                 hover:shadow-md hover:shadow-primary/30 
+                 hover:brightness-110 active:scale-[0.98]"
+                onPress={() => onInstall(item.name)}>
                 Instalar
               </Button>
             </>
