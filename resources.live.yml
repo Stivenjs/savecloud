@@ -20,10 +20,6 @@ Resources:
             Status: Enabled
             Prefix: share-tokens/
             ExpirationInDays: 7
-          - Id: ExpireCloudInvites7Days
-            Status: Enabled
-            Prefix: cloud-invites/
-            ExpirationInDays: 7
 
   CloudFrontOriginAccessIdentity:
     Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
