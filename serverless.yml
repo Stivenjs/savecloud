@@ -33,7 +33,11 @@ provider:
         type: request
         functionName: apiAuthorizer
         enableSimpleResponses: true
-        resultTtlInSeconds: 0
+        authorizerPayloadFormatVersion: "2.0"
+        resultTtlInSeconds: 60
+        identitySource:
+          - "$request.header.x-api-key"
+          - "$request.header.x-user-id"
 
   iam:
     role:
