@@ -1,5 +1,5 @@
 import dagre from "dagre";
-import type { Edge, Node } from "reactflow";
+import { MarkerType, type Edge, type Node } from "reactflow";
 import { formatBytes, formatPlaytime, formatRelativeDate } from "@utils/format";
 import { formatGameDisplayName } from "@utils/gameImage";
 import type { Config } from "@app-types/config";
@@ -127,6 +127,7 @@ export function mapGameSaveGraphToModel(graph: GameSaveGraph): SaveGraphModel {
     ...graph,
     nodes: graph.nodes.map((node) => ({
       ...node,
+      title: node.kind === "juego" && node.gameId ? formatGameDisplayName(node.gameId) : node.title,
       gameId: node.gameId ? formatGameDisplayName(node.gameId) : null,
       metric: formatMetric(node.metric),
     })),
@@ -313,9 +314,11 @@ function layoutGraph(nodes: Node<SaveGraphFlowNodeData>[], edges: Edge[]): Node<
   graph.setDefaultEdgeLabel(() => ({}));
   graph.setGraph({
     rankdir: "TB",
-    ranksep: 72,
-    nodesep: 36,
-    edgesep: 20,
+    ranksep: 128,
+    nodesep: 54,
+    edgesep: 36,
+    marginx: 40,
+    marginy: 56,
   });
 
   nodes.forEach((node) => {
@@ -370,10 +373,32 @@ export function toReactFlowGraph(model: SaveGraphModel): {
     id: edge.id,
     source: edge.source,
     target: edge.target,
+    type: "smoothstep",
     animated: edge.animated ?? edge.relation === "actividad",
     label: edge.relation,
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      width: 14,
+      height: 14,
+      color: "rgba(148, 163, 184, 0.55)",
+    },
     style: {
-      strokeWidth: 1.6,
+      strokeWidth: 1.8,
+      strokeLinecap: "round",
+      opacity: 0.78,
+    },
+    labelBgPadding: [8, 4],
+    labelBgBorderRadius: 999,
+    labelBgStyle: {
+      fill: "rgba(15, 23, 42, 0.82)",
+      color: "#e2e8f0",
+    },
+    labelStyle: {
+      fill: "#cbd5e1",
+      fontSize: 10,
+      fontWeight: 600,
+      letterSpacing: "0.16em",
+      textTransform: "uppercase",
     },
   }));
 
