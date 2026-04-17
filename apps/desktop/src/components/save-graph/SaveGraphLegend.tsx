@@ -11,7 +11,7 @@ export function SaveGraphLegend() {
         <span className="rounded-full border border-warning/30 bg-warning/15 px-3 py-1">Respaldo</span>
         <span className="rounded-full border border-secondary/30 bg-secondary/15 px-3 py-1">Biblioteca</span>
         <span className="rounded-full border border-divider bg-content2 px-3 py-1">Cronología</span>
-        <span className="rounded-full border border-divider bg-content2 px-3 py-1">Respaldo (arista)</span>
+        <span className="rounded-full border border-divider bg-content2 px-3 py-1">Respaldo</span>
       </div>
     </section>
   );
