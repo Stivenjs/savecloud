@@ -50,6 +50,7 @@ Resources:
       DistributionConfig:
         Comment: "CloudFront Distribution para SaveCloud (${sls:stage})"
         Enabled: true
+        HttpVersion: http3
         Origins:
           - Id: S3Origin
             DomainName:

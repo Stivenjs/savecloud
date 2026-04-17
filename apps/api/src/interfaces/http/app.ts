@@ -49,6 +49,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   const app = Fastify({ logger: true });
 
   await app.register(cors, { origin: true });
+  await app.register(import("@fastify/compress"));
 
   const expectedApiKey = process.env.API_KEY;
 
