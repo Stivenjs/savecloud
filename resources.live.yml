@@ -20,10 +20,6 @@ Resources:
             Status: Enabled
             Prefix: share-tokens/
             ExpirationInDays: 7
-          - Id: ExpireCloudInvites7Days
-            Status: Enabled
-            Prefix: cloud-invites/
-            ExpirationInDays: 7
 
   CloudFrontOriginAccessIdentity:
     Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
@@ -52,7 +48,9 @@ Resources:
     Type: AWS::CloudFront::Distribution
     Properties:
       DistributionConfig:
+        Comment: "CloudFront Distribution para SaveCloud (${sls:stage})"
         Enabled: true
+        HttpVersion: http3
         Origins:
           - Id: S3Origin
             DomainName:
@@ -72,8 +70,15 @@ Resources:
             QueryString: false
             Cookies:
               Forward: none
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN:
+                Fn::GetAtt: [CloudFrontAllowBackupsOnlyFunction, FunctionARN]
         ViewerCertificate:
           CloudFrontDefaultCertificate: true
+      Tags:
+        - Key: Name
+          Value: "savecloud-distro-${sls:stage}"
 
   CloudFrontAllowBackupsOnlyFunction:
     Type: AWS::CloudFront::Function

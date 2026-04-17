@@ -14,6 +14,7 @@ provider:
   runtime: nodejs24.x
   region: us-east-2
   stage: ${opt:stage, 'dev'}
+  architecture: arm64
   environment:
     BUCKET_NAME: { Ref: SavesBucket }
     API_KEY: ${env:SYNC_GAMES_API_KEY, ''}
@@ -32,7 +33,11 @@ provider:
         type: request
         functionName: apiAuthorizer
         enableSimpleResponses: true
-        resultTtlInSeconds: 0
+        authorizerPayloadFormatVersion: "2.0"
+        resultTtlInSeconds: 60
+        identitySource:
+          - "$request.header.x-api-key"
+          - "$request.header.x-user-id"
 
   iam:
     role:
