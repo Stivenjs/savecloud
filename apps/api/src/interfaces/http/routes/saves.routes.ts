@@ -39,6 +39,7 @@ import type { GetDownloadUrlUseCase } from "@application/use-cases/GetDownloadUr
 import type { GetDownloadUrlsUseCase } from "@application/use-cases/GetDownloadUrlsUseCase";
 import type { DeleteGameFromCloudUseCase } from "@application/use-cases/DeleteGameFromCloudUseCase";
 import type { RenameGameInCloudUseCase } from "@application/use-cases/RenameGameInCloudUseCase";
+import type { GetGameSummaryUseCase } from "@application/use-cases/GetGameSummaryUseCase";
 import type { ListBackupsUseCase } from "@application/use-cases/ListBackupsUseCase";
 import type { DeleteBackupUseCase } from "@application/use-cases/DeleteBackupUseCase";
 import type { RenameBackupUseCase } from "@application/use-cases/RenameBackupUseCase";
@@ -97,6 +98,7 @@ export async function registerSavesRoutes(
     deleteGameFromCloudUseCase: DeleteGameFromCloudUseCase;
     renameGameInCloudUseCase: RenameGameInCloudUseCase;
     listSavesUseCase: ListSavesUseCase;
+    getGameSummaryUseCase?: GetGameSummaryUseCase;
     listBackupsUseCase: ListBackupsUseCase;
     deleteBackupUseCase: DeleteBackupUseCase;
     renameBackupUseCase: RenameBackupUseCase;
@@ -152,35 +154,43 @@ export async function registerSavesRoutes(
     const cached = savesSummaryCache.get(userId);
     if (cached) return reply.send(cached);
 
-    const saves = await deps.listSavesUseCase.execute({ userId });
+    let summary;
 
-    type Agg = { fileCount: number; totalSize: number; lastModified: Date | null };
-    const byGame = new Map<string, Agg>();
+    if (deps.getGameSummaryUseCase) {
+      summary = await deps.getGameSummaryUseCase.execute(userId);
+      summary = summary.map((s) => ({
+        gameId: s.gameId,
+        fileCount: s.fileCount,
+        totalSizeBytes: s.totalSizeBytes,
+        lastModified: s.lastModified ? s.lastModified.toISOString() : null,
+      }));
+    } else {
+      const saves = await deps.listSavesUseCase.execute({ userId });
+      type Agg = { fileCount: number; totalSize: number; lastModified: Date | null };
+      const byGame = new Map<string, Agg>();
 
-    for (const s of saves) {
-      const key = s.gameId;
-      const existing = byGame.get(key) ?? { fileCount: 0, totalSize: 0, lastModified: null };
-      const size = s.size ?? 0;
-      const lm = s.lastModified;
+      for (const s of saves) {
+        const key = s.gameId;
+        const existing = byGame.get(key) ?? { fileCount: 0, totalSize: 0, lastModified: null };
+        const nextLast =
+          existing.lastModified == null || (s.lastModified && s.lastModified > existing.lastModified)
+            ? (s.lastModified ?? existing.lastModified)
+            : existing.lastModified;
 
-      const nextLast =
-        existing.lastModified == null || (lm && lm > existing.lastModified)
-          ? (lm ?? existing.lastModified)
-          : existing.lastModified;
+        byGame.set(key, {
+          fileCount: existing.fileCount + 1,
+          totalSize: existing.totalSize + (s.size ?? 0),
+          lastModified: nextLast,
+        });
+      }
 
-      byGame.set(key, {
-        fileCount: existing.fileCount + 1,
-        totalSize: existing.totalSize + size,
-        lastModified: nextLast,
-      });
+      summary = Array.from(byGame.entries()).map(([gameId, agg]) => ({
+        gameId,
+        fileCount: agg.fileCount,
+        totalSizeBytes: agg.totalSize,
+        lastModified: agg.lastModified ? agg.lastModified.toISOString() : null,
+      }));
     }
-
-    const summary = Array.from(byGame.entries()).map(([gameId, agg]) => ({
-      gameId,
-      fileCount: agg.fileCount,
-      totalSizeBytes: agg.totalSize,
-      lastModified: agg.lastModified ? agg.lastModified.toISOString() : null,
-    }));
 
     savesSummaryCache.set(userId, summary);
     return reply.send(summary);

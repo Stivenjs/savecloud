@@ -147,7 +147,6 @@ functions:
     timeout: 30
     events:
       - eventBridge:
-          eventBus: default
           pattern:
             source:
               - aws.s3
