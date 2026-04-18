@@ -12,6 +12,14 @@ export interface ProfileDto {
   readonly cloudHostCount: number;
 }
 
+export interface CreateProfileInput {
+  readonly name: string;
+  readonly userId: string;
+  readonly apiBaseUrl: string;
+  readonly wsBaseUrl: string;
+  readonly apiKey: string;
+}
+
 export async function listProfilesCmd(): Promise<ProfileDto[]> {
   return invoke<ProfileDto[]>("list_profiles_cmd");
 }
@@ -22,6 +30,16 @@ export async function getActiveProfileCmd(): Promise<ProfileDto> {
 
 export async function setActiveProfileCmd(profileId: string): Promise<ProfileDto> {
   return invoke<ProfileDto>("set_active_profile_cmd", { profileId });
+}
+
+export async function createProfileCmd(input: CreateProfileInput): Promise<ProfileDto> {
+  return invoke<ProfileDto>("create_profile_cmd", {
+    name: input.name,
+    userId: input.userId,
+    apiBaseUrl: input.apiBaseUrl,
+    wsBaseUrl: input.wsBaseUrl,
+    apiKey: input.apiKey,
+  });
 }
 
 export async function getAlwaysShowSelectorCmd(): Promise<boolean> {

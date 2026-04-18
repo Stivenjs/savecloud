@@ -3,8 +3,9 @@
 //! Garantiza escrituras atómicas, carga del índice de perfiles,
 //! y manejo del archivo `profiles.json` en el directorio de configuración.
 
-use super::profiles::ProfilesIndex;
 use super::paths;
+use super::profile_defaults::ensure_default_profile;
+use super::profiles::ProfilesIndex;
 use std::fs;
 use std::path::PathBuf;
 
@@ -30,13 +31,20 @@ pub fn profiles_path() -> Result<PathBuf, String> {
 pub fn load_profiles_index() -> Result<ProfilesIndex, String> {
     let path = profiles_path()?;
 
-    if !path.exists() {
-        return Ok(ProfilesIndex::new());
+    let mut index = if !path.exists() {
+        ProfilesIndex::new()
+    } else {
+        let content =
+            fs::read_to_string(&path).map_err(|e| format!("Failed to read profiles.json: {e}"))?;
+        serde_json::from_str::<ProfilesIndex>(&content)
+            .map_err(|e| format!("Failed to parse profiles.json: {e}"))?
+    };
+
+    if ensure_default_profile(&mut index) {
+        save_profiles_index(&index)?;
     }
 
-    let content = fs::read_to_string(&path).map_err(|e| format!("Failed to read profiles.json: {e}"))?;
-    serde_json::from_str::<ProfilesIndex>(&content)
-        .map_err(|e| format!("Failed to parse profiles.json: {e}"))
+    Ok(index)
 }
 
 /// Guarda el índice de perfiles en disco con escritura atómica.

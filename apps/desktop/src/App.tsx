@@ -1,48 +1,39 @@
-import { MemoryRouter, useNavigate } from "react-router-dom";
-import { AppLayout, TransferOverlayRouter } from "@components/layout";
-import { AppRoutes } from "@router/AppRoutes";
-import { NAV_ITEMS } from "@components/navigation/navItems";
-import { TrayActionsListener } from "@components/sync/TrayActionsListener";
-import { UnsyncedSavesModalWithProgress } from "@features/games";
-import { useAppInitialization } from "@hooks/useAppInitialization";
-import { useProfileSessionHydration } from "@hooks/useProfileSession";
-import { useConfig } from "@hooks/useConfig";
-import type { ConfiguredGame } from "@app-types/config";
+import { Spinner } from "@heroui/react";
 import "@styles/App.css";
-
-function AppContent() {
-  const navigate = useNavigate();
-  const { config } = useConfig();
-
-  const games = config?.games ?? [];
-
-  const handleMenuGameClick = (game: ConfiguredGame) => {
-    navigate(`/games/${game.id}`);
-  };
-
-  return (
-    <AppLayout navItems={NAV_ITEMS} games={games} onMenuGameClick={handleMenuGameClick}>
-      <AppRoutes />
-    </AppLayout>
-  );
-}
+import { ProfileStartupSelector } from "@features/profile/ProfileStartupSelector";
+import { useProfileSessionHydration } from "@hooks/useProfileSession";
+import { AppRuntime } from "@/app/AppRuntime";
+import { useStartupProfileGate } from "@/app/hooks/useStartupProfileGate";
 
 function App() {
   useProfileSessionHydration();
-  useAppInitialization();
+  const gate = useStartupProfileGate();
 
-  return (
-    <>
-      <TrayActionsListener />
-      <UnsyncedSavesModalWithProgress />
+  const appReady = !gate.loading && !gate.visible;
 
-      <MemoryRouter>
-        <AppContent />
-      </MemoryRouter>
+  if (!appReady) {
+    if (gate.visible) {
+      return (
+        <ProfileStartupSelector
+          options={gate.options}
+          selectingId={gate.selectingId}
+          creatingProfile={gate.creatingProfile}
+          error={gate.error}
+          onSelect={gate.onSelectProfile}
+          onCreateProfile={gate.onCreateProfile}
+        />
+      );
+    }
 
-      <TransferOverlayRouter />
-    </>
-  );
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background text-default-500">
+        <Spinner />
+        <span className="ml-2">Cargando perfiles...</span>
+      </div>
+    );
+  }
+
+  return <AppRuntime />;
 }
 
 export default App;

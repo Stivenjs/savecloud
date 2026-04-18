@@ -10,6 +10,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+pub const DEFAULT_PROFILE_ID: &str = "config-default";
+
 /// Representa un perfil individual del usuario.
 ///
 /// Un perfil encapsula toda la configuración necesaria para un usuario local,
@@ -109,10 +111,10 @@ pub struct ProfilesIndex {
 
 impl ProfilesIndex {
     /// Crea un nuevo índice vacío.
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             profiles: Vec::new(),
-            active_profile_id: String::new(),
+            active_profile_id: DEFAULT_PROFILE_ID.to_string(),
             always_show_selector: false,
         }
     }

@@ -4,11 +4,12 @@
 //! eliminar perfiles, coordinando la persistencia con el Keyring del SO.
 
 use super::io::{
-    delete_secure_api_key_for_profile, get_secure_api_key_for_profile,
+    delete_secure_api_key_for_profile, get_global_secure_api_key, get_secure_api_key_for_profile,
     set_secure_api_key_for_profile,
 };
 use super::profile_io;
-use super::profiles::{Profile, ProfileDTO, ProfilesIndex};
+use super::profile_storage;
+use super::profiles::{Profile, ProfileDTO, ProfilesIndex, DEFAULT_PROFILE_ID};
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -137,13 +138,11 @@ impl ProfileManager {
         // Crear respaldo antes de un cambio persistente.
         profile_io::backup_profiles_index()?;
 
+        // Crear en disco la estructura vacía del nuevo perfil antes de activarlo.
+        profile_storage::initialize_profile_storage(&profile)?;
+
         // Añadir perfil al índice
         index.add_profile(profile.clone());
-
-        // Si es el primer perfil, hacerlo activo
-        if index.profiles.len() == 1 {
-            index.active_profile_id = profile_id;
-        }
 
         // Persitir cambios
         profile_io::save_profiles_index(index)?;
@@ -215,8 +214,13 @@ impl ProfileManager {
     /// # Errors
     /// Devuelve error si la API key no se encuentra en el Keyring.
     pub fn get_profile_api_key(profile_id: &str) -> Result<String, String> {
-        get_secure_api_key_for_profile(profile_id)
-            .ok_or_else(|| format!("API key not found for profile: {profile_id}"))
+        if profile_id == DEFAULT_PROFILE_ID {
+            get_global_secure_api_key()
+                .ok_or_else(|| format!("API key not found for profile: {profile_id}"))
+        } else {
+            get_secure_api_key_for_profile(profile_id)
+                .ok_or_else(|| format!("API key not found for profile: {profile_id}"))
+        }
     }
 
     /// Obtiene la API key del perfil activo.
