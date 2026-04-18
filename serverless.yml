@@ -63,6 +63,7 @@ provider:
             - dynamodb:PutItem
             - dynamodb:GetItem
             - dynamodb:DeleteItem
+            - dynamodb:UpdateItem
             - dynamodb:Query
           Resource:
             - Fn::GetAtt: [ActiveConnectionsTable, Arn]

@@ -7,6 +7,7 @@ import type { GameSave } from "@domain/entities/GameSave";
 export interface SaveFileIndexRepository {
   listByUser(userId: string): Promise<GameSave[]>;
   listByUserAndGame(userId: string, gameId: string): Promise<GameSave[]>;
+  getByObjectKey(userId: string, objectKey: string): Promise<GameSave | null>;
   upsert(input: {
     userId: string;
     gameId: string;

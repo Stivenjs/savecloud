@@ -1,5 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, PutCommand, DeleteCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, PutCommand, DeleteCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { GameStat } from "@domain/entities/GameStat";
 import type { GameStatRepository } from "@domain/ports/GameStatRepository";
 
@@ -61,5 +61,54 @@ export class DynamoDbGameStatRepository implements GameStatRepository {
         Key: { userId, gameId },
       })
     );
+  }
+
+  async applyDelta(input: {
+    userId: string;
+    gameId: string;
+    deltaFileCount: number;
+    deltaSizeBytes: number;
+    lastModified?: Date | null;
+  }): Promise<void> {
+    const { userId, gameId, deltaFileCount, deltaSizeBytes, lastModified } = input;
+
+    if (deltaFileCount === 0 && deltaSizeBytes === 0 && !lastModified) {
+      return;
+    }
+
+    let updateExpression = "ADD fileCount :df, totalSizeBytes :ds";
+    const expressionAttributeValues: Record<string, any> = {
+      ":df": deltaFileCount,
+      ":ds": deltaSizeBytes,
+    };
+
+    if (lastModified !== undefined) {
+      updateExpression += " SET #lm = :lm";
+      expressionAttributeValues[":lm"] = lastModified ? lastModified.toISOString() : null;
+    }
+
+    const updateInput = {
+      TableName: this.tableName,
+      Key: { userId, gameId },
+      UpdateExpression: updateExpression,
+      ExpressionAttributeValues: expressionAttributeValues,
+      ReturnValues: "ALL_NEW" as const,
+      ...(lastModified !== undefined
+        ? {
+            ExpressionAttributeNames: {
+              "#lm": "lastModified",
+            },
+          }
+        : {}),
+    };
+
+    const result = await this.docClient.send(new UpdateCommand(updateInput));
+
+    const nextFileCount = typeof result.Attributes?.fileCount === "number" ? result.Attributes.fileCount : 0;
+    const nextTotalSize = typeof result.Attributes?.totalSizeBytes === "number" ? result.Attributes.totalSizeBytes : 0;
+
+    if (nextFileCount <= 0 || nextTotalSize < 0) {
+      await this.delete(userId, gameId);
+    }
   }
 }

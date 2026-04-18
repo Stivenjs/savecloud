@@ -1,5 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, DeleteCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, DeleteCommand, GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import type { GameSave } from "@domain/entities/GameSave";
 import type { SaveFileIndexRepository } from "@domain/ports/SaveFileIndexRepository";
 
@@ -67,6 +67,21 @@ export class DynamoDbSaveFileIndexRepository implements SaveFileIndexRepository 
     return items
       .map((item) => this.mapItemToGameSave(userId, item, gameId))
       .filter((item): item is GameSave => item !== null);
+  }
+
+  async getByObjectKey(userId: string, objectKey: string): Promise<GameSave | null> {
+    const res = await this.docClient.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          userId,
+          objectKey,
+        },
+      })
+    );
+
+    if (!res.Item || typeof res.Item !== "object") return null;
+    return this.mapItemToGameSave(userId, res.Item as Record<string, unknown>);
   }
 
   async upsert(input: {
