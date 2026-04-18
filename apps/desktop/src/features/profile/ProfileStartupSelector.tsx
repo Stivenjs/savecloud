@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Button, Input } from "@heroui/react";
-import { User } from "lucide-react";
+import { Button, Input, Popover, PopoverContent, PopoverTrigger } from "@heroui/react";
+import { Trash2, User } from "lucide-react";
 import type { ProfileSessionSource } from "@store/ProfileSessionStore";
 import { resolveProfileAsset } from "@utils/profileMedia";
 
@@ -15,22 +15,27 @@ export interface StartupProfileOption {
 interface ProfileStartupSelectorProps {
   options: readonly StartupProfileOption[];
   selectingId: string | null;
+  deletingId: string | null;
   creatingProfile: boolean;
   error: string | null;
   onSelect: (profileId: string) => void;
   onCreateProfile: (input: { name: string }) => void;
+  onDeleteProfile: (profileId: string) => Promise<void>;
 }
 
 export function ProfileStartupSelector({
   options,
   selectingId,
+  deletingId,
   creatingProfile,
   error,
   onSelect,
   onCreateProfile,
+  onDeleteProfile,
 }: ProfileStartupSelectorProps) {
   const [creatingOpen, setCreatingOpen] = useState(false);
   const [name, setName] = useState("");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const canCreate = useMemo(
     () => name.trim().length > 0 && !creatingProfile && selectingId == null,
@@ -69,33 +74,82 @@ export function ProfileStartupSelector({
             {options.map((option) => {
               const avatarSrc = resolveProfileAsset(option.profileAvatarUrl);
               const isSelecting = selectingId === option.id;
+              const isDeleting = deletingId === option.id;
               const accountDisplayName = option.localUserId.trim() || option.name.trim() || "Sin usuario";
+              const isMenuOpen = openMenuId === option.id;
+
+              const handleDeleteProfile = async () => {
+                setOpenMenuId(null);
+                await onDeleteProfile(option.id);
+              };
 
               return (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => onSelect(option.id)}
-                  disabled={selectingId != null}
-                  className="group flex w-40 flex-col items-center text-center transition duration-200 hover:-translate-y-0.5 cursor-pointer disabled:opacity-70">
-                  <div className="relative size-28 overflow-hidden border border-white/55 bg-black/25 shadow-lg shadow-black/20 transition duration-200 group-hover:border-white group-hover:shadow-[0_0_0_2px_rgba(255,255,255,0.28)]">
-                    {avatarSrc ? (
-                      <img src={avatarSrc} alt="Avatar de perfil" decoding="async" className="size-full object-cover" />
-                    ) : (
-                      <div className="flex size-full items-center justify-center text-white/70">
-                        <User size={34} strokeWidth={1.4} />
-                      </div>
-                    )}
-                  </div>
+                <div key={option.id} className="group relative flex w-40 flex-col items-center text-center">
+                  <button
+                    type="button"
+                    onClick={() => onSelect(option.id)}
+                    disabled={selectingId != null || isDeleting}
+                    className="flex w-full flex-col items-center text-center transition duration-200 hover:-translate-y-0.5 cursor-pointer disabled:opacity-70">
+                    <div className="relative size-28 overflow-hidden border border-white/55 bg-black/25 shadow-lg shadow-black/20 transition duration-200 group-hover:border-white group-hover:shadow-[0_0_0_2px_rgba(255,255,255,0.28)]">
+                      {avatarSrc ? (
+                        <img
+                          src={avatarSrc}
+                          alt="Avatar de perfil"
+                          decoding="async"
+                          className="size-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex size-full items-center justify-center text-white/70">
+                          <User size={34} strokeWidth={1.4} />
+                        </div>
+                      )}
+                      {isDeleting && <div className="absolute inset-0 bg-black/35" />}
 
-                  <div className="mt-3">
-                    <p className="line-clamp-1 text-3xl font-semibold text-white">{option.name || "Perfil"}</p>
-                    <p className="line-clamp-1 text-xl text-white/65 opacity-0 transition duration-200 group-hover:opacity-100">
-                      {accountDisplayName}
-                    </p>
-                    {isSelecting && <p className="mt-1 text-xs text-white/80">Cambiando...</p>}
-                  </div>
-                </button>
+                      <Popover
+                        isOpen={isMenuOpen}
+                        onOpenChange={(open) => setOpenMenuId(open ? option.id : null)}
+                        placement="bottom-end"
+                        showArrow={false}
+                        shouldCloseOnBlur>
+                        <PopoverTrigger>
+                          <button
+                            type="button"
+                            aria-label="Opciones del perfil"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                            }}
+                            className="absolute bottom-0 right-0 flex size-6 items-center justify-center bg-black/45 text-white/85 opacity-0 transition duration-150 hover:bg-black/70 hover:text-white group-hover:opacity-100 focus-visible:opacity-100">
+                            <span className="-translate-y-px text-[14px] leading-none tracking-tight">•••</span>
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="min-w-48 rounded-none border-0 bg-[#3f434d] px-4 py-3 text-white shadow-2xl shadow-black/40">
+                          <div className="space-y-3">
+                            <p className="text-sm font-semibold text-white/90">¿Eliminar esta cuenta?</p>
+                            <Button
+                              color="danger"
+                              variant="flat"
+                              size="sm"
+                              className="w-full justify-center rounded-none bg-white/10 text-white hover:bg-white/15"
+                              startContent={<Trash2 size={14} />}
+                              isDisabled={selectingId != null || creatingProfile || isDeleting}
+                              onPress={() => void handleDeleteProfile()}>
+                              Eliminar cuenta
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+
+                    <div className="mt-3">
+                      <p className="line-clamp-1 text-3xl font-semibold text-white">{option.name || "Perfil"}</p>
+                      <p className="line-clamp-1 text-xl text-white/65 opacity-0 transition duration-200 group-hover:opacity-100">
+                        {accountDisplayName}
+                      </p>
+                      {isSelecting && <p className="mt-1 text-xs text-white/80">Cambiando...</p>}
+                      {isDeleting && <p className="mt-1 text-xs text-white/80">Borrando...</p>}
+                    </div>
+                  </button>
+                </div>
               );
             })}
 

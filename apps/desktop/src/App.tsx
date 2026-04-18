@@ -17,10 +17,12 @@ function App() {
         <ProfileStartupSelector
           options={gate.options}
           selectingId={gate.selectingId}
+          deletingId={gate.deletingId}
           creatingProfile={gate.creatingProfile}
           error={gate.error}
           onSelect={gate.onSelectProfile}
           onCreateProfile={gate.onCreateProfile}
+          onDeleteProfile={gate.onDeleteProfile}
         />
       );
     }

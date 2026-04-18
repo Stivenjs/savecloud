@@ -34,6 +34,10 @@ export async function createProfileCmd(input: CreateProfileInput): Promise<Profi
   });
 }
 
+export async function deleteProfileCmd(profileId: string): Promise<void> {
+  await invoke("delete_profile_cmd", { profileId });
+}
+
 export async function getAlwaysShowSelectorCmd(): Promise<boolean> {
   return invoke<boolean>("get_always_show_selector_cmd");
 }

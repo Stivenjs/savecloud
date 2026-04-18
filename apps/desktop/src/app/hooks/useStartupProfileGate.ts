@@ -7,6 +7,7 @@ import {
   createProfileCmd,
   getAlwaysShowSelectorCmd,
   listProfilesCmd,
+  deleteProfileCmd,
   setActiveProfileCmd,
 } from "@services/tauri/profile.service";
 import type { StartupProfileOption } from "@features/profile/ProfileStartupSelector";
@@ -22,9 +23,11 @@ export interface StartupProfileGateState {
   readonly options: readonly StartupProfileOption[];
   readonly error: string | null;
   readonly selectingId: string | null;
+  readonly deletingId: string | null;
   readonly creatingProfile: boolean;
   readonly onSelectProfile: (profileId: string) => Promise<void>;
   readonly onCreateProfile: (input: CreateProfileInput) => Promise<void>;
+  readonly onDeleteProfile: (profileId: string) => Promise<void>;
 }
 
 export function useStartupProfileGate(): StartupProfileGateState {
@@ -35,6 +38,7 @@ export function useStartupProfileGate(): StartupProfileGateState {
   const [options, setOptions] = useState<StartupProfileOption[]>([]);
   const [screenError, setScreenError] = useState<string | null>(null);
   const [selectingId, setSelectingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [creatingProfile, setCreatingProfile] = useState(false);
 
   useEffect(() => {
@@ -119,14 +123,31 @@ export function useStartupProfileGate(): StartupProfileGateState {
     }
   }, []);
 
+  const onDeleteProfile = useCallback(async (profileId: string) => {
+    setScreenError(null);
+    setDeletingId(profileId);
+
+    try {
+      await deleteProfileCmd(profileId);
+      setOptions((prev) => prev.filter((item) => item.id !== profileId));
+      await queryClient.refetchQueries({ queryKey: CONFIG_QUERY_KEY, type: "all" });
+    } catch (error) {
+      setScreenError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDeletingId(null);
+    }
+  }, []);
+
   return {
     loading: screenLoading,
     visible: screenVisible,
     options,
     error: screenError,
     selectingId,
+    deletingId,
     creatingProfile,
     onSelectProfile,
     onCreateProfile,
+    onDeleteProfile,
   };
 }
