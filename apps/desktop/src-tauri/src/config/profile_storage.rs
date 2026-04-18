@@ -1,6 +1,6 @@
 use super::io::{
-    get_global_secure_api_key, get_global_secure_steam_web_api_key,
-    set_global_secure_api_key, set_global_secure_steam_web_api_key,
+    get_global_secure_api_key, get_global_secure_steam_web_api_key, set_global_secure_api_key,
+    set_global_secure_steam_web_api_key,
 };
 use super::models::*;
 use super::paths;
@@ -103,22 +103,6 @@ pub fn load_settings() -> AppSettings {
         .and_then(|content| serde_json::from_str::<AppSettings>(&content).ok())
         .unwrap_or_default();
 
-    if let Some(profile) = active_profile.as_ref() {
-        settings.api_base_url = Some(profile.api_base_url.clone());
-        settings.ws_base_url = Some(profile.ws_base_url.clone());
-        settings.user_id = Some(profile.local_user_id.clone());
-        settings.profile_avatar = profile.profile_avatar_url.clone();
-        settings.profile_background = profile.profile_background.clone();
-        settings.profile_frame = profile.profile_frame.clone();
-        settings.custom_scan_paths = profile.custom_scan_paths.clone();
-        settings.keep_backups_per_game = profile.keep_backups_per_game;
-        settings.full_backup_streaming = profile.full_backup_streaming;
-        settings.full_backup_streaming_dry_run = profile.full_backup_streaming_dry_run;
-        settings.default_source_download_dir = profile.default_source_download_dir.clone();
-        settings.share_visual_profile_with_hosts = profile.share_visual_profile_with_hosts;
-        settings.share_visual_profile_with_members = profile.share_visual_profile_with_members;
-    }
-
     let secure_key = active_profile
         .as_ref()
         .and_then(|profile| super::io::get_secure_api_key_for_profile(&profile.id))
@@ -197,6 +181,55 @@ pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
     let path = scoped_data_path(paths::SETTINGS_FILE_NAME).ok_or("Ruta no disponible")?;
     save_json(&path, settings)?;
 
+    // Mantiene sincronizado el perfil activo para evitar que load_settings()
+    // vuelva a inyectar valores antiguos desde profiles.json.
+    if let Some(active) = active_profile.as_ref() {
+        let mut index = profile_io::load_profiles_index()?;
+        if let Some(profile) = index.get_profile_mut(&active.id) {
+            if let Some(api_base_url) = settings
+                .api_base_url
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                profile.api_base_url = api_base_url.to_string();
+            }
+
+            if let Some(ws_base_url) = settings
+                .ws_base_url
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                profile.ws_base_url = ws_base_url.to_string();
+            }
+
+            if let Some(user_id) = settings
+                .user_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                profile.local_user_id = user_id.to_string();
+            }
+
+            profile.profile_avatar_url = settings.profile_avatar.clone();
+            profile.profile_background = settings.profile_background.clone();
+            profile.profile_frame = settings.profile_frame.clone();
+            profile.cloud_host_api_base_urls = settings.cloud_host_api_base_urls.clone();
+            profile.cloud_host_ws_base_urls = settings.cloud_host_ws_base_urls.clone();
+            profile.custom_scan_paths = settings.custom_scan_paths.clone();
+            profile.keep_backups_per_game = settings.keep_backups_per_game;
+            profile.full_backup_streaming = settings.full_backup_streaming;
+            profile.full_backup_streaming_dry_run = settings.full_backup_streaming_dry_run;
+            profile.default_source_download_dir = settings.default_source_download_dir.clone();
+            profile.share_visual_profile_with_hosts = settings.share_visual_profile_with_hosts;
+            profile.share_visual_profile_with_members = settings.share_visual_profile_with_members;
+
+            profile_io::save_profiles_index(&index)?;
+        }
+    }
+
     if is_default_profile_active() {
         if let Some(legacy_path) = paths::settings_path() {
             let _ = save_json(&legacy_path, settings);
@@ -207,17 +240,23 @@ pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
 }
 
 pub fn save_settings_for_profile(profile_id: &str, settings: &AppSettings) -> Result<(), String> {
-    let path = profile_file_path(profile_id, paths::SETTINGS_FILE_NAME).ok_or("Ruta no disponible")?;
+    let path =
+        profile_file_path(profile_id, paths::SETTINGS_FILE_NAME).ok_or("Ruta no disponible")?;
     save_json(&path, settings)
 }
 
 pub fn save_library_for_profile(profile_id: &str, library: &GameLibrary) -> Result<(), String> {
-    let path = profile_file_path(profile_id, paths::LIBRARY_FILE_NAME).ok_or("Ruta no disponible")?;
+    let path =
+        profile_file_path(profile_id, paths::LIBRARY_FILE_NAME).ok_or("Ruta no disponible")?;
     save_json(&path, library)
 }
 
-pub fn save_history_for_profile(profile_id: &str, history: &OperationHistory) -> Result<(), String> {
-    let path = profile_file_path(profile_id, paths::HISTORY_FILE_NAME).ok_or("Ruta no disponible")?;
+pub fn save_history_for_profile(
+    profile_id: &str,
+    history: &OperationHistory,
+) -> Result<(), String> {
+    let path =
+        profile_file_path(profile_id, paths::HISTORY_FILE_NAME).ok_or("Ruta no disponible")?;
     save_json(&path, history)
 }
 
@@ -225,7 +264,8 @@ pub fn save_gamification_for_profile(
     profile_id: &str,
     gamification: &GamificationConfig,
 ) -> Result<(), String> {
-    let path = profile_file_path(profile_id, paths::GAMIFICATION_FILE_NAME).ok_or("Ruta no disponible")?;
+    let path =
+        profile_file_path(profile_id, paths::GAMIFICATION_FILE_NAME).ok_or("Ruta no disponible")?;
     save_json(&path, gamification)
 }
 

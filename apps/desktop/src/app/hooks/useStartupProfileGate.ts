@@ -95,7 +95,7 @@ export function useStartupProfileGate(): StartupProfileGateState {
         const updated = await setActiveProfileCmd(profileId);
         useProfileSessionStore.getState().setActiveProfile(profileDtoToSession(updated), selected.source);
 
-        await queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+        await queryClient.refetchQueries({ queryKey: CONFIG_QUERY_KEY, type: "all" });
         setScreenVisible(false);
       } catch (error) {
         setScreenError(error instanceof Error ? error.message : String(error));
@@ -117,7 +117,7 @@ export function useStartupProfileGate(): StartupProfileGateState {
         return [...withoutCreated, option];
       });
 
-      await queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+      await queryClient.refetchQueries({ queryKey: CONFIG_QUERY_KEY, type: "all" });
     } catch (error) {
       setScreenError(error instanceof Error ? error.message : String(error));
     } finally {
