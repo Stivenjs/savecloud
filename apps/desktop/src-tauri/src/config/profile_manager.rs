@@ -13,6 +13,17 @@ use uuid::Uuid;
 pub struct ProfileManager;
 
 impl ProfileManager {
+    fn normalize_optional_string(value: Option<String>) -> Option<String> {
+        value.and_then(|raw| {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+    }
+
     /// Carga el índice de perfiles del disco.
     pub fn load_profiles() -> Result<ProfilesIndex, String> {
         profile_io::load_profiles_index()
@@ -77,11 +88,16 @@ impl ProfileManager {
     /// # Arguments
     /// * `index` - Índice de perfiles (mutable)
     /// * `name` - Nombre amigable del perfil
+    /// * `profile_avatar_url` - Avatar inicial del perfil (opcional)
     /// La configuración cloud (user_id, urls, api_key) se completa después.
     ///
     /// # Errors
     /// Devuelve error si falla la persistencia o el Keyring.
-    pub fn create_profile(index: &mut ProfilesIndex, name: String) -> Result<Profile, String> {
+    pub fn create_profile(
+        index: &mut ProfilesIndex,
+        name: String,
+        profile_avatar_url: Option<String>,
+    ) -> Result<Profile, String> {
         let profile_id = format!(
             "profile_{}",
             Uuid::new_v4()
@@ -98,7 +114,7 @@ impl ProfileManager {
             local_user_id: String::new(),
             api_base_url: String::new(),
             ws_base_url: String::new(),
-            profile_avatar_url: None,
+            profile_avatar_url: Self::normalize_optional_string(profile_avatar_url),
             created_at: now,
             last_used: now,
             cloud_host_api_base_urls: Default::default(),
@@ -218,7 +234,7 @@ mod tests {
     #[test]
     fn test_create_profile_generates_unique_id() {
         let mut index = ProfilesIndex::new();
-        let result = ProfileManager::create_profile(&mut index, "Test".to_string());
+        let result = ProfileManager::create_profile(&mut index, "Test".to_string(), None);
 
         assert!(result.is_ok());
         let profile = result.unwrap();

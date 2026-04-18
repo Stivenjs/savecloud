@@ -31,6 +31,7 @@ import {
   User,
   Zap,
 } from "lucide-react";
+import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { ProfileHeroBackground } from "@features/profile/PublicProfileHero";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Config } from "@app-types/config";
@@ -132,7 +133,6 @@ export function ProfileDrawer({
   const weeklyPlaytimeSeconds = gamification?.weeklyPlaytimeSeconds ?? 0;
   const achievementsUnlocked = gamification?.achievementsUnlocked ?? [];
 
-  const avatarResolved = useMemo(() => resolveProfileAsset(avatar || undefined), [avatar]);
   const frameResolved = useMemo(() => resolveProfileAsset(frame || undefined), [frame]);
 
   const handleSave = useCallback(async () => {
@@ -216,8 +216,8 @@ export function ProfileDrawer({
               {/* Avatar */}
               <div className="relative size-18 shrink-0">
                 <div className="relative size-full overflow-hidden rounded-md border border-white/10 bg-black/30 shadow-lg">
-                  {avatarResolved ? (
-                    <img src={avatarResolved} alt="user avatar" decoding="async" className="size-full object-cover" />
+                  {avatar.trim() ? (
+                    <ProfileAvatarVisual rawAvatar={avatar} alt="user avatar" className="size-full object-cover" />
                   ) : (
                     <div className="flex size-full items-center justify-center text-default-400">
                       <User size={36} strokeWidth={1.2} />

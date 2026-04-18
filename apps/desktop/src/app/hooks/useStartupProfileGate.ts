@@ -15,6 +15,7 @@ import { profileDtoToOption, profileDtoToSession } from "@/app/profileSessionMap
 
 export interface CreateProfileInput {
   readonly name: string;
+  readonly profileAvatarUrl?: string | null;
 }
 
 export interface StartupProfileGateState {

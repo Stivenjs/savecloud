@@ -14,6 +14,7 @@ export interface ProfileDto {
 
 export interface CreateProfileInput {
   readonly name: string;
+  readonly profileAvatarUrl?: string | null;
 }
 
 export async function listProfilesCmd(): Promise<ProfileDto[]> {
@@ -31,6 +32,7 @@ export async function setActiveProfileCmd(profileId: string): Promise<ProfileDto
 export async function createProfileCmd(input: CreateProfileInput): Promise<ProfileDto> {
   return invoke<ProfileDto>("create_profile_cmd", {
     name: input.name,
+    profileAvatarUrl: input.profileAvatarUrl ?? null,
   });
 }
 

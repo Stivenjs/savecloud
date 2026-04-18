@@ -1,10 +1,12 @@
 import { useMemo } from "react";
 import { Avatar, Button, Divider } from "@heroui/react";
 import { Copy } from "lucide-react";
+import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { toastSuccess } from "@utils/toast";
 import type { ConnectionStatus } from "@hooks/useLastSyncInfo";
 import { ConnectionStatusIndicator } from "@features/games/ConnectionStatusIndicator";
 import { resolveProfileAsset } from "@utils/profileMedia";
+import { parseLegacyNiceAvatarHtml, parseNiceAvatarConfig } from "@features/profile/niceAvatar";
 
 export interface UserBadgeProps {
   userId?: string | null;
@@ -32,6 +34,10 @@ export function UserBadge({
   const isConfigured = !!userId?.trim();
 
   const avatarSrc = useMemo(() => resolveProfileAsset(profileAvatar ?? undefined), [profileAvatar]);
+  const hasGeneratedAvatar = useMemo(
+    () => !!parseNiceAvatarConfig(profileAvatar) || !!parseLegacyNiceAvatarHtml(profileAvatar),
+    [profileAvatar]
+  );
   const frameSrc = useMemo(() => resolveProfileAsset(profileFrame ?? undefined), [profileFrame]);
 
   const handleCopy = async () => {
@@ -48,16 +54,20 @@ export function UserBadge({
     <div className="flex min-w-0 flex-1 items-center gap-2">
       <div className="relative size-8 shrink-0">
         <div className="relative size-full overflow-hidden rounded-md border border-default-200/70 bg-default-100/60 dark:border-default-100/35 dark:bg-default-50/25">
-          <Avatar
-            size="sm"
-            radius="none"
-            showFallback
-            src={avatarSrc ?? undefined}
-            classNames={{
-              base: `size-full min-h-8 min-w-8 rounded-md ${avatarSrc ? "" : "bg-primary/10 text-primary"}`,
-              img: "object-cover",
-            }}
-          />
+          {hasGeneratedAvatar ? (
+            <ProfileAvatarVisual rawAvatar={profileAvatar} alt="avatar" className="size-full object-cover" />
+          ) : (
+            <Avatar
+              size="sm"
+              radius="none"
+              showFallback
+              src={avatarSrc ?? undefined}
+              classNames={{
+                base: `size-full min-h-8 min-w-8 rounded-md ${avatarSrc ? "" : "bg-primary/10 text-primary"}`,
+                img: "object-cover",
+              }}
+            />
+          )}
         </div>
         {frameSrc ? (
           <img

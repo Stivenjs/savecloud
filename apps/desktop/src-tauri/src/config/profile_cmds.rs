@@ -53,6 +53,7 @@ pub async fn set_active_profile_cmd(profile_id: String) -> Result<ProfileDTO, St
 ///
 /// # Arguments
 /// * `name` - Nombre amigable del perfil
+/// * `profile_avatar_url` - Avatar inicial del perfil (opcional)
 ///
 /// # Returns
 /// ProfileDTO del perfil recién creado.
@@ -60,9 +61,12 @@ pub async fn set_active_profile_cmd(profile_id: String) -> Result<ProfileDTO, St
 /// # Errors
 /// Devuelve error si falla la creación o la persistencia.
 #[tauri::command]
-pub async fn create_profile_cmd(name: String) -> Result<ProfileDTO, String> {
+pub async fn create_profile_cmd(
+    name: String,
+    profile_avatar_url: Option<String>,
+) -> Result<ProfileDTO, String> {
     let mut index = ProfileManager::load_profiles()?;
-    let profile = ProfileManager::create_profile(&mut index, name)?;
+    let profile = ProfileManager::create_profile(&mut index, name, profile_avatar_url)?;
     Ok(ProfileDTO::from(&profile))
 }
 

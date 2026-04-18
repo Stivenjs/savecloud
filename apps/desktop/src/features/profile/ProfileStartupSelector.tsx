@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { Button, Input, Popover, PopoverContent, PopoverTrigger } from "@heroui/react";
-import { Trash2, User } from "lucide-react";
+import { RefreshCw, Trash2, User } from "lucide-react";
+import Avatar from "react-nice-avatar";
+import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import type { ProfileSessionSource } from "@store/ProfileSessionStore";
-import { resolveProfileAsset } from "@utils/profileMedia";
+import { buildNiceAvatarConfig, generateNiceAvatarSeed, serializeNiceAvatarConfig } from "@features/profile/niceAvatar";
 
 export interface StartupProfileOption {
   readonly id: string;
@@ -19,7 +21,7 @@ interface ProfileStartupSelectorProps {
   creatingProfile: boolean;
   error: string | null;
   onSelect: (profileId: string) => void;
-  onCreateProfile: (input: { name: string }) => void;
+  onCreateProfile: (input: { name: string; profileAvatarUrl?: string | null }) => Promise<void>;
   onDeleteProfile: (profileId: string) => Promise<void>;
 }
 
@@ -35,7 +37,13 @@ export function ProfileStartupSelector({
 }: ProfileStartupSelectorProps) {
   const [creatingOpen, setCreatingOpen] = useState(false);
   const [name, setName] = useState("");
+  const [avatarSeed, setAvatarSeed] = useState(generateNiceAvatarSeed);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  const generatedAvatarConfig = useMemo(() => {
+    const seedPrefix = name.trim().toLowerCase();
+    return buildNiceAvatarConfig(`${seedPrefix}|${avatarSeed}`);
+  }, [name, avatarSeed]);
 
   const canCreate = useMemo(
     () => name.trim().length > 0 && !creatingProfile && selectingId == null,
@@ -44,10 +52,13 @@ export function ProfileStartupSelector({
 
   const submitCreate = async () => {
     if (!canCreate) return;
+    const profileAvatarUrl = serializeNiceAvatarConfig(generatedAvatarConfig);
     await onCreateProfile({
       name: name.trim(),
+      profileAvatarUrl,
     });
     setName("");
+    setAvatarSeed(generateNiceAvatarSeed());
     setCreatingOpen(false);
   };
 
@@ -72,7 +83,6 @@ export function ProfileStartupSelector({
 
           <div className="mx-auto mt-10 flex max-w-3xl flex-wrap items-start justify-center gap-x-10 gap-y-8">
             {options.map((option) => {
-              const avatarSrc = resolveProfileAsset(option.profileAvatarUrl);
               const isSelecting = selectingId === option.id;
               const isDeleting = deletingId === option.id;
               const accountDisplayName = option.localUserId.trim() || option.name.trim() || "Sin usuario";
@@ -91,11 +101,10 @@ export function ProfileStartupSelector({
                     disabled={selectingId != null || isDeleting}
                     className="flex w-full flex-col items-center text-center transition duration-200 hover:-translate-y-0.5 cursor-pointer disabled:opacity-70">
                     <div className="relative size-28 overflow-hidden border border-white/55 bg-black/25 shadow-lg shadow-black/20 transition duration-200 group-hover:border-white group-hover:shadow-[0_0_0_2px_rgba(255,255,255,0.28)]">
-                      {avatarSrc ? (
-                        <img
-                          src={avatarSrc}
+                      {option.profileAvatarUrl ? (
+                        <ProfileAvatarVisual
+                          rawAvatar={option.profileAvatarUrl}
                           alt="Avatar de perfil"
-                          decoding="async"
                           className="size-full object-cover"
                         />
                       ) : (
@@ -174,6 +183,25 @@ export function ProfileStartupSelector({
                 <div className="space-y-1">
                   <h2 className="text-lg font-semibold tracking-tight text-white">Crear nuevo perfil</h2>
                   <p className="text-sm text-white/60">Usa un nombre claro para identificar esta cuenta más tarde.</p>
+                </div>
+
+                <div className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="relative size-20 overflow-hidden rounded-md border border-white/20 bg-black/30 shadow-lg shadow-black/30">
+                    <Avatar className="size-full" shape="square" {...generatedAvatarConfig} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-white/85">Avatar generado automáticamente</p>
+                    <p className="text-xs text-white/55">Puedes regenerarlo antes de crear el perfil.</p>
+                    <Button
+                      size="sm"
+                      variant="flat"
+                      className="mt-2 rounded-md bg-white/10 text-white hover:bg-white/15"
+                      startContent={<RefreshCw size={14} />}
+                      onPress={() => setAvatarSeed(generateNiceAvatarSeed())}
+                      isDisabled={creatingProfile || selectingId != null}>
+                      Regenerar avatar
+                    </Button>
+                  </div>
                 </div>
 
                 <Input
