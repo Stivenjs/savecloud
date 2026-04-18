@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { ProfileHeroBackground } from "@features/profile/PublicProfileHero";
+import { buildNiceAvatarConfig, generateNiceAvatarSeed, serializeNiceAvatarConfig } from "@features/profile/niceAvatar";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Config } from "@app-types/config";
 import type { GamificationState } from "@app-types/gamification";
@@ -96,6 +97,7 @@ export function ProfileDrawer({
   const [bg, setBg] = useState("");
   const [avatar, setAvatar] = useState("");
   const [frame, setFrame] = useState("");
+  const [avatarGeneratorSeed, setAvatarGeneratorSeed] = useState("");
   const [saving, setSaving] = useState(false);
   const [shareVisualWithHosts, setShareVisualWithHosts] = useState(false);
   const [shareVisualWithMembers, setShareVisualWithMembers] = useState(false);
@@ -105,9 +107,10 @@ export function ProfileDrawer({
     setBg(config.profileBackground ?? "");
     setAvatar(config.profileAvatar ?? "");
     setFrame(config.profileFrame ?? "");
+    setAvatarGeneratorSeed(activeProfile?.localUserId?.trim() || config.userId?.trim() || "");
     setShareVisualWithHosts(config.shareVisualProfileWithHosts ?? false);
     setShareVisualWithMembers(config.shareVisualProfileWithMembers ?? false);
-  }, [isOpen, config]);
+  }, [activeProfile?.localUserId, config, isOpen]);
 
   const gamesCount = config?.games?.length ?? 0;
   const totalSeconds = config?.totalPlaytime ?? 0;
@@ -182,6 +185,12 @@ export function ProfileDrawer({
     } catch (e) {
       toastError("Archivo no válido", e instanceof Error ? e.message : String(e));
     }
+  }, []);
+
+  const applyGeneratedAvatar = useCallback((seed: string) => {
+    const normalizedSeed = seed.trim() || generateNiceAvatarSeed();
+    const generated = buildNiceAvatarConfig(normalizedSeed);
+    setAvatar(serializeNiceAvatarConfig(generated));
   }, []);
 
   return (
@@ -422,6 +431,40 @@ export function ProfileDrawer({
                   onPress={() => void pickFile("avatar")}>
                   Imagen local…
                 </Button>
+
+                <div className="mt-1 rounded-lg border border-default-200 bg-default-50/60 p-2.5 dark:bg-default-100/5">
+                  <p className="mb-2 text-xs font-medium text-default-600">Avatar generado con librería</p>
+                  <div className="flex items-center gap-2">
+                    <div className="relative size-14 overflow-hidden rounded-md border border-default-200 bg-default-100/60 dark:border-default-100/35 dark:bg-default-50/20">
+                      <ProfileAvatarVisual rawAvatar={avatar} alt="preview" className="size-full object-cover" />
+                    </div>
+                    <Input
+                      size="sm"
+                      label="Semilla"
+                      placeholder="nombre, email o texto"
+                      value={avatarGeneratorSeed}
+                      onValueChange={setAvatarGeneratorSeed}
+                      variant="bordered"
+                      className="flex-1"
+                    />
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <Button size="sm" variant="flat" onPress={() => applyGeneratedAvatar(avatarGeneratorSeed)}>
+                      Usar semilla
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="flat"
+                      startContent={<RefreshCw size={14} />}
+                      onPress={() => {
+                        const seed = generateNiceAvatarSeed();
+                        setAvatarGeneratorSeed(seed);
+                        applyGeneratedAvatar(seed);
+                      }}>
+                      Aleatorio
+                    </Button>
+                  </div>
+                </div>
               </div>
             </AccordionItem>
 
