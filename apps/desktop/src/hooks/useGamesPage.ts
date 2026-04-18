@@ -1,4 +1,4 @@
-import { useReducer, useEffect, useCallback } from "react";
+import { useReducer, useEffect, useCallback, useMemo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
   addGame,
@@ -29,9 +29,11 @@ import {
 import { toastDownloadResult, toastError, toastSuccess, toastSyncResult } from "@utils/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConfig } from "@hooks/useConfig";
+import { useProfileSession } from "@hooks/useProfileSession";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
+import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { useSyncStore } from "@store/SyncStore";
 import { filterGames, type OriginFilter } from "@features/games/GamesFilters";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
@@ -203,7 +205,9 @@ export function useGamesPage() {
   } = state;
 
   const { config, loading, error, refetch } = useConfig();
-  const hasSyncConfig = hasUsableCloudConnection(config);
+  const { activeProfile } = useProfileSession();
+  const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
+  const hasSyncConfig = hasUsableCloudConnection(cloudConfig);
   const {
     lastSyncAt,
     lastSyncGameId,

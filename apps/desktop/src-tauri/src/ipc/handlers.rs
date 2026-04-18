@@ -152,5 +152,13 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::sources::commands::sources_find_matches_batch,
         crate::overlay::show_overlay_notification,
         crate::shutdown::hooks::request_app_shutdown,
+        crate::config::profile_cmds::list_profiles_cmd,
+        crate::config::profile_cmds::get_active_profile_cmd,
+        crate::config::profile_cmds::set_active_profile_cmd,
+        crate::config::profile_cmds::create_profile_cmd,
+        crate::config::profile_cmds::delete_profile_cmd,
+        crate::config::profile_cmds::update_profile_metadata_cmd,
+        crate::config::profile_cmds::set_always_show_selector_cmd,
+        crate::config::profile_cmds::get_always_show_selector_cmd,
     ])
 }

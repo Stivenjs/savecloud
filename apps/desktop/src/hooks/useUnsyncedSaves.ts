@@ -2,20 +2,25 @@ import { useCallback, useMemo, useState, useEffect } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { syncCheckUnsyncedGames, syncUploadGame, type UnsyncedGame } from "@services/tauri";
 import { useConfig, CONFIG_QUERY_KEY } from "@hooks/useConfig";
+import { useProfileSession } from "@hooks/useProfileSession";
 import { LAST_SYNC_QUERY_KEY } from "@hooks/useLastSyncInfo";
 import { toastSyncResult } from "@utils/toast";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
+import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 
 const UNSYNCED_QUERY_KEY = ["unsynced-games"] as const;
 
 export function useUnsyncedSaves() {
   const queryClient = useQueryClient();
   const { config } = useConfig();
+  const { activeProfile } = useProfileSession();
 
   const [isDismissed, setIsDismissed] = useState(false);
 
-  const hasSyncConfig = useMemo(() => hasUsableCloudConnection(config), [config]);
+  const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
+
+  const hasSyncConfig = useMemo(() => hasUsableCloudConnection(cloudConfig), [cloudConfig]);
 
   const {
     data: unsyncedList = [],

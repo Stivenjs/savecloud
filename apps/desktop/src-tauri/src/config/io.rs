@@ -85,6 +85,37 @@ fn set_secure_steam_web_api_key(key: &str) -> Result<(), String> {
     entry.set_password(key).map_err(|e| e.to_string())
 }
 
+    /// Genera el nombre de cuenta del Keyring para un perfil específico.
+    fn profile_keyring_account(profile_id: &str) -> String {
+        format!("savecloud_profile_{}", profile_id.trim())
+    }
+
+    /// Recupera la clave API desde el Keyring para un perfil específico.
+    pub fn get_secure_api_key_for_profile(profile_id: &str) -> Option<String> {
+        let account = profile_keyring_account(profile_id);
+        Entry::new(KEYRING_SERVICE, &account)
+            .ok()
+            .and_then(|entry| entry.get_password().ok())
+            .filter(|k| k != MASKED_API_KEY)
+    }
+
+    /// Guarda la clave API en el Keyring para un perfil específico.
+    pub fn set_secure_api_key_for_profile(profile_id: &str, key: &str) -> Result<(), String> {
+        if key == MASKED_API_KEY {
+            return Ok(());
+        }
+        let account = profile_keyring_account(profile_id);
+        let entry = Entry::new(KEYRING_SERVICE, &account).map_err(|e| e.to_string())?;
+        entry.set_password(key).map_err(|e| e.to_string())
+    }
+
+    /// Elimina la clave API del Keyring para un perfil específico.
+    pub fn delete_secure_api_key_for_profile(profile_id: &str) -> Result<(), String> {
+        let account = profile_keyring_account(profile_id);
+        let entry = Entry::new(KEYRING_SERVICE, &account).map_err(|e| e.to_string())?;
+        entry.delete_password().map_err(|e| e.to_string())
+    }
+
 /// Inyecta el valor de una variable de entorno en un campo opcional,
 /// priorizando el valor en tiempo de compilación sobre el valor en tiempo de ejecución.
 fn apply_env_fallback(

@@ -14,6 +14,7 @@ import { ResetCloudSeedModal } from "@features/settings/ResetCloudSeedModal";
 import { PullFriendConfigModal } from "@/features/settings/PullFriendConfigModal";
 import { UpdatesCard } from "@features/settings/UpdatesCard";
 import { useSettingsPage } from "@/hooks/useSettingsPage";
+import { useProfileSession } from "@hooks/useProfileSession";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigationStore } from "@features/input/store";
 import { DevSdk } from "@features/settings/DevSdk";
@@ -24,6 +25,7 @@ const ReleaseNotesDialogLazy = lazy(() =>
 );
 
 export function SettingsPage() {
+  const { activeProfile } = useProfileSession();
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [resetCloudSeedModalOpen, setResetCloudSeedModalOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<string>("account");
@@ -162,7 +164,7 @@ export function SettingsPage() {
             backingUpConfig={backingUpConfig}
             restoringConfig={restoringConfig}
             configPath={configPath}
-            userId={config?.userId}
+            userId={activeProfile?.localUserId || config?.userId}
             hasSteamWebApiKey={!!config?.steamWebApiKey?.trim()}
             s3TransferEndpointType={s3TransferEndpointType}
             isLoadingData={loadingConfigData}

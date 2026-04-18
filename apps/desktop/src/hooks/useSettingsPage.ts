@@ -34,6 +34,7 @@ import {
 } from "@services/tauri/sources.service";
 import { MASKED_CONFIG_SECRET } from "@/constants/configMask";
 import { useConfig } from "@hooks/useConfig";
+import { useProfileSession } from "@hooks/useProfileSession";
 import { STEAM_SEED_FRESHNESS_QUERY_KEY } from "@features/steam-catalog/hooks/useSteamSeedFreshness";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastError, toastSuccess } from "@utils/toast";
@@ -220,7 +221,11 @@ export function useSettingsPage() {
   const [steamSeedImportProgress, setSteamSeedImportProgress] = useState<SteamSeedImportProgressPayload | null>(null);
   const [deletingSourceIds, setDeletingSourceIds] = useState<Set<string>>(new Set());
   const { config, loading: loadingUseConfig, refetch: refetchConfig } = useConfig();
+  const { activeProfile } = useProfileSession();
   const queryClient = useQueryClient();
+
+  const activeUserId = activeProfile?.localUserId?.trim() ?? "";
+  const activeApiBaseUrl = activeProfile?.apiBaseUrl?.trim() || config?.apiBaseUrl?.trim() || "";
 
   const { data: autostart = false, isLoading: loadingAutostart } = useQuery({
     queryKey: ["autostartStatus"],
@@ -253,7 +258,7 @@ export function useSettingsPage() {
   }, []);
 
   const { data: s3TransferEndpointType = null, isLoading: loadingS3 } = useQuery({
-    queryKey: ["s3TransferEndpointType", config?.apiBaseUrl, config?.userId],
+    queryKey: ["s3TransferEndpointType", activeApiBaseUrl, activeUserId],
     queryFn: async () => {
       try {
         return await getS3TransferEndpointType();
@@ -261,7 +266,7 @@ export function useSettingsPage() {
         return "unknown";
       }
     },
-    enabled: !!config?.apiBaseUrl?.trim() && !!config?.userId?.trim(),
+    enabled: !!activeApiBaseUrl && !!activeUserId,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -272,12 +277,13 @@ export function useSettingsPage() {
         apiBaseUrl: config.apiBaseUrl ?? "",
         wsBaseUrl: config.wsBaseUrl ?? "",
         apiKey: state.createApiKey || config.apiKey || "",
-        userId: config.userId ?? "",
+        userId: activeUserId || config.userId || "",
         steamWebApiKey: state.createSteamWebApiKey || config.steamWebApiKey || "",
       });
     }
   }, [
     state.createConfigModalOpen,
+    activeUserId,
     config?.apiBaseUrl,
     config?.wsBaseUrl,
     config?.apiKey,

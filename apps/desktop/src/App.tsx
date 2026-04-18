@@ -5,6 +5,7 @@ import { NAV_ITEMS } from "@components/navigation/navItems";
 import { TrayActionsListener } from "@components/sync/TrayActionsListener";
 import { UnsyncedSavesModalWithProgress } from "@features/games";
 import { useAppInitialization } from "@hooks/useAppInitialization";
+import { useProfileSessionHydration } from "@hooks/useProfileSession";
 import { useConfig } from "@hooks/useConfig";
 import type { ConfiguredGame } from "@app-types/config";
 import "@styles/App.css";
@@ -27,6 +28,7 @@ function AppContent() {
 }
 
 function App() {
+  useProfileSessionHydration();
   useAppInitialization();
 
   return (

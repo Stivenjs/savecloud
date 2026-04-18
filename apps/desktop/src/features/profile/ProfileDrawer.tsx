@@ -37,6 +37,7 @@ import type { Config } from "@app-types/config";
 import type { GamificationState } from "@app-types/gamification";
 import type { ConnectionStatus } from "@hooks/useLastSyncInfo";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
+import { useProfileSession } from "@hooks/useProfileSession";
 import {
   readImageAsDataUrl,
   scheduleConfigBackupToCloud,
@@ -89,6 +90,7 @@ export function ProfileDrawer({
   hasSyncConfig,
   connectionStatus,
 }: ProfileDrawerProps) {
+  const { activeProfile } = useProfileSession();
   const queryClient = useQueryClient();
   const [bg, setBg] = useState("");
   const [avatar, setAvatar] = useState("");
@@ -108,7 +110,7 @@ export function ProfileDrawer({
 
   const gamesCount = config?.games?.length ?? 0;
   const totalSeconds = config?.totalPlaytime ?? 0;
-  const userId = config?.userId?.trim() ?? "";
+  const userId = activeProfile?.localUserId?.trim() || config?.userId?.trim() || "";
   const displayName = userId || "Usuario";
   const conn = connectionLabel(hasSyncConfig ? connectionStatus : undefined);
 
@@ -212,10 +214,10 @@ export function ProfileDrawer({
 
             <div className="absolute inset-x-0 bottom-0 flex items-end gap-4 px-4 pb-3">
               {/* Avatar */}
-              <div className="relative size-[72px] shrink-0">
+              <div className="relative size-18 shrink-0">
                 <div className="relative size-full overflow-hidden rounded-md border border-white/10 bg-black/30 shadow-lg">
                   {avatarResolved ? (
-                    <img src={avatarResolved} alt="" decoding="async" className="size-full object-cover" />
+                    <img src={avatarResolved} alt="user avatar" decoding="async" className="size-full object-cover" />
                   ) : (
                     <div className="flex size-full items-center justify-center text-default-400">
                       <User size={36} strokeWidth={1.2} />

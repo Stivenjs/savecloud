@@ -9,6 +9,10 @@ pub mod gamification;
 pub mod io;
 pub mod models;
 pub mod paths;
+pub mod profiles;
+pub mod profile_io;
+pub mod profile_manager;
+pub mod profile_cmds;
 
 pub use io::*;
 pub use models::*;

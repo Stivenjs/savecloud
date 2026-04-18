@@ -1,7 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useConfig } from "@hooks/useConfig";
+import { useProfileSession } from "@hooks/useProfileSession";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { getFriendConfig, setCloudHostWsUrl } from "@services/tauri/config.service";
 
@@ -35,18 +37,22 @@ interface CloudIncomingMessage {
  */
 export function useCloudWebSockets() {
   const { config, refetch } = useConfig();
+  const { activeProfile } = useProfileSession();
   const prevGameStatusRef = useRef<Record<string, boolean>>({});
   const lastBroadcastedGameIdRef = useRef<string | null>(null);
 
+  const activeUserId = activeProfile?.localUserId?.trim() ?? "";
+  const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
+
   useEffect(() => {
-    if (!config?.userId || !hasUsableCloudConnection(config)) {
+    if (!activeUserId || cloudConfig == null || !hasUsableCloudConnection(cloudConfig)) {
       invoke("stop_cloud_ws").catch(() => {});
       return;
     }
 
-    const hostId = config.activeCloudHostUserId;
+    const hostId = cloudConfig.activeCloudHostUserId;
     const isUsingHostCloud = !!hostId;
-    let activeWsBaseUrl = isUsingHostCloud ? config.cloudHostWsBaseUrls?.[hostId] : config.wsBaseUrl;
+    let activeWsBaseUrl = isUsingHostCloud ? cloudConfig.cloudHostWsBaseUrls?.[hostId] : cloudConfig.wsBaseUrl;
 
     let isComponentMounted = true;
     let unlistenIncoming: (() => void) | undefined;
@@ -96,10 +102,10 @@ export function useCloudWebSockets() {
       isComponentMounted = false;
       unlistenIncoming?.();
     };
-  }, [config?.activeCloudHostUserId, config?.wsBaseUrl, config?.cloudHostWsBaseUrls, config?.userId, refetch]);
+  }, [activeUserId, cloudConfig, refetch]);
 
   useEffect(() => {
-    if (!config?.userId) return;
+    if (!activeUserId) return;
 
     let unlistenStatus: (() => void) | undefined;
 
@@ -135,9 +141,9 @@ export function useCloudWebSockets() {
     };
 
     function broadcastGameStart(gameId: string) {
-      if (!config?.userId) return;
+      if (!activeUserId) return;
 
-      const gameNode = config.games?.find((g) => g.id === gameId);
+      const gameNode = config?.games?.find((g) => g.id === gameId);
       const gameName = gameNode?.editionLabel ? `${gameId} (${gameNode.editionLabel})` : gameId;
 
       invoke("send_cloud_broadcast", { gameId, gameName }).catch(() => {});
@@ -156,5 +162,5 @@ export function useCloudWebSockets() {
     return () => {
       unlistenStatus?.();
     };
-  }, [config?.userId, config?.games]);
+  }, [activeUserId, config?.games]);
 }
