@@ -7,6 +7,9 @@ Resources:
     Properties:
       AccelerateConfiguration:
         AccelerationStatus: Suspended
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -115,10 +118,7 @@ Resources:
     Type: AWS::DynamoDB::Table
     Properties:
       TableName: ${sls:stage}-ActiveConnections
-      BillingMode: PROVISIONED
-      ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
+      BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: connectionId
           AttributeType: S
@@ -134,12 +134,25 @@ Resources:
               KeyType: HASH
           Projection:
             ProjectionType: ALL
-          ProvisionedThroughput:
-            ReadCapacityUnits: 1
-            WriteCapacityUnits: 1
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
+
+  GameStatsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-GameStats
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: gameId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: gameId
+          KeyType: RANGE
 
 Outputs:
   CloudFrontDistributionDomainName:

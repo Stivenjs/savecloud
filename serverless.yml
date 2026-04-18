@@ -20,6 +20,7 @@ provider:
     API_KEY: ${env:SYNC_GAMES_API_KEY, ''}
     DOWNLOAD_BASE_URL: ${self:custom.downloadBaseUrl.${sls:stage}, ''}
     CONNECTIONS_TABLE: { Ref: ActiveConnectionsTable }
+    GAME_STATS_TABLE: { Ref: GameStatsTable }
     WS_ENDPOINT:
       Fn::Join:
         - ""
@@ -65,6 +66,7 @@ provider:
           Resource:
             - Fn::GetAtt: [ActiveConnectionsTable, Arn]
             - Fn::Join: ["/", [Fn::GetAtt: [ActiveConnectionsTable, Arn], "index", "*"]]
+            - Fn::GetAtt: [GameStatsTable, Arn]
 
         - Effect: Allow
           Action:
@@ -138,6 +140,23 @@ functions:
       - schedule:
           rate: ${self:custom.steamSeedScheduleRate.${sls:stage}, 'rate(15 minutes)'}
           enabled: ${self:custom.steamSeedScheduleEnabled.${sls:stage}, false}
+
+  syncGameStats:
+    handler: apps/api/src/interfaces/lambda/s3-events/syncGameStats.handler
+    description: Actualiza DynamoDB cuando se sube/borra un save en S3 - ${sls:stage}
+    timeout: 30
+    events:
+      - eventBridge:
+          pattern:
+            source:
+              - aws.s3
+            detail-type:
+              - "Object Created"
+              - "Object Deleted"
+            detail:
+              bucket:
+                name:
+                  - Ref: SavesBucket
 
   wsConnect:
     handler: apps/api/src/interfaces/lambda/websocket/connect.handler

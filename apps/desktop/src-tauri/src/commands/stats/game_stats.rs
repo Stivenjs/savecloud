@@ -318,16 +318,22 @@ fn collect_files_with_meta(dir: &Path, base: &Path, out: &mut Vec<(u64, std::tim
         return;
     };
     for e in entries.flatten() {
-        let full = e.path();
+        let file_name = e.file_name();
+        let fname_str = file_name.to_string_lossy();
+
+        if fname_str.starts_with('.') {
+            continue;
+        }
+
         let meta = match e.metadata() {
             Ok(m) => m,
             Err(_) => continue,
         };
+
+        let full = e.path();
         if meta.is_dir() {
-            if !e.file_name().to_string_lossy().starts_with('.') {
-                collect_files_with_meta(&full, base, out);
-            }
-        } else if meta.is_file() && full.strip_prefix(base).is_ok() {
+            collect_files_with_meta(&full, base, out);
+        } else if meta.is_file() {
             let size = meta.len();
             let mtime = meta.modified().unwrap_or(UNIX_EPOCH);
             out.push((size, mtime));
@@ -388,32 +394,36 @@ pub async fn get_game_stats() -> Result<Vec<GameStatsDto>, String> {
         .map(|g| (g.id.to_lowercase(), g.playtime_seconds))
         .collect();
 
-    let cloud_by_game: HashMap<String, Option<String>> = match sync::sync_list_remote_saves().await
-    {
-        Ok(remote) => {
-            let mut map: HashMap<String, Option<chrono::DateTime<chrono::Utc>>> = HashMap::new();
-            for s in remote {
-                let dt = chrono::DateTime::parse_from_rfc3339(&s.last_modified)
-                    .or_else(|_| chrono::DateTime::parse_from_rfc2822(&s.last_modified))
-                    .ok()
-                    .map(|d| d.with_timezone(&chrono::Utc));
+    let cloud_by_game: HashMap<String, Option<String>> =
+        match sync::api::sync_list_remote_saves_summary().await {
+            Ok(remote) => {
+                let mut map: HashMap<String, Option<chrono::DateTime<chrono::Utc>>> =
+                    HashMap::new();
+                for s in remote {
+                    let dt = match s.last_modified.as_deref() {
+                        Some(val) => chrono::DateTime::parse_from_rfc3339(val)
+                            .or_else(|_| chrono::DateTime::parse_from_rfc2822(val))
+                            .ok()
+                            .map(|d| d.with_timezone(&chrono::Utc)),
+                        None => None,
+                    };
 
-                if let Some(new_dt) = dt {
-                    let key = s.game_id.to_lowercase();
-                    let entry = map.entry(key).or_insert(None);
-                    *entry = Some(match *entry {
-                        Some(prev) if new_dt > prev => new_dt,
-                        Some(prev) => prev,
-                        None => new_dt,
-                    });
+                    if let Some(new_dt) = dt {
+                        let key = s.game_id.to_lowercase();
+                        let entry = map.entry(key).or_insert(None);
+                        *entry = Some(match *entry {
+                            Some(prev) if new_dt > prev => new_dt,
+                            Some(prev) => prev,
+                            None => new_dt,
+                        });
+                    }
                 }
+                map.into_iter()
+                    .map(|(k, v)| (k, v.map(|d| d.to_rfc3339())))
+                    .collect()
             }
-            map.into_iter()
-                .map(|(k, v)| (k, v.map(|d| d.to_rfc3339())))
-                .collect()
-        }
-        Err(_) => HashMap::new(),
-    };
+            Err(_) => HashMap::new(),
+        };
 
     let mut handles = Vec::with_capacity(cfg.games.len());
     for game in &cfg.games {

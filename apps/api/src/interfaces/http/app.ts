@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import cors from "@fastify/cors";
 import type { SaveRepository } from "@domain/ports/SaveRepository";
+import type { GameStatRepository } from "@domain/ports/GameStatRepository";
 import type { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
 import { GetUploadUrlUseCase } from "@application/use-cases/GetUploadUrlUseCase";
 import { GetUploadUrlsUseCase } from "@application/use-cases/GetUploadUrlsUseCase";
@@ -12,6 +13,7 @@ import { ListBackupsUseCase } from "@application/use-cases/ListBackupsUseCase";
 import { DeleteBackupUseCase } from "@application/use-cases/DeleteBackupUseCase";
 import { RenameBackupUseCase } from "@application/use-cases/RenameBackupUseCase";
 import { ListSavesUseCase } from "@application/use-cases/ListSavesUseCase";
+import { GetGameSummaryUseCase } from "@application/use-cases/GetGameSummaryUseCase";
 import { CreateMultipartUploadUseCase } from "@application/use-cases/CreateMultipartUploadUseCase";
 import { CreateMultipartUploadWithPartUrlsUseCase } from "@application/use-cases/CreateMultipartUploadWithPartUrlsUseCase";
 import { GetUploadPartUrlsUseCase } from "@application/use-cases/GetUploadPartUrlsUseCase";
@@ -35,6 +37,7 @@ import { GetFriendProfileUseCase } from "@application/use-cases/GetFriendProfile
 
 export interface AppDependencies {
   saveRepository: SaveRepository;
+  gameStatRepository?: GameStatRepository;
   steamSeedRepository?: S3SteamSeedRepository;
   cloudInviteRepository?: CloudInviteRepository;
   shareTokenStore?: ShareTokenS3;
@@ -84,6 +87,9 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   const listBackupsUseCase = new ListBackupsUseCase(deps.saveRepository);
   const deleteBackupUseCase = new DeleteBackupUseCase(deps.saveRepository);
   const renameBackupUseCase = new RenameBackupUseCase(deps.saveRepository);
+  const getGameSummaryUseCase = deps.gameStatRepository
+    ? new GetGameSummaryUseCase(deps.gameStatRepository)
+    : undefined;
   const createMultipartUploadUseCase = new CreateMultipartUploadUseCase(deps.saveRepository);
   const createMultipartUploadWithPartUrlsUseCase = new CreateMultipartUploadWithPartUrlsUseCase(deps.saveRepository);
   const getUploadPartUrlsUseCase = new GetUploadPartUrlsUseCase(deps.saveRepository);
@@ -101,6 +107,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     deleteGameFromCloudUseCase,
     renameGameInCloudUseCase,
     listSavesUseCase,
+    getGameSummaryUseCase,
     listBackupsUseCase,
     deleteBackupUseCase,
     renameBackupUseCase,
