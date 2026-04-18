@@ -23,8 +23,6 @@ pub mod upload;
 
 use models::SaveFileDto;
 
-pub use api::sync_list_remote_saves;
-
 /// Lista archivos de guardado de un juego configurado.
 #[tauri::command]
 pub async fn list_save_files(game_id: String) -> Result<Vec<SaveFileDto>, String> {
