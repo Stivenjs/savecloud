@@ -89,7 +89,7 @@ function NotificationRow({
         ${unread ? "bg-primary-50/30 dark:bg-primary-900/10" : ""}
       `}>
       {/* Barra de resaltado para notificaciones no leídas */}
-      {unread && <span className="absolute left-0 top-3 bottom-3 w-[3px] rounded-full bg-primary-400" />}
+      {unread && <span className="absolute left-0 top-3 bottom-3 w-0.75 rounded-full bg-primary-400" />}
 
       {/* Icono */}
       <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
