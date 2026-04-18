@@ -32,6 +32,7 @@ import {
   listSourcesSummary,
   removeSource,
 } from "@services/tauri/sources.service";
+import { getAlwaysShowSelectorCmd, setAlwaysShowSelectorCmd } from "@services/tauri/profile.service";
 import { MASKED_CONFIG_SECRET } from "@/constants/configMask";
 import { useConfig } from "@hooks/useConfig";
 import { useProfileSession } from "@hooks/useProfileSession";
@@ -230,6 +231,12 @@ export function useSettingsPage() {
   const { data: autostart = false, isLoading: loadingAutostart } = useQuery({
     queryKey: ["autostartStatus"],
     queryFn: isEnabled,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const { data: alwaysShowProfileSelector = false, isLoading: loadingAlwaysShowProfileSelector } = useQuery({
+    queryKey: ["alwaysShowProfileSelector"],
+    queryFn: getAlwaysShowSelectorCmd,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -451,6 +458,21 @@ export function useSettingsPage() {
       queryClient.setQueryData(["autostartStatus"], checked);
     } catch (e) {
       console.error("Error al cambiar autostart:", e);
+    }
+  };
+
+  const handleAlwaysShowProfileSelectorChange = async (checked: boolean) => {
+    try {
+      await setAlwaysShowSelectorCmd(checked);
+      queryClient.setQueryData(["alwaysShowProfileSelector"], checked);
+      toastSuccess(
+        "Preferencia guardada",
+        checked
+          ? "Se mostrará el panel de perfiles en cada inicio."
+          : "La app abrirá directamente el último perfil usado."
+      );
+    } catch (e) {
+      toastError("Error al guardar preferencia", e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -736,7 +758,9 @@ export function useSettingsPage() {
     config,
     configPath,
     autostart,
+    alwaysShowProfileSelector,
     loading: loadingAutostart,
+    loadingAlwaysShowProfileSelector,
     loadingConfigData: loadingConfigPath || loadingS3 || loadingUseConfig,
     s3TransferEndpointType,
     handleExportConfig,
@@ -748,6 +772,7 @@ export function useSettingsPage() {
     handleCreateConfigFile,
     handlePullFriendConfig,
     handleAutostartChange,
+    handleAlwaysShowProfileSelectorChange,
     handleFullBackupStreamingChange,
     handleFullBackupStreamingDryRunChange,
     handleSyncSteamCatalog,

@@ -60,9 +60,7 @@ export function useStartupProfileGate(): StartupProfileGateState {
       if (cancelled) return;
 
       setOptions(profileOptions);
-      const shouldShowSelector =
-        profileOptions.length > 0 &&
-        (alwaysShowSelector || profileOptions.length > 1 || profileOptions.some((p) => p.source === "config-default"));
+      const shouldShowSelector = profileOptions.length > 0 && alwaysShowSelector;
       setScreenVisible(shouldShowSelector);
       setScreenLoading(false);
       startupGateResolvedRef.current = true;

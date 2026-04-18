@@ -7,6 +7,7 @@ import { CreateConfigModal } from "@features/settings/CreateConfigModal";
 import { ExperimentalFeaturesCard } from "@features/settings/ExperimentalFeaturesCard";
 import { LocalBackupInfoCard } from "@features/settings/LocalBackupInfoCard";
 import { NotificationsCard } from "@features/settings/NotificationsCard";
+import { ProfileStartupBehaviorCard } from "@features/settings/ProfileStartupBehaviorCard";
 import { ReleaseNotesCard } from "@features/settings/ReleaseNotesCard";
 import { RestoreConfigModal } from "@features/settings/RestoreConfigModal";
 import { ResetSteamCatalogModal } from "@features/settings/ResetSteamCatalogModal";
@@ -31,7 +32,9 @@ export function SettingsPage() {
   const [settingsTab, setSettingsTab] = useState<string>("account");
   const {
     autostart,
+    alwaysShowProfileSelector,
     loading,
+    loadingAlwaysShowProfileSelector,
     loadingConfigData,
     testingNotification,
     exporting,
@@ -64,6 +67,7 @@ export function SettingsPage() {
     handleCreateConfigFile,
     handlePullFriendConfig,
     handleAutostartChange,
+    handleAlwaysShowProfileSelectorChange,
     handleFullBackupStreamingChange,
     handleFullBackupStreamingDryRunChange,
     handleSyncSteamCatalog,
@@ -198,6 +202,11 @@ export function SettingsPage() {
           }>
           <div className="space-y-4">
             <AutostartCard autostart={autostart} loading={loading} onChange={handleAutostartChange} />
+            <ProfileStartupBehaviorCard
+              alwaysShowProfileSelector={alwaysShowProfileSelector}
+              loading={loadingAlwaysShowProfileSelector}
+              onChange={handleAlwaysShowProfileSelectorChange}
+            />
             <SourceInstallSettingsCard
               sourceUrl={sourceUrl}
               defaultDownloadDir={defaultSourceDownloadDir}
