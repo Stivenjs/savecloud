@@ -50,19 +50,11 @@ export function ProfileStartupSelector({
       <div className="absolute inset-0 backdrop-blur-sm" />
 
       <div className="relative mx-auto flex min-h-dvh w-full max-w-5xl items-center justify-center px-6 py-10">
-        <section className="w-full rounded-2xl border border-default-200 bg-content1/85 p-8 shadow-2xl shadow-default-900/20 sm:p-10">
-          <header className="mb-8 flex items-center justify-between">
-            <div className="flex items-center gap-3 text-foreground">
-              <div className="flex size-9 items-center justify-center rounded-full border border-default-200 bg-default-100">
-                <span className="text-base font-semibold">SC</span>
-              </div>
-              <span className="text-2xl font-semibold tracking-wide">SAVECLOUD</span>
-            </div>
-          </header>
-
+        <section className="w-full p-3 sm:p-6">
           <div className="mx-auto max-w-2xl text-center">
-            <h1 className="text-balance text-3xl font-semibold tracking-tight sm:text-5xl">¿Quien va a jugar?</h1>
-            <p className="mt-3 text-sm text-default-500 sm:text-base">Selecciona el perfil activo para esta sesion.</p>
+            <h1 className="text-balance text-3xl font-semibold tracking-tight text-white sm:text-5xl">
+              ¿Quién va a jugar?
+            </h1>
           </div>
 
           {error && (
@@ -71,11 +63,11 @@ export function ProfileStartupSelector({
             </div>
           )}
 
-          <div className="mx-auto mt-8 grid max-w-3xl gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mx-auto mt-10 flex max-w-3xl flex-wrap items-start justify-center gap-x-10 gap-y-8">
             {options.map((option) => {
               const avatarSrc = resolveProfileAsset(option.profileAvatarUrl);
               const isSelecting = selectingId === option.id;
-              const label = option.source === "config-default" ? "Default (config.json)" : "Perfil";
+              const accountDisplayName = option.localUserId.trim() || option.name.trim() || "Sin usuario";
 
               return (
                 <button
@@ -83,43 +75,41 @@ export function ProfileStartupSelector({
                   type="button"
                   onClick={() => onSelect(option.id)}
                   disabled={selectingId != null}
-                  className="group flex min-h-44 flex-col rounded-xl border border-default-200 bg-content2/65 p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-default-400 hover:bg-content2 disabled:cursor-not-allowed disabled:opacity-70">
-                  <div className="flex items-center justify-between">
-                    <span className="rounded-full border border-default-300 bg-default-100 px-2 py-0.5 text-xs text-default-700 dark:border-default-600 dark:bg-default-200/10 dark:text-default-300">
-                      {label}
-                    </span>
-                    {isSelecting && <span className="text-xs text-primary">Cambiando...</span>}
+                  className="group flex w-40 flex-col items-center text-center transition duration-200 hover:-translate-y-0.5 cursor-pointer disabled:opacity-70">
+                  <div className="relative size-28 overflow-hidden border border-white/55 bg-black/25 shadow-lg shadow-black/20 transition duration-200 group-hover:border-white group-hover:shadow-[0_0_0_2px_rgba(255,255,255,0.28)]">
+                    {avatarSrc ? (
+                      <img src={avatarSrc} alt="Avatar de perfil" decoding="async" className="size-full object-cover" />
+                    ) : (
+                      <div className="flex size-full items-center justify-center text-white/70">
+                        <User size={34} strokeWidth={1.4} />
+                      </div>
+                    )}
                   </div>
 
-                  <div className="mt-4 flex flex-1 flex-col items-center justify-center gap-3 text-center">
-                    <div className="relative size-20 overflow-hidden rounded-md border border-default-300 bg-default-100 shadow-lg shadow-default-900/15 dark:bg-default-200/10">
-                      {avatarSrc ? (
-                        <img src={avatarSrc} alt="" decoding="async" className="size-full object-cover" />
-                      ) : (
-                        <div className="flex size-full items-center justify-center text-default-500">
-                          <User size={34} strokeWidth={1.4} />
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <p className="line-clamp-1 text-base font-semibold text-foreground">{option.name || "Perfil"}</p>
-                      <p className="line-clamp-1 text-xs text-default-500">{option.localUserId || "Sin usuario"}</p>
-                    </div>
+                  <div className="mt-3">
+                    <p className="line-clamp-1 text-3xl font-semibold text-white">{option.name || "Perfil"}</p>
+                    <p className="line-clamp-1 text-xl text-white/65 opacity-0 transition duration-200 group-hover:opacity-100">
+                      {accountDisplayName}
+                    </p>
+                    {isSelecting && <p className="mt-1 text-xs text-white/80">Cambiando...</p>}
                   </div>
                 </button>
               );
             })}
-          </div>
 
-          <div className="mx-auto mt-6 flex max-w-3xl justify-center">
-            <Button
-              color="primary"
-              variant="flat"
-              onPress={() => setCreatingOpen((v) => !v)}
-              isDisabled={selectingId != null || creatingProfile}>
-              {creatingOpen ? "Cancelar nuevo perfil" : "Crear nuevo perfil"}
-            </Button>
+            <button
+              type="button"
+              onClick={() => setCreatingOpen((v) => !v)}
+              disabled={selectingId != null || creatingProfile}
+              className="group flex min-h-40 flex-col items-center justify-center rounded-xl border border-transparent bg-transparent transition duration-200 hover:bg-content2/20 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer">
+              <div className="relative flex size-16 items-center justify-center border-2 border-transparent text-white transition duration-200 group-hover:border-white/90">
+                <span className="pointer-events-none absolute left-1/2 top-1/2 h-8 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-white" />
+                <span className="pointer-events-none absolute left-1/2 top-1/2 h-0.5 w-8 -translate-x-1/2 -translate-y-1/2 bg-white" />
+              </div>
+              <span className="mt-2 text-xl font-semibold text-white/90 opacity-0 transition duration-200 group-hover:opacity-100">
+                Añadir cuenta
+              </span>
+            </button>
           </div>
 
           {creatingOpen && (
