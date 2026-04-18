@@ -18,13 +18,7 @@ interface ProfileStartupSelectorProps {
   creatingProfile: boolean;
   error: string | null;
   onSelect: (profileId: string) => void;
-  onCreateProfile: (input: {
-    name: string;
-    userId: string;
-    apiBaseUrl: string;
-    wsBaseUrl: string;
-    apiKey: string;
-  }) => void;
+  onCreateProfile: (input: { name: string }) => void;
 }
 
 export function ProfileStartupSelector({
@@ -37,31 +31,16 @@ export function ProfileStartupSelector({
 }: ProfileStartupSelectorProps) {
   const [creatingOpen, setCreatingOpen] = useState(false);
   const [name, setName] = useState("");
-  const [userId, setUserId] = useState("");
-  const [apiBaseUrl, setApiBaseUrl] = useState("");
-  const [wsBaseUrl, setWsBaseUrl] = useState("");
-  const [apiKey, setApiKey] = useState("");
 
   const canCreate = useMemo(
-    () =>
-      name.trim().length > 0 &&
-      userId.trim().length > 0 &&
-      apiBaseUrl.trim().length > 0 &&
-      wsBaseUrl.trim().length > 0 &&
-      apiKey.trim().length > 0 &&
-      !creatingProfile &&
-      selectingId == null,
-    [name, userId, apiBaseUrl, wsBaseUrl, apiKey, creatingProfile, selectingId]
+    () => name.trim().length > 0 && !creatingProfile && selectingId == null,
+    [name, creatingProfile, selectingId]
   );
 
   const submitCreate = () => {
     if (!canCreate) return;
     onCreateProfile({
       name: name.trim(),
-      userId: userId.trim(),
-      apiBaseUrl: apiBaseUrl.trim(),
-      wsBaseUrl: wsBaseUrl.trim(),
-      apiKey: apiKey.trim(),
     });
   };
 
@@ -145,31 +124,19 @@ export function ProfileStartupSelector({
 
           {creatingOpen && (
             <div className="mx-auto mt-5 grid max-w-3xl gap-3 rounded-xl border border-default-200 bg-content2/70 p-4 sm:grid-cols-2">
-              <Input label="Nombre" value={name} onValueChange={setName} placeholder="Mi perfil" />
-              <Input label="User ID" value={userId} onValueChange={setUserId} placeholder="usuario123" />
-              <Input
-                label="API Base URL"
-                value={apiBaseUrl}
-                onValueChange={setApiBaseUrl}
-                placeholder="https://api.savecloud.app"
-              />
-              <Input
-                label="WS Base URL"
-                value={wsBaseUrl}
-                onValueChange={setWsBaseUrl}
-                placeholder="wss://api.savecloud.app"
-              />
               <Input
                 className="sm:col-span-2"
-                type="password"
-                label="API Key"
-                value={apiKey}
-                onValueChange={setApiKey}
-                placeholder="Clave API"
+                label="Nombre"
+                value={name}
+                onValueChange={setName}
+                placeholder="Mi perfil"
               />
+              <p className="sm:col-span-2 text-xs text-default-500">
+                Podras configurar usuario, API URL y credenciales despues en Configuracion.
+              </p>
               <div className="sm:col-span-2 flex justify-end">
                 <Button color="primary" onPress={submitCreate} isDisabled={!canCreate} isLoading={creatingProfile}>
-                  Crear y usar este perfil
+                  Crear perfil
                 </Button>
               </div>
             </div>

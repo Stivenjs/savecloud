@@ -3,13 +3,10 @@
 //! Proporciona operaciones de alto nivel para crear, cambiar, actualizar y
 //! eliminar perfiles, coordinando la persistencia con el Keyring del SO.
 
-use super::io::{
-    delete_secure_api_key_for_profile, get_global_secure_api_key, get_secure_api_key_for_profile,
-    set_secure_api_key_for_profile,
-};
+use super::io::delete_secure_api_key_for_profile;
 use super::profile_io;
 use super::profile_storage;
-use super::profiles::{Profile, ProfileDTO, ProfilesIndex, DEFAULT_PROFILE_ID};
+use super::profiles::{Profile, ProfileDTO, ProfilesIndex};
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -34,8 +31,6 @@ impl ProfileManager {
 
     /// Obtiene el perfil activo como DTO (sin secretos).
     pub fn get_active_profile_dto(index: &ProfilesIndex) -> Result<ProfileDTO, String> {
-        // Valida que el perfil activo tenga API key disponible en Keyring.
-        let _ = Self::get_active_profile_api_key(index)?;
         Self::get_active_profile(index).map(|p| ProfileDTO::from(&p))
     }
 
@@ -67,9 +62,6 @@ impl ProfileManager {
             p.last_used = Utc::now().timestamp();
         }
 
-        // Validar que el perfil activo tenga API key asociada.
-        let _ = Self::get_active_profile_api_key(index)?;
-
         // Persitir cambios
         profile_io::save_profiles_index(index)?;
 
@@ -85,21 +77,11 @@ impl ProfileManager {
     /// # Arguments
     /// * `index` - Índice de perfiles (mutable)
     /// * `name` - Nombre amigable del perfil
-    /// * `user_id` - ID de usuario local en SaveCloud
-    /// * `api_base_url` - URL base de la API
-    /// * `ws_base_url` - URL base de WebSocket
-    /// * `api_key` - Clave API (se guarda en Keyring)
+    /// La configuración cloud (user_id, urls, api_key) se completa después.
     ///
     /// # Errors
     /// Devuelve error si falla la persistencia o el Keyring.
-    pub fn create_profile(
-        index: &mut ProfilesIndex,
-        name: String,
-        user_id: String,
-        api_base_url: String,
-        ws_base_url: String,
-        api_key: String,
-    ) -> Result<Profile, String> {
+    pub fn create_profile(index: &mut ProfilesIndex, name: String) -> Result<Profile, String> {
         let profile_id = format!(
             "profile_{}",
             Uuid::new_v4()
@@ -113,9 +95,9 @@ impl ProfileManager {
         let profile = Profile {
             id: profile_id.clone(),
             name,
-            local_user_id: user_id,
-            api_base_url,
-            ws_base_url,
+            local_user_id: String::new(),
+            api_base_url: String::new(),
+            ws_base_url: String::new(),
             profile_avatar_url: None,
             created_at: now,
             last_used: now,
@@ -131,9 +113,6 @@ impl ProfileManager {
             share_visual_profile_with_hosts: false,
             share_visual_profile_with_members: false,
         };
-
-        // Guardar API key en Keyring con el profile_id
-        set_secure_api_key_for_profile(&profile_id, &api_key)?;
 
         // Crear respaldo antes de un cambio persistente.
         profile_io::backup_profiles_index()?;
@@ -209,28 +188,6 @@ impl ProfileManager {
         Ok(updated)
     }
 
-    /// Obtiene la API key del Keyring para un perfil específico.
-    ///
-    /// # Errors
-    /// Devuelve error si la API key no se encuentra en el Keyring.
-    pub fn get_profile_api_key(profile_id: &str) -> Result<String, String> {
-        if profile_id == DEFAULT_PROFILE_ID {
-            get_global_secure_api_key()
-                .ok_or_else(|| format!("API key not found for profile: {profile_id}"))
-        } else {
-            get_secure_api_key_for_profile(profile_id)
-                .ok_or_else(|| format!("API key not found for profile: {profile_id}"))
-        }
-    }
-
-    /// Obtiene la API key del perfil activo.
-    ///
-    /// # Errors
-    /// Devuelve error si el perfil activo no existe o si la API key no se encuentra.
-    pub fn get_active_profile_api_key(index: &ProfilesIndex) -> Result<String, String> {
-        Self::get_profile_api_key(&index.active_profile_id)
-    }
-
     /// Establece la opción de mostrar siempre el selector.
     ///
     /// # Errors
@@ -261,14 +218,7 @@ mod tests {
     #[test]
     fn test_create_profile_generates_unique_id() {
         let mut index = ProfilesIndex::new();
-        let result = ProfileManager::create_profile(
-            &mut index,
-            "Test".to_string(),
-            "user1".to_string(),
-            "http://api".to_string(),
-            "ws://ws".to_string(),
-            "key1".to_string(),
-        );
+        let result = ProfileManager::create_profile(&mut index, "Test".to_string());
 
         assert!(result.is_ok());
         let profile = result.unwrap();

@@ -14,10 +14,6 @@ export interface ProfileDto {
 
 export interface CreateProfileInput {
   readonly name: string;
-  readonly userId: string;
-  readonly apiBaseUrl: string;
-  readonly wsBaseUrl: string;
-  readonly apiKey: string;
 }
 
 export async function listProfilesCmd(): Promise<ProfileDto[]> {
@@ -35,10 +31,6 @@ export async function setActiveProfileCmd(profileId: string): Promise<ProfileDto
 export async function createProfileCmd(input: CreateProfileInput): Promise<ProfileDto> {
   return invoke<ProfileDto>("create_profile_cmd", {
     name: input.name,
-    userId: input.userId,
-    apiBaseUrl: input.apiBaseUrl,
-    wsBaseUrl: input.wsBaseUrl,
-    apiKey: input.apiKey,
   });
 }
 

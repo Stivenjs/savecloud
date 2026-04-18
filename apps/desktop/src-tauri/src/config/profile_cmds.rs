@@ -53,10 +53,6 @@ pub async fn set_active_profile_cmd(profile_id: String) -> Result<ProfileDTO, St
 ///
 /// # Arguments
 /// * `name` - Nombre amigable del perfil
-/// * `user_id` - ID de usuario local en SaveCloud
-/// * `api_base_url` - URL base de la API (ej: https://backup.local)
-/// * `ws_base_url` - URL base de WebSocket (ej: wss://backup.local)
-/// * `api_key` - Clave API (se guardará en OS Keyring)
 ///
 /// # Returns
 /// ProfileDTO del perfil recién creado.
@@ -64,22 +60,9 @@ pub async fn set_active_profile_cmd(profile_id: String) -> Result<ProfileDTO, St
 /// # Errors
 /// Devuelve error si falla la creación o la persistencia.
 #[tauri::command]
-pub async fn create_profile_cmd(
-    name: String,
-    user_id: String,
-    api_base_url: String,
-    ws_base_url: String,
-    api_key: String,
-) -> Result<ProfileDTO, String> {
+pub async fn create_profile_cmd(name: String) -> Result<ProfileDTO, String> {
     let mut index = ProfileManager::load_profiles()?;
-    let profile = ProfileManager::create_profile(
-        &mut index,
-        name,
-        user_id,
-        api_base_url,
-        ws_base_url,
-        api_key,
-    )?;
+    let profile = ProfileManager::create_profile(&mut index, name)?;
     Ok(ProfileDTO::from(&profile))
 }
 

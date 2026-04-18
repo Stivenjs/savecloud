@@ -14,10 +14,6 @@ import { profileDtoToOption, profileDtoToSession } from "@/app/profileSessionMap
 
 export interface CreateProfileInput {
   readonly name: string;
-  readonly userId: string;
-  readonly apiBaseUrl: string;
-  readonly wsBaseUrl: string;
-  readonly apiKey: string;
 }
 
 export interface StartupProfileGateState {
