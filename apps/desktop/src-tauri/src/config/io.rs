@@ -37,7 +37,11 @@ pub fn set_global_secure_api_key(key: &str) -> Result<(), String> {
 }
 
 fn cloud_host_keyring_account(host_user_id: &str) -> String {
-    format!("{}{}", KEYRING_ACCOUNT_CLOUD_HOST_PREFIX, host_user_id.trim())
+    format!(
+        "{}{}",
+        KEYRING_ACCOUNT_CLOUD_HOST_PREFIX,
+        host_user_id.trim()
+    )
 }
 
 pub fn get_secure_api_key_for_cloud_host(host_user_id: &str) -> Option<String> {
@@ -220,8 +224,12 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
     current_settings.share_visual_profile_with_members = cfg.share_visual_profile_with_members;
 
     save_settings(&current_settings)?;
-    save_library(&GameLibrary { games: cfg.games.clone() })?;
-    save_history(&OperationHistory { entries: cfg.operation_history.clone() })?;
+    save_library(&GameLibrary {
+        games: cfg.games.clone(),
+    })?;
+    save_history(&OperationHistory {
+        entries: cfg.operation_history.clone(),
+    })?;
     save_gamification(&cfg.gamification)?;
 
     Ok(())

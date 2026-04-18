@@ -37,11 +37,13 @@ export function ProfileStartupSelector({
     [name, creatingProfile, selectingId]
   );
 
-  const submitCreate = () => {
+  const submitCreate = async () => {
     if (!canCreate) return;
-    onCreateProfile({
+    await onCreateProfile({
       name: name.trim(),
     });
+    setName("");
+    setCreatingOpen(false);
   };
 
   return (
@@ -113,21 +115,45 @@ export function ProfileStartupSelector({
           </div>
 
           {creatingOpen && (
-            <div className="mx-auto mt-5 grid max-w-3xl gap-3 rounded-xl border border-default-200 bg-content2/70 p-4 sm:grid-cols-2">
-              <Input
-                className="sm:col-span-2"
-                label="Nombre"
-                value={name}
-                onValueChange={setName}
-                placeholder="Mi perfil"
-              />
-              <p className="sm:col-span-2 text-xs text-default-500">
-                Podras configurar usuario, API URL y credenciales despues en Configuracion.
-              </p>
-              <div className="sm:col-span-2 flex justify-end">
-                <Button color="primary" onPress={submitCreate} isDisabled={!canCreate} isLoading={creatingProfile}>
-                  Crear perfil
-                </Button>
+            <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-white/10 bg-black/25 p-5 text-white shadow-2xl shadow-black/25 backdrop-blur-md sm:p-6">
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <h2 className="text-lg font-semibold tracking-tight text-white">Crear nuevo perfil</h2>
+                  <p className="text-sm text-white/60">Usa un nombre claro para identificar esta cuenta más tarde.</p>
+                </div>
+
+                <Input
+                  label="Nombre"
+                  labelPlacement="outside"
+                  value={name}
+                  onValueChange={setName}
+                  placeholder="Mi perfil"
+                  variant="bordered"
+                  size="sm"
+                  classNames={{
+                    label: "text-white/70",
+                    input: "text-white placeholder:text-white/35",
+                    inputWrapper:
+                      "border-white/15 bg-white/5 shadow-none hover:border-white/30 data-[hover=true]:border-white/30 group-data-[focus=true]:border-white/55",
+                  }}
+                />
+
+                <p className="text-xs text-white/45">
+                  Después podrás configurar usuario, API URL y credenciales desde Configuración.
+                </p>
+
+                <div className="flex justify-end">
+                  <Button
+                    color="primary"
+                    variant="solid"
+                    size="sm"
+                    onPress={() => void submitCreate()}
+                    isDisabled={!canCreate}
+                    isLoading={creatingProfile}
+                    className="min-w-36">
+                    Crear perfil
+                  </Button>
+                </div>
               </div>
             </div>
           )}

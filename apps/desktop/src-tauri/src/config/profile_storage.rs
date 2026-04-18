@@ -42,17 +42,25 @@ fn scoped_data_path(file_name: &str) -> Option<PathBuf> {
 fn scoped_or_legacy_path(file_name: &str) -> Option<PathBuf> {
     if is_default_profile_active() {
         let scoped = scoped_data_path(file_name);
-        if scoped.as_ref().is_some_and(|path| path.exists()) {
-            return scoped;
-        }
-
-        return match file_name {
+        let legacy = match file_name {
             paths::SETTINGS_FILE_NAME => paths::settings_path(),
             paths::LIBRARY_FILE_NAME => paths::library_path(),
             paths::HISTORY_FILE_NAME => paths::history_path(),
             paths::GAMIFICATION_FILE_NAME => paths::gamification_path(),
-            _ => scoped,
+            _ => scoped.clone(),
         };
+
+        // Para el perfil principal priorizamos el storage legado para mantener
+        // compatibilidad con instalaciones previas donde viven los datos reales.
+        if legacy.as_ref().is_some_and(|path| path.exists()) {
+            return legacy;
+        }
+
+        if scoped.as_ref().is_some_and(|path| path.exists()) {
+            return scoped;
+        }
+
+        return legacy.or(scoped);
     }
 
     scoped_data_path(file_name)
