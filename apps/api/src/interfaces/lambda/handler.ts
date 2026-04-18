@@ -11,9 +11,11 @@ import { S3SaveRepository } from "@infrastructure/persistence/S3SaveRepository";
 import { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
 import { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
 import { DynamoDbGameStatRepository } from "@infrastructure/persistence/DynamoDbGameStatRepository";
+import { DynamoDbSaveFileIndexRepository } from "@infrastructure/persistence/DynamoDbSaveFileIndexRepository";
 
 const bucketName = process.env.BUCKET_NAME ?? "";
 const gameStatsTable = process.env.GAME_STATS_TABLE ?? "";
+const saveFilesIndexTable = process.env.SAVE_FILES_INDEX_TABLE ?? "";
 
 const httpsAgent = new Agent({
   keepAlive: true,
@@ -40,6 +42,9 @@ const shareTokenStore = new ShareTokenS3(s3, bucketName);
 const notificationStore = new S3NotificationStore(s3, bucketName);
 const cloudInviteRepository = new S3CloudInviteRepository(s3, bucketName);
 const gameStatRepository = new DynamoDbGameStatRepository(dynamoClient, gameStatsTable);
+const saveFileIndexRepository = saveFilesIndexTable
+  ? new DynamoDbSaveFileIndexRepository(dynamoClient, saveFilesIndexTable)
+  : undefined;
 
 let cachedProxy: ((event: APIGatewayProxyEvent, context: Context) => Promise<APIGatewayProxyResult>) | null = null;
 
@@ -47,6 +52,7 @@ async function getProxy() {
   if (!cachedProxy) {
     const app = await buildApp({
       saveRepository,
+      saveFileIndexRepository,
       steamSeedRepository,
       shareTokenStore,
       notificationStore,

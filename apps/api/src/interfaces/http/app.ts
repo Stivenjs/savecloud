@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import cors from "@fastify/cors";
 import type { SaveRepository } from "@domain/ports/SaveRepository";
+import type { SaveFileIndexRepository } from "@domain/ports/SaveFileIndexRepository";
 import type { GameStatRepository } from "@domain/ports/GameStatRepository";
 import type { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
 import { GetUploadUrlUseCase } from "@application/use-cases/GetUploadUrlUseCase";
@@ -37,6 +38,7 @@ import { GetFriendProfileUseCase } from "@application/use-cases/GetFriendProfile
 
 export interface AppDependencies {
   saveRepository: SaveRepository;
+  saveFileIndexRepository?: SaveFileIndexRepository;
   gameStatRepository?: GameStatRepository;
   steamSeedRepository?: S3SteamSeedRepository;
   cloudInviteRepository?: CloudInviteRepository;
@@ -83,7 +85,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   const getDownloadUrlsUseCase = new GetDownloadUrlsUseCase(deps.saveRepository);
   const deleteGameFromCloudUseCase = new DeleteGameFromCloudUseCase(deps.saveRepository);
   const renameGameInCloudUseCase = new RenameGameInCloudUseCase(deps.saveRepository);
-  const listSavesUseCase = new ListSavesUseCase(deps.saveRepository);
+  const listSavesUseCase = new ListSavesUseCase(deps.saveRepository, deps.saveFileIndexRepository);
   const listBackupsUseCase = new ListBackupsUseCase(deps.saveRepository);
   const deleteBackupUseCase = new DeleteBackupUseCase(deps.saveRepository);
   const renameBackupUseCase = new RenameBackupUseCase(deps.saveRepository);

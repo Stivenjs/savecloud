@@ -29,4 +29,16 @@ export interface GameStatRepository {
    * @param gameId - Identificador del juego.
    */
   delete(userId: string, gameId: string): Promise<void>;
+
+  /**
+   * Aplica un delta incremental sobre una estadística existente.
+   * Permite actualizar conteo y tamaño sin volver a listar archivos en S3.
+   */
+  applyDelta(input: {
+    userId: string;
+    gameId: string;
+    deltaFileCount: number;
+    deltaSizeBytes: number;
+    lastModified?: Date | null;
+  }): Promise<void>;
 }
