@@ -113,40 +113,6 @@ export function ProfileStartupSelector({
                         </div>
                       )}
                       {isDeleting && <div className="absolute inset-0 bg-black/35" />}
-
-                      <Popover
-                        isOpen={isMenuOpen}
-                        onOpenChange={(open) => setOpenMenuId(open ? option.id : null)}
-                        placement="bottom-end"
-                        showArrow={false}
-                        shouldCloseOnBlur>
-                        <PopoverTrigger>
-                          <button
-                            type="button"
-                            aria-label="Opciones del perfil"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                            }}
-                            className="absolute bottom-0 right-0 flex size-6 items-center justify-center bg-black/45 text-white/85 opacity-0 transition duration-150 hover:bg-black/70 hover:text-white group-hover:opacity-100 focus-visible:opacity-100">
-                            <span className="-translate-y-px text-[14px] leading-none tracking-tight">•••</span>
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="min-w-48 rounded-none border-0 bg-[#3f434d] px-4 py-3 text-white shadow-2xl shadow-black/40">
-                          <div className="space-y-3">
-                            <p className="text-sm font-semibold text-white/90">¿Eliminar esta cuenta?</p>
-                            <Button
-                              color="danger"
-                              variant="flat"
-                              size="sm"
-                              className="w-full justify-center rounded-none bg-white/10 text-white hover:bg-white/15"
-                              startContent={<Trash2 size={14} />}
-                              isDisabled={selectingId != null || creatingProfile || isDeleting}
-                              onPress={() => void handleDeleteProfile()}>
-                              Eliminar cuenta
-                            </Button>
-                          </div>
-                        </PopoverContent>
-                      </Popover>
                     </div>
 
                     <div className="mt-3">
@@ -158,6 +124,38 @@ export function ProfileStartupSelector({
                       {isDeleting && <p className="mt-1 text-xs text-white/80">Borrando...</p>}
                     </div>
                   </button>
+
+                  <Popover
+                    isOpen={isMenuOpen}
+                    onOpenChange={(open) => setOpenMenuId(open ? option.id : null)}
+                    placement="bottom-end"
+                    showArrow={false}
+                    shouldCloseOnBlur>
+                    <PopoverTrigger>
+                      <button
+                        type="button"
+                        aria-label="Opciones del perfil"
+                        className="absolute top-21 right-6 z-10 flex size-6 items-center justify-center border border-white/20 bg-[#6a7079]/65 text-white/85 opacity-0 transition duration-150 hover:bg-[#7a8089]/80 hover:text-white group-hover:opacity-100 focus-visible:opacity-100"
+                        disabled={selectingId != null || creatingProfile || isDeleting}>
+                        <span className="-translate-y-px text-[14px] leading-none tracking-tight">•••</span>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="min-w-48 rounded-none border-0 bg-[#3f434d] px-4 py-3 text-white shadow-2xl shadow-black/40">
+                      <div className="space-y-3">
+                        <p className="text-sm font-semibold text-white/90">¿Eliminar esta cuenta?</p>
+                        <Button
+                          color="danger"
+                          variant="flat"
+                          size="sm"
+                          className="w-full justify-center rounded-none bg-white/10 text-white hover:bg-white/15"
+                          startContent={<Trash2 size={14} />}
+                          isDisabled={selectingId != null || creatingProfile || isDeleting}
+                          onPress={() => void handleDeleteProfile()}>
+                          Eliminar cuenta
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               );
             })}
