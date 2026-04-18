@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button, Input, Popover, PopoverContent, PopoverTrigger } from "@heroui/react";
+import { motion } from "framer-motion";
 import { RefreshCw, Trash2, User } from "lucide-react";
 import Avatar from "react-nice-avatar";
 import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
@@ -67,8 +68,14 @@ export function ProfileStartupSelector({
       <div className="absolute inset-0 bg-linear-to-br from-default-100/90 via-default-50/35 to-background dark:from-default-200/10 dark:via-default-100/5" />
       <div className="absolute inset-0 backdrop-blur-sm" />
 
-      <div className="relative mx-auto flex min-h-dvh w-full max-w-5xl items-center justify-center px-6 py-10">
-        <section className="w-full p-3 sm:p-6">
+      <motion.div
+        layout="position"
+        transition={{ type: "spring", stiffness: 140, damping: 22, mass: 0.95 }}
+        className="relative mx-auto flex min-h-dvh w-full max-w-5xl items-center justify-center px-6 py-10">
+        <motion.section
+          layout="position"
+          transition={{ type: "spring", stiffness: 145, damping: 21, mass: 0.92 }}
+          className="w-full p-3 sm:p-6">
           <div className="mx-auto max-w-2xl text-center">
             <h1 className="text-balance text-3xl font-semibold tracking-tight text-white sm:text-5xl">
               ¿Quién va a jugar?
@@ -81,7 +88,10 @@ export function ProfileStartupSelector({
             </div>
           )}
 
-          <div className="mx-auto mt-10 flex max-w-3xl flex-wrap items-start justify-center gap-x-10 gap-y-8">
+          <motion.div
+            layout="position"
+            transition={{ type: "spring", stiffness: 150, damping: 20, mass: 0.9 }}
+            className="mx-auto mt-10 flex max-w-3xl flex-wrap items-start justify-center gap-x-10 gap-y-8">
             {options.map((option) => {
               const isSelecting = selectingId === option.id;
               const isDeleting = deletingId === option.id;
@@ -94,7 +104,11 @@ export function ProfileStartupSelector({
               };
 
               return (
-                <div key={option.id} className="group relative flex w-40 flex-col items-center text-center">
+                <motion.div
+                  layout="position"
+                  transition={{ type: "spring", stiffness: 170, damping: 22, mass: 0.85 }}
+                  key={option.id}
+                  className="group relative flex w-40 flex-col items-center text-center">
                   <button
                     type="button"
                     onClick={() => onSelect(option.id)}
@@ -156,27 +170,40 @@ export function ProfileStartupSelector({
                       </div>
                     </PopoverContent>
                   </Popover>
-                </div>
+                </motion.div>
               );
             })}
 
-            <button
+            <motion.button
+              layout="position"
+              transition={{ type: "spring", stiffness: 170, damping: 22, mass: 0.85 }}
               type="button"
               onClick={() => setCreatingOpen((v) => !v)}
               disabled={selectingId != null || creatingProfile}
               className="group flex min-h-40 flex-col items-center justify-center rounded-xl border border-transparent bg-transparent transition duration-200 hover:bg-content2/20 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer">
-              <div className="relative flex size-16 items-center justify-center border-2 border-transparent text-white transition duration-200 group-hover:border-white/90">
+              <div
+                className={`relative flex size-16 items-center justify-center border-2 border-transparent text-white transition duration-300 group-hover:border-white/90 ${
+                  creatingOpen ? "rotate-45" : "rotate-0"
+                }`}>
                 <span className="pointer-events-none absolute left-1/2 top-1/2 h-8 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-white" />
                 <span className="pointer-events-none absolute left-1/2 top-1/2 h-0.5 w-8 -translate-x-1/2 -translate-y-1/2 bg-white" />
               </div>
               <span className="mt-2 text-xl font-semibold text-white/90 opacity-0 transition duration-200 group-hover:opacity-100">
                 Añadir cuenta
               </span>
-            </button>
-          </div>
+            </motion.button>
+          </motion.div>
 
-          {creatingOpen && (
-            <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-white/10 bg-black/25 p-5 text-white shadow-2xl shadow-black/25 backdrop-blur-md sm:p-6">
+          <motion.div
+            initial={false}
+            animate={
+              creatingOpen
+                ? { height: "auto", opacity: 1, y: 0, marginTop: 24 }
+                : { height: 0, opacity: 0, y: -8, marginTop: 0 }
+            }
+            transition={{ type: "spring", stiffness: 190, damping: 24, mass: 0.75 }}
+            className="mx-auto max-w-xl overflow-hidden">
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-5 text-white shadow-2xl shadow-black/25 backdrop-blur-md sm:p-6">
               <div className="space-y-4">
                 <div className="space-y-1">
                   <h2 className="text-lg font-semibold tracking-tight text-white">Crear nuevo perfil</h2>
@@ -236,9 +263,9 @@ export function ProfileStartupSelector({
                 </div>
               </div>
             </div>
-          )}
-        </section>
-      </div>
+          </motion.div>
+        </motion.section>
+      </motion.div>
     </div>
   );
 }
