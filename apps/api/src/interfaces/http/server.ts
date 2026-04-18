@@ -5,7 +5,7 @@ import { S3CloudInviteRepository } from "@infrastructure/persistence/S3CloudInvi
 import { S3SaveRepository } from "@infrastructure/persistence/S3SaveRepository";
 import { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
 
-const bucketName = process.env.BUCKET_NAME ?? "SaveCloud-saves-dev";
+const bucketName = process.env.BUCKET_NAME ?? "savecloud-saves-dev";
 const s3 = new S3Client({
   region: process.env.AWS_REGION ?? "us-east-2",
   useAccelerateEndpoint: process.env.USE_ACCELERATE_ENDPOINT === "true",

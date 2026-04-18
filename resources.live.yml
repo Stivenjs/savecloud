@@ -2,6 +2,8 @@ Resources:
   # Bucket principal para saves en Producción
   SavesBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       AccelerateConfiguration:
         AccelerationStatus: Suspended
