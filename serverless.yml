@@ -21,6 +21,7 @@ provider:
     DOWNLOAD_BASE_URL: ${self:custom.downloadBaseUrl.${sls:stage}, ''}
     CONNECTIONS_TABLE: { Ref: ActiveConnectionsTable }
     GAME_STATS_TABLE: { Ref: GameStatsTable }
+    SAVE_FILES_INDEX_TABLE: { Ref: SaveFilesIndexTable }
     WS_ENDPOINT:
       Fn::Join:
         - ""
@@ -67,6 +68,7 @@ provider:
             - Fn::GetAtt: [ActiveConnectionsTable, Arn]
             - Fn::Join: ["/", [Fn::GetAtt: [ActiveConnectionsTable, Arn], "index", "*"]]
             - Fn::GetAtt: [GameStatsTable, Arn]
+            - Fn::GetAtt: [SaveFilesIndexTable, Arn]
 
         - Effect: Allow
           Action:

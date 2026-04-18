@@ -154,6 +154,22 @@ Resources:
         - AttributeName: gameId
           KeyType: RANGE
 
+  SaveFilesIndexTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-SaveFilesIndex
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: objectKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: objectKey
+          KeyType: RANGE
+
 Outputs:
   CloudFrontDistributionDomainName:
     Description: CloudFront domain for backup downloads

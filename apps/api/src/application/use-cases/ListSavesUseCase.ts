@@ -1,4 +1,5 @@
 import type { GameSave } from "@domain/entities/GameSave";
+import type { SaveFileIndexRepository } from "@domain/ports/SaveFileIndexRepository";
 import type { SaveRepository } from "@domain/ports/SaveRepository";
 import { TtlCache } from "@shared/ttlCache";
 
@@ -20,7 +21,10 @@ export type ListSavesOutput = GameSave[];
  * Caso de uso: listar guardados de un usuario (opcionalmente filtrados por juego).
  */
 export class ListSavesUseCase {
-  constructor(private readonly saveRepository: SaveRepository) {}
+  constructor(
+    private readonly saveRepository: SaveRepository,
+    private readonly saveFileIndexRepository?: SaveFileIndexRepository
+  ) {}
 
   async execute(input: ListSavesInput): Promise<ListSavesOutput> {
     const gameId = input.gameId?.trim();
@@ -28,16 +32,29 @@ export class ListSavesUseCase {
       const key = `${input.userId}::${gameId}`;
       const cached = listByUserAndGameCache.get(key);
       if (cached) return cached;
-      const saves = await this.saveRepository.listByUserAndGame(input.userId, gameId);
+
+      // Usa DynamoDB cuando hay indice; cae a S3 si el indice aun no fue poblado.
+      let saves =
+        this.saveFileIndexRepository && (await this.saveFileIndexRepository.listByUserAndGame(input.userId, gameId));
+      if (!saves || saves.length === 0) {
+        saves = await this.saveRepository.listByUserAndGame(input.userId, gameId);
+      }
+
       listByUserAndGameCache.set(key, saves);
       return saves;
     }
+
+    if (this.saveFileIndexRepository) {
+      const saves = await this.saveFileIndexRepository.listByUser(input.userId);
+      if (saves.length > 0) return saves;
+    }
+
     return this.saveRepository.listByUser(input.userId);
   }
 }
 
 // Cache por instancia: evita repetir listados del mismo juego en refrescos frecuentes de UI.
-const listByUserAndGameCache = new TtlCache<string, GameSave[]>({ ttlMs: 20_000, maxEntries: 300 });
+const listByUserAndGameCache = new TtlCache<string, GameSave[]>({ ttlMs: 10_000, maxEntries: 300 });
 
 /**
  * Invalida la caché de listados filtrados por juego.
