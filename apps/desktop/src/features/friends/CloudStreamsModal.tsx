@@ -3,6 +3,8 @@ import { Eye, Radio, RadioTower, Square, Video, X } from "lucide-react";
 import { useCloudStreamsModal } from "@hooks/useCloudStreamsModal";
 import { StreamQualityControls } from "@features/friends/StreamQualityControls";
 
+// EXPERIMENTAL: Cloud streaming UI is under development and can be hidden for release builds.
+
 interface CloudStreamsModalProps {
   isOpen: boolean;
   onClose: () => void;

@@ -6,6 +6,8 @@ import { useConfig } from "@hooks/useConfig";
 import { useCloudStreamStore } from "@store/CloudStreamStore";
 import { clearHostStreamRuntime, getHostStreamRuntime } from "@features/friends/streamRuntime";
 
+// EXPERIMENTAL: host-side WebRTC signaling for cloud stream prototype.
+
 const MAX_VIEWERS = 4;
 
 interface StreamSignalPayload {

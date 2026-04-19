@@ -19,6 +19,7 @@ import { useGamification } from "@hooks/useGamification";
 import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
+import { featureFlags } from "@/constants/featureFlags";
 import type { ConfiguredGame } from "@app-types/config";
 
 const ProfileDrawer = lazy(() => import("@features/profile/ProfileDrawer").then((m) => ({ default: m.ProfileDrawer })));
@@ -103,7 +104,8 @@ export function AppLayout({ navItems, children, games, onMenuGameClick }: AppLay
   const { connectionStatus } = useLastSyncInfo(hasSyncConfig);
 
   const [profileDrawerOpen, setProfileDrawerOpen] = useState(false);
-  const showStreamsLauncher = import.meta.env.DEV;
+  // Funcionalidad experimental: se controla desde un flag centralizado.
+  const showStreamsLauncher = featureFlags.experimentalCloudStreams;
 
   useEffect(() => {
     let last = useShellUiStore.getState().profileOpenRequest;

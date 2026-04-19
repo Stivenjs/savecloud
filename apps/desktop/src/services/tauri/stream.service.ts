@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+// EXPERIMENTAL: Tauri bridge for stream signaling commands.
+
 export type StreamSignalEvent =
   | "STREAM_SYNC_REQUEST"
   | "STREAM_CREATED"

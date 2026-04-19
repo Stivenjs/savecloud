@@ -14,6 +14,8 @@ import {
 } from "@features/friends/streamRuntime";
 import type { StreamFpsPreset, StreamResolutionPreset } from "@features/friends/StreamQualityControls";
 
+// EXPERIMENTAL: orchestrates stream creation/join flow for the prototype modal.
+
 const MAX_VIEWERS = 4;
 const RESOLUTION_MAP: Record<StreamResolutionPreset, { width: number; height: number }> = {
   "720p": { width: 1280, height: 720 },

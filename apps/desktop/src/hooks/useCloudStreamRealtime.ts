@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useCloudStreamStore } from "@store/CloudStreamStore";
 
+// EXPERIMENTAL: realtime stream store synchronization for prototype signaling.
+
 interface StreamSignalPayload {
   fromUserId?: string;
   event?: string;
