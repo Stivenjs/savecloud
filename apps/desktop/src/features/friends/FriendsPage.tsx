@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Chip, Spinner, Tab, Tabs } from "@heroui/react";
 import { Link2, UserRound } from "lucide-react";
-import { listen } from "@tauri-apps/api/event";
 import type { ConfiguredGame } from "@app-types/config";
 import { useFriendsPage } from "@/hooks/useFriendsPage";
 import { AddFriendGamesModal } from "@features/friends/AddFriendGamesModal";
@@ -15,13 +14,10 @@ import { CopyFriendSavesConfirmModal } from "@features/friends/CopyFriendSavesCo
 import { FriendsInvitesTab, InvitesTabTitle } from "@features/friends/FriendsInvitesTab";
 import { useNavigationStore } from "@features/input/store";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
+import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
 import { listCloudPresence } from "@services/tauri/invites.service";
 
 type FriendsTabKey = "link" | "user" | "invites";
-
-interface CloudIncomingMessage {
-  type: "FRIEND_PLAYING" | "PRESENCE_UPDATE" | "ERROR";
-}
 
 export function FriendsPage() {
   const [friendsTab, setFriendsTab] = useState<FriendsTabKey>(() => {
@@ -87,7 +83,7 @@ export function FriendsPage() {
 
   const handleAddGamesPress = useCallback(() => setAddFriendGamesOpen(true), [setAddFriendGamesOpen]);
   const handleUseAsTemplate = useCallback((game: ConfiguredGame) => setTemplateGame(game), [setTemplateGame]);
-  const queryClient = useQueryClient();
+  useCloudPresenceRealtimeInvalidation();
 
   const { data: cloudPresence = [] } = useQuery({
     queryKey: ["cloud-presence"],
@@ -98,28 +94,6 @@ export function FriendsPage() {
   const searchedFriendPresence = friendConfig?.userId
     ? cloudPresence.find((item) => item.userId === friendConfig.userId)
     : undefined;
-
-  useEffect(() => {
-    let unlistenIncoming: (() => void) | undefined;
-
-    const setupListener = async () => {
-      try {
-        unlistenIncoming = await listen<CloudIncomingMessage>("cloud-ws-incoming", (event) => {
-          if (event.payload?.type === "FRIEND_PLAYING" || event.payload?.type === "PRESENCE_UPDATE") {
-            queryClient.invalidateQueries({ queryKey: ["cloud-presence"] });
-          }
-        });
-      } catch {
-        // No-op: el polling sigue activo como fallback.
-      }
-    };
-
-    setupListener();
-
-    return () => {
-      unlistenIncoming?.();
-    };
-  }, [queryClient]);
 
   useEffect(() => {
     if (friendsTab !== "invites") return;

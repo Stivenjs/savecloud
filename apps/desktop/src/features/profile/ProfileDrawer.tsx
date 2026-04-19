@@ -39,6 +39,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Config } from "@app-types/config";
 import type { GamificationState } from "@app-types/gamification";
 import type { ConnectionStatus } from "@hooks/useLastSyncInfo";
+import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
 import { useProfileSession } from "@hooks/useProfileSession";
 import {
@@ -126,6 +127,7 @@ export function ProfileDrawer({
     enabled: isOpen && !!userId,
     refetchInterval: 30_000,
   });
+  useCloudPresenceRealtimeInvalidation(isOpen);
 
   const ownPresence = userId ? cloudPresence.find((item) => item.userId === userId) : undefined;
   const showPresenceChip = cloudPresenceLoading || ownPresence?.status !== "online";

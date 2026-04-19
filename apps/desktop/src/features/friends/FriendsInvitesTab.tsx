@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Avatar, Button, Chip, Divider, Input, Skeleton, Tab, Tabs } from "@heroui/react";
 import { Check, Cloud, Copy, LogOut, Mail, Plus, RefreshCcw, Trash2, UserRound, Eye, X } from "lucide-react";
 import type { CloudInvite, CloudMembership } from "@services/tauri/invites.service";
 import { listCloudPresence } from "@services/tauri/invites.service";
-import { listen } from "@tauri-apps/api/event";
 import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
+import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
 
 function SectionCard({
   title,
@@ -71,10 +71,6 @@ interface FriendsInvitesTabProps {
   ourConfig?: any;
 }
 
-interface CloudIncomingMessage {
-  type: "FRIEND_PLAYING" | "PRESENCE_UPDATE" | "ERROR";
-}
-
 export function FriendsInvitesTab({
   inviteeUserIdInput,
   setInviteeUserIdInput,
@@ -99,7 +95,7 @@ export function FriendsInvitesTab({
   ourConfig,
 }: FriendsInvitesTabProps) {
   const [view, setView] = useState<"requests" | "cloud">("requests");
-  const queryClient = useQueryClient();
+  useCloudPresenceRealtimeInvalidation();
 
   const { data: cloudPresence = [], isLoading: cloudPresenceLoading } = useQuery({
     queryKey: ["cloud-presence"],
@@ -110,28 +106,6 @@ export function FriendsInvitesTab({
   const presenceByUser = useMemo(() => new Map(cloudPresence.map((item) => [item.userId, item])), [cloudPresence]);
 
   const getPresence = (userId: string) => presenceByUser.get(userId);
-
-  useEffect(() => {
-    let unlistenIncoming: (() => void) | undefined;
-
-    const setupListener = async () => {
-      try {
-        unlistenIncoming = await listen<CloudIncomingMessage>("cloud-ws-incoming", (event) => {
-          if (event.payload?.type === "FRIEND_PLAYING" || event.payload?.type === "PRESENCE_UPDATE") {
-            queryClient.invalidateQueries({ queryKey: ["cloud-presence"] });
-          }
-        });
-      } catch {
-        // No-op: si falla el listener, seguimos con polling normal.
-      }
-    };
-
-    setupListener();
-
-    return () => {
-      unlistenIncoming?.();
-    };
-  }, [queryClient]);
 
   return (
     <div className="space-y-4">
