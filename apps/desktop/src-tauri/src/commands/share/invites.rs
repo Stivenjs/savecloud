@@ -63,6 +63,23 @@ pub struct CloudMembershipsResponseDto {
     pub member_memberships: Vec<CloudMembershipDto>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudPresenceDto {
+    pub user_id: String,
+    pub status: String,
+    pub game_id: Option<String>,
+    pub game_name: Option<String>,
+    pub connection_count: u32,
+    pub last_seen_at: Option<u64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudPresenceResponseDto {
+    pub items: Vec<CloudPresenceDto>,
+}
+
 fn load_host_api_auth() -> Result<(String, String, String), String> {
     let settings = config::load_settings();
     let base_url_raw = settings
@@ -150,9 +167,14 @@ pub async fn create_cloud_invite(
             serde_json::Value::String(invitee),
         );
     }
-    
+
     let settings = config::load_settings();
-    if let Some(ws_url) = settings.ws_base_url.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(ws_url) = settings
+        .ws_base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         payload.insert(
             "wsUrl".to_string(),
             serde_json::Value::String(ws_url.to_string()),
@@ -317,10 +339,8 @@ pub async fn accept_cloud_invite_by_url(invite_url: String) -> Result<(), String
     if let Some(ws_url) = parsed.ws_url {
         let ws = ws_url.trim();
         if !ws.is_empty() {
-             next.cloud_host_ws_base_urls.insert(
-                 parsed.host_user_id.clone(),
-                 ws.to_string(),
-             );
+            next.cloud_host_ws_base_urls
+                .insert(parsed.host_user_id.clone(), ws.to_string());
         }
     }
     next.active_cloud_host_user_id = Some(parsed.host_user_id);
@@ -467,4 +487,32 @@ pub async fn list_cloud_memberships() -> Result<CloudMembershipsResponseDto, Str
         host_memberships,
         member_memberships,
     })
+}
+
+#[command]
+pub async fn list_cloud_presence() -> Result<Vec<CloudPresenceDto>, String> {
+    let (base_url, api_key, user_id) = load_active_member_api_auth()?;
+    let endpoint = format!("{}/invites/presence", base_url);
+    let response = API_CLIENT
+        .get(&endpoint)
+        .header("x-api-key", api_key)
+        .header("x-user-id", user_id)
+        .send()
+        .await
+        .map_err(|e| format!("Fallo de red: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "API Error ({}): {}",
+            response.status(),
+            response.text().await.unwrap_or_default()
+        ));
+    }
+
+    let parsed = response
+        .json::<CloudPresenceResponseDto>()
+        .await
+        .map_err(|e| format!("Error de deserialización: {}", e))?;
+
+    Ok(parsed.items)
 }

@@ -12,10 +12,12 @@ import { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRe
 import { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
 import { DynamoDbGameStatRepository } from "@infrastructure/persistence/DynamoDbGameStatRepository";
 import { DynamoDbSaveFileIndexRepository } from "@infrastructure/persistence/DynamoDbSaveFileIndexRepository";
+import { DynamoDbConnectionRepository } from "@infrastructure/persistence/DynamoDbConnectionRepository";
 
 const bucketName = process.env.BUCKET_NAME ?? "";
 const gameStatsTable = process.env.GAME_STATS_TABLE ?? "";
 const saveFilesIndexTable = process.env.SAVE_FILES_INDEX_TABLE ?? "";
+const connectionsTable = process.env.CONNECTIONS_TABLE ?? "";
 
 const httpsAgent = new Agent({
   keepAlive: true,
@@ -45,6 +47,9 @@ const gameStatRepository = new DynamoDbGameStatRepository(dynamoClient, gameStat
 const saveFileIndexRepository = saveFilesIndexTable
   ? new DynamoDbSaveFileIndexRepository(dynamoClient, saveFilesIndexTable)
   : undefined;
+const connectionRepository = connectionsTable
+  ? new DynamoDbConnectionRepository(dynamoClient, connectionsTable)
+  : undefined;
 
 let cachedProxy: ((event: APIGatewayProxyEvent, context: Context) => Promise<APIGatewayProxyResult>) | null = null;
 
@@ -58,6 +63,7 @@ async function getProxy() {
       notificationStore,
       cloudInviteRepository,
       gameStatRepository,
+      connectionRepository,
     });
 
     cachedProxy = awsLambdaFastify(app, {

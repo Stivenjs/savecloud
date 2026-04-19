@@ -27,6 +27,15 @@ export interface CloudMembershipsResponse {
   memberMemberships: CloudMembership[];
 }
 
+export interface CloudPresenceItem {
+  userId: string;
+  status: "offline" | "online" | "playing";
+  gameId?: string | null;
+  gameName?: string | null;
+  connectionCount: number;
+  lastSeenAt?: number | null;
+}
+
 export async function createCloudInvite(input: {
   inviteeUserId?: string;
   withToken?: boolean;
@@ -75,4 +84,8 @@ export async function removeCloudMember(memberUserId: string): Promise<void> {
 
 export async function listCloudMemberships(): Promise<CloudMembershipsResponse> {
   return invoke<CloudMembershipsResponse>("list_cloud_memberships");
+}
+
+export async function listCloudPresence(): Promise<CloudPresenceItem[]> {
+  return invoke<CloudPresenceItem[]>("list_cloud_presence");
 }

@@ -120,6 +120,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::commands::share::invites::leave_cloud_membership,
         crate::commands::share::invites::remove_cloud_member,
         crate::commands::share::invites::list_cloud_memberships,
+        crate::commands::share::invites::list_cloud_presence,
         crate::steam_catalog::commands::sync::sync_steam_catalog,
         crate::steam_catalog::commands::sync::reset_steam_catalog_sync,
         crate::steam_catalog::commands::trending::sync_steam_store_trending,

@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, type ReactNode, useMemo } from "react";
 import { User } from "lucide-react";
 import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { formatPlaytime } from "@utils/format";
@@ -69,6 +69,7 @@ export interface PublicProfileHeroProps {
   profileFrame?: string;
   totalPlaytimeSeconds: number;
   gamesCount: number;
+  statusContent?: ReactNode;
 }
 
 export function PublicProfileHero({
@@ -78,6 +79,7 @@ export function PublicProfileHero({
   profileFrame,
   totalPlaytimeSeconds,
   gamesCount,
+  statusContent,
 }: PublicProfileHeroProps) {
   const bg = profileBackground?.trim() ?? "";
   const frameResolved = useMemo(() => resolveProfileAsset(profileFrame || undefined), [profileFrame]);
@@ -130,6 +132,7 @@ export function PublicProfileHero({
             </div>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1 pb-0.5">
+            {statusContent ? <div>{statusContent}</div> : null}
             <div className="flex items-center gap-1.5 rounded-full border border-default-200/80 bg-default-100/80 px-2.5 py-0.5 text-xs dark:bg-default-50/10">
               <span className="text-default-500">Nivel</span>
               <span className="flex size-6 items-center justify-center rounded-full border border-primary/40 bg-primary/10 font-semibold text-primary">

@@ -4,8 +4,9 @@ import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
 
 export interface BroadcastActivityInput {
   broadcasterUserId: string;
-  gameId: string;
+  gameId?: string;
   gameName?: string;
+  presenceStatus: "playing" | "online";
 }
 
 /**
@@ -22,6 +23,8 @@ export class BroadcastActivityUseCase {
 
   async execute(input: BroadcastActivityInput): Promise<void> {
     const broadcasterId = input.broadcasterUserId;
+    const normalizedGameId = input.gameId?.trim() || "";
+    const resolvedGameName = input.gameName?.trim() || normalizedGameId || null;
 
     let activeCloudHostId = broadcasterId;
 
@@ -37,15 +40,30 @@ export class BroadcastActivityUseCase {
     const activeMemberIds = cloudMemberships.filter((m) => m.active).map((m) => m.memberUserId);
 
     const allPeersInCloud = [activeCloudHostId, ...activeMemberIds];
-    const payload = {
-      type: "FRIEND_PLAYING",
+    const timestamp = Date.now();
+    const presencePayload = {
+      type: "PRESENCE_UPDATE",
       data: {
-        friendUserId: broadcasterId,
-        gameId: input.gameId,
-        gameName: input.gameName || input.gameId,
-        timestamp: Date.now(),
+        userId: broadcasterId,
+        status: input.presenceStatus,
+        gameId: normalizedGameId || null,
+        gameName: resolvedGameName,
+        timestamp,
       },
     };
+
+    const friendPlayingPayload =
+      input.presenceStatus === "playing"
+        ? {
+            type: "FRIEND_PLAYING",
+            data: {
+              friendUserId: broadcasterId,
+              gameId: normalizedGameId,
+              gameName: resolvedGameName || normalizedGameId,
+              timestamp,
+            },
+          }
+        : null;
 
     for (const targetUserId of allPeersInCloud) {
       if (targetUserId === broadcasterId) continue;
@@ -53,9 +71,15 @@ export class BroadcastActivityUseCase {
       const connectionIds = await this.connectionRepository.getConnectionsByUser(targetUserId);
 
       for (const connectionId of connectionIds) {
-        this.notifier.sendToConnection(connectionId, payload).catch((err) => {
+        this.notifier.sendToConnection(connectionId, presencePayload).catch((err) => {
           console.warn(`[WS] Fallo al enviar a ${connectionId} (${targetUserId}):`, err.message);
         });
+
+        if (friendPlayingPayload) {
+          this.notifier.sendToConnection(connectionId, friendPlayingPayload).catch((err) => {
+            console.warn(`[WS] Fallo al enviar FRIEND_PLAYING a ${connectionId} (${targetUserId}):`, err.message);
+          });
+        }
       }
     }
   }
