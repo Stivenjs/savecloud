@@ -23,4 +23,33 @@ export interface ConnectionRepository {
    * @returns {Promise<string[]>} Lista de IDs de conexión.
    */
   getConnectionsByUser(userId: string): Promise<string[]>;
+
+  /**
+   * Obtiene los metadatos de actividad para cada conexión activa de un usuario.
+   */
+  getConnectionPresenceByUser(userId: string): Promise<
+    Array<{
+      connectionId: string;
+      lastActivityAt: number | null;
+      activityGameId: string | null;
+      activityGameName: string | null;
+    }>
+  >;
+
+  /**
+   * Lookup inverso: dado un connectionId, devuelve el userId verificado.
+   */
+  getUserByConnection(connectionId: string): Promise<string | null>;
+
+  /**
+   * Actualiza la actividad de una conexión (heartbeat/juego activo).
+   */
+  setConnectionActivity(
+    connectionId: string,
+    input: {
+      lastActivityAt: number;
+      activityGameId?: string | null;
+      activityGameName?: string | null;
+    }
+  ): Promise<void>;
 }

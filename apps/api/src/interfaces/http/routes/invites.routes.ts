@@ -4,6 +4,7 @@ import type { CreateCloudInviteUseCase } from "@application/use-cases/CreateClou
 import type { ListPendingCloudInvitesUseCase } from "@application/use-cases/ListPendingCloudInvitesUseCase";
 import type { RespondCloudInviteUseCase } from "@application/use-cases/RespondCloudInviteUseCase";
 import type { SetCloudGameShareUseCase } from "@application/use-cases/SetCloudGameShareUseCase";
+import type { ListCloudPresenceUseCase } from "@application/use-cases/ListCloudPresenceUseCase";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import { issueUserAccessToken } from "@shared/accessToken";
 import {
@@ -26,6 +27,7 @@ export async function registerInviteRoutes(
     listPendingCloudInvitesUseCase: ListPendingCloudInvitesUseCase;
     respondCloudInviteUseCase: RespondCloudInviteUseCase;
     setCloudGameShareUseCase: SetCloudGameShareUseCase;
+    listCloudPresenceUseCase?: ListCloudPresenceUseCase;
     cloudInviteRepository: CloudInviteRepository;
   }
 ): Promise<void> {
@@ -127,6 +129,18 @@ export async function registerInviteRoutes(
       return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
     }
   });
+
+  if (deps.listCloudPresenceUseCase) {
+    app.get("/invites/presence", async (request, reply: FastifyReply) => {
+      try {
+        const userId = getUserId(request);
+        const result = await deps.listCloudPresenceUseCase!.execute(userId);
+        return reply.send(result);
+      } catch (err) {
+        return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
+      }
+    });
+  }
 
   app.post<{ Body: SetGameShareBody }>(
     "/invites/games/share",

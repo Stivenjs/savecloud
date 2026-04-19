@@ -18,6 +18,8 @@ use url::Url;
 pub enum CloudIncomingMessage {
     /// Un amigo ha comenzado a jugar a algo.
     FriendPlaying { data: FriendPlayingData },
+    /// Cambio de presencia explícito (online/playing).
+    PresenceUpdate { data: PresenceUpdateData },
     /// Un error reportado por el servidor.
     Error { data: ErrorData },
 }
@@ -27,6 +29,15 @@ pub enum CloudIncomingMessage {
 pub struct FriendPlayingData {
     pub friend_user_id: String,
     pub game_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PresenceUpdateData {
+    pub user_id: String,
+    pub status: String,
+    pub game_id: Option<String>,
+    pub game_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

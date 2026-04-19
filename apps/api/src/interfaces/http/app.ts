@@ -26,6 +26,8 @@ import { ListPendingCloudInvitesUseCase } from "@application/use-cases/ListPendi
 import { RespondCloudInviteUseCase } from "@application/use-cases/RespondCloudInviteUseCase";
 import { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
 import { SetCloudGameShareUseCase } from "@application/use-cases/SetCloudGameShareUseCase";
+import { ListCloudPresenceUseCase } from "@application/use-cases/ListCloudPresenceUseCase";
+import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import type { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
 import type { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
@@ -46,6 +48,7 @@ export interface AppDependencies {
   cloudInviteRepository?: CloudInviteRepository;
   shareTokenStore?: ShareTokenS3;
   notificationStore?: S3NotificationStore;
+  connectionRepository?: ConnectionRepository;
 }
 
 /**
@@ -148,6 +151,9 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       listPendingCloudInvitesUseCase: new ListPendingCloudInvitesUseCase(deps.cloudInviteRepository),
       respondCloudInviteUseCase: new RespondCloudInviteUseCase(deps.cloudInviteRepository),
       setCloudGameShareUseCase: new SetCloudGameShareUseCase(deps.cloudInviteRepository),
+      listCloudPresenceUseCase: deps.connectionRepository
+        ? new ListCloudPresenceUseCase(deps.cloudInviteRepository, deps.connectionRepository)
+        : undefined,
       cloudInviteRepository: deps.cloudInviteRepository,
     });
   }

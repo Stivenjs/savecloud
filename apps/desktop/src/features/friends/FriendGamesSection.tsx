@@ -11,14 +11,23 @@ import { getSteamAppId } from "@utils/gameImage";
 import type { FriendGameSummary } from "@hooks/useFriendsPage";
 import { PublicProfileHero } from "@features/profile/PublicProfileHero";
 import { STEAM_CATALOG_GAME_ID_PREFIX } from "@utils/steamCatalogGameId";
+import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
 
 interface FriendProfileBannerProps {
   userIdDisplay: string;
   gameCount: number;
   onAddGamesPress: () => void;
+  presenceStatus?: "offline" | "online" | "playing";
+  presenceGameName?: string | null;
 }
 
-function FriendProfileBanner({ userIdDisplay, gameCount, onAddGamesPress }: FriendProfileBannerProps) {
+function FriendProfileBanner({
+  userIdDisplay,
+  gameCount,
+  onAddGamesPress,
+  presenceStatus,
+  presenceGameName,
+}: FriendProfileBannerProps) {
   return (
     <Card className="border border-primary-200/50 bg-primary-50/30 dark:border-primary-500/20 dark:bg-primary-500/10">
       <CardBody className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -26,10 +35,16 @@ function FriendProfileBanner({ userIdDisplay, gameCount, onAddGamesPress }: Frie
           <p className="text-xs font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-400">
             Perfil cargado
           </p>
-          <p className="font-mono text-sm text-foreground">{userIdDisplay}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-mono text-sm text-foreground">{userIdDisplay}</p>
+            <PresenceStatusChip status={presenceStatus} />
+          </div>
           <p className="text-xs text-default-500">
             {gameCount} juego{gameCount !== 1 ? "s" : ""} en este perfil
           </p>
+          {presenceStatus === "playing" && presenceGameName ? (
+            <p className="text-xs text-default-500">Jugando: {presenceGameName}</p>
+          ) : null}
         </div>
         <Button variant="bordered" color="primary" startContent={<UserPlus size={18} />} onPress={onAddGamesPress}>
           Añadir juegos de este perfil
@@ -51,6 +66,8 @@ interface FriendGamesSectionProps {
   /** Cuando el miembro comparte perfil con anfitriones y el viewer es el host, muestra hero rico. */
   friendVisualProfile?: FriendVisualProfileProps | null;
   summaries: FriendGameSummary[];
+  presenceStatus?: "offline" | "online" | "playing";
+  presenceGameName?: string | null;
   copyingGameId: string | null;
   onAddGamesPress: () => void;
   onCopySaves: (gameId: string) => void;
@@ -61,6 +78,8 @@ export function FriendGamesSection({
   userIdDisplay,
   friendVisualProfile,
   summaries,
+  presenceStatus,
+  presenceGameName,
   copyingGameId,
   onAddGamesPress,
   onCopySaves,
@@ -111,6 +130,14 @@ export function FriendGamesSection({
           profileFrame={friendVisualProfile.profileFrame}
           totalPlaytimeSeconds={friendVisualProfile.totalPlaytimeSeconds}
           gamesCount={summaries.length}
+          statusContent={
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <PresenceStatusChip status={presenceStatus} />
+              {presenceStatus === "playing" && presenceGameName ? (
+                <span className="text-xs text-default-500">Jugando: {presenceGameName}</span>
+              ) : null}
+            </div>
+          }
         />
         <div className="flex justify-end">
           <Button variant="bordered" color="primary" startContent={<UserPlus size={18} />} onPress={onAddGamesPress}>
@@ -122,6 +149,8 @@ export function FriendGamesSection({
       <FriendProfileBanner
         userIdDisplay={userIdDisplay}
         gameCount={summaries.length}
+        presenceStatus={presenceStatus}
+        presenceGameName={presenceGameName}
         onAddGamesPress={onAddGamesPress}
       />
     );

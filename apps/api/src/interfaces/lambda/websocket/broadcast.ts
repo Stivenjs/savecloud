@@ -25,6 +25,10 @@ export const handler = async (event: APIGatewayProxyWebsocketEventV2) => {
   console.info("[ws:broadcast] Authorized request", { connectionId, userId: verifiedUserId });
 
   const body = JSON.parse(event.body || "{}");
+  const parsedGameId = typeof body.gameId === "string" ? body.gameId.trim() : "";
+  const parsedGameName = typeof body.gameName === "string" ? body.gameName.trim() : "";
+  const statusRaw = typeof body.status === "string" ? body.status.trim().toLowerCase() : "";
+  const isStopSignal = parsedGameId.length === 0 || statusRaw === "online" || statusRaw === "idle";
   const wsEndpoint =
     process.env.WS_ENDPOINT || `https://${event.requestContext.domainName}/${event.requestContext.stage}`;
 
@@ -36,8 +40,15 @@ export const handler = async (event: APIGatewayProxyWebsocketEventV2) => {
     // { "action": "broadcast", "userId": "xooty", "gameId": "resident-evil-4", "gameName": "Resident Evil 4" }
     await broadcastUseCase.execute({
       broadcasterUserId: verifiedUserId,
-      gameId: body.gameId,
-      gameName: body.gameName,
+      presenceStatus: isStopSignal ? "online" : "playing",
+      gameId: isStopSignal ? undefined : parsedGameId,
+      gameName: isStopSignal ? undefined : parsedGameName || parsedGameId,
+    });
+
+    await connectionRepo.setConnectionActivity(connectionId, {
+      lastActivityAt: Date.now(),
+      activityGameId: isStopSignal ? null : parsedGameId,
+      activityGameName: isStopSignal ? null : parsedGameName || parsedGameId,
     });
 
     return { statusCode: 200, body: "Broadcast sent" };

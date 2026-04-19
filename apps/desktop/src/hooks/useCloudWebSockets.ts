@@ -11,9 +11,12 @@ import { getFriendConfig, setCloudHostWsUrl } from "@services/tauri/config.servi
  * Mensaje recibido desde el WebSocket de la nube (Rust -> TS)
  */
 interface CloudIncomingMessage {
-  type: "FRIEND_PLAYING" | "ERROR";
+  type: "FRIEND_PLAYING" | "PRESENCE_UPDATE" | "ERROR";
   data: {
     friendUserId?: string;
+    userId?: string;
+    status?: "online" | "playing";
+    gameId?: string;
     gameName?: string;
     message?: string;
   };
@@ -40,6 +43,8 @@ export function useCloudWebSockets() {
   const { activeProfile } = useProfileSession();
   const prevGameStatusRef = useRef<Record<string, boolean>>({});
   const lastBroadcastedGameIdRef = useRef<string | null>(null);
+  const lastBroadcastByGameRef = useRef<Record<string, number>>({});
+  const stopCooldownByGameRef = useRef<Record<string, number>>({});
 
   const activeUserId = activeProfile?.localUserId?.trim() ?? "";
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
@@ -107,6 +112,9 @@ export function useCloudWebSockets() {
   useEffect(() => {
     if (!activeUserId) return;
 
+    const BROADCAST_REFRESH_MS = 45_000;
+    const STOP_BROADCAST_COOLDOWN_MS = 3_000;
+
     let unlistenStatus: (() => void) | undefined;
 
     const setupListener = async () => {
@@ -114,21 +122,36 @@ export function useCloudWebSockets() {
         unlistenStatus = await listen<Record<string, boolean>>("games-running-status", (event) => {
           const currentStatus = event.payload;
           const prevStatus = prevGameStatusRef.current;
+          const now = Date.now();
 
           for (const [gameId, isRunning] of Object.entries(currentStatus)) {
             const wasNotRunning = !prevStatus[gameId];
+            const wasRunning = !!prevStatus[gameId];
 
-            if (isRunning && wasNotRunning) {
-              if (lastBroadcastedGameIdRef.current !== gameId) {
+            if (isRunning) {
+              const lastSentAt = lastBroadcastByGameRef.current[gameId] ?? 0;
+              const shouldRefresh = now - lastSentAt >= BROADCAST_REFRESH_MS;
+
+              if ((wasNotRunning || shouldRefresh) && lastBroadcastedGameIdRef.current !== gameId) {
                 lastBroadcastedGameIdRef.current = gameId;
+                lastBroadcastByGameRef.current[gameId] = now;
                 broadcastGameStart(gameId);
 
-                // Resetear el lock después de un tiempo para permitir re-detección si el juego se cierra y abre
                 setTimeout(() => {
                   if (lastBroadcastedGameIdRef.current === gameId) {
                     lastBroadcastedGameIdRef.current = null;
                   }
-                }, 10000);
+                }, 5000);
+              }
+            } else {
+              delete lastBroadcastByGameRef.current[gameId];
+
+              if (wasRunning) {
+                const lastStopAt = stopCooldownByGameRef.current[gameId] ?? 0;
+                if (now - lastStopAt >= STOP_BROADCAST_COOLDOWN_MS) {
+                  stopCooldownByGameRef.current[gameId] = now;
+                  broadcastGameStop();
+                }
               }
             }
           }
@@ -155,6 +178,13 @@ export function useCloudWebSockets() {
           body: `Iniciaste ${gameName}`,
         }).catch(() => {});
       }
+    }
+
+    function broadcastGameStop() {
+      if (!activeUserId) return;
+
+      // Señaliza estado online/idle al backend sin disparar FRIEND_PLAYING.
+      invoke("send_cloud_broadcast", { gameId: "", gameName: "" }).catch(() => {});
     }
 
     setupListener();

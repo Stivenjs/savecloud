@@ -34,7 +34,8 @@ import {
 import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { ProfileHeroBackground } from "@features/profile/PublicProfileHero";
 import { buildNiceAvatarConfig, generateNiceAvatarSeed, serializeNiceAvatarConfig } from "@features/profile/niceAvatar";
-import { useQueryClient } from "@tanstack/react-query";
+import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Config } from "@app-types/config";
 import type { GamificationState } from "@app-types/gamification";
 import type { ConnectionStatus } from "@hooks/useLastSyncInfo";
@@ -47,6 +48,7 @@ import {
   setShareVisualProfileWithHosts,
   setShareVisualProfileWithMembers,
 } from "@services/tauri";
+import { listCloudPresence } from "@services/tauri/invites.service";
 import { achievementLabel, formatHoursToNextLevel } from "@utils/gamificationLabels";
 import { formatPlaytime } from "@utils/format";
 import { resolveProfileAsset } from "@utils/profileMedia";
@@ -117,6 +119,15 @@ export function ProfileDrawer({
   const userId = activeProfile?.localUserId?.trim() || config?.userId?.trim() || "";
   const displayName = userId || "Usuario";
   const conn = connectionLabel(hasSyncConfig ? connectionStatus : undefined);
+
+  const { data: cloudPresence = [], isLoading: cloudPresenceLoading } = useQuery({
+    queryKey: ["cloud-presence"],
+    queryFn: listCloudPresence,
+    enabled: isOpen && !!userId,
+    refetchInterval: 30_000,
+  });
+
+  const ownPresence = userId ? cloudPresence.find((item) => item.userId === userId) : undefined;
 
   const lp = gamification?.levelProgress;
   const fallbackLevel = useMemo(
@@ -249,12 +260,19 @@ export function ProfileDrawer({
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
                   <span className={`font-medium ${conn.tone}`}>{conn.text}</span>
                   <span className="text-default-400">·</span>
+                  <span className="inline-flex items-center">
+                    <PresenceStatusChip loading={cloudPresenceLoading} status={ownPresence?.status} />
+                  </span>
+                  <span className="text-default-400">·</span>
                   <span className="text-default-500">{formatPlaytime(totalSeconds)} jugados</span>
                   <span className="text-default-400">·</span>
                   <span className="text-default-500">
                     {gamesCount} {gamesCount === 1 ? "juego" : "juegos"}
                   </span>
                 </div>
+                {ownPresence?.status === "playing" && ownPresence?.gameName ? (
+                  <p className="mt-1 text-xs text-default-500">Jugando: {ownPresence.gameName}</p>
+                ) : null}
               </div>
 
               {/* Level badge */}

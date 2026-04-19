@@ -1,7 +1,11 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, Button, Chip, Divider, Input, Skeleton, Tab, Tabs } from "@heroui/react";
 import { Check, Cloud, Copy, LogOut, Mail, Plus, RefreshCcw, Trash2, UserRound, Eye, X } from "lucide-react";
 import type { CloudInvite, CloudMembership } from "@services/tauri/invites.service";
+import { listCloudPresence } from "@services/tauri/invites.service";
+import { listen } from "@tauri-apps/api/event";
+import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
 
 function SectionCard({
   title,
@@ -67,6 +71,10 @@ interface FriendsInvitesTabProps {
   ourConfig?: any;
 }
 
+interface CloudIncomingMessage {
+  type: "FRIEND_PLAYING" | "PRESENCE_UPDATE" | "ERROR";
+}
+
 export function FriendsInvitesTab({
   inviteeUserIdInput,
   setInviteeUserIdInput,
@@ -91,6 +99,39 @@ export function FriendsInvitesTab({
   ourConfig,
 }: FriendsInvitesTabProps) {
   const [view, setView] = useState<"requests" | "cloud">("requests");
+  const queryClient = useQueryClient();
+
+  const { data: cloudPresence = [], isLoading: cloudPresenceLoading } = useQuery({
+    queryKey: ["cloud-presence"],
+    queryFn: listCloudPresence,
+    refetchInterval: 30_000,
+  });
+
+  const presenceByUser = useMemo(() => new Map(cloudPresence.map((item) => [item.userId, item])), [cloudPresence]);
+
+  const getPresence = (userId: string) => presenceByUser.get(userId);
+
+  useEffect(() => {
+    let unlistenIncoming: (() => void) | undefined;
+
+    const setupListener = async () => {
+      try {
+        unlistenIncoming = await listen<CloudIncomingMessage>("cloud-ws-incoming", (event) => {
+          if (event.payload?.type === "FRIEND_PLAYING" || event.payload?.type === "PRESENCE_UPDATE") {
+            queryClient.invalidateQueries({ queryKey: ["cloud-presence"] });
+          }
+        });
+      } catch {
+        // No-op: si falla el listener, seguimos con polling normal.
+      }
+    };
+
+    setupListener();
+
+    return () => {
+      unlistenIncoming?.();
+    };
+  }, [queryClient]);
 
   return (
     <div className="space-y-4">
@@ -336,10 +377,19 @@ export function FriendsInvitesTab({
                             <Avatar name={m.hostUserId} size="sm" color="secondary" />
                             <div className="min-w-0">
                               <p className="text-xs font-medium truncate">{m.hostUserId}</p>
-                              <p className="text-[10px] text-default-400">Anfitrión</p>
+                              <p className="text-[10px] text-default-400">
+                                Anfitrión
+                                {getPresence(m.hostUserId)?.status === "playing" && getPresence(m.hostUserId)?.gameName
+                                  ? ` · ${getPresence(m.hostUserId)?.gameName}`
+                                  : ""}
+                              </p>
                             </div>
                           </div>
                           <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                            <PresenceStatusChip
+                              loading={cloudPresenceLoading}
+                              status={getPresence(m.hostUserId)?.status}
+                            />
                             {m.wsUrl && ourConfig?.cloudHostWsBaseUrls?.[m.hostUserId] !== m.wsUrl && (
                               <Button
                                 size="sm"
@@ -393,10 +443,20 @@ export function FriendsInvitesTab({
                           <Avatar name={m.memberUserId} size="sm" color="danger" />
                           <div className="min-w-0">
                             <p className="text-xs font-medium truncate">{m.memberUserId}</p>
-                            <p className="text-[10px] text-default-400">Miembro</p>
+                            <p className="text-[10px] text-default-400">
+                              Miembro
+                              {getPresence(m.memberUserId)?.status === "playing" &&
+                              getPresence(m.memberUserId)?.gameName
+                                ? ` · ${getPresence(m.memberUserId)?.gameName}`
+                                : ""}
+                            </p>
                           </div>
                         </div>
                         <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                          <PresenceStatusChip
+                            loading={cloudPresenceLoading}
+                            status={getPresence(m.memberUserId)?.status}
+                          />
                           <Button
                             size="sm"
                             variant="flat"
