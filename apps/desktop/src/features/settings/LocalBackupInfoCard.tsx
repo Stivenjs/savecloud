@@ -70,7 +70,7 @@ export function LocalBackupInfoCard() {
                   toastError("Error al guardar", e instanceof Error ? e.message : String(e));
                 }
               }}
-              className="min-w-[90px]"
+              className="min-w-22.5"
               size="sm">
               {KEEP_OPTIONS.map((n) => (
                 <SelectItem key={String(n)} textValue={String(n)}>

@@ -3,11 +3,12 @@
 //! Este archivo expone las funciones `#[tauri::command]` que el frontend de React
 //! invoca para controlar las comunicaciones remotas.
 
-use super::ws_client::CloudBroadcastPayload;
+use super::ws_client::{CloudBroadcastPayload, CloudStreamSignalPayload};
 use super::ws_manager::CloudWsState;
 use crate::commands::logs::sync_logger;
 use crate::config;
 use crate::plugins::log_buffer::AppLogs;
+use serde_json::Value;
 use tauri::{command, AppHandle, State};
 
 /// Inicia la conexión WebSocket segura con la infraestructura de la nube.
@@ -152,4 +153,24 @@ pub async fn send_cloud_broadcast(
     };
 
     cloud_state.send_broadcast(payload).await
+}
+
+#[command]
+pub async fn send_cloud_stream_signal(
+    event: String,
+    stream_id: String,
+    target_user_id: Option<String>,
+    payload: Option<Value>,
+    cloud_state: State<'_, CloudWsState>,
+) -> Result<(), String> {
+    let signal = CloudStreamSignalPayload {
+        action: "broadcast".to_string(),
+        message_type: "STREAM_SIGNAL".to_string(),
+        event,
+        stream_id,
+        target_user_id,
+        payload,
+    };
+
+    cloud_state.send_stream_signal(signal).await
 }

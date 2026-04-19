@@ -32,6 +32,10 @@ function isOverlayMode(): boolean {
   return new URLSearchParams(window.location.search).get("overlay") === "true";
 }
 
+function isStreamViewerMode(): boolean {
+  return new URLSearchParams(window.location.search).get("streamViewer") === "true";
+}
+
 /**
  * Obtiene el elemento root del DOM de forma segura
  * @throws {Error} Si el elemento root no existe
@@ -114,6 +118,25 @@ async function renderMainApp(): Promise<void> {
   }
 }
 
+async function renderStreamViewerApp(): Promise<void> {
+  try {
+    const { StreamViewerPage } = await import("@features/friends/StreamViewerPage");
+
+    const root = ReactDOM.createRoot(getRootElement());
+
+    root.render(
+      <MainAppWrapper>
+        <StreamViewerPage />
+      </MainAppWrapper>
+    );
+
+    await showMainWindow();
+  } catch (error) {
+    console.error("[Render] Error cargando stream viewer:", error);
+    throw error;
+  }
+}
+
 /**
  * Muestra la ventana principal de la aplicación
  */
@@ -130,6 +153,8 @@ async function bootstrap(): Promise<void> {
   try {
     if (isOverlayMode()) {
       await renderOverlayApp();
+    } else if (isStreamViewerMode()) {
+      await renderStreamViewerApp();
     } else {
       await renderMainApp();
     }

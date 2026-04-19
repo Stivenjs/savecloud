@@ -7,6 +7,7 @@ use crate::commands::logs::sync_logger;
 use crate::plugins::log_buffer::{AppLogs, LogEntry};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
@@ -23,6 +24,8 @@ pub enum CloudIncomingMessage {
     PresenceUpdate { data: PresenceUpdateData },
     /// Un error reportado por el servidor.
     Error { data: ErrorData },
+    /// Evento de signaling para sesiones de streaming P2P.
+    StreamSignal { data: StreamSignalData },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -46,6 +49,17 @@ pub struct ErrorData {
     pub message: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct StreamSignalData {
+    pub from_user_id: String,
+    pub target_user_id: Option<String>,
+    pub event: String,
+    pub stream_id: String,
+    pub payload: Option<Value>,
+    pub timestamp: u64,
+}
+
 /// Mensajes de salida que enviamos al servidor (broadcasts).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -54,6 +68,24 @@ pub struct CloudBroadcastPayload {
     pub broadcaster_user_id: String,
     pub game_id: String,
     pub game_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudStreamSignalPayload {
+    pub action: String,
+    #[serde(rename = "type")]
+    pub message_type: String,
+    pub event: String,
+    pub stream_id: String,
+    pub target_user_id: Option<String>,
+    pub payload: Option<Value>,
+}
+
+#[derive(Debug, Clone)]
+pub enum CloudOutgoingMessage {
+    Broadcast(CloudBroadcastPayload),
+    StreamSignal(CloudStreamSignalPayload),
 }
 
 /// Inicia el bucle de conexión WebSocket en un hilo de fondo.
@@ -66,7 +98,7 @@ pub struct CloudBroadcastPayload {
 pub async fn start_ws_loop(
     app_handle: AppHandle,
     url_str: String,
-    mut rx: mpsc::UnboundedReceiver<CloudBroadcastPayload>,
+    mut rx: mpsc::UnboundedReceiver<CloudOutgoingMessage>,
     logs: AppLogs,
 ) {
     let _url = match Url::parse(&url_str) {
@@ -131,6 +163,7 @@ pub async fn start_ws_loop(
                                                 CloudIncomingMessage::FriendPlaying { .. } => "FRIEND_PLAYING",
                                                 CloudIncomingMessage::PresenceUpdate { .. } => "PRESENCE_UPDATE",
                                                 CloudIncomingMessage::Error { .. } => "ERROR",
+                                                CloudIncomingMessage::StreamSignal { .. } => "STREAM_SIGNAL",
                                             };
 
                                             sync_logger::log_operation(
@@ -172,8 +205,13 @@ pub async fn start_ws_loop(
                         }
 
                         // 2. Mensajes salientes de la UI (broadcasts)
-                        Some(payload) = rx.recv() => {
-                            if let Ok(text) = serde_json::to_string(&payload) {
+                        Some(outgoing) = rx.recv() => {
+                            let serialized = match outgoing {
+                                CloudOutgoingMessage::Broadcast(payload) => serde_json::to_string(&payload),
+                                CloudOutgoingMessage::StreamSignal(payload) => serde_json::to_string(&payload),
+                            };
+
+                            if let Ok(text) = serialized {
                                 if let Err(e) = ws_sender.send(Message::Text(text.into())).await {
                                     log_cloud(&app_handle, &logs, "error", &format!("Error enviando broadcast: {}", e)).await;
                                 }

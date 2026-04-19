@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 
 interface CloudIncomingMessage {
-  type: "FRIEND_PLAYING" | "PRESENCE_UPDATE" | "ERROR";
+  type: "FRIEND_PLAYING" | "PRESENCE_UPDATE" | "ERROR" | "STREAM_SIGNAL";
 }
 
 export function useCloudPresenceRealtimeInvalidation(enabled = true) {

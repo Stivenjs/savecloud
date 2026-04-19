@@ -5,6 +5,7 @@ import { DynamoDbConnectionRepository } from "@infrastructure/persistence/Dynamo
 import { ApiGatewayNotifier } from "@infrastructure/websocket/ApiGatewayNotifier";
 import { S3CloudInviteRepository } from "@infrastructure/persistence/S3CloudInviteRepository";
 import { BroadcastActivityUseCase } from "@application/use-cases/BroadcastActivityUseCase";
+import { RelayStreamSignalUseCase } from "@application/use-cases/RelayStreamSignalUseCase";
 import { normalizeGameDisplayName } from "@shared/utils";
 
 const dynamoClient = new DynamoDBClient();
@@ -25,16 +26,41 @@ export const handler = async (event: APIGatewayProxyWebsocketEventV2) => {
 
   console.info("[ws:broadcast] Authorized request", { connectionId, userId: verifiedUserId });
 
+  const wsEndpoint =
+    process.env.WS_ENDPOINT || `https://${event.requestContext.domainName}/${event.requestContext.stage}`;
+  const notifier = new ApiGatewayNotifier(wsEndpoint, connectionRepo);
+
   const body = JSON.parse(event.body || "{}");
+  const messageType = typeof body.type === "string" ? body.type.trim().toUpperCase() : "";
+
+  if (messageType === "STREAM_SIGNAL") {
+    const streamSignalUseCase = new RelayStreamSignalUseCase(inviteRepo, connectionRepo, notifier);
+
+    try {
+      const signalEvent = typeof body.event === "string" ? body.event.trim() : "";
+      const streamId = typeof body.streamId === "string" ? body.streamId.trim() : "";
+      const targetUserId = typeof body.targetUserId === "string" ? body.targetUserId.trim() : "";
+
+      await streamSignalUseCase.execute({
+        senderUserId: verifiedUserId,
+        event: signalEvent,
+        streamId,
+        targetUserId: targetUserId || undefined,
+        payload: body.payload ?? null,
+      });
+
+      return { statusCode: 200, body: "Signal relayed" };
+    } catch (error) {
+      console.error("[ws:broadcast] Error relaying stream signal:", error);
+      return { statusCode: 400, body: "Invalid stream signal" };
+    }
+  }
+
   const parsedGameId = typeof body.gameId === "string" ? body.gameId.trim() : "";
   const parsedGameName = typeof body.gameName === "string" ? body.gameName.trim() : "";
   const normalizedGameName = normalizeGameDisplayName(parsedGameId, parsedGameName);
   const statusRaw = typeof body.status === "string" ? body.status.trim().toLowerCase() : "";
   const isStopSignal = parsedGameId.length === 0 || statusRaw === "online" || statusRaw === "idle";
-  const wsEndpoint =
-    process.env.WS_ENDPOINT || `https://${event.requestContext.domainName}/${event.requestContext.stage}`;
-
-  const notifier = new ApiGatewayNotifier(wsEndpoint, connectionRepo);
   const broadcastUseCase = new BroadcastActivityUseCase(inviteRepo, connectionRepo, notifier);
 
   try {

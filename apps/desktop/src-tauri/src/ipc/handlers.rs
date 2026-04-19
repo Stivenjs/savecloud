@@ -29,6 +29,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::cloud::ws_commands::start_cloud_ws,
         crate::cloud::ws_commands::stop_cloud_ws,
         crate::cloud::ws_commands::send_cloud_broadcast,
+        crate::cloud::ws_commands::send_cloud_stream_signal,
         crate::steam::steam_search::get_steam_app_name,
         crate::steam::steam_search::get_steam_appdetails_media,
         crate::steam::steam_search::get_steam_appdetails_media_batch,
