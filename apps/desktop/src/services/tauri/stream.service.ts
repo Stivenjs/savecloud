@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export type StreamSignalEvent =
+  | "STREAM_SYNC_REQUEST"
   | "STREAM_CREATED"
   | "STREAM_ENDED"
   | "STREAM_JOIN"

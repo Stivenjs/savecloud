@@ -198,6 +198,36 @@ export function useCloudStreamHostSignaling() {
       await syncViewerCount(streamId, runtime.viewers.size);
     };
 
+    const handleSyncRequest = async (signal: StreamSignalPayload) => {
+      const requesterUserId = signal.fromUserId?.trim();
+      if (!requesterUserId || requesterUserId === localUserId) return;
+
+      const activeHostedStreamId = useCloudStreamStore.getState().activeHostedStreamId;
+      if (!activeHostedStreamId) return;
+
+      const stream = useCloudStreamStore
+        .getState()
+        .streams.find((item) => item.streamId === activeHostedStreamId && item.hostUserId === localUserId);
+      if (!stream) return;
+
+      const runtime = getHostStreamRuntime(activeHostedStreamId);
+      const viewerCount = runtime?.viewers.size ?? stream.viewerCount;
+
+      await sendCloudStreamSignal({
+        event: "STREAM_CREATED",
+        streamId: activeHostedStreamId,
+        targetUserId: requesterUserId,
+        payload: {
+          startedAt: stream.startedAt,
+          qualityPreset: stream.qualityPreset,
+          hasSystemAudio: stream.hasSystemAudio,
+          hasMicAudio: stream.hasMicAudio,
+          viewerCount,
+          maxViewers: stream.maxViewers,
+        },
+      });
+    };
+
     const setupListener = async () => {
       unlistenIncoming = await listen<CloudIncomingMessage>("cloud-ws-incoming", (event) => {
         const incoming = event.payload;
@@ -211,6 +241,11 @@ export function useCloudStreamHostSignaling() {
 
         if (signal.event === "STREAM_JOIN") {
           void handleJoin(signal);
+          return;
+        }
+
+        if (signal.event === "STREAM_SYNC_REQUEST") {
+          void handleSyncRequest(signal);
           return;
         }
 
