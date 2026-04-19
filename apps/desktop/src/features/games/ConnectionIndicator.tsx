@@ -14,12 +14,12 @@ export function ConnectionIndicator({ status, error, onRetry }: ConnectionIndica
   const config = {
     connecting: {
       icon: <Spinner size="sm" color="primary" />,
-      label: "Conectando...",
+      label: "Conectando…",
       className: "text-default-500",
     },
     connected: {
       icon: <Wifi size={14} className="text-success" />,
-      label: "Conectado",
+      label: "En línea",
       className: "text-success",
     },
     error: {
@@ -29,7 +29,7 @@ export function ConnectionIndicator({ status, error, onRetry }: ConnectionIndica
     },
     retrying: {
       icon: <RefreshCw size={14} className="animate-spin text-warning" />,
-      label: "Reintentando...",
+      label: "Reintentando…",
       className: "text-warning",
     },
   };

@@ -39,6 +39,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Config } from "@app-types/config";
 import type { GamificationState } from "@app-types/gamification";
 import type { ConnectionStatus } from "@hooks/useLastSyncInfo";
+import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
 import { useProfileSession } from "@hooks/useProfileSession";
 import {
@@ -126,8 +127,10 @@ export function ProfileDrawer({
     enabled: isOpen && !!userId,
     refetchInterval: 30_000,
   });
+  useCloudPresenceRealtimeInvalidation(isOpen);
 
   const ownPresence = userId ? cloudPresence.find((item) => item.userId === userId) : undefined;
+  const showPresenceChip = cloudPresenceLoading || ownPresence?.status !== "online";
 
   const lp = gamification?.levelProgress;
   const fallbackLevel = useMemo(
@@ -259,10 +262,12 @@ export function ProfileDrawer({
                 <h2 className="truncate text-lg font-semibold text-foreground">{displayName}</h2>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
                   <span className={`font-medium ${conn.tone}`}>{conn.text}</span>
-                  <span className="text-default-400">·</span>
-                  <span className="inline-flex items-center">
-                    <PresenceStatusChip loading={cloudPresenceLoading} status={ownPresence?.status} />
-                  </span>
+                  {showPresenceChip ? <span className="text-default-400">·</span> : null}
+                  {showPresenceChip ? (
+                    <span className="inline-flex items-center">
+                      <PresenceStatusChip loading={cloudPresenceLoading} status={ownPresence?.status} />
+                    </span>
+                  ) : null}
                   <span className="text-default-400">·</span>
                   <span className="text-default-500">{formatPlaytime(totalSeconds)} jugados</span>
                   <span className="text-default-400">·</span>

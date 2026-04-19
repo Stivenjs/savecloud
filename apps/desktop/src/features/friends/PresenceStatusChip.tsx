@@ -23,7 +23,7 @@ export function PresenceStatusChip({ status, loading = false }: PresenceStatusCh
   if (status === "online") {
     return (
       <Chip size="sm" variant="flat" color="primary">
-        conectado
+        en linea
       </Chip>
     );
   }
@@ -31,7 +31,7 @@ export function PresenceStatusChip({ status, loading = false }: PresenceStatusCh
   if (status === "offline") {
     return (
       <Chip size="sm" variant="flat" color="default">
-        desconectado
+        sin conexion
       </Chip>
     );
   }

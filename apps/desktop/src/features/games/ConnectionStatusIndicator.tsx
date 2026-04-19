@@ -13,13 +13,13 @@ export function ConnectionStatusIndicator({ status }: ConnectionStatusIndicatorP
         return {
           color: "success" as const,
           icon: "●",
-          text: "Conectado",
+          text: "En línea",
         };
       case "connecting":
         return {
           color: "default" as const,
           icon: <Spinner size="sm" color="primary" />,
-          text: "Conectando...",
+          text: "Conectando…",
         };
       case "error":
         return {
@@ -31,7 +31,7 @@ export function ConnectionStatusIndicator({ status }: ConnectionStatusIndicatorP
         return {
           color: "warning" as const,
           icon: <RefreshCw size={12} className="animate-spin" />,
-          text: "Reintentando...",
+          text: "Reintentando…",
         };
       default:
         return null;
