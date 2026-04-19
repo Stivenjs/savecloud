@@ -1,7 +1,8 @@
 use super::io::{
-    get_global_secure_api_key, get_global_secure_steam_web_api_key,
+    get_global_secure_api_key, get_global_secure_steam_web_api_key, get_secure_api_key_for_profile,
     get_secure_steam_web_api_key_for_profile, set_global_secure_api_key,
-    set_global_secure_steam_web_api_key, set_secure_steam_web_api_key_for_profile,
+    set_global_secure_steam_web_api_key, set_secure_api_key_for_profile,
+    set_secure_steam_web_api_key_for_profile,
 };
 use super::models::*;
 use super::paths;
@@ -101,6 +102,88 @@ fn save_json<T: serde::Serialize>(path: &std::path::Path, data: &T) -> Result<()
     fs::write(path, content).map_err(|e| e.to_string())
 }
 
+type GetProfileSecretFn = fn(&str) -> Option<String>;
+type GetGlobalSecretFn = fn() -> Option<String>;
+type SetProfileSecretFn = fn(&str, &str) -> Result<(), String>;
+type SetGlobalSecretFn = fn(&str) -> Result<(), String>;
+
+fn resolve_secret_for_active_profile(
+    active_profile: Option<&super::profiles::Profile>,
+    get_profile_secret: GetProfileSecretFn,
+    get_global_secret: GetGlobalSecretFn,
+) -> Option<String> {
+    match active_profile {
+        Some(profile) if profile.id == DEFAULT_PROFILE_ID => {
+            get_profile_secret(&profile.id).or_else(get_global_secret)
+        }
+        Some(profile) => get_profile_secret(&profile.id),
+        None => get_global_secret(),
+    }
+}
+
+fn migrate_secret_to_secure_store(
+    active_profile: Option<&super::profiles::Profile>,
+    secret: &str,
+    set_profile_secret: SetProfileSecretFn,
+    set_global_secret: SetGlobalSecretFn,
+) {
+    if let Some(profile) = active_profile {
+        let _ = set_profile_secret(&profile.id, secret);
+        if profile.id == DEFAULT_PROFILE_ID {
+            let _ = set_global_secret(secret);
+        }
+    } else {
+        let _ = set_global_secret(secret);
+    }
+}
+
+fn hydrate_secret_field(
+    field: &mut Option<String>,
+    active_profile: Option<&super::profiles::Profile>,
+    get_profile_secret: GetProfileSecretFn,
+    get_global_secret: GetGlobalSecretFn,
+    set_profile_secret: SetProfileSecretFn,
+    set_global_secret: SetGlobalSecretFn,
+) {
+    let secure_secret =
+        resolve_secret_for_active_profile(active_profile, get_profile_secret, get_global_secret);
+
+    if let Some(secret) = secure_secret {
+        *field = Some(secret);
+        return;
+    }
+
+    if let Some(legacy_secret) = field
+        .as_deref()
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+    {
+        migrate_secret_to_secure_store(
+            active_profile,
+            legacy_secret,
+            set_profile_secret,
+            set_global_secret,
+        );
+    }
+}
+
+fn persist_secret_for_active_profile(
+    field: Option<&str>,
+    active_profile: Option<&super::profiles::Profile>,
+    set_profile_secret: SetProfileSecretFn,
+    set_global_secret: SetGlobalSecretFn,
+) -> Result<(), String> {
+    let Some(secret) = field.map(str::trim).filter(|key| !key.is_empty()) else {
+        return Ok(());
+    };
+
+    if let Some(profile) = active_profile {
+        return set_profile_secret(&profile.id, secret);
+    }
+
+    set_global_secret(secret)
+}
+
 pub fn load_settings_raw() -> AppSettings {
     paths::settings_path()
         .and_then(|path| fs::read_to_string(path).ok())
@@ -110,62 +193,30 @@ pub fn load_settings_raw() -> AppSettings {
 
 pub fn load_settings() -> AppSettings {
     let active_profile = active_profile();
+    let active_profile_ref = active_profile.as_ref();
 
     let mut settings = scoped_or_legacy_path(paths::SETTINGS_FILE_NAME)
         .and_then(|path| fs::read_to_string(path).ok())
         .and_then(|content| serde_json::from_str::<AppSettings>(&content).ok())
         .unwrap_or_default();
 
-    let secure_key = match active_profile.as_ref() {
-        Some(profile) if profile.id == DEFAULT_PROFILE_ID => {
-            super::io::get_secure_api_key_for_profile(&profile.id)
-                .or_else(get_global_secure_api_key)
-        }
-        Some(profile) => super::io::get_secure_api_key_for_profile(&profile.id),
-        None => get_global_secure_api_key(),
-    };
-    if secure_key.is_none() && settings.api_key.is_some() {
-        if let Some(ref key) = settings.api_key {
-            if let Some(profile) = active_profile.as_ref() {
-                let _ = super::io::set_secure_api_key_for_profile(&profile.id, key);
-                if profile.id == DEFAULT_PROFILE_ID {
-                    let _ = set_global_secure_api_key(key);
-                }
-            } else {
-                let _ = set_global_secure_api_key(key);
-            }
-        }
-    } else if let Some(key) = secure_key {
-        settings.api_key = Some(key);
-    }
+    hydrate_secret_field(
+        &mut settings.api_key,
+        active_profile_ref,
+        get_secure_api_key_for_profile,
+        get_global_secure_api_key,
+        set_secure_api_key_for_profile,
+        set_global_secure_api_key,
+    );
 
-    let secure_steam = match active_profile.as_ref() {
-        Some(profile) if profile.id == DEFAULT_PROFILE_ID => {
-            get_secure_steam_web_api_key_for_profile(&profile.id)
-                .or_else(get_global_secure_steam_web_api_key)
-        }
-        Some(profile) => get_secure_steam_web_api_key_for_profile(&profile.id),
-        None => get_global_secure_steam_web_api_key(),
-    };
-    if secure_steam.is_none()
-        && settings
-            .steam_web_api_key
-            .as_ref()
-            .map_or(false, |key| !key.trim().is_empty())
-    {
-        if let Some(ref key) = settings.steam_web_api_key {
-            if let Some(profile) = active_profile.as_ref() {
-                let _ = set_secure_steam_web_api_key_for_profile(&profile.id, key);
-                if profile.id == DEFAULT_PROFILE_ID {
-                    let _ = set_global_secure_steam_web_api_key(key);
-                }
-            } else {
-                let _ = set_global_secure_steam_web_api_key(key);
-            }
-        }
-    } else if let Some(key) = secure_steam {
-        settings.steam_web_api_key = Some(key);
-    }
+    hydrate_secret_field(
+        &mut settings.steam_web_api_key,
+        active_profile_ref,
+        get_secure_steam_web_api_key_for_profile,
+        get_global_secure_steam_web_api_key,
+        set_secure_steam_web_api_key_for_profile,
+        set_global_secure_steam_web_api_key,
+    );
 
     if active_profile.is_none() {
         apply_env_fallback(
@@ -198,25 +249,19 @@ pub fn load_settings() -> AppSettings {
 pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
     let active_profile = active_profile();
 
-    if let Some(ref key) = settings.api_key {
-        if !key.trim().is_empty() {
-            if let Some(profile) = active_profile.as_ref() {
-                super::io::set_secure_api_key_for_profile(&profile.id, key)?;
-            } else {
-                set_global_secure_api_key(key)?;
-            }
-        }
-    }
+    persist_secret_for_active_profile(
+        settings.api_key.as_deref(),
+        active_profile.as_ref(),
+        set_secure_api_key_for_profile,
+        set_global_secure_api_key,
+    )?;
 
-    if let Some(ref key) = settings.steam_web_api_key {
-        if !key.trim().is_empty() {
-            if let Some(profile) = active_profile.as_ref() {
-                set_secure_steam_web_api_key_for_profile(&profile.id, key)?;
-            } else {
-                set_global_secure_steam_web_api_key(key)?;
-            }
-        }
-    }
+    persist_secret_for_active_profile(
+        settings.steam_web_api_key.as_deref(),
+        active_profile.as_ref(),
+        set_secure_steam_web_api_key_for_profile,
+        set_global_secure_steam_web_api_key,
+    )?;
 
     let path = scoped_data_path(paths::SETTINGS_FILE_NAME).ok_or("Ruta no disponible")?;
     save_json(&path, settings)?;
