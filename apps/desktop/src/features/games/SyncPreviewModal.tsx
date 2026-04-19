@@ -159,7 +159,7 @@ export function SyncPreviewModal({
               {files.length > 0 && (
                 <div className="mt-3">
                   <p className="mb-2 text-xs font-medium text-default-500">Archivos y carpetas</p>
-                  <ScrollShadow className="max-h-[240px] w-full rounded-medium border border-default-200">
+                  <ScrollShadow className="max-h-60 w-full rounded-medium border border-default-200">
                     <ul className="list-inside space-y-1 px-3 py-2 text-sm">
                       {files.map((file) => (
                         <li

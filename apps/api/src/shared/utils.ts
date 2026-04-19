@@ -44,3 +44,48 @@ export function resolvePublicBaseUrl(request: FastifyRequest): string {
   const safeProto = proto === "http" ? "https" : proto;
   return `${safeProto}://${host}`;
 }
+
+function isLikelySlug(value: string): boolean {
+  return !value.includes(" ") && /[-_]/.test(value);
+}
+
+function titleCaseWords(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+/**
+ * Normaliza el nombre del juego para presencia/notificaciones.
+ *
+ * - Si `providedGameName` ya viene legible, se respeta.
+ * - Si viene como slug técnico (`resident-evil-4`), lo humaniza.
+ * - Si no hay nombre, deriva desde `gameId`.
+ */
+export function normalizeGameDisplayName(gameId: string, providedGameName?: string | null): string {
+  const rawName = (providedGameName ?? "").trim();
+  const rawGameId = gameId.trim();
+  const source = rawName || rawGameId;
+
+  if (!source) return "";
+
+  // Si ya viene legible y no parece slug, lo dejamos tal cual.
+  if (rawName && !isLikelySlug(rawName)) {
+    return rawName;
+  }
+
+  let cleaned = source;
+
+  // Quitar sufijo tipo Steam App ID: resident-evil-4-2050650
+  cleaned = cleaned.replace(/[-_]\d{4,10}$/g, "");
+
+  // Quitar sufijos técnicos frecuentes de releases.
+  cleaned = cleaned.replace(/[-_](crack|repack|rip|p2p|x64|x86|v\d+[.\d]*|build-?\d+|multi\d+).*$/i, "");
+
+  // Normalizar separadores y capitalización final.
+  cleaned = cleaned.replace(/[-_]+/g, " ").trim();
+
+  return titleCaseWords(cleaned || source.replace(/[-_]+/g, " "));
+}

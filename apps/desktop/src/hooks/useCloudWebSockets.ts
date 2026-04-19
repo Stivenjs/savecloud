@@ -6,6 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
+import { formatGameDisplayName } from "@utils/gameImage";
 import { getFriendConfig, setCloudHostWsUrl } from "@services/tauri/config.service";
 
 /**
@@ -90,15 +91,9 @@ export function useCloudWebSockets() {
       if (isComponentMounted) {
         unlistenIncoming = await listen<CloudIncomingMessage>("cloud-ws-incoming", (event) => {
           const msg = event.payload;
-
-          if (msg.type === "FRIEND_PLAYING") {
-            const { friendUserId, gameName } = msg.data;
-
-            invoke("show_overlay_notification", {
-              title: "Amigo jugando",
-              body: `${friendUserId} está jugando ${gameName}`,
-            }).catch(() => {});
-          }
+          // El overlay de FRIEND_PLAYING se dispara desde Rust para evitar duplicados
+          // y depender de un solo canal de entrega en producción.
+          if (msg.type === "FRIEND_PLAYING") return;
         });
       }
     }
@@ -169,7 +164,9 @@ export function useCloudWebSockets() {
       if (!activeUserId) return;
 
       const gameNode = config?.games?.find((g) => g.id === gameId);
-      const gameName = gameNode?.editionLabel ? `${gameId} (${gameNode.editionLabel})` : gameId;
+      const baseDisplayName = formatGameDisplayName(gameId);
+      const editionLabel = gameNode?.editionLabel?.trim();
+      const gameName = editionLabel ? `${baseDisplayName} (${editionLabel})` : baseDisplayName;
 
       invoke("send_cloud_broadcast", { gameId, gameName })
         .then(() => queryClient.invalidateQueries({ queryKey: ["cloud-presence"] }))
