@@ -46,12 +46,19 @@ export function useCloudStreamHostSignaling() {
     [activeProfile?.localUserId, config?.userId]
   );
 
+  const logDebug = (message: string) => {
+    console.debug(`[SaveCloud:StreamHost ${localUserId || "unknown"}] ${message}`);
+  };
+
   useEffect(() => {
     if (!localUserId) return;
+
+    logDebug("Inicializando listener de signaling de stream");
 
     let unlistenIncoming: (() => void) | undefined;
 
     const syncViewerCount = async (streamId: string, viewerCount: number) => {
+      logDebug(`syncViewerCount stream=${streamId} viewers=${viewerCount}`);
       setViewerCount(streamId, viewerCount);
       await sendCloudStreamSignal({
         event: "STREAM_VIEWERS",
@@ -65,6 +72,8 @@ export function useCloudStreamHostSignaling() {
       const viewerUserId = signal.fromUserId?.trim();
       if (!streamId || !viewerUserId) return;
 
+      logDebug(`STREAM_JOIN recibido stream=${streamId} viewer=${viewerUserId}`);
+
       const stream = useCloudStreamStore
         .getState()
         .streams.find((item) => item.streamId === streamId && item.hostUserId === localUserId);
@@ -72,6 +81,7 @@ export function useCloudStreamHostSignaling() {
 
       const runtime = getHostStreamRuntime(streamId);
       if (!runtime) {
+        logDebug("Rechazando join: host_not_ready");
         await sendCloudStreamSignal({
           event: "STREAM_JOIN_REJECTED",
           streamId,
@@ -82,10 +92,12 @@ export function useCloudStreamHostSignaling() {
       }
 
       if (runtime.viewers.has(viewerUserId)) {
+        logDebug("Join ignorado: viewer ya conectado");
         return;
       }
 
       if (runtime.viewers.size >= MAX_VIEWERS) {
+        logDebug("Rechazando join: stream_full");
         await sendCloudStreamSignal({
           event: "STREAM_JOIN_REJECTED",
           streamId,
@@ -98,13 +110,16 @@ export function useCloudStreamHostSignaling() {
       const peer = createPeerConnection();
       runtime.peers.set(viewerUserId, peer);
       runtime.viewers.add(viewerUserId);
+      logDebug(`Peer creado para viewer=${viewerUserId}`);
 
       for (const track of runtime.mediaStream.getTracks()) {
+        logDebug(`Añadiendo track al peer kind=${track.kind} enabled=${track.enabled} readyState=${track.readyState}`);
         peer.addTrack(track, runtime.mediaStream);
       }
 
       peer.onicecandidate = (event) => {
         if (!event.candidate) return;
+        logDebug(`ICE local generado para viewer=${viewerUserId}`);
         void sendCloudStreamSignal({
           event: "STREAM_ICE",
           streamId,
@@ -114,6 +129,7 @@ export function useCloudStreamHostSignaling() {
       };
 
       peer.onconnectionstatechange = () => {
+        logDebug(`peer connectionState viewer=${viewerUserId} state=${peer.connectionState}`);
         if (["failed", "disconnected", "closed"].includes(peer.connectionState)) {
           const runtimeRef = getHostStreamRuntime(streamId);
           if (!runtimeRef) return;
@@ -129,6 +145,7 @@ export function useCloudStreamHostSignaling() {
 
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
+      logDebug(`Offer creada para viewer=${viewerUserId} sdpLen=${offer.sdp?.length ?? 0}`);
       await sendCloudStreamSignal({
         event: "STREAM_OFFER",
         streamId,
@@ -155,6 +172,8 @@ export function useCloudStreamHostSignaling() {
       const answerSdp = payload?.sdp;
       if (!streamId || !viewerUserId || !answerSdp || !isRtcSdpType(answerType)) return;
 
+      logDebug(`STREAM_ANSWER recibido stream=${streamId} viewer=${viewerUserId} type=${answerType}`);
+
       const runtime = getHostStreamRuntime(streamId);
       const peer = runtime?.peers.get(viewerUserId);
       if (!peer) return;
@@ -173,6 +192,8 @@ export function useCloudStreamHostSignaling() {
       const payload = signal.payload;
       if (!streamId || !viewerUserId || !payload?.candidate) return;
 
+      logDebug(`STREAM_ICE recibido stream=${streamId} viewer=${viewerUserId}`);
+
       const runtime = getHostStreamRuntime(streamId);
       const peer = runtime?.peers.get(viewerUserId);
       if (!peer) return;
@@ -184,6 +205,8 @@ export function useCloudStreamHostSignaling() {
       const streamId = signal.streamId?.trim();
       const viewerUserId = signal.fromUserId?.trim();
       if (!streamId || !viewerUserId) return;
+
+      logDebug(`STREAM_LEAVE recibido stream=${streamId} viewer=${viewerUserId}`);
 
       const runtime = getHostStreamRuntime(streamId);
       if (!runtime) return;
@@ -202,6 +225,8 @@ export function useCloudStreamHostSignaling() {
       const requesterUserId = signal.fromUserId?.trim();
       if (!requesterUserId || requesterUserId === localUserId) return;
 
+      logDebug(`STREAM_SYNC_REQUEST recibido desde=${requesterUserId}`);
+
       const activeHostedStreamId = useCloudStreamStore.getState().activeHostedStreamId;
       if (!activeHostedStreamId) return;
 
@@ -212,6 +237,8 @@ export function useCloudStreamHostSignaling() {
 
       const runtime = getHostStreamRuntime(activeHostedStreamId);
       const viewerCount = runtime?.viewers.size ?? stream.viewerCount;
+
+      logDebug(`Reenviando STREAM_CREATED snapshot stream=${activeHostedStreamId} viewers=${viewerCount}`);
 
       await sendCloudStreamSignal({
         event: "STREAM_CREATED",

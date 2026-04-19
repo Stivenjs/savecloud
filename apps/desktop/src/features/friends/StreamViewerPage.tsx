@@ -50,17 +50,28 @@ export function StreamViewerPage() {
   const [status, setStatus] = useState("Esperando señal de stream...");
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const remoteStreamRef = useRef<MediaStream>(new MediaStream());
 
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
 
   const streamId = useMemo(() => params.get("streamId")?.trim() ?? "", [params]);
   const hostUserId = useMemo(() => params.get("hostUserId")?.trim() ?? "", [params]);
 
+  const pushDebugLog = (message: string) => {
+    const entry = `[${new Date().toLocaleTimeString()}] ${message}`;
+    setDebugLogs((current) => [entry, ...current].slice(0, 12));
+    console.debug("[SaveCloud:StreamViewer]", entry);
+  };
+
   useEffect(() => {
     if (!streamId || !hostUserId || !localUserId) return;
+
+    pushDebugLog(`Inicializando viewer para host=${hostUserId} stream=${streamId} user=${localUserId}`);
 
     let unlistenIncoming: (() => void) | undefined;
 
@@ -69,11 +80,24 @@ export function StreamViewerPage() {
 
       const peer = createPeerConnection();
       peerRef.current = peer;
+      remoteStreamRef.current = new MediaStream();
+      pushDebugLog("PeerConnection creado");
 
       peer.ontrack = (event) => {
-        const [remoteStream] = event.streams;
-        if (videoRef.current && remoteStream) {
+        const remoteStream = remoteStreamRef.current;
+        remoteStream.addTrack(event.track);
+        pushDebugLog(`ontrack recibido kind=${event.track.kind} readyState=${event.track.readyState}`);
+
+        if (videoRef.current) {
           videoRef.current.srcObject = remoteStream;
+
+          window.setTimeout(() => {
+            void videoRef.current?.play().catch(() => {
+              pushDebugLog("video.play() falló en ontrack");
+              // Si el WebView bloquea play() por política temporal, el track sigue adjunto.
+            });
+          }, 0);
+
           setStatus("Conectado al stream");
           setIsConnected(true);
         }
@@ -81,6 +105,7 @@ export function StreamViewerPage() {
 
       peer.onicecandidate = (event) => {
         if (!event.candidate) return;
+        pushDebugLog("ICE local generado y enviado al host");
         void sendCloudStreamSignal({
           event: "STREAM_ICE",
           streamId,
@@ -92,6 +117,7 @@ export function StreamViewerPage() {
       };
 
       peer.onconnectionstatechange = () => {
+        pushDebugLog(`connectionState=${peer.connectionState}`);
         if (peer.connectionState === "connected") {
           setStatus("Conectado al stream");
           setIsConnected(true);
@@ -106,8 +132,22 @@ export function StreamViewerPage() {
       return peer;
     };
 
+    const flushPendingIceCandidates = async (peer: RTCPeerConnection) => {
+      const pending = [...pendingIceCandidatesRef.current];
+      pendingIceCandidatesRef.current = [];
+
+      if (pending.length > 0) {
+        pushDebugLog(`Aplicando ${pending.length} ICE candidates pendientes`);
+      }
+
+      for (const candidate of pending) {
+        await peer.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+    };
+
     const sendJoinWithRetry = async (attempt = 0): Promise<void> => {
       try {
+        pushDebugLog(`Enviando STREAM_JOIN intento=${attempt + 1}`);
         await sendCloudStreamSignal({
           event: "STREAM_JOIN",
           streamId,
@@ -117,6 +157,7 @@ export function StreamViewerPage() {
       } catch {
         if (attempt >= 2) {
           setError("No se pudo solicitar unión al stream.");
+          pushDebugLog("Fallo definitivo al enviar STREAM_JOIN");
           return;
         }
         window.setTimeout(() => {
@@ -132,6 +173,10 @@ export function StreamViewerPage() {
 
         const signal = incoming.data;
         if (!signal?.streamId || signal.streamId !== streamId || !signal.event) return;
+
+        pushDebugLog(
+          `Señal recibida event=${signal.event} from=${signal.fromUserId ?? "-"} target=${signal.targetUserId ?? "-"}`
+        );
 
         if (signal.event === "STREAM_JOIN_REJECTED" && signal.targetUserId === localUserId) {
           setError(
@@ -151,6 +196,8 @@ export function StreamViewerPage() {
           const remoteSdp = payload?.sdp;
           if (!remoteSdp || !isRtcSdpType(remoteType)) return;
 
+          pushDebugLog(`STREAM_OFFER recibido type=${remoteType} sdpLen=${remoteSdp.length}`);
+
           const peer = ensurePeer();
           void (async () => {
             await peer.setRemoteDescription(
@@ -160,8 +207,18 @@ export function StreamViewerPage() {
               })
             );
 
+            pushDebugLog("RemoteDescription aplicada");
+
+            await flushPendingIceCandidates(peer);
+
+            if (videoRef.current && videoRef.current.srcObject == null) {
+              videoRef.current.srcObject = remoteStreamRef.current;
+            }
+
             const answer = await peer.createAnswer();
             await peer.setLocalDescription(answer);
+
+            pushDebugLog(`Answer creada y enviada type=${answer.type} sdpLen=${answer.sdp?.length ?? 0}`);
 
             await sendCloudStreamSignal({
               event: "STREAM_ANSWER",
@@ -182,9 +239,18 @@ export function StreamViewerPage() {
           const payload = signal.payload;
           if (!payload?.candidate) return;
 
+          pushDebugLog(`ICE remoto recibido desde host (remoteDescription=${!!peerRef.current?.remoteDescription})`);
+
           const peer = ensurePeer();
+          if (!peer.remoteDescription) {
+            pendingIceCandidatesRef.current.push(payload.candidate);
+            pushDebugLog("ICE encolado porque aún no hay remoteDescription");
+            return;
+          }
+
           void peer.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {
             setError("No se pudo aplicar ICE candidate del host.");
+            pushDebugLog("Fallo al aplicar ICE remoto");
           });
           return;
         }
@@ -192,11 +258,14 @@ export function StreamViewerPage() {
         if (signal.event === "STREAM_ENDED") {
           setStatus("La transmisión finalizó.");
           setIsConnected(false);
+          pushDebugLog("STREAM_ENDED recibido");
           const peer = peerRef.current;
           if (peer) {
             peer.close();
             peerRef.current = null;
           }
+          pendingIceCandidatesRef.current = [];
+          remoteStreamRef.current = new MediaStream();
           if (videoRef.current) {
             videoRef.current.srcObject = null;
           }
@@ -215,6 +284,8 @@ export function StreamViewerPage() {
         peer.close();
         peerRef.current = null;
       }
+      pendingIceCandidatesRef.current = [];
+      remoteStreamRef.current = new MediaStream();
 
       void sendCloudStreamSignal({
         event: "STREAM_LEAVE",
@@ -248,7 +319,41 @@ export function StreamViewerPage() {
         </div>
 
         <div className="mt-4 overflow-hidden rounded-xl border border-default-200/70 bg-black/80">
-          <video ref={videoRef} className="h-105 w-full object-contain" autoPlay playsInline controls={!isConnected} />
+          <video
+            ref={videoRef}
+            className="h-105 w-full object-contain"
+            autoPlay
+            playsInline
+            controls={!isConnected}
+            onLoadedMetadata={() => {
+              void videoRef.current?.play().catch(() => {
+                // El stream sigue cargado; el usuario puede arrancarlo manualmente con controles.
+              });
+            }}
+            onCanPlay={() => {
+              void videoRef.current?.play().catch(() => {
+                // Si el autoplay aún no engancha, el control manual queda disponible.
+              });
+            }}
+          />
+        </div>
+
+        <div className="mt-3 rounded-xl border border-default-200/70 bg-background/75 p-3 text-[11px] text-default-500">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="font-medium text-default-600">Log de depuración</span>
+            <span>{debugLogs.length} eventos</span>
+          </div>
+          <div className="max-h-40 space-y-1 overflow-y-auto font-mono">
+            {debugLogs.length ? (
+              debugLogs.map((entry, index) => (
+                <div key={`${entry}-${index}`} className="wrap-break-word">
+                  {entry}
+                </div>
+              ))
+            ) : (
+              <div>Sin eventos todavía.</div>
+            )}
+          </div>
         </div>
 
         <div className="mt-4 flex items-center justify-between gap-2">
