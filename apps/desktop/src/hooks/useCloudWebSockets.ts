@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useConfig } from "@hooks/useConfig";
 import { useProfileSession } from "@hooks/useProfileSession";
+import { useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
@@ -41,6 +42,7 @@ interface CloudIncomingMessage {
 export function useCloudWebSockets() {
   const { config, refetch } = useConfig();
   const { activeProfile } = useProfileSession();
+  const queryClient = useQueryClient();
   const prevGameStatusRef = useRef<Record<string, boolean>>({});
   const lastBroadcastedGameIdRef = useRef<string | null>(null);
   const lastBroadcastByGameRef = useRef<Record<string, number>>({});
@@ -169,7 +171,9 @@ export function useCloudWebSockets() {
       const gameNode = config?.games?.find((g) => g.id === gameId);
       const gameName = gameNode?.editionLabel ? `${gameId} (${gameNode.editionLabel})` : gameId;
 
-      invoke("send_cloud_broadcast", { gameId, gameName }).catch(() => {});
+      invoke("send_cloud_broadcast", { gameId, gameName })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["cloud-presence"] }))
+        .catch(() => {});
 
       // El mensaje decorativo "Tú estás jugando" solo se muestra en desarrollo para pruebas.
       if (import.meta.env.DEV) {
@@ -184,7 +188,9 @@ export function useCloudWebSockets() {
       if (!activeUserId) return;
 
       // Señaliza estado online/idle al backend sin disparar FRIEND_PLAYING.
-      invoke("send_cloud_broadcast", { gameId: "", gameName: "" }).catch(() => {});
+      invoke("send_cloud_broadcast", { gameId: "", gameName: "" })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["cloud-presence"] }))
+        .catch(() => {});
     }
 
     setupListener();
@@ -192,5 +198,5 @@ export function useCloudWebSockets() {
     return () => {
       unlistenStatus?.();
     };
-  }, [activeUserId, config?.games]);
+  }, [activeUserId, config?.games, queryClient]);
 }
