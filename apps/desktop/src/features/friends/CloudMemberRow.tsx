@@ -12,6 +12,8 @@ interface CloudMemberRowProps {
   loadingPresence: boolean;
   isActionLoading?: boolean;
   onViewProfile: (userId: string) => void;
+  onRequestRemoveMember?: (userId: string) => void;
+  onRequestLeaveMembership?: (hostId: string) => void;
   onRemoveMember?: (userId: string) => Promise<void>;
   onLeaveMembership?: (hostId: string) => Promise<void>;
 }
@@ -25,6 +27,8 @@ export function CloudMemberRow({
   loadingPresence,
   isActionLoading = false,
   onViewProfile,
+  onRequestRemoveMember,
+  onRequestLeaveMembership,
   onRemoveMember,
   onLeaveMembership,
 }: CloudMemberRowProps) {
@@ -48,6 +52,8 @@ export function CloudMemberRow({
           isHost={isHost}
           isLoading={isActionLoading || loadingPresence}
           onViewProfile={onViewProfile}
+          onRequestRemoveMember={onRequestRemoveMember}
+          onRequestLeaveMembership={onRequestLeaveMembership}
           onRemoveMember={onRemoveMember}
           onLeaveMembership={onLeaveMembership}
         />

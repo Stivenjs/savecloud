@@ -5,6 +5,10 @@ import { motion } from "framer-motion";
 import { UserRound } from "lucide-react";
 import { listCloudMemberships, listCloudPresence } from "@services/tauri/invites.service";
 import { CloudMembersHeader } from "@features/friends/CloudMembersHeader";
+import {
+  CloudMembershipActionConfirmModal,
+  type CloudMembershipActionType,
+} from "@features/friends/CloudMembershipActionConfirmModal";
 import { CloudMembersSection } from "@features/friends/CloudMembersSection";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
@@ -31,6 +35,7 @@ export function CloudMembersModal({
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<{ type: CloudMembershipActionType; userId: string } | null>(null);
 
   const { moveProps } = useDraggable({
     targetRef: modalRef,
@@ -118,6 +123,19 @@ export function CloudMembersModal({
     [onLeaveMembership]
   );
 
+  const handleConfirmPendingAction = useCallback(async () => {
+    if (!pendingAction) return;
+
+    if (pendingAction.type === "remove-member") {
+      await handleRemoveMember(pendingAction.userId);
+      return;
+    }
+
+    await handleLeaveMembership(pendingAction.userId);
+  }, [pendingAction, handleRemoveMember, handleLeaveMembership]);
+
+  const handleClosePendingAction = useCallback(() => setPendingAction(null), []);
+
   return (
     <Modal
       ref={modalRef}
@@ -187,6 +205,7 @@ export function CloudMembersModal({
                       loadingPresence={cloudPresenceLoading}
                       isActionLoading={isActionLoading}
                       onViewProfile={handleViewProfile}
+                      onRequestRemoveMember={(userId) => setPendingAction({ type: "remove-member", userId })}
                       onRemoveMember={onRemoveMember ? handleRemoveMember : undefined}
                       searchQuery={debouncedSearchQuery}
                     />
@@ -199,6 +218,9 @@ export function CloudMembersModal({
                       loadingPresence={cloudPresenceLoading}
                       isActionLoading={isActionLoading}
                       onViewProfile={handleViewProfile}
+                      onRequestLeaveMembership={(hostId) =>
+                        setPendingAction({ type: "leave-membership", userId: hostId })
+                      }
                       onLeaveMembership={onLeaveMembership ? handleLeaveMembership : undefined}
                       searchQuery={debouncedSearchQuery}
                     />
@@ -206,6 +228,14 @@ export function CloudMembersModal({
                 ) : null}
               </ModalBody>
             </motion.div>
+            <CloudMembershipActionConfirmModal
+              isOpen={pendingAction !== null}
+              actionType={pendingAction?.type ?? "remove-member"}
+              userId={pendingAction?.userId ?? ""}
+              onClose={handleClosePendingAction}
+              onConfirm={handleConfirmPendingAction}
+              isLoading={pendingAction ? isActionLoading === pendingAction.userId : false}
+            />
           </motion.div>
         )}
       </ModalContent>

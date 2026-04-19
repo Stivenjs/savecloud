@@ -8,6 +8,8 @@ interface CloudMemberActionsProps {
   isHost: boolean;
   isLoading: boolean;
   onViewProfile: (userId: string) => void;
+  onRequestRemoveMember?: (userId: string) => void;
+  onRequestLeaveMembership?: (hostId: string) => void;
   onRemoveMember?: (userId: string) => Promise<void>;
   onLeaveMembership?: (hostId: string) => Promise<void>;
 }
@@ -17,6 +19,8 @@ export function CloudMemberActions({
   isHost,
   isLoading,
   onViewProfile,
+  onRequestRemoveMember,
+  onRequestLeaveMembership,
   onRemoveMember,
   onLeaveMembership,
 }: CloudMemberActionsProps) {
@@ -39,13 +43,20 @@ export function CloudMemberActions({
         label: "Remover miembro",
         icon: <Trash2 className="h-4 w-4" />,
         color: "danger",
-        action: async () => {
-          setIsActionLoading(true);
-          try {
-            await onRemoveMember(userId);
-          } finally {
-            setIsActionLoading(false);
+        action: () => {
+          if (onRequestRemoveMember) {
+            onRequestRemoveMember(userId);
+            return;
           }
+
+          void (async () => {
+            setIsActionLoading(true);
+            try {
+              await onRemoveMember(userId);
+            } finally {
+              setIsActionLoading(false);
+            }
+          })();
         },
       });
     } else if (!isHost && onLeaveMembership) {
@@ -54,19 +65,35 @@ export function CloudMemberActions({
         label: "Dejar membresía",
         icon: <LogOut className="h-4 w-4" />,
         color: "warning",
-        action: async () => {
-          setIsActionLoading(true);
-          try {
-            await onLeaveMembership(membership.hostUserId);
-          } finally {
-            setIsActionLoading(false);
+        action: () => {
+          if (onRequestLeaveMembership) {
+            onRequestLeaveMembership(membership.hostUserId);
+            return;
           }
+
+          void (async () => {
+            setIsActionLoading(true);
+            try {
+              await onLeaveMembership(membership.hostUserId);
+            } finally {
+              setIsActionLoading(false);
+            }
+          })();
         },
       });
     }
 
     return items;
-  }, [isHost, userId, onViewProfile, onRemoveMember, onLeaveMembership, membership.hostUserId]);
+  }, [
+    isHost,
+    userId,
+    onViewProfile,
+    onRequestRemoveMember,
+    onRequestLeaveMembership,
+    onRemoveMember,
+    onLeaveMembership,
+    membership.hostUserId,
+  ]);
 
   return (
     <Dropdown>

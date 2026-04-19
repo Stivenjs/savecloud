@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Button, Tooltip } from "@heroui/react";
 import { ChevronDown } from "lucide-react";
 import type { CloudMembership, CloudPresenceItem } from "@services/tauri/invites.service";
 import { CloudMemberRow } from "@features/friends/CloudMemberRow";
@@ -12,6 +11,8 @@ interface CloudMembersSectionProps {
   loadingPresence: boolean;
   isActionLoading?: string | null;
   onViewProfile: (userId: string) => void;
+  onRequestRemoveMember?: (userId: string) => void;
+  onRequestLeaveMembership?: (hostId: string) => void;
   onRemoveMember?: (userId: string) => Promise<void>;
   onLeaveMembership?: (hostId: string) => Promise<void>;
   searchQuery?: string;
@@ -25,6 +26,8 @@ export function CloudMembersSection({
   loadingPresence,
   isActionLoading = null,
   onViewProfile,
+  onRequestRemoveMember,
+  onRequestLeaveMembership,
   onRemoveMember,
   onLeaveMembership,
   searchQuery = "",
@@ -75,6 +78,8 @@ export function CloudMembersSection({
                       loadingPresence={loadingPresence}
                       isActionLoading={isActionLoading === userId}
                       onViewProfile={onViewProfile}
+                      onRequestRemoveMember={onRequestRemoveMember}
+                      onRequestLeaveMembership={onRequestLeaveMembership}
                       onRemoveMember={onRemoveMember}
                       onLeaveMembership={onLeaveMembership}
                     />
