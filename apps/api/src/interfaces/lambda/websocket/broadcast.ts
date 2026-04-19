@@ -5,6 +5,7 @@ import { DynamoDbConnectionRepository } from "@infrastructure/persistence/Dynamo
 import { ApiGatewayNotifier } from "@infrastructure/websocket/ApiGatewayNotifier";
 import { S3CloudInviteRepository } from "@infrastructure/persistence/S3CloudInviteRepository";
 import { BroadcastActivityUseCase } from "@application/use-cases/BroadcastActivityUseCase";
+import { normalizeGameDisplayName } from "@shared/utils";
 
 const dynamoClient = new DynamoDBClient();
 const s3Client = new S3Client();
@@ -27,6 +28,7 @@ export const handler = async (event: APIGatewayProxyWebsocketEventV2) => {
   const body = JSON.parse(event.body || "{}");
   const parsedGameId = typeof body.gameId === "string" ? body.gameId.trim() : "";
   const parsedGameName = typeof body.gameName === "string" ? body.gameName.trim() : "";
+  const normalizedGameName = normalizeGameDisplayName(parsedGameId, parsedGameName);
   const statusRaw = typeof body.status === "string" ? body.status.trim().toLowerCase() : "";
   const isStopSignal = parsedGameId.length === 0 || statusRaw === "online" || statusRaw === "idle";
   const wsEndpoint =
@@ -42,13 +44,13 @@ export const handler = async (event: APIGatewayProxyWebsocketEventV2) => {
       broadcasterUserId: verifiedUserId,
       presenceStatus: isStopSignal ? "online" : "playing",
       gameId: isStopSignal ? undefined : parsedGameId,
-      gameName: isStopSignal ? undefined : parsedGameName || parsedGameId,
+      gameName: isStopSignal ? undefined : normalizedGameName || parsedGameId,
     });
 
     await connectionRepo.setConnectionActivity(connectionId, {
       lastActivityAt: Date.now(),
       activityGameId: isStopSignal ? null : parsedGameId,
-      activityGameName: isStopSignal ? null : parsedGameName || parsedGameId,
+      activityGameName: isStopSignal ? null : normalizedGameName || parsedGameId,
     });
 
     return { statusCode: 200, body: "Broadcast sent" };

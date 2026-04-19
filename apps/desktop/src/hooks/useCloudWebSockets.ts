@@ -6,6 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
+import { formatGameDisplayName } from "@utils/gameImage";
 import { getFriendConfig, setCloudHostWsUrl } from "@services/tauri/config.service";
 
 /**
@@ -163,7 +164,9 @@ export function useCloudWebSockets() {
       if (!activeUserId) return;
 
       const gameNode = config?.games?.find((g) => g.id === gameId);
-      const gameName = gameNode?.editionLabel ? `${gameId} (${gameNode.editionLabel})` : gameId;
+      const baseDisplayName = formatGameDisplayName(gameId);
+      const editionLabel = gameNode?.editionLabel?.trim();
+      const gameName = editionLabel ? `${baseDisplayName} (${editionLabel})` : baseDisplayName;
 
       invoke("send_cloud_broadcast", { gameId, gameName })
         .then(() => queryClient.invalidateQueries({ queryKey: ["cloud-presence"] }))
