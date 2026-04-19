@@ -3,7 +3,10 @@
 //! Proporciona operaciones de alto nivel para crear, cambiar, actualizar y
 //! eliminar perfiles, coordinando la persistencia con el Keyring del SO.
 
-use super::io::delete_secure_api_key_for_profile;
+use super::io::{
+    delete_secure_api_key_for_cloud_host_in_profile, delete_secure_api_key_for_profile,
+    delete_secure_steam_web_api_key_for_profile,
+};
 use super::profile_io;
 use super::profile_storage;
 use super::profiles::{Profile, ProfileDTO, ProfilesIndex};
@@ -157,6 +160,11 @@ impl ProfileManager {
             );
         }
 
+        let target_profile = index
+            .get_profile(profile_id)
+            .cloned()
+            .ok_or_else(|| format!("Profile not found: {profile_id}"))?;
+
         // Eliminar del índice
         index.remove_profile(profile_id);
 
@@ -168,6 +176,10 @@ impl ProfileManager {
 
         // Eliminar API key del Keyring (best effort, no error si falla)
         let _ = delete_secure_api_key_for_profile(profile_id);
+        let _ = delete_secure_steam_web_api_key_for_profile(profile_id);
+        for host_user_id in target_profile.cloud_host_api_base_urls.keys() {
+            let _ = delete_secure_api_key_for_cloud_host_in_profile(profile_id, host_user_id);
+        }
 
         // Persitir cambios
         profile_io::save_profiles_index(index)?;

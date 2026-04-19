@@ -5,18 +5,54 @@
 
 use super::models::*;
 use super::profile_storage;
+use super::profiles::DEFAULT_PROFILE_ID;
 use keyring::Entry;
 
 pub const KEYRING_SERVICE: &str = "savecloud_api";
 pub const KEYRING_ACCOUNT: &str = "default_user";
 const KEYRING_ACCOUNT_CLOUD_HOST_PREFIX: &str = "cloud_host_";
 const KEYRING_ACCOUNT_STEAM_WEB_API: &str = "steam_web_api";
+const KEYRING_PROFILE_SERVICE_PREFIX: &str = "savecloud_api_profile_";
+const KEYRING_PROFILE_ACCOUNT_API_KEY: &str = "api_key";
+const KEYRING_PROFILE_ACCOUNT_STEAM_WEB_API: &str = "steam_web_api";
 
-fn get_secure_api_key() -> Option<String> {
-    Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+fn active_profile_id() -> Option<String> {
+    super::profile_io::load_profiles_index()
+        .ok()
+        .and_then(|index| index.get_active_profile().map(|profile| profile.id.clone()))
+}
+
+fn profile_service(profile_id: &str) -> String {
+    format!("{}{}", KEYRING_PROFILE_SERVICE_PREFIX, profile_id.trim())
+}
+
+fn keyring_value(service: &str, account: &str) -> Option<String> {
+    Entry::new(service, account)
         .ok()
         .and_then(|entry| entry.get_password().ok())
-        .filter(|key| key != MASKED_API_KEY)
+}
+
+fn keyring_value_filtered(service: &str, account: &str, masked: &str) -> Option<String> {
+    keyring_value(service, account).filter(|key| key != masked)
+}
+
+fn keyring_set(service: &str, account: &str, key: &str) -> Result<(), String> {
+    let entry = Entry::new(service, account).map_err(|error| error.to_string())?;
+    entry.set_password(key).map_err(|error| error.to_string())
+}
+
+fn delete_keyring_entry(service: &str, account: &str) -> Result<(), String> {
+    let entry = Entry::new(service, account).map_err(|error| error.to_string())?;
+    match entry.delete_password() {
+        Ok(()) => Ok(()),
+        // Si no existe, no lo tratamos como error.
+        Err(error) if error.to_string().to_ascii_lowercase().contains("no entry") => Ok(()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn get_secure_api_key() -> Option<String> {
+    keyring_value_filtered(KEYRING_SERVICE, KEYRING_ACCOUNT, MASKED_API_KEY)
 }
 
 pub fn get_global_secure_api_key() -> Option<String> {
@@ -28,8 +64,7 @@ fn set_secure_api_key(key: &str) -> Result<(), String> {
         return Ok(());
     }
 
-    let entry = Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT).map_err(|error| error.to_string())?;
-    entry.set_password(key).map_err(|error| error.to_string())
+    keyring_set(KEYRING_SERVICE, KEYRING_ACCOUNT, key)
 }
 
 pub fn set_global_secure_api_key(key: &str) -> Result<(), String> {
@@ -45,11 +80,23 @@ fn cloud_host_keyring_account(host_user_id: &str) -> String {
 }
 
 pub fn get_secure_api_key_for_cloud_host(host_user_id: &str) -> Option<String> {
+    if let Some(profile_id) = active_profile_id() {
+        let account = cloud_host_keyring_account(host_user_id);
+        let service = profile_service(&profile_id);
+        if let Some(value) = keyring_value_filtered(&service, &account, MASKED_API_KEY) {
+            return Some(value);
+        }
+
+        // Migracion desde esquema anterior (service global + account host-prefixed).
+        if let Some(legacy) = keyring_value_filtered(KEYRING_SERVICE, &account, MASKED_API_KEY) {
+            let _ = keyring_set(&service, &account, &legacy);
+            return Some(legacy);
+        }
+        return None;
+    }
+
     let account = cloud_host_keyring_account(host_user_id);
-    Entry::new(KEYRING_SERVICE, &account)
-        .ok()
-        .and_then(|entry| entry.get_password().ok())
-        .filter(|key| key != MASKED_API_KEY)
+    keyring_value_filtered(KEYRING_SERVICE, &account, MASKED_API_KEY)
 }
 
 pub fn set_secure_api_key_for_cloud_host(host_user_id: &str, key: &str) -> Result<(), String> {
@@ -58,15 +105,29 @@ pub fn set_secure_api_key_for_cloud_host(host_user_id: &str, key: &str) -> Resul
     }
 
     let account = cloud_host_keyring_account(host_user_id);
-    let entry = Entry::new(KEYRING_SERVICE, &account).map_err(|error| error.to_string())?;
-    entry.set_password(key).map_err(|error| error.to_string())
+    if let Some(profile_id) = active_profile_id() {
+        return keyring_set(&profile_service(&profile_id), &account, key);
+    }
+
+    keyring_set(KEYRING_SERVICE, &account, key)
+}
+
+pub fn delete_secure_api_key_for_cloud_host_in_profile(
+    profile_id: &str,
+    host_user_id: &str,
+) -> Result<(), String> {
+    let account = cloud_host_keyring_account(host_user_id);
+    let _ = delete_keyring_entry(&profile_service(profile_id), &account);
+    let _ = delete_keyring_entry(KEYRING_SERVICE, &account);
+    Ok(())
 }
 
 fn get_secure_steam_web_api_key() -> Option<String> {
-    Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT_STEAM_WEB_API)
-        .ok()
-        .and_then(|entry| entry.get_password().ok())
-        .filter(|key| key != MASKED_STEAM_WEB_API_KEY)
+    keyring_value_filtered(
+        KEYRING_SERVICE,
+        KEYRING_ACCOUNT_STEAM_WEB_API,
+        MASKED_STEAM_WEB_API_KEY,
+    )
 }
 
 pub fn get_global_secure_steam_web_api_key() -> Option<String> {
@@ -78,9 +139,7 @@ fn set_secure_steam_web_api_key(key: &str) -> Result<(), String> {
         return Ok(());
     }
 
-    let entry = Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT_STEAM_WEB_API)
-        .map_err(|error| error.to_string())?;
-    entry.set_password(key).map_err(|error| error.to_string())
+    keyring_set(KEYRING_SERVICE, KEYRING_ACCOUNT_STEAM_WEB_API, key)
 }
 
 pub fn set_global_secure_steam_web_api_key(key: &str) -> Result<(), String> {
@@ -91,12 +150,31 @@ fn profile_keyring_account(profile_id: &str) -> String {
     format!("savecloud_profile_{}", profile_id.trim())
 }
 
+fn steam_web_api_keyring_account(profile_id: &str) -> String {
+    format!("savecloud_profile_steam_{}", profile_id.trim())
+}
+
 pub fn get_secure_api_key_for_profile(profile_id: &str) -> Option<String> {
-    let account = profile_keyring_account(profile_id);
-    Entry::new(KEYRING_SERVICE, &account)
-        .ok()
-        .and_then(|entry| entry.get_password().ok())
-        .filter(|key| key != MASKED_API_KEY)
+    let service = profile_service(profile_id);
+    if let Some(value) =
+        keyring_value_filtered(&service, KEYRING_PROFILE_ACCOUNT_API_KEY, MASKED_API_KEY)
+    {
+        return Some(value);
+    }
+
+    // Migracion desde esquema anterior basado en account por perfil.
+    let legacy_account = profile_keyring_account(profile_id);
+    if let Some(legacy) = keyring_value_filtered(KEYRING_SERVICE, &legacy_account, MASKED_API_KEY) {
+        let _ = keyring_set(&service, KEYRING_PROFILE_ACCOUNT_API_KEY, &legacy);
+        return Some(legacy);
+    }
+
+    // Compatibilidad extra para el perfil por defecto legado.
+    if profile_id.trim() == DEFAULT_PROFILE_ID {
+        return get_global_secure_api_key();
+    }
+
+    None
 }
 
 pub fn set_secure_api_key_for_profile(profile_id: &str, key: &str) -> Result<(), String> {
@@ -104,15 +182,68 @@ pub fn set_secure_api_key_for_profile(profile_id: &str, key: &str) -> Result<(),
         return Ok(());
     }
 
-    let account = profile_keyring_account(profile_id);
-    let entry = Entry::new(KEYRING_SERVICE, &account).map_err(|error| error.to_string())?;
-    entry.set_password(key).map_err(|error| error.to_string())
+    keyring_set(
+        &profile_service(profile_id),
+        KEYRING_PROFILE_ACCOUNT_API_KEY,
+        key,
+    )
 }
 
 pub fn delete_secure_api_key_for_profile(profile_id: &str) -> Result<(), String> {
-    let account = profile_keyring_account(profile_id);
-    let entry = Entry::new(KEYRING_SERVICE, &account).map_err(|error| error.to_string())?;
-    entry.delete_password().map_err(|error| error.to_string())
+    let legacy_account = profile_keyring_account(profile_id);
+    let _ = delete_keyring_entry(
+        &profile_service(profile_id),
+        KEYRING_PROFILE_ACCOUNT_API_KEY,
+    );
+    let _ = delete_keyring_entry(KEYRING_SERVICE, &legacy_account);
+    Ok(())
+}
+
+pub fn get_secure_steam_web_api_key_for_profile(profile_id: &str) -> Option<String> {
+    let service = profile_service(profile_id);
+    if let Some(value) = keyring_value_filtered(
+        &service,
+        KEYRING_PROFILE_ACCOUNT_STEAM_WEB_API,
+        MASKED_STEAM_WEB_API_KEY,
+    ) {
+        return Some(value);
+    }
+
+    let legacy_account = steam_web_api_keyring_account(profile_id);
+    if let Some(legacy) =
+        keyring_value_filtered(KEYRING_SERVICE, &legacy_account, MASKED_STEAM_WEB_API_KEY)
+    {
+        let _ = keyring_set(&service, KEYRING_PROFILE_ACCOUNT_STEAM_WEB_API, &legacy);
+        return Some(legacy);
+    }
+
+    if profile_id.trim() == DEFAULT_PROFILE_ID {
+        return get_global_secure_steam_web_api_key();
+    }
+
+    None
+}
+
+pub fn set_secure_steam_web_api_key_for_profile(profile_id: &str, key: &str) -> Result<(), String> {
+    if key == MASKED_STEAM_WEB_API_KEY {
+        return Ok(());
+    }
+
+    keyring_set(
+        &profile_service(profile_id),
+        KEYRING_PROFILE_ACCOUNT_STEAM_WEB_API,
+        key,
+    )
+}
+
+pub fn delete_secure_steam_web_api_key_for_profile(profile_id: &str) -> Result<(), String> {
+    let legacy_account = steam_web_api_keyring_account(profile_id);
+    let _ = delete_keyring_entry(
+        &profile_service(profile_id),
+        KEYRING_PROFILE_ACCOUNT_STEAM_WEB_API,
+    );
+    let _ = delete_keyring_entry(KEYRING_SERVICE, &legacy_account);
+    Ok(())
 }
 
 pub fn load_settings() -> AppSettings {

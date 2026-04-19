@@ -1,6 +1,7 @@
 use super::io::{
-    get_global_secure_api_key, get_global_secure_steam_web_api_key, set_global_secure_api_key,
-    set_global_secure_steam_web_api_key,
+    get_global_secure_api_key, get_global_secure_steam_web_api_key,
+    get_secure_steam_web_api_key_for_profile, set_global_secure_api_key,
+    set_global_secure_steam_web_api_key, set_secure_steam_web_api_key_for_profile,
 };
 use super::models::*;
 use super::paths;
@@ -115,14 +116,21 @@ pub fn load_settings() -> AppSettings {
         .and_then(|content| serde_json::from_str::<AppSettings>(&content).ok())
         .unwrap_or_default();
 
-    let secure_key = active_profile
-        .as_ref()
-        .and_then(|profile| super::io::get_secure_api_key_for_profile(&profile.id))
-        .or_else(get_global_secure_api_key);
+    let secure_key = match active_profile.as_ref() {
+        Some(profile) if profile.id == DEFAULT_PROFILE_ID => {
+            super::io::get_secure_api_key_for_profile(&profile.id)
+                .or_else(get_global_secure_api_key)
+        }
+        Some(profile) => super::io::get_secure_api_key_for_profile(&profile.id),
+        None => get_global_secure_api_key(),
+    };
     if secure_key.is_none() && settings.api_key.is_some() {
         if let Some(ref key) = settings.api_key {
             if let Some(profile) = active_profile.as_ref() {
                 let _ = super::io::set_secure_api_key_for_profile(&profile.id, key);
+                if profile.id == DEFAULT_PROFILE_ID {
+                    let _ = set_global_secure_api_key(key);
+                }
             } else {
                 let _ = set_global_secure_api_key(key);
             }
@@ -131,7 +139,14 @@ pub fn load_settings() -> AppSettings {
         settings.api_key = Some(key);
     }
 
-    let secure_steam = get_global_secure_steam_web_api_key();
+    let secure_steam = match active_profile.as_ref() {
+        Some(profile) if profile.id == DEFAULT_PROFILE_ID => {
+            get_secure_steam_web_api_key_for_profile(&profile.id)
+                .or_else(get_global_secure_steam_web_api_key)
+        }
+        Some(profile) => get_secure_steam_web_api_key_for_profile(&profile.id),
+        None => get_global_secure_steam_web_api_key(),
+    };
     if secure_steam.is_none()
         && settings
             .steam_web_api_key
@@ -139,7 +154,14 @@ pub fn load_settings() -> AppSettings {
             .map_or(false, |key| !key.trim().is_empty())
     {
         if let Some(ref key) = settings.steam_web_api_key {
-            let _ = set_global_secure_steam_web_api_key(key);
+            if let Some(profile) = active_profile.as_ref() {
+                let _ = set_secure_steam_web_api_key_for_profile(&profile.id, key);
+                if profile.id == DEFAULT_PROFILE_ID {
+                    let _ = set_global_secure_steam_web_api_key(key);
+                }
+            } else {
+                let _ = set_global_secure_steam_web_api_key(key);
+            }
         }
     } else if let Some(key) = secure_steam {
         settings.steam_web_api_key = Some(key);
@@ -162,11 +184,13 @@ pub fn load_settings() -> AppSettings {
             "SYNC_GAMES_USER_ID",
         );
     }
-    apply_env_fallback(
-        &mut settings.steam_web_api_key,
-        option_env!("STEAM_WEB_API_KEY"),
-        "STEAM_WEB_API_KEY",
-    );
+    if active_profile.is_none() {
+        apply_env_fallback(
+            &mut settings.steam_web_api_key,
+            option_env!("STEAM_WEB_API_KEY"),
+            "STEAM_WEB_API_KEY",
+        );
+    }
 
     settings
 }
@@ -186,7 +210,11 @@ pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
 
     if let Some(ref key) = settings.steam_web_api_key {
         if !key.trim().is_empty() {
-            set_global_secure_steam_web_api_key(key)?;
+            if let Some(profile) = active_profile.as_ref() {
+                set_secure_steam_web_api_key_for_profile(&profile.id, key)?;
+            } else {
+                set_global_secure_steam_web_api_key(key)?;
+            }
         }
     }
 
