@@ -5,8 +5,10 @@ import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { SteamCatalogFilters } from "@features/steam-catalog/components/SteamCatalogFilters";
 import { SteamCatalogGrid } from "@features/steam-catalog/components/SteamCatalogGrid";
 import { SteamCatalogPagination } from "@features/steam-catalog/components/SteamCatalogPagination";
+import { SteamCatalogTrendingHero } from "@features/steam-catalog/components/SteamCatalogTrendingHero";
 import { SteamCatalogToolbar } from "@features/steam-catalog/components/SteamCatalogToolbar";
 import { useSteamCatalogQueries } from "@features/steam-catalog/hooks/useSteamCatalogQueries";
+import { useSteamCatalogTrendingHero } from "@features/steam-catalog/hooks/useSteamCatalogTrendingHero";
 import { useShellUiStore } from "@store/ShellUiStore";
 import { useEffect, useLayoutEffect, useRef } from "react";
 
@@ -56,6 +58,16 @@ export function SteamCatalogPage() {
   });
 
   const isReady = !isLoading && items.length > 0;
+  const showTrendingHero = !searchMode && selectedGenres.length === 0 && selectedTags.length === 0 && page === 1;
+
+  const {
+    items: heroItems,
+    mediaBySteamAppId: heroMediaBySteamAppId,
+    isLoading: isHeroLoading,
+    isFetching: isHeroFetching,
+    isError: isHeroError,
+    error: heroError,
+  } = useSteamCatalogTrendingHero(showTrendingHero);
 
   useLayoutEffect(() => {
     if (!isReady || hasRestored.current) return;
@@ -101,6 +113,17 @@ export function SteamCatalogPage() {
           </p>
         </div>
       </div>
+
+      {showTrendingHero ? (
+        <SteamCatalogTrendingHero
+          items={heroItems}
+          mediaBySteamAppId={heroMediaBySteamAppId}
+          isLoading={isHeroLoading}
+          isFetching={isHeroFetching}
+          isError={isHeroError}
+          errorMessage={heroError?.message}
+        />
+      ) : null}
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <aside className="w-full shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-5rem)] lg:w-80 lg:overflow-y-auto lg:pr-1">

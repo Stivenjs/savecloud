@@ -79,3 +79,19 @@ pub async fn get_steam_catalog_filter_facets(
         .map_err(|e| e.to_string())?
         .map_err(|e| e.to_string())
 }
+
+/// Top de tendencias para el hero de la primera vista del catálogo.
+#[tauri::command]
+pub async fn list_steam_catalog_trending_hero(
+    db: State<'_, AppDb>,
+    limit: Option<u32>,
+) -> Result<Vec<CatalogListItem>, String> {
+    let cap = limit.unwrap_or(10).max(1).min(20);
+    let db = db.deref().clone();
+    tokio::task::spawn_blocking(move || {
+        db.with_conn(|c| catalog_query::list_catalog_trending_hero(c, cap))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())
+}

@@ -65,3 +65,27 @@ video::-webkit-media-controls-fullscreen-button {
     background-position: -200% center;
   }
 }
+
+.sg-trending-pagination {
+  position: static;
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.65rem 0 0.8rem;
+}
+
+.sg-trending-pagination .swiper-pagination-bullet {
+  width: 14px;
+  height: 8px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--heroui-default-400, #a1a1aa) 70%, transparent);
+  opacity: 0.65;
+  margin: 0;
+  transition: all 0.2s ease;
+}
+
+.sg-trending-pagination .swiper-pagination-bullet-active {
+  width: 22px;
+  background: color-mix(in oklab, var(--heroui-primary, #3b82f6) 80%, white 10%);
+  opacity: 1;
+}

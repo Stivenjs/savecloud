@@ -443,6 +443,13 @@ export async function listSteamCatalogPage(
   });
 }
 
+/** Top de juegos en tendencia para el hero de la primera vista del catálogo. */
+export async function listSteamCatalogTrendingHero(limit?: number): Promise<CatalogListItem[]> {
+  return invoke<CatalogListItem[]>("list_steam_catalog_trending_hero", {
+    limit: limit ?? null,
+  });
+}
+
 /**
  * Ficha completa desde el catálogo local: caché → JSON en disco → Store API.
  * Misma forma que `getSteamAppDetails`, pero exige que el `appId` exista en el catálogo sincronizado.
