@@ -7,7 +7,7 @@ import { STEAM_CATALOG_GAME_ID_PREFIX } from "@utils/steamCatalogGameId";
 import { Pagination } from "swiper/modules";
 import { Swiper, SwiperSlide } from "swiper/react";
 import type { Swiper as SwiperType } from "swiper";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type SteamCatalogTrendingHeroProps = {
   items: CatalogListItem[];
@@ -25,6 +25,12 @@ const RECOMMENDATION_COPY_VARIANTS = [
   "elegido por relacion de categorias y estilo de juego.",
   "propuesto por patrones de etiquetas en juegos relacionados.",
 ];
+
+const STEAM_ASSET_BASE = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps";
+
+function getLibraryHeroUrl(appId: string): string {
+  return `${STEAM_ASSET_BASE}/${appId}/library_hero.jpg`;
+}
 
 function imageFor(
   item: CatalogListItem | null,
@@ -132,12 +138,6 @@ export function SteamCatalogTrendingHero({
 
   return (
     <section className="space-y-3" aria-label="Destacados y recomendados">
-      <div className="flex items-center gap-2 text-sm font-semibold text-default-700 dark:text-default-200">
-        <Sparkles size={16} className="text-primary" />
-        Destacados y recomendados
-        {isFetching ? <span className="text-xs text-default-400">Actualizando…</span> : null}
-      </div>
-
       <div className="relative">
         <Button
           isIconOnly
@@ -193,6 +193,8 @@ type TrendingHeroSlideProps = {
 function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, onOpenGame }: TrendingHeroSlideProps) {
   const gallery = useMemo(() => galleryFor(featured, mediaBySteamAppId), [featured, mediaBySteamAppId]);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [hasManualImageSelection, setHasManualImageSelection] = useState(false);
+  const [failedHeroUrls, setFailedHeroUrls] = useState<Set<string>>(new Set());
   const recommendationCopy = useMemo(() => {
     const randomIndex = Math.floor(Math.random() * RECOMMENDATION_COPY_VARIANTS.length);
     return RECOMMENDATION_COPY_VARIANTS[randomIndex];
@@ -200,9 +202,30 @@ function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, onOpenGa
 
   useEffect(() => {
     setActiveImageIndex(0);
+    setHasManualImageSelection(false);
+    setFailedHeroUrls(new Set());
   }, [featured.steamAppId]);
 
-  const featuredImage = gallery[activeImageIndex] ?? imageFor(featured, mediaBySteamAppId);
+  const heroCandidates = useMemo(() => {
+    if (hasManualImageSelection) {
+      const selected = gallery[activeImageIndex] ?? null;
+      const rest = gallery.filter((url) => url !== selected);
+      return [selected, ...rest].filter((url): url is string => Boolean(url));
+    }
+
+    return [getLibraryHeroUrl(featured.steamAppId), ...gallery].filter((url): url is string => Boolean(url));
+  }, [featured.steamAppId, gallery, activeImageIndex, hasManualImageSelection]);
+
+  const featuredImage = heroCandidates.find((url) => !failedHeroUrls.has(url)) ?? null;
+  const handleHeroImageError = useCallback((url: string) => {
+    setFailedHeroUrls((prev) => {
+      if (prev.has(url)) return prev;
+      const next = new Set(prev);
+      next.add(url);
+      return next;
+    });
+  }, []);
+
   const featuredGenres = mediaBySteamAppId?.[featured.steamAppId]?.genres ?? [];
   const sideThumbs = gallery.slice(0, 4);
 
@@ -216,6 +239,7 @@ function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, onOpenGa
             className="absolute inset-0 h-full w-full object-cover object-center"
             loading="lazy"
             decoding="async"
+            onError={() => handleHeroImageError(featuredImage)}
           />
         ) : (
           <div className="absolute inset-0 bg-linear-to-br from-default-900 via-default-800 to-default-700" />
@@ -262,7 +286,10 @@ function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, onOpenGa
                     ? "border-primary/90 ring-1 ring-primary/70"
                     : "border-white/15 hover:border-white/45"
                 }`}
-                onClick={() => setActiveImageIndex(index)}>
+                onClick={() => {
+                  setHasManualImageSelection(true);
+                  setActiveImageIndex(index);
+                }}>
                 <img
                   src={url}
                   alt={`${featured.name} captura ${index + 1}`}
