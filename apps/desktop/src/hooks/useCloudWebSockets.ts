@@ -90,15 +90,9 @@ export function useCloudWebSockets() {
       if (isComponentMounted) {
         unlistenIncoming = await listen<CloudIncomingMessage>("cloud-ws-incoming", (event) => {
           const msg = event.payload;
-
-          if (msg.type === "FRIEND_PLAYING") {
-            const { friendUserId, gameName } = msg.data;
-
-            invoke("show_overlay_notification", {
-              title: "Amigo jugando",
-              body: `${friendUserId} está jugando ${gameName}`,
-            }).catch(() => {});
-          }
+          // El overlay de FRIEND_PLAYING se dispara desde Rust para evitar duplicados
+          // y depender de un solo canal de entrega en producción.
+          if (msg.type === "FRIEND_PLAYING") return;
         });
       }
     }

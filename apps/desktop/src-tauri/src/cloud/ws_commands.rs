@@ -5,6 +5,7 @@
 
 use super::ws_client::CloudBroadcastPayload;
 use super::ws_manager::CloudWsState;
+use crate::commands::logs::sync_logger;
 use crate::config;
 use crate::plugins::log_buffer::AppLogs;
 use tauri::{command, AppHandle, State};
@@ -82,6 +83,31 @@ pub async fn start_cloud_ws(
             urlencoding::encode(&api_key)
         )
     };
+
+    let ws_endpoint_preview = final_url
+        .split('?')
+        .next()
+        .map(str::to_string)
+        .unwrap_or_else(|| "unknown".to_string());
+    let mode = if settings
+        .active_cloud_host_user_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_some()
+    {
+        "guest"
+    } else {
+        "host"
+    };
+
+    sync_logger::log_operation(
+        "cloud_ws_start",
+        &format!(
+            "mode={} userId={} endpoint={}",
+            mode, user_id, ws_endpoint_preview
+        ),
+    );
 
     // 3. Delegar el inicio al gestor de estado.
     cloud_state

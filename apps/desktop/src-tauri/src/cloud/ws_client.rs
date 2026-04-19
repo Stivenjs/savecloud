@@ -99,6 +99,12 @@ pub async fn start_ws_loop(
                         Some(msg) = ws_receiver.next() => {
                             match msg {
                                 Ok(Message::Text(text)) => {
+                                    let text_preview: String = text.chars().take(220).collect();
+                                    sync_logger::log_operation(
+                                        "cloud_ws_text_received",
+                                        &format!("payloadPreview={}", text_preview),
+                                    );
+
                                     match serde_json::from_str::<CloudIncomingMessage>(&text) {
                                         Ok(incoming) => {
                                             if let CloudIncomingMessage::FriendPlaying { data } = &incoming {
@@ -111,11 +117,45 @@ pub async fn start_ws_loop(
                                                         data.game_name
                                                     ),
                                                 );
+
+                                                // Fallback robusto: disparar overlay desde Rust sin depender del puente TS.
+                                                let _ = crate::overlay::show_overlay_notification(
+                                                    app_handle.clone(),
+                                                    "Amigo jugando".to_string(),
+                                                    format!("{} esta jugando {}", data.friend_user_id, data.game_name),
+                                                )
+                                                .await;
                                             }
-                                            let _ = app_handle.emit("cloud-ws-incoming", &incoming);
+
+                                            let msg_kind = match &incoming {
+                                                CloudIncomingMessage::FriendPlaying { .. } => "FRIEND_PLAYING",
+                                                CloudIncomingMessage::PresenceUpdate { .. } => "PRESENCE_UPDATE",
+                                                CloudIncomingMessage::Error { .. } => "ERROR",
+                                            };
+
+                                            sync_logger::log_operation(
+                                                "cloud_ws_message_parsed",
+                                                &format!("kind={}", msg_kind),
+                                            );
+
+                                            match app_handle.emit("cloud-ws-incoming", &incoming) {
+                                                Ok(_) => sync_logger::log_operation(
+                                                    "cloud_ws_emit_to_frontend_ok",
+                                                    &format!("kind={}", msg_kind),
+                                                ),
+                                                Err(e) => sync_logger::log_error(
+                                                    "cloud_ws_emit_to_frontend_error",
+                                                    &format!("kind={}", msg_kind),
+                                                    &e.to_string(),
+                                                ),
+                                            }
                                         }
-                                        Err(_e) => {
-                                            // Silencioso en producción si el formato es desconocido por ahora
+                                        Err(e) => {
+                                            sync_logger::log_error(
+                                                "cloud_ws_parse_error",
+                                                "No se pudo parsear payload websocket",
+                                                &e.to_string(),
+                                            );
                                         }
                                     }
                                 }
