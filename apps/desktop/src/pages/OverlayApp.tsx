@@ -41,27 +41,27 @@ const ANIMATION_CONFIG: {
 const NotificationCard: React.FC<OverlayNotification> = ({ id, title, body, avatar }) => (
   <motion.div key={id} {...ANIMATION_CONFIG} className="pointer-events-auto">
     {/* Contenedor principal */}
-    <div className="flex bg-[#1a1a1a] rounded-[4px] overflow-hidden shadow-[0_3px_12px_rgba(0,0,0,0.55)]">
+    <div className="flex bg-[#1a1a1a] rounded-sm overflow-hidden shadow-[0_3px_12px_rgba(0,0,0,0.55)]">
       {/* Barra verde lateral */}
-      <div className="w-[4px] bg-[#5c7e10] shrink-0" />
+      <div className="w-1 bg-[#5c7e10] shrink-0" />
 
       {/* Contenido de la notificación */}
-      <div className="flex items-center gap-[12px] py-[12px] px-[14px]">
+      <div className="flex items-center gap-3 py-3 px-3.5">
         {/* Avatar cuadrado con esquinas ligeramente redondeadas */}
-        <div className="w-[36px] h-[36px] rounded-[3px] bg-[#3d3d3d] overflow-hidden shrink-0 flex items-center justify-center">
+        <div className="w-9 h-9 rounded-[3px] bg-[#3d3d3d] overflow-hidden shrink-0 flex items-center justify-center">
           {avatar ? (
             <img src={avatar} alt="" className="w-full h-full object-cover" />
           ) : (
-            <Gamepad2 className="w-[20px] h-[20px] text-[#67707b]" />
+            <Gamepad2 className="w-5 h-5 text-[#67707b]" />
           )}
         </div>
 
         {/* Texto */}
         <div className="flex flex-col min-w-0">
           {/* Nombre del amigo */}
-          <span className="text-[#c6d4df] text-[14px] font-normal leading-[1.2] truncate max-w-[220px]">{title}</span>
+          <span className="text-[#c6d4df] text-[14px] font-normal leading-[1.2] truncate max-w-55">{title}</span>
           {/* Estado */}
-          <span className="text-[#5c7e10] text-[13px] font-normal leading-[1.3] truncate max-w-[220px]">{body}</span>
+          <span className="text-[#5c7e10] text-[13px] font-normal leading-[1.3] truncate max-w-55">{body}</span>
         </div>
       </div>
     </div>

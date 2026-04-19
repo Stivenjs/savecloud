@@ -3,6 +3,7 @@
 //! Este archivo gestiona la conexión cruda, el handshake TLS y el bucle de eventos
 //! de lectura/escritura para comunicarse con el servidor AWS WebSocket.
 
+use crate::commands::logs::sync_logger;
 use crate::plugins::log_buffer::{AppLogs, LogEntry};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -102,6 +103,14 @@ pub async fn start_ws_loop(
                                         Ok(incoming) => {
                                             if let CloudIncomingMessage::FriendPlaying { data } = &incoming {
                                                 log_cloud(&app_handle, &logs, "info", &format!("Amigo jugando: {} a {}", data.friend_user_id, data.game_name)).await;
+                                                sync_logger::log_operation(
+                                                    "cloud_ws_friend_playing_received",
+                                                    &format!(
+                                                        "friendUserId={} gameName={}",
+                                                        data.friend_user_id,
+                                                        data.game_name
+                                                    ),
+                                                );
                                             }
                                             let _ = app_handle.emit("cloud-ws-incoming", &incoming);
                                         }
