@@ -21,6 +21,7 @@ export function LibrarySaveGraphPage() {
   const setSelectedNodeId = useSaveGraphStore((state) => state.setSelectedNodeId);
   const { configQuery, statsQuery, historyQuery, remoteSummaryQuery, fullBackupsQuery, model } =
     useLibrarySaveGraphData();
+  const hasGames = (configQuery.data?.games.length ?? 0) > 0;
 
   useEffect(() => {
     setSelectedNodeId(null);
@@ -63,7 +64,7 @@ export function LibrarySaveGraphPage() {
 
   return (
     <main className="text-foreground">
-      <div className="flex w-full max-w-[100rem] flex-col gap-6 px-4 py-6 md:px-6 lg:px-8">
+      <div className="flex w-full max-w-400 flex-col gap-6 px-4 py-6 md:px-6 lg:px-8">
         <header>
           <section className="space-y-4 rounded-3xl border border-divider bg-content1 p-5">
             <div className="flex flex-wrap items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.28em] text-default-500">
@@ -113,7 +114,7 @@ export function LibrarySaveGraphPage() {
                 statsQuery.isPending ||
                 historyQuery.isPending ||
                 remoteSummaryQuery.isPending ||
-                fullBackupsQuery.isPending ? (
+                (hasGames && fullBackupsQuery.isPending) ? (
                   <div className="flex min-h-[52vh] flex-col items-center justify-center gap-3">
                     <Spinner size="lg" color="primary" />
                     <p className="text-default-500">Construyendo el mapa general...</p>
