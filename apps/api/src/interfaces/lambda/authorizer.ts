@@ -6,6 +6,7 @@
 
 import { timingSafeEqual } from "crypto";
 import { verifyUserAccessToken } from "@shared/accessToken";
+import { isPublicHttpRoute } from "@interfaces/http/security/public-routes";
 
 const expectedApiKey = process.env.API_KEY ?? "";
 
@@ -43,23 +44,7 @@ export async function handler(event: {
   const rawPath = event.rawPath ?? event.requestContext?.http?.path ?? "";
   const method = (event.requestContext?.http?.method ?? "").toUpperCase();
 
-  // Rutas públicas
-  if (rawPath === "/health") {
-    return { isAuthorized: true };
-  }
-
-  // CORS preflight: el navegador no envía x-api-key en OPTIONS
-  if (method === "OPTIONS") {
-    return { isAuthorized: true };
-  }
-
-  // GET /share/:token es público (resolver link compartido sin auth)
-  if (method === "GET" && rawPath.startsWith("/share/") && rawPath.length > "/share/".length) {
-    return { isAuthorized: true };
-  }
-
-  // Aceptar invitación por token debe ser público (bootstrap de credenciales)
-  if (method === "POST" && rawPath === "/invites/accept-token") {
+  if (isPublicHttpRoute(method, rawPath)) {
     return { isAuthorized: true };
   }
 

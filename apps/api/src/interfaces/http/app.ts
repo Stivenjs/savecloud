@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import cors from "@fastify/cors";
+import rateLimit from "@fastify/rate-limit";
 import type { SaveRepository } from "@domain/ports/SaveRepository";
 import type { SaveFileIndexRepository } from "@domain/ports/SaveFileIndexRepository";
 import type { GameStatRepository } from "@domain/ports/GameStatRepository";
@@ -34,6 +35,7 @@ import { registerNotificationRoutes } from "@interfaces/http/routes/notification
 import { registerInviteRoutes } from "@interfaces/http/routes/invites.routes";
 import { registerProfileRoutes } from "@interfaces/http/routes/users.routes";
 import { verifyUserAccessToken } from "@shared/accessToken";
+import { isPublicRoute } from "@interfaces/http/security/public-routes";
 import { GetFriendProfileUseCase } from "@application/use-cases/GetFriendProfileUseCase";
 
 export interface AppDependencies {
@@ -56,13 +58,22 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   await app.register(cors, { origin: true });
   await app.register(import("@fastify/compress"));
 
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator(request) {
+      const forwarded = request.headers["x-forwarded-for"] as string | undefined;
+      if (forwarded) {
+        return forwarded.split(",")[0]?.trim() || "unknown";
+      }
+      return request.ip || "unknown";
+    },
+  });
+
   const expectedApiKey = process.env.API_KEY;
 
   if (expectedApiKey) {
     app.addHook("onRequest", async (request, reply) => {
-      if (request.url === "/health") return;
-      if (request.method === "GET" && request.url.startsWith("/share/")) return;
-      if (request.method === "POST" && request.url === "/invites/accept-token") return;
+      if (isPublicRoute(request)) return;
 
       const key = request.headers["x-api-key"];
       if (key === expectedApiKey) return;
@@ -151,9 +162,20 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     });
   }
 
-  app.get("/health", async (_, reply: FastifyReply) => {
-    return reply.send({ status: "ok" });
-  });
+  app.get(
+    "/health",
+    {
+      config: {
+        rateLimit: {
+          max: 60,
+          timeWindow: "1 minute",
+        },
+      },
+    },
+    async (_, reply: FastifyReply) => {
+      return reply.send({ status: "ok" });
+    }
+  );
 
   return app;
 }

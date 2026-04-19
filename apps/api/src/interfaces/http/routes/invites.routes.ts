@@ -85,7 +85,15 @@ export async function registerInviteRoutes(
 
   app.post<{ Body: AcceptByTokenBody }>(
     "/invites/accept-token",
-    { schema: { body: AcceptByTokenSchema } },
+    {
+      schema: { body: AcceptByTokenSchema },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: "1 minute",
+        },
+      },
+    },
     async (request, reply: FastifyReply) => {
       try {
         const userId = getUserId(request);
