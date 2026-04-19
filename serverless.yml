@@ -36,10 +36,9 @@ provider:
         functionName: apiAuthorizer
         enableSimpleResponses: true
         authorizerPayloadFormatVersion: "2.0"
-        resultTtlInSeconds: 60
+        resultTtlInSeconds: 0
         identitySource:
-          - "$request.header.x-api-key"
-          - "$request.header.x-user-id"
+          - "$request.header.host"
 
   iam:
     role:

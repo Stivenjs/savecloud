@@ -631,15 +631,15 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
 
               <span
                 ref={iconRef}
-                className="sm-icon relative w-[14px] h-[14px] shrink-0 inline-flex items-center justify-center will-change-transform"
+                className="sm-icon relative w-3.5 h-3.5 shrink-0 inline-flex items-center justify-center will-change-transform"
                 aria-hidden="true">
                 <span
                   ref={plusHRef}
-                  className="sm-icon-line absolute left-1/2 top-1/2 w-full h-[2px] bg-current rounded-[2px] -translate-x-1/2 -translate-y-1/2 will-change-transform"
+                  className="sm-icon-line absolute left-1/2 top-1/2 w-full h-0.5 bg-current rounded-xs -translate-x-1/2 -translate-y-1/2 will-change-transform"
                 />
                 <span
                   ref={plusVRef}
-                  className="sm-icon-line sm-icon-line-v absolute left-1/2 top-1/2 w-full h-[2px] bg-current rounded-[2px] -translate-x-1/2 -translate-y-1/2 will-change-transform"
+                  className="sm-icon-line sm-icon-line-v absolute left-1/2 top-1/2 w-full h-0.5 bg-current rounded-xs -translate-x-1/2 -translate-y-1/2 will-change-transform"
                 />
               </span>
             </button>
@@ -726,7 +726,7 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
                         href={s.link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="sm-socials-link text-[1.2rem] font-medium no-underline relative inline-block py-[2px] transition-[color,opacity] duration-300 ease-linear">
+                        className="sm-socials-link text-[1.2rem] font-medium no-underline relative inline-block py-0.5 transition-[color,opacity] duration-300 ease-linear">
                         {s.label}
                       </a>
                     </li>

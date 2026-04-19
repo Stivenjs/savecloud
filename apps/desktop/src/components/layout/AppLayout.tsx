@@ -1,4 +1,4 @@
-import { type ReactNode, startTransition, lazy, Suspense, useEffect, useState } from "react";
+import { type ReactNode, startTransition, lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@heroui/react";
 import { Moon, Sun } from "lucide-react";
@@ -12,8 +12,10 @@ import { useShellUiStore } from "@store/ShellUiStore";
 import { UserBadge } from "@features/games/UserBadge";
 import { prefetchProfileDrawer } from "@features/profile/profileDrawerPrefetch";
 import { useConfig } from "@hooks/useConfig";
+import { useProfileSession } from "@hooks/useProfileSession";
 import { useGamification } from "@hooks/useGamification";
 import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
+import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import type { ConfiguredGame } from "@app-types/config";
 
@@ -90,9 +92,12 @@ export function AppLayout({ navItems, children, games, onMenuGameClick }: AppLay
   const setSideMenuOpen = useShellUiStore((s) => s.setSideMenuOpen);
 
   const { config, loading: configLoading } = useConfig();
+  const { activeProfile } = useProfileSession();
   const { data: gamification } = useGamification();
 
-  const hasSyncConfig = hasUsableCloudConnection(config);
+  const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
+
+  const hasSyncConfig = hasUsableCloudConnection(cloudConfig);
   const { connectionStatus } = useLastSyncInfo(hasSyncConfig);
 
   const [profileDrawerOpen, setProfileDrawerOpen] = useState(false);
@@ -158,7 +163,7 @@ export function AppLayout({ navItems, children, games, onMenuGameClick }: AppLay
         headerActions={
           <div className="flex items-center gap-4">
             <UserBadge
-              userId={config?.userId}
+              userId={activeProfile?.localUserId || config?.userId}
               profileAvatar={config?.profileAvatar}
               profileFrame={config?.profileFrame}
               hasSyncConfig={hasSyncConfig}

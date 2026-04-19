@@ -31,12 +31,15 @@ import {
   User,
   Zap,
 } from "lucide-react";
+import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { ProfileHeroBackground } from "@features/profile/PublicProfileHero";
+import { buildNiceAvatarConfig, generateNiceAvatarSeed, serializeNiceAvatarConfig } from "@features/profile/niceAvatar";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Config } from "@app-types/config";
 import type { GamificationState } from "@app-types/gamification";
 import type { ConnectionStatus } from "@hooks/useLastSyncInfo";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
+import { useProfileSession } from "@hooks/useProfileSession";
 import {
   readImageAsDataUrl,
   scheduleConfigBackupToCloud,
@@ -89,10 +92,12 @@ export function ProfileDrawer({
   hasSyncConfig,
   connectionStatus,
 }: ProfileDrawerProps) {
+  const { activeProfile } = useProfileSession();
   const queryClient = useQueryClient();
   const [bg, setBg] = useState("");
   const [avatar, setAvatar] = useState("");
   const [frame, setFrame] = useState("");
+  const [avatarGeneratorSeed, setAvatarGeneratorSeed] = useState("");
   const [saving, setSaving] = useState(false);
   const [shareVisualWithHosts, setShareVisualWithHosts] = useState(false);
   const [shareVisualWithMembers, setShareVisualWithMembers] = useState(false);
@@ -102,13 +107,14 @@ export function ProfileDrawer({
     setBg(config.profileBackground ?? "");
     setAvatar(config.profileAvatar ?? "");
     setFrame(config.profileFrame ?? "");
+    setAvatarGeneratorSeed(activeProfile?.localUserId?.trim() || config.userId?.trim() || "");
     setShareVisualWithHosts(config.shareVisualProfileWithHosts ?? false);
     setShareVisualWithMembers(config.shareVisualProfileWithMembers ?? false);
-  }, [isOpen, config]);
+  }, [activeProfile?.localUserId, config, isOpen]);
 
   const gamesCount = config?.games?.length ?? 0;
   const totalSeconds = config?.totalPlaytime ?? 0;
-  const userId = config?.userId?.trim() ?? "";
+  const userId = activeProfile?.localUserId?.trim() || config?.userId?.trim() || "";
   const displayName = userId || "Usuario";
   const conn = connectionLabel(hasSyncConfig ? connectionStatus : undefined);
 
@@ -130,7 +136,6 @@ export function ProfileDrawer({
   const weeklyPlaytimeSeconds = gamification?.weeklyPlaytimeSeconds ?? 0;
   const achievementsUnlocked = gamification?.achievementsUnlocked ?? [];
 
-  const avatarResolved = useMemo(() => resolveProfileAsset(avatar || undefined), [avatar]);
   const frameResolved = useMemo(() => resolveProfileAsset(frame || undefined), [frame]);
 
   const handleSave = useCallback(async () => {
@@ -182,6 +187,12 @@ export function ProfileDrawer({
     }
   }, []);
 
+  const applyGeneratedAvatar = useCallback((seed: string) => {
+    const normalizedSeed = seed.trim() || generateNiceAvatarSeed();
+    const generated = buildNiceAvatarConfig(normalizedSeed);
+    setAvatar(serializeNiceAvatarConfig(generated));
+  }, []);
+
   return (
     <Drawer
       isOpen={isOpen}
@@ -212,10 +223,10 @@ export function ProfileDrawer({
 
             <div className="absolute inset-x-0 bottom-0 flex items-end gap-4 px-4 pb-3">
               {/* Avatar */}
-              <div className="relative size-[72px] shrink-0">
+              <div className="relative size-18 shrink-0">
                 <div className="relative size-full overflow-hidden rounded-md border border-white/10 bg-black/30 shadow-lg">
-                  {avatarResolved ? (
-                    <img src={avatarResolved} alt="" decoding="async" className="size-full object-cover" />
+                  {avatar.trim() ? (
+                    <ProfileAvatarVisual rawAvatar={avatar} alt="user avatar" className="size-full object-cover" />
                   ) : (
                     <div className="flex size-full items-center justify-center text-default-400">
                       <User size={36} strokeWidth={1.2} />
@@ -420,6 +431,40 @@ export function ProfileDrawer({
                   onPress={() => void pickFile("avatar")}>
                   Imagen local…
                 </Button>
+
+                <div className="mt-1 rounded-lg border border-default-200 bg-default-50/60 p-2.5 dark:bg-default-100/5">
+                  <p className="mb-2 text-xs font-medium text-default-600">Avatar generado con librería</p>
+                  <div className="flex items-center gap-2">
+                    <div className="relative size-14 overflow-hidden rounded-md border border-default-200 bg-default-100/60 dark:border-default-100/35 dark:bg-default-50/20">
+                      <ProfileAvatarVisual rawAvatar={avatar} alt="preview" className="size-full object-cover" />
+                    </div>
+                    <Input
+                      size="sm"
+                      label="Semilla"
+                      placeholder="nombre, email o texto"
+                      value={avatarGeneratorSeed}
+                      onValueChange={setAvatarGeneratorSeed}
+                      variant="bordered"
+                      className="flex-1"
+                    />
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <Button size="sm" variant="flat" onPress={() => applyGeneratedAvatar(avatarGeneratorSeed)}>
+                      Usar semilla
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="flat"
+                      startContent={<RefreshCw size={14} />}
+                      onPress={() => {
+                        const seed = generateNiceAvatarSeed();
+                        setAvatarGeneratorSeed(seed);
+                        applyGeneratedAvatar(seed);
+                      }}>
+                      Aleatorio
+                    </Button>
+                  </div>
+                </div>
               </div>
             </AccordionItem>
 

@@ -6,8 +6,8 @@ import { toastSyncResult } from "@utils/toast";
 import { notifySyncComplete, notifySyncError } from "@utils/notification";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { useInputManager } from "@features/input/useInputManager";
-import { getConfig } from "@services/tauri/config.service";
 import { useNotificationStore } from "@store/NotificationStore";
+import { useProfileSessionStore } from "@store/ProfileSessionStore";
 import { initSyncListeners } from "@store/SyncStore";
 import { initSourcesListeners } from "@store/SourcesDownloadsStore";
 import { initTorrentListeners } from "@store/TorrentStore";
@@ -50,11 +50,11 @@ export function useAppInitialization() {
   useEffect(() => {
     const refresh = async () => {
       try {
-        const cfg = await getConfig();
-        if (!cfg.userId?.trim() || !cfg.apiBaseUrl?.trim()) {
+        const activeProfile = useProfileSessionStore.getState().activeProfile;
+        if (!activeProfile?.localUserId.trim() || !activeProfile.apiBaseUrl.trim()) {
           console.info("[SaveCloud:useAppInitialization] sync notificaciones omitido (falta userId o apiBaseUrl)", {
-            hasUserId: !!cfg.userId?.trim(),
-            hasApi: !!cfg.apiBaseUrl?.trim(),
+            hasUserId: !!activeProfile?.localUserId.trim(),
+            hasApi: !!activeProfile?.apiBaseUrl.trim(),
           });
           return;
         }

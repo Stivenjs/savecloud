@@ -8,10 +8,12 @@ import {
   type SteamAppDetailsResult,
   type GameStats,
 } from "@services/tauri";
+import { useProfileSession } from "@hooks/useProfileSession";
 import { useGameRunningStatus } from "@hooks/useGameRunningStatus";
 import { getGameLibraryHeroUrl, getSteamAppId, isSteamMoviePosterUrl } from "@utils/gameImage";
 import { configuredGameFromSteamCatalogRouteId, isSteamCatalogRouteGameId } from "@utils/steamCatalogGameId";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
+import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import type { ConfiguredGame } from "@app-types/config";
 
 interface LocationState {
@@ -24,6 +26,7 @@ export function useGameDetail() {
   const { gameId } = useParams<{ gameId: string }>();
   const location = useLocation();
   const navState = location.state as LocationState | undefined;
+  const { activeProfile } = useProfileSession();
 
   const { data: config, isLoading: isConfigLoading } = useQuery({
     queryKey: ["config"],
@@ -80,6 +83,8 @@ export function useGameDetail() {
 
   const isLoading = !gameId || (!isCatalogRoute && isConfigLoading) || (!!steamAppId && isSteamLoading);
 
+  const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
+
   return {
     gameId: gameId ?? "",
     game: game ?? null,
@@ -91,7 +96,7 @@ export function useGameDetail() {
     libraryHeroFallbackUrl,
     videoUrl: steamDetails?.media.videoUrl ?? null,
     isLoading,
-    hasSyncConfig: hasUsableCloudConnection(config ?? null),
+    hasSyncConfig: hasUsableCloudConnection(cloudConfig),
     isSteamCatalogOnly: isCatalogRoute,
     /** Ruta para volver con atrás; si falta, el detalle usa `navigate(-1)`. */
     backToPath: navState?.from ?? null,

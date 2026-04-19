@@ -1,5 +1,6 @@
 import { memo, useMemo } from "react";
 import { User } from "lucide-react";
+import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { formatPlaytime } from "@utils/format";
 import { isProfileVideoSource, resolveProfileAsset } from "@utils/profileMedia";
 
@@ -79,7 +80,6 @@ export function PublicProfileHero({
   gamesCount,
 }: PublicProfileHeroProps) {
   const bg = profileBackground?.trim() ?? "";
-  const avatarResolved = useMemo(() => resolveProfileAsset(profileAvatar || undefined), [profileAvatar]);
   const frameResolved = useMemo(() => resolveProfileAsset(profileFrame || undefined), [profileFrame]);
 
   const fallbackLevel = useMemo(
@@ -100,10 +100,10 @@ export function PublicProfileHero({
         )}
         <div className="absolute inset-0 bg-linear-to-t from-content1 via-content1/45 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 flex items-end gap-4 px-4 pb-3">
-          <div className="relative size-[72px] shrink-0">
+          <div className="relative size-18 shrink-0">
             <div className="relative size-full overflow-hidden rounded-md border border-white/10 bg-black/30 shadow-lg">
-              {avatarResolved ? (
-                <img src={avatarResolved} alt="" decoding="async" className="size-full object-cover" />
+              {profileAvatar?.trim() ? (
+                <ProfileAvatarVisual rawAvatar={profileAvatar} alt="" className="size-full object-cover" />
               ) : (
                 <div className="flex size-full items-center justify-center text-default-400">
                   <User size={36} strokeWidth={1.2} />
@@ -113,7 +113,7 @@ export function PublicProfileHero({
             {frameResolved ? (
               <img
                 src={frameResolved}
-                alt=""
+                alt="user frame"
                 decoding="async"
                 className="pointer-events-none absolute inset-0 size-full object-contain"
               />

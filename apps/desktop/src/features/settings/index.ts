@@ -5,6 +5,7 @@ export { CreateConfigModal } from "./CreateConfigModal";
 export { ExperimentalFeaturesCard } from "./ExperimentalFeaturesCard";
 export { LocalBackupInfoCard } from "./LocalBackupInfoCard";
 export { NotificationsCard } from "./NotificationsCard";
+export { ProfileStartupBehaviorCard } from "./ProfileStartupBehaviorCard";
 export { ReleaseNotesCard } from "./ReleaseNotesCard";
 export { ResetCloudSeedModal } from "./ResetCloudSeedModal";
 export { RestoreConfigModal } from "./RestoreConfigModal";

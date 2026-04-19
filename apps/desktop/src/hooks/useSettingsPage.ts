@@ -32,8 +32,10 @@ import {
   listSourcesSummary,
   removeSource,
 } from "@services/tauri/sources.service";
+import { getAlwaysShowSelectorCmd, setAlwaysShowSelectorCmd } from "@services/tauri/profile.service";
 import { MASKED_CONFIG_SECRET } from "@/constants/configMask";
 import { useConfig } from "@hooks/useConfig";
+import { useProfileSession } from "@hooks/useProfileSession";
 import { STEAM_SEED_FRESHNESS_QUERY_KEY } from "@features/steam-catalog/hooks/useSteamSeedFreshness";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastError, toastSuccess } from "@utils/toast";
@@ -220,11 +222,21 @@ export function useSettingsPage() {
   const [steamSeedImportProgress, setSteamSeedImportProgress] = useState<SteamSeedImportProgressPayload | null>(null);
   const [deletingSourceIds, setDeletingSourceIds] = useState<Set<string>>(new Set());
   const { config, loading: loadingUseConfig, refetch: refetchConfig } = useConfig();
+  const { activeProfile } = useProfileSession();
   const queryClient = useQueryClient();
+
+  const activeUserId = activeProfile?.localUserId?.trim() ?? "";
+  const activeApiBaseUrl = activeProfile?.apiBaseUrl?.trim() || config?.apiBaseUrl?.trim() || "";
 
   const { data: autostart = false, isLoading: loadingAutostart } = useQuery({
     queryKey: ["autostartStatus"],
     queryFn: isEnabled,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const { data: alwaysShowProfileSelector = false, isLoading: loadingAlwaysShowProfileSelector } = useQuery({
+    queryKey: ["alwaysShowProfileSelector"],
+    queryFn: getAlwaysShowSelectorCmd,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -253,7 +265,7 @@ export function useSettingsPage() {
   }, []);
 
   const { data: s3TransferEndpointType = null, isLoading: loadingS3 } = useQuery({
-    queryKey: ["s3TransferEndpointType", config?.apiBaseUrl, config?.userId],
+    queryKey: ["s3TransferEndpointType", activeApiBaseUrl, activeUserId],
     queryFn: async () => {
       try {
         return await getS3TransferEndpointType();
@@ -261,7 +273,7 @@ export function useSettingsPage() {
         return "unknown";
       }
     },
-    enabled: !!config?.apiBaseUrl?.trim() && !!config?.userId?.trim(),
+    enabled: !!activeApiBaseUrl && !!activeUserId,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -272,12 +284,13 @@ export function useSettingsPage() {
         apiBaseUrl: config.apiBaseUrl ?? "",
         wsBaseUrl: config.wsBaseUrl ?? "",
         apiKey: state.createApiKey || config.apiKey || "",
-        userId: config.userId ?? "",
+        userId: activeUserId || config.userId || "",
         steamWebApiKey: state.createSteamWebApiKey || config.steamWebApiKey || "",
       });
     }
   }, [
     state.createConfigModalOpen,
+    activeUserId,
     config?.apiBaseUrl,
     config?.wsBaseUrl,
     config?.apiKey,
@@ -445,6 +458,21 @@ export function useSettingsPage() {
       queryClient.setQueryData(["autostartStatus"], checked);
     } catch (e) {
       console.error("Error al cambiar autostart:", e);
+    }
+  };
+
+  const handleAlwaysShowProfileSelectorChange = async (checked: boolean) => {
+    try {
+      await setAlwaysShowSelectorCmd(checked);
+      queryClient.setQueryData(["alwaysShowProfileSelector"], checked);
+      toastSuccess(
+        "Preferencia guardada",
+        checked
+          ? "Se mostrará el panel de perfiles en cada inicio."
+          : "La app abrirá directamente el último perfil usado."
+      );
+    } catch (e) {
+      toastError("Error al guardar preferencia", e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -730,7 +758,9 @@ export function useSettingsPage() {
     config,
     configPath,
     autostart,
+    alwaysShowProfileSelector,
     loading: loadingAutostart,
+    loadingAlwaysShowProfileSelector,
     loadingConfigData: loadingConfigPath || loadingS3 || loadingUseConfig,
     s3TransferEndpointType,
     handleExportConfig,
@@ -742,6 +772,7 @@ export function useSettingsPage() {
     handleCreateConfigFile,
     handlePullFriendConfig,
     handleAutostartChange,
+    handleAlwaysShowProfileSelectorChange,
     handleFullBackupStreamingChange,
     handleFullBackupStreamingDryRunChange,
     handleSyncSteamCatalog,

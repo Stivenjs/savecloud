@@ -7,6 +7,7 @@ import { CreateConfigModal } from "@features/settings/CreateConfigModal";
 import { ExperimentalFeaturesCard } from "@features/settings/ExperimentalFeaturesCard";
 import { LocalBackupInfoCard } from "@features/settings/LocalBackupInfoCard";
 import { NotificationsCard } from "@features/settings/NotificationsCard";
+import { ProfileStartupBehaviorCard } from "@features/settings/ProfileStartupBehaviorCard";
 import { ReleaseNotesCard } from "@features/settings/ReleaseNotesCard";
 import { RestoreConfigModal } from "@features/settings/RestoreConfigModal";
 import { ResetSteamCatalogModal } from "@features/settings/ResetSteamCatalogModal";
@@ -14,6 +15,7 @@ import { ResetCloudSeedModal } from "@features/settings/ResetCloudSeedModal";
 import { PullFriendConfigModal } from "@/features/settings/PullFriendConfigModal";
 import { UpdatesCard } from "@features/settings/UpdatesCard";
 import { useSettingsPage } from "@/hooks/useSettingsPage";
+import { useProfileSession } from "@hooks/useProfileSession";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigationStore } from "@features/input/store";
 import { DevSdk } from "@features/settings/DevSdk";
@@ -24,12 +26,15 @@ const ReleaseNotesDialogLazy = lazy(() =>
 );
 
 export function SettingsPage() {
+  const { activeProfile } = useProfileSession();
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [resetCloudSeedModalOpen, setResetCloudSeedModalOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<string>("account");
   const {
     autostart,
+    alwaysShowProfileSelector,
     loading,
+    loadingAlwaysShowProfileSelector,
     loadingConfigData,
     testingNotification,
     exporting,
@@ -62,6 +67,7 @@ export function SettingsPage() {
     handleCreateConfigFile,
     handlePullFriendConfig,
     handleAutostartChange,
+    handleAlwaysShowProfileSelectorChange,
     handleFullBackupStreamingChange,
     handleFullBackupStreamingDryRunChange,
     handleSyncSteamCatalog,
@@ -162,7 +168,7 @@ export function SettingsPage() {
             backingUpConfig={backingUpConfig}
             restoringConfig={restoringConfig}
             configPath={configPath}
-            userId={config?.userId}
+            userId={activeProfile?.localUserId || config?.userId}
             hasSteamWebApiKey={!!config?.steamWebApiKey?.trim()}
             s3TransferEndpointType={s3TransferEndpointType}
             isLoadingData={loadingConfigData}
@@ -196,6 +202,11 @@ export function SettingsPage() {
           }>
           <div className="space-y-4">
             <AutostartCard autostart={autostart} loading={loading} onChange={handleAutostartChange} />
+            <ProfileStartupBehaviorCard
+              alwaysShowProfileSelector={alwaysShowProfileSelector}
+              loading={loadingAlwaysShowProfileSelector}
+              onChange={handleAlwaysShowProfileSelectorChange}
+            />
             <SourceInstallSettingsCard
               sourceUrl={sourceUrl}
               defaultDownloadDir={defaultSourceDownloadDir}
