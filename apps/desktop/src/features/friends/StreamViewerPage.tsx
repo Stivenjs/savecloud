@@ -7,6 +7,8 @@ import { useAppInitialization } from "@hooks/useAppInitialization";
 import { useProfileSession, useProfileSessionHydration } from "@hooks/useProfileSession";
 import { useConfig } from "@hooks/useConfig";
 
+// EXPERIMENTAL: Stream viewer window used for development/testing only.
+
 interface StreamSignalPayload {
   fromUserId?: string;
   targetUserId?: string | null;

@@ -5,6 +5,8 @@ interface HostStreamRuntime {
   onDispose?: () => void;
 }
 
+// EXPERIMENTAL: in-memory runtime used by the streaming prototype.
+
 const hostRuntimeByStreamId = new Map<string, HostStreamRuntime>();
 
 export function registerHostStreamRuntime(streamId: string, mediaStream: MediaStream, onDispose?: () => void): void {
