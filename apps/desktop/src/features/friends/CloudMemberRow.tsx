@@ -2,6 +2,7 @@ import { Avatar } from "@heroui/react";
 import type { CloudMembership } from "@services/tauri/invites.service";
 import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
 import { CloudMemberActions } from "@features/friends/CloudMemberActions";
+import { resolveProfileAsset } from "@utils/profileMedia";
 
 interface CloudMemberRowProps {
   membership: CloudMembership;
@@ -12,6 +13,7 @@ interface CloudMemberRowProps {
   loadingPresence: boolean;
   isActionLoading?: boolean;
   onViewProfile: (userId: string) => void;
+  userAvatar?: string | null;
   onRequestRemoveMember?: (userId: string) => void;
   onRequestLeaveMembership?: (hostId: string) => void;
   onRemoveMember?: (userId: string) => Promise<void>;
@@ -27,15 +29,18 @@ export function CloudMemberRow({
   loadingPresence,
   isActionLoading = false,
   onViewProfile,
+  userAvatar,
   onRequestRemoveMember,
   onRequestLeaveMembership,
   onRemoveMember,
   onLeaveMembership,
 }: CloudMemberRowProps) {
+  const avatarSrc = resolveProfileAsset(userAvatar ?? undefined);
+
   return (
     <div className="flex items-center justify-between gap-2 rounded-lg border border-default-200/60 bg-default-50/30 px-2.5 py-2 backdrop-blur-sm hover:border-default-300/80 hover:bg-default-50/50 transition-colors">
       <div className="flex min-w-0 items-center gap-2 flex-1">
-        <Avatar name={userId} size="sm" className="shrink-0" />
+        <Avatar name={userId} src={avatarSrc ?? undefined} size="md" className="shrink-0" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium text-foreground">{userId}</p>
           <div className="flex items-center gap-1">

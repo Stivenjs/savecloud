@@ -7,6 +7,7 @@ interface CloudMembersSectionProps {
   title: string;
   memberships: CloudMembership[];
   presenceMap: Map<string, CloudPresenceItem>;
+  avatarByUser?: Map<string, string | null>;
   isHost: boolean;
   loadingPresence: boolean;
   isActionLoading?: string | null;
@@ -22,6 +23,7 @@ export function CloudMembersSection({
   title,
   memberships,
   presenceMap,
+  avatarByUser,
   isHost,
   loadingPresence,
   isActionLoading = null,
@@ -73,6 +75,7 @@ export function CloudMembersSection({
                       membership={membership}
                       isHost={isHost}
                       userId={userId}
+                      userAvatar={avatarByUser?.get(userId) ?? null}
                       status={presence?.status}
                       gameName={presence?.gameName}
                       loadingPresence={loadingPresence}
