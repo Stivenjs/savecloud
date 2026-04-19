@@ -13,7 +13,7 @@ import { getFriendConfig, setCloudHostWsUrl } from "@services/tauri/config.servi
  * Mensaje recibido desde el WebSocket de la nube (Rust -> TS)
  */
 interface CloudIncomingMessage {
-  type: "FRIEND_PLAYING" | "PRESENCE_UPDATE" | "ERROR";
+  type: "FRIEND_PLAYING" | "PRESENCE_UPDATE" | "ERROR" | "STREAM_SIGNAL";
   data: {
     friendUserId?: string;
     userId?: string;
@@ -21,6 +21,12 @@ interface CloudIncomingMessage {
     gameId?: string;
     gameName?: string;
     message?: string;
+    fromUserId?: string;
+    targetUserId?: string | null;
+    event?: string;
+    streamId?: string;
+    payload?: unknown;
+    timestamp?: number;
   };
 }
 

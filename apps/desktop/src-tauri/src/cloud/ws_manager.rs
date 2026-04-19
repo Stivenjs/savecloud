@@ -8,7 +8,9 @@ use tauri::AppHandle;
 use tokio::sync::{mpsc, Mutex};
 use tokio::task::JoinHandle;
 
-use super::ws_client::{start_ws_loop, CloudBroadcastPayload};
+use super::ws_client::{
+    start_ws_loop, CloudBroadcastPayload, CloudOutgoingMessage, CloudStreamSignalPayload,
+};
 use crate::plugins::log_buffer::AppLogs;
 
 /// Estado compartido del WebSocket de la nube gestionado por Tauri.
@@ -18,7 +20,7 @@ use crate::plugins::log_buffer::AppLogs;
 pub struct CloudWsState {
     /// Canal para enviar mensajes salientes al hilo de fondo del WebSocket.
     /// Si es `None`, significa que la conexión aún no ha detectado intención de inicio.
-    pub tx: Arc<Mutex<Option<mpsc::UnboundedSender<CloudBroadcastPayload>>>>,
+    pub tx: Arc<Mutex<Option<mpsc::UnboundedSender<CloudOutgoingMessage>>>>,
 
     /// Handle de la tarea de tokio encargada del bucle de red.
     /// Guardado para permitir la finalización de la tarea si se detiene el servicio.
@@ -49,7 +51,7 @@ impl CloudWsState {
             return;
         }
 
-        let (tx, rx) = mpsc::unbounded_channel::<CloudBroadcastPayload>();
+        let (tx, rx) = mpsc::unbounded_channel::<CloudOutgoingMessage>();
         *tx_guard = Some(tx);
 
         let app_handle_clone = app_handle.clone();
@@ -82,11 +84,26 @@ impl CloudWsState {
         let tx_guard = self.tx.lock().await;
 
         if let Some(tx) = tx_guard.as_ref() {
-            tx.send(payload)
+            tx.send(CloudOutgoingMessage::Broadcast(payload))
                 .map_err(|e| format!("Fallo al encolar broadcast: {}", e))?;
             Ok(())
         } else {
             Err("No hay una conexión WebSocket activa para enviar el broadcast.".to_string())
+        }
+    }
+
+    pub async fn send_stream_signal(
+        &self,
+        payload: CloudStreamSignalPayload,
+    ) -> Result<(), String> {
+        let tx_guard = self.tx.lock().await;
+
+        if let Some(tx) = tx_guard.as_ref() {
+            tx.send(CloudOutgoingMessage::StreamSignal(payload))
+                .map_err(|e| format!("Fallo al encolar signal de stream: {}", e))?;
+            Ok(())
+        } else {
+            Err("No hay una conexión WebSocket activa para enviar la señal de stream.".to_string())
         }
     }
 }

@@ -7,3 +7,4 @@ export * from "./invites.service";
 export * from "./sources.service";
 export * from "./share.service";
 export * from "./profile.service";
+export * from "./stream.service";

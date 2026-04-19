@@ -27,6 +27,10 @@ export const FriendsPage = lazy(() =>
   import("@features/friends/FriendsPage").then((m) => ({ default: m.FriendsPage }))
 );
 
+export const StreamViewerPage = lazy(() =>
+  import("@features/friends/StreamViewerPage").then((m) => ({ default: m.StreamViewerPage }))
+);
+
 export const HistoryPage = lazy(() =>
   import("@features/history/HistoryPage").then((m) => ({ default: m.HistoryPage }))
 );

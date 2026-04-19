@@ -12,6 +12,8 @@ import { initSyncListeners } from "@store/SyncStore";
 import { initSourcesListeners } from "@store/SourcesDownloadsStore";
 import { initTorrentListeners } from "@store/TorrentStore";
 import { useCloudWebSockets } from "@hooks/useCloudWebSockets";
+import { useCloudStreamRealtime } from "@hooks/useCloudStreamRealtime";
+import { useCloudStreamHostSignaling } from "@hooks/useCloudStreamHostSignaling";
 
 /**
  * Hook encargado de inicializar comportamientos globales de la aplicación.
@@ -43,6 +45,8 @@ export function useAppInitialization() {
   initSourcesListeners();
   initTorrentListeners();
   useCloudWebSockets();
+  useCloudStreamRealtime();
+  useCloudStreamHostSignaling();
 
   /**
    * Contador de notificaciones + sync periódico con la API (multi-dispositivo).

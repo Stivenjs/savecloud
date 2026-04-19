@@ -11,6 +11,7 @@ import { TitleBar } from "@components/layout/TitleBar";
 import { useShellUiStore } from "@store/ShellUiStore";
 import { UserBadge } from "@features/games/UserBadge";
 import { CloudMembersLauncher } from "@features/friends/CloudMembersLauncher";
+import { CloudStreamsLauncher } from "@features/friends/CloudStreamsLauncher";
 import { prefetchProfileDrawer } from "@features/profile/profileDrawerPrefetch";
 import { useConfig } from "@hooks/useConfig";
 import { useProfileSession } from "@hooks/useProfileSession";
@@ -172,6 +173,7 @@ export function AppLayout({ navItems, children, games, onMenuGameClick }: AppLay
               onOpenProfile={() => setProfileDrawerOpen(true)}
               onIntentOpenProfile={prefetchProfileDrawer}
             />
+            <CloudStreamsLauncher />
             <CloudMembersLauncher />
             <NotificationCenter />
           </div>
