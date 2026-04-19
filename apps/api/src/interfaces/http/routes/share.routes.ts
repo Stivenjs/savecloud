@@ -41,18 +41,29 @@ export async function registerShareRoutes(app: FastifyInstance, shareTokenStore:
     return reply.send({ token, shareUrl });
   });
 
-  app.get<{ Params: { token: string } }>("/share/:token", async (request, reply: FastifyReply) => {
-    const { token } = request.params;
-    const payload = await shareTokenStore.getToken(token);
-    if (!payload) {
-      return reply.status(404).send({
-        error: "Not Found",
-        message: "Link inválido o expirado",
+  app.get<{ Params: { token: string } }>(
+    "/share/:token",
+    {
+      config: {
+        rateLimit: {
+          max: 30,
+          timeWindow: "1 minute",
+        },
+      },
+    },
+    async (request, reply: FastifyReply) => {
+      const { token } = request.params;
+      const payload = await shareTokenStore.getToken(token);
+      if (!payload) {
+        return reply.status(404).send({
+          error: "Not Found",
+          message: "Link inválido o expirado",
+        });
+      }
+      return reply.send({
+        userId: payload.userId,
+        gameId: payload.gameId,
       });
     }
-    return reply.send({
-      userId: payload.userId,
-      gameId: payload.gameId,
-    });
-  });
+  );
 }
