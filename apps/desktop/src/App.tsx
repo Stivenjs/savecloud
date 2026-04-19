@@ -5,6 +5,16 @@ import { useProfileSessionHydration } from "@hooks/useProfileSession";
 import { AppRuntime } from "@/app/AppRuntime";
 import { useStartupProfileGate } from "@/app/hooks/useStartupProfileGate";
 
+function AppAmbientBackground({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative min-h-dvh overflow-hidden bg-background text-foreground">
+      <div className="absolute inset-0 bg-linear-to-br from-background via-default-50/55 to-default-100/80 dark:from-default-200/10 dark:via-default-100/5 dark:to-background" />
+      <div className="absolute inset-0 backdrop-blur-sm" />
+      <div className="relative min-h-dvh">{children}</div>
+    </div>
+  );
+}
+
 function App() {
   useProfileSessionHydration();
   const gate = useStartupProfileGate();
@@ -28,14 +38,20 @@ function App() {
     }
 
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-background text-default-500">
-        <Spinner />
-        <span className="ml-2">Cargando perfiles...</span>
-      </div>
+      <AppAmbientBackground>
+        <div className="flex min-h-dvh items-center justify-center text-default-500">
+          <Spinner />
+          <span className="ml-2">Cargando perfiles...</span>
+        </div>
+      </AppAmbientBackground>
     );
   }
 
-  return <AppRuntime />;
+  return (
+    <AppAmbientBackground>
+      <AppRuntime />
+    </AppAmbientBackground>
+  );
 }
 
 export default App;

@@ -65,7 +65,7 @@ export function ProfileStartupSelector({
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-background text-foreground">
-      <div className="absolute inset-0 bg-linear-to-br from-default-100/90 via-default-50/35 to-background dark:from-default-200/10 dark:via-default-100/5" />
+      <div className="absolute inset-0 bg-linear-to-br from-background via-default-50/55 to-default-100/80 dark:from-default-200/10 dark:via-default-100/5 dark:to-background" />
       <div className="absolute inset-0 backdrop-blur-sm" />
 
       <motion.div
@@ -77,13 +77,13 @@ export function ProfileStartupSelector({
           transition={{ type: "spring", stiffness: 145, damping: 21, mass: 0.92 }}
           className="w-full p-3 sm:p-6">
           <div className="mx-auto max-w-2xl text-center">
-            <h1 className="text-balance text-3xl font-semibold tracking-tight text-white sm:text-5xl">
+            <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-5xl dark:text-white">
               ¿Quién va a jugar?
             </h1>
           </div>
 
           {error && (
-            <div className="mx-auto mt-6 max-w-xl rounded-lg border border-danger-300/60 bg-danger-50 px-4 py-3 text-sm text-danger-700 dark:border-danger-700/50 dark:bg-danger-950/40 dark:text-danger-300">
+            <div className="mx-auto mt-6 max-w-xl rounded-lg border border-danger-300/60 bg-danger-50 px-4 py-3 text-sm text-danger-700 shadow-sm shadow-danger-950/5 dark:border-danger-700/50 dark:bg-danger-950/40 dark:text-danger-300 dark:shadow-none">
               {error}
             </div>
           )}
@@ -114,7 +114,7 @@ export function ProfileStartupSelector({
                     onClick={() => onSelect(option.id)}
                     disabled={selectingId != null || isDeleting}
                     className="flex w-full flex-col items-center text-center transition duration-200 hover:-translate-y-0.5 cursor-pointer disabled:opacity-70">
-                    <div className="relative size-28 overflow-hidden border border-white/55 bg-black/25 shadow-lg shadow-black/20 transition duration-200 group-hover:border-white group-hover:shadow-[0_0_0_2px_rgba(255,255,255,0.28)]">
+                    <div className="relative size-28 overflow-hidden border border-default-200 bg-content1/80 shadow-lg shadow-black/10 transition duration-200 group-hover:border-default-300 group-hover:shadow-[0_0_0_2px_rgba(15,23,42,0.08)] dark:border-white/20 dark:bg-black/25 dark:shadow-black/20 dark:group-hover:border-white/70 dark:group-hover:shadow-[0_0_0_2px_rgba(255,255,255,0.28)]">
                       {option.profileAvatarUrl ? (
                         <ProfileAvatarVisual
                           rawAvatar={option.profileAvatarUrl}
@@ -122,7 +122,7 @@ export function ProfileStartupSelector({
                           className="size-full object-cover"
                         />
                       ) : (
-                        <div className="flex size-full items-center justify-center text-white/70">
+                        <div className="flex size-full items-center justify-center text-default-500 dark:text-white/70">
                           <User size={34} strokeWidth={1.4} />
                         </div>
                       )}
@@ -130,12 +130,14 @@ export function ProfileStartupSelector({
                     </div>
 
                     <div className="mt-3">
-                      <p className="line-clamp-1 text-3xl font-semibold text-white">{option.name || "Perfil"}</p>
-                      <p className="line-clamp-1 text-xl text-white/65 opacity-0 transition duration-200 group-hover:opacity-100">
+                      <p className="line-clamp-1 text-3xl font-semibold text-foreground dark:text-white">
+                        {option.name || "Perfil"}
+                      </p>
+                      <p className="line-clamp-1 text-xl text-default-500 opacity-0 transition duration-200 group-hover:opacity-100 dark:text-white/65">
                         {accountDisplayName}
                       </p>
-                      {isSelecting && <p className="mt-1 text-xs text-white/80">Cambiando...</p>}
-                      {isDeleting && <p className="mt-1 text-xs text-white/80">Borrando...</p>}
+                      {isSelecting && <p className="mt-1 text-xs text-default-500 dark:text-white/80">Cambiando...</p>}
+                      {isDeleting && <p className="mt-1 text-xs text-default-500 dark:text-white/80">Borrando...</p>}
                     </div>
                   </button>
 
@@ -149,7 +151,7 @@ export function ProfileStartupSelector({
                       <button
                         type="button"
                         aria-label="Opciones del perfil"
-                        className="absolute top-21 right-6 z-10 flex size-6 items-center justify-center border border-white/20 bg-[#6a7079]/65 text-white/85 opacity-0 transition duration-150 hover:bg-[#7a8089]/80 hover:text-white group-hover:opacity-100 focus-visible:opacity-100"
+                        className="absolute top-21 right-6 z-10 flex size-6 items-center justify-center border border-default-300/80 bg-content1/90 text-foreground/80 opacity-0 shadow-sm shadow-black/5 transition duration-150 hover:bg-content2/90 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 dark:border-white/20 dark:bg-[#6a7079]/65 dark:text-white/85 dark:shadow-black/10 dark:hover:bg-[#7a8089]/80 dark:hover:text-white"
                         disabled={selectingId != null || creatingProfile || isDeleting}>
                         <span className="-translate-y-px text-[14px] leading-none tracking-tight">•••</span>
                       </button>
@@ -180,15 +182,15 @@ export function ProfileStartupSelector({
               type="button"
               onClick={() => setCreatingOpen((v) => !v)}
               disabled={selectingId != null || creatingProfile}
-              className="group flex min-h-40 flex-col items-center justify-center rounded-xl border border-transparent bg-transparent transition duration-200 hover:bg-content2/20 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer">
+              className="group flex min-h-40 cursor-pointer flex-col items-center justify-center rounded-xl border border-transparent bg-transparent text-foreground transition duration-200 hover:bg-content2/40 disabled:cursor-not-allowed disabled:opacity-50 dark:text-white dark:hover:bg-content2/20">
               <div
-                className={`relative flex size-16 items-center justify-center border-2 border-transparent text-white transition duration-300 group-hover:border-white/90 ${
+                className={`relative flex size-16 items-center justify-center border-2 border-transparent text-foreground transition duration-300 group-hover:border-foreground/80 dark:text-white dark:group-hover:border-white/90 ${
                   creatingOpen ? "rotate-45" : "rotate-0"
                 }`}>
-                <span className="pointer-events-none absolute left-1/2 top-1/2 h-8 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-white" />
-                <span className="pointer-events-none absolute left-1/2 top-1/2 h-0.5 w-8 -translate-x-1/2 -translate-y-1/2 bg-white" />
+                <span className="pointer-events-none absolute left-1/2 top-1/2 h-8 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-current" />
+                <span className="pointer-events-none absolute left-1/2 top-1/2 h-0.5 w-8 -translate-x-1/2 -translate-y-1/2 bg-current" />
               </div>
-              <span className="mt-2 text-xl font-semibold text-white/90 opacity-0 transition duration-200 group-hover:opacity-100">
+              <span className="mt-2 text-xl font-semibold text-foreground/90 opacity-0 transition duration-200 group-hover:opacity-100 dark:text-white/90">
                 Añadir cuenta
               </span>
             </motion.button>
@@ -203,24 +205,32 @@ export function ProfileStartupSelector({
             }
             transition={{ type: "spring", stiffness: 190, damping: 24, mass: 0.75 }}
             className="mx-auto max-w-xl overflow-hidden">
-            <div className="rounded-2xl border border-white/10 bg-black/25 p-5 text-white shadow-2xl shadow-black/25 backdrop-blur-md sm:p-6">
+            <div className="rounded-2xl border border-default-200 bg-background/85 p-5 text-foreground shadow-2xl shadow-black/10 backdrop-blur-md sm:p-6 dark:border-white/10 dark:bg-black/25 dark:text-white dark:shadow-black/25">
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <h2 className="text-lg font-semibold tracking-tight text-white">Crear nuevo perfil</h2>
-                  <p className="text-sm text-white/60">Usa un nombre claro para identificar esta cuenta más tarde.</p>
+                  <h2 className="text-lg font-semibold tracking-tight text-foreground dark:text-white">
+                    Crear nuevo perfil
+                  </h2>
+                  <p className="text-sm text-default-500 dark:text-white/60">
+                    Usa un nombre claro para identificar esta cuenta más tarde.
+                  </p>
                 </div>
 
-                <div className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="relative size-20 overflow-hidden rounded-md border border-white/20 bg-black/30 shadow-lg shadow-black/30">
+                <div className="flex items-center gap-4 rounded-xl border border-default-200 bg-content1/80 p-3 dark:border-white/10 dark:bg-white/5">
+                  <div className="relative size-20 overflow-hidden rounded-md border border-default-200 bg-content2/60 shadow-lg shadow-black/10 dark:border-white/20 dark:bg-black/30 dark:shadow-black/30">
                     <Avatar className="size-full" shape="square" {...generatedAvatarConfig} />
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-white/85">Avatar generado automáticamente</p>
-                    <p className="text-xs text-white/55">Puedes regenerarlo antes de crear el perfil.</p>
+                    <p className="text-sm font-medium text-foreground/85 dark:text-white/85">
+                      Avatar generado automáticamente
+                    </p>
+                    <p className="text-xs text-default-500 dark:text-white/55">
+                      Puedes regenerarlo antes de crear el perfil.
+                    </p>
                     <Button
                       size="sm"
                       variant="flat"
-                      className="mt-2 rounded-md bg-white/10 text-white hover:bg-white/15"
+                      className="mt-2 rounded-md bg-content2/70 text-foreground hover:bg-content2/90 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
                       startContent={<RefreshCw size={14} />}
                       onPress={() => setAvatarSeed(generateNiceAvatarSeed())}
                       isDisabled={creatingProfile || selectingId != null}>
@@ -238,14 +248,15 @@ export function ProfileStartupSelector({
                   variant="bordered"
                   size="sm"
                   classNames={{
-                    label: "text-white/70",
-                    input: "text-white placeholder:text-white/35",
+                    label: "text-default-600 dark:text-white/70",
+                    input:
+                      "text-foreground placeholder:text-default-400 dark:text-white dark:placeholder:text-white/35",
                     inputWrapper:
-                      "border-white/15 bg-white/5 shadow-none hover:border-white/30 data-[hover=true]:border-white/30 group-data-[focus=true]:border-white/55",
+                      "border-default-200 bg-background/80 shadow-none hover:border-default-300 data-[hover=true]:border-default-300 group-data-[focus=true]:border-primary/60 dark:border-white/15 dark:bg-white/5 dark:hover:border-white/30 dark:data-[hover=true]:border-white/30 dark:group-data-[focus=true]:border-white/55",
                   }}
                 />
 
-                <p className="text-xs text-white/45">
+                <p className="text-xs text-default-500 dark:text-white/45">
                   Después podrás configurar usuario, API URL y credenciales desde Configuración.
                 </p>
 
