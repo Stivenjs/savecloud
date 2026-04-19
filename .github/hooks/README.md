@@ -10,11 +10,6 @@ Agent hooks automate code quality checks, security validation, and context injec
 **Timeout**: 60s
 **Purpose**: Automatically format only the files modified in the current git worktree using Prettier after the agent edits them.
 
-### build-check.json
-**Event**: `PostToolUse`
-**Command**: `bun run build`
-**Timeout**: 120s
-**Purpose**: Verify backend TypeScript compilation after changes to catch type errors before deployment.
 
 ### session-context.json
 **Event**: `SessionStart`

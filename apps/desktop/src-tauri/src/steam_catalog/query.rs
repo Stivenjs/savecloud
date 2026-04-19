@@ -35,6 +35,26 @@ fn map_catalog_row(row: &Row<'_>) -> Result<CatalogListItem, rusqlite::Error> {
     })
 }
 
+/// Devuelve el bloque superior de tendencias para el hero del catálogo.
+///
+/// Ordena por `rank ASC` y limita el tamaño para mantener el payload pequeño
+/// en la primera vista de la tienda.
+pub fn list_catalog_trending_hero(
+    conn: &Connection,
+    limit: u32,
+) -> Result<Vec<CatalogListItem>, rusqlite::Error> {
+    let mut stmt = conn.prepare(
+        "SELECT a.app_id, a.name \
+         FROM steam_catalog_trending tr \
+         JOIN steam_catalog_apps a ON a.app_id = tr.app_id \
+         ORDER BY tr.rank ASC \
+         LIMIT ?1",
+    )?;
+
+    let rows = stmt.query_map([limit as i64], map_catalog_row)?;
+    rows.collect()
+}
+
 /// Añade un EXISTS por cada género (semántica AND: la app debe tener TODOS).
 ///
 /// Usa la subquery correlacionada:

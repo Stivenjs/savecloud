@@ -3,144 +3,255 @@ name: savecloud-workspace-instructions
 description: Comprehensive workspace instructions for SaveCloud project - cloud game save backup system with Fastify backend, Tauri desktop app, and AWS deployment. Covers build commands, Clean Architecture, Tauri patterns, deployment pitfalls, and development conventions.
 ---
 
-# SaveCloud Workspace Instructions
+# SaveCloud AI Agent Instructions
 
-## Project Overview
+SaveCloud is a **full-stack cloud save synchronization platform** for video games, consisting of three applications: Backend API (Fastify), CLI (TypeScript + TUI), and Desktop App (Tauri + React).
 
-SaveCloud is a cloud-based game save backup system consisting of:
-- **Backend**: Fastify API on AWS Lambda + S3 (Clean Architecture)
-- **Desktop App**: Tauri 2 (React frontend + Rust backend)
-- **CLI**: Interactive configuration tool
+**Runtime**: Bun 1.3.10 | **Backend**: Fastify on AWS Lambda | **Desktop**: Tauri 2 + React 19
 
-## Build and Development Commands
+---
 
-### Backend (Root Directory)
-- `bun run build` - Compile TypeScript
-- `bun run dev` - Start local Fastify server (port 3000, hot-reload)
-- `bun run deploy:dev` - Deploy to AWS dev environment
-- `bun run deploy:live` - Deploy to AWS live environment (with CloudFront)
-- `bun run api-key` - Generate API key for dev
-- `bun run api-key:live` - Generate API key for live
-- `bun run cli` - Run interactive CLI
-- `bun run build:cli` - Build standalone CLI executable
+## Quick Start for Agents
 
-### Desktop App (apps/savecloud-desktop/)
-- `bun run dev` - Start Vite dev server (port 1420)
-- `bun run desktop` - Start Tauri dev (includes Vite)
-- `bun run desktop:build` - Build desktop installer
-- `bun run icon` - Generate app icons
-- `bun run latest-json` - Generate updater JSON
+### Development Commands
 
-### Shared
-- `bun run format` - Format code with Prettier
-- `bun run lint` - Lint TypeScript (backend only)
+```bash
+# Backend API (hot-reload on port 3000)
+bun run dev
 
-## Architecture Decisions
+# Desktop app (Tauri + Vite)
+bun run desktop
 
-### Backend (Clean Architecture)
-- **Dependency Flow**: interfaces → application → domain ← infrastructure
-- **Domain Layer**: Business entities and ports (interfaces)
-- **Application Layer**: Use cases (orchestration logic)
-- **Infrastructure Layer**: AWS implementations (S3, DynamoDB)
-- **Interfaces Layer**: HTTP routes, Lambda handlers
-- **Path Aliases**: Use `@domain/`, `@application/`, etc. (never bare paths)
+# CLI interactive menu
+bun run cli
 
-### Desktop App (Tauri 2)
-- **IPC Pattern**: Commands via `#[tauri::command]` in Rust, invoked from React
-- **State Management**: Zustand + React Query (10min stale time for config)
-- **Frontend Structure**: Feature-driven with lazy loading
-- **Rust Structure**: Modular commands (config, sync, steam, cloud, etc.)
+# Build TypeScript
+bun run build
 
-## Key Conventions
-
-### TypeScript
-- Strict mode enabled
-- ES2022 target, CommonJS modules
-- Use `Result<T, String>` for errors (not custom error types)
-- Timing-safe secret comparison with `timingSafeEqual()`
-
-### Authentication
-- API key in `x-api-key` header
-- Access tokens: `sc1.{payload}.{hmac}` format
-- WebSocket auth via query params
-
-### S3 Storage
-- Structure: `{userId}/{gameId}/` for saves, `backups/` for archives
-- Lifecycle rules auto-delete expired tokens (7 days)
-- Transfer Acceleration optional (extra costs)
-
-### Tauri Commands
-- Register all commands in `generate_handler![]`
-- Use owned types in async commands (no `&str`)
-- State injection with `State<'_, Type>`
-
-## Potential Pitfalls
+# Generate API key
+bun run api-key
+```
 
 ### Deployment
-- **Stage Isolation**: Dev/live are separate AWS stacks
-- **API Key Embedding**: CLI requires env vars at build time
-- **CloudFront Propagation**: Changes take ~20 minutes
-- **Lambda Cold Starts**: ~500ms on first request
 
-### Development
-- **S3 Throttle**: Limit presigned URL concurrency to 50
-- **Multipart Limits**: Max 200 parts per upload
-- **Token Rotation**: Existing tokens fail on secret change
-- **Unregistered Commands**: Fail silently in Tauri
+```bash
+bun run deploy:dev     # AWS Lambda (dev stage)
+bun run deploy:live    # AWS Lambda (live stage)
+```
 
-### Environment
-- **Bun vs Node**: Dev uses Bun, production uses Node 24
-- **Config Paths**: OS-specific, fails on non-standard installs
-- **No Tests**: Manual testing only
+---
 
-## Key Files and Directories
+## Architecture Patterns
+
+### Backend: Clean Architecture (Hexagonal)
+
+```
+interfaces/ (HTTP/Lambda handlers)
+    ↓
+application/ (use-cases)
+    ↓
+domain/ (entities + port interfaces) ←— infrastructure/ (implementations)
+```
+
+**Dependency direction**: Always inward (interfaces → application → domain)
+
+**Example**:
+
+- Port: `SaveRepository` interface defined in `domain/ports/`
+- Implementation: `S3SaveRepository` in `infrastructure/persistence/`
+- Use Case: `DeleteBackupUseCase` accepts repository as dependency
+- HTTP Handler: Injects use case via container
+
+### Desktop: React ↔ Tauri IPC ↔ Rust
+
+- Frontend components call Rust commands via `invoke<T>("cmd_name")`
+- State managed with Zustand (global) + React Query v5 (server state)
+- Rust backend handles file I/O, Steam integration, P2P sync
+
+### CLI: Layered (Domain → Application → Infrastructure)
+
+Mirrors backend architecture with CLI-specific concerns (config I/O, path scanning, Steam integration).
+
+---
+
+## Key Conventions & Patterns
+
+| Area               | Convention                                 | Example                                                  |
+| ------------------ | ------------------------------------------ | -------------------------------------------------------- |
+| **Backend**        | Use case with `execute()` method           | `class GetUploadUrlUseCase { async execute(gameId) {} }` |
+| **Imports**        | Path aliases only (no relative imports)    | `import { User } from "@domain/entities"`                |
+| **DI**             | Constructor injection of repositories      | `constructor(private saveRepo: SaveRepository)`          |
+| **Validation**     | TypeBox schemas in interfaces layer        | TypeScript strict mode enabled                           |
+| **Tauri Commands** | `#[tauri::command] pub async fn name() {}` | Must register in `ipc/handlers.rs`                       |
+| **React Hooks**    | Query + Tauri invoke bridge                | `useQuery({ queryFn: () => invoke<T>("cmd") })`          |
+| **Zustand**        | Global state via `create()`                | `NotificationStore`, `SyncStore`                         |
+| **Error Handling** | `Result<T, String>` (Rust)                 | No custom error types yet                                |
+| **Modules**        | One concern per module                     | `sync/`, `steam/`, `config/`                             |
+
+### Import Rules
+
+- Use path aliases: `@domain`, `@application`, `@infrastructure`
+- Import from index files: `from "@domain"` or `from "@domain/entities"`
+- Never use relative paths beyond same directory: `import "./foo"` → `import from "foo.ts"`
+
+---
+
+## Key Files & Directories
 
 ### Backend
-- `apps/api/src/interfaces/http/app.ts` - Fastify app setup
-- `apps/api/src/interfaces/lambda/handler.ts` - AWS Lambda entry
-- `apps/api/src/application/use-cases/` - Business logic (22 use cases)
-- `apps/api/src/domain/ports/` - Repository interfaces
-- `apps/api/src/infrastructure/persistence/` - S3/DynamoDB implementations
 
-### Desktop App
-- `apps/savecloud-desktop/src/App.tsx` - React entry
-- `apps/savecloud-desktop/src-tauri/src/lib.rs` - Rust entry
-- `apps/savecloud-desktop/src-tauri/src/ipc/handlers.rs` - Command registration
-- `apps/savecloud-desktop/src-tauri/tauri.conf.json` - Tauri config
+- **[apps/api/src/domain/](../apps/api/src/domain/)** — Entities, business rules, port interfaces
+- **[apps/api/src/application/use-cases/](../apps/api/src/application/use-cases/)** — Use case implementations
+- **[apps/api/src/infrastructure/](../apps/api/src/infrastructure/)** — AWS SDK, S3, DynamoDB implementations
+- **[apps/api/src/interfaces/http/](../apps/api/src/interfaces/http/)** — Fastify routes, schema validation
+- **[apps/api/src/interfaces/lambda/](../apps/api/src/interfaces/lambda/)** — Lambda handler for serverless
+
+### Desktop
+
+- **[apps/desktop/src/](../apps/desktop/src/)** — React components, Zustand stores, Tauri IPC hooks
+- **[apps/desktop/src-tauri/src/](../apps/desktop/src-tauri/src/)** — Rust backend (Tauri commands)
+- **[apps/desktop/src/services/](../apps/desktop/src/services/)** — API client, Tauri invoke wrappers
+- **[tauri.conf.json](../apps/desktop/src-tauri//tauri.conf.json)** — Tauri configuration, capabilities, permissions
+
+### CLI
+
+- **[apps/cli/domain/](../apps/cli/domain/)** — Entities (Config, ConfiguredGame)
+- **[apps/cli/application/use-cases/](../apps/cli/application/use-cases/)** — Add, remove, list games; scan paths
+- **[apps/cli/infrastructure/](../apps/cli/infrastructure/)** — Steam integration, file system scanner, config I/O
 
 ### Configuration
-- `serverless.yml` - AWS deployment config
-- `resources.dev.yml` / `resources.live.yml` - CloudFormation
-- `.env` - Local environment variables
 
-## Documentation Links
+- **[serverless.yml](../serverless.yml)** — AWS Lambda, API Gateway, DynamoDB, S3 resources
+- **[apps/desktop/src-tauri/Cargo.toml](../apps/desktop/src-tauri/Cargo.toml)** — Rust dependencies
+- **[tsconfig.json](../tsconfig.json)** — Path aliases, strict mode enabled
 
-- [Deployment Guide](../doc/DEPLOYMENT.md) - Full AWS setup and configuration
-- [Plugins Development](../doc/PLUGINS_DEV.md) - Lua plugin API
-- [Rust Plugins](../doc/RUST_PLUGINS.md) - Plugin architecture
-- [README](../README.md) - Project overview and scripts
+---
 
-## Development Workflow
+## Critical Implementation Gotchas
 
-1. **Backend Changes**: `bun run dev` for local testing, `bun run deploy:dev` for AWS
-2. **Desktop Changes**: `bun run desktop` for development, `bun run desktop:build` for release
-3. **CLI Changes**: `bun run cli` for testing, `bun run build:cli` for executable
-4. **Version Sync**: `bun run version` to update from git tags
+| Issue                                   | Impact                                   | Prevention                                                                |
+| --------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------- |
+| Unregistered Tauri commands             | Command fails silently                   | Always update `src-tauri/src/ipc/handlers.rs` `generate_handler![]` macro |
+| Missing capabilities.json               | Permission denied silently               | Add capability for any new Tauri feature                                  |
+| S3 presigned URL throttling             | 503 SlowDown at 500+ concurrent requests | Use concurrency limits (e.g., `PRESIGN_CONCURRENCY=50`)                   |
+| API Gateway auth cache                  | 401 leaked between requests              | Use Host as identity source, disable TTL cache                            |
+| Non-owned types in async Tauri commands | Won't compile                            | Always use `String`, `Vec<T>`, never `&str` or `&[T]`                     |
+| Token secret mismatch                   | Auth fails across Lambda invocations     | Store in AWS SSM Parameter Store or external vault                        |
+| Relative imports mixing                 | TypeScript confusion                     | Always use path aliases; never mix relative/absolute                      |
 
-## Testing and Validation
+### Concurrency & AWS Limits
 
-- **Local Backend**: `bun run invoke:local` to test Lambda handler
-- **AWS Verification**: Check S3 console for uploaded files, CloudFront for live URLs
-- **Desktop**: Manual testing only (no automated tests)
-- **Integration**: Deploy to dev stage for end-to-end testing
+- **S3 presigned URLs**: Max 500/sec per account; implement queue if needed
+- **Lambda cold starts**: ~1-2s on first invoke; use provisioned concurrency in production
+- **DynamoDB**: Default limits; use on-demand billing or set capacity
+- **WebSocket connections**: Max 600 concurrent per API Gateway; implement reconnect logic
 
-## Agent Hooks
+---
 
-Automated code quality and safety checks on file edits. Configure hooks in `.github/hooks/`:
+## Testing
 
-- **format.json** - Auto-format all edited files (Prettier) after save
-- **build-check.json** - Verify TypeScript compilation after changes
-- **session-context.json** - Inject project context at session start
-- **security.json** - Block dangerous command patterns pre-execution
+**Important**: No test framework currently configured — Manual testing only.
 
-See [Hooks README](./hooks/README.md) for details. Hooks enforce consistency and catch errors early without manual intervention.
+When implementing tests:
+
+- Backend: **vitest** + **supertest** (Fastify) for use cases, Lambda handlers
+- Desktop: **vitest** + **React Testing Library** for components
+- Rust: Built-in `#[tokio::test]` with mocking
+- Focus on edge cases: S3 throttling, token expiry, WebSocket lifecycle, file sync race conditions
+
+---
+
+## Related Documentation
+
+- **[Deployment Guide](../doc/DEPLOYMENT.md)** — AWS setup, environment variables, secrets management
+- **[Desktop App README](../apps/desktop/README.md)** — React + Tauri architecture, build instructions
+- **[GitHub Hooks README](../.github/hooks/README.md)** — Development environment setup
+- **[Plugins Dev Guide](../doc/PLUGINS_DEV.md)** — Tauri plugin development (if applicable)
+
+---
+
+## TypeScript Configuration
+
+- **Strict mode**: Enabled globally
+- **Path aliases**: Defined in [tsconfig.json](../tsconfig.json)
+  - `@domain` → `apps/api/src/domain`
+  - `@application` → `apps/api/src/application`
+  - `@infrastructure` → `apps/api/src/infrastructure`
+  - `@interfaces` → `apps/api/src/interfaces`
+  - Same pattern for CLI app
+
+---
+
+## Code Style
+
+- **Formatter**: Prettier (configured in package.json)
+- **Linter**: ESLint (TypeScript)
+- **Pre-commit**: Husky + lint-staged (auto-format on commit)
+
+```bash
+bun run format                 # Format all files
+bun run format:changed         # Format only changed files
+bun run lint                   # Lint backend code
+```
+
+---
+
+## Secrets & Configuration
+
+- **API keys**: Generated via `bun run api-key`, stored in `.env`
+- **AWS credentials**: Required for deployment (set in `.env` or AWS CLI)
+- **Environment files**: `.env` (git-ignored), `.env.example` (for reference)
+
+See [Deployment Guide](../doc/DEPLOYMENT.md) for full setup.
+
+---
+
+## Game Integration Features
+
+- **Steam**: Integrated via `infrastructure/steamAppNames.ts`, saves located in game-specific directories
+- **Save locations**: Platform-specific paths (Windows: `%APPDATA%`, Linux: `~/.local/share/`, macOS: `~/Library/`)
+- **P2P Sync**: librqbit Rust plugin for distributed sync
+- **File extensions**: Auto-detected from game-specific save extensions in `infrastructure/saveExtensions.ts`
+
+---
+
+## When Adding New Features
+
+1. **Define port interface** in `domain/ports/` (dependency inversion)
+2. **Implement use case** in `application/use-cases/` (orchestration)
+3. **Add repository implementation** in `infrastructure/` (concrete AWS SDK calls)
+4. **Expose HTTP endpoint** in `interfaces/http/routes/` (validation + response)
+5. **For Desktop**: Register Tauri command in `src-tauri/src/ipc/handlers.rs` and update `capabilities.json`
+6. **For CLI**: Add command in `apps/cli/commands/` and register in menu
+
+---
+
+## Agent Best Practices
+
+1. **Always check existing patterns** — Look at similar features before implementing
+2. **Verify imports compile** — Use `bun run build` before committing
+3. **Test Tauri commands** — Manually invoke via desktop app to catch registration issues
+4. **Check AWS limits** — Review concurrency/throttling behavior for production readiness
+5. **Link to docs, don't duplicate** — Reference [Deployment Guide](../doc/DEPLOYMENT.md) instead of rewriting
+6. **No breaking changes to domain** — Clean Architecture strictly enforces inward dependencies
+7. **Type everything** — TypeScript strict mode is non-negotiable
+
+---
+
+## Quick Command Reference
+
+| Task             | Command               |
+| ---------------- | --------------------- |
+| Start API        | `bun run dev`         |
+| Start Desktop    | `bun run desktop`     |
+| Build backend    | `bun run build`       |
+| Deploy to dev    | `bun run deploy:dev`  |
+| Deploy to live   | `bun run deploy:live` |
+| Generate API key | `bun run api-key`     |
+| Run CLI          | `bun run cli`         |
+| Format code      | `bun run format`      |
+| Check Rust       | `bun run cargo:check` |
+
+---
+
+**Last updated**: April 2026 | **Package Manager**: Bun 1.3.10 | **Node Runtime**: 24.x (Lambda)

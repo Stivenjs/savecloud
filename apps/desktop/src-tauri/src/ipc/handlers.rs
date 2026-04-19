@@ -126,6 +126,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::steam_catalog::commands::trending::sync_steam_store_trending,
         crate::steam_catalog::commands::listing::search_steam_catalog,
         crate::steam_catalog::commands::listing::list_steam_catalog_page,
+        crate::steam_catalog::commands::listing::list_steam_catalog_trending_hero,
         crate::steam_catalog::commands::listing::get_steam_catalog_filter_facets,
         crate::steam_catalog::commands::details::get_steam_catalog_app_details,
         crate::notifications::commands::list_notifications,

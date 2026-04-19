@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery, type Query } from "@tanstack/react-query";
-import { syncListRemoteSavesSummary } from "@services/tauri";
+import { listOperationHistory, syncListRemoteSavesSummary, type OperationLogEntry } from "@services/tauri";
 
 export const LAST_SYNC_QUERY_KEY = ["last-sync-info"] as const;
 const CONFIG_GAME_ID = "__config__";
@@ -46,6 +46,33 @@ function computeLastSync(saves: { gameId: string; lastModified: string | null }[
   };
 }
 
+function computeLastSyncFromHistory(entries: OperationLogEntry[]): LastSyncInfo {
+  let latest: { gameId: string; date: Date } | null = null;
+
+  for (const entry of entries) {
+    if (entry.kind !== "upload") continue;
+    if (entry.fileCount <= 0) continue;
+
+    const date = new Date(entry.timestamp);
+    if (Number.isNaN(date.getTime())) continue;
+
+    if (!latest || date > latest.date) {
+      latest = { gameId: entry.gameId, date };
+    }
+  }
+
+  return {
+    lastSyncAt: latest?.date ?? null,
+    lastSyncGameId: latest?.gameId ?? null,
+  };
+}
+
+function chooseMostRecentSync(remoteSync: LastSyncInfo, localSync: LastSyncInfo): LastSyncInfo {
+  if (!remoteSync.lastSyncAt) return localSync;
+  if (!localSync.lastSyncAt) return remoteSync;
+  return localSync.lastSyncAt > remoteSync.lastSyncAt ? localSync : remoteSync;
+}
+
 function computeCloudGames(saves: { gameId: string; totalSizeBytes: number; fileCount: number }[]): {
   cloudGames: CloudGameSummary[];
   totalSize: number;
@@ -66,10 +93,15 @@ export function useLastSyncInfo(enabled: boolean) {
     queryKey: LAST_SYNC_QUERY_KEY,
 
     queryFn: async (): Promise<LastSyncQueryData> => {
-      const all = await syncListRemoteSavesSummary();
+      const [all, operationHistory] = await Promise.all([
+        syncListRemoteSavesSummary(),
+        listOperationHistory().catch(() => []),
+      ]);
       const saves = all.filter((s) => s.gameId !== CONFIG_GAME_ID);
 
-      const lastSync = computeLastSync(saves);
+      const remoteLastSync = computeLastSync(saves);
+      const localLastSync = computeLastSyncFromHistory(operationHistory);
+      const lastSync = chooseMostRecentSync(remoteLastSync, localLastSync);
       const { cloudGames, totalSize } = computeCloudGames(saves);
 
       return {
