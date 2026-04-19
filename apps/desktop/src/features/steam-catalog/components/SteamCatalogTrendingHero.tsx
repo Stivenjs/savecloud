@@ -18,6 +18,14 @@ type SteamCatalogTrendingHeroProps = {
   errorMessage?: string | null;
 };
 
+const RECOMMENDATION_COPY_VARIANTS = [
+  "seleccionado por coincidencias de etiquetas dentro del catalogo.",
+  "destacado por su afinidad con generos y etiquetas similares.",
+  "sugerido por similitud tematica dentro del catalogo actual.",
+  "elegido por relacion de categorias y estilo de juego.",
+  "propuesto por patrones de etiquetas en juegos relacionados.",
+];
+
 function imageFor(
   item: CatalogListItem | null,
   mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null
@@ -25,7 +33,29 @@ function imageFor(
   if (!item || !mediaBySteamAppId) return null;
   const media = mediaBySteamAppId[item.steamAppId];
   if (!media) return null;
-  return media.mediaUrls[0] ?? media.capsuleImage ?? null;
+  const prioritized = prioritizeMediaUrls(media.mediaUrls);
+  return prioritized[0] ?? media.capsuleImage ?? null;
+}
+
+function isHeaderOrCapsuleUrl(url: string): boolean {
+  const normalized = url.toLowerCase();
+  return normalized.includes("/header.") || normalized.includes("capsule_");
+}
+
+function isHighResScreenshotUrl(url: string): boolean {
+  const normalized = url.toLowerCase();
+  return normalized.includes("/ss_") && normalized.includes("1920x1080");
+}
+
+function prioritizeMediaUrls(urls: string[]): string[] {
+  const unique = [...new Set(urls.filter(Boolean))];
+  if (!unique.length) return [];
+
+  const hiResScreens = unique.filter((url) => isHighResScreenshotUrl(url));
+  const regularScreens = unique.filter((url) => !isHeaderOrCapsuleUrl(url) && !isHighResScreenshotUrl(url));
+  const fallbackHeaderCapsule = unique.filter((url) => isHeaderOrCapsuleUrl(url));
+
+  return [...hiResScreens, ...regularScreens, ...fallbackHeaderCapsule];
 }
 
 function galleryFor(
@@ -35,7 +65,7 @@ function galleryFor(
   const media = mediaBySteamAppId?.[item.steamAppId];
   if (!media) return [];
 
-  const images = media.mediaUrls.filter(Boolean);
+  const images = prioritizeMediaUrls(media.mediaUrls);
   if (images.length) return images;
   return media.capsuleImage ? [media.capsuleImage] : [];
 }
@@ -163,6 +193,10 @@ type TrendingHeroSlideProps = {
 function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, onOpenGame }: TrendingHeroSlideProps) {
   const gallery = useMemo(() => galleryFor(featured, mediaBySteamAppId), [featured, mediaBySteamAppId]);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const recommendationCopy = useMemo(() => {
+    const randomIndex = Math.floor(Math.random() * RECOMMENDATION_COPY_VARIANTS.length);
+    return RECOMMENDATION_COPY_VARIANTS[randomIndex];
+  }, [featured.steamAppId]);
 
   useEffect(() => {
     setActiveImageIndex(0);
@@ -216,7 +250,7 @@ function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, onOpenGa
         <div className="space-y-3">
           <p className="text-3xl font-semibold leading-none tracking-tight">{featured.name}</p>
           <p className="text-3xl font-semibold leading-none tracking-tight text-primary">Recomendado</p>
-          <p className="text-sm text-white/90">porque has jugado titulos con las etiquetas similares.</p>
+          <p className="text-sm text-white/90">{recommendationCopy}</p>
 
           <div className="grid grid-cols-2 gap-2">
             {sideThumbs.map((url, index) => (
