@@ -1,13 +1,18 @@
-import { Button, Skeleton } from "@heroui/react";
-import { Flame, ArrowRight, Sparkles, ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@heroui/react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addTransitionType, startTransition } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { CatalogListItem, SteamAppdetailsMediaResult } from "@services/tauri";
-import { STEAM_CATALOG_GAME_ID_PREFIX } from "@utils/steamCatalogGameId";
 import { Pagination } from "swiper/modules";
 import { Swiper, SwiperSlide } from "swiper/react";
 import type { Swiper as SwiperType } from "swiper";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { SteamCatalogTrendingHeroSkeleton } from "@features/steam-catalog/components/SteamCatalogTrendingHeroSkeleton";
+import {
+  getSecondaryItemsForSlide,
+  toRouteGameId,
+} from "@features/steam-catalog/components/steamCatalogTrendingHero.utils";
+import { TrendingHeroSlide } from "@features/steam-catalog/components/TrendingHeroSlide";
 
 type SteamCatalogTrendingHeroProps = {
   items: CatalogListItem[];
@@ -18,73 +23,10 @@ type SteamCatalogTrendingHeroProps = {
   errorMessage?: string | null;
 };
 
-const RECOMMENDATION_COPY_VARIANTS = [
-  "seleccionado por coincidencias de etiquetas dentro del catalogo.",
-  "destacado por su afinidad con generos y etiquetas similares.",
-  "sugerido por similitud tematica dentro del catalogo actual.",
-  "elegido por relacion de categorias y estilo de juego.",
-  "propuesto por patrones de etiquetas en juegos relacionados.",
-];
-
-const STEAM_ASSET_BASE = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps";
-
-function getLibraryHeroUrl(appId: string): string {
-  return `${STEAM_ASSET_BASE}/${appId}/library_hero.jpg`;
-}
-
-function imageFor(
-  item: CatalogListItem | null,
-  mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null
-): string | null {
-  if (!item || !mediaBySteamAppId) return null;
-  const media = mediaBySteamAppId[item.steamAppId];
-  if (!media) return null;
-  const prioritized = prioritizeMediaUrls(media.mediaUrls);
-  return prioritized[0] ?? media.capsuleImage ?? null;
-}
-
-function isHeaderOrCapsuleUrl(url: string): boolean {
-  const normalized = url.toLowerCase();
-  return normalized.includes("/header.") || normalized.includes("capsule_");
-}
-
-function isHighResScreenshotUrl(url: string): boolean {
-  const normalized = url.toLowerCase();
-  return normalized.includes("/ss_") && normalized.includes("1920x1080");
-}
-
-function prioritizeMediaUrls(urls: string[]): string[] {
-  const unique = [...new Set(urls.filter(Boolean))];
-  if (!unique.length) return [];
-
-  const hiResScreens = unique.filter((url) => isHighResScreenshotUrl(url));
-  const regularScreens = unique.filter((url) => !isHeaderOrCapsuleUrl(url) && !isHighResScreenshotUrl(url));
-  const fallbackHeaderCapsule = unique.filter((url) => isHeaderOrCapsuleUrl(url));
-
-  return [...hiResScreens, ...regularScreens, ...fallbackHeaderCapsule];
-}
-
-function galleryFor(
-  item: CatalogListItem,
-  mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null
-): string[] {
-  const media = mediaBySteamAppId?.[item.steamAppId];
-  if (!media) return [];
-
-  const images = prioritizeMediaUrls(media.mediaUrls);
-  if (images.length) return images;
-  return media.capsuleImage ? [media.capsuleImage] : [];
-}
-
-function toRouteGameId(item: CatalogListItem): string {
-  return `${STEAM_CATALOG_GAME_ID_PREFIX}${item.steamAppId}`;
-}
-
 export function SteamCatalogTrendingHero({
   items,
   mediaBySteamAppId,
   isLoading,
-  isFetching,
   isError,
   errorMessage,
 }: SteamCatalogTrendingHeroProps) {
@@ -92,14 +34,10 @@ export function SteamCatalogTrendingHero({
   const location = useLocation();
   const [swiper, setSwiper] = useState<SwiperType | null>(null);
 
-  const slides = useMemo(() => items.slice(0, 8), [items]);
+  const slides = useMemo(() => items, [items]);
 
-  const secondaryForSlide = (activeIndex: number): CatalogListItem[] => {
-    if (slides.length <= 1) return [];
-
-    const rest = slides.filter((_, idx) => idx !== activeIndex);
-    return rest.slice(0, 4);
-  };
+  const secondaryForSlide = (activeIndex: number): CatalogListItem[] =>
+    getSecondaryItemsForSlide(slides, activeIndex, 4);
 
   const openGame = (item: CatalogListItem) => {
     startTransition(() => {
@@ -111,17 +49,7 @@ export function SteamCatalogTrendingHero({
   };
 
   if (isLoading) {
-    return (
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]" aria-label="Destacados">
-        <Skeleton className="h-72 w-full rounded-2xl" />
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
-          <Skeleton className="h-32 w-full rounded-xl" />
-          <Skeleton className="h-32 w-full rounded-xl" />
-          <Skeleton className="h-32 w-full rounded-xl" />
-          <Skeleton className="h-32 w-full rounded-xl" />
-        </div>
-      </section>
-    );
+    return <SteamCatalogTrendingHeroSkeleton />;
   }
 
   if (isError) {
@@ -180,167 +108,5 @@ export function SteamCatalogTrendingHero({
         <div className="sg-trending-pagination mt-2" aria-label="Paginacion destacados" />
       </div>
     </section>
-  );
-}
-
-type TrendingHeroSlideProps = {
-  featured: CatalogListItem;
-  relatedItems: CatalogListItem[];
-  mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null;
-  onOpenGame: (item: CatalogListItem) => void;
-};
-
-function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, onOpenGame }: TrendingHeroSlideProps) {
-  const gallery = useMemo(() => galleryFor(featured, mediaBySteamAppId), [featured, mediaBySteamAppId]);
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [hasManualImageSelection, setHasManualImageSelection] = useState(false);
-  const [failedHeroUrls, setFailedHeroUrls] = useState<Set<string>>(new Set());
-  const recommendationCopy = useMemo(() => {
-    const randomIndex = Math.floor(Math.random() * RECOMMENDATION_COPY_VARIANTS.length);
-    return RECOMMENDATION_COPY_VARIANTS[randomIndex];
-  }, [featured.steamAppId]);
-
-  useEffect(() => {
-    setActiveImageIndex(0);
-    setHasManualImageSelection(false);
-    setFailedHeroUrls(new Set());
-  }, [featured.steamAppId]);
-
-  const heroCandidates = useMemo(() => {
-    if (hasManualImageSelection) {
-      const selected = gallery[activeImageIndex] ?? null;
-      const rest = gallery.filter((url) => url !== selected);
-      return [selected, ...rest].filter((url): url is string => Boolean(url));
-    }
-
-    return [getLibraryHeroUrl(featured.steamAppId), ...gallery].filter((url): url is string => Boolean(url));
-  }, [featured.steamAppId, gallery, activeImageIndex, hasManualImageSelection]);
-
-  const featuredImage = heroCandidates.find((url) => !failedHeroUrls.has(url)) ?? null;
-  const handleHeroImageError = useCallback((url: string) => {
-    setFailedHeroUrls((prev) => {
-      if (prev.has(url)) return prev;
-      const next = new Set(prev);
-      next.add(url);
-      return next;
-    });
-  }, []);
-
-  const featuredGenres = mediaBySteamAppId?.[featured.steamAppId]?.genres ?? [];
-  const sideThumbs = gallery.slice(0, 4);
-
-  return (
-    <div className="grid min-h-80 grid-cols-1 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
-      <article className="group relative min-h-72 overflow-hidden">
-        {featuredImage ? (
-          <img
-            src={featuredImage}
-            alt={featured.name}
-            className="absolute inset-0 h-full w-full object-cover object-center"
-            loading="lazy"
-            decoding="async"
-            onError={() => handleHeroImageError(featuredImage)}
-          />
-        ) : (
-          <div className="absolute inset-0 bg-linear-to-br from-default-900 via-default-800 to-default-700" />
-        )}
-
-        <div className="absolute inset-0 bg-linear-to-r from-zinc-950/85 via-zinc-900/50 to-zinc-950/10" />
-        <div className="absolute inset-0 bg-linear-to-t from-zinc-950/85 via-transparent to-transparent" />
-
-        <div className="relative z-10 flex h-full flex-col justify-between p-5 sm:p-6">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/90">
-            <Flame size={14} className="text-primary" />
-            Trending
-          </div>
-
-          <div className="space-y-3">
-            <h2 className="max-w-[18ch] text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-              {featured.name}
-            </h2>
-            <Button
-              size="sm"
-              color="primary"
-              className="font-semibold"
-              endContent={<ArrowRight size={14} />}
-              onPress={() => onOpenGame(featured)}>
-              Ver ficha
-            </Button>
-          </div>
-        </div>
-      </article>
-
-      <aside className="relative border-t border-default-200/80 bg-[radial-gradient(circle_at_top,#0f2a4b_0%,#0b1a2d_42%,#0a1422_100%)] p-4 text-white lg:border-l lg:border-t-0 lg:border-default-100/15">
-        <div className="space-y-3">
-          <p className="text-3xl font-semibold leading-none tracking-tight">{featured.name}</p>
-          <p className="text-3xl font-semibold leading-none tracking-tight text-primary">Recomendado</p>
-          <p className="text-sm text-white/90">{recommendationCopy}</p>
-
-          <div className="grid grid-cols-2 gap-2">
-            {sideThumbs.map((url, index) => (
-              <button
-                key={`${featured.steamAppId}-${url}`}
-                type="button"
-                className={`group/mini relative h-20 overflow-hidden rounded-sm border text-left transition-colors duration-200 ${
-                  activeImageIndex === index
-                    ? "border-primary/90 ring-1 ring-primary/70"
-                    : "border-white/15 hover:border-white/45"
-                }`}
-                onClick={() => {
-                  setHasManualImageSelection(true);
-                  setActiveImageIndex(index);
-                }}>
-                <img
-                  src={url}
-                  alt={`${featured.name} captura ${index + 1}`}
-                  className="absolute inset-0 h-full w-full object-cover"
-                  loading="lazy"
-                  decoding="async"
-                />
-                <div className="absolute inset-0 bg-black/35 transition-colors duration-200 group-hover/mini:bg-black/10" />
-                <span className="absolute left-1.5 top-1.5 text-[10px] text-white/80">#{index + 1}</span>
-              </button>
-            ))}
-
-            {sideThumbs.length < 4
-              ? relatedItems.slice(0, 4 - sideThumbs.length).map((item, index) => {
-                  const image = imageFor(item, mediaBySteamAppId);
-                  return (
-                    <button
-                      key={item.steamAppId}
-                      type="button"
-                      className="group/mini relative h-20 overflow-hidden rounded-sm border border-white/15 text-left"
-                      onClick={() => onOpenGame(item)}>
-                      {image ? (
-                        <img
-                          src={image}
-                          alt={item.name}
-                          className="absolute inset-0 h-full w-full object-cover"
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      ) : (
-                        <div className="absolute inset-0 bg-default-700" />
-                      )}
-                      <div className="absolute inset-0 bg-black/40 transition-colors duration-200 group-hover/mini:bg-black/15" />
-                      <span className="absolute left-1.5 top-1.5 text-[10px] text-white/80">R{index + 1}</span>
-                    </button>
-                  );
-                })
-              : null}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5 pt-1">
-            {featuredGenres.slice(0, 2).map((genre) => (
-              <span
-                key={`${featured.steamAppId}-${genre}`}
-                className="rounded bg-white/20 px-2 py-0.5 text-[11px] text-white/95">
-                {genre}
-              </span>
-            ))}
-          </div>
-        </div>
-      </aside>
-    </div>
   );
 }

@@ -7,7 +7,7 @@ import {
   type SteamAppdetailsMediaResult,
 } from "@services/tauri";
 
-const HERO_TRENDING_LIMIT = 8;
+const HERO_TRENDING_LIMIT = 16;
 
 export function useSteamCatalogTrendingHero(enabled: boolean) {
   const heroQuery = useQuery({
@@ -16,6 +16,7 @@ export function useSteamCatalogTrendingHero(enabled: boolean) {
     enabled,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
   const items = heroQuery.data ?? [];
