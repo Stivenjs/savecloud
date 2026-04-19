@@ -76,14 +76,12 @@ export const handler = async (event: any) => {
       lastModified: eventTime,
     });
 
-    if (deltaFileCount !== 0 || deltaSizeBytes !== 0) {
-      await gameStatRepo.applyDelta({
-        userId,
-        gameId,
-        deltaFileCount,
-        deltaSizeBytes,
-        lastModified: eventTime,
-      });
-    }
+    await gameStatRepo.applyDelta({
+      userId,
+      gameId,
+      deltaFileCount,
+      deltaSizeBytes,
+      lastModified: eventTime,
+    });
   }
 };
