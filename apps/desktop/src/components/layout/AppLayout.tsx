@@ -103,6 +103,7 @@ export function AppLayout({ navItems, children, games, onMenuGameClick }: AppLay
   const { connectionStatus } = useLastSyncInfo(hasSyncConfig);
 
   const [profileDrawerOpen, setProfileDrawerOpen] = useState(false);
+  const showStreamsLauncher = import.meta.env.DEV;
 
   useEffect(() => {
     let last = useShellUiStore.getState().profileOpenRequest;
@@ -173,7 +174,7 @@ export function AppLayout({ navItems, children, games, onMenuGameClick }: AppLay
               onOpenProfile={() => setProfileDrawerOpen(true)}
               onIntentOpenProfile={prefetchProfileDrawer}
             />
-            <CloudStreamsLauncher />
+            {showStreamsLauncher ? <CloudStreamsLauncher /> : null}
             <CloudMembersLauncher />
             <NotificationCenter />
           </div>
