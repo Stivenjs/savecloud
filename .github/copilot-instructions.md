@@ -1,3 +1,8 @@
+---
+name: savecloud-workspace-instructions
+description: Comprehensive workspace instructions for SaveCloud project - cloud game save backup system with Fastify backend, Tauri desktop app, and AWS deployment. Covers build commands, Clean Architecture, Tauri patterns, deployment pitfalls, and development conventions.
+---
+
 # SaveCloud AI Agent Instructions
 
 SaveCloud is a **full-stack cloud save synchronization platform** for video games, consisting of three applications: Backend API (Fastify), CLI (TypeScript + TUI), and Desktop App (Tauri + React).
