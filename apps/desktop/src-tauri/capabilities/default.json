@@ -3,7 +3,8 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": [
-    "main"
+    "main",
+    "stream-viewer-*"
   ],
   "permissions": [
     "core:default",
@@ -24,6 +25,7 @@
     "core:window:allow-internal-toggle-maximize",
     "core:window:allow-show",
     "core:window:allow-set-fullscreen",
+    "core:webview:allow-create-webview-window",
     {
       "identifier": "opener:allow-open-url",
       "allow": [
