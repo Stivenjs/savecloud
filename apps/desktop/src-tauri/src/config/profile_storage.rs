@@ -19,6 +19,10 @@ fn profile_file_path(profile_id: &str, file_name: &str) -> Option<PathBuf> {
     paths::data_dir().map(|dir| dir.join("profiles").join(profile_id.trim()).join(file_name))
 }
 
+fn profile_directory_path(profile_id: &str) -> Option<PathBuf> {
+    paths::data_dir().map(|dir| dir.join("profiles").join(profile_id.trim()))
+}
+
 fn is_default_profile_active() -> bool {
     active_profile()
         .as_ref()
@@ -303,6 +307,18 @@ pub fn initialize_profile_storage(profile: &super::profiles::Profile) -> Result<
     save_library_for_profile(&profile.id, &GameLibrary::default())?;
     save_history_for_profile(&profile.id, &OperationHistory::default())?;
     save_gamification_for_profile(&profile.id, &GamificationConfig::default())?;
+
+    Ok(())
+}
+
+pub fn delete_profile_storage(profile_id: &str) -> Result<(), String> {
+    let Some(profile_dir) = profile_directory_path(profile_id) else {
+        return Ok(());
+    };
+
+    if profile_dir.exists() {
+        fs::remove_dir_all(&profile_dir).map_err(|e| e.to_string())?;
+    }
 
     Ok(())
 }

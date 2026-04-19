@@ -160,6 +160,9 @@ impl ProfileManager {
         // Eliminar del índice
         index.remove_profile(profile_id);
 
+        // Eliminar la carpeta física del perfil en disco.
+        profile_storage::delete_profile_storage(profile_id)?;
+
         // Crear respaldo antes de un cambio persistente.
         profile_io::backup_profiles_index()?;
 
