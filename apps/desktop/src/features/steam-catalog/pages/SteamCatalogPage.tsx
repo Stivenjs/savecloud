@@ -58,7 +58,7 @@ export function SteamCatalogPage() {
   });
 
   const isReady = !isLoading && items.length > 0;
-  const showTrendingHero = !searchMode && selectedGenres.length === 0 && selectedTags.length === 0 && page === 1;
+  const showTrendingHero = true;
 
   const {
     items: heroItems,
