@@ -47,7 +47,7 @@ function CandidateMenu({ onDismiss }: { onDismiss: () => void }) {
           <MoreVertical size={15} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="min-w-[190px] border border-default-200/80 p-1 shadow-sm">
+      <PopoverContent className="min-w-47.5 border border-default-200/80 p-1 shadow-sm">
         <button
           className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-default-100"
           onClick={() => {

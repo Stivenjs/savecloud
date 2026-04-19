@@ -6,6 +6,10 @@ import type { CloudInvite, CloudMembership } from "@services/tauri/invites.servi
 import { listCloudPresence } from "@services/tauri/invites.service";
 import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
 import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
+import {
+  CloudMembershipActionConfirmModal,
+  type CloudMembershipActionType,
+} from "@features/friends/CloudMembershipActionConfirmModal";
 
 function SectionCard({
   title,
@@ -95,6 +99,10 @@ export function FriendsInvitesTab({
   ourConfig,
 }: FriendsInvitesTabProps) {
   const [view, setView] = useState<"requests" | "cloud">("requests");
+  const [pendingCloudAction, setPendingCloudAction] = useState<{
+    type: CloudMembershipActionType;
+    userId: string;
+  } | null>(null);
   useCloudPresenceRealtimeInvalidation();
 
   const { data: cloudPresence = [], isLoading: cloudPresenceLoading } = useQuery({
@@ -106,6 +114,18 @@ export function FriendsInvitesTab({
   const presenceByUser = useMemo(() => new Map(cloudPresence.map((item) => [item.userId, item])), [cloudPresence]);
 
   const getPresence = (userId: string) => presenceByUser.get(userId);
+
+  const handleConfirmCloudAction = async () => {
+    if (!pendingCloudAction) return;
+
+    if (pendingCloudAction.type === "remove-member") {
+      await handleRemoveMember(pendingCloudAction.userId);
+    } else {
+      await handleLeaveMembership(pendingCloudAction.userId);
+    }
+
+    setPendingCloudAction(null);
+  };
 
   return (
     <div className="space-y-4">
@@ -333,7 +353,7 @@ export function FriendsInvitesTab({
                 <Divider />
 
                 <div>
-                  <p className="text-xs font-medium text-default-500 uppercase tracking-wide mb-2">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-default-500">
                     Nubes donde eres miembro
                   </p>
                   {memberMemberships.length === 0 ? (
@@ -347,10 +367,10 @@ export function FriendsInvitesTab({
                         <div
                           key={`${m.hostUserId}-${m.memberUserId}`}
                           className="flex flex-col gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex min-w-0 items-center gap-2">
                             <Avatar name={m.hostUserId} size="sm" color="secondary" />
                             <div className="min-w-0">
-                              <p className="text-xs font-medium truncate">{m.hostUserId}</p>
+                              <p className="truncate text-xs font-medium">{m.hostUserId}</p>
                               <p className="text-[10px] text-default-400">
                                 Anfitrión
                                 {getPresence(m.hostUserId)?.status === "playing" && getPresence(m.hostUserId)?.gameName
@@ -364,7 +384,7 @@ export function FriendsInvitesTab({
                               loading={cloudPresenceLoading}
                               status={getPresence(m.hostUserId)?.status}
                             />
-                            {m.wsUrl && ourConfig?.cloudHostWsBaseUrls?.[m.hostUserId] !== m.wsUrl && (
+                            {m.wsUrl && ourConfig?.cloudHostWsBaseUrls?.[m.hostUserId] !== m.wsUrl ? (
                               <Button
                                 size="sm"
                                 variant="flat"
@@ -373,7 +393,7 @@ export function FriendsInvitesTab({
                                 onPress={() => void handleUseHostCloud(m.hostUserId)}>
                                 Sincronizar conexión
                               </Button>
-                            )}
+                            ) : null}
                             <Button
                               size="sm"
                               variant="flat"
@@ -387,7 +407,7 @@ export function FriendsInvitesTab({
                               variant="light"
                               color="warning"
                               startContent={<LogOut className="h-3.5 w-3.5" />}
-                              onPress={() => void handleLeaveMembership(m.hostUserId)}>
+                              onPress={() => setPendingCloudAction({ type: "leave-membership", userId: m.hostUserId })}>
                               Salir
                             </Button>
                           </div>
@@ -413,10 +433,10 @@ export function FriendsInvitesTab({
                       <div
                         key={`${m.hostUserId}-${m.memberUserId}`}
                         className="flex flex-col gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
                           <Avatar name={m.memberUserId} size="sm" color="danger" />
                           <div className="min-w-0">
-                            <p className="text-xs font-medium truncate">{m.memberUserId}</p>
+                            <p className="truncate text-xs font-medium">{m.memberUserId}</p>
                             <p className="text-[10px] text-default-400">
                               Miembro
                               {getPresence(m.memberUserId)?.status === "playing" &&
@@ -444,7 +464,7 @@ export function FriendsInvitesTab({
                             variant="light"
                             color="danger"
                             startContent={<Trash2 className="h-3.5 w-3.5" />}
-                            onPress={() => void handleRemoveMember(m.memberUserId)}>
+                            onPress={() => setPendingCloudAction({ type: "remove-member", userId: m.memberUserId })}>
                             Eliminar
                           </Button>
                         </div>
@@ -457,6 +477,15 @@ export function FriendsInvitesTab({
           </div>
         </Tab>
       </Tabs>
+
+      <CloudMembershipActionConfirmModal
+        isOpen={pendingCloudAction !== null}
+        actionType={pendingCloudAction?.type ?? "remove-member"}
+        userId={pendingCloudAction?.userId ?? ""}
+        onClose={() => setPendingCloudAction(null)}
+        onConfirm={handleConfirmCloudAction}
+        isLoading={inviteBusy}
+      />
     </div>
   );
 }

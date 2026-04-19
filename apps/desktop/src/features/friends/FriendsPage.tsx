@@ -12,6 +12,10 @@ import { ShareLinkCard } from "@features/friends/ShareLinkCard";
 import { ShareLinkImportConfirmModal } from "@features/friends/ShareLinkImportConfirmModal";
 import { CopyFriendSavesConfirmModal } from "@features/friends/CopyFriendSavesConfirmModal";
 import { FriendsInvitesTab, InvitesTabTitle } from "@features/friends/FriendsInvitesTab";
+import {
+  consumePendingFriendProfileUserId,
+  onRequestOpenFriendProfile,
+} from "@features/friends/friendProfileNavigation";
 import { useNavigationStore } from "@features/input/store";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
@@ -94,6 +98,25 @@ export function FriendsPage() {
   const searchedFriendPresence = friendConfig?.userId
     ? cloudPresence.find((item) => item.userId === friendConfig.userId)
     : undefined;
+
+  useEffect(() => {
+    const openProfileById = (userId: string) => {
+      const normalized = userId.trim();
+      if (!normalized) return;
+      setFriendsTab("user");
+      try {
+        sessionStorage.setItem("friendsPageTab", "user");
+      } catch {}
+      void loadFriendProfileById(normalized);
+    };
+
+    const pendingUserId = consumePendingFriendProfileUserId();
+    if (pendingUserId) {
+      openProfileById(pendingUserId);
+    }
+
+    return onRequestOpenFriendProfile(openProfileById);
+  }, [loadFriendProfileById]);
 
   useEffect(() => {
     if (friendsTab !== "invites") return;
