@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import type { ConfiguredGame } from "@app-types/config";
+import { formatGameDisplayName } from "@utils/gameImage";
 
 export interface GameFormState {
   gameId: string;
@@ -24,6 +25,7 @@ export interface UseGameFormReturn {
   setError: (error: string | null) => void;
   loading: boolean;
   setLoading: (loading: boolean) => void;
+  isDirty: boolean;
 }
 
 const EMPTY_FORM: GameFormState = {
@@ -49,7 +51,7 @@ interface UseGameFormOptions {
 
 function buildFormFromGame(game: ConfiguredGame): GameFormState {
   return {
-    gameId: game.id,
+    gameId: formatGameDisplayName(game.id),
     path: (game.paths ?? [])[0] ?? "",
     editionLabel: game.editionLabel ?? "",
     sourceUrl: game.sourceUrl ?? "",
@@ -70,6 +72,7 @@ export function useGameForm({
   suggestedId = "",
 }: UseGameFormOptions): UseGameFormReturn {
   const [form, setForm] = useState<GameFormState>(EMPTY_FORM);
+  const [initialForm, setInitialForm] = useState<GameFormState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -78,15 +81,19 @@ export function useGameForm({
   useEffect(() => {
     if (!isOpen) return;
 
+    let initForm: GameFormState;
     if (mode === "edit" && game) {
-      setForm(buildFormFromGame(game));
+      initForm = buildFormFromGame(game);
     } else {
-      setForm({
+      initForm = {
         ...EMPTY_FORM,
         gameId: suggestedId,
         path: initialPath,
-      });
+      };
     }
+
+    setForm(initForm);
+    setInitialForm(initForm);
 
     setError(null);
     setLoading(false);
@@ -98,10 +105,16 @@ export function useGameForm({
   }, []);
 
   const resetForm = useCallback(() => {
-    setForm(EMPTY_FORM);
+    setForm(initialForm || EMPTY_FORM);
     setError(null);
     setLoading(false);
-  }, []);
+  }, [initialForm]);
 
-  return { form, setField, resetForm, error, setError, loading, setLoading };
+  const isDirty = useMemo(() => {
+    if (mode === "add") return true;
+    if (!initialForm) return false;
+    return JSON.stringify(form) !== JSON.stringify(initialForm);
+  }, [form, initialForm, mode]);
+
+  return { form, setField, resetForm, error, setError, loading, setLoading, isDirty };
 }

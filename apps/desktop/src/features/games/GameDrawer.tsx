@@ -1,6 +1,7 @@
 import { Button, Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader, Tab, Tabs } from "@heroui/react";
 import { Gamepad2, Image, Play } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
+import { toGameId } from "@utils/gameImage";
 import {
   addGame,
   renameGame,
@@ -34,7 +35,7 @@ export function GameDrawer({
   initialPath = "",
   suggestedId = "",
 }: GameDrawerProps) {
-  const { form, setField, resetForm, error, setError, loading, setLoading } = useGameForm({
+  const { form, setField, resetForm, error, setError, loading, setLoading, isDirty } = useGameForm({
     isOpen,
     mode,
     game,
@@ -48,13 +49,15 @@ export function GameDrawer({
   };
 
   const handleSubmit = async () => {
-    const id = form.gameId.trim();
+    const rawName = form.gameId.trim();
     const path = form.path.trim();
 
-    if (!id) {
+    if (!rawName) {
       setError("El nombre del juego es obligatorio.");
       return;
     }
+
+    const finalId = toGameId(rawName);
 
     setLoading(true);
     setError(null);
@@ -62,7 +65,7 @@ export function GameDrawer({
     try {
       if (mode === "add") {
         await addGame(
-          id,
+          finalId,
           path,
           form.editionLabel.trim() || undefined,
           form.sourceUrl.trim() || undefined,
@@ -70,10 +73,10 @@ export function GameDrawer({
           form.imageUrl.trim() || undefined
         );
       } else if (game) {
-        const idChanged = id !== game.id;
+        const idChanged = finalId !== game.id;
         if (idChanged) {
-          await renameGameInCloud(game.id, id);
-          await renameGame(game.id, id);
+          await renameGameInCloud(game.id, finalId);
+          await renameGame(game.id, finalId);
         }
 
         const paths = [...(game.paths ?? [])];
@@ -83,7 +86,7 @@ export function GameDrawer({
         }
 
         await updateGame(
-          idChanged ? id : game.id,
+          idChanged ? finalId : game.id,
           paths,
           form.editionLabel.trim() || undefined,
           form.sourceUrl.trim() || undefined,
@@ -92,8 +95,8 @@ export function GameDrawer({
         );
       }
 
-      await setGameLaunchExecutable(id, form.launchExecutablePath.trim() || null);
-      await setGameExecutableNames(id, form.executableNames);
+      await setGameLaunchExecutable(finalId, form.launchExecutablePath.trim() || null);
+      await setGameExecutableNames(finalId, form.executableNames);
       scheduleConfigBackupToCloud();
 
       onSuccess();
@@ -107,7 +110,7 @@ export function GameDrawer({
 
   const title = mode === "add" ? "Añadir juego" : "Editar juego";
   const submitLabel = mode === "add" ? "Añadir" : "Guardar cambios";
-  const canSubmit = !!form.gameId.trim();
+  const canSubmit = !!form.gameId.trim() && isDirty;
 
   return (
     <Drawer isOpen={isOpen} onOpenChange={(open) => !open && handleClose()} placement="right" size="lg">
