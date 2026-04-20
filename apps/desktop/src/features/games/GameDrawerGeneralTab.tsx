@@ -27,20 +27,20 @@ export function GameDrawerGeneralTab({ form, setField, setError, error, mode }: 
   return (
     <div className="flex flex-col gap-4">
       <Input
-        label="Identificador del juego"
-        placeholder="ej. elden-ring"
+        label="Nombre del juego"
+        placeholder="ej. Elden Ring"
         value={form.gameId}
         onValueChange={(v) => setField("gameId", v)}
         description={
           mode === "add"
-            ? "Un nombre único para identificar el juego (minúsculas, guiones)"
+            ? "El nombre del juego para identificarlo en la biblioteca"
             : "Al cambiarlo se actualiza también en la nube"
         }
         variant="bordered"
         autoFocus
       />
       <Input
-        label="Ruta de la carpeta de guardados"
+        label="Ruta de la carpeta de guardados (opcional)"
         placeholder="Selecciona una carpeta o escribe la ruta"
         value={form.path}
         onValueChange={(v) => setField("path", v)}

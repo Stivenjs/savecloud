@@ -51,8 +51,8 @@ export function GameDrawer({
     const id = form.gameId.trim();
     const path = form.path.trim();
 
-    if (!id || !path) {
-      setError("Identificador y ruta son obligatorios.");
+    if (!id) {
+      setError("El nombre del juego es obligatorio.");
       return;
     }
 
@@ -77,8 +77,10 @@ export function GameDrawer({
         }
 
         const paths = [...(game.paths ?? [])];
-        if (paths.length > 0) paths[0] = path;
-        else paths.push(path);
+        if (path) {
+          if (paths.length > 0) paths[0] = path;
+          else paths.push(path);
+        }
 
         await updateGame(
           idChanged ? id : game.id,
@@ -105,7 +107,7 @@ export function GameDrawer({
 
   const title = mode === "add" ? "Añadir juego" : "Editar juego";
   const submitLabel = mode === "add" ? "Añadir" : "Guardar cambios";
-  const canSubmit = !!form.gameId.trim() && !!form.path.trim();
+  const canSubmit = !!form.gameId.trim();
 
   return (
     <Drawer isOpen={isOpen} onOpenChange={(open) => !open && handleClose()} placement="right" size="lg">
