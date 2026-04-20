@@ -1040,3 +1040,42 @@ pub fn should_show_weekly_digest_notification(current_week_id: String) -> bool {
     let g = config::load_gamification();
     g.last_weekly_digest_notification_week_id != current_week_id && g.weekly_playtime_seconds >= 60
 }
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PathValidationResult {
+    pub exists: bool,
+    pub size_bytes: Option<u64>,
+}
+
+/// Verifica asíncronamente si una ruta existe y calcula su tamaño.
+#[tauri::command]
+pub async fn check_path_size(path: String) -> Result<PathValidationResult, String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() || !p.is_dir() {
+        return Ok(PathValidationResult {
+            exists: false,
+            size_bytes: None,
+        });
+    }
+
+    let path_clone = path.clone();
+    let size_bytes = tokio::task::spawn_blocking(move || {
+        let mut total_size = 0u64;
+        for entry in walkdir::WalkDir::new(path_clone).into_iter().filter_map(|e| e.ok()) {
+            if let Ok(metadata) = entry.metadata() {
+                if metadata.is_file() {
+                    total_size += metadata.len();
+                }
+            }
+        }
+        total_size
+    })
+    .await
+    .unwrap_or(0);
+
+    Ok(PathValidationResult {
+        exists: true,
+        size_bytes: Some(size_bytes),
+    })
+}

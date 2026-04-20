@@ -1,7 +1,9 @@
 import { Button, Input } from "@heroui/react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 import type { GameFormState } from "@/hooks/useGameForm";
+import { usePathValidation } from "@/hooks/usePathValidation";
+import { formatBytes } from "@/utils/format";
 
 interface GeneralTabProps {
   form: GameFormState;
@@ -22,6 +24,34 @@ export function GameDrawerGeneralTab({ form, setField, setError, error, mode }: 
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
+  };
+
+  const { isValidating, result } = usePathValidation(form.path);
+
+  const getPathDescription = () => {
+    if (!form.path.trim()) return "Selecciona o escribe la ruta donde se guardan las partidas";
+    if (isValidating)
+      return (
+        <span className="flex items-center gap-1.5 text-default-500">
+          <Loader2 size={14} className="animate-spin" /> Verificando ruta...
+        </span>
+      );
+    if (result) {
+      if (result.exists) {
+        const sizeInfo = result.sizeBytes ? ` (${formatBytes(result.sizeBytes)})` : "";
+        return (
+          <span className="flex items-center gap-1.5 text-success">
+            <CheckCircle2 size={14} /> Directorio encontrado{sizeInfo}
+          </span>
+        );
+      }
+      return (
+        <span className="flex items-center gap-1.5 text-danger">
+          <AlertTriangle size={14} /> No se encontró nada en este directorio
+        </span>
+      );
+    }
+    return "Selecciona o escribe la ruta donde se guardan las partidas";
   };
 
   return (
@@ -45,8 +75,9 @@ export function GameDrawerGeneralTab({ form, setField, setError, error, mode }: 
         value={form.path}
         onValueChange={(v) => setField("path", v)}
         variant="bordered"
-        isInvalid={!!error}
+        isInvalid={!!error || result?.exists === false}
         errorMessage={error}
+        description={getPathDescription()}
         endContent={
           <Button isIconOnly variant="flat" size="sm" aria-label="Seleccionar carpeta" onPress={handleBrowseFolder}>
             <FolderOpen size={18} />
