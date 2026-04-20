@@ -20,6 +20,7 @@ import { useNavigationStore } from "@features/input/store";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
 import { listCloudPresence } from "@services/tauri/invites.service";
+import { visibilityManager } from "@hooks/useAppVisibility";
 
 type FriendsTabKey = "link" | "user" | "invites";
 
@@ -123,6 +124,8 @@ export function FriendsPage() {
 
     void refreshInvitesState();
     const id = window.setInterval(() => {
+      // Evitar polling de invitaciones cuando la app está en background.
+      if (!visibilityManager.isVisible) return;
       void refreshInvitesState();
     }, 30000);
 

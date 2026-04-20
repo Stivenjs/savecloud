@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
+import { visibilityManager } from "@hooks/useAppVisibility";
 
 const vertexShader = `
 void main() {
@@ -265,7 +266,21 @@ export default function MagicRings({
     };
     frameId = requestAnimationFrame(animate);
 
+    // Pausar/reanudar el loop WebGL según la visibilidad de la app.
+    // Evita que el shader corra a ~60fps cuando la ventana está minimizada.
+    const unsubVisibility = visibilityManager.subscribe(
+      () => {
+        // App en background → cancelar el loop
+        cancelAnimationFrame(frameId);
+      },
+      () => {
+        // App en primer plano → reanudar el loop
+        frameId = requestAnimationFrame(animate);
+      }
+    );
+
     return () => {
+      unsubVisibility();
       cancelAnimationFrame(frameId);
       window.removeEventListener("resize", resize);
       ro.disconnect();

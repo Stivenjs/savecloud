@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { visibilityManager } from "@hooks/useAppVisibility";
 import { listen } from "@tauri-apps/api/event";
 import { NOTIFICATIONS_CHANGED_EVENT } from "@services/tauri/notifications.service";
 import { backupConfigToCloud, checkForUpdatesWithPrompt } from "@services/tauri";
@@ -77,11 +78,30 @@ export function useAppInitialization() {
     };
 
     document.addEventListener("visibilitychange", onVisible);
-    const interval = setInterval(refresh, 120_000);
+
+    // Eliminar el timer completamente en background y recrearlo al volver.
+    // Esto evita que V8 despierte innecesariamente cuando la app está minimizada.
+    let intervalId: ReturnType<typeof setInterval> | null = setInterval(() => void refresh(), 120_000);
+
+    const unsubVisibility = visibilityManager.subscribe(
+      () => {
+        // App en background → detener el timer por completo
+        if (intervalId !== null) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+      },
+      () => {
+        // App vuelve a primer plano → sincronizar inmediatamente y reanudar timer
+        void refresh();
+        intervalId = setInterval(() => void refresh(), 120_000);
+      }
+    );
 
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
-      clearInterval(interval);
+      unsubVisibility();
+      if (intervalId !== null) clearInterval(intervalId);
     };
   }, []);
 
@@ -122,16 +142,31 @@ export function useAppInitialization() {
    * Frecuencia: cada 5 minutos.
    */
   useEffect(() => {
-    const interval = setInterval(
+    // Eliminar el timer completamente en background y recrearlo al volver.
+    const BACKUP_INTERVAL_MS = 5 * 60 * 1000;
+    const doBackup = () =>
+      backupConfigToCloud().catch(() => {
+        // Ignorar errores silenciosamente
+      });
+
+    let intervalId: ReturnType<typeof setInterval> | null = setInterval(doBackup, BACKUP_INTERVAL_MS);
+
+    const unsubVisibility = visibilityManager.subscribe(
       () => {
-        backupConfigToCloud().catch(() => {
-          // Ignorar errores silenciosamente
-        });
+        if (intervalId !== null) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
       },
-      5 * 60 * 1000
+      () => {
+        intervalId = setInterval(doBackup, BACKUP_INTERVAL_MS);
+      }
     );
 
-    return () => clearInterval(interval);
+    return () => {
+      unsubVisibility();
+      if (intervalId !== null) clearInterval(intervalId);
+    };
   }, []);
 
   /**

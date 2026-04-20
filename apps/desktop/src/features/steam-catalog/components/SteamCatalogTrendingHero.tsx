@@ -7,13 +7,14 @@ import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay, EffectFade } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
 import "swiper/css/effect-fade";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { SteamCatalogTrendingHeroSkeleton } from "@features/steam-catalog/components/SteamCatalogTrendingHeroSkeleton";
 import {
   getSecondaryItemsForSlide,
   toRouteGameId,
 } from "@features/steam-catalog/components/steamCatalogTrendingHero.utils";
 import { TrendingHeroSlide } from "@features/steam-catalog/components/TrendingHeroSlide";
+import { visibilityManager } from "@hooks/useAppVisibility";
 
 type SteamCatalogTrendingHeroProps = {
   items: CatalogListItem[];
@@ -34,6 +35,14 @@ export function SteamCatalogTrendingHero({
   const navigate = useNavigate();
   const location = useLocation();
   const [swiper, setSwiper] = useState<SwiperType | null>(null);
+
+  // Pausar autoplay del hero banner cuando la app está en background.
+  useEffect(() => {
+    return visibilityManager.subscribe(
+      () => swiper?.autoplay?.stop(), // onPause
+      () => swiper?.autoplay?.start() // onResume
+    );
+  }, [swiper]);
 
   const slides = useMemo(() => items, [items]);
 
