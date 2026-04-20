@@ -13,6 +13,7 @@ import {
   registerHostStreamRuntime,
 } from "@features/friends/streamRuntime";
 import type { StreamFpsPreset, StreamResolutionPreset } from "@features/friends/StreamQualityControls";
+import { visibilityManager } from "@hooks/useAppVisibility";
 
 // EXPERIMENTAL: orchestrates stream creation/join flow for the prototype modal.
 
@@ -102,6 +103,8 @@ export function useCloudStreamsModal({ isOpen, onClose, modalRef }: UseCloudStre
     void requestStateSync();
 
     const interval = window.setInterval(() => {
+      // No enviar sync requests cuando la app está en background.
+      if (!visibilityManager.isVisible) return;
       void requestStateSync();
     }, 12000);
 
