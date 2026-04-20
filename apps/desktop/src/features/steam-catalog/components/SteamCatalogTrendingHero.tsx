@@ -8,7 +8,6 @@ import { Autoplay, EffectFade } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
 import "swiper/css/effect-fade";
 import { useCallback, useMemo, useRef, useEffect } from "react";
-// backdrop-blur eliminado de los botones nav — ver comentario en JSX
 import { SteamCatalogTrendingHeroSkeleton } from "@features/steam-catalog/components/SteamCatalogTrendingHeroSkeleton";
 import {
   getSecondaryItemsForSlide,
