@@ -3,9 +3,10 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addTransitionType, startTransition } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { CatalogListItem, SteamAppdetailsMediaResult } from "@services/tauri";
-import { Pagination } from "swiper/modules";
 import { Swiper, SwiperSlide } from "swiper/react";
+import { Autoplay, EffectFade } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
+import "swiper/css/effect-fade";
 import { useMemo, useState } from "react";
 import { SteamCatalogTrendingHeroSkeleton } from "@features/steam-catalog/components/SteamCatalogTrendingHeroSkeleton";
 import {
@@ -86,12 +87,18 @@ export function SteamCatalogTrendingHero({
         </Button>
 
         <Swiper
-          modules={[Pagination]}
           onSwiper={setSwiper}
           loop={slides.length > 1}
+          effect="fade"
+          fadeEffect={{ crossFade: true }}
+          modules={[Autoplay, EffectFade]}
           slidesPerView={1}
+          autoplay={{
+            delay: 3500,
+            disableOnInteraction: false,
+            pauseOnMouseEnter: true,
+          }}
           speed={520}
-          pagination={{ clickable: true, el: ".sg-trending-pagination" }}
           className="sg-trending-swiper overflow-hidden rounded-2xl border border-default-200/70 bg-content1 shadow-sm dark:border-default-100/15">
           {slides.map((featured, slideIndex) => (
             <SwiperSlide key={featured.steamAppId}>
@@ -105,7 +112,10 @@ export function SteamCatalogTrendingHero({
           ))}
         </Swiper>
 
-        <div className="sg-trending-pagination mt-2" aria-label="Paginacion destacados" />
+        <div
+          className="sg-trending-pagination absolute bottom-4 left-1/2 -translate-x-1/2 z-50 w-full flex items-center justify-center gap-2 [&>.swiper-pagination-bullet]:h-2 [&>.swiper-pagination-bullet]:w-6 [&>.swiper-pagination-bullet]:rounded-full [&>.swiper-pagination-bullet]:bg-white/50 [&>.swiper-pagination-bullet-active]:h-2 [&>.swiper-pagination-bullet-active]:w-8 [&>.swiper-pagination-bullet-active]:bg-white"
+          aria-label="Paginacion destacados"
+        />
       </div>
     </section>
   );
