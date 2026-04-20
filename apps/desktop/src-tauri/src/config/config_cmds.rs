@@ -327,8 +327,8 @@ pub fn add_game(
     let game_id = game_id.trim().to_string();
     let path = path.trim().to_string();
 
-    if game_id.is_empty() || path.is_empty() {
-        return Err("Identificador o ruta ausente".to_string());
+    if game_id.is_empty() {
+        return Err("Identificador ausente".to_string());
     }
 
     let trim_opt =
@@ -339,7 +339,7 @@ pub fn add_game(
         .iter_mut()
         .find(|g| g.id.eq_ignore_ascii_case(&game_id))
     {
-        if !g.paths.contains(&path) {
+        if !path.is_empty() && !g.paths.contains(&path) {
             g.paths.push(path);
         }
         if let Some(label) = trim_opt(edition_label) {
@@ -357,7 +357,7 @@ pub fn add_game(
     } else {
         library.games.push(ConfiguredGame {
             id: game_id,
-            paths: vec![path],
+            paths: if path.is_empty() { vec![] } else { vec![path] },
             steam_app_id: trim_opt(steam_app_id),
             image_url: trim_opt(image_url),
             executable_names: None,
@@ -396,9 +396,6 @@ pub fn update_game(
         .map(|p| p.trim().to_string())
         .filter(|p| !p.is_empty())
         .collect();
-    if paths.is_empty() {
-        return Err("Se requiere al menos un vector de ruta".to_string());
-    }
 
     let trim_opt =
         |opt: Option<String>| opt.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
@@ -1042,4 +1039,43 @@ pub fn mark_weekly_digest_notified(week_id: String) -> Result<(), String> {
 pub fn should_show_weekly_digest_notification(current_week_id: String) -> bool {
     let g = config::load_gamification();
     g.last_weekly_digest_notification_week_id != current_week_id && g.weekly_playtime_seconds >= 60
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PathValidationResult {
+    pub exists: bool,
+    pub size_bytes: Option<u64>,
+}
+
+/// Verifica asíncronamente si una ruta existe y calcula su tamaño.
+#[tauri::command]
+pub async fn check_path_size(path: String) -> Result<PathValidationResult, String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() || !p.is_dir() {
+        return Ok(PathValidationResult {
+            exists: false,
+            size_bytes: None,
+        });
+    }
+
+    let path_clone = path.clone();
+    let size_bytes = tokio::task::spawn_blocking(move || {
+        let mut total_size = 0u64;
+        for entry in walkdir::WalkDir::new(path_clone).into_iter().filter_map(|e| e.ok()) {
+            if let Ok(metadata) = entry.metadata() {
+                if metadata.is_file() {
+                    total_size += metadata.len();
+                }
+            }
+        }
+        total_size
+    })
+    .await
+    .unwrap_or(0);
+
+    Ok(PathValidationResult {
+        exists: true,
+        size_bytes: Some(size_bytes),
+    })
 }
