@@ -7,7 +7,7 @@ import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay, EffectFade } from "swiper/modules";
 import type { Swiper as SwiperType } from "swiper";
 import "swiper/css/effect-fade";
-import { useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useRef, useEffect } from "react";
 import { SteamCatalogTrendingHeroSkeleton } from "@features/steam-catalog/components/SteamCatalogTrendingHeroSkeleton";
 import {
   getSecondaryItemsForSlide,
@@ -34,29 +34,46 @@ export function SteamCatalogTrendingHero({
 }: SteamCatalogTrendingHeroProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [swiper, setSwiper] = useState<SwiperType | null>(null);
 
-  // Pausar autoplay del hero banner cuando la app está en background.
+  const swiperRef = useRef<SwiperType | null>(null);
+
+  const handleSwiper = useCallback((instance: SwiperType) => {
+    swiperRef.current = instance;
+
+    if (!visibilityManager.isVisible) {
+      instance.autoplay?.stop();
+    }
+  }, []);
+
   useEffect(() => {
-    return visibilityManager.subscribe(
-      () => swiper?.autoplay?.stop(), // onPause
-      () => swiper?.autoplay?.start() // onResume
+    const unsub = visibilityManager.subscribe(
+      () => swiperRef.current?.autoplay?.stop(),
+      () => swiperRef.current?.autoplay?.start()
     );
-  }, [swiper]);
+    return unsub;
+  }, []);
 
   const slides = useMemo(() => items, [items]);
 
-  const secondaryForSlide = (activeIndex: number): CatalogListItem[] =>
-    getSecondaryItemsForSlide(slides, activeIndex, 4);
+  const secondaryForSlide = useCallback(
+    (activeIndex: number): CatalogListItem[] => getSecondaryItemsForSlide(slides, activeIndex, 4),
+    [slides]
+  );
 
-  const openGame = (item: CatalogListItem) => {
-    startTransition(() => {
-      addTransitionType("game-detail");
-      navigate(`/games/${toRouteGameId(item)}`, {
-        state: { resolvedSteamAppId: item.steamAppId, from: `${location.pathname}${location.search}` },
+  const openGame = useCallback(
+    (item: CatalogListItem) => {
+      startTransition(() => {
+        addTransitionType("game-detail");
+        navigate(`/games/${toRouteGameId(item)}`, {
+          state: {
+            resolvedSteamAppId: item.steamAppId,
+            from: `${location.pathname}${location.search}`,
+          },
+        });
       });
-    });
-  };
+    },
+    [navigate, location.pathname, location.search]
+  );
 
   if (isLoading) {
     return <SteamCatalogTrendingHeroSkeleton />;
@@ -80,8 +97,8 @@ export function SteamCatalogTrendingHero({
         <Button
           isIconOnly
           variant="flat"
-          className="absolute -left-2 top-1/2 z-20 hidden size-11 -translate-y-1/2 rounded-none bg-content1/70 text-foreground backdrop-blur-md lg:flex"
-          onPress={() => swiper?.slidePrev()}
+          className="absolute -left-2 top-1/2 z-20 hidden size-11 -translate-y-1/2 rounded-none bg-content1/80 text-foreground lg:flex"
+          onPress={() => swiperRef.current?.slidePrev()}
           aria-label="Anterior">
           <ChevronLeft size={28} />
         </Button>
@@ -89,14 +106,14 @@ export function SteamCatalogTrendingHero({
         <Button
           isIconOnly
           variant="flat"
-          className="absolute -right-2 top-1/2 z-20 hidden size-11 -translate-y-1/2 rounded-none bg-content1/70 text-foreground backdrop-blur-md lg:flex"
-          onPress={() => swiper?.slideNext()}
+          className="absolute -right-2 top-1/2 z-20 hidden size-11 -translate-y-1/2 rounded-none bg-content1/80 text-foreground lg:flex"
+          onPress={() => swiperRef.current?.slideNext()}
           aria-label="Siguiente">
           <ChevronRight size={28} />
         </Button>
 
         <Swiper
-          onSwiper={setSwiper}
+          onSwiper={handleSwiper}
           loop={slides.length > 1}
           effect="fade"
           fadeEffect={{ crossFade: true }}
