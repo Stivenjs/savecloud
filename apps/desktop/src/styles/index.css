@@ -65,3 +65,14 @@ video::-webkit-media-controls-fullscreen-button {
     background-position: -200% center;
   }
 }
+
+html.paused-bg *,
+html.paused-bg *::before,
+html.paused-bg *::after {
+  animation-play-state: paused !important;
+  transition-duration: 0ms !important;
+}
+
+html.paused-bg * {
+  will-change: auto !important;
+}
