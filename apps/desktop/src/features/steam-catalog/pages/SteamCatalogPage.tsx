@@ -126,7 +126,7 @@ export function SteamCatalogPage() {
       ) : null}
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <aside className="w-full shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-5rem)] lg:w-80 lg:overflow-y-auto lg:pr-1">
+        <aside className="w-full shrink-0 lg:sticky lg:top-26 lg:max-h-[calc(100vh-8rem)] lg:w-80 lg:overflow-y-auto lg:pr-1">
           <SteamCatalogFilters
             genres={facets?.genres ?? []}
             tags={facets?.tags ?? []}
