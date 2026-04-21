@@ -59,24 +59,27 @@ export const handler = async (event: APIGatewayProxyWebsocketEventV2) => {
   const parsedGameId = typeof body.gameId === "string" ? body.gameId.trim() : "";
   const parsedGameName = typeof body.gameName === "string" ? body.gameName.trim() : "";
   const normalizedGameName = normalizeGameDisplayName(parsedGameId, parsedGameName);
-  const statusRaw = typeof body.status === "string" ? body.status.trim().toLowerCase() : "";
-  const isStopSignal = parsedGameId.length === 0 || statusRaw === "online" || statusRaw === "idle";
+  const isStopSignal = parsedGameId.length === 0;
+
+  try {
+    await connectionRepo.setConnectionActivity(connectionId, {
+      lastActivityAt: Date.now(),
+      activityGameId: isStopSignal ? null : parsedGameId,
+      activityGameName: isStopSignal ? null : normalizedGameName || parsedGameId,
+    });
+  } catch (error) {
+    console.error("[ws:broadcast] Error actualizando actividad en DynamoDB:", error);
+    // No abortamos: preferimos que la notificación llegue aunque falle el registro.
+  }
+
   const broadcastUseCase = new BroadcastActivityUseCase(inviteRepo, connectionRepo, notifier);
 
   try {
-    // Body esperado desde la app Tauri (Rust):
-    // { "action": "broadcast", "userId": "xooty", "gameId": "resident-evil-4", "gameName": "Resident Evil 4" }
     await broadcastUseCase.execute({
       broadcasterUserId: verifiedUserId,
       presenceStatus: isStopSignal ? "online" : "playing",
       gameId: isStopSignal ? undefined : parsedGameId,
       gameName: isStopSignal ? undefined : normalizedGameName || parsedGameId,
-    });
-
-    await connectionRepo.setConnectionActivity(connectionId, {
-      lastActivityAt: Date.now(),
-      activityGameId: isStopSignal ? null : parsedGameId,
-      activityGameName: isStopSignal ? null : normalizedGameName || parsedGameId,
     });
 
     return { statusCode: 200, body: "Broadcast sent" };
