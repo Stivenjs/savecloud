@@ -15,7 +15,7 @@ export function PresenceStatusChip({ status, loading = false }: PresenceStatusCh
   if (status === "playing") {
     return (
       <Chip size="sm" variant="flat" color="success">
-        jugando
+        Jugando
       </Chip>
     );
   }
@@ -23,7 +23,7 @@ export function PresenceStatusChip({ status, loading = false }: PresenceStatusCh
   if (status === "online") {
     return (
       <Chip size="sm" variant="flat" color="primary">
-        en linea
+        En linea
       </Chip>
     );
   }
@@ -31,14 +31,14 @@ export function PresenceStatusChip({ status, loading = false }: PresenceStatusCh
   if (status === "offline") {
     return (
       <Chip size="sm" variant="flat" color="default">
-        sin conexion
+        Sin conexion
       </Chip>
     );
   }
 
   return (
     <Chip size="sm" variant="flat" color="default">
-      desconocido
+      Desconocido
     </Chip>
   );
 }
