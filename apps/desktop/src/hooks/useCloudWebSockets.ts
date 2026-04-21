@@ -33,28 +33,27 @@ interface CloudIncomingMessage {
 /**
  * Hook personalizado para gestionar conexiones WebSocket con el servidor cloud.
  *
- * Funcionalidades:
- * - Establece y mantiene conexión WebSocket con el servidor cloud propio o de un host
- * - Reconecta automáticamente en caso de desconexión
- * - Escucha notificaciones de amigos jugando
- * - Emite broadcasts cuando el usuario local inicia un juego
- * - Descubre automáticamente la URL del WebSocket del host si no está disponible
+ * ## Cold-start
+ * Cuando la app arranca con un juego ya corriendo, `send_cloud_broadcast` puede
+ * llamarse antes de que el WS esté conectado.  El manager de Rust encola el
+ * mensaje y lo envía en cuanto el handshake termina, por lo que desde TS no
+ * necesitamos lógica de reintento adicional: el `invoke` siempre retorna `Ok`.
  *
- * @example
- * function MyComponent() {
- *   useCloudWebSockets();
- *   return <div>...</div>;
- * }
+ * Sin embargo, para mayor robustez, este hook también detecta si ya hay un juego
+ * corriendo en el momento del montaje y emite un broadcast inmediato (que caerá
+ * en la cola de Rust si el WS no está listo todavía).
  */
 export function useCloudWebSockets() {
   const { config, refetch } = useConfig();
   const { activeProfile } = useProfileSession();
   const queryClient = useQueryClient();
+
   const prevGameStatusRef = useRef<Record<string, boolean>>({});
   const lastBroadcastedGameIdRef = useRef<string | null>(null);
   const lastBroadcastByGameRef = useRef<Record<string, number>>({});
   const stopCooldownByGameRef = useRef<Record<string, number>>({});
 
+  const initialReplayDoneRef = useRef(false);
   const activeUserId = activeProfile?.localUserId?.trim() ?? "";
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
 
@@ -66,7 +65,7 @@ export function useCloudWebSockets() {
 
     const hostId = cloudConfig.activeCloudHostUserId;
     const isUsingHostCloud = !!hostId;
-    let activeWsBaseUrl = isUsingHostCloud ? cloudConfig.cloudHostWsBaseUrls?.[hostId] : cloudConfig.wsBaseUrl;
+    const activeWsBaseUrl = isUsingHostCloud ? cloudConfig.cloudHostWsBaseUrls?.[hostId] : cloudConfig.wsBaseUrl;
 
     let isComponentMounted = true;
     let unlistenIncoming: (() => void) | undefined;
@@ -81,24 +80,22 @@ export function useCloudWebSockets() {
             await setCloudHostWsUrl(hostId, friendCfg.wsBaseUrl);
             refetch();
           }
-        } catch (e) {
+        } catch {
           // Error silencioso
         }
       }
 
-      // Iniciar el servicio en Rust (las credenciales se gestionan internamente)
+      // Rust maneja internamente la cola de mensajes pendientes;
+      // simplemente arrancamos el servicio.
       try {
         await invoke("start_cloud_ws");
-      } catch (e) {
+      } catch {
         // Error silencioso
       }
 
-      // Escuchar mensajes entrantes desde Rust
       if (isComponentMounted) {
         unlistenIncoming = await listen<CloudIncomingMessage>("cloud-ws-incoming", (event) => {
           const msg = event.payload;
-          // El overlay de FRIEND_PLAYING se dispara desde Rust para evitar duplicados
-          // y depender de un solo canal de entrega en producción.
           if (msg.type === "FRIEND_PLAYING") return;
         });
       }
@@ -119,6 +116,56 @@ export function useCloudWebSockets() {
     const STOP_BROADCAST_COOLDOWN_MS = 3_000;
 
     let unlistenStatus: (() => void) | undefined;
+
+    function resolveGameName(gameId: string): string {
+      const gameNode = config?.games?.find((g) => g.id === gameId);
+      const baseDisplayName = formatGameDisplayName(gameId);
+      const editionLabel = gameNode?.editionLabel?.trim();
+      return editionLabel ? `${baseDisplayName} (${editionLabel})` : baseDisplayName;
+    }
+
+    function broadcastGameStart(gameId: string) {
+      if (!activeUserId) return;
+
+      const gameName = resolveGameName(gameId);
+
+      invoke("send_cloud_broadcast", { gameId, gameName })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["cloud-presence"] }))
+        .catch(() => {});
+
+      if (import.meta.env.DEV) {
+        invoke("show_overlay_notification", {
+          title: "Tú estás jugando",
+          body: `Iniciaste ${gameName}`,
+        }).catch(() => {});
+      }
+    }
+
+    function broadcastGameStop() {
+      if (!activeUserId) return;
+
+      invoke("send_cloud_broadcast", { gameId: "", gameName: "" })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["cloud-presence"] }))
+        .catch(() => {});
+    }
+
+    if (!initialReplayDoneRef.current) {
+      initialReplayDoneRef.current = true;
+
+      invoke<Record<string, boolean>>("get_running_games_status")
+        .then((currentStatus) => {
+          const now = Date.now();
+          for (const [gameId, isRunning] of Object.entries(currentStatus)) {
+            if (isRunning) {
+              prevGameStatusRef.current[gameId] = true;
+              lastBroadcastByGameRef.current[gameId] = now;
+              lastBroadcastedGameIdRef.current = gameId;
+              broadcastGameStart(gameId);
+            }
+          }
+        })
+        .catch(() => {});
+    }
 
     const setupListener = async () => {
       try {
@@ -144,7 +191,7 @@ export function useCloudWebSockets() {
                   if (lastBroadcastedGameIdRef.current === gameId) {
                     lastBroadcastedGameIdRef.current = null;
                   }
-                }, 5000);
+                }, 5_000);
               }
             } else {
               delete lastBroadcastByGameRef.current[gameId];
@@ -161,40 +208,10 @@ export function useCloudWebSockets() {
 
           prevGameStatusRef.current = { ...currentStatus };
         });
-      } catch (e) {
+      } catch {
         // Error silencioso en UI
       }
     };
-
-    function broadcastGameStart(gameId: string) {
-      if (!activeUserId) return;
-
-      const gameNode = config?.games?.find((g) => g.id === gameId);
-      const baseDisplayName = formatGameDisplayName(gameId);
-      const editionLabel = gameNode?.editionLabel?.trim();
-      const gameName = editionLabel ? `${baseDisplayName} (${editionLabel})` : baseDisplayName;
-
-      invoke("send_cloud_broadcast", { gameId, gameName })
-        .then(() => queryClient.invalidateQueries({ queryKey: ["cloud-presence"] }))
-        .catch(() => {});
-
-      // El mensaje decorativo "Tú estás jugando" solo se muestra en desarrollo para pruebas.
-      if (import.meta.env.DEV) {
-        invoke("show_overlay_notification", {
-          title: "Tú estás jugando",
-          body: `Iniciaste ${gameName}`,
-        }).catch(() => {});
-      }
-    }
-
-    function broadcastGameStop() {
-      if (!activeUserId) return;
-
-      // Señaliza estado online/idle al backend sin disparar FRIEND_PLAYING.
-      invoke("send_cloud_broadcast", { gameId: "", gameName: "" })
-        .then(() => queryClient.invalidateQueries({ queryKey: ["cloud-presence"] }))
-        .catch(() => {});
-    }
 
     setupListener();
 

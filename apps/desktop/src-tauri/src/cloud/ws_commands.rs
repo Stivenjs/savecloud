@@ -13,13 +13,10 @@ use tauri::{command, AppHandle, State};
 
 /// Inicia la conexión WebSocket segura con la infraestructura de la nube.
 ///
-/// Esta función es agnóstica a si el usuario es host o invitado; resuelve las
-/// credenciales necesarias desde el almacén seguro (keyring) y levanta la conexión
-/// en segundo plano.
-///
-/// # Returns
-/// * `Ok(())` si el proceso de conexión se inició satisfactoriamente.
-/// * `Err(String)` si faltan configuraciones críticas (URL, API Key, UserID).
+/// Resuelve las credenciales desde el almacén seguro (keyring) y levanta la
+/// conexión en segundo plano. Los mensajes enviados antes de que el WS esté
+/// listo se guardan en la cola del manager y se envían automáticamente en
+/// cuanto el handshake termina (cold-start buffer).
 #[command]
 pub async fn start_cloud_ws(
     app_handle: AppHandle,
@@ -34,7 +31,7 @@ pub async fn start_cloud_ws(
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .ok_or(" userID no configurado")?
+        .ok_or("userID no configurado")?
         .to_string();
 
     // 2. Determinar si estamos en modo Invitado u Host propio.
@@ -90,6 +87,7 @@ pub async fn start_cloud_ws(
         .next()
         .map(str::to_string)
         .unwrap_or_else(|| "unknown".to_string());
+
     let mode = if settings
         .active_cloud_host_user_id
         .as_deref()
@@ -127,12 +125,8 @@ pub async fn stop_cloud_ws(cloud_state: State<'_, CloudWsState>) -> Result<(), S
 
 /// Envía una notificación de actividad de juego al servidor cloud.
 ///
-/// Este broadcast permite que otros usuarios vean qué estás jugando
-/// en tiempo real mediante notificaciones emergentes (overlay).
-///
-/// # Arguments
-/// * `game_id` - Identificador único del juego (normalmente el slug de Steam).
-/// * `game_name` - Nombre legible para mostrar en la notificación.
+/// Si el WS todavía no está listo (cold start), el mensaje se encola
+/// automáticamente y se envía en cuanto la conexión se establece.
 #[command]
 pub async fn send_cloud_broadcast(
     game_id: String,

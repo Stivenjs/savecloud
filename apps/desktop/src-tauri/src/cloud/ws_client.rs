@@ -2,6 +2,12 @@
 //!
 //! Este archivo gestiona la conexión cruda, el handshake TLS y el bucle de eventos
 //! de lectura/escritura para comunicarse con el servidor AWS WebSocket.
+//!
+//! ## Cambio respecto a la versión original
+//! Tras el `connect_async` exitoso se invoca `cloud_state.notify_ready()` para
+//! que el manager drene la cola de mensajes pendientes (cold-start buffer).
+//! El parámetro `ready_notify` es un `oneshot::Sender<()>` opcional que se
+//! consume en la primera conexión exitosa.
 
 use crate::commands::logs::sync_logger;
 use crate::plugins::log_buffer::{AppLogs, LogEntry};
@@ -10,21 +16,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use url::Url;
 
-/// Mensajes que el cliente puede recibir desde el servidor de la nube.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum CloudIncomingMessage {
-    /// Un amigo ha comenzado a jugar a algo.
     FriendPlaying { data: FriendPlayingData },
-    /// Cambio de presencia explícito (online/playing).
     PresenceUpdate { data: PresenceUpdateData },
-    /// Un error reportado por el servidor.
     Error { data: ErrorData },
-    /// Evento de signaling para sesiones de streaming P2P.
     StreamSignal { data: StreamSignalData },
 }
 
@@ -60,7 +61,6 @@ pub struct StreamSignalData {
     pub timestamp: u64,
 }
 
-/// Mensajes de salida que enviamos al servidor (broadcasts).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CloudBroadcastPayload {
@@ -91,15 +91,19 @@ pub enum CloudOutgoingMessage {
 /// Inicia el bucle de conexión WebSocket en un hilo de fondo.
 ///
 /// # Arguments
-/// * `app_handle` - Instancia de Tauri para emitir eventos al frontend.
-/// * `url_str` - URL completa del WebSocket (con apiKey/token ya incluidos).
-/// * `rx` - Canal de recepción de mensajes de salida desde el frontend.
-/// * `logs` - Buffer de logs en memoria para el usuario.
+/// * `app_handle`    - Instancia de Tauri para emitir eventos al frontend.
+/// * `url_str`       - URL completa del WebSocket (con apiKey/token ya incluidos).
+/// * `rx`            - Canal de recepción de mensajes de salida desde el frontend.
+/// * `logs`          - Buffer de logs en memoria para el usuario.
+/// * `ready_notify`  - Sender one-shot consumido una sola vez cuando la primera
+///                     conexión exitosa se establece. Permite al manager drenar
+///                     la cola de mensajes pendientes del cold start.
 pub async fn start_ws_loop(
     app_handle: AppHandle,
     url_str: String,
     mut rx: mpsc::UnboundedReceiver<CloudOutgoingMessage>,
     logs: AppLogs,
+    mut ready_notify: Option<oneshot::Sender<()>>,
 ) {
     let _url = match Url::parse(&url_str) {
         Ok(u) => u,
@@ -114,7 +118,7 @@ pub async fn start_ws_loop(
     loop {
         match connect_async(url_str.as_str()).await {
             Ok((ws_stream, _)) => {
-                backoff = Duration::from_secs(2); // Reset backoff
+                backoff = Duration::from_secs(2);
                 log_cloud(
                     &app_handle,
                     &logs,
@@ -122,6 +126,12 @@ pub async fn start_ws_loop(
                     "Conexión WebSocket establecida con éxito.",
                 )
                 .await;
+
+                // Se consume solo la primera vez (Option::take); en reconexiones
+                // el canal ya no existe y esto es un no-op.
+                if let Some(tx) = ready_notify.take() {
+                    let _ = tx.send(());
+                }
 
                 let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
@@ -140,21 +150,31 @@ pub async fn start_ws_loop(
                                     match serde_json::from_str::<CloudIncomingMessage>(&text) {
                                         Ok(incoming) => {
                                             if let CloudIncomingMessage::FriendPlaying { data } = &incoming {
-                                                log_cloud(&app_handle, &logs, "info", &format!("Amigo jugando: {} a {}", data.friend_user_id, data.game_name)).await;
+                                                log_cloud(
+                                                    &app_handle,
+                                                    &logs,
+                                                    "info",
+                                                    &format!(
+                                                        "Amigo jugando: {} a {}",
+                                                        data.friend_user_id, data.game_name
+                                                    ),
+                                                )
+                                                .await;
                                                 sync_logger::log_operation(
                                                     "cloud_ws_friend_playing_received",
                                                     &format!(
                                                         "friendUserId={} gameName={}",
-                                                        data.friend_user_id,
-                                                        data.game_name
+                                                        data.friend_user_id, data.game_name
                                                     ),
                                                 );
 
-                                                // Fallback robusto: disparar overlay desde Rust sin depender del puente TS.
                                                 let _ = crate::overlay::show_overlay_notification(
                                                     app_handle.clone(),
                                                     "Amigo jugando".to_string(),
-                                                    format!("{} esta jugando {}", data.friend_user_id, data.game_name),
+                                                    format!(
+                                                        "{} esta jugando {}",
+                                                        data.friend_user_id, data.game_name
+                                                    ),
                                                 )
                                                 .await;
                                             }
@@ -193,27 +213,48 @@ pub async fn start_ws_loop(
                                     }
                                 }
                                 Ok(Message::Close(_)) => {
-                                    log_cloud(&app_handle, &logs, "info", "Conexión cerrada por el servidor.").await;
+                                    log_cloud(
+                                        &app_handle,
+                                        &logs,
+                                        "info",
+                                        "Conexión cerrada por el servidor.",
+                                    )
+                                    .await;
                                     break;
                                 }
                                 Err(e) => {
-                                    log_cloud(&app_handle, &logs, "error", &format!("Error de red: {}", e)).await;
+                                    log_cloud(
+                                        &app_handle,
+                                        &logs,
+                                        "error",
+                                        &format!("Error de red: {}", e),
+                                    )
+                                    .await;
                                     break;
                                 }
                                 _ => {}
                             }
                         }
 
-                        // 2. Mensajes salientes de la UI (broadcasts)
                         Some(outgoing) = rx.recv() => {
                             let serialized = match outgoing {
-                                CloudOutgoingMessage::Broadcast(payload) => serde_json::to_string(&payload),
-                                CloudOutgoingMessage::StreamSignal(payload) => serde_json::to_string(&payload),
+                                CloudOutgoingMessage::Broadcast(payload) => {
+                                    serde_json::to_string(&payload)
+                                }
+                                CloudOutgoingMessage::StreamSignal(payload) => {
+                                    serde_json::to_string(&payload)
+                                }
                             };
 
                             if let Ok(text) = serialized {
                                 if let Err(e) = ws_sender.send(Message::Text(text.into())).await {
-                                    log_cloud(&app_handle, &logs, "error", &format!("Error enviando broadcast: {}", e)).await;
+                                    log_cloud(
+                                        &app_handle,
+                                        &logs,
+                                        "error",
+                                        &format!("Error enviando broadcast: {}", e),
+                                    )
+                                    .await;
                                 }
                             }
                         }
@@ -231,13 +272,12 @@ pub async fn start_ws_loop(
             }
         }
 
-        // Reintento con backoff exponencial
+        // Reintento con backoff exponencial (máx. 60 s)
         tokio::time::sleep(backoff).await;
         backoff = std::cmp::min(backoff * 2, Duration::from_secs(60));
     }
 }
 
-/// Helper para añadir logs al sistema interno de SaveCloud.
 async fn log_cloud(handle: &AppHandle, logs: &AppLogs, level: &str, message: &str) {
     let entry = LogEntry {
         timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
@@ -246,9 +286,6 @@ async fn log_cloud(handle: &AppHandle, logs: &AppLogs, level: &str, message: &st
         message: message.to_string(),
     };
 
-    // 1. Guardar en el buffer persistente en memoria
     logs.lock().await.push(entry.clone());
-
-    // 2. Emitir a la UI para que se vea en tiempo real
     let _ = handle.emit("plugin_log", entry);
 }
