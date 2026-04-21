@@ -16,7 +16,7 @@ export interface ListCloudPresenceOutput {
   items: CloudPresenceItem[];
 }
 
-const PLAYING_FRESHNESS_MS = 90_000;
+const PLAYING_FRESHNESS_MS = 135_000; // 3 × 45 s
 
 /**
  * Devuelve presencia para los usuarios de la misma nube compartida del solicitante.
@@ -73,6 +73,7 @@ export class ListCloudPresenceUseCase {
             (r) =>
               typeof r.lastActivityAt === "number" &&
               r.activityGameName &&
+              r.activityGameId &&
               now - r.lastActivityAt <= PLAYING_FRESHNESS_MS
           )
           .sort((a, b) => (b.lastActivityAt ?? 0) - (a.lastActivityAt ?? 0))[0];

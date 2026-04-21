@@ -10,7 +10,7 @@ import { formatGameDisplayName } from "@utils/gameImage";
 import { getFriendConfig, setCloudHostWsUrl } from "@services/tauri/config.service";
 
 /**
- * Mensaje recibido desde el WebSocket de la nube (Rust -> TS)
+ * Mensaje entrante desde el WebSocket de la nube (Rust → TS).
  */
 interface CloudIncomingMessage {
   type: "FRIEND_PLAYING" | "PRESENCE_UPDATE" | "ERROR" | "STREAM_SIGNAL";
@@ -31,29 +31,42 @@ interface CloudIncomingMessage {
 }
 
 /**
- * Hook personalizado para gestionar conexiones WebSocket con el servidor cloud.
+ * Gestiona la conexión WebSocket con el servidor cloud y el broadcast de
+ * presencia de juego en tiempo real.
  *
- * ## Cold-start
- * Cuando la app arranca con un juego ya corriendo, `send_cloud_broadcast` puede
- * llamarse antes de que el WS esté conectado.  El manager de Rust encola el
- * mensaje y lo envía en cuanto el handshake termina, por lo que desde TS no
- * necesitamos lógica de reintento adicional: el `invoke` siempre retorna `Ok`.
- *
- * Sin embargo, para mayor robustez, este hook también detecta si ya hay un juego
- * corriendo en el momento del montaje y emite un broadcast inmediato (que caerá
- * en la cola de Rust si el WS no está listo todavía).
+ * ## Cold-start buffer (Rust)
+ * Los broadcasts emitidos antes de que el handshake WS termine se encolan
+ * automáticamente en el manager de Rust y se envían en cuanto la conexión
+ * se establece.
  */
 export function useCloudWebSockets() {
   const { config, refetch } = useConfig();
   const { activeProfile } = useProfileSession();
   const queryClient = useQueryClient();
 
+  /**
+   * Snapshot del último mapa `gameId → isRunning` recibido desde Rust.
+   * Permite detectar transiciones sin depender del estado de React.
+   */
   const prevGameStatusRef = useRef<Record<string, boolean>>({});
+
+  /**
+   * `gameId` del juego cuyo broadcast fue enviado más recientemente,
+   * o `null` si no hay ningún juego activo.
+   */
   const lastBroadcastedGameIdRef = useRef<string | null>(null);
-  const lastBroadcastByGameRef = useRef<Record<string, number>>({});
+
+  /**
+   * Timestamp del último broadcast de *stop* por juego.
+   * Cooldown de 3 s para evitar spam si el proceso fluctúa al cerrar.
+   */
   const stopCooldownByGameRef = useRef<Record<string, number>>({});
 
+  /**
+   * Garantiza que el cold-start solo se ejecute una vez por montaje del hook.
+   */
   const initialReplayDoneRef = useRef(false);
+
   const activeUserId = activeProfile?.localUserId?.trim() ?? "";
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
 
@@ -81,40 +94,49 @@ export function useCloudWebSockets() {
             refetch();
           }
         } catch {
-          // Error silencioso
+          // Silencioso: Rust reportará el error de conexión.
         }
       }
 
-      // Rust maneja internamente la cola de mensajes pendientes;
-      // simplemente arrancamos el servicio.
       try {
         await invoke("start_cloud_ws");
       } catch {
-        // Error silencioso
+        // Silencioso: el manager de Rust loguea internamente.
       }
 
       if (isComponentMounted) {
         unlistenIncoming = await listen<CloudIncomingMessage>("cloud-ws-incoming", (event) => {
-          const msg = event.payload;
-          if (msg.type === "FRIEND_PLAYING") return;
+          const { type } = event.payload;
+          if (type === "FRIEND_PLAYING" || type === "PRESENCE_UPDATE") {
+            queryClient.invalidateQueries({ queryKey: ["cloud-presence"] });
+          }
         });
       }
     }
 
-    setupCloudService();
+    void setupCloudService();
 
     return () => {
       isComponentMounted = false;
       unlistenIncoming?.();
     };
-  }, [activeUserId, cloudConfig, refetch]);
+  }, [activeUserId, cloudConfig, refetch, queryClient]);
 
   useEffect(() => {
     if (!activeUserId) return;
 
+    /**
+     * TTL del backend: 90 s.
+     * Heartbeat cada 45 s = 50 % del TTL, margen suficiente para latencia.
+     */
     const BROADCAST_REFRESH_MS = 45_000;
+
+    /**
+     * Cooldown mínimo entre dos broadcasts de *stop* para el mismo juego.
+     */
     const STOP_BROADCAST_COOLDOWN_MS = 3_000;
 
+    let refreshIntervalId: ReturnType<typeof setInterval> | null = null;
     let unlistenStatus: (() => void) | undefined;
 
     function resolveGameName(gameId: string): string {
@@ -124,7 +146,13 @@ export function useCloudWebSockets() {
       return editionLabel ? `${baseDisplayName} (${editionLabel})` : baseDisplayName;
     }
 
-    function broadcastGameStart(gameId: string) {
+    /**
+     * Broadcast de INICIO de juego.
+     *
+     * Muestra el overlay en DEV y envía el primer heartbeat al servidor.
+     * Solo debe llamarse en la transición `stopped → running`.
+     */
+    function broadcastGameStart(gameId: string): void {
       if (!activeUserId) return;
 
       const gameName = resolveGameName(gameId);
@@ -141,7 +169,27 @@ export function useCloudWebSockets() {
       }
     }
 
-    function broadcastGameStop() {
+    /**
+     * Heartbeat silencioso: renueva el TTL en DynamoDB sin efectos secundarios.
+     *
+     * NO muestra overlay ni notificaciones. Es el único tipo de broadcast
+     * que se envía desde el timer de refresco periódico.
+     */
+    function refreshGamePresence(gameId: string): void {
+      if (!activeUserId) return;
+
+      const gameName = resolveGameName(gameId);
+
+      invoke("send_cloud_broadcast", { gameId, gameName })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["cloud-presence"] }))
+        .catch(() => {});
+      // Sin overlay, sin notificaciones.
+    }
+
+    /**
+     * Broadcast de FIN de juego (gameId y gameName vacíos = "online").
+     */
+    function broadcastGameStop(): void {
       if (!activeUserId) return;
 
       invoke("send_cloud_broadcast", { gameId: "", gameName: "" })
@@ -149,24 +197,66 @@ export function useCloudWebSockets() {
         .catch(() => {});
     }
 
+    /**
+     * Inicia (o reinicia) el timer de refresco periódico para `gameId`.
+     *
+     * Usa `refreshGamePresence` (silencioso) en lugar de `broadcastGameStart`
+     * para evitar que el overlay aparezca repetidamente.
+     *
+     * Si `lastBroadcastedGameIdRef` ya no apunta a este juego cuando el
+     * intervalo dispara, el timer se auto-cancela.
+     */
+    function startRefreshTimer(gameId: string): void {
+      if (refreshIntervalId !== null) {
+        clearInterval(refreshIntervalId);
+      }
+
+      refreshIntervalId = setInterval(() => {
+        if (lastBroadcastedGameIdRef.current === gameId) {
+          refreshGamePresence(gameId);
+        } else {
+          if (refreshIntervalId !== null) {
+            clearInterval(refreshIntervalId);
+            refreshIntervalId = null;
+          }
+        }
+      }, BROADCAST_REFRESH_MS);
+    }
+
+    function stopRefreshTimer(): void {
+      if (refreshIntervalId !== null) {
+        clearInterval(refreshIntervalId);
+        refreshIntervalId = null;
+      }
+    }
+
     if (!initialReplayDoneRef.current) {
       initialReplayDoneRef.current = true;
 
       invoke<Record<string, boolean>>("get_running_games_status")
         .then((currentStatus) => {
-          const now = Date.now();
           for (const [gameId, isRunning] of Object.entries(currentStatus)) {
             if (isRunning) {
               prevGameStatusRef.current[gameId] = true;
-              lastBroadcastByGameRef.current[gameId] = now;
               lastBroadcastedGameIdRef.current = gameId;
               broadcastGameStart(gameId);
+              startRefreshTimer(gameId);
             }
           }
         })
         .catch(() => {});
     }
 
+    /**
+     * Reacciona a cambios en el mapa `gameId → isRunning` emitido por Rust.
+     *
+     * Rust solo emite el evento cuando el mapa cambia, por lo que este
+     * listener NO se usa para el refresco periódico (eso lo hace el timer).
+     * Su responsabilidad es exclusivamente gestionar transiciones:
+     *
+     * - `stopped → running`: broadcast inicial + arrancar timer.
+     * - `running → stopped`: detener timer + broadcast de stop.
+     */
     const setupListener = async () => {
       try {
         unlistenStatus = await listen<Record<string, boolean>>("games-running-status", (event) => {
@@ -175,33 +265,22 @@ export function useCloudWebSockets() {
           const now = Date.now();
 
           for (const [gameId, isRunning] of Object.entries(currentStatus)) {
-            const wasNotRunning = !prevStatus[gameId];
             const wasRunning = !!prevStatus[gameId];
 
-            if (isRunning) {
-              const lastSentAt = lastBroadcastByGameRef.current[gameId] ?? 0;
-              const shouldRefresh = now - lastSentAt >= BROADCAST_REFRESH_MS;
-
-              if ((wasNotRunning || shouldRefresh) && lastBroadcastedGameIdRef.current !== gameId) {
-                lastBroadcastedGameIdRef.current = gameId;
-                lastBroadcastByGameRef.current[gameId] = now;
-                broadcastGameStart(gameId);
-
-                setTimeout(() => {
-                  if (lastBroadcastedGameIdRef.current === gameId) {
-                    lastBroadcastedGameIdRef.current = null;
-                  }
-                }, 5_000);
+            if (isRunning && !wasRunning) {
+              lastBroadcastedGameIdRef.current = gameId;
+              broadcastGameStart(gameId);
+              startRefreshTimer(gameId);
+            } else if (!isRunning && wasRunning) {
+              if (lastBroadcastedGameIdRef.current === gameId) {
+                lastBroadcastedGameIdRef.current = null;
+                stopRefreshTimer();
               }
-            } else {
-              delete lastBroadcastByGameRef.current[gameId];
 
-              if (wasRunning) {
-                const lastStopAt = stopCooldownByGameRef.current[gameId] ?? 0;
-                if (now - lastStopAt >= STOP_BROADCAST_COOLDOWN_MS) {
-                  stopCooldownByGameRef.current[gameId] = now;
-                  broadcastGameStop();
-                }
+              const lastStopAt = stopCooldownByGameRef.current[gameId] ?? 0;
+              if (now - lastStopAt >= STOP_BROADCAST_COOLDOWN_MS) {
+                stopCooldownByGameRef.current[gameId] = now;
+                broadcastGameStop();
               }
             }
           }
@@ -209,14 +288,15 @@ export function useCloudWebSockets() {
           prevGameStatusRef.current = { ...currentStatus };
         });
       } catch {
-        // Error silencioso en UI
+        // Fallback silencioso: el polling de presencia del backend lo cubre.
       }
     };
 
-    setupListener();
+    void setupListener();
 
     return () => {
       unlistenStatus?.();
+      stopRefreshTimer();
     };
   }, [activeUserId, config?.games, queryClient]);
 }

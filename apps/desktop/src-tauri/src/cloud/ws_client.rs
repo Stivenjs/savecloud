@@ -1,19 +1,11 @@
 //! Lógica de bajo nivel para el cliente WebSocket de SaveCloud.
-//!
-//! Este archivo gestiona la conexión cruda, el handshake TLS y el bucle de eventos
-//! de lectura/escritura para comunicarse con el servidor AWS WebSocket.
-//!
-//! ## Cambio respecto a la versión original
-//! Tras el `connect_async` exitoso se invoca `cloud_state.notify_ready()` para
-//! que el manager drene la cola de mensajes pendientes (cold-start buffer).
-//! El parámetro `ready_notify` es un `oneshot::Sender<()>` opcional que se
-//! consume en la primera conexión exitosa.
 
 use crate::commands::logs::sync_logger;
 use crate::plugins::log_buffer::{AppLogs, LogEntry};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, oneshot};
@@ -34,6 +26,8 @@ pub enum CloudIncomingMessage {
 pub struct FriendPlayingData {
     pub friend_user_id: String,
     pub game_name: String,
+    #[serde(default)]
+    pub game_id: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -115,10 +109,19 @@ pub async fn start_ws_loop(
 
     let mut backoff = Duration::from_secs(2);
 
+    // Mapa de deduplicación: friendUserId → último gameId notificado con overlay.
+    // Se resetea en cada reconexión para que, si el amigo estaba jugando cuando
+    // perdimos la conexión, volvamos a notificar al reconectar.
+    let mut last_friend_game: HashMap<String, String> = HashMap::new();
+
     loop {
         match connect_async(url_str.as_str()).await {
             Ok((ws_stream, _)) => {
                 backoff = Duration::from_secs(2);
+
+                // Resetear deduplicación en cada nueva conexión.
+                last_friend_game.clear();
+
                 log_cloud(
                     &app_handle,
                     &logs,
@@ -160,23 +163,40 @@ pub async fn start_ws_loop(
                                                     ),
                                                 )
                                                 .await;
+
                                                 sync_logger::log_operation(
                                                     "cloud_ws_friend_playing_received",
                                                     &format!(
-                                                        "friendUserId={} gameName={}",
-                                                        data.friend_user_id, data.game_name
+                                                        "friendUserId={} gameId={} gameName={}",
+                                                        data.friend_user_id,
+                                                        data.game_id,
+                                                        data.game_name
                                                     ),
                                                 );
 
-                                                let _ = crate::overlay::show_overlay_notification(
-                                                    app_handle.clone(),
-                                                    "Amigo jugando".to_string(),
-                                                    format!(
-                                                        "{} esta jugando {}",
-                                                        data.friend_user_id, data.game_name
-                                                    ),
-                                                )
-                                                .await;
+                                                let already_notified = last_friend_game
+                                                    .get(&data.friend_user_id)
+                                                    .map(|prev_id| prev_id == &data.game_id)
+                                                    .unwrap_or(false);
+
+                                                if !already_notified && !data.game_id.is_empty() {
+                                                    last_friend_game.insert(
+                                                        data.friend_user_id.clone(),
+                                                        data.game_id.clone(),
+                                                    );
+
+                                                    let _ = crate::overlay::show_overlay_notification(
+                                                        app_handle.clone(),
+                                                        "Amigo jugando".to_string(),
+                                                        format!(
+                                                            "{} está jugando {}",
+                                                            data.friend_user_id, data.game_name
+                                                        ),
+                                                    )
+                                                    .await;
+                                                } else if data.game_id.is_empty() {
+                                                    last_friend_game.remove(&data.friend_user_id);
+                                                }
                                             }
 
                                             let msg_kind = match &incoming {
@@ -272,7 +292,6 @@ pub async fn start_ws_loop(
             }
         }
 
-        // Reintento con backoff exponencial (máx. 60 s)
         tokio::time::sleep(backoff).await;
         backoff = std::cmp::min(backoff * 2, Duration::from_secs(60));
     }
