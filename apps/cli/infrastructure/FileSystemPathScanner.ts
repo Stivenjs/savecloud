@@ -32,8 +32,6 @@ function scanBasePaths(basePath: string, addCandidate: (c: PathCandidate) => voi
   }
 }
 
-// ─── Steam ──────────────────────────────────────────────────────────────────
-
 function findSteamUserDataCandidates(steamPath: string): PathCandidate[] {
   const userdataPath = join(steamPath, "userdata");
   if (!existsSync(userdataPath)) return [];
@@ -141,8 +139,6 @@ function containsSavesAtAnyDepth(dirPath: string, depth = 0): boolean {
 
   return false;
 }
-
-// ─── Scanner principal ──────────────────────────────────────────────────────
 
 export class FileSystemPathScanner implements PathScanner {
   async scan(extraPaths?: readonly string[]): Promise<PathCandidate[]> {

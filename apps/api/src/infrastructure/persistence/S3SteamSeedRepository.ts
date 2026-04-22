@@ -204,7 +204,6 @@ export class S3SteamSeedRepository {
    * - `keys: string[]` → devuelve `Promise<BatchDownloadResult[]>` (bulk, paralelo).
    */
   async getBatchDownloadUrl(ownerId: string, keyOrKeys: string | string[]): Promise<string | BatchDownloadResult[]> {
-    // ── Modo bulk ────────────────────────────────────────────────────────────
     if (Array.isArray(keyOrKeys)) {
       if (keyOrKeys.length === 0) return [];
 
@@ -241,7 +240,6 @@ export class S3SteamSeedRepository {
       return results;
     }
 
-    // ── Modo singular (backward-compat) ──────────────────────────────────────
     this.assertOwnedKey(ownerId, keyOrKeys);
     const command = new GetObjectCommand({ Bucket: this.bucketName, Key: keyOrKeys });
     return getSignedUrl(this.s3, command, { expiresIn: PRESIGN_EXPIRES_IN_SECONDS });
