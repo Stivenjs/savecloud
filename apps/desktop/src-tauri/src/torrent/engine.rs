@@ -772,15 +772,27 @@ pub fn spawn_progress_monitor(
 
         loop {
             interval.tick().await;
-
-            // Un único lookup por tick garantiza que la presencia del torrent y
-            // la lectura de sus estadísticas son consistentes entre sí.
+ 
+            // Si el motor ya no considera este torrent como activo (porque ha sido
+            // cancelado), detenemos el monitor de inmediato para evitar enviar
+            // eventos de progreso "fantasma" (ej. estado Pausado) al frontend.
+            if let Some(engine) = &engine_state {
+                let is_active = {
+                    let eng = engine.lock().await;
+                    eng.active.contains(&info_hash)
+                };
+                if !is_active {
+                    break;
+                }
+            }
+ 
             let managed = match session.get(id) {
                 Some(m) => m,
                 None => break,
             };
-
+ 
             let stats = managed.stats();
+
 
             // El snapshot `live` solo está presente mientras el torrent tiene
             // actividad de red. Si está ausente, todas las métricas de red se

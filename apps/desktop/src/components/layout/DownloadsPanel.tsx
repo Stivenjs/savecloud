@@ -128,6 +128,21 @@ export function DownloadsPanel() {
       .catch(() => {});
   }, []);
 
+  const onCancelSource = useCallback((jobId: string, infoHash?: string) => {
+    useSourcesDownloadsStore.getState().removeByJobId(jobId);
+    if (infoHash) {
+      useTorrentStore.getState().removeByHash(infoHash);
+    }
+
+    cancelSourceDownload(jobId)
+      .then(() => {
+        if (infoHash) {
+          cancelTorrent(infoHash).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const rows = useMemo<DownloadRow[]>(() => {
     const syncRows = Object.entries(syncTasks).map(([id, task]) => {
       const value = task.total > 0 ? Math.min(100, Math.round((task.loaded / task.total) * 100)) : 0;
@@ -225,6 +240,7 @@ export function DownloadsPanel() {
         total,
         speedBps: torrent ? torrent.downloadSpeedBytes : undefined,
         etaSeconds: torrent ? torrent.etaSeconds : undefined,
+        infoHash: torrent?.infoHash,
         // Las filas de sources con torrent también exponen peers y upload
         // para que el panel muestre la misma riqueza de información.
         torrentExtra: torrent
@@ -427,7 +443,7 @@ export function DownloadsPanel() {
                     {row.canCancel ? (
                       <button
                         className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-danger-50 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger-100"
-                        onClick={() => void cancelSourceDownload(row.jobId!)}>
+                        onClick={() => onCancelSource(row.jobId!, row.infoHash)}>
                         <X size={12} />
                         Cancelar
                       </button>
