@@ -40,7 +40,6 @@ export class BroadcastActivityUseCase {
     const resolvedGameName = input.gameName?.trim() || normalizedGameId || null;
     const isStopSignal = normalizedGameId === "";
 
-    // ── Resolver el host de la nube ──────────────────────────────────────────
     let activeCloudHostId = broadcasterId;
 
     const membershipsAsMember = await this.inviteRepository.listMembershipsForMember(broadcasterId);

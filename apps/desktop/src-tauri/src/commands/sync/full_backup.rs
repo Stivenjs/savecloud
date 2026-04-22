@@ -567,7 +567,6 @@ pub async fn create_and_upload_full_backup(
             }
         };
         let token_for_upload = shutdown_token.as_ref().map(|g| g.token());
-        // ───────────────────────────────────────────────────────────────────
 
         let upload_res = streaming::multipart::upload_tar_stream_multipart(
             rx,
