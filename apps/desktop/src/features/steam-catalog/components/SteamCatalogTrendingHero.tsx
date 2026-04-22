@@ -125,9 +125,9 @@ export function SteamCatalogTrendingHero({
             pauseOnMouseEnter: true,
           }}
           speed={520}
-          className="sg-trending-swiper overflow-hidden rounded-2xl border border-default-200/70 bg-content1 shadow-sm dark:border-default-100/15">
+          className="sg-trending-swiper min-h-[380px] overflow-hidden rounded-2xl border border-default-200/70 shadow-sm dark:border-default-100/15">
           {slides.map((featured, slideIndex) => (
-            <SwiperSlide key={featured.steamAppId}>
+            <SwiperSlide key={featured.steamAppId} className="!h-auto">
               <TrendingHeroSlide
                 featured={featured}
                 relatedItems={secondaryForSlide(slideIndex)}
@@ -137,11 +137,6 @@ export function SteamCatalogTrendingHero({
             </SwiperSlide>
           ))}
         </Swiper>
-
-        <div
-          className="sg-trending-pagination absolute bottom-4 left-1/2 -translate-x-1/2 z-50 w-full flex items-center justify-center gap-2 [&>.swiper-pagination-bullet]:h-2 [&>.swiper-pagination-bullet]:w-6 [&>.swiper-pagination-bullet]:rounded-full [&>.swiper-pagination-bullet]:bg-white/50 [&>.swiper-pagination-bullet-active]:h-2 [&>.swiper-pagination-bullet-active]:w-8 [&>.swiper-pagination-bullet-active]:bg-white"
-          aria-label="Paginacion destacados"
-        />
       </div>
     </section>
   );
