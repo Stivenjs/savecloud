@@ -23,7 +23,7 @@ pub const META_NAME_NORMALIZED_BACKFILL: &str = "name_normalized_backfill";
 pub const META_RANK_SCORE_BACKFILL: &str = "rank_score_backfill";
 /// Versión actual del backfill de scoring; incrementar si cambia la fórmula de scoring
 /// para forzar un recálculo global en el próximo arranque.
-pub const RANK_SCORE_BACKFILL_VERSION: &str = "0.1.1";
+pub const RANK_SCORE_BACKFILL_VERSION: &str = "0.1.0";
 
 pub fn get_meta(conn: &Connection, key: &str) -> Result<Option<String>, rusqlite::Error> {
     conn.query_row(

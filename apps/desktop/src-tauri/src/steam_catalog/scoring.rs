@@ -147,22 +147,33 @@ fn recency_score(data: &serde_json::Value, current_year: i32) -> i64 {
     (WEIGHT_RECENCY - age * 5_000).max(0)
 }
 
+fn type_adjustment_score(data: &serde_json::Value) -> i64 {
+    let app_type = data["type"].as_str().unwrap_or("game");
+
+    let is_dlc = app_type == "dlc"
+        || data["categories"]
+            .as_array()
+            .map(|cats| cats.iter().any(|c| c["id"].as_i64() == Some(21)))
+            .unwrap_or(false);
+
+    if is_dlc {
+        return -800_000;
+    }
+
+    match app_type {
+        "game" => 0,
+        "demo" => -400_000,
+        "music" | "soundtrack" | "video" | "advertising" => -1_000_000,
+        _ => -200_000,
+    }
+}
+
 pub fn compute_rank_score(details_json: &str) -> i64 {
     let Ok(root) = serde_json::from_str::<serde_json::Value>(details_json) else {
         return 0;
     };
 
-    let data = root.get("data").unwrap_or(&root);
-    let year = current_year();
-
-    let score = community_score(data)
-        + metacritic_score(data)
-        + vip_studio_score(data)
-        + quality_score(data)
-        + media_score(data)
-        + recency_score(data, year);
-
-    score.min(MAX_SCORE)
+    compute_rank_score_from_value(&root)
 }
 
 pub fn compute_rank_score_from_value(root: &serde_json::Value) -> i64 {
@@ -174,7 +185,8 @@ pub fn compute_rank_score_from_value(root: &serde_json::Value) -> i64 {
         + vip_studio_score(data)
         + quality_score(data)
         + media_score(data)
-        + recency_score(data, year);
+        + recency_score(data, year)
+        + type_adjustment_score(data);
 
     score.min(MAX_SCORE)
 }
@@ -321,11 +333,30 @@ mod tests {
     }
 
     #[test]
-    fn tie_breaker_penalizes_modern() {
+    fn tie_breaker_favors_modern() {
         let old = serde_json::to_string(&make_data(15000, "2008", 0, 0, "", vec!["X"])).unwrap();
 
         let new = serde_json::to_string(&make_data(3000000, "2024", 0, 0, "", vec!["X"])).unwrap();
 
-        assert!(compute_rank_score(&old) > compute_rank_score(&new));
+        assert!(compute_rank_score(&new) > compute_rank_score(&old));
+    }
+
+    #[test]
+    fn games_outrank_dlcs() {
+        let mut game_data = make_data(100, "2024", 0, 0, "", vec!["X"]);
+        game_data["data"]["type"] = serde_json::json!("game");
+
+        let mut dlc_data = make_data(101, "2024", 1000, 90, "English", vec!["Valve"]);
+        dlc_data["data"]["type"] = serde_json::json!("dlc");
+
+        let game_score = compute_rank_score_from_value(&game_data);
+        let dlc_score = compute_rank_score_from_value(&dlc_data);
+
+        assert!(
+            game_score > dlc_score,
+            "Game score ({}) should be > DLC score ({})",
+            game_score,
+            dlc_score
+        );
     }
 }
