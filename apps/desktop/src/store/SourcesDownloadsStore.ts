@@ -16,6 +16,7 @@ interface SourcesDownloadsStore {
   lastProgress: SourceDownloadJob | null;
   activeByJobId: Record<string, SourceDownloadJob>;
   activeCount: number;
+  tombstones: Set<string>;
   aggregateProgress: SourcesAggregate;
   hydrateActive: () => Promise<void>;
   upsertFromPayload: (payload: SourceProgressPayload) => void;
@@ -38,6 +39,7 @@ export const useSourcesDownloadsStore = create<SourcesDownloadsStore>((set) => (
   lastProgress: null,
   activeByJobId: {},
   activeCount: 0,
+  tombstones: new Set(),
   aggregateProgress: { loaded: 0, total: 0, percent: 0 },
   hydrateActive: async () => {
     try {
@@ -61,6 +63,10 @@ export const useSourcesDownloadsStore = create<SourcesDownloadsStore>((set) => (
   },
   upsertFromPayload: (payload) => {
     set((state) => {
+      if (state.tombstones.has(payload.jobId)) {
+        return state;
+      }
+
       const current = state.activeByJobId[payload.jobId];
       const nextJob: SourceDownloadJob = {
         jobId: payload.jobId,
@@ -92,16 +98,30 @@ export const useSourcesDownloadsStore = create<SourcesDownloadsStore>((set) => (
       };
     });
   },
-  removeByJobId: (jobId) =>
+  removeByJobId: (jobId) => {
     set((state) => {
       const next = { ...state.activeByJobId };
       delete next[jobId];
+
+      const nextTombstones = new Set(state.tombstones);
+      nextTombstones.add(jobId);
+
       return {
         activeByJobId: next,
         activeCount: Object.keys(next).length,
         aggregateProgress: buildAggregate(next),
+        tombstones: nextTombstones,
       };
-    }),
+    });
+
+    setTimeout(() => {
+      useSourcesDownloadsStore.setState((state) => {
+        const nextTombstones = new Set(state.tombstones);
+        nextTombstones.delete(jobId);
+        return { tombstones: nextTombstones };
+      });
+    }, 5000);
+  },
 }));
 
 let listenersInitialized = false;

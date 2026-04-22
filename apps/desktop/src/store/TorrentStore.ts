@@ -21,6 +21,7 @@ interface TorrentStore {
   progress: TorrentProgressState | null;
   activeByHash: Record<string, TorrentProgressState>;
   activeCount: number;
+  tombstones: Set<string>;
   setProgress: (progress: TorrentProgressState | null) => void;
   removeByHash: (infoHash: string) => void;
   hydrateActive: () => Promise<void>;
@@ -30,11 +31,16 @@ export const useTorrentStore = create<TorrentStore>((set) => ({
   progress: null,
   activeByHash: {},
   activeCount: 0,
+  tombstones: new Set(),
   setProgress: (progress) => {
     set((state) => {
       const next = { ...state.activeByHash };
 
       if (progress?.infoHash) {
+        if (state.tombstones.has(progress.infoHash)) {
+          return state;
+        }
+
         const isChecking =
           progress.state === "starting" &&
           progress.downloadSpeedBytes === 0 &&
@@ -67,13 +73,31 @@ export const useTorrentStore = create<TorrentStore>((set) => ({
       };
     });
   },
-  removeByHash: (infoHash) =>
+  removeByHash: (infoHash) => {
     set((state) => {
       const next = { ...state.activeByHash };
       delete next[infoHash];
+
+      const nextTombstones = new Set(state.tombstones);
+      nextTombstones.add(infoHash);
+
       const nextProgress = state.progress?.infoHash === infoHash ? null : state.progress;
-      return { activeByHash: next, activeCount: Object.keys(next).length, progress: nextProgress };
-    }),
+      return {
+        activeByHash: next,
+        activeCount: Object.keys(next).length,
+        progress: nextProgress,
+        tombstones: nextTombstones,
+      };
+    });
+
+    setTimeout(() => {
+      useTorrentStore.setState((state) => {
+        const nextTombstones = new Set(state.tombstones);
+        nextTombstones.delete(infoHash);
+        return { tombstones: nextTombstones };
+      });
+    }, 5000);
+  },
   hydrateActive: async () => {
     try {
       const hashes = await getActiveTorrentDownloads();

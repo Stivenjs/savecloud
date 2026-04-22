@@ -186,6 +186,7 @@ fn build_match_index() -> Result<Vec<IndexedSourceItem>, String> {
                 normalized_title: normalized,
                 token_hashes,
                 protocols,
+                file_size: item.file_size.clone(),
             });
         }
     }

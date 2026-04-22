@@ -86,6 +86,7 @@ export interface SourceBestMatch {
   item_title: string;
   score: number;
   protocols: string[];
+  file_size?: string | null;
 }
 
 export interface BatchImportItemResult {

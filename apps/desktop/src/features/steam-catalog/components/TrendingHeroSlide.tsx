@@ -53,8 +53,8 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
   const sideThumbs = gallery.slice(0, 4);
 
   return (
-    <div className="grid min-h-80 grid-cols-1 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
-      <article className="group relative min-h-72 overflow-hidden">
+    <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
+      <article className="group relative h-full overflow-hidden">
         {featuredImage ? (
           <img
             src={featuredImage}
@@ -93,7 +93,7 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
         </div>
       </article>
 
-      <aside className="relative border-t border-default-200/80 bg-[radial-gradient(circle_at_top,#0f2a4b_0%,#0b1a2d_42%,#0a1422_100%)] p-4 text-white lg:border-l lg:border-t-0 lg:border-default-100/15">
+      <aside className="relative flex flex-col justify-center border-t border-default-200/80 bg-[radial-gradient(circle_at_top,#0f2a4b_0%,#0b1a2d_42%,#0a1422_100%)] p-4 text-white lg:border-l lg:border-t-0 lg:border-default-100/15">
         <div className="space-y-3">
           <p className="text-3xl font-semibold leading-none tracking-tight">{featured.name}</p>
           <p className="text-3xl font-semibold leading-none tracking-tight text-primary">Recomendado</p>
