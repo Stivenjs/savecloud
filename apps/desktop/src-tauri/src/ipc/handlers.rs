@@ -164,5 +164,6 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::config::profile_cmds::set_always_show_selector_cmd,
         crate::config::profile_cmds::get_always_show_selector_cmd,
         crate::config::config_cmds::check_path_size,
+        crate::system::disk::get_available_disks,
     ])
 }

@@ -2,7 +2,6 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { CatalogListItem } from "@services/tauri";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
 import type { SourceBestMatch } from "@services/tauri";
-import { open } from "@tauri-apps/plugin-dialog";
 import { GameCard } from "@features/games/GameCard";
 import { GamesListMotionContainer, GamesListMotionItem } from "@features/games/GamesListMotion";
 import { catalogListItemToConfiguredGame } from "@features/steam-catalog/model/catalogConfiguredGame";
@@ -13,6 +12,8 @@ import { toastError, toastSuccess } from "@utils/toast";
 import { useNavigate } from "react-router-dom";
 import { useConfig } from "@hooks/useConfig";
 import type { ConfiguredGame } from "@app-types/config";
+import { useDisclosure } from "@heroui/react";
+import { InstallModal } from "@features/steam-catalog/components/InstallModal";
 
 type PickByGame = Record<string, string>;
 
@@ -148,6 +149,13 @@ export function SteamCatalogGrid({
 }: SteamCatalogGridProps) {
   const { config } = useConfig();
   const [pickByGame, setPickByGame] = useState<PickByGame>({});
+  const { isOpen, onOpen, onOpenChange } = useDisclosure();
+  const [installingGame, setInstallingGame] = useState<{
+    name: string;
+    size?: string | null;
+    image?: string | null;
+    chosen: SourceBestMatch;
+  } | null>(null);
 
   const matchByGameNameRef = useRef(matchByGameName);
   const pickByGameRef = useRef(pickByGame);
@@ -190,52 +198,83 @@ export function SteamCatalogGrid({
     setPickByGame((p) => ({ ...p, [gameName]: key }));
   }, []);
 
-  const handleInstall = useCallback(async (gameName: string) => {
-    const match = matchByGameNameRef.current[gameName];
-    const chosen = pickCandidate(match, pickByGameRef.current[gameName]);
-    if (!chosen) return;
+  const handleInstall = useCallback(
+    async (gameName: string) => {
+      const match = matchByGameNameRef.current[gameName];
+      const chosen = pickCandidate(match, pickByGameRef.current[gameName]);
+      if (!chosen) return;
 
-    const selectedPath = await open({
-      title: `Seleccionar carpeta para ${gameName}`,
-      directory: true,
-      multiple: false,
-    });
-    if (!selectedPath || typeof selectedPath !== "string") return;
+      const item = items.find((i) => i.name === gameName);
+      const media = item?.steamAppId ? mediaBySteamAppId?.[item.steamAppId] : null;
 
-    try {
-      await startSourceDownload({
-        sourceId: chosen.source_id,
-        itemId: chosen.item_id,
-        destinationDir: selectedPath.trim(),
-        preferredProtocol: null,
+      setInstallingGame({
+        name: gameName,
+        size: chosen.file_size,
+        image: media?.capsuleImage || media?.mediaUrls?.[0],
+        chosen,
       });
-      toastSuccess("Descarga iniciada", `Instalacion iniciada para ${gameName}.`);
-    } catch (e) {
-      toastError("No se pudo iniciar", e instanceof Error ? e.message : String(e));
-    }
-  }, []);
+      onOpen();
+    },
+    [items, mediaBySteamAppId, onOpen]
+  );
+
+  const handleConfirmInstall = useCallback(
+    async (selectedPath: string) => {
+      if (!installingGame) return;
+      const { name, chosen } = installingGame;
+
+      try {
+        await startSourceDownload({
+          sourceId: chosen.source_id,
+          itemId: chosen.item_id,
+          destinationDir: selectedPath.trim(),
+          preferredProtocol: null,
+        });
+
+        toastSuccess("Descarga iniciada", `Instalacion iniciada para ${name}.`);
+      } catch (e) {
+        toastError("No se pudo iniciar", e instanceof Error ? e.message : String(e));
+      }
+    },
+    [installingGame]
+  );
 
   return (
-    <GamesListMotionContainer className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5" listKey={listKey}>
-      {items.map((item) => {
-        const libraryGame = config?.games?.find(
-          (g) => (g.steamAppId && g.steamAppId === item.steamAppId) || g.id.toLowerCase() === item.name.toLowerCase()
-        );
+    <>
+      <GamesListMotionContainer
+        className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5"
+        listKey={listKey}>
+        {items.map((item) => {
+          const libraryGame = config?.games?.find(
+            (g) => (g.steamAppId && g.steamAppId === item.steamAppId) || g.id.toLowerCase() === item.name.toLowerCase()
+          );
 
-        return (
-          <CatalogGridItem
-            key={item.name}
-            item={item}
-            libraryGame={libraryGame}
-            mediaBySteamAppId={mediaBySteamAppId}
-            match={matchByGameName[item.name]}
-            selectKey={pickByGame[item.name]}
-            isMatchingPending={isMatchingPending}
-            onPickChange={handlePickChange}
-            onInstall={handleInstall}
-          />
-        );
-      })}
-    </GamesListMotionContainer>
+          return (
+            <CatalogGridItem
+              key={item.name}
+              item={item}
+              libraryGame={libraryGame}
+              mediaBySteamAppId={mediaBySteamAppId}
+              match={matchByGameName[item.name]}
+              selectKey={pickByGame[item.name]}
+              isMatchingPending={isMatchingPending}
+              onPickChange={handlePickChange}
+              onInstall={handleInstall}
+            />
+          );
+        })}
+      </GamesListMotionContainer>
+
+      {installingGame && (
+        <InstallModal
+          isOpen={isOpen}
+          onOpenChange={onOpenChange}
+          gameName={installingGame.name}
+          gameSizeStr={installingGame.size}
+          gameImage={installingGame.image}
+          onConfirm={handleConfirmInstall}
+        />
+      )}
+    </>
   );
 }

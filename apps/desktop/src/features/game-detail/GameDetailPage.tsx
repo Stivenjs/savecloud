@@ -4,10 +4,10 @@ import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { open } from "@tauri-apps/plugin-dialog";
+
 import { Button, Select, SelectItem, Spinner, Tab, Tabs, Skeleton } from "@heroui/react";
 import { ArrowLeft, Cpu, Gamepad2, LayoutList, ScrollText } from "lucide-react";
-import { formatGameDisplayName } from "@utils/gameImage";
+import { formatGameDisplayName, getGameImageUrl } from "@utils/gameImage";
 import { launchGame, openSaveFolder, removeGame, scheduleConfigBackupToCloud } from "@services/tauri";
 import { sourcesFindMatchForGame, startSourceDownload } from "@services/tauri";
 import { createShareLink } from "@/services/tauri/share.service";
@@ -23,6 +23,9 @@ import { useGameDetailCloudActions } from "@/hooks/useGameDetailCloudActions";
 import { GameDetailHero } from "@features/game-detail/GameDetailHero";
 import { GameDetailActionStrip } from "@features/game-detail/GameDetailActionStrip";
 import { GameDetailSyncSetupBanner } from "@features/game-detail/GameDetailSyncSetupBanner";
+import { InstallModal } from "@features/steam-catalog/components/InstallModal";
+import { useDisclosure } from "@heroui/react";
+
 import {
   GameDetailLocalSummary,
   GameDetailRequirementsPanel,
@@ -40,7 +43,9 @@ export function GameDetailPage() {
   const {
     gameId,
     game,
+    steamAppId,
     steamDetails,
+
     stats,
     isGameRunning,
     mediaUrls,
@@ -57,6 +62,15 @@ export function GameDetailPage() {
   const [gameForTorrent, setGameForTorrent] = useState<ConfiguredGame | null>(null);
   const [gameToFullBackupConfirm, setGameToFullBackupConfirm] = useState<ConfiguredGame | null>(null);
   const [gameToRestoreBackup, setGameToRestoreBackup] = useState<ConfiguredGame | null>(null);
+  const {
+    isOpen: isInstallModalOpen,
+    onOpen: onInstallModalOpen,
+    onOpenChange: onInstallModalOpenChange,
+  } = useDisclosure();
+  const [installingFromSource, setInstallingFromSource] = useState<{
+    size?: string | null;
+    image?: string | null;
+  } | null>(null);
 
   useLayoutEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -191,26 +205,38 @@ export function GameDetailPage() {
   const handleInstallFromSources = useCallback(async () => {
     const chosen = pickCandidate(sourceCandidates, selectedSourceKey);
     if (!chosen) return;
-    const selectedPath = await open({
-      title: `Seleccionar carpeta para ${displayName}`,
-      directory: true,
-      multiple: false,
+
+    setInstallingFromSource({
+      size: chosen.file_size,
+      image:
+        steamDetails?.media.capsuleImage ||
+        steamDetails?.headerImage ||
+        (game ? getGameImageUrl(game, steamAppId) : null) ||
+        steamDetails?.media.mediaUrls?.[0],
     });
-    if (!selectedPath || typeof selectedPath !== "string") {
-      return;
-    }
-    try {
-      await startSourceDownload({
-        sourceId: chosen.source_id,
-        itemId: chosen.item_id,
-        destinationDir: selectedPath.trim(),
-        preferredProtocol: null,
-      });
-      toastSuccess("Descarga iniciada", `Instalacion iniciada para ${displayName}.`);
-    } catch (e) {
-      toastError("No se pudo iniciar", e instanceof Error ? e.message : "Error inesperado");
-    }
-  }, [sourceCandidates, selectedSourceKey, displayName]);
+
+    onInstallModalOpen();
+  }, [sourceCandidates, selectedSourceKey, steamDetails, game, steamAppId, onInstallModalOpen]);
+
+  const handleConfirmInstall = useCallback(
+    async (selectedPath: string) => {
+      const chosen = pickCandidate(sourceCandidates, selectedSourceKey);
+      if (!chosen) return;
+
+      try {
+        await startSourceDownload({
+          sourceId: chosen.source_id,
+          itemId: chosen.item_id,
+          destinationDir: selectedPath.trim(),
+          preferredProtocol: null,
+        });
+        toastSuccess("Descarga iniciada", `Instalacion iniciada para ${displayName}.`);
+      } catch (e) {
+        toastError("No se pudo iniciar", e instanceof Error ? e.message : "Error inesperado");
+      }
+    },
+    [sourceCandidates, selectedSourceKey, displayName]
+  );
 
   if (isLoading) {
     return (
@@ -428,6 +454,16 @@ export function GameDetailPage() {
           <h2 className="mb-6 text-lg font-semibold tracking-tight text-foreground">Resumen</h2>
           <GameDetailLocalSummary game={game} />
         </section>
+      )}
+      {installingFromSource && (
+        <InstallModal
+          isOpen={isInstallModalOpen}
+          onOpenChange={onInstallModalOpenChange}
+          gameName={displayName}
+          gameSizeStr={installingFromSource.size}
+          gameImage={installingFromSource.image}
+          onConfirm={handleConfirmInstall}
+        />
       )}
     </div>
   );
