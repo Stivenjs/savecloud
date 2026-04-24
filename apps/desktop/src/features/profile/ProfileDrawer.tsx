@@ -250,7 +250,7 @@ export function ProfileDrawer({
                 {frameResolved && (
                   <img
                     src={frameResolved}
-                    alt=""
+                    alt="user frame"
                     decoding="async"
                     className="pointer-events-none absolute inset-0 size-full object-contain"
                   />
