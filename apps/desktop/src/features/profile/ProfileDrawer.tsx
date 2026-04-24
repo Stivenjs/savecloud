@@ -233,9 +233,10 @@ export function ProfileDrawer({
             ) : (
               <div className="absolute inset-0 bg-[linear-gradient(125deg,#1b2838_0%,#0e1621_45%,#1b2838_100%)]" />
             )}
-            <div className="absolute inset-0 bg-linear-to-t from-content1 via-content1/45 to-transparent" />
+            {/* Gradiente más oscuro y alto para máxima legibilidad */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-linear-to-t from-black/90 via-black/30 to-transparent z-10" />
 
-            <div className="absolute inset-x-0 bottom-0 flex items-end gap-4 px-4 pb-3">
+            <div className="absolute inset-x-0 bottom-0 flex items-end gap-4 px-4 pb-3 z-20">
               {/* Avatar */}
               <div className="relative size-18 shrink-0">
                 <div className="relative size-full overflow-hidden rounded-md border border-white/10 bg-black/30 shadow-lg">
@@ -259,19 +260,27 @@ export function ProfileDrawer({
 
               {/* Name + meta */}
               <div className="min-w-0 flex-1 pb-1">
-                <h2 className="truncate text-lg font-semibold text-foreground">{displayName}</h2>
+                <h2 className="truncate text-lg font-semibold text-foreground drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+                  {displayName}
+                </h2>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                  <span className={`font-medium ${conn.tone}`}>{conn.text}</span>
-                  {showPresenceChip ? <span className="text-default-400">·</span> : null}
+                  <span className={`font-medium ${conn.tone} drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]`}>
+                    {conn.text}
+                  </span>
                   {showPresenceChip ? (
-                    <span className="inline-flex items-center">
+                    <span className="text-default-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">·</span>
+                  ) : null}
+                  {showPresenceChip ? (
+                    <span className="inline-flex items-center drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
                       <PresenceStatusChip loading={cloudPresenceLoading} status={ownPresence?.status} />
                     </span>
                   ) : null}
-                  <span className="text-default-400">·</span>
-                  <span className="text-default-500">{formatPlaytime(totalSeconds)} jugados</span>
-                  <span className="text-default-400">·</span>
-                  <span className="text-default-500">
+                  <span className="text-default-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">·</span>
+                  <span className="text-default-500 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+                    {formatPlaytime(totalSeconds)} jugados
+                  </span>
+                  <span className="text-default-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">·</span>
+                  <span className="text-default-500 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
                     {gamesCount} {gamesCount === 1 ? "juego" : "juegos"}
                   </span>
                 </div>
