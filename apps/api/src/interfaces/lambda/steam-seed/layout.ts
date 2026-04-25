@@ -8,7 +8,10 @@ export const STEAM_SEED_MANIFEST_PREFIX = "manifest/part-";
 export const STEAM_SEED_MANIFEST_SUFFIX = ".txt";
 export const STEAM_SEED_BATCHES_PREFIX = "batches/";
 
-/** Alineado con filtros “full” del desktop (`steam/appdetails.rs`). */
+export const STEAM_REVIEWS_STATE_KEY = "reviews_state.json";
+export const STEAM_REVIEWS_BATCHES_PREFIX = "reviews/batches/";
+
+/** Alineado con filtros "full" del desktop (`steam/appdetails.rs`). */
 export const DEFAULT_STEAM_FILTERS = "basic,developers,publishers,genres,categories,release_date,screenshots,movies";
 
 export function manifestPartKey(partIndex: number): string {
@@ -18,4 +21,8 @@ export function manifestPartKey(partIndex: number): string {
 
 export function batchKey(batchSeq: number): string {
   return `${STEAM_SEED_BATCHES_PREFIX}${String(batchSeq).padStart(8, "0")}.jsonl`;
+}
+
+export function reviewsBatchKey(batchSeq: number): string {
+  return `${STEAM_REVIEWS_BATCHES_PREFIX}${String(batchSeq).padStart(8, "0")}.jsonl`;
 }

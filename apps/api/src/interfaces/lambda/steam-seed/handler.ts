@@ -3,12 +3,22 @@ import type { Context } from "aws-lambda";
 import { DEFAULT_STEAM_FILTERS } from "@interfaces/lambda/steam-seed/layout";
 import { pickOwnerIdAuto } from "@interfaces/lambda/steam-seed/owners";
 import { runSteamSeedTick } from "@interfaces/lambda/steam-seed/run";
+import { runReviewsTick } from "@interfaces/lambda/steam-seed/run_reviews";
 
 /**
  * Entry point del worker `steamSeedWorker`.
  *
  * - `event.ownerId` (opcional): fuerza el owner a procesar (útil para invocación manual).
  * - En ejecución programada sin owner, hace auto-discovery + round-robin.
+ *
+ * Cada invocación ejecuta dos ticks secuenciales:
+ *   1. Tick de detalles de apps  (comportamiento existente, sin cambios)
+ *   2. Tick de reseñas           (nuevo — itera sobre processed_appids.json)
+ *
+ * Ambos ticks son independientes: si uno está en backoff o completo, el otro
+ * continúa con normalidad. Los errores del tick de reseñas se registran pero NO
+ * provocan que el Lambda lance una excepción — el progreso de detalles nunca es
+ * bloqueado por las reseñas.
  */
 export async function handler(_event: unknown, _context: Context): Promise<Record<string, unknown>> {
   const requestId =
@@ -54,33 +64,70 @@ export async function handler(_event: unknown, _context: Context): Promise<Recor
       })
     );
 
-    const result = await runSteamSeedTick({ s3, bucket, seedPrefix });
+    const detailsResult = await runSteamSeedTick({ s3, bucket, seedPrefix });
 
     console.log(
       JSON.stringify({
         msg: "steam-seed.done",
         requestId,
-        seedPrefix: result.seedPrefix,
-        reason: result.reason ?? null,
-        priorityChangedDetected: result.priorityChangedDetected ?? false,
-        wroteBatchKey: result.wroteBatchKey ?? null,
-        done: result.done,
-        backoffUntil: result.stateAfter.backoffUntil,
-        catalogComplete: result.stateAfter.catalogComplete,
-        totals: result.stateAfter.totals,
+        seedPrefix: detailsResult.seedPrefix,
+        reason: detailsResult.reason ?? null,
+        priorityChangedDetected: detailsResult.priorityChangedDetected ?? false,
+        wroteBatchKey: detailsResult.wroteBatchKey ?? null,
+        done: detailsResult.done,
+        backoffUntil: detailsResult.stateAfter.backoffUntil,
+        catalogComplete: detailsResult.stateAfter.catalogComplete,
+        totals: detailsResult.stateAfter.totals,
       })
     );
 
+    let reviewsResult: Awaited<ReturnType<typeof runReviewsTick>> | null = null;
+    try {
+      reviewsResult = await runReviewsTick({ s3, bucket, seedPrefix });
+
+      console.log(
+        JSON.stringify({
+          msg: "steam-reviews.done",
+          requestId,
+          seedPrefix: reviewsResult.seedPrefix,
+          reason: reviewsResult.reason ?? null,
+          wroteBatchKey: reviewsResult.wroteBatchKey ?? null,
+          done: reviewsResult.done,
+          backoffUntil: reviewsResult.stateAfter.backoffUntil,
+          offset: reviewsResult.stateAfter.offset,
+          totals: reviewsResult.stateAfter.totals,
+        })
+      );
+    } catch (reviewsErr) {
+      console.error(
+        JSON.stringify({
+          msg: "steam-reviews.error",
+          requestId,
+          errorName: reviewsErr instanceof Error ? reviewsErr.name : typeof reviewsErr,
+          errorMessage: reviewsErr instanceof Error ? reviewsErr.message : String(reviewsErr),
+          errorStack: reviewsErr instanceof Error ? reviewsErr.stack : undefined,
+        })
+      );
+    }
+
     return {
       ok: true,
-      seedPrefix: result.seedPrefix,
-      reason: result.reason,
-      priorityChangedDetected: result.priorityChangedDetected ?? false,
-      wroteBatchKey: result.wroteBatchKey,
-      done: result.done,
-      totals: result.stateAfter.totals,
-      // Campo útil para debugging rápido de configuración.
+      seedPrefix: detailsResult.seedPrefix,
+      reason: detailsResult.reason,
+      priorityChangedDetected: detailsResult.priorityChangedDetected ?? false,
+      wroteBatchKey: detailsResult.wroteBatchKey,
+      done: detailsResult.done,
+      totals: detailsResult.stateAfter.totals,
       steamFiltersEffective: process.env.STEAM_FILTERS ?? DEFAULT_STEAM_FILTERS,
+      reviews: reviewsResult
+        ? {
+            reason: reviewsResult.reason,
+            wroteBatchKey: reviewsResult.wroteBatchKey,
+            done: reviewsResult.done,
+            offset: reviewsResult.stateAfter.offset,
+            totals: reviewsResult.stateAfter.totals,
+          }
+        : null,
     };
   } catch (err) {
     console.error(

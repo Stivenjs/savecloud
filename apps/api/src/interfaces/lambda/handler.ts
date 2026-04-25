@@ -14,28 +14,39 @@ import { DynamoDbGameStatRepository } from "@infrastructure/persistence/DynamoDb
 import { DynamoDbSaveFileIndexRepository } from "@infrastructure/persistence/DynamoDbSaveFileIndexRepository";
 import { DynamoDbConnectionRepository } from "@infrastructure/persistence/DynamoDbConnectionRepository";
 
-const bucketName = process.env.BUCKET_NAME ?? "";
-const gameStatsTable = process.env.GAME_STATS_TABLE ?? "";
-const saveFilesIndexTable = process.env.SAVE_FILES_INDEX_TABLE ?? "";
-const connectionsTable = process.env.CONNECTIONS_TABLE ?? "";
+function requireEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`[bootstrap] Missing required env var: ${name}`);
+  return value;
+}
 
-const httpsAgent = new Agent({
-  keepAlive: true,
-  maxSockets: 250,
-});
+function optionalEnv(name: string): string | undefined {
+  return process.env[name]?.trim() || undefined;
+}
+
+const bucketName = requireEnv("BUCKET_NAME");
+const gameStatsTable = requireEnv("GAME_STATS_TABLE");
+const saveFilesIndexTable = optionalEnv("SAVE_FILES_INDEX_TABLE");
+const connectionsTable = optionalEnv("CONNECTIONS_TABLE");
+const awsRegion = requireEnv("AWS_REGION");
 
 const s3 = new S3Client({
-  region: process.env.AWS_REGION ?? "us-east-2",
+  region: awsRegion,
   useAccelerateEndpoint: process.env.USE_ACCELERATE_ENDPOINT === "true",
   requestHandler: new NodeHttpHandler({
-    httpsAgent,
+    httpsAgent: new Agent({ keepAlive: true, maxSockets: 250 }),
     connectionTimeout: 300,
     socketTimeout: 3000,
   }),
 });
 
 const dynamoClient = new DynamoDBClient({
-  region: process.env.AWS_REGION ?? "us-east-2",
+  region: awsRegion,
+  requestHandler: new NodeHttpHandler({
+    httpsAgent: new Agent({ keepAlive: true, maxSockets: 100 }),
+    connectionTimeout: 300,
+    socketTimeout: 3000,
+  }),
 });
 
 const saveRepository = new S3SaveRepository(s3, bucketName);
@@ -51,10 +62,15 @@ const connectionRepository = connectionsTable
   ? new DynamoDbConnectionRepository(dynamoClient, connectionsTable)
   : undefined;
 
-let cachedProxy: ((event: APIGatewayProxyEvent, context: Context) => Promise<APIGatewayProxyResult>) | null = null;
+type Proxy = (event: APIGatewayProxyEvent, context: Context) => Promise<APIGatewayProxyResult>;
 
-async function getProxy() {
-  if (!cachedProxy) {
+let proxyPromise: Promise<Proxy> | null = null;
+
+function initProxy(): Promise<Proxy> {
+  proxyPromise ??= (async (): Promise<Proxy> => {
+    const start = Date.now();
+    console.info("[bootstrap] Cold start — initializing app");
+
     const app = await buildApp({
       saveRepository,
       saveFileIndexRepository,
@@ -66,23 +82,26 @@ async function getProxy() {
       connectionRepository,
     });
 
-    cachedProxy = awsLambdaFastify(app, {
+    const proxy = awsLambdaFastify<APIGatewayProxyEvent>(app, {
       binaryMimeTypes: ["application/octet-stream"],
       callbackWaitsForEmptyEventLoop: false,
     });
 
     await app.ready();
-  }
 
-  return cachedProxy;
+    console.info(`[bootstrap] App ready in ${Date.now() - start}ms`);
+    return proxy;
+  })();
+
+  return proxyPromise;
 }
 
 /**
  * Handler de Lambda: delega en Fastify vía @fastify/aws-lambda.
- * La app se reutiliza entre invocaciones (cache) para reducir cold starts.
+ * La app se construye una sola vez y se reutiliza entre invocaciones (warm start).
  */
 export async function handler(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
   context.callbackWaitsForEmptyEventLoop = false;
-  const proxy = await getProxy();
+  const proxy = await initProxy();
   return proxy(event, context);
 }
