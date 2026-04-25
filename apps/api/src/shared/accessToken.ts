@@ -6,6 +6,8 @@ type AccessTokenPayloadV1 = {
   exp: number; // unix seconds
 };
 
+export type VerifiedToken = Readonly<{ userId: string; exp: number }>;
+
 function base64UrlEncode(input: Buffer | string): string {
   const buf = typeof input === "string" ? Buffer.from(input, "utf8") : input;
   return buf.toString("base64").replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
@@ -19,31 +21,53 @@ function base64UrlDecodeToBuffer(input: string): Buffer {
 }
 
 function getSecret(): string {
-  // Si quieres rotar sin tocar el API_KEY global, define ACCESS_TOKEN_SECRET.
   return process.env.ACCESS_TOKEN_SECRET?.trim() || process.env.API_KEY?.trim() || "";
 }
 
-function sign(secret: string, data: string): string {
-  return createHmac("sha256", secret).update(data).digest("base64url");
+/**
+ * Firma `data` con HMAC-SHA256 y devuelve bytes crudos en un Buffer.
+ * Comparar buffers de bytes (no strings) hace que timingSafeEqual sea correcto.
+ */
+function signToBuffer(secret: string, data: string): Buffer {
+  return createHmac("sha256", secret).update(data).digest();
 }
 
+/**
+ * Emite un token de acceso firmado para `userId` con TTL en segundos.
+ * Lanza si el secreto no está configurado o si los argumentos son inválidos.
+ */
 export function issueUserAccessToken(userId: string, ttlSeconds: number): string {
   const secret = getSecret();
   if (!secret) {
     throw new Error("ACCESS_TOKEN_SECRET (or API_KEY) is not configured");
   }
+
+  const trimmed = userId.trim();
+  if (!trimmed) {
+    throw new Error("userId must not be empty");
+  }
+
+  if (!Number.isFinite(ttlSeconds) || ttlSeconds < 60) {
+    throw new Error(`ttlSeconds must be a finite number ≥ 60, got: ${ttlSeconds}`);
+  }
+
   const now = Math.floor(Date.now() / 1000);
   const payload: AccessTokenPayloadV1 = {
     v: 1,
-    sub: userId.trim(),
-    exp: now + Math.max(60, ttlSeconds),
+    sub: trimmed,
+    exp: now + ttlSeconds,
   };
+
   const body = base64UrlEncode(JSON.stringify(payload));
-  const sig = sign(secret, body);
+  const sig = base64UrlEncode(signToBuffer(secret, body));
   return `sc1.${body}.${sig}`;
 }
 
-export function verifyUserAccessToken(token: string): { userId: string; exp: number } | null {
+/**
+ * Verifica la firma y la vigencia del token.
+ * Devuelve `{ userId, exp }` si es válido, o `null` en cualquier otro caso.
+ */
+export function verifyUserAccessToken(token: string): VerifiedToken | null {
   const secret = getSecret();
   if (!secret) {
     console.error("[auth:token] FATAL: ACCESS_TOKEN_SECRET/API_KEY is not set — cannot verify tokens");
@@ -51,17 +75,27 @@ export function verifyUserAccessToken(token: string): { userId: string; exp: num
   }
 
   const raw = token.trim();
-  const parts = raw.split(".");
-  if (parts.length !== 3) return null;
-  const [prefix, body, sig] = parts;
-  if (prefix !== "sc1") return null;
-  if (!body || !sig) return null;
 
-  const expectedSig = sign(secret, body);
-  const a = Buffer.from(sig);
-  const b = Buffer.from(expectedSig);
-  if (a.length !== b.length) return null;
-  if (!timingSafeEqual(a, b)) return null;
+  const firstDot = raw.indexOf(".");
+  const lastDot = raw.lastIndexOf(".");
+  if (firstDot === lastDot || firstDot === -1) return null;
+
+  const prefix = raw.slice(0, firstDot);
+  const body = raw.slice(firstDot + 1, lastDot);
+  const sig = raw.slice(lastDot + 1);
+
+  if (prefix !== "sc1" || !body || !sig) return null;
+
+  const expectedSigBuf = signToBuffer(secret, body);
+  let receivedSigBuf: Buffer;
+  try {
+    receivedSigBuf = base64UrlDecodeToBuffer(sig);
+  } catch {
+    return null;
+  }
+
+  if (receivedSigBuf.length !== expectedSigBuf.length) return null;
+  if (!timingSafeEqual(receivedSigBuf, expectedSigBuf)) return null;
 
   let parsed: AccessTokenPayloadV1;
   try {
@@ -78,5 +112,5 @@ export function verifyUserAccessToken(token: string): { userId: string; exp: num
   const now = Math.floor(Date.now() / 1000);
   if (parsed.exp <= now) return null;
 
-  return { userId: parsed.sub.trim(), exp: parsed.exp };
+  return Object.freeze({ userId: parsed.sub.trim(), exp: parsed.exp });
 }
