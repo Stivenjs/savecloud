@@ -2,6 +2,8 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
 
 const USER_ID_HEADER = "x-user-id";
+const MAX_TTL_SECONDS = 365 * 24 * 60 * 60;
+const DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 function getUserId(request: FastifyRequest): string {
   const userId = request.headers[USER_ID_HEADER];
@@ -19,51 +21,68 @@ function getBaseUrl(request: FastifyRequest): string {
   return `${proto}://${host}`;
 }
 
+function resolveTtlSeconds(expiresInDays: unknown): number {
+  if (typeof expiresInDays === "number" && expiresInDays > 0) {
+    return Math.min(Math.floor(expiresInDays * 24 * 60 * 60), MAX_TTL_SECONDS);
+  }
+  return DEFAULT_TTL_SECONDS;
+}
+
 export async function registerShareRoutes(app: FastifyInstance, shareTokenStore: ShareTokenS3): Promise<void> {
   app.post<{
     Body: { gameId?: string; expiresInDays?: number };
   }>("/share", async (request, reply: FastifyReply) => {
     const userId = getUserId(request);
     const { gameId, expiresInDays } = request.body ?? {};
+
     if (!gameId?.trim()) {
-      return reply.status(400).send({
-        error: "Bad Request",
-        message: "gameId is required",
-      });
+      return reply.status(400).send({ error: "Bad Request", message: "gameId is required" });
     }
-    const ttlSeconds =
-      typeof expiresInDays === "number" && expiresInDays > 0
-        ? Math.min(expiresInDays * 24 * 60 * 60, 365 * 24 * 60 * 60)
-        : 7 * 24 * 60 * 60;
-    const { token } = await shareTokenStore.createToken(userId, gameId.trim(), ttlSeconds);
-    const baseUrl = getBaseUrl(request);
-    const shareUrl = `${baseUrl}/share/${token}`;
-    return reply.send({ token, shareUrl });
+
+    const ttlSeconds = resolveTtlSeconds(expiresInDays);
+    const { token, expiresAt } = await shareTokenStore.createToken(userId, gameId.trim(), ttlSeconds);
+    const shareUrl = `${getBaseUrl(request)}/share/${token}`;
+
+    return reply.status(201).send({ token, shareUrl, expiresAt });
   });
 
   app.get<{ Params: { token: string } }>(
     "/share/:token",
     {
       config: {
-        rateLimit: {
-          max: 30,
-          timeWindow: "1 minute",
-        },
+        rateLimit: { max: 30, timeWindow: "1 minute" },
       },
     },
     async (request, reply: FastifyReply) => {
       const { token } = request.params;
-      const payload = await shareTokenStore.getToken(token);
-      if (!payload) {
-        return reply.status(404).send({
-          error: "Not Found",
-          message: "Link inválido o expirado",
-        });
+      const result = await shareTokenStore.getToken(token);
+
+      switch (result.status) {
+        case "ok":
+          return reply.send({
+            userId: result.payload.userId,
+            gameId: result.payload.gameId,
+            expiresAt: result.payload.expiresAt,
+          });
+
+        case "expired":
+          return reply.status(410).send({
+            error: "Gone",
+            message: "Este enlace ha expirado",
+          });
+
+        case "not_found":
+          return reply.status(404).send({
+            error: "Not Found",
+            message: "Enlace inválido",
+          });
+
+        case "error":
+          return reply.status(502).send({
+            error: "Bad Gateway",
+            message: "No se pudo verificar el enlace, intenta de nuevo",
+          });
       }
-      return reply.send({
-        userId: payload.userId,
-        gameId: payload.gameId,
-      });
     }
   );
 }
