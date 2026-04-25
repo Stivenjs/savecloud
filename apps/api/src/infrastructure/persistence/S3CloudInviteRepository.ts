@@ -122,6 +122,15 @@ export class S3CloudInviteRepository implements CloudInviteRepository {
     await this.putJson(this.sharedGamesKey(hostUserId, memberUserId), file);
   }
 
+  /**
+   * Lee una invitación de S3, independientemente de si ha caducado.
+   * Se utiliza internamente para la consulta de membresías: la caducidad de una invitación NO
+   * desactiva la membresía que creó.
+   */
+  private async getInviteByIdIgnoreExpiry(id: string): Promise<CloudInvite | null> {
+    return this.getJsonOrNull<CloudInvite>(this.inviteItemKey(id));
+  }
+
   async createInvite(input: CreateInviteInput): Promise<CloudInvite> {
     const now = nowIso();
     const ttl = Math.max(60, input.ttlSeconds);
@@ -219,7 +228,9 @@ export class S3CloudInviteRepository implements CloudInviteRepository {
     for (const idxKey of inviteeKeys) {
       const marker = await this.getJsonOrNull<{ inviteId: string }>(idxKey);
       if (!marker?.inviteId) continue;
-      const invite = await this.getInviteById(marker.inviteId);
+
+      const invite = await this.getInviteByIdIgnoreExpiry(marker.inviteId);
+
       if (invite?.inviteeUserId === memberUserId) {
         hosts.set(invite.hostUserId, invite.wsUrl);
       }
