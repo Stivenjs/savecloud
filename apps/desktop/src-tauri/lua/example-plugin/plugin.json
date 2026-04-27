@@ -1,0 +1,10 @@
+{
+  "id": "example.uppercase.preupload",
+  "name": "Example Uppercase PreUpload",
+  "version": "1.0.0",
+  "api_version": 1,
+  "enabled": true,
+  "hooks": {
+    "on_pre_upload_timeout_ms": 2000
+  }
+}
