@@ -37,6 +37,7 @@ const WEIGHT_VIP_STUDIO: i64 = 250_000;
 const WEIGHT_QUALITY: i64 = 100_000;
 const WEIGHT_MEDIA: i64 = 50_000;
 const WEIGHT_RECENCY: i64 = 50_000;
+const WEIGHT_REVIEWS: i64 = 150_000;
 
 static VIP_STUDIOS: OnceLock<Vec<String>> = OnceLock::new();
 
@@ -168,15 +169,53 @@ fn type_adjustment_score(data: &serde_json::Value) -> i64 {
     }
 }
 
+fn reviews_score(summary: Option<&serde_json::Value>) -> i64 {
+    let Some(summary) = summary else {
+        return 0;
+    };
+
+    let total_reviews = summary["total_reviews"].as_f64().unwrap_or(0.0).max(0.0);
+    let total_positive = summary["total_positive"].as_f64().unwrap_or(0.0).max(0.0);
+    let review_score = summary["review_score"].as_f64().unwrap_or(0.0);
+
+    if total_reviews <= 0.0 {
+        return 0;
+    }
+
+    let ratio = (total_positive / total_reviews).clamp(0.0, 1.0);
+    let descriptor_norm = (review_score / 9.0).clamp(0.0, 1.0);
+    let quality = (ratio * 0.8) + (descriptor_norm * 0.2);
+    let confidence = 1.0 - (-total_reviews / 20_000.0).exp();
+
+    (WEIGHT_REVIEWS as f64 * quality * confidence) as i64
+}
+
+#[allow(dead_code)]
 pub fn compute_rank_score(details_json: &str) -> i64 {
+    compute_rank_score_with_reviews(details_json, None)
+}
+
+pub fn compute_rank_score_with_reviews(
+    details_json: &str,
+    reviews_summary_json: Option<&str>,
+) -> i64 {
     let Ok(root) = serde_json::from_str::<serde_json::Value>(details_json) else {
         return 0;
     };
 
-    compute_rank_score_from_value(&root)
+    let reviews_summary = reviews_summary_json.and_then(|json| serde_json::from_str(json).ok());
+    compute_rank_score_from_value_with_reviews(&root, reviews_summary.as_ref())
 }
 
+#[allow(dead_code)]
 pub fn compute_rank_score_from_value(root: &serde_json::Value) -> i64 {
+    compute_rank_score_from_value_with_reviews(root, None)
+}
+
+pub fn compute_rank_score_from_value_with_reviews(
+    root: &serde_json::Value,
+    reviews_summary: Option<&serde_json::Value>,
+) -> i64 {
     let data = root.get("data").unwrap_or(root);
     let year = current_year();
 
@@ -186,7 +225,8 @@ pub fn compute_rank_score_from_value(root: &serde_json::Value) -> i64 {
         + quality_score(data)
         + media_score(data)
         + recency_score(data, year)
-        + type_adjustment_score(data);
+        + type_adjustment_score(data)
+        + reviews_score(reviews_summary);
 
     score.min(MAX_SCORE)
 }
@@ -207,15 +247,18 @@ fn current_year() -> i32 {
 /// Ejecutar una vez al iniciar la app
 pub fn backfill_rank_scores(conn: &Connection) -> Result<u32, rusqlite::Error> {
     let mut stmt = conn.prepare(
-        "SELECT app_id, details_json FROM steam_catalog_apps WHERE details_json IS NOT NULL",
+        "SELECT app_id, details_json, reviews_summary_json
+         FROM steam_catalog_apps
+         WHERE details_json IS NOT NULL",
     )?;
 
-    let mut rows_iter = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    let mut rows_iter = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
     let mut total_computed = 0;
 
     // Procesamos en lotes de 5,000 para no saturar la RAM con strings gigantes de JSON.
     loop {
-        let batch: Vec<(i64, String)> = rows_iter.by_ref().take(5000).collect::<Result<_, _>>()?;
+        let batch: Vec<(i64, String, Option<String>)> =
+            rows_iter.by_ref().take(5000).collect::<Result<_, _>>()?;
 
         if batch.is_empty() {
             break;
@@ -223,7 +266,12 @@ pub fn backfill_rank_scores(conn: &Connection) -> Result<u32, rusqlite::Error> {
 
         let computed: Vec<(i64, i64)> = batch
             .par_iter()
-            .map(|(app_id, json)| (*app_id, compute_rank_score(json)))
+            .map(|(app_id, details_json, reviews_json)| {
+                (
+                    *app_id,
+                    compute_rank_score_with_reviews(details_json, reviews_json.as_deref()),
+                )
+            })
             .collect();
 
         // Usamos una transacción por lote para persistencia eficiente.
@@ -247,17 +295,18 @@ pub fn backfill_rank_scores(conn: &Connection) -> Result<u32, rusqlite::Error> {
 /// Incremental: solo recalcula los que NO tienen score
 pub fn update_missing_scores(conn: &Connection) -> Result<u32, rusqlite::Error> {
     let mut stmt = conn.prepare(
-        "SELECT app_id, details_json
+        "SELECT app_id, details_json, reviews_summary_json
          FROM steam_catalog_apps
          WHERE catalog_rank_score IS NULL
-         AND details_json IS NOT NULL",
+           AND details_json IS NOT NULL",
     )?;
 
-    let mut rows_iter = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+    let mut rows_iter = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
     let mut total_computed = 0;
 
     loop {
-        let batch: Vec<(i64, String)> = rows_iter.by_ref().take(5000).collect::<Result<_, _>>()?;
+        let batch: Vec<(i64, String, Option<String>)> =
+            rows_iter.by_ref().take(5000).collect::<Result<_, _>>()?;
 
         if batch.is_empty() {
             break;
@@ -265,7 +314,12 @@ pub fn update_missing_scores(conn: &Connection) -> Result<u32, rusqlite::Error> 
 
         let computed: Vec<(i64, i64)> = batch
             .par_iter()
-            .map(|(id, json)| (*id, compute_rank_score(json)))
+            .map(|(id, details_json, reviews_json)| {
+                (
+                    *id,
+                    compute_rank_score_with_reviews(details_json, reviews_json.as_deref()),
+                )
+            })
             .collect();
 
         let tx = conn.unchecked_transaction()?;
@@ -283,6 +337,47 @@ pub fn update_missing_scores(conn: &Connection) -> Result<u32, rusqlite::Error> 
     }
 
     Ok(total_computed)
+}
+
+/// Recalcula score para un subconjunto de `app_id` ya enriquecidos.
+pub fn recompute_scores_for_app_ids(
+    conn: &Connection,
+    app_ids: &[u32],
+) -> Result<u32, rusqlite::Error> {
+    if app_ids.is_empty() {
+        return Ok(0);
+    }
+
+    let tx = conn.unchecked_transaction()?;
+    let mut affected: u32 = 0;
+    {
+        let mut sel = tx.prepare_cached(
+            "SELECT details_json, reviews_summary_json
+             FROM steam_catalog_apps
+             WHERE app_id = ?1
+               AND details_json IS NOT NULL",
+        )?;
+        let mut upd = tx.prepare_cached(
+            "UPDATE steam_catalog_apps
+             SET catalog_rank_score = ?1
+             WHERE app_id = ?2",
+        )?;
+
+        for app_id in app_ids {
+            let row = sel.query_row(rusqlite::params![*app_id], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+            });
+
+            if let Ok((details_json, reviews_json)) = row {
+                let score = compute_rank_score_with_reviews(&details_json, reviews_json.as_deref());
+                let n = upd.execute(rusqlite::params![score, *app_id])?;
+                affected = affected.saturating_add(n as u32);
+            }
+        }
+    }
+
+    tx.commit()?;
+    Ok(affected)
 }
 
 #[cfg(test)]
@@ -311,6 +406,21 @@ mod tests {
                 "screenshots": [{}],
                 "movies": []
             }
+        })
+    }
+
+    fn make_review_summary(
+        total_positive: u64,
+        total_negative: u64,
+        review_score: u32,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "num_reviews": total_positive + total_negative,
+            "review_score": review_score,
+            "review_score_desc": "",
+            "total_positive": total_positive,
+            "total_negative": total_negative,
+            "total_reviews": total_positive + total_negative
         })
     }
 
@@ -358,5 +468,37 @@ mod tests {
             game_score,
             dlc_score
         );
+    }
+
+    #[test]
+    fn reviews_do_not_affect_zero_volume() {
+        let base = make_data(3000000, "2024", 0, 0, "English", vec!["X"]);
+        let no_reviews = compute_rank_score_from_value_with_reviews(&base, None);
+        let zero_reviews = make_review_summary(0, 0, 0);
+        let with_zero_reviews =
+            compute_rank_score_from_value_with_reviews(&base, Some(&zero_reviews));
+        assert_eq!(no_reviews, with_zero_reviews);
+    }
+
+    #[test]
+    fn high_volume_positive_reviews_boost_more_than_low_volume() {
+        let base = make_data(3000001, "2024", 0, 0, "English", vec!["X"]);
+        let low_volume = make_review_summary(90, 10, 8);
+        let high_volume = make_review_summary(900_000, 100_000, 8);
+
+        let low = compute_rank_score_from_value_with_reviews(&base, Some(&low_volume));
+        let high = compute_rank_score_from_value_with_reviews(&base, Some(&high_volume));
+        assert!(high > low);
+    }
+
+    #[test]
+    fn negative_reviews_penalize_vs_positive_reviews() {
+        let base = make_data(3000002, "2024", 0, 0, "English", vec!["X"]);
+        let negative = make_review_summary(10_000, 40_000, 2);
+        let positive = make_review_summary(40_000, 10_000, 8);
+
+        let neg_score = compute_rank_score_from_value_with_reviews(&base, Some(&negative));
+        let pos_score = compute_rank_score_from_value_with_reviews(&base, Some(&positive));
+        assert!(pos_score > neg_score);
     }
 }

@@ -237,6 +237,172 @@ pub async fn import_cloud_seed_one_round(
     .map_err(|e| e.to_string())?
     .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
 
+    let reviews_result = import_cloud_seed_reviews_one_round(
+        app,
+        db,
+        ctx,
+        max_batches,
+        requested_strategy,
+        concurrency,
+        iteration,
+        total_batches_history.saturating_add(to_process.len() as u32),
+        total_rows_history.saturating_add(rows_updated),
+    )
+    .await?;
+
+    Ok(SteamSeedImportResultDto {
+        batches_processed: (to_process.len() as u32)
+            .saturating_add(reviews_result.batches_processed),
+        rows_updated: rows_updated.saturating_add(reviews_result.rows_updated),
+    })
+}
+
+async fn import_cloud_seed_reviews_one_round(
+    app: Option<&tauri::AppHandle>,
+    db: &AppDb,
+    ctx: &ApiContext,
+    max_batches: u32,
+    requested_strategy: &str,
+    concurrency: usize,
+    iteration: u32,
+    total_batches_history: u32,
+    total_rows_history: u32,
+) -> Result<SteamSeedImportResultDto, String> {
+    let db_load = db.clone();
+    let mut import_state = tokio::task::spawn_blocking(move || {
+        db_load.with_conn(db::load_or_init_reviews_import_state)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
+
+    if import_state.strategy != requested_strategy {
+        import_state.cursor_last_key = None;
+        import_state.newest_watermark = None;
+        import_state.max_imported_batch_key = None;
+    }
+
+    let to_process = match requested_strategy {
+        "cursor" => {
+            api::collect_cursor_review_keys(
+                ctx,
+                import_state.cursor_last_key.as_deref(),
+                max_batches,
+            )
+            .await?
+        }
+        "newest_first" => {
+            api::collect_newest_first_review_keys(
+                ctx,
+                import_state.newest_watermark.as_deref(),
+                max_batches,
+            )
+            .await?
+        }
+        _ => return Err("estrategia de import de reviews no soportada".to_string()),
+    };
+
+    if to_process.is_empty() {
+        return Ok(SteamSeedImportResultDto {
+            batches_processed: 0,
+            rows_updated: 0,
+        });
+    }
+
+    let url_map = api::resolve_reviews_batch_download_urls(ctx, &to_process).await?;
+    let total_to_process = to_process.len() as u32;
+
+    use futures_util::stream::{self, StreamExt};
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    let rows_updated = Arc::new(AtomicU32::new(0));
+    let db_write_lock = Arc::new(Mutex::new(()));
+
+    stream::iter(
+        to_process
+            .iter()
+            .enumerate()
+            .map(|(i, k)| (i, k.clone()))
+            .collect::<Vec<_>>(),
+    )
+    .map(|(idx, key)| {
+        let url = url_map.get(&key).cloned();
+        let db = db.clone();
+        let app = app.cloned();
+        let rows_updated = Arc::clone(&rows_updated);
+        let write_lock = Arc::clone(&db_write_lock);
+
+        async move {
+            if let Some(url) = url {
+                let progress_ctx = streaming::StreamProgressContext {
+                    iteration,
+                    total_batches_this_round: total_to_process,
+                    global_total_batches: total_batches_history.saturating_add(idx as u32),
+                    global_total_rows: total_rows_history
+                        .saturating_add(rows_updated.load(Ordering::Relaxed)),
+                };
+
+                match streaming::stream_import_reviews_batch(
+                    app.as_ref(),
+                    Some(&progress_ctx),
+                    &key,
+                    &db,
+                    &url,
+                    write_lock,
+                )
+                .await
+                {
+                    Ok(n) => {
+                        rows_updated.fetch_add(n, Ordering::Relaxed);
+                    }
+                    Err(e) => {
+                        eprintln!("[steam-seed] Error en reviews batch {}: {}", key, e);
+                    }
+                }
+            }
+        }
+    })
+    .buffer_unordered(concurrency)
+    .collect::<()>()
+    .await;
+
+    let rows_updated = rows_updated.load(Ordering::Relaxed);
+
+    match requested_strategy {
+        "cursor" => {
+            import_state.cursor_last_key = to_process.iter().max().cloned();
+        }
+        "newest_first" => {
+            import_state.newest_watermark = to_process.iter().min().cloned();
+        }
+        _ => {}
+    }
+    import_state.strategy = requested_strategy.to_string();
+
+    let batch_max = to_process
+        .iter()
+        .max()
+        .cloned()
+        .expect("to_process de reviews no vacío");
+    import_state.max_imported_batch_key = Some(match import_state.max_imported_batch_key.take() {
+        None => batch_max,
+        Some(prev) if batch_max > prev => batch_max,
+        Some(prev) => prev,
+    });
+
+    let db_save = db.clone();
+    tokio::task::spawn_blocking(move || {
+        db_save.with_conn(|conn| {
+            db::save_reviews_import_state(conn, &import_state)?;
+            Ok(())
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
+
     Ok(SteamSeedImportResultDto {
         batches_processed: to_process.len() as u32,
         rows_updated,

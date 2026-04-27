@@ -543,6 +543,20 @@ export async function registerSavesRoutes(
     }
   );
 
+  app.get<{ Querystring: SteamSeedBatchesQuery }>(
+    "/saves/steam-seed/reviews/batches",
+    { schema: { querystring: SteamSeedBatchesQuerySchema } },
+    async (request, reply) => {
+      if (!deps.steamSeedRepository) {
+        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
+      }
+      const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
+      const maxKeys = request.query.maxKeys ?? 200;
+      const out = await deps.steamSeedRepository.listReviewBatchKeys(ownerId, maxKeys, request.query.cursor);
+      return reply.send(out);
+    }
+  );
+
   app.post<{ Body: SteamSeedBatchDownloadUrlBody }>(
     "/saves/steam-seed/batch/download-url",
     { schema: { body: SteamSeedBatchDownloadUrlSchema } },
@@ -573,6 +587,40 @@ export async function registerSavesRoutes(
           return reply.status(400).send({ error: "Bad Request", message });
         }
         request.log.error({ err }, "steam-seed batch download-url failed");
+        return reply.status(500).send({ error: "Internal Server Error", message });
+      }
+    }
+  );
+
+  app.post<{ Body: SteamSeedBatchDownloadUrlBody }>(
+    "/saves/steam-seed/reviews/batch/download-url",
+    { schema: { body: SteamSeedBatchDownloadUrlSchema } },
+    async (request, reply) => {
+      if (!deps.steamSeedRepository) {
+        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
+      }
+
+      const { key, keys } = request.body;
+      if (!key && (!keys || keys.length === 0)) {
+        return reply.status(400).send({ error: "Bad Request", message: "either 'key' or 'keys' is required" });
+      }
+
+      try {
+        const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
+
+        if (keys) {
+          const results = await deps.steamSeedRepository.getBatchDownloadUrl(ownerId, keys);
+          return reply.send({ results });
+        }
+
+        const downloadUrl = await deps.steamSeedRepository.getBatchDownloadUrl(ownerId, key!.trim());
+        return reply.send({ downloadUrl });
+      } catch (err) {
+        const message = getErrorMessage(err);
+        if (message.startsWith("Invalid key:")) {
+          return reply.status(400).send({ error: "Bad Request", message });
+        }
+        request.log.error({ err }, "steam-seed reviews batch download-url failed");
         return reply.status(500).send({ error: "Internal Server Error", message });
       }
     }
