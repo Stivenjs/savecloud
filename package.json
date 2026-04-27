@@ -22,14 +22,13 @@
     "cargo:check": "bun run --cwd apps/desktop/src-tauri cargo check",
     "cargo:clean": "bun run --cwd apps/desktop/src-tauri cargo clean",
     "version": "bun run scripts/sync-version.ts",
-    "format": "bunx prettier . --write \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
     "format:changed": "bun run scripts/format-changed.ts",
     "prepare": "husky"
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx,json,css,scss,md}": [
-      "prettier --write"
-    ]
+    "*": "oxfmt --no-error-on-unmatched-pattern"
   },
   "dependencies": {
     "@aws-sdk/client-apigatewaymanagementapi": "^3.1024.0",
@@ -57,7 +56,7 @@
     "esbuild": "^0.24.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
-    "prettier": "3.8.1",
+    "oxfmt": "^0.47.0",
     "serverless": "^4.0.0",
     "typescript": "^5.6.0"
   }

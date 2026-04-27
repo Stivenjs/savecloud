@@ -22,8 +22,8 @@ export function SaveGraphNode({ data, selected }: NodeProps<SaveGraphFlowNodeDat
       className={`relative overflow-hidden rounded-3xl border p-4 text-left transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] ${data.toneClassName} ${
         selected ? "ring-2 ring-primary/50" : ""
       }`}>
-      <Handle type="target" position={Position.Top} className="!h-2 !w-2 !border-0 !bg-default-400/70" />
-      <Handle type="source" position={Position.Bottom} className="!h-2 !w-2 !border-0 !bg-default-400/70" />
+      <Handle type="target" position={Position.Top} className="h-2! w-2! border-0! bg-default-400/70" />
+      <Handle type="source" position={Position.Bottom} className="h-2! w-2! border-0! bg-default-400/70" />
 
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
