@@ -4,7 +4,7 @@ import { spawnSync } from "child_process";
 import { extname } from "path";
 
 const cwd = process.cwd();
-const prettierExtensions = new Set([".js", ".jsx", ".ts", ".tsx", ".json", ".css", ".md"]);
+const oxfmtExtensions = new Set([".js", ".jsx", ".ts", ".tsx", ".json", ".css", ".md"]);
 
 function runGit(args: string[]) {
   const result = spawnSync("git", args, {
@@ -30,22 +30,22 @@ const changedTrackedFiles = runGit(["diff", "--name-only", "--diff-filter=ACMR",
 const untrackedFiles = runGit(["ls-files", "--others", "--exclude-standard"]).split(/\r?\n/).filter(Boolean);
 
 const changedFiles = Array.from(new Set([...changedTrackedFiles, ...untrackedFiles])).filter((filePath) =>
-  prettierExtensions.has(extname(filePath).toLowerCase())
+  oxfmtExtensions.has(extname(filePath).toLowerCase())
 );
 
 if (!changedFiles.length) {
   process.exit(0);
 }
 
-const prettier = spawnSync("bunx", ["prettier", "--write", ...changedFiles], {
+const oxfmt = spawnSync("oxfmt", [...changedFiles], {
   cwd,
   stdio: "inherit",
 });
 
-if (prettier.error) {
-  throw prettier.error;
+if (oxfmt.error) {
+  throw oxfmt.error;
 }
 
-if (prettier.status !== 0) {
-  process.exit(prettier.status ?? 1);
+if (oxfmt.status !== 0) {
+  process.exit(oxfmt.status ?? 1);
 }
