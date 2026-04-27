@@ -1,6 +1,12 @@
 -- /apps/savecloud-desktop/src-tauri/lua/savecloud-api.lua
 -- Archivo de definiciones de SaveCloud para autocompletado en el editor.
 -- Coloca este archivo en la misma carpeta que tu script 'init.lua'.
+--
+-- Requisitos de runtime (Sprint 1):
+-- - El plugin debe incluir `plugin.json` obligatorio.
+-- - `plugin.json.api_version` debe ser 1 para ser compatible.
+-- - `plugin.json.enabled` permite activar/desactivar carga.
+-- - `plugin.json.hooks.on_pre_upload_timeout_ms` configura timeout de pre-upload.
 
 ---@meta
 

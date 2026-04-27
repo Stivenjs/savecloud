@@ -7,14 +7,18 @@
 //! - Ejecutar el hook de pre-subida (Pipeline).
 
 use super::api::register_savecloud_api;
+use super::manifest::PluginManifest;
 use crate::plugins::log_buffer::AppLogs;
 use mlua::{Function, Lua, Result};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tauri::AppHandle;
 
 pub struct Plugin {
     pub name: String,
-    lua: Lua,
+    lua: Arc<Mutex<Lua>>,
+    pre_upload_timeout: Duration,
 }
 
 pub fn clean_lua_error(err: &mlua::Error) -> String {
@@ -26,7 +30,12 @@ pub fn clean_lua_error(err: &mlua::Error) -> String {
 }
 
 impl Plugin {
-    pub fn load_from_dir(dir_path: &Path, app_handle: AppHandle, logs: AppLogs) -> Result<Self> {
+    pub fn load_from_dir(
+        dir_path: &Path,
+        app_handle: AppHandle,
+        logs: AppLogs,
+        manifest: &PluginManifest,
+    ) -> Result<Self> {
         let lua = Lua::new();
 
         let name = dir_path.file_name().unwrap().to_string_lossy().to_string();
@@ -51,11 +60,20 @@ impl Plugin {
         let script = std::fs::read_to_string(&init_path)?;
         lua.load(&script).exec()?;
 
-        Ok(Self { name, lua })
+        Ok(Self {
+            name,
+            lua: Arc::new(Mutex::new(lua)),
+            pre_upload_timeout: Duration::from_millis(manifest.resolved_pre_upload_timeout_ms()),
+        })
     }
 
     pub fn trigger_on_init(&self) -> Result<()> {
-        let globals = self.lua.globals();
+        // Lectura explícita para mantener visible la configuración efectiva del hook.
+        let _pre_upload_timeout_ms = self.pre_upload_timeout.as_millis();
+        let lua = self.lua.lock().map_err(|_| {
+            mlua::Error::RuntimeError("No se pudo obtener lock de VM del plugin".to_string())
+        })?;
+        let globals = lua.globals();
 
         if let Ok(func) = globals.get::<Function>("on_init") {
             func.call::<()>(())
@@ -66,15 +84,43 @@ impl Plugin {
     }
 
     pub fn _on_pre_upload(&self, data: &[u8]) -> Result<Vec<u8>> {
-        let globals = self.lua.globals();
+        let lua = self.lua.clone();
+        let input = data.to_vec();
+        let timeout = self.pre_upload_timeout;
 
-        if let Ok(func) = globals.get::<Function>("on_pre_upload") {
-            let modified_data: Vec<u8> = func
-                .call::<Vec<u8>>(data)
-                .map_err(|err| mlua::Error::RuntimeError(clean_lua_error(&err)))?;
-            return Ok(modified_data);
+        let result = tauri::async_runtime::block_on(async move {
+            tokio::time::timeout(
+                timeout,
+                tauri::async_runtime::spawn_blocking(move || {
+                    let lua = lua.lock().map_err(|_| {
+                        mlua::Error::RuntimeError(
+                            "No se pudo obtener lock de VM del plugin".to_string(),
+                        )
+                    })?;
+                    let globals = lua.globals();
+
+                    if let Ok(func) = globals.get::<Function>("on_pre_upload") {
+                        let modified_data: Vec<u8> = func
+                            .call::<Vec<u8>>(input)
+                            .map_err(|err| mlua::Error::RuntimeError(clean_lua_error(&err)))?;
+                        return Ok(modified_data);
+                    }
+
+                    Ok(input)
+                }),
+            )
+            .await
+        });
+
+        match result {
+            Ok(Ok(inner)) => inner,
+            Ok(Err(join_err)) => Err(mlua::Error::RuntimeError(format!(
+                "on_pre_upload task join error: {join_err}"
+            ))),
+            Err(_) => Err(mlua::Error::RuntimeError(format!(
+                "on_pre_upload timeout after {}ms",
+                timeout.as_millis()
+            ))),
         }
-
-        Ok(data.to_vec())
     }
 }
