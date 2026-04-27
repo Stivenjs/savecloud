@@ -14,6 +14,42 @@ El sistema de plugins permite que scripts Lua externos se enganchen al ciclo de 
 - Llamar las funciones hook definidas en el `init.lua` de cada plugin
 - Ejecutar el pipeline de pre-subida pasando los datos por cada plugin cargado
 
+## Contrato de carga (Sprint 1)
+
+Desde Sprint 1, la carga es estricta y requiere un manifest `plugin.json` en la raiz de cada plugin.
+
+### plugin.json minimo
+
+```json
+{
+  "id": "mi.plugin",
+  "name": "Mi Plugin",
+  "version": "1.0.0",
+  "api_version": 1,
+  "enabled": true,
+  "hooks": {
+    "on_pre_upload_timeout_ms": 2000
+  }
+}
+```
+
+### Reglas de carga
+
+- Si falta `plugin.json`, el plugin se omite (`manifest_missing`).
+- Si `plugin.json` es invalido, el plugin se omite (`manifest_invalid`).
+- Si `enabled` es `false`, el plugin no se carga (`plugin_disabled`).
+- Si `api_version` no coincide con la version soportada por el core, el plugin no se carga (`api_version_mismatch`).
+
+### Compatibilidad de API
+
+- Version soportada actualmente: `api_version = 1`.
+
+### Timeout de hooks
+
+- `hooks.on_pre_upload_timeout_ms` permite configurar timeout por plugin para `on_pre_upload`.
+- El valor final se ajusta a limites globales del core (clamping).
+- Si el hook excede timeout o falla, se registra error y el pipeline continua con los datos sin modificar.
+
 ---
 
 ## Estructura de modulos

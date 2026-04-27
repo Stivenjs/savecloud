@@ -8,7 +8,7 @@
 //! - Registrar el módulo de HTTP.
 
 use crate::plugins::log_buffer::{AppLogs, LogEntry};
-use mlua::{Lua, Result, Table};
+use mlua::{Lua, Result, Table, Value};
 use tauri::AppHandle;
 
 pub fn register_savecloud_api(
@@ -27,8 +27,8 @@ pub fn register_savecloud_api(
     register_http_module(lua, &savecloud_table)?;
 
     globals.set("savecloud", savecloud_table)?;
-    //globals.set("os", mlua::Value::Nil)?;
-    //globals.set("io", mlua::Value::Nil)?;
+    globals.set("os", Value::Nil)?;
+    globals.set("io", Value::Nil)?;
 
     Ok(())
 }
