@@ -8,6 +8,14 @@ pub struct SteamSeedImportState {
     pub max_imported_batch_key: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct SteamSeedReviewsImportState {
+    pub strategy: String,
+    pub cursor_last_key: Option<String>,
+    pub newest_watermark: Option<String>,
+    pub max_imported_batch_key: Option<String>,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SteamSeedUploadUrlResponse {
@@ -52,6 +60,26 @@ pub struct SteamSeedBatchLine {
     pub steam_success: Option<bool>,
     #[serde(default)]
     pub data: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SteamReviewSummary {
+    pub num_reviews: u32,
+    pub review_score: u32,
+    pub review_score_desc: String,
+    pub total_positive: u64,
+    pub total_negative: u64,
+    pub total_reviews: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteamReviewsBatchLine {
+    pub app_id: u32,
+    #[serde(default)]
+    pub reviews_success: Option<bool>,
+    #[serde(default)]
+    pub summary: Option<SteamReviewSummary>,
 }
 
 #[derive(Serialize)]

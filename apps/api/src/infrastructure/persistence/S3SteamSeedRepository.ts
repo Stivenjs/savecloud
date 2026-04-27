@@ -110,6 +110,34 @@ export class S3SteamSeedRepository {
   }
 
   /**
+   * Lista claves bajo un prefijo de steam-seed con paginación opcional.
+   */
+  private async listSeedKeysByPrefix(
+    ownerId: string,
+    suffixPrefix: string,
+    maxKeys: number = 200,
+    continuationToken?: string
+  ): Promise<{ keys: string[]; nextCursor?: string }> {
+    const prefix = `${this.basePrefix(ownerId)}${suffixPrefix}`;
+    const out = await this.s3.send(
+      new ListObjectsV2Command({
+        Bucket: this.bucketName,
+        Prefix: prefix,
+        MaxKeys: Math.max(1, Math.min(1000, maxKeys)),
+        ContinuationToken: continuationToken,
+      })
+    );
+    const keys = (out.Contents ?? [])
+      .map((x) => x.Key)
+      .filter((k): k is string => !!k)
+      .sort();
+    return {
+      keys,
+      nextCursor: out.IsTruncated ? out.NextContinuationToken : undefined,
+    };
+  }
+
+  /**
    * Genera una URL de subida pre-firmada para un parte del manifiesto.
    *
    * @param ownerId   - Identificador del propietario.
@@ -330,23 +358,18 @@ export class S3SteamSeedRepository {
     maxKeys: number = 200,
     continuationToken?: string
   ): Promise<{ keys: string[]; nextCursor?: string }> {
-    const prefix = `${this.basePrefix(ownerId)}batches/`;
-    const out = await this.s3.send(
-      new ListObjectsV2Command({
-        Bucket: this.bucketName,
-        Prefix: prefix,
-        MaxKeys: Math.max(1, Math.min(1000, maxKeys)),
-        ContinuationToken: continuationToken,
-      })
-    );
-    const keys = (out.Contents ?? [])
-      .map((x) => x.Key)
-      .filter((k): k is string => !!k)
-      .sort();
-    return {
-      keys,
-      nextCursor: out.IsTruncated ? out.NextContinuationToken : undefined,
-    };
+    return this.listSeedKeysByPrefix(ownerId, "batches/", maxKeys, continuationToken);
+  }
+
+  /**
+   * Lista claves S3 bajo el prefijo `reviews/batches/`.
+   */
+  async listReviewBatchKeys(
+    ownerId: string,
+    maxKeys: number = 200,
+    continuationToken?: string
+  ): Promise<{ keys: string[]; nextCursor?: string }> {
+    return this.listSeedKeysByPrefix(ownerId, "reviews/batches/", maxKeys, continuationToken);
   }
 
   /**

@@ -1,4 +1,4 @@
-use super::types::SteamSeedImportState;
+use super::types::{SteamReviewSummary, SteamSeedImportState, SteamSeedReviewsImportState};
 use rusqlite::Connection;
 
 /// Lee todos los `app_id` del catálogo Steam en orden ascendente.
@@ -77,11 +77,54 @@ pub fn save_import_state(
     Ok(())
 }
 
+/// Carga el estado de importación de reviews desde SQLite.
+pub fn load_or_init_reviews_import_state(
+    conn: &Connection,
+) -> Result<SteamSeedReviewsImportState, rusqlite::Error> {
+    conn.execute(
+        "INSERT OR IGNORE INTO steam_seed_reviews_import_state (id) VALUES (1)",
+        [],
+    )?;
+    conn.query_row(
+        "SELECT strategy, cursor_last_key, newest_watermark, max_imported_batch_key
+         FROM steam_seed_reviews_import_state WHERE id = 1",
+        [],
+        |row| {
+            Ok(SteamSeedReviewsImportState {
+                strategy: row.get(0)?,
+                cursor_last_key: row.get(1)?,
+                newest_watermark: row.get(2)?,
+                max_imported_batch_key: row.get(3)?,
+            })
+        },
+    )
+}
+
+/// Persiste el estado de importación de reviews en SQLite.
+pub fn save_reviews_import_state(
+    conn: &Connection,
+    state: &SteamSeedReviewsImportState,
+) -> Result<(), rusqlite::Error> {
+    conn.execute(
+        "UPDATE steam_seed_reviews_import_state
+         SET strategy = ?1, cursor_last_key = ?2, newest_watermark = ?3,
+             max_imported_batch_key = ?4, updated_at = unixepoch()
+         WHERE id = 1",
+        rusqlite::params![
+            state.strategy,
+            state.cursor_last_key,
+            state.newest_watermark,
+            state.max_imported_batch_key,
+        ],
+    )?;
+    Ok(())
+}
+
 /// Hace upsert masivo de apps enriquecidas y sincroniza facets + FTS en una
 /// sola transacción por batch completo, incluyendo el score precalculado.
 pub fn apply_seed_updates(
     conn: &Connection,
-    updates: &[(u32, serde_json::Value, i64)],
+    updates: &[(u32, serde_json::Value)],
 ) -> Result<u32, rusqlite::Error> {
     if updates.is_empty() {
         return Ok(0);
@@ -127,16 +170,22 @@ pub fn apply_seed_updates(
         let mut track =
             tx.prepare_cached("INSERT OR IGNORE INTO _seed_batch_ids (app_id) VALUES (?1)")?;
 
-        for (app_id, data, score) in updates {
+        let mut changed_ids: Vec<u32> = Vec::with_capacity(updates.len());
+
+        for (app_id, data) in updates {
             let json = serde_json::to_string(data).unwrap_or_default();
             let name =
                 infer_name_from_details_json(data).unwrap_or_else(|| format!("App {}", app_id));
             let name_norm = crate::steam_catalog::normalize::normalize_catalog_name(&name);
 
-            let n = upsert.execute(rusqlite::params![app_id, name, name_norm, json, score])?;
+            let n = upsert.execute(rusqlite::params![app_id, name, name_norm, json, 0])?;
             updated = updated.saturating_add(n as u32);
             track.execute(rusqlite::params![app_id])?;
+            changed_ids.push(*app_id);
         }
+
+        // Recalcular score usando details + reviews locales existentes.
+        let _ = crate::steam_catalog::scoring::recompute_scores_for_app_ids(&tx, &changed_ids);
     }
 
     tx.execute_batch(
@@ -202,6 +251,41 @@ pub fn apply_seed_updates(
           AND name_normalized IS NOT NULL;
         ",
     )?;
+
+    tx.commit()?;
+    Ok(updated)
+}
+
+/// Hace upsert masivo de resúmenes de reviews en el catálogo local.
+pub fn apply_reviews_updates(
+    conn: &Connection,
+    updates: &[(u32, SteamReviewSummary)],
+) -> Result<u32, rusqlite::Error> {
+    if updates.is_empty() {
+        return Ok(0);
+    }
+
+    let tx = conn.unchecked_transaction()?;
+    let mut updated: u32 = 0;
+    let mut changed_ids: Vec<u32> = Vec::with_capacity(updates.len());
+    {
+        let mut upsert = tx.prepare_cached(
+            "UPDATE steam_catalog_apps
+             SET reviews_summary_json = ?1,
+                 reviews_updated_at = unixepoch()
+             WHERE app_id = ?2",
+        )?;
+
+        for (app_id, summary) in updates {
+            let summary_json = serde_json::to_string(summary).unwrap_or_default();
+            let n = upsert.execute(rusqlite::params![summary_json, app_id])?;
+            updated = updated.saturating_add(n as u32);
+            changed_ids.push(*app_id);
+        }
+    }
+
+    // Recalcula score solo para apps afectadas por reviews.
+    let _ = crate::steam_catalog::scoring::recompute_scores_for_app_ids(&tx, &changed_ids);
 
     tx.commit()?;
     Ok(updated)

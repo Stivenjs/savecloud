@@ -1,5 +1,5 @@
 use super::db::apply_seed_updates;
-use super::types::SteamSeedBatchLine;
+use super::types::{SteamReviewsBatchLine, SteamSeedBatchLine};
 use crate::network::API_CLIENT;
 use crate::sqlite::AppDb;
 use futures_util::StreamExt;
@@ -93,14 +93,12 @@ pub async fn stream_import_batch(
     let mut parse_handles = Vec::with_capacity(chunks.len());
     for chunk in chunks {
         parse_handles.push(tokio::task::spawn_blocking(move || {
-            let mut out: Vec<(u32, serde_json::Value, i64)> = Vec::with_capacity(chunk.len());
+            let mut out: Vec<(u32, serde_json::Value)> = Vec::with_capacity(chunk.len());
             for line in &chunk {
                 if let Ok(parsed) = serde_json::from_str::<SteamSeedBatchLine>(line) {
                     if parsed.steam_success == Some(true) {
                         if let Some(data) = parsed.data {
-                            let score =
-                                crate::steam_catalog::scoring::compute_rank_score_from_value(&data);
-                            out.push((parsed.app_id, data, score));
+                            out.push((parsed.app_id, data));
                         }
                     }
                 }
@@ -110,7 +108,7 @@ pub async fn stream_import_batch(
     }
 
     // Recolectamos todos los resultados
-    let mut all_updates: Vec<(u32, serde_json::Value, i64)> = Vec::with_capacity(total_lines);
+    let mut all_updates: Vec<(u32, serde_json::Value)> = Vec::with_capacity(total_lines);
     for handle in parse_handles {
         match handle.await {
             Ok(partial) => all_updates.extend(partial),
@@ -166,4 +164,80 @@ pub async fn stream_import_batch(
     }
 
     Ok(total_updated)
+}
+
+/// Importa un batch NDJSON de reviews Steam y persiste resúmenes en SQLite.
+pub async fn stream_import_reviews_batch(
+    app: Option<&tauri::AppHandle>,
+    ctx: Option<&StreamProgressContext>,
+    batch_key: &str,
+    db: &AppDb,
+    download_url_str: &str,
+    write_lock: Arc<Mutex<()>>,
+) -> Result<u32, String> {
+    if let (Some(a), Some(c)) = (app, ctx) {
+        let _ = a.emit(
+            "steam-seed-import-progress",
+            super::types::SteamSeedImportProgressPayload {
+                iteration: c.iteration,
+                batches_this_round: c.total_batches_this_round,
+                rows_this_round: 0,
+                total_batches: c.global_total_batches,
+                total_rows_updated: c.global_total_rows,
+                status_text: Some(format!("Descargando reviews {}...", batch_key)),
+                current_batch: Some(batch_key.to_string()),
+                done: false,
+            },
+        );
+    }
+
+    let response = API_CLIENT
+        .get(download_url_str)
+        .send()
+        .await
+        .map_err(|e| format!("Fallo al iniciar descarga streaming de reviews: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "Error HTTP al descargar batch de reviews: {}",
+            response.status()
+        ));
+    }
+
+    let bytes_stream = response
+        .bytes_stream()
+        .map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)));
+    let stream_reader = StreamReader::new(bytes_stream);
+    let mut lines_reader = BufReader::new(stream_reader).lines();
+
+    let mut updates: Vec<(u32, super::types::SteamReviewSummary)> = Vec::with_capacity(4096);
+    while let Ok(Some(line)) = lines_reader.next_line().await {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if let Ok(parsed) = serde_json::from_str::<SteamReviewsBatchLine>(trimmed) {
+            if parsed.reviews_success == Some(true) {
+                if let Some(summary) = parsed.summary {
+                    updates.push((parsed.app_id, summary));
+                }
+            }
+        }
+    }
+
+    if updates.is_empty() {
+        return Ok(0);
+    }
+
+    let db_clone = db.clone();
+    let _guard = write_lock.lock().await;
+    let updated = tokio::task::spawn_blocking(move || {
+        db_clone.with_conn(|conn| super::db::apply_reviews_updates(conn, &updates))
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking reviews falló: {}", e))?
+    .map_err(|e| format!("Error en persistencia de reviews: {}", e))?;
+
+    Ok(updated)
 }

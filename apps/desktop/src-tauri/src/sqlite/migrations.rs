@@ -52,6 +52,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("sql/017_catalog_rank_score.sql"),
     include_str!("sql/018_fix_corrupted_indexes.sql"),
     include_str!("sql/019_fix_indexes.sql"),
+    include_str!("sql/020_reviews_seed_support.sql"),
 ];
 
 /// Ejecuta todas las migraciones pendientes.
@@ -188,6 +189,6 @@ mod tests {
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
 
-        assert_eq!(version, 16);
+        assert_eq!(version, super::MIGRATIONS.len() as i32);
     }
 }
