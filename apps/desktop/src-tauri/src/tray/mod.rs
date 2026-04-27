@@ -72,16 +72,9 @@ pub fn create_tray(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
 
                 "quit" => {
                     let handle = app.app_handle().clone();
-
-                    std::thread::spawn(move || {
-                        println!("Iniciando cierre limpio...");
-
-                        handle.exit(0);
-
-                        std::thread::sleep(std::time::Duration::from_secs(5));
-
-                        eprintln!("Forzando cierre de la aplicación...");
-                        std::process::exit(0);
+                    tauri::async_runtime::spawn(async move {
+                        log::info!("[Tray] Cierre solicitado desde menú 'Salir'.");
+                        crate::shutdown::hooks::request_app_shutdown(handle).await;
                     });
                 }
 

@@ -1062,7 +1062,10 @@ pub async fn check_path_size(path: String) -> Result<PathValidationResult, Strin
     let path_clone = path.clone();
     let size_bytes = tokio::task::spawn_blocking(move || {
         let mut total_size = 0u64;
-        for entry in walkdir::WalkDir::new(path_clone).into_iter().filter_map(|e| e.ok()) {
+        for entry in walkdir::WalkDir::new(path_clone)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             if let Ok(metadata) = entry.metadata() {
                 if metadata.is_file() {
                     total_size += metadata.len();
