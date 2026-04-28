@@ -2,7 +2,6 @@ import { Button, Card, CardBody } from "@heroui/react";
 import { invoke } from "@tauri-apps/api/core";
 import { AlertCircle, Mic } from "lucide-react";
 import { toastError, toastInfo } from "@utils/toast";
-
 import { useSpeechRecognition } from "@/features/voice-commands/useSpeechRecognition";
 
 export function VoiceCommandsCard() {

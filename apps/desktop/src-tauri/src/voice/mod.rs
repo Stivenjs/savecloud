@@ -2,6 +2,7 @@ pub mod audio;
 pub mod commands;
 pub mod error;
 pub mod matcher;
+pub mod number_normalizer;
 pub mod wake_word;
 
 pub use error::VoiceError;

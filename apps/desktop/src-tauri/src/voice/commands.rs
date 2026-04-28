@@ -142,6 +142,23 @@ pub fn find_game_by_voice_query(text: String) -> Result<Option<GameMatch>, Strin
 }
 
 #[tauri::command]
+pub fn find_game_voice_candidates(
+    text: String,
+    limit: Option<usize>,
+) -> Result<Vec<GameMatch>, String> {
+    let library = config::load_library();
+    let max = limit.unwrap_or(3).min(5);
+    Ok(matcher::find_top_matches(&text, &library, max)
+        .into_iter()
+        .map(|m| GameMatch {
+            game_id: m.game_id,
+            name: m.name,
+            score: m.score,
+        })
+        .collect())
+}
+
+#[tauri::command]
 pub fn emit_test_wake_word(app: AppHandle) -> Result<(), VoiceError> {
     app.emit("voice://wake-word-detected", "manual_test")
         .map_err(|e| VoiceError::Cpal(e.to_string()))
