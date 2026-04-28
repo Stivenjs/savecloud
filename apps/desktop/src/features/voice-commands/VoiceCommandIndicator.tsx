@@ -1,6 +1,5 @@
 import { Card, CardBody } from "@heroui/react";
 import { AlertCircle, Loader2, Mic } from "lucide-react";
-
 import { useVoiceStore } from "@/features/voice-commands/voiceStore";
 
 const STATUS_TEXT: Record<string, string> = {

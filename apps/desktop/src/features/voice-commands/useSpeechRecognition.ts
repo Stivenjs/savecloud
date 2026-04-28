@@ -34,6 +34,58 @@ type SpeechWindow = Window & {
   webkitSpeechRecognition?: SpeechRecognitionCtor;
 };
 
+const MAX_UTTERANCE_ALTERNATIVES = 8;
+
+function cleanTranscript(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function buildUtteranceAlternatives(event: SpeechRecognitionEventLike): string[] {
+  const finalResults: Array<Array<{ transcript: string }>> = [];
+
+  for (let i = 0; i < event.results.length; i += 1) {
+    const result = event.results[i];
+    if (!result?.isFinal) continue;
+    const altCount = Math.max(result.length ?? 1, 1);
+    const alternatives: Array<{ transcript: string }> = [];
+    for (let altIdx = 0; altIdx < altCount; altIdx += 1) {
+      const transcript = cleanTranscript(result[altIdx]?.transcript ?? "");
+      if (!transcript) continue;
+      alternatives.push({ transcript });
+    }
+    if (alternatives.length > 0) {
+      finalResults.push(alternatives);
+    }
+  }
+
+  if (finalResults.length === 0) {
+    return [];
+  }
+
+  const ranked = new Set<string>();
+  const primary = cleanTranscript(finalResults.map((alts) => alts[0]?.transcript ?? "").join(" "));
+  if (primary) ranked.add(primary);
+
+  for (let segmentIdx = 0; segmentIdx < finalResults.length; segmentIdx += 1) {
+    const segmentAlternatives = finalResults[segmentIdx];
+    for (let altIdx = 1; altIdx < segmentAlternatives.length; altIdx += 1) {
+      const candidate = cleanTranscript(
+        finalResults
+          .map(
+            (alts, idx) => (idx === segmentIdx ? segmentAlternatives[altIdx]?.transcript : alts[0]?.transcript) ?? ""
+          )
+          .join(" ")
+      );
+      if (candidate) ranked.add(candidate);
+      if (ranked.size >= MAX_UTTERANCE_ALTERNATIVES) {
+        return Array.from(ranked);
+      }
+    }
+  }
+
+  return Array.from(ranked);
+}
+
 export function useSpeechRecognition() {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const speechWindow = window as SpeechWindow;
@@ -59,18 +111,7 @@ export function useSpeechRecognition() {
       recognition.interimResults = true;
       recognition.maxAlternatives = 3;
       recognition.onresult = (event) => {
-        const startIndex = event.resultIndex ?? 0;
-        const alternatives = new Set<string>();
-        for (let i = startIndex; i < event.results.length; i += 1) {
-          const result = event.results[i];
-          if (!result?.isFinal) continue;
-          const altCount = result.length ?? 1;
-          for (let altIdx = 0; altIdx < altCount; altIdx += 1) {
-            const transcript = result[altIdx]?.transcript?.trim();
-            if (transcript) alternatives.add(transcript);
-          }
-        }
-        const rankedAlternatives = Array.from(alternatives);
+        const rankedAlternatives = buildUtteranceAlternatives(event);
         const primaryText = rankedAlternatives[0] ?? "";
         if (primaryText) onResult({ primaryText, alternatives: rankedAlternatives });
       };

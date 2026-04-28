@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { toastError, toastInfo, toastSuccess } from "@utils/toast";
-
+import { formatGameDisplayName } from "@utils/gameImage";
 import { parseVoiceCommand } from "@/features/voice-commands/commandMapper";
 import { useSpeechRecognition } from "@/features/voice-commands/useSpeechRecognition";
 import { useVoiceStore } from "@/features/voice-commands/voiceStore";
@@ -23,8 +23,35 @@ type LearnedCorrection = {
   gameName: string;
 };
 
+function normalizeTargetText(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function buildVoiceTargets(alternatives: string[]): string[] {
+  const out = new Set<string>();
+  for (const text of alternatives) {
+    const target = parseVoiceCommand(text).target.trim();
+    if (!target) continue;
+    const normalized = normalizeTargetText(target);
+    if (!normalized) continue;
+    out.add(normalized);
+    const compact = normalized.replace(/\s+/g, "");
+    if (compact.length >= 4 && compact !== normalized) {
+      out.add(compact);
+    }
+  }
+  return Array.from(out);
+}
+
 function normalizeVoiceKey(text: string): string {
-  return text.trim().toLowerCase().replace(/\s+/g, " ");
+  return normalizeTargetText(text).replace(/\s+/g, " ");
 }
 
 function loadLearnedCorrections(): Record<string, LearnedCorrection> {
@@ -89,10 +116,7 @@ export function useVoiceCommands() {
           commandInFlightRef.current = true;
           commandCooldownUntilRef.current = nowCommand + 4_000;
           setTranscript(primaryText);
-          const targets = alternatives
-            .map((text) => parseVoiceCommand(text).target)
-            .map((target) => target.trim())
-            .filter((target, idx, arr) => target.length > 0 && arr.indexOf(target) === idx);
+          const targets = buildVoiceTargets(alternatives);
           if (targets.length === 0) {
             toastInfo("No te escuché bien", "Prueba de nuevo: abre Counter Strike.");
             setStatus("listeningWake");
@@ -114,7 +138,7 @@ export function useVoiceCommands() {
               if (learned) {
                 try {
                   await invoke("launch_game", { gameId: learned.gameId });
-                  toastSuccess("Abriendo juego", learned.gameName);
+                  toastSuccess("Abriendo juego", formatGameDisplayName(learned.gameId));
                   launched = true;
                   break;
                 } catch {
@@ -144,7 +168,7 @@ export function useVoiceCommands() {
               if (suggestions.length > 0) {
                 const names = suggestions
                   .slice(0, 2)
-                  .map((s) => s.name)
+                  .map((s) => formatGameDisplayName(s.game_id))
                   .join(" o ");
                 toastInfo("Juego no encontrado", `No encontré "${fallbackTarget}". Quizá quisiste decir: ${names}.`);
               } else {
@@ -158,10 +182,10 @@ export function useVoiceCommands() {
             const learnedKey = normalizeVoiceKey(resolvedTarget);
             learnedCorrectionsRef.current[learnedKey] = {
               gameId: resolvedMatch.game_id,
-              gameName: resolvedMatch.name,
+              gameName: formatGameDisplayName(resolvedMatch.game_id),
             };
             saveLearnedCorrections(learnedCorrectionsRef.current);
-            toastSuccess("Abriendo juego", resolvedMatch.name);
+            toastSuccess("Abriendo juego", formatGameDisplayName(resolvedMatch.game_id));
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             toastError("No se pudo ejecutar el comando de voz", message);
