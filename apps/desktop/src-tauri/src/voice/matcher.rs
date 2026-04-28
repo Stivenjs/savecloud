@@ -166,6 +166,15 @@ fn acronym_of(input: &str) -> Option<String> {
     }
 }
 
+fn compact_variant(input: &str) -> Option<String> {
+    let compact: String = input.split_whitespace().collect();
+    if compact.len() >= 4 && compact != input {
+        Some(compact)
+    } else {
+        None
+    }
+}
+
 fn expanded_shortcut_query(input: &str) -> Option<String> {
     let mut out_tokens: Vec<String> = Vec::new();
     let mut changed = false;
@@ -201,6 +210,9 @@ fn build_query_aliases(query: &str) -> Vec<String> {
     for numeric_variant in expand_numeric_variants(query) {
         aliases.push(normalize_catalog_name(&numeric_variant));
     }
+    if let Some(compact) = compact_variant(query) {
+        aliases.push(compact);
+    }
     aliases.sort_unstable();
     aliases.dedup();
     aliases
@@ -230,6 +242,9 @@ fn build_game_aliases(game: &ConfiguredGame) -> Vec<String> {
         .join(" ");
     if !base.is_empty() {
         aliases.push(base.clone());
+        if let Some(compact) = compact_variant(&base) {
+            aliases.push(compact);
+        }
         if let Some(swapped) = swap_roman_arabic_variant(&base) {
             aliases.push(normalize_catalog_name(&swapped));
         }
@@ -362,6 +377,18 @@ mod tests {
         assert_eq!(
             candidates.first().map(|c| c.game_id.as_str()),
             Some("resident evil 4")
+        );
+    }
+
+    #[test]
+    fn find_top_matches_handles_compact_game_ids() {
+        let library = GameLibrary {
+            games: vec![test_game("eldenring"), test_game("sekiro")],
+        };
+        let candidates = find_top_matches("elden ring", &library, 2);
+        assert_eq!(
+            candidates.first().map(|c| c.game_id.as_str()),
+            Some("eldenring")
         );
     }
 }
