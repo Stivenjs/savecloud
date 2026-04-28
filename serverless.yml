@@ -98,7 +98,7 @@ custom:
   steamSeedFiltersDefault: "basic,developers,publishers,genres,categories,release_date,screenshots,movies"
 
 resources:
-  - ${file(resources.${sls:stage, 'dev'}.yml)}
+  - ${file(infra/resources.${sls:stage, 'dev'}.yml)}
 
 functions:
   apiAuthorizer:
