@@ -52,7 +52,10 @@
         "silent": true,
         "type": "downloadBootstrapper"
       }
-    }
+    },
+    "resources": [
+      "resources/oye_cloud.rpw"
+    ]
   },
   "identifier": "com.savecloud.desktop",
   "plugins": {

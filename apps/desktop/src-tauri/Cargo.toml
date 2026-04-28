@@ -66,6 +66,10 @@ tauri-plugin-os = "2.3.2"
 zstd = { version = "0.13.3", features = ["zstdmt"] }
 num_cpus = "1.17.0"
 log = "0.4.29"
+rustpotter = "3"
+cpal = "0.15"
+ringbuf = "0.4"
+half = "=2.3.1"
 
 
 [dev-dependencies]

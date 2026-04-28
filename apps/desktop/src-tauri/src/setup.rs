@@ -18,6 +18,7 @@ use crate::sqlite::AppDb;
 use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray::tray_state::TrayState;
+use crate::voice::VoiceState;
 
 use std::sync::Arc;
 use tauri::{App, Manager};
@@ -146,6 +147,7 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
 
     app.manage(queue::SourcesState::new_from_disk());
     app.manage(cloud::CloudWsState::new());
+    app.manage(VoiceState::default());
 
     queue::resume_pending_jobs(&app.handle());
 

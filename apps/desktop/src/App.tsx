@@ -4,6 +4,7 @@ import { ProfileStartupSelector } from "@features/profile/ProfileStartupSelector
 import { useProfileSessionHydration } from "@hooks/useProfileSession";
 import { AppRuntime } from "@/app/AppRuntime";
 import { useStartupProfileGate } from "@/app/hooks/useStartupProfileGate";
+import { useVoiceCommands, VoiceCommandIndicator } from "@features/voice-commands";
 
 function AppAmbientBackground({ children }: { children: React.ReactNode }) {
   return (
@@ -17,6 +18,7 @@ function AppAmbientBackground({ children }: { children: React.ReactNode }) {
 
 function App() {
   useProfileSessionHydration();
+  useVoiceCommands();
   const gate = useStartupProfileGate();
 
   const appReady = !gate.loading && !gate.visible;
@@ -50,6 +52,7 @@ function App() {
   return (
     <AppAmbientBackground>
       <AppRuntime />
+      <VoiceCommandIndicator />
     </AppAmbientBackground>
   );
 }
