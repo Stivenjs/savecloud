@@ -168,6 +168,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::voice::commands::start_voice_listener,
         crate::voice::commands::stop_voice_listener,
         crate::voice::commands::find_game_by_voice_query,
+        crate::voice::commands::find_game_voice_candidates,
         crate::voice::commands::emit_test_wake_word,
         crate::voice::commands::list_voice_input_devices,
     ])

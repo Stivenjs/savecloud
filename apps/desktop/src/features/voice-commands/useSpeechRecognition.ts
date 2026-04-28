@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from "react";
 
-type SpeechResultHandler = (text: string) => void;
+type SpeechResultHandler = (payload: { primaryText: string; alternatives: string[] }) => void;
 type SpeechErrorHandler = (error: string) => void;
 type SpeechEndHandler = () => void;
 
@@ -22,7 +22,11 @@ interface SpeechRecognitionCtor {
 
 interface SpeechRecognitionEventLike {
   resultIndex?: number;
-  results: ArrayLike<{ 0: { transcript: string }; isFinal?: boolean }>;
+  results: ArrayLike<{
+    isFinal?: boolean;
+    length?: number;
+    [index: number]: { transcript: string } | undefined;
+  }>;
 }
 
 type SpeechWindow = Window & {
@@ -56,14 +60,19 @@ export function useSpeechRecognition() {
       recognition.maxAlternatives = 3;
       recognition.onresult = (event) => {
         const startIndex = event.resultIndex ?? 0;
-        let finalTranscript = "";
+        const alternatives = new Set<string>();
         for (let i = startIndex; i < event.results.length; i += 1) {
           const result = event.results[i];
           if (!result?.isFinal) continue;
-          finalTranscript += `${result[0]?.transcript ?? ""} `;
+          const altCount = result.length ?? 1;
+          for (let altIdx = 0; altIdx < altCount; altIdx += 1) {
+            const transcript = result[altIdx]?.transcript?.trim();
+            if (transcript) alternatives.add(transcript);
+          }
         }
-        const transcript = finalTranscript.trim();
-        if (transcript) onResult(transcript);
+        const rankedAlternatives = Array.from(alternatives);
+        const primaryText = rankedAlternatives[0] ?? "";
+        if (primaryText) onResult({ primaryText, alternatives: rankedAlternatives });
       };
       recognition.onerror = (event) => onError(event.error || "speech_error");
       recognition.onend = onEnd;

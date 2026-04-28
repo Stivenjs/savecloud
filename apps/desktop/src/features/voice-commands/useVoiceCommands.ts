@@ -16,6 +16,35 @@ interface GameMatch {
 const WAKE_WORD_EVENT = "voice://wake-word-detected";
 const VOICE_HOLD_KEY = "KeyV";
 const RELEASE_GRACE_MS = 180;
+const VOICE_CORRECTIONS_STORAGE_KEY = "voice-commands:learned-corrections:v1";
+
+type LearnedCorrection = {
+  gameId: string;
+  gameName: string;
+};
+
+function normalizeVoiceKey(text: string): string {
+  return text.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function loadLearnedCorrections(): Record<string, LearnedCorrection> {
+  try {
+    const raw = localStorage.getItem(VOICE_CORRECTIONS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, LearnedCorrection>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLearnedCorrections(corrections: Record<string, LearnedCorrection>): void {
+  try {
+    localStorage.setItem(VOICE_CORRECTIONS_STORAGE_KEY, JSON.stringify(corrections));
+  } catch {
+    // noop
+  }
+}
 
 export function useVoiceCommands() {
   const enabled = useVoiceStore((s) => s.enabled);
@@ -31,6 +60,7 @@ export function useVoiceCommands() {
   const holdTriggerActiveRef = useRef(false);
   const speechSessionActiveRef = useRef(false);
   const releaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const learnedCorrectionsRef = useRef<Record<string, LearnedCorrection>>(loadLearnedCorrections());
 
   useEffect(() => {
     if (!enabled) {
@@ -51,16 +81,19 @@ export function useVoiceCommands() {
         return;
       }
       const started = start(
-        async (text) => {
+        async ({ primaryText, alternatives }) => {
           const nowCommand = Date.now();
           if (commandInFlightRef.current || nowCommand < commandCooldownUntilRef.current) {
             return;
           }
           commandInFlightRef.current = true;
           commandCooldownUntilRef.current = nowCommand + 4_000;
-          setTranscript(text);
-          const { target } = parseVoiceCommand(text);
-          if (!target) {
+          setTranscript(primaryText);
+          const targets = alternatives
+            .map((text) => parseVoiceCommand(text).target)
+            .map((target) => target.trim())
+            .filter((target, idx, arr) => target.length > 0 && arr.indexOf(target) === idx);
+          if (targets.length === 0) {
             toastInfo("No te escuché bien", "Prueba de nuevo: abre Counter Strike.");
             setStatus("listeningWake");
             stop();
@@ -72,14 +105,63 @@ export function useVoiceCommands() {
           setStatus("executing");
 
           try {
-            const match = await invoke<GameMatch | null>("find_game_by_voice_query", { text: target });
-            if (!match) {
-              toastInfo("Juego no encontrado", `No encuentro "${target}" en tu librería.`);
+            let launched = false;
+            let resolvedMatch: GameMatch | null = null;
+            let resolvedTarget = "";
+
+            for (const target of targets) {
+              const learned = learnedCorrectionsRef.current[normalizeVoiceKey(target)];
+              if (learned) {
+                try {
+                  await invoke("launch_game", { gameId: learned.gameId });
+                  toastSuccess("Abriendo juego", learned.gameName);
+                  launched = true;
+                  break;
+                } catch {
+                  delete learnedCorrectionsRef.current[normalizeVoiceKey(target)];
+                  saveLearnedCorrections(learnedCorrectionsRef.current);
+                }
+              }
+
+              const match = await invoke<GameMatch | null>("find_game_by_voice_query", { text: target });
+              if (match) {
+                resolvedMatch = match;
+                resolvedTarget = target;
+                break;
+              }
+            }
+
+            if (launched) {
+              return;
+            }
+
+            if (!resolvedMatch) {
+              const fallbackTarget = targets[0];
+              const suggestions = await invoke<GameMatch[]>("find_game_voice_candidates", {
+                text: fallbackTarget,
+                limit: 3,
+              });
+              if (suggestions.length > 0) {
+                const names = suggestions
+                  .slice(0, 2)
+                  .map((s) => s.name)
+                  .join(" o ");
+                toastInfo("Juego no encontrado", `No encontré "${fallbackTarget}". Quizá quisiste decir: ${names}.`);
+              } else {
+                toastInfo("Juego no encontrado", `No encuentro "${fallbackTarget}" en tu librería.`);
+              }
               setStatus("listeningWake");
               return;
             }
-            await invoke("launch_game", { gameId: match.game_id });
-            toastSuccess("Abriendo juego", match.name);
+
+            await invoke("launch_game", { gameId: resolvedMatch.game_id });
+            const learnedKey = normalizeVoiceKey(resolvedTarget);
+            learnedCorrectionsRef.current[learnedKey] = {
+              gameId: resolvedMatch.game_id,
+              gameName: resolvedMatch.name,
+            };
+            saveLearnedCorrections(learnedCorrectionsRef.current);
+            toastSuccess("Abriendo juego", resolvedMatch.name);
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             toastError("No se pudo ejecutar el comando de voz", message);
