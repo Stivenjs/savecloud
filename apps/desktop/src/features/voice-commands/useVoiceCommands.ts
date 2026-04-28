@@ -79,6 +79,7 @@ export function useVoiceCommands() {
   const setStatus = useVoiceStore((s) => s.setStatus);
   const setTranscript = useVoiceStore((s) => s.setTranscript);
   const setError = useVoiceStore((s) => s.setError);
+  const setHoldKeyPressed = useVoiceStore((s) => s.setHoldKeyPressed);
   const speech = useSpeechRecognition();
   const { start, stop } = speech;
   const commandInFlightRef = useRef(false);
@@ -102,6 +103,9 @@ export function useVoiceCommands() {
     }
 
     setStatus("listeningWake");
+    const syncIdleListeningStatus = () => {
+      setStatus(holdTriggerActiveRef.current ? "listeningCommand" : "listeningWake");
+    };
 
     const beginCommandListening = (showWakeToast: boolean) => {
       if (speechSessionActiveRef.current || commandInFlightRef.current) {
@@ -119,7 +123,7 @@ export function useVoiceCommands() {
           const targets = buildVoiceTargets(alternatives);
           if (targets.length === 0) {
             toastInfo("No te escuché bien", "Prueba de nuevo: abre Counter Strike.");
-            setStatus("listeningWake");
+            syncIdleListeningStatus();
             stop();
             commandInFlightRef.current = false;
             speechSessionActiveRef.current = false;
@@ -174,7 +178,7 @@ export function useVoiceCommands() {
               } else {
                 toastInfo("Juego no encontrado", `No encuentro "${fallbackTarget}" en tu librería.`);
               }
-              setStatus("listeningWake");
+              syncIdleListeningStatus();
               return;
             }
 
@@ -193,7 +197,7 @@ export function useVoiceCommands() {
             stop();
             commandInFlightRef.current = false;
             speechSessionActiveRef.current = false;
-            setStatus("listeningWake");
+            syncIdleListeningStatus();
           }
         },
         (speechError) => {
@@ -205,7 +209,7 @@ export function useVoiceCommands() {
         () => {
           commandInFlightRef.current = false;
           speechSessionActiveRef.current = false;
-          setStatus("listeningWake");
+          syncIdleListeningStatus();
         }
       );
 
@@ -218,7 +222,7 @@ export function useVoiceCommands() {
       speechSessionActiveRef.current = true;
       setStatus("listeningCommand");
       if (showWakeToast) {
-        toastInfo("Wake word detectada", "Di el comando ahora (por ejemplo: abre Minecraft).");
+        toastInfo("Escuchando", "Di solo el nombre del juego o usa 'abre <juego>'.");
       }
     };
 
@@ -243,6 +247,8 @@ export function useVoiceCommands() {
       }
       if (holdTriggerActiveRef.current) return;
       holdTriggerActiveRef.current = true;
+      setHoldKeyPressed(true);
+      setStatus("listeningCommand");
       beginCommandListening(false);
     };
 
@@ -251,6 +257,7 @@ export function useVoiceCommands() {
       event.preventDefault();
       event.stopPropagation();
       holdTriggerActiveRef.current = false;
+      setHoldKeyPressed(false);
       if (releaseTimerRef.current) {
         clearTimeout(releaseTimerRef.current);
       }
@@ -259,7 +266,7 @@ export function useVoiceCommands() {
         if (!holdTriggerActiveRef.current && speechSessionActiveRef.current && !commandInFlightRef.current) {
           stop();
           speechSessionActiveRef.current = false;
-          setStatus("listeningWake");
+          syncIdleListeningStatus();
         }
       }, RELEASE_GRACE_MS);
     };
@@ -269,6 +276,7 @@ export function useVoiceCommands() {
 
     return () => {
       stop();
+      setHoldKeyPressed(false);
       if (releaseTimerRef.current) {
         clearTimeout(releaseTimerRef.current);
         releaseTimerRef.current = null;
@@ -277,5 +285,5 @@ export function useVoiceCommands() {
       window.removeEventListener("keyup", onKeyUp, true);
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [enabled, setError, setStatus, setTranscript, start, stop]);
+  }, [enabled, setError, setHoldKeyPressed, setStatus, setTranscript, start, stop]);
 }

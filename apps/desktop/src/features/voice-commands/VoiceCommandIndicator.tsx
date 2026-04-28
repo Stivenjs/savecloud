@@ -1,17 +1,19 @@
-import { Card, CardBody } from "@heroui/react";
 import { AlertCircle, Loader2, Mic } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import BorderGlow from "@components/external/BorderGlow";
 import { useVoiceStore } from "@/features/voice-commands/voiceStore";
 
 const STATUS_TEXT: Record<string, string> = {
-  listeningWake: 'Esperando "Oye Cloud"',
-  listeningCommand: "Escuchando comando",
-  executing: "Ejecutando comando",
+  listeningWake: "Mantén V para hablar",
+  listeningCommand: "Di el nombre del juego",
+  executing: "Abriendo juego",
   error: "Error de voz",
 };
 
 export function VoiceCommandIndicator() {
   const enabled = useVoiceStore((s) => s.enabled);
   const status = useVoiceStore((s) => s.status);
+  const holdKeyPressed = useVoiceStore((s) => s.holdKeyPressed);
   const errorMessage = useVoiceStore((s) => s.errorMessage);
 
   if (!enabled || status === "idle") return null;
@@ -27,26 +29,46 @@ export function VoiceCommandIndicator() {
 
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 z-40">
-      <Card className="border border-default-200/80 bg-background/95 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.25)]">
-        <CardBody className="min-w-[220px] gap-2 p-3">
-          <div className="flex items-center gap-2">
-            {isExecuting ? (
-              <Loader2 size={16} className="animate-spin text-primary-500" />
-            ) : isError ? (
-              <AlertCircle size={16} className="text-danger-500" />
-            ) : (
-              <Mic size={16} className="text-default-500" />
-            )}
-            <span className="text-sm font-medium text-foreground">{STATUS_TEXT[status] ?? "Comandos de voz"}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={`h-2 w-2 rounded-full ${dotClass}`} />
-            <span className="text-xs text-default-500">
-              {isError ? errorMessage || "Reintenta activar comandos de voz." : "MVP activo"}
-            </span>
-          </div>
-        </CardBody>
-      </Card>
+      <AnimatePresence>
+        {holdKeyPressed && (
+          <motion.div
+            key="voice-command-indicator"
+            initial={{ opacity: 0, y: 16, scale: 0.96, filter: "blur(4px)" }}
+            animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+            exit={{ opacity: 0, y: 12, scale: 0.98, filter: "blur(3px)" }}
+            transition={{ type: "spring", stiffness: 260, damping: 24, mass: 0.9 }}>
+            <BorderGlow
+              active={holdKeyPressed}
+              className="min-w-[220px] border-default-200/80 bg-background/95 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.25)]"
+              borderRadius={16}
+              edgeSensitivity={0}
+              colors={["#7C3AED", "#8B5CF6", "#A78BFA"]}
+              fillOpacity={0}
+              glowIntensity={0}>
+              <div className="gap-2 p-3">
+                <div className="flex items-center gap-2">
+                  {isExecuting ? (
+                    <Loader2 size={16} className="animate-spin text-primary-500" />
+                  ) : isError ? (
+                    <AlertCircle size={16} className="text-danger-500" />
+                  ) : (
+                    <Mic size={16} className="text-default-500" />
+                  )}
+                  <span className="text-sm font-medium text-foreground">
+                    {STATUS_TEXT[status] ?? "Comandos de voz"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`h-2 w-2 rounded-full ${dotClass}`} />
+                  <span className="text-xs text-default-500">
+                    {isError ? errorMessage || "Reintenta activar comandos de voz." : "Reconocimiento activo"}
+                  </span>
+                </div>
+              </div>
+            </BorderGlow>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
