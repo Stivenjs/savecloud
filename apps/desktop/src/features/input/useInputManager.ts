@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useNavigationStore } from "@features/input/store";
 import { SemanticAction } from "@features/input/types";
+import { featureFlags } from "@/constants/featureFlags";
 import { useShellUiStore } from "@store/ShellUiStore";
 
 const NAVIGATION_THROTTLE_MS = 120;
@@ -76,6 +77,11 @@ export function useInputManager() {
       }
 
       const isNavKey = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key);
+      const isNavConfirmBackKey = isNavKey || e.key === "Enter" || e.key === "Escape";
+
+      if (!featureFlags.gamepadNavigation && isNavConfirmBackKey) {
+        return;
+      }
 
       if (isNavKey) {
         e.preventDefault();
@@ -84,7 +90,7 @@ export function useInputManager() {
         lastKeyInput.current = now;
       }
 
-      if (useNavigationStore.getState().inputMode !== "gamepad") {
+      if (isNavConfirmBackKey && useNavigationStore.getState().inputMode !== "gamepad") {
         setInputMode("gamepad");
       }
 
@@ -114,42 +120,44 @@ export function useInputManager() {
     window.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("keydown", handleKeyDown, true);
 
-    const unlisten = listen<{ action: SemanticAction; player: number }>("controller_action", (event) => {
-      const now = Date.now();
-      if (now - lastGamepadInput.current < NAVIGATION_THROTTLE_MS) return;
-      lastGamepadInput.current = now;
+    const unlisten = featureFlags.gamepadNavigation
+      ? listen<{ action: SemanticAction; player: number }>("controller_action", (event) => {
+          const now = Date.now();
+          if (now - lastGamepadInput.current < NAVIGATION_THROTTLE_MS) return;
+          lastGamepadInput.current = now;
 
-      if (useNavigationStore.getState().inputMode !== "gamepad") {
-        setInputMode("gamepad");
-      }
+          if (useNavigationStore.getState().inputMode !== "gamepad") {
+            setInputMode("gamepad");
+          }
 
-      switch (event.payload.action) {
-        case "navigate_up":
-          navigate("UP");
-          break;
-        case "navigate_down":
-          navigate("DOWN");
-          break;
-        case "navigate_left":
-          navigate("LEFT");
-          break;
-        case "navigate_right":
-          navigate("RIGHT");
-          break;
-        case "confirm":
-          confirm();
-          break;
-        case "back":
-          dispatchBackAction();
-          break;
-        case "menu":
-          useShellUiStore.getState().requestStaggeredMenuToggle();
-          break;
-        case "profile":
-          useShellUiStore.getState().requestProfileOpen();
-          break;
-      }
-    });
+          switch (event.payload.action) {
+            case "navigate_up":
+              navigate("UP");
+              break;
+            case "navigate_down":
+              navigate("DOWN");
+              break;
+            case "navigate_left":
+              navigate("LEFT");
+              break;
+            case "navigate_right":
+              navigate("RIGHT");
+              break;
+            case "confirm":
+              confirm();
+              break;
+            case "back":
+              dispatchBackAction();
+              break;
+            case "menu":
+              useShellUiStore.getState().requestStaggeredMenuToggle();
+              break;
+            case "profile":
+              useShellUiStore.getState().requestProfileOpen();
+              break;
+          }
+        })
+      : Promise.resolve(() => {});
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);

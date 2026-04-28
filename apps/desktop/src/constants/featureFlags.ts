@@ -5,6 +5,7 @@ function parseBooleanFlag(value: string | undefined): boolean {
 }
 
 const envExperimentalCloudStreams = parseBooleanFlag(import.meta.env.VITE_EXPERIMENTAL_CLOUD_STREAMS);
+const envEnableGamepadNavigation = parseBooleanFlag(import.meta.env.VITE_ENABLE_GAMEPAD_NAVIGATION);
 
 /**
  * Flags globales para funcionalidades experimentales.
@@ -12,5 +13,6 @@ const envExperimentalCloudStreams = parseBooleanFlag(import.meta.env.VITE_EXPERI
  * En producción solo se habilitan si el flag VITE_EXPERIMENTAL_CLOUD_STREAMS=true.
  */
 export const featureFlags = {
-  experimentalCloudStreams: import.meta.env.DEV || envExperimentalCloudStreams,
+  experimentalCloudStreams: envExperimentalCloudStreams,
+  gamepadNavigation: envEnableGamepadNavigation,
 } as const;

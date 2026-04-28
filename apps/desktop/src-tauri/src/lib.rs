@@ -22,6 +22,7 @@ mod time;
 mod torrent;
 mod tray;
 mod utils;
+mod voice;
 use tauri::Manager;
 
 fn load_dotenv() {

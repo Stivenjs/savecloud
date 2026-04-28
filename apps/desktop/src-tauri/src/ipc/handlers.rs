@@ -165,5 +165,10 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::config::profile_cmds::get_always_show_selector_cmd,
         crate::config::config_cmds::check_path_size,
         crate::system::disk::get_available_disks,
+        crate::voice::commands::start_voice_listener,
+        crate::voice::commands::stop_voice_listener,
+        crate::voice::commands::find_game_by_voice_query,
+        crate::voice::commands::emit_test_wake_word,
+        crate::voice::commands::list_voice_input_devices,
     ])
 }

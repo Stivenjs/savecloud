@@ -20,6 +20,7 @@ import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigationStore } from "@features/input/store";
 import { DevSdk } from "@features/settings/DevSdk";
 import { SourceInstallSettingsCard } from "@features/settings/SourceInstallSettingsCard";
+import { VoiceCommandsCard } from "@features/voice-commands";
 
 const ReleaseNotesDialogLazy = lazy(() =>
   import("@features/settings/ReleaseNotesDialog").then((module) => ({ default: module.ReleaseNotesDialog }))
@@ -227,6 +228,7 @@ export function SettingsPage() {
               <ReleaseNotesCard onOpenNotes={() => setReleaseNotesOpen(true)} />
             </div>
             <NotificationsCard testingNotification={testingNotification} onTestNotification={handleTestNotification} />
+            <VoiceCommandsCard />
           </div>
         </Tab>
 

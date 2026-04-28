@@ -1,6 +1,6 @@
 [package]
 name = "savecloud-desktop"
-version = "1.16.0"
+version = "1.20.8"
 description = "Sync your game saves to the cloud. Auto-upload on change, local backups before overwrite. Works with Steam, non-Steam, and emulated games."
 authors = ["Steven Jaime"]
 edition = "2021"
@@ -66,6 +66,10 @@ tauri-plugin-os = "2.3.2"
 zstd = { version = "0.13.3", features = ["zstdmt"] }
 num_cpus = "1.17.0"
 log = "0.4.29"
+rustpotter = "3"
+cpal = "0.15"
+ringbuf = "0.4"
+half = "=2.3.1"
 
 
 [dev-dependencies]

@@ -52,7 +52,10 @@
         "silent": true,
         "type": "downloadBootstrapper"
       }
-    }
+    },
+    "resources": [
+      "resources/oye_cloud.rpw"
+    ]
   },
   "identifier": "com.savecloud.desktop",
   "plugins": {
@@ -64,5 +67,5 @@
     }
   },
   "productName": "SaveCloud",
-  "version": "1.16.0"
+  "version": "1.20.8"
 }

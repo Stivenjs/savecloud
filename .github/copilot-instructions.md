@@ -121,7 +121,7 @@ Mirrors backend architecture with CLI-specific concerns (config I/O, path scanni
 
 ### Configuration
 
-- **[serverless.yml](../serverless.yml)** — AWS Lambda, API Gateway, DynamoDB, S3 resources
+- **[serverless.yml](../serverless.yml)** — AWS Lambda, API Gateway, DynamoDB, S3 (recursos en [infra/resources.*.yml](../infra/))
 - **[apps/desktop/src-tauri/Cargo.toml](../apps/desktop/src-tauri/Cargo.toml)** — Rust dependencies
 - **[tsconfig.json](../tsconfig.json)** — Path aliases, strict mode enabled
 

@@ -1,7 +1,7 @@
 {
   "name": "savecloud-desktop",
   "private": true,
-  "version": "1.16.0",
+  "version": "1.20.8",
   "type": "module",
   "packageManager": "bun",
   "scripts": {
