@@ -13,6 +13,6 @@ const envEnableGamepadNavigation = parseBooleanFlag(import.meta.env.VITE_ENABLE_
  * En producción solo se habilitan si el flag VITE_EXPERIMENTAL_CLOUD_STREAMS=true.
  */
 export const featureFlags = {
-  experimentalCloudStreams: import.meta.env.DEV || envExperimentalCloudStreams,
+  experimentalCloudStreams: envExperimentalCloudStreams,
   gamepadNavigation: envEnableGamepadNavigation,
 } as const;
