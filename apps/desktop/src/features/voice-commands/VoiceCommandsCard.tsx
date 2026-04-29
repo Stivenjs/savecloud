@@ -1,11 +1,28 @@
-import { Button, Card, CardBody } from "@heroui/react";
+import { Button, Card, CardBody, Chip, Select, SelectItem } from "@heroui/react";
 import { invoke } from "@tauri-apps/api/core";
 import { AlertCircle, Mic } from "lucide-react";
 import { toastError, toastInfo } from "@utils/toast";
 import { useSpeechRecognition } from "@/features/voice-commands/useSpeechRecognition";
+import { type NoiseSensitivity, useVoiceStore } from "@/features/voice-commands/voiceStore";
+
+const NOISE_LEVEL_OPTIONS: Array<{ key: NoiseSensitivity; label: string; description: string }> = [
+  { key: "low", label: "Baja", description: "Entorno silencioso, máxima precisión." },
+  { key: "medium", label: "Media", description: "Balance entre precisión y tolerancia al ruido." },
+  { key: "high", label: "Alta", description: "Para ruido de fondo constante (ventilador, calle, etc.)." },
+];
+
+function formatConfidence(value: number | null): string {
+  if (value == null) return "Sin datos";
+  const pct = Math.max(0, Math.min(100, Math.round(value * 100)));
+  return `${pct}%`;
+}
 
 export function VoiceCommandsCard() {
   const speech = useSpeechRecognition();
+  const noiseSensitivity = useVoiceStore((s) => s.noiseSensitivity);
+  const setNoiseSensitivity = useVoiceStore((s) => s.setNoiseSensitivity);
+  const lastAvgConfidence = useVoiceStore((s) => s.lastAvgConfidence);
+  const isNoisy = useVoiceStore((s) => s.isNoisy);
 
   const handleTestWakeWord = async () => {
     try {
@@ -42,6 +59,40 @@ export function VoiceCommandsCard() {
             </div>
           </div>
         )}
+
+        <div className="grid gap-3 rounded-xl border border-default-200 bg-default-50/40 p-3 dark:border-default-100/10 dark:bg-default-100/5 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-default-500">Sensibilidad al ruido</p>
+            <Select
+              aria-label="Sensibilidad al ruido para comandos de voz"
+              size="sm"
+              selectedKeys={[noiseSensitivity]}
+              disallowEmptySelection
+              onSelectionChange={(keys) => {
+                const selected = Array.from(keys)[0];
+                if (selected === "low" || selected === "medium" || selected === "high") {
+                  setNoiseSensitivity(selected);
+                }
+              }}>
+              {NOISE_LEVEL_OPTIONS.map((option) => (
+                <SelectItem key={option.key} description={option.description}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-default-500">Estado de reconocimiento</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Chip size="sm" variant="flat" color={isNoisy ? "warning" : "success"}>
+                {isNoisy ? "Ruido detectado" : "Señal estable"}
+              </Chip>
+              <Chip size="sm" variant="flat">
+                Calidad: {formatConfidence(lastAvgConfidence)}
+              </Chip>
+            </div>
+          </div>
+        </div>
 
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="flat" onPress={handleTestWakeWord}>

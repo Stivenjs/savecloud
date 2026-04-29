@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-const SINGLE_NUMBER_WORDS: &[(&str, u32)] = &[
+const SINGLES: &[(&str, u32)] = &[
     ("cero", 0),
     ("zero", 0),
     ("uno", 1),
@@ -34,10 +34,10 @@ const SINGLE_NUMBER_WORDS: &[(&str, u32)] = &[
     ("seven", 7),
     ("septimo", 7),
     ("septima", 7),
-    ("octavo", 8),
-    ("octava", 8),
     ("ocho", 8),
     ("eight", 8),
+    ("octavo", 8),
+    ("octava", 8),
     ("nueve", 9),
     ("nine", 9),
     ("noveno", 9),
@@ -60,7 +60,7 @@ const SINGLE_NUMBER_WORDS: &[(&str, u32)] = &[
     ("veinte", 20),
 ];
 
-const TENS_WORDS: &[(&str, u32)] = &[
+const TENS: &[(&str, u32)] = &[
     ("treinta", 30),
     ("cuarenta", 40),
     ("cincuenta", 50),
@@ -84,51 +84,37 @@ const FUSED_TWENTIES: &[(&str, u32)] = &[
     ("veintinueve", 29),
 ];
 
-fn word_value(token: &str) -> Option<u32> {
-    SINGLE_NUMBER_WORDS
+fn lookup<'a>(table: &'a [(&str, u32)], token: &str) -> Option<u32> {
+    table
         .iter()
-        .find_map(|(word, value)| (*word == token).then_some(*value))
-        .or_else(|| {
-            TENS_WORDS
-                .iter()
-                .find_map(|(word, value)| (*word == token).then_some(*value))
-        })
-        .or_else(|| {
-            FUSED_TWENTIES
-                .iter()
-                .find_map(|(word, value)| (*word == token).then_some(*value))
-        })
+        .find_map(|&(word, val)| (word == token).then_some(val))
 }
 
-fn parse_number_tokens(tokens: &[&str], idx: usize) -> Option<(u32, usize)> {
+fn word_value(token: &str) -> Option<u32> {
+    lookup(FUSED_TWENTIES, token)
+        .or_else(|| lookup(SINGLES, token))
+        .or_else(|| lookup(TENS, token))
+}
+
+fn parse_at(tokens: &[&str], idx: usize) -> Option<(u32, usize)> {
     let current = *tokens.get(idx)?;
 
-    if let Some(value) = FUSED_TWENTIES
-        .iter()
-        .find_map(|(word, value)| (*word == current).then_some(*value))
-    {
-        return Some((value, 1));
+    if let Some(v) = lookup(FUSED_TWENTIES, current) {
+        return Some((v, 1));
     }
 
-    if let Some(value) = SINGLE_NUMBER_WORDS
-        .iter()
-        .find_map(|(word, value)| (*word == current).then_some(*value))
-    {
-        return Some((value, 1));
+    if let Some(v) = lookup(SINGLES, current) {
+        return Some((v, 1));
     }
 
-    if let Some(tens) = TENS_WORDS
-        .iter()
-        .find_map(|(word, value)| (*word == current).then_some(*value))
-    {
-        let and_token = tokens.get(idx + 1).copied();
-        let unit_token = tokens.get(idx + 2).copied();
-        if and_token == Some("y") {
-            if let Some(unit) = unit_token.and_then(word_value) {
-                if (1..=9).contains(&unit) {
-                    return Some((tens + unit, 3));
-                }
-            }
+    if let Some(tens) = lookup(TENS, current) {
+        let compound = matches!(
+            (tokens.get(idx + 1).copied(), tokens.get(idx + 2).copied()),
+            (Some("y"), Some(unit)) if matches!(word_value(unit), Some(1..=9))
+        );
+        if compound {
+            let unit = word_value(tokens[idx + 2]).unwrap();
+            return Some((tens + unit, 3));
         }
         return Some((tens, 1));
     }
@@ -142,39 +128,33 @@ pub fn expand_numeric_variants(input: &str) -> Vec<String> {
         return Vec::new();
     }
 
-    let mut variants: HashSet<String> = HashSet::new();
-    let mut replaced_tokens = Vec::with_capacity(tokens.len());
-    let mut idx = 0usize;
+    let mut greedy: Vec<String> = Vec::with_capacity(tokens.len());
+    let mut idx = 0;
     let mut changed = false;
 
     while idx < tokens.len() {
-        if let Some((number, consumed)) = parse_number_tokens(&tokens, idx) {
-            replaced_tokens.push(number.to_string());
+        if let Some((value, consumed)) = parse_at(&tokens, idx) {
+            greedy.push(value.to_string());
             idx += consumed;
             changed = true;
-            continue;
-        }
-        replaced_tokens.push(tokens[idx].to_string());
-        idx += 1;
-    }
-
-    if changed {
-        variants.insert(replaced_tokens.join(" "));
-    }
-
-    let mut all_single_replacements = Vec::with_capacity(tokens.len());
-    let mut has_single_replacement = false;
-    for token in &tokens {
-        if let Some(value) = word_value(token) {
-            all_single_replacements.push(value.to_string());
-            has_single_replacement = true;
         } else {
-            all_single_replacements.push((*token).to_string());
+            greedy.push(tokens[idx].to_string());
+            idx += 1;
         }
     }
-    if has_single_replacement {
-        variants.insert(all_single_replacements.join(" "));
+
+    if !changed {
+        return Vec::new();
     }
+
+    let mut variants: HashSet<String> = HashSet::new();
+    variants.insert(greedy.join(" "));
+
+    let token_pass: Vec<String> = tokens
+        .iter()
+        .map(|&t| word_value(t).map_or_else(|| t.to_string(), |v| v.to_string()))
+        .collect();
+    variants.insert(token_pass.join(" "));
 
     let mut out: Vec<String> = variants.into_iter().collect();
     out.sort_unstable();
@@ -186,26 +166,28 @@ mod tests {
     use super::expand_numeric_variants;
 
     #[test]
-    fn expands_basic_spanish_cardinal() {
-        let variants = expand_numeric_variants("resident evil cuatro");
-        assert!(variants.contains(&"resident evil 4".to_string()));
+    fn basic_spanish_cardinal() {
+        assert!(expand_numeric_variants("resident evil cuatro")
+            .contains(&"resident evil 4".to_string()));
     }
 
     #[test]
-    fn expands_spanish_compound_number() {
-        let variants = expand_numeric_variants("fifa treinta y dos");
-        assert!(variants.contains(&"fifa 32".to_string()));
+    fn compound_tens_and_units() {
+        assert!(expand_numeric_variants("fifa treinta y dos").contains(&"fifa 32".to_string()));
     }
 
     #[test]
-    fn expands_fused_twenties() {
-        let variants = expand_numeric_variants("fifa veinticuatro");
-        assert!(variants.contains(&"fifa 24".to_string()));
+    fn fused_twenties() {
+        assert!(expand_numeric_variants("fifa veinticuatro").contains(&"fifa 24".to_string()));
     }
 
     #[test]
-    fn expands_mixed_language_words() {
-        let variants = expand_numeric_variants("doom four");
-        assert!(variants.contains(&"doom 4".to_string()));
+    fn english_cardinal() {
+        assert!(expand_numeric_variants("doom four").contains(&"doom 4".to_string()));
+    }
+
+    #[test]
+    fn no_number_words_returns_empty() {
+        assert!(expand_numeric_variants("doom eternal").is_empty());
     }
 }
