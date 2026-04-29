@@ -6,9 +6,10 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use url::Url;
 
@@ -82,6 +83,21 @@ pub enum CloudOutgoingMessage {
     StreamSignal(CloudStreamSignalPayload),
 }
 
+/// Métricas runtime del cliente WebSocket (panel de observabilidad).
+#[derive(Clone, Default, Debug)]
+pub struct WsRuntimeMetrics {
+    pub connected: bool,
+    pub last_connected_at_ms: Option<i64>,
+    pub last_disconnected_at_ms: Option<i64>,
+    pub last_error: Option<String>,
+    pub last_error_at_ms: Option<i64>,
+    pub total_successful_connections: u64,
+}
+
+fn utc_now_ms() -> i64 {
+    chrono::Utc::now().timestamp_millis()
+}
+
 /// Inicia el bucle de conexión WebSocket en un hilo de fondo.
 ///
 /// # Arguments
@@ -92,17 +108,25 @@ pub enum CloudOutgoingMessage {
 /// * `ready_notify`  - Sender one-shot consumido una sola vez cuando la primera
 ///                     conexión exitosa se establece. Permite al manager drenar
 ///                     la cola de mensajes pendientes del cold start.
+/// * `metrics`       - Opcional: actualiza totales de conexión / errores para el panel de salud.
 pub async fn start_ws_loop(
     app_handle: AppHandle,
     url_str: String,
     mut rx: mpsc::UnboundedReceiver<CloudOutgoingMessage>,
     logs: AppLogs,
     mut ready_notify: Option<oneshot::Sender<()>>,
+    metrics: Option<Arc<Mutex<WsRuntimeMetrics>>>,
 ) {
     let _url = match Url::parse(&url_str) {
         Ok(u) => u,
         Err(e) => {
             log_cloud(&app_handle, &logs, "error", &format!("URL inválida: {}", e)).await;
+            if let Some(ref m) = metrics {
+                let mut g = m.lock().await;
+                g.connected = false;
+                g.last_error = Some(format!("URL inválida: {}", e));
+                g.last_error_at_ms = Some(utc_now_ms());
+            }
             return;
         }
     };
@@ -129,6 +153,14 @@ pub async fn start_ws_loop(
                     "Conexión WebSocket establecida con éxito.",
                 )
                 .await;
+
+                if let Some(ref m) = metrics {
+                    let mut g = m.lock().await;
+                    g.connected = true;
+                    g.last_connected_at_ms = Some(utc_now_ms());
+                    g.total_successful_connections =
+                        g.total_successful_connections.saturating_add(1);
+                }
 
                 // Se consume solo la primera vez (Option::take); en reconexiones
                 // el canal ya no existe y esto es un no-op.
@@ -240,6 +272,11 @@ pub async fn start_ws_loop(
                                         "Conexión cerrada por el servidor.",
                                     )
                                     .await;
+                                    if let Some(ref m) = metrics {
+                                        let mut g = m.lock().await;
+                                        g.connected = false;
+                                        g.last_disconnected_at_ms = Some(utc_now_ms());
+                                    }
                                     break;
                                 }
                                 Err(e) => {
@@ -250,6 +287,13 @@ pub async fn start_ws_loop(
                                         &format!("Error de red: {}", e),
                                     )
                                     .await;
+                                    if let Some(ref m) = metrics {
+                                        let mut g = m.lock().await;
+                                        g.connected = false;
+                                        g.last_disconnected_at_ms = Some(utc_now_ms());
+                                        g.last_error = Some(format!("recv: {}", e));
+                                        g.last_error_at_ms = Some(utc_now_ms());
+                                    }
                                     break;
                                 }
                                 _ => {}
@@ -289,6 +333,12 @@ pub async fn start_ws_loop(
                     &format!("Error conectando: {}. Reintentando...", e),
                 )
                 .await;
+                if let Some(ref m) = metrics {
+                    let mut g = m.lock().await;
+                    g.connected = false;
+                    g.last_error = Some(format!("connect: {}", e));
+                    g.last_error_at_ms = Some(utc_now_ms());
+                }
             }
         }
 

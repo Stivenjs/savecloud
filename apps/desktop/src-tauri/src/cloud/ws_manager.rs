@@ -4,7 +4,7 @@
 //! coordinar el envío de mensajes desde la UI hacia el servidor WebSocket.
 //!
 //! ## Cold-start buffer
-//! Los mensajes enviados *antes* de que el WS esté completamente conectado se
+//! Los mensajes enviados *antes* de que el WS esté completamente listo se
 //! guardan en `pending_queue`. En cuanto el bucle de red confirma que la
 //! conexión se estableció (señal `ready_notify`), el manager drena la cola
 //! automáticamente sin perder ningún evento.
@@ -16,6 +16,7 @@ use tokio::task::JoinHandle;
 
 use super::ws_client::{
     start_ws_loop, CloudBroadcastPayload, CloudOutgoingMessage, CloudStreamSignalPayload,
+    WsRuntimeMetrics,
 };
 use crate::plugins::log_buffer::AppLogs;
 
@@ -31,6 +32,9 @@ pub struct CloudWsState {
     /// Cola de mensajes enviados *antes* de que el WS estuviese listo.
     /// Se drena automáticamente en cuanto la conexión se establece.
     pending_queue: Arc<Mutex<Vec<CloudOutgoingMessage>>>,
+
+    /// Contador de conexión / último error para el panel de salud.
+    pub ws_metrics: Arc<Mutex<WsRuntimeMetrics>>,
 }
 
 impl CloudWsState {
@@ -39,7 +43,15 @@ impl CloudWsState {
             tx: Arc::new(Mutex::new(None)),
             handle: Arc::new(Mutex::new(None)),
             pending_queue: Arc::new(Mutex::new(Vec::new())),
+            ws_metrics: Arc::new(Mutex::new(WsRuntimeMetrics::default())),
         }
+    }
+
+    /// Snapshot para IPC (métricas + tamaño de cola cold-start).
+    pub async fn observability_ws_snapshot(&self) -> (WsRuntimeMetrics, usize) {
+        let m = self.ws_metrics.lock().await.clone();
+        let pending = self.pending_queue.lock().await.len();
+        (m, pending)
     }
 
     /// Inicia la conexión WebSocket en un hilo de fondo si no está ya activa.
@@ -73,15 +85,24 @@ impl CloudWsState {
         });
 
         let app_handle_clone = app_handle.clone();
+        let metrics = Arc::clone(&self.ws_metrics);
 
         let join_handle = tokio::spawn(async move {
-            start_ws_loop(app_handle_clone, url_str, rx, logs, Some(ready_tx)).await;
+            start_ws_loop(
+                app_handle_clone,
+                url_str,
+                rx,
+                logs,
+                Some(ready_tx),
+                Some(metrics),
+            )
+            .await;
         });
 
         *handle_guard = Some(join_handle);
     }
 
-    /// Detiene la conexión WebSocket y libera los recursos del hilo de fondo.
+    /// Detiene manualmente la conexión WebSocket y libera los recursos del hilo de fondo.
     /// La cola pendiente se limpia para no acumular mensajes obsoletos.
     pub async fn stop(&self) {
         let mut tx_guard = self.tx.lock().await;
@@ -95,6 +116,10 @@ impl CloudWsState {
 
         // Limpiar cola para que el próximo arranque empiece limpio.
         self.pending_queue.lock().await.clear();
+
+        let mut met = self.ws_metrics.lock().await;
+        met.connected = false;
+        met.last_disconnected_at_ms = Some(chrono::Utc::now().timestamp_millis());
     }
 
     /// Envía inmediatamente si el WS ya está activo, o encola para después.

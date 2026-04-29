@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import type { SaveRepository } from "@domain/ports/SaveRepository";
@@ -31,11 +31,13 @@ import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import type { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
 import type { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
+import { recordHttpMetric } from "@infrastructure/observability/httpMetricsStore";
 import { registerSavesRoutes } from "@interfaces/http/routes/saves.routes";
 import { registerShareRoutes } from "@interfaces/http/routes/share.routes";
 import { registerNotificationRoutes } from "@interfaces/http/routes/notifications.routes";
 import { registerInviteRoutes } from "@interfaces/http/routes/invites.routes";
 import { registerProfileRoutes } from "@interfaces/http/routes/users.routes";
+import { registerObservabilityRoutes } from "@interfaces/http/routes/observability.routes";
 import { verifyUserAccessToken } from "@shared/accessToken";
 import { isPublicRoute } from "@interfaces/http/security/public-routes";
 import { GetFriendProfileUseCase } from "@application/use-cases/GetFriendProfileUseCase";
@@ -55,6 +57,12 @@ export interface AppDependencies {
  * Crea y configura la aplicación Fastify con las rutas y casos de uso.
  * Inyección de dependencias en el punto de entrada (composition root).
  */
+declare module "fastify" {
+  interface FastifyRequest {
+    _scMetricsStartNs?: bigint;
+  }
+}
+
 export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> {
   const app = Fastify({ logger: true });
 
@@ -70,6 +78,29 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       }
       return request.ip || "unknown";
     },
+  });
+
+  app.addHook("onRequest", async (request: FastifyRequest) => {
+    request._scMetricsStartNs = process.hrtime.bigint();
+  });
+
+  app.addHook("onResponse", async (request: FastifyRequest, reply: FastifyReply) => {
+    const start = request._scMetricsStartNs;
+    if (start === undefined) return;
+    const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
+    const path = (request.url ?? "").split("?")[0] ?? "";
+    if (path === "/health" || path === "/favicon.ico" || path.startsWith("/observability/")) return;
+    const routeTemplate =
+      typeof request.routeOptions?.url === "string" && request.routeOptions.url.length > 0
+        ? request.routeOptions.url
+        : null;
+    recordHttpMetric({
+      method: request.method,
+      path,
+      routeUrl: routeTemplate,
+      statusCode: reply.statusCode,
+      durationMs,
+    });
   });
 
   const expectedApiKey = process.env.API_KEY;
@@ -182,6 +213,8 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       return reply.send({ status: "ok" });
     }
   );
+
+  await registerObservabilityRoutes(app);
 
   return app;
 }

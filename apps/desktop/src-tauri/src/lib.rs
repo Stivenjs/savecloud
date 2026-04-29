@@ -8,6 +8,7 @@ mod ipc;
 mod manifest;
 mod network;
 mod notifications;
+mod observability;
 mod overlay;
 mod plugins;
 mod setup;

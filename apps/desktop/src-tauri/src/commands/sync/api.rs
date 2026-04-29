@@ -11,8 +11,10 @@ use super::context::ApiContext;
 use super::models::SyncResultDto;
 use super::models::{CloudSavesSummaryDto, RemoteSaveDto, RemoteSaveInfoDto};
 use crate::network::API_CLIENT;
+use crate::observability;
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
+use std::time::Instant;
 
 const S3_ACCELERATE_HOST: &str = "s3-accelerate.amazonaws.com";
 
@@ -109,7 +111,26 @@ pub(crate) async fn api_request(
             .body(b.to_vec());
     }
 
-    req.send().await.map_err(|e| e.to_string())
+    let start = Instant::now();
+    let res = req
+        .send()
+        .await
+        .map_err(|e| {
+            observability::record_error("sync_api_send", &e.to_string(), None);
+            e.to_string()
+        })?;
+    let elapsed_ms = start.elapsed().as_millis() as u64;
+    let ok = res.status().is_success();
+    observability::record_saves_api_timing(elapsed_ms, ok, path);
+    if !ok {
+        let st = res.status().as_u16();
+        observability::record_error(
+            "sync_api_http",
+            &format!("path={} status={}", path, st),
+            Some(st),
+        );
+    }
+    Ok(res)
 }
 
 pub(crate) async fn get_upload_urls(

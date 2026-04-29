@@ -139,6 +139,8 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::notifications::commands::sync_notifications_push,
         crate::notifications::commands::sync_notifications_pull,
         crate::notifications::commands::sync_notifications_full,
+        crate::observability::snapshot::get_observability_snapshot,
+        crate::observability::remote::get_remote_observability_summary,
         crate::sources::commands::list_sources,
         crate::sources::commands::list_sources_summary,
         crate::sources::commands::list_source_items_page,
