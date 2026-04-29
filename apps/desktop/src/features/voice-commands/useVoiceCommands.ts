@@ -209,6 +209,7 @@ export function useVoiceCommands() {
                 noisyRetryCountRef.current += 1;
                 commandInFlightRef.current = false;
                 commandCooldownUntilRef.current = 0;
+                toastInfo("No encontré el juego", "Voy a reintentar una vez. Intenta decir el nombre más claro.");
                 syncIdleListeningStatus();
                 return;
               }
