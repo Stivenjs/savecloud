@@ -21,6 +21,7 @@ import { useNavigationStore } from "@features/input/store";
 import { DevSdk } from "@features/settings/DevSdk";
 import { SourceInstallSettingsCard } from "@features/settings/SourceInstallSettingsCard";
 import { VoiceCommandsCard } from "@features/voice-commands";
+import { HealthObservabilityCard } from "@features/settings/HealthObservabilityCard";
 
 const ReleaseNotesDialogLazy = lazy(() =>
   import("@features/settings/ReleaseNotesDialog").then((module) => ({ default: module.ReleaseNotesDialog }))
@@ -227,6 +228,7 @@ export function SettingsPage() {
               <UpdatesCard checkingUpdate={checkingUpdate} onCheckUpdates={handleCheckUpdates} />
               <ReleaseNotesCard onOpenNotes={() => setReleaseNotesOpen(true)} />
             </div>
+            <HealthObservabilityCard />
             <NotificationsCard testingNotification={testingNotification} onTestNotification={handleTestNotification} />
             <VoiceCommandsCard />
           </div>

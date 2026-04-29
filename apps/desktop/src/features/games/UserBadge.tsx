@@ -32,7 +32,6 @@ export function UserBadge({
 }: UserBadgeProps) {
   const isConfigured = !!userId?.trim();
 
-  // avatarSrc y hasGeneratedAvatar ya no se usan tras el refactor
   const frameSrc = useMemo(() => resolveProfileAsset(profileFrame ?? undefined), [profileFrame]);
 
   const handleCopy = async () => {

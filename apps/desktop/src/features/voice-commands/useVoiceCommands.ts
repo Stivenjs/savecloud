@@ -3,9 +3,13 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { toastError, toastInfo, toastSuccess } from "@utils/toast";
 import { formatGameDisplayName } from "@utils/gameImage";
-import { parseVoiceCommand } from "@/features/voice-commands/commandMapper";
+import { parseVoiceCommand, rankAlternativesByConfidence } from "@/features/voice-commands/commandMapper";
 import { useSpeechRecognition } from "@/features/voice-commands/useSpeechRecognition";
-import { useVoiceStore } from "@/features/voice-commands/voiceStore";
+import {
+  useVoiceStore,
+  NOISE_SENSITIVITY_CONFIDENCE,
+  NOISE_SENSITIVITY_SILENCE_MS,
+} from "@/features/voice-commands/voiceStore";
 
 interface GameMatch {
   game_id: string;
@@ -35,8 +39,10 @@ function normalizeTargetText(text: string): string {
 }
 
 function buildVoiceTargets(alternatives: string[]): string[] {
+  const ranked = rankAlternativesByConfidence(alternatives);
+
   const out = new Set<string>();
-  for (const text of alternatives) {
+  for (const text of ranked) {
     const target = parseVoiceCommand(text).target.trim();
     if (!target) continue;
     const normalized = normalizeTargetText(target);
@@ -80,8 +86,16 @@ export function useVoiceCommands() {
   const setTranscript = useVoiceStore((s) => s.setTranscript);
   const setError = useVoiceStore((s) => s.setError);
   const setHoldKeyPressed = useVoiceStore((s) => s.setHoldKeyPressed);
-  const speech = useSpeechRecognition();
+  const noiseSensitivity = useVoiceStore((s) => s.noiseSensitivity);
+  const setLastRecognitionQuality = useVoiceStore((s) => s.setLastRecognitionQuality);
+
+  // Derivar parámetros STT del nivel de sensibilidad seleccionado
+  const minConfidence = NOISE_SENSITIVITY_CONFIDENCE[noiseSensitivity];
+  const silenceTimeoutMs = NOISE_SENSITIVITY_SILENCE_MS[noiseSensitivity];
+
+  const speech = useSpeechRecognition({ minConfidence, silenceTimeoutMs });
   const { start, stop } = speech;
+
   const commandInFlightRef = useRef(false);
   const wakeDebounceUntilRef = useRef(0);
   const commandCooldownUntilRef = useRef(0);
@@ -89,6 +103,7 @@ export function useVoiceCommands() {
   const speechSessionActiveRef = useRef(false);
   const releaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const learnedCorrectionsRef = useRef<Record<string, LearnedCorrection>>(loadLearnedCorrections());
+  const noisyRetryCountRef = useRef(0);
 
   useEffect(() => {
     if (!enabled) {
@@ -103,6 +118,7 @@ export function useVoiceCommands() {
     }
 
     setStatus("listeningWake");
+
     const syncIdleListeningStatus = () => {
       setStatus(holdTriggerActiveRef.current ? "listeningCommand" : "listeningWake");
     };
@@ -111,18 +127,42 @@ export function useVoiceCommands() {
       if (speechSessionActiveRef.current || commandInFlightRef.current) {
         return;
       }
+
+      noisyRetryCountRef.current = 0;
+
       const started = start(
-        async ({ primaryText, alternatives }) => {
+        async ({ primaryText, alternatives, avgConfidence, isNoisy }) => {
           const nowCommand = Date.now();
           if (commandInFlightRef.current || nowCommand < commandCooldownUntilRef.current) {
             return;
           }
+
           commandInFlightRef.current = true;
-          commandCooldownUntilRef.current = nowCommand + 4_000;
+
+          // Cooldown adaptativo: en modo alto ruido, reducimos cooldown
+          // para permitir reintentos más rápidos
+          const cooldownMs = noiseSensitivity === "high" ? 2_500 : noiseSensitivity === "medium" ? 4_000 : 5_000;
+          commandCooldownUntilRef.current = nowCommand + cooldownMs;
+
           setTranscript(primaryText);
+          setLastRecognitionQuality(avgConfidence, isNoisy);
+
           const targets = buildVoiceTargets(alternatives);
+
           if (targets.length === 0) {
-            toastInfo("No te escuché bien", "Prueba de nuevo: abre Counter Strike.");
+            // Si hay ruido, no mostrar error inmediatamente — solo reintentar silenciosamente
+            if (isNoisy && noisyRetryCountRef.current < 2) {
+              noisyRetryCountRef.current += 1;
+              commandInFlightRef.current = false;
+              commandCooldownUntilRef.current = 0; // permitir reintento inmediato
+              return;
+            }
+            toastInfo(
+              "No te escuché bien",
+              noiseSensitivity === "high"
+                ? "Hay mucho ruido. Intenta hablar más cerca del micrófono."
+                : "Prueba de nuevo: abre Counter Strike."
+            );
             syncIdleListeningStatus();
             stop();
             commandInFlightRef.current = false;
@@ -164,17 +204,33 @@ export function useVoiceCommands() {
             }
 
             if (!resolvedMatch) {
+              // Con ruido alto y sin resultado, intentar reintento automático una vez
+              if (isNoisy && noisyRetryCountRef.current < 1) {
+                noisyRetryCountRef.current += 1;
+                commandInFlightRef.current = false;
+                commandCooldownUntilRef.current = 0;
+                toastInfo("No encontré el juego", "Voy a reintentar una vez. Intenta decir el nombre más claro.");
+                syncIdleListeningStatus();
+                return;
+              }
+
               const fallbackTarget = targets[0];
               const suggestions = await invoke<GameMatch[]>("find_game_voice_candidates", {
                 text: fallbackTarget,
                 limit: 3,
               });
+
               if (suggestions.length > 0) {
                 const names = suggestions
                   .slice(0, 2)
                   .map((s) => formatGameDisplayName(s.game_id))
                   .join(" o ");
-                toastInfo("Juego no encontrado", `No encontré "${fallbackTarget}". Quizá quisiste decir: ${names}.`);
+                toastInfo(
+                  "Juego no encontrado",
+                  isNoisy
+                    ? `Con el ruido no te escuché bien. ¿Quisiste decir: ${names}?`
+                    : `No encontré "${fallbackTarget}". Quizá quisiste decir: ${names}.`
+                );
               } else {
                 toastInfo("Juego no encontrado", `No encuentro "${fallbackTarget}" en tu librería.`);
               }
@@ -197,12 +253,21 @@ export function useVoiceCommands() {
             stop();
             commandInFlightRef.current = false;
             speechSessionActiveRef.current = false;
+            noisyRetryCountRef.current = 0;
             syncIdleListeningStatus();
           }
         },
         (speechError) => {
           commandInFlightRef.current = false;
           speechSessionActiveRef.current = false;
+          noisyRetryCountRef.current = 0;
+
+          // "no-speech" en entornos ruidosos es normal, no mostrar error
+          if (speechError === "no-speech" || speechError === "audio-capture") {
+            syncIdleListeningStatus();
+            return;
+          }
+
           setError(speechError);
           toastError("Error de reconocimiento", speechError);
         },
@@ -258,6 +323,7 @@ export function useVoiceCommands() {
       event.stopPropagation();
       holdTriggerActiveRef.current = false;
       setHoldKeyPressed(false);
+
       if (releaseTimerRef.current) {
         clearTimeout(releaseTimerRef.current);
       }
@@ -285,5 +351,17 @@ export function useVoiceCommands() {
       window.removeEventListener("keyup", onKeyUp, true);
       void unlistenPromise.then((unlisten) => unlisten());
     };
-  }, [enabled, setError, setHoldKeyPressed, setStatus, setTranscript, start, stop]);
+  }, [
+    enabled,
+    noiseSensitivity,
+    minConfidence,
+    silenceTimeoutMs,
+    setError,
+    setHoldKeyPressed,
+    setStatus,
+    setTranscript,
+    setLastRecognitionQuality,
+    start,
+    stop,
+  ]);
 }
