@@ -42,7 +42,7 @@ export function LocalBackupInfoCard() {
   };
 
   return (
-    <Card className="border border-default-200 bg-default-50/30">
+    <Card className="bg-default-50">
       <CardBody className="gap-4">
         <div className="flex items-center gap-2">
           <Archive size={20} className="text-default-500" />
