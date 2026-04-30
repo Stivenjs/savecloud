@@ -127,7 +127,7 @@ export function SteamCatalogTrendingHero({
           speed={520}
           className="sg-trending-swiper min-h-[380px] overflow-hidden rounded-2xl border border-default-200/70 shadow-sm dark:border-default-100/15">
           {slides.map((featured, slideIndex) => (
-            <SwiperSlide key={featured.steamAppId} className="!h-auto">
+            <SwiperSlide key={featured.steamAppId} className="h-auto!">
               <TrendingHeroSlide
                 featured={featured}
                 relatedItems={secondaryForSlide(slideIndex)}
