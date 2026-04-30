@@ -15,7 +15,7 @@ export function ExperimentalFeaturesCard({
   onFullBackupStreamingDryRunChange,
 }: ExperimentalFeaturesCardProps) {
   return (
-    <Card className="border border-default-200 bg-default-50/30">
+    <Card className="bg-default-50">
       <CardBody className="gap-4">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-start gap-3">

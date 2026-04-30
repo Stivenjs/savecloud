@@ -1,6 +1,6 @@
 import { useState, lazy, Suspense } from "react";
 import { Tab, Tabs } from "@heroui/react";
-import { AppWindow, Cloud, FlaskConical } from "lucide-react";
+import { AppWindow, Bell, Cloud, FlaskConical, RefreshCw } from "lucide-react";
 import { AutostartCard } from "@features/settings/AutostartCard";
 import { ConfigSection } from "@features/settings/ConfigSection";
 import { CreateConfigModal } from "@features/settings/CreateConfigModal";
@@ -141,7 +141,7 @@ export function SettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Configuración</h1>
         <p className="mt-1 text-sm text-default-500">
-          Cuenta y datos de la app, preferencias del sistema y opciones avanzadas.
+          Ajusta tu cuenta, comportamiento de la app e integraciones desde un solo lugar.
         </p>
       </div>
 
@@ -161,7 +161,7 @@ export function SettingsPage() {
           title={
             <span className="flex items-center gap-2">
               <Cloud size={17} className="opacity-90" />
-              Cuenta y datos
+              Cuenta
             </span>
           }>
           <ConfigSection
@@ -199,7 +199,7 @@ export function SettingsPage() {
           title={
             <span className="flex items-center gap-2">
               <AppWindow size={17} className="opacity-90" />
-              Aplicación
+              Inicio y app
             </span>
           }>
           <div className="space-y-4">
@@ -209,6 +209,20 @@ export function SettingsPage() {
               loading={loadingAlwaysShowProfileSelector}
               onChange={handleAlwaysShowProfileSelectorChange}
             />
+          </div>
+        </Tab>
+
+        <Tab
+          key="integrations"
+          title={
+            <span className="flex items-center gap-2">
+              <Bell size={17} className="opacity-90" />
+              Integraciones y alertas
+            </span>
+          }>
+          <div className="space-y-4">
+            <NotificationsCard testingNotification={testingNotification} onTestNotification={handleTestNotification} />
+            <VoiceCommandsCard />
             <SourceInstallSettingsCard
               sourceUrl={sourceUrl}
               defaultDownloadDir={defaultSourceDownloadDir}
@@ -224,13 +238,20 @@ export function SettingsPage() {
               onSaveDefaultDir={handleSaveDefaultSourceDownloadDir}
               onDeleteSource={handleDeleteSource}
             />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <UpdatesCard checkingUpdate={checkingUpdate} onCheckUpdates={handleCheckUpdates} />
-              <ReleaseNotesCard onOpenNotes={() => setReleaseNotesOpen(true)} />
-            </div>
-            <HealthObservabilityCard />
-            <NotificationsCard testingNotification={testingNotification} onTestNotification={handleTestNotification} />
-            <VoiceCommandsCard />
+          </div>
+        </Tab>
+
+        <Tab
+          key="updates"
+          title={
+            <span className="flex items-center gap-2">
+              <RefreshCw size={17} className="opacity-90" />
+              Versiones
+            </span>
+          }>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <UpdatesCard checkingUpdate={checkingUpdate} onCheckUpdates={handleCheckUpdates} />
+            <ReleaseNotesCard onOpenNotes={() => setReleaseNotesOpen(true)} />
           </div>
         </Tab>
 
@@ -239,10 +260,11 @@ export function SettingsPage() {
           title={
             <span className="flex items-center gap-2">
               <FlaskConical size={17} className="opacity-90" />
-              Avanzado
+              Avanzado y diagnóstico
             </span>
           }>
           <div className="space-y-4">
+            <HealthObservabilityCard />
             <LocalBackupInfoCard />
             <ExperimentalFeaturesCard
               fullBackupStreaming={!!config?.fullBackupStreaming}
