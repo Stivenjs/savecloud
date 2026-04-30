@@ -1,5 +1,7 @@
 //! Notificación de completado de torrents al sistema de sources.
 
+use std::collections::HashSet;
+
 use tauri::AppHandle;
 
 use crate::sources::domain::{DownloadProtocol, SourceJobStatus};
@@ -22,9 +24,8 @@ pub fn torrent_complete_notify(app: &AppHandle, info_hash: &str, total_bytes: u6
         Err(_) => return,
     };
 
-    let mut updated_ids = Vec::new();
+    let mut updated_ids = HashSet::new();
 
-    // Primero: actualizar solo jobs activos (no terminales) que coincidan
     for job in jobs.iter_mut() {
         let is_torrent_protocol = matches!(
             job.protocol,
@@ -39,7 +40,7 @@ pub fn torrent_complete_notify(app: &AppHandle, info_hash: &str, total_bytes: u6
             job.loaded = total_bytes;
             job.total = total_bytes;
             job.updated_at = chrono::Utc::now().to_rfc3339();
-            updated_ids.push(job.job_id.clone());
+            let _ = updated_ids.insert(job.job_id.clone());
         }
     }
 
@@ -47,10 +48,10 @@ pub fn torrent_complete_notify(app: &AppHandle, info_hash: &str, total_bytes: u6
         return;
     }
 
-    // Segundo: emitir evento terminal solo para los jobs que acabamos de actualizar
     for job in jobs.iter().filter(|j| updated_ids.contains(&j.job_id)) {
         events::emit_terminal(app, job);
     }
 
+    jobs.retain(|job| !updated_ids.contains(&job.job_id));
     let _ = store::save_jobs(&jobs);
 }

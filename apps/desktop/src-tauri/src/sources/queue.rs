@@ -164,6 +164,7 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
                     state.upsert_job(done_job.clone())?;
                     emit_progress(app, &done_job);
                     emit_terminal(app, &done_job);
+                    state.remove_job(job_id)?;
                 }
                 Err(err) if err == "stopped_by_user" => {
                     let current = find_job(state, job_id)?;
@@ -263,6 +264,7 @@ fn spawn_torrent_monitor(app: AppHandle, job_id: String, info_hash: String) {
                 emit_progress(&app, &job);
                 if job.status == SourceJobStatus::Completed {
                     emit_terminal(&app, &job);
+                    let _ = state.remove_job(&job_id);
                     break;
                 }
             }

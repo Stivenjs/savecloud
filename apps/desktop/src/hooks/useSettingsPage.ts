@@ -251,18 +251,20 @@ export function useSettingsPage() {
     queryFn: listSourcesSummary,
   });
 
+  const { data: defaultSourceDownloadDirFromConfig = "" } = useQuery({
+    queryKey: ["defaultSourceDownloadDir"],
+    queryFn: async () => (await getDefaultSourceDownloadDir()) ?? "",
+    staleTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const dir = await getDefaultSourceDownloadDir();
-      if (!cancelled) {
-        dispatch({ type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR", payload: dir ?? "" });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    dispatch({
+      type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR",
+      payload: defaultSourceDownloadDirFromConfig,
+    });
+  }, [defaultSourceDownloadDirFromConfig]);
 
   const { data: s3TransferEndpointType = null, isLoading: loadingS3 } = useQuery({
     queryKey: ["s3TransferEndpointType", activeApiBaseUrl, activeUserId],
@@ -723,12 +725,15 @@ export function useSettingsPage() {
     if (!path || typeof path !== "string") return;
     dispatch({ type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR", payload: path });
     await setDefaultSourceDownloadDir(path);
+    queryClient.setQueryData(["defaultSourceDownloadDir"], path);
     queryClient.invalidateQueries({ queryKey: ["config"] });
   };
 
   const handleSaveDefaultSourceDownloadDir = async () => {
     try {
-      await setDefaultSourceDownloadDir(state.defaultSourceDownloadDir.trim() || null);
+      const next = state.defaultSourceDownloadDir.trim() || null;
+      await setDefaultSourceDownloadDir(next);
+      queryClient.setQueryData(["defaultSourceDownloadDir"], next ?? "");
       queryClient.invalidateQueries({ queryKey: ["config"] });
       toastSuccess("Ruta guardada", "Carpeta por defecto actualizada.");
     } catch (e) {
