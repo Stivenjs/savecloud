@@ -20,7 +20,7 @@
 
 use rusqlite::{params_from_iter, Connection, Row};
 
-use super::normalize::search_phrase_and_tokens;
+use super::normalize::{escape_like_pattern, search_phrase_and_tokens};
 use super::types::{CatalogFilterFacet, CatalogFilterFacets, CatalogListItem, CatalogPage};
 
 /// Número máximo de filas que COUNT evalúa cuando hay filtros activos.
@@ -249,10 +249,10 @@ pub fn catalog_page_filtered(
     })
 }
 
-/// Búsqueda por tokens con orden: relevancia FTS → tendencia → score → recencia de enriquecimiento.
+/// Búsqueda por tokens con orden híbrido: señal léxica (exacta/prefijo) → score → relevancia FTS.
 ///
-/// El `catalog_rank_score` actúa como criterio de desempate entre resultados con igual relevancia FTS,
-/// priorizando juegos de mayor calidad cuando hay múltiples coincidencias exactas del token.
+/// Para consultas cortas (p. ej. "god"), se prioriza que aparezcan antes títulos
+/// más fuertes cuando además coinciden como prefijo de nombre.
 ///
 /// Los filtros de género/tag se aplican con EXISTS correlacionado, igual que en el listado.
 pub fn search_catalog_filtered(
@@ -262,7 +262,7 @@ pub fn search_catalog_filtered(
     genres: &[String],
     tags: &[String],
 ) -> Result<Vec<CatalogListItem>, rusqlite::Error> {
-    let Some((_, tokens)) = search_phrase_and_tokens(q) else {
+    let Some((phrase, tokens)) = search_phrase_and_tokens(q) else {
         return Ok(Vec::new());
     };
 
@@ -280,15 +280,29 @@ pub fn search_catalog_filtered(
          WHERE steam_catalog_search MATCH ?",
     );
 
+    let phrase_like = escape_like_pattern(&phrase);
+    let phrase_prefix = format!("{phrase_like}%");
+    let phrase_contains = format!("% {phrase_like}%");
+
     let mut params: Vec<String> = vec![fts_match_query];
     append_genre_filter(&mut sql, &mut params, genres, "a");
     append_tag_filter(&mut sql, &mut params, tags, "a");
+    params.push(phrase.clone());
+    params.push(phrase_prefix);
+    params.push(phrase_contains);
 
     sql.push_str(
-        " ORDER BY s.rank ASC, \
+        " ORDER BY \
+          CASE \
+            WHEN a.name_normalized = ? THEN 0 \
+            WHEN a.name_normalized LIKE ? ESCAPE '\\' THEN 1 \
+            WHEN a.name_normalized LIKE ? ESCAPE '\\' THEN 2 \
+            ELSE 3 \
+          END ASC, \
+          a.catalog_rank_score DESC, \
+          s.rank ASC, \
           (tr.rank IS NOT NULL) DESC, \
           tr.rank ASC, \
-          a.catalog_rank_score DESC, \
           a.enriched_at DESC",
     );
     sql.push_str(&format!(" LIMIT {limit}"));
