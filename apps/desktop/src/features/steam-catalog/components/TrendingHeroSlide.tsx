@@ -68,9 +68,6 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
           <div className="absolute inset-0 bg-linear-to-br from-default-900 via-default-800 to-default-700" />
         )}
 
-        <div className="absolute inset-0 bg-linear-to-r from-zinc-950/85 via-zinc-900/50 to-zinc-950/10" />
-        <div className="absolute inset-0 bg-linear-to-t from-zinc-950/85 via-transparent to-transparent" />
-
         <div className="relative z-10 flex h-full flex-col justify-between p-5 sm:p-6">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/90">
             <Flame size={14} className="text-primary" />
