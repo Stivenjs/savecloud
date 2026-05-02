@@ -1,4 +1,15 @@
-import { Button, Card, CardBody, Select, SelectItem } from "@heroui/react";
+import {
+  Button,
+  Card,
+  CardBody,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  Select,
+  SelectItem,
+} from "@heroui/react";
 import { Archive, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cleanupOldBackups, setKeepBackupsPerGame, deleteAllLocalBackups } from "@services/tauri/config.service";
@@ -12,7 +23,7 @@ export function LocalBackupInfoCard() {
   const { config, refetch } = useConfig();
   const [keepLastN, setKeepLastN] = useState(DEFAULT_KEEP);
   const [cleaning, setCleaning] = useState(false);
-  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+  const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false);
 
   useEffect(() => {
     const n = config?.keepBackupsPerGame ?? DEFAULT_KEEP;
@@ -36,6 +47,19 @@ export function LocalBackupInfoCard() {
       }
     } catch (e) {
       toastError("Error al liberar espacio", e instanceof Error ? e.message : String(e));
+    } finally {
+      setCleaning(false);
+    }
+  };
+
+  const handleDeleteAllBackups = async () => {
+    setCleaning(true);
+    try {
+      await deleteAllLocalBackups();
+      toastSuccess("Backups locales eliminados", "Se borraron todas las copias locales en SaveCloud/backups.");
+      setIsDeleteAllModalOpen(false);
+    } catch (e) {
+      toastError("Error al borrar backups", e instanceof Error ? e.message : String(e));
     } finally {
       setCleaning(false);
     }
@@ -91,41 +115,35 @@ export function LocalBackupInfoCard() {
             Liberar espacio ahora
           </Button>
 
-          {confirmDeleteAll ? (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-default-600">
-              <span className="font-medium">¿Borrar TODOS los backups locales? Esta acción no se puede deshacer.</span>
-              <Button
-                size="sm"
-                variant="flat"
-                color="danger"
-                isLoading={cleaning}
-                onPress={async () => {
-                  setCleaning(true);
-                  try {
-                    await deleteAllLocalBackups();
-                    toastSuccess(
-                      "Backups locales eliminados",
-                      "Se borraron todas las copias locales en SaveCloud/backups."
-                    );
-                    setConfirmDeleteAll(false);
-                  } catch (e) {
-                    toastError("Error al borrar backups", e instanceof Error ? e.message : String(e));
-                  } finally {
-                    setCleaning(false);
-                  }
-                }}>
-                Confirmar borrado
-              </Button>
-              <Button size="sm" variant="light" onPress={() => setConfirmDeleteAll(false)}>
+          <Button size="sm" variant="flat" color="danger" onPress={() => setIsDeleteAllModalOpen(true)}>
+            Borrar todos los backups locales
+          </Button>
+        </div>
+
+        <Modal
+          isOpen={isDeleteAllModalOpen}
+          onOpenChange={(open) => setIsDeleteAllModalOpen(open)}
+          isDismissable={!cleaning}
+          isKeyboardDismissDisabled={cleaning}>
+          <ModalContent>
+            <ModalHeader className="text-danger">Confirmar borrado total</ModalHeader>
+            <ModalBody>
+              <p className="text-sm text-default-700">
+                <span className="font-medium">
+                  ¿Borrar TODOS los backups locales? Esta acción no se puede deshacer.
+                </span>
+              </p>
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="light" onPress={() => setIsDeleteAllModalOpen(false)} isDisabled={cleaning}>
                 Cancelar
               </Button>
-            </div>
-          ) : (
-            <Button size="sm" variant="flat" color="danger" onPress={() => setConfirmDeleteAll(true)}>
-              Borrar todos los backups locales
-            </Button>
-          )}
-        </div>
+              <Button color="danger" isLoading={cleaning} onPress={handleDeleteAllBackups}>
+                Confirmar borrado
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
       </CardBody>
     </Card>
   );
