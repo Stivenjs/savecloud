@@ -156,6 +156,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::sources::commands::sources_find_match_for_game,
         crate::sources::commands::sources_find_matches_batch,
         crate::overlay::show_overlay_notification,
+        crate::overlay::hide_overlay_window,
         crate::shutdown::hooks::request_app_shutdown,
         crate::config::profile_cmds::list_profiles_cmd,
         crate::config::profile_cmds::get_active_profile_cmd,
