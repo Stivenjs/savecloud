@@ -24,17 +24,7 @@ const TOAST_CONFIG = {
   toastProps: { timeout: 3000 },
 } as const;
 
-/**
- * Verifica si la aplicación debe renderizarse en modo overlay
- * @returns `true` si el parámetro overlay=true está en la URL
- */
-function isOverlayMode(): boolean {
-  return new URLSearchParams(window.location.search).get("overlay") === "true";
-}
-
-function isStreamViewerMode(): boolean {
-  return new URLSearchParams(window.location.search).get("streamViewer") === "true";
-}
+type RenderMode = "overlay" | "streamViewer" | "friendsWindow" | "main";
 
 /**
  * Obtiene el elemento root del DOM de forma segura
@@ -74,67 +64,46 @@ const MainAppWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =
   </React.StrictMode>
 );
 
-/**
- * Renderiza la aplicación en modo overlay
- * Carga dinámicamente los estilos y componentes del overlay
- */
-async function renderOverlayApp(): Promise<void> {
-  try {
-    await import("@styles/overlay.css");
-
-    const { OverlayApp } = await import("./pages/OverlayApp");
-
-    const root = ReactDOM.createRoot(getRootElement());
-
-    root.render(
-      <OverlayWrapper>
-        <OverlayApp />
-      </OverlayWrapper>
-    );
-  } catch (error) {
-    console.error("[Render] Error cargando aplicación overlay:", error);
-    throw error;
-  }
+function detectRenderMode(): RenderMode {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("overlay") === "true") return "overlay";
+  if (params.get("streamViewer") === "true") return "streamViewer";
+  if (params.get("friendsWindow") === "true") return "friendsWindow";
+  return "main";
 }
 
-/**
- * Renderiza la aplicación principal
- */
-async function renderMainApp(): Promise<void> {
-  try {
-    const root = ReactDOM.createRoot(getRootElement());
+function renderWithRoot(content: React.ReactNode): void {
+  const root = ReactDOM.createRoot(getRootElement());
+  root.render(content);
+}
 
-    root.render(
-      <MainAppWrapper>
-        <App />
-      </MainAppWrapper>
-    );
+async function renderMainWrapped(content: React.ReactNode): Promise<void> {
+  renderWithRoot(<MainAppWrapper>{content}</MainAppWrapper>);
+  await showMainWindow();
+}
 
-    // Mostrar ventana cuando React esté listo
-    await showMainWindow();
-  } catch (error) {
-    console.error("[Render] Error cargando aplicación principal:", error);
-    throw error;
-  }
+async function renderOverlayApp(): Promise<void> {
+  await import("@styles/overlay.css");
+  const { OverlayApp } = await import("./pages/OverlayApp");
+  renderWithRoot(
+    <OverlayWrapper>
+      <OverlayApp />
+    </OverlayWrapper>
+  );
 }
 
 async function renderStreamViewerApp(): Promise<void> {
-  try {
-    const { StreamViewerPage } = await import("@features/friends/StreamViewerPage");
+  const { StreamViewerPage } = await import("@features/friends/StreamViewerPage");
+  await renderMainWrapped(<StreamViewerPage />);
+}
 
-    const root = ReactDOM.createRoot(getRootElement());
+async function renderFriendsWindowApp(): Promise<void> {
+  const { FriendsWindowPage } = await import("@features/friends/FriendsWindowPage");
+  await renderMainWrapped(<FriendsWindowPage />);
+}
 
-    root.render(
-      <MainAppWrapper>
-        <StreamViewerPage />
-      </MainAppWrapper>
-    );
-
-    await showMainWindow();
-  } catch (error) {
-    console.error("[Render] Error cargando stream viewer:", error);
-    throw error;
-  }
+async function renderMainApp(): Promise<void> {
+  await renderMainWrapped(<App />);
 }
 
 /**
@@ -151,13 +120,14 @@ async function showMainWindow(): Promise<void> {
  */
 async function bootstrap(): Promise<void> {
   try {
-    if (isOverlayMode()) {
-      await renderOverlayApp();
-    } else if (isStreamViewerMode()) {
-      await renderStreamViewerApp();
-    } else {
-      await renderMainApp();
-    }
+    const mode = detectRenderMode();
+    const renderByMode: Record<RenderMode, () => Promise<void>> = {
+      overlay: renderOverlayApp,
+      streamViewer: renderStreamViewerApp,
+      friendsWindow: renderFriendsWindowApp,
+      main: renderMainApp,
+    };
+    await renderByMode[mode]();
   } catch (error) {
     console.error("[Bootstrap] Error fatal inicializando la aplicación:", error);
 
