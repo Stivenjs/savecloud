@@ -62,7 +62,7 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let label = window.label();
-                if label == "main" || label == "friends-window" {
+                if label == "main" || label == "friends-window" || label == "settings-window" {
                     let _ = window.hide();
                     api.prevent_close();
                 }

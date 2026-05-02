@@ -35,8 +35,6 @@ export const HistoryPage = lazy(() =>
   import("@features/history/HistoryPage").then((m) => ({ default: m.HistoryPage }))
 );
 
-export const SettingsPage = lazy(() => import("@features/settings").then((m) => ({ default: m.SettingsPage })));
-
 export const AboutPage = lazy(() => import("@features/about/AboutPage").then((m) => ({ default: m.AboutPage })));
 
 export const PlaceholderPage = lazy(() =>

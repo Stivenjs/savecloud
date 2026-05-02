@@ -5,7 +5,8 @@
   "windows": [
     "main",
     "friends-window",
-    "stream-viewer-*"
+    "settings-window",
+    "stream-viewer"
   ],
   "permissions": [
     "core:default",

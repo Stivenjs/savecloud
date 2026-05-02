@@ -24,7 +24,7 @@ const TOAST_CONFIG = {
   toastProps: { timeout: 3000 },
 } as const;
 
-type RenderMode = "overlay" | "streamViewer" | "friendsWindow" | "main";
+type RenderMode = "overlay" | "streamViewer" | "friendsWindow" | "settingsWindow" | "main";
 
 /**
  * Obtiene el elemento root del DOM de forma segura
@@ -69,6 +69,7 @@ function detectRenderMode(): RenderMode {
   if (params.get("overlay") === "true") return "overlay";
   if (params.get("streamViewer") === "true") return "streamViewer";
   if (params.get("friendsWindow") === "true") return "friendsWindow";
+  if (params.get("settingsWindow") === "true") return "settingsWindow";
   return "main";
 }
 
@@ -106,6 +107,11 @@ async function renderMainApp(): Promise<void> {
   await renderMainWrapped(<App />);
 }
 
+async function renderSettingsWindowApp(): Promise<void> {
+  const { SettingsWindowPage } = await import("@features/settings/SettingsWindowPage");
+  await renderMainWrapped(<SettingsWindowPage />);
+}
+
 /**
  * Muestra la ventana principal de la aplicación
  */
@@ -125,6 +131,7 @@ async function bootstrap(): Promise<void> {
       overlay: renderOverlayApp,
       streamViewer: renderStreamViewerApp,
       friendsWindow: renderFriendsWindowApp,
+      settingsWindow: renderSettingsWindowApp,
       main: renderMainApp,
     };
     await renderByMode[mode]();

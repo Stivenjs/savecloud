@@ -1,10 +1,12 @@
 import { Button, Card, CardBody, Select, SelectItem, Tooltip } from "@heroui/react";
 import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { motion } from "framer-motion";
 import { Activity, Copy, FileText, RefreshCw, RotateCw, Stethoscope } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { openOrFocusSettingsWindow, focusMainWindow } from "@features/settings/settingsWindow";
 import { useObservabilityHealth } from "@hooks/useObservabilityHealth";
 import { sanitizeDiagnosticPayload } from "@services/tauri/observability.service";
 import { toastError, toastSuccess } from "@utils/toast";
@@ -239,7 +241,6 @@ function HealthSkeleton() {
 }
 
 export function HealthObservabilityCard() {
-  const navigate = useNavigate();
   const [remoteWindow, setRemoteWindow] = useState<string>("15m");
   const [restartBusy, setRestartBusy] = useState(false);
   const { data, isLoading, isError, error, refetch, isFetching } = useObservabilityHealth(remoteWindow);
@@ -259,10 +260,12 @@ export function HealthObservabilityCard() {
           await refetch();
           break;
         case "open_history":
-          navigate("/history");
+          await emit("open-main-route", { route: "/history" });
+          await focusMainWindow();
+          await getCurrentWindow().hide();
           break;
         case "open_settings":
-          navigate("/settings");
+          await openOrFocusSettingsWindow();
           break;
         case "copy_diagnostic":
           if (!data) return;
