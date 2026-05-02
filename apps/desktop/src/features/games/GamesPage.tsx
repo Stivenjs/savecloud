@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button, Spinner } from "@heroui/react";
 import { RefreshCw } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
@@ -18,6 +18,7 @@ import { GamesStatsCompact } from "@features/games/GamesStatsCompact";
 import { BulkActionConfirmModal } from "@features/games/BulkActionConfirmModal";
 import { RemoveGameModal } from "@features/games/RemoveGameModal";
 import { ScanModal } from "@features/games/ScanModal";
+import { RestoreFromCloudWizardModal } from "@features/games/RestoreFromCloudWizardModal";
 import { useGamesPage } from "@/hooks/useGamesPage";
 import { useGameStats } from "@hooks/useGameStats";
 import { scheduleConfigBackupToCloud } from "@services/tauri";
@@ -52,6 +53,12 @@ export function GamesPage() {
     scanModalOpen,
     setScanModalOpen,
     setConfigureFromCloudGameId,
+    restoreFromCloudGameId,
+    handleOpenRestoreFromCloud,
+    handleCloseRestoreFromCloud,
+    openScanAssistForCloudRestore,
+    linkCloudGameFolder,
+    restoreWizardTriggerDownload,
     addModalInitial,
     setAddModalInitial,
     gameToRemove,
@@ -68,7 +75,6 @@ export function GamesPage() {
     fullBackupUploadingGameId,
     /* operationResult, */
     handleScanSelect,
-    handleConfigureFromCloud,
     handleRemoveGame,
     handleConfirmRemove,
     handleSyncOne,
@@ -102,8 +108,16 @@ export function GamesPage() {
   const [gameForTorrent, setGameForTorrent] = useState<ConfiguredGame | null>(null);
   const [gameToFullBackupConfirm, setGameToFullBackupConfirm] = useState<ConfiguredGame | null>(null);
 
+  const localGameIdsLower = useMemo(
+    () => new Set((config?.games ?? []).map((g: ConfiguredGame) => g.id.toLowerCase())),
+    [config?.games]
+  );
+
   useRegisterGlobalBack(() => {
     switch (true) {
+      case !!restoreFromCloudGameId:
+        handleCloseRestoreFromCloud();
+        return true;
       case scanModalOpen:
         setConfigureFromCloudGameId(null);
         setScanModalOpen(false);
@@ -220,7 +234,8 @@ export function GamesPage() {
               hasSyncConfig={hasSyncConfig}
               cloudGames={cloudGames}
               totalCloudSize={totalCloudSize}
-              onConfigureFromCloud={handleConfigureFromCloud}
+              localGameIdsLower={localGameIdsLower}
+              onRestoreFromCloud={handleOpenRestoreFromCloud}
             />
           </div>
         </div>
@@ -236,6 +251,26 @@ export function GamesPage() {
         initialPath={addModalInitial.path}
         suggestedId={addModalInitial.suggestedId}
       />
+      {restoreFromCloudGameId && (
+        <RestoreFromCloudWizardModal
+          gameId={restoreFromCloudGameId}
+          isOpen={!!restoreFromCloudGameId}
+          onClose={handleCloseRestoreFromCloud}
+          onLinkFolder={(folderPath) => linkCloudGameFolder(restoreFromCloudGameId, folderPath)}
+          onRequestScanAssist={() => {
+            const gid = restoreFromCloudGameId;
+            if (!gid) return;
+            pushLayer("scan-modal", "scan-search-input");
+            openScanAssistForCloudRestore(gid);
+          }}
+          onDownloadNow={() => {
+            const gid = restoreFromCloudGameId;
+            if (!gid) return;
+            handleCloseRestoreFromCloud();
+            restoreWizardTriggerDownload(gid);
+          }}
+        />
+      )}
       <ScanModal
         isOpen={scanModalOpen}
         onClose={() => {

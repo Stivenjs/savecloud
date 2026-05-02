@@ -1,4 +1,4 @@
-import { useReducer, useEffect, useCallback, useMemo } from "react";
+import { useReducer, useEffect, useCallback, useMemo, startTransition } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
   addGame,
@@ -58,6 +58,8 @@ type GamesPageState = {
   scanModalOpen: boolean;
   addModalInitial: { path: string; suggestedId: string };
   configureFromCloudGameId: string | null;
+  /** Asistente explícito «traer desde la nube» (no confundir con escaneo). */
+  restoreFromCloudGameId: string | null;
   gameToRemove: ConfiguredGame | null;
   downloadConflictGame: ConfiguredGame | null;
   downloadConflicts: DownloadConflictItem[];
@@ -83,6 +85,7 @@ type GamesPageAction =
     }
   | { type: "SET_SCAN_MODAL"; open: boolean }
   | { type: "SET_CONFIGURE_FROM_CLOUD"; gameId: string | null }
+  | { type: "SET_RESTORE_FROM_CLOUD"; gameId: string | null }
   | { type: "SET_GAME_TO_REMOVE"; game: ConfiguredGame | null }
   | {
       type: "SET_DOWNLOAD_CONFLICT";
@@ -113,6 +116,7 @@ const initialState: GamesPageState = {
   scanModalOpen: false,
   addModalInitial: { path: "", suggestedId: "" },
   configureFromCloudGameId: null,
+  restoreFromCloudGameId: null,
   gameToRemove: null,
   downloadConflictGame: null,
   downloadConflicts: [],
@@ -144,6 +148,8 @@ function gamesPageReducer(state: GamesPageState, action: GamesPageAction): Games
       return { ...state, scanModalOpen: action.open };
     case "SET_CONFIGURE_FROM_CLOUD":
       return { ...state, configureFromCloudGameId: action.gameId };
+    case "SET_RESTORE_FROM_CLOUD":
+      return { ...state, restoreFromCloudGameId: action.gameId };
     case "SET_GAME_TO_REMOVE":
       return { ...state, gameToRemove: action.game };
     case "SET_DOWNLOAD_CONFLICT":
@@ -189,6 +195,7 @@ export function useGamesPage() {
     scanModalOpen,
     addModalInitial,
     configureFromCloudGameId,
+    restoreFromCloudGameId,
     gameToRemove,
     downloadConflictGame,
     downloadConflicts,
@@ -323,6 +330,36 @@ export function useGamesPage() {
     dispatch({ type: "SET_CONFIGURE_FROM_CLOUD", gameId });
     dispatch({ type: "SET_SCAN_MODAL", open: true });
   };
+
+  const handleOpenRestoreFromCloud = useCallback((gameId: string) => {
+    dispatch({ type: "SET_RESTORE_FROM_CLOUD", gameId });
+  }, []);
+
+  const handleCloseRestoreFromCloud = useCallback(() => {
+    dispatch({ type: "SET_RESTORE_FROM_CLOUD", gameId: null });
+  }, []);
+
+  /** Cierra el asistente y abre escaneo con el mismo `gameId` fijado (rama secundaria). */
+  const openScanAssistForCloudRestore = useCallback((gameId: string) => {
+    dispatch({ type: "SET_RESTORE_FROM_CLOUD", gameId: null });
+    dispatch({ type: "SET_CONFIGURE_FROM_CLOUD", gameId });
+    dispatch({ type: "SET_SCAN_MODAL", open: true });
+  }, []);
+
+  const linkCloudGameFolder = useCallback(
+    async (gameId: string, folderPath: string) => {
+      const trimmed = folderPath.trim();
+      if (!trimmed) {
+        throw new Error("La ruta seleccionada está vacía.");
+      }
+      await addGame(gameId, trimmed);
+      scheduleConfigBackupToCloud();
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+      await refetch?.();
+    },
+    [queryClient, refetch]
+  );
 
   const handleRemoveGame = (game: ConfiguredGame) => {
     dispatch({ type: "SET_GAME_TO_REMOVE", game });
@@ -496,6 +533,20 @@ export function useGamesPage() {
       queryClient.invalidateQueries({ queryKey: ["game-stats"] });
       queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
     }
+  };
+
+  const restoreWizardTriggerDownload = (gameId: string) => {
+    const game = config?.games?.find((g: ConfiguredGame) => g.id.toLowerCase() === gameId.toLowerCase());
+    if (!game) {
+      toastError(
+        "No se encontró el juego tras enlazar",
+        "Cierra este diálogo, actualiza la lista y usa «Descargar» en la tarjeta del juego."
+      );
+      return;
+    }
+    startTransition(() => {
+      void handleDownloadOne(game);
+    });
   };
 
   const handleConfirmDownloadConflict = async () => {
@@ -738,6 +789,12 @@ export function useGamesPage() {
     scanModalOpen,
     setScanModalOpen,
     setConfigureFromCloudGameId,
+    restoreFromCloudGameId,
+    handleOpenRestoreFromCloud,
+    handleCloseRestoreFromCloud,
+    openScanAssistForCloudRestore,
+    linkCloudGameFolder,
+    restoreWizardTriggerDownload,
     addModalInitial,
     setAddModalInitial,
     gameToRemove,
