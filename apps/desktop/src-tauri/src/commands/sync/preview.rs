@@ -4,7 +4,6 @@ use super::api;
 use super::download;
 use super::models::{PreviewDownloadDto, PreviewFileDto, PreviewUploadDto};
 use crate::utils::path_utils;
-use std::path::PathBuf;
 
 /// Previsualiza qué archivos se subirían para un juego.
 ///
@@ -57,11 +56,6 @@ pub async fn preview_download(game_id: String) -> Result<PreviewDownloadDto, Str
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?
         .clone();
 
-    let dest_base = match path_utils::expand_path(game.paths[0].trim()) {
-        Some(p) => PathBuf::from(p),
-        None => return Err("No se pudo expandir la ruta".into()),
-    };
-
     // Lanza ambas operaciones de red en paralelo en vez de secuencial,
     // reduciendo la latencia total a max(t_saves, t_conflicts) en vez de su suma.
     let (saves_result, conflicts_result) = tokio::try_join!(
@@ -84,7 +78,13 @@ pub async fn preview_download(game_id: String) -> Result<PreviewDownloadDto, Str
             PreviewFileDto {
                 filename: save.filename.clone(),
                 size: save.size.unwrap_or(0),
-                local_newer: if dest_base.join(&save.filename).exists() {
+                local_newer: if path_utils::sync_abs_path_for_cloud_save(
+                    &game.paths,
+                    &save.filename,
+                )
+                .as_ref()
+                .is_some_and(|p| p.exists())
+                {
                     Some(local_newer)
                 } else {
                     None

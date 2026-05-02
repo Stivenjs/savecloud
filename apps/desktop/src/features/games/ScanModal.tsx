@@ -16,10 +16,12 @@ import {
 import { FolderOpen, Plus, Search, HardDrive, Gamepad2, MoreVertical, EyeOff, Trash2 } from "lucide-react";
 import { scanPathCandidates } from "@services/tauri";
 import type { PathCandidate } from "@services/tauri";
+import type { ConfiguredGame } from "@app-types/config";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { useResolvedCandidateNames } from "@hooks/useResolvedCandidateNames";
 import { useDismissedCandidates } from "@hooks/useDismissedCandidates";
 import { extractAppIdFromFolderName, toGameId } from "@utils/gameImage";
+import { dedupePreserveGamePaths, mergeScanPathsWithConfigured, normPathKey } from "@utils/gameSavePaths";
 import { useNavigable } from "@features/input/useNavigable";
 import { getGamepadFocusClass } from "@features/input/styles";
 
@@ -29,6 +31,8 @@ interface ScanModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectCandidate: (paths: string[], suggestedId: string) => void;
+  /** Para listar todas las rutas ya guardadas en config cuando coincide un candidato. */
+  configuredGames?: readonly ConfiguredGame[];
 }
 
 function CandidateMenu({ onDismiss }: { onDismiss: () => void }) {
@@ -68,12 +72,17 @@ function CandidateMenu({ onDismiss }: { onDismiss: () => void }) {
 function CandidateRow({
   candidate,
   resolvedName,
+  displayPaths,
+  mergedFromConfigured,
   onAdd,
   onDismiss,
   index,
 }: {
   candidate: PathCandidate;
   resolvedName: string | null | undefined;
+  /** Rutas fusionadas scan + configuración donde aplique (sin duplicar). */
+  displayPaths: readonly string[];
+  mergedFromConfigured: boolean;
   onAdd: () => void;
   onDismiss: () => void;
   index: number;
@@ -101,11 +110,31 @@ function CandidateRow({
             {isLoading && <Spinner size="sm" className="ml-2 inline-block" color="default" />}
           </p>
         </div>
-        <div className="mt-1 flex items-center gap-1.5">
-          <HardDrive size={12} className="shrink-0 text-default-400" />
-          <p className="truncate text-[11px] text-default-400" title={candidate.path}>
-            {candidate.path}
-          </p>
+        <div className="mt-2 flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-default-400">
+              {displayPaths.length === 1 ? "Ruta" : `${displayPaths.length} rutas`}
+            </span>
+            {mergedFromConfigured && (
+              <span
+                className="text-[10px] text-primary"
+                title="Incluye todas las rutas configuradas para este juego en la app.">
+                + config local
+              </span>
+            )}
+          </div>
+          <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-md border border-default-100/80 bg-default-50/80 px-2 py-1.5 dark:border-default-100/15 dark:bg-default-50/10">
+            {displayPaths.map((absPath, i) => (
+              <li
+                key={`${normPathKey(absPath)}:${i}`}
+                className="flex items-start gap-1.5 text-[11px] leading-snug text-default-500">
+                <HardDrive size={11} className="mt-0.5 shrink-0 text-default-400" aria-hidden />
+                <span className="min-w-0 break-all" title={absPath}>
+                  {absPath}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
 
@@ -126,7 +155,7 @@ function CandidateRow({
   );
 }
 
-export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps) {
+export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames = [] }: ScanModalProps) {
   const {
     data: candidates,
     isLoading,
@@ -147,6 +176,16 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
     return candidates.filter((c: PathCandidate) => !dismissed.has(c.path));
   }, [candidates, dismissed]);
 
+  const displayPathsMetaByCandidatePath = useMemo(() => {
+    const map = new Map<string, { paths: readonly string[]; mergedFromConfigured: boolean }>();
+    const gamesList = [...configuredGames];
+    for (const c of candidates ?? []) {
+      const { paths, mergedFromConfigured } = mergeScanPathsWithConfigured(c, gamesList);
+      map.set(c.path, { paths, mergedFromConfigured });
+    }
+    return map;
+  }, [candidates, configuredGames]);
+
   const filteredCandidates = useMemo(() => {
     if (!visibleCandidates.length) return [];
     if (!debouncedSearch) return visibleCandidates;
@@ -154,10 +193,11 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
       const resolvedName = resolvedNames[c.path];
       const hasAppId = !!c.steamAppId || !!extractAppIdFromFolderName(c.folderName ?? "");
       const displayName = hasAppId && resolvedName ? resolvedName : (c.folderName ?? "");
-      const searchIn = [displayName, c.folderName ?? "", c.path, c.basePath ?? ""].join(" ");
+      const merged = displayPathsMetaByCandidatePath.get(c.path)?.paths ?? [c.path];
+      const searchIn = [displayName, c.folderName ?? "", c.path, c.basePath ?? "", ...merged].join(" ");
       return searchIn.toLowerCase().includes(debouncedSearch);
     });
-  }, [visibleCandidates, debouncedSearch, resolvedNames]);
+  }, [visibleCandidates, debouncedSearch, resolvedNames, displayPathsMetaByCandidatePath]);
 
   const dismissedCount = useMemo(
     () => (candidates ?? []).filter((c: PathCandidate) => dismissed.has(c.path)).length,
@@ -288,16 +328,22 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate }: ScanModalProps
               {/* Lista */}
               <ul className="flex flex-col gap-2 overflow-y-auto pr-0.5 max-h-[55vh] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-default-300 hover:[&::-webkit-scrollbar-thumb]:bg-default-400">
                 {filteredCandidates.length > 0 ? (
-                  filteredCandidates.map((c: PathCandidate, idx: number) => (
-                    <CandidateRow
-                      key={c.path}
-                      candidate={c}
-                      resolvedName={resolvedNames[c.path]}
-                      onAdd={() => handleAdd(c)}
-                      onDismiss={() => dismiss(c.path)}
-                      index={idx}
-                    />
-                  ))
+                  filteredCandidates.map((c: PathCandidate, idx: number) => {
+                    const meta = displayPathsMetaByCandidatePath.get(c.path);
+                    const displayPaths = meta?.paths ?? dedupePreserveGamePaths(c.paths?.length ? c.paths : [c.path]);
+                    return (
+                      <CandidateRow
+                        key={c.path}
+                        candidate={c}
+                        resolvedName={resolvedNames[c.path]}
+                        displayPaths={displayPaths}
+                        mergedFromConfigured={meta?.mergedFromConfigured ?? false}
+                        onAdd={() => handleAdd(c)}
+                        onDismiss={() => dismiss(c.path)}
+                        index={idx}
+                      />
+                    );
+                  })
                 ) : debouncedSearch ? (
                   <li className="py-8 text-center text-sm text-default-400">
                     No hay coincidencias para &quot;{searchQuery}&quot;

@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
@@ -137,16 +138,18 @@ async fn create_file_with_retry(path: &std::path::Path) -> Result<tokio::fs::Fil
 ///
 /// # Arguments
 ///
-/// * `dest_base` - Directorio raíz donde residen los archivos de guardado locales.
-/// * `saves` - Lista de metadatos de archivos disponibles en la nube para este juego.
+/// Resuelve la ruta local de cada objeto remoto (prefijo por carpeta y legado `sync-root-i/`).
 fn check_conflicts_for_game(
-    dest_base: &std::path::Path,
+    game_paths: &[String],
     saves: &[RemoteSaveInfoDto],
 ) -> Vec<DownloadConflictDto> {
     let mut conflicts = Vec::new();
 
     for save in saves {
-        let dest_path = dest_base.join(&save.filename);
+        let Some(dest_path) = path_utils::sync_abs_path_for_cloud_save(game_paths, &save.filename)
+        else {
+            continue;
+        };
 
         let Ok(meta) = fs::metadata(&dest_path) else {
             continue;
@@ -204,16 +207,15 @@ pub async fn sync_check_download_conflicts(
         .find(|g| g.id.eq_ignore_ascii_case(&game_id))
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
-    let dest_base = match path_utils::expand_path(game.paths[0].trim()) {
-        Some(p) => PathBuf::from(p),
-        None => return Err("No se pudo expandir la ruta de destino".into()),
-    };
+    if game.paths.is_empty() {
+        return Err("El juego no tiene rutas de guardado".into());
+    }
 
     // Optimización: si ya conocemos el juego, listamos solo su prefijo remoto.
     let saves: Vec<RemoteSaveInfoDto> =
         api::sync_list_remote_saves_for_game(game_id.clone()).await?;
 
-    let conflicts = check_conflicts_for_game(&dest_base, &saves);
+    let conflicts = check_conflicts_for_game(&game.paths, &saves);
     Ok(DownloadConflictsResultDto { conflicts })
 }
 
@@ -259,16 +261,13 @@ pub async fn sync_check_download_conflicts_batch(
             }
         };
 
-        let dest_base = match path_utils::expand_path(game.paths[0].trim()) {
-            Some(p) => PathBuf::from(p),
-            None => {
-                results.push(GameConflictsResultDto {
-                    game_id,
-                    conflicts: Vec::new(),
-                });
-                continue;
-            }
-        };
+        if game.paths.is_empty() {
+            results.push(GameConflictsResultDto {
+                game_id,
+                conflicts: Vec::new(),
+            });
+            continue;
+        }
 
         let saves: Vec<RemoteSaveInfoDto> = all
             .iter()
@@ -276,7 +275,7 @@ pub async fn sync_check_download_conflicts_batch(
             .cloned()
             .collect();
 
-        let conflicts = check_conflicts_for_game(&dest_base, &saves);
+        let conflicts = check_conflicts_for_game(&game.paths, &saves);
         results.push(GameConflictsResultDto { game_id, conflicts });
     }
 
@@ -421,7 +420,30 @@ pub async fn sync_check_unsynced_games() -> Result<Vec<UnsyncedGameDto>, String>
 ///
 /// # Arguments
 ///
-/// * `dest_base` - Directorio raíz de guardados del juego.
+/// Une un directorio base de backup con el `filename` lógico del API (prefijos de carpeta o legado).
+fn backup_path_for_cloud_file(backup_base: &std::path::Path, cloud_filename: &str) -> PathBuf {
+    let mut p = backup_base.to_path_buf();
+    let norm = cloud_filename.replace('\\', "/");
+    for seg in norm.split('/').filter(|s| !s.is_empty()) {
+        let safe: String = seg
+            .chars()
+            .map(|c| {
+                if [':', '<', '>', '"', '|', '?', '*'].contains(&c) {
+                    '_'
+                } else {
+                    c
+                }
+            })
+            .collect();
+        if safe.is_empty() {
+            continue;
+        }
+        p.push(safe);
+    }
+    p
+}
+
+/// * `game_paths` — Rutas configuradas del juego (`paths` del config).
 /// * `backup_dir` - Directorio donde almacenar la copia previa, si se desea.
 /// * `save` - Metadatos del archivo remoto a descargar.
 /// * `download_url` - URL presignada para la descarga del contenido.
@@ -434,38 +456,40 @@ pub async fn sync_check_unsynced_games() -> Result<Vec<UnsyncedGameDto>, String>
 /// puede crear el archivo destino después de los reintentos, o si ocurre un
 /// error de escritura durante la transferencia.
 async fn download_one_file(
-    dest_base: &std::path::Path,
+    game_paths: &[String],
     backup_dir: Option<&std::path::Path>,
     save: &RemoteSaveInfoDto,
     download_url: &str,
     game_id: &str,
     app: &AppHandle,
 ) -> Result<(), String> {
-    let dest_path = dest_base.join(&save.filename);
+    let Some(dest_path) = path_utils::sync_abs_path_for_cloud_save(game_paths, &save.filename)
+    else {
+        return Err(format!(
+            "No se pudo resolver ruta local para descargar: {}",
+            save.filename
+        ));
+    };
 
     if let Some(parent) = dest_path.parent() {
         let _ = fs::create_dir_all(parent);
     }
 
-    // Copia de seguridad previa a la sobreescritura.
-    // Se usa fs::copy directamente en lugar de exists() + copy() para evitar
-    // una condición de carrera entre la comprobación y la copia.
+    // Copia de seguridad previa a la sobreescritura (estructura de carpetas igual que en la nube).
     if let Some(backup_base) = backup_dir {
-        if let Ok(rel) = dest_path.strip_prefix(dest_base) {
-            let backup_path = backup_base.join(rel);
-            if let Some(bp) = backup_path.parent() {
-                let _ = fs::create_dir_all(bp);
-            }
-            match fs::copy(&dest_path, &backup_path) {
-                Ok(_) => {}
-                Err(e) if e.kind() == ErrorKind::NotFound => {}
-                Err(e) => {
-                    sync_logger::log_error(
-                        "sync_download_game",
-                        "download_one_file",
-                        &format!("No se pudo hacer backup de '{}': {}", save.filename, e),
-                    );
-                }
+        let backup_path = backup_path_for_cloud_file(backup_base, &save.filename);
+        if let Some(bp) = backup_path.parent() {
+            let _ = fs::create_dir_all(bp);
+        }
+        match fs::copy(&dest_path, &backup_path) {
+            Ok(_) => {}
+            Err(e) if e.kind() == ErrorKind::NotFound => {}
+            Err(e) => {
+                sync_logger::log_error(
+                    "sync_download_game",
+                    "download_one_file",
+                    &format!("No se pudo hacer backup de '{}': {}", save.filename, e),
+                );
             }
         }
     }
@@ -697,10 +721,10 @@ pub(crate) async fn sync_download_game_impl(
     let api_base = api_ctx.base_url.as_str();
     let api_key = api_ctx.api_key.as_str();
 
-    let dest_base = match path_utils::expand_path(game.paths[0].trim()) {
-        Some(p) => PathBuf::from(p),
-        None => return Err("No se pudo expandir la ruta de destino".into()),
-    };
+    if game.paths.is_empty() {
+        return Err("El juego no tiene rutas de guardado configuradas.".into());
+    }
+    let game_paths_arc = Arc::new(game.paths.clone());
 
     // Usa la lista provista por el llamador o la descarga si es una llamada individual.
     let saves: Vec<_> = match prefetched_saves {
@@ -759,14 +783,14 @@ pub(crate) async fn sync_download_game_impl(
             .map(|(save, (download_url, _))| (save, download_url)),
     )
     .map(|(save, download_url)| {
-        let dest_base = dest_base.clone();
+        let game_paths_arc = Arc::clone(&game_paths_arc);
         let backup_dir = backup_dir.clone();
         let game_id = game_id.clone();
         let app = app.clone();
 
         async move {
             download_one_file(
-                &dest_base,
+                game_paths_arc.as_slice(),
                 backup_dir.as_deref(),
                 &save,
                 &download_url,

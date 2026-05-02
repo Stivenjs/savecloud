@@ -215,7 +215,7 @@ export function GamesPage() {
               setScanModalOpen(true);
             }}
             onAddPress={() => {
-              setAddModalInitial({ path: "", suggestedId: "" });
+              setAddModalInitial({ paths: [], suggestedId: "" });
               setAddModalOpen(true);
             }}
             onDownloadAllPress={openDownloadAllConfirm}
@@ -248,7 +248,7 @@ export function GamesPage() {
           handleRefresh?.();
         }}
         mode="add"
-        initialPath={addModalInitial.path}
+        initialPaths={addModalInitial.paths}
         suggestedId={addModalInitial.suggestedId}
       />
       {restoreFromCloudGameId && (
@@ -279,6 +279,7 @@ export function GamesPage() {
           popLayer();
         }}
         onSelectCandidate={handleScanSelect}
+        configuredGames={config?.games ?? []}
       />
       <RemoveGameModal
         isOpen={!!gameToRemove}
@@ -387,7 +388,7 @@ export function GamesPage() {
           unsyncedGameIds={unsyncedGameIds}
           onEmptyScanPress={() => setScanModalOpen(true)}
           onEmptyAddPress={() => {
-            setAddModalInitial({ path: "", suggestedId: "" });
+            setAddModalInitial({ paths: [], suggestedId: "" });
             setAddModalOpen(true);
           }}
           onRemove={handleRemoveGame}

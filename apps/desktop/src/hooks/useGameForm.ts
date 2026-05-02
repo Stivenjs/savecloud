@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState, useMemo } from "react";
 import type { ConfiguredGame } from "@app-types/config";
 import { formatGameDisplayName } from "@utils/gameImage";
+import { dedupePreserveGamePaths } from "@utils/gameSavePaths";
 
 export interface GameFormState {
   gameId: string;
-  path: string;
+  /** Carpetas/archivos raíz de guardado (varias ubicaciones por juego). */
+  paths: string[];
   editionLabel: string;
   sourceUrl: string;
   searchInput: string;
@@ -16,6 +18,9 @@ export interface GameFormState {
   /** Nombres de proceso para detección manual (se guardan al pulsar Guardar). */
   executableNames: string[];
 }
+
+/** Misma referencia para “sin rutas precargadas”; evita bucles en useEffect (nunca usar `= []` como default). */
+export const STABLE_EMPTY_GAME_PATHS: string[] = [];
 
 export interface UseGameFormReturn {
   form: GameFormState;
@@ -30,7 +35,7 @@ export interface UseGameFormReturn {
 
 const EMPTY_FORM: GameFormState = {
   gameId: "",
-  path: "",
+  paths: [],
   editionLabel: "",
   sourceUrl: "",
   searchInput: "",
@@ -45,14 +50,14 @@ interface UseGameFormOptions {
   isOpen: boolean;
   mode: "add" | "edit";
   game?: ConfiguredGame | null;
-  initialPath?: string;
+  initialPaths?: string[];
   suggestedId?: string;
 }
 
 function buildFormFromGame(game: ConfiguredGame): GameFormState {
   return {
     gameId: formatGameDisplayName(game.id),
-    path: (game.paths ?? [])[0] ?? "",
+    paths: game.paths?.length ? dedupePreserveGamePaths([...game.paths]) : [],
     editionLabel: game.editionLabel ?? "",
     sourceUrl: game.sourceUrl ?? "",
     searchInput: "",
@@ -68,7 +73,7 @@ export function useGameForm({
   isOpen,
   mode,
   game,
-  initialPath = "",
+  initialPaths = STABLE_EMPTY_GAME_PATHS,
   suggestedId = "",
 }: UseGameFormOptions): UseGameFormReturn {
   const [form, setForm] = useState<GameFormState>(EMPTY_FORM);
@@ -88,7 +93,7 @@ export function useGameForm({
       initForm = {
         ...EMPTY_FORM,
         gameId: suggestedId,
-        path: initialPath,
+        paths: dedupePreserveGamePaths(initialPaths),
       };
     }
 
@@ -98,7 +103,7 @@ export function useGameForm({
     setError(null);
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, mode, gameId, initialPath, suggestedId]);
+  }, [isOpen, mode, gameId, initialPaths, suggestedId]);
 
   const setField = useCallback(<K extends keyof GameFormState>(key: K, value: GameFormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));

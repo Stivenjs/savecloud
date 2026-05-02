@@ -56,7 +56,7 @@ type GamesPageState = {
   originFilter: OriginFilter;
   addModalOpen: boolean;
   scanModalOpen: boolean;
-  addModalInitial: { path: string; suggestedId: string };
+  addModalInitial: { paths: string[]; suggestedId: string };
   configureFromCloudGameId: string | null;
   /** Asistente explícito «traer desde la nube» (no confundir con escaneo). */
   restoreFromCloudGameId: string | null;
@@ -81,7 +81,7 @@ type GamesPageAction =
   | {
       type: "SET_ADD_MODAL";
       open: boolean;
-      initial?: { path: string; suggestedId: string };
+      initial?: { paths: string[]; suggestedId: string };
     }
   | { type: "SET_SCAN_MODAL"; open: boolean }
   | { type: "SET_CONFIGURE_FROM_CLOUD"; gameId: string | null }
@@ -114,7 +114,7 @@ const initialState: GamesPageState = {
   originFilter: "all",
   addModalOpen: false,
   scanModalOpen: false,
-  addModalInitial: { path: "", suggestedId: "" },
+  addModalInitial: { paths: [], suggestedId: "" },
   configureFromCloudGameId: null,
   restoreFromCloudGameId: null,
   gameToRemove: null,
@@ -298,7 +298,7 @@ export function useGamesPage() {
   const setOriginFilter = (v: OriginFilter) => dispatch({ type: "SET_ORIGIN_FILTER", payload: v });
   const setAddModalOpen = (open: boolean) => dispatch({ type: "SET_ADD_MODAL", open });
   const setScanModalOpen = (open: boolean) => dispatch({ type: "SET_SCAN_MODAL", open });
-  const setAddModalInitial = (initial: { path: string; suggestedId: string }) =>
+  const setAddModalInitial = (initial: { paths: string[]; suggestedId: string }) =>
     dispatch({ type: "SET_ADD_MODAL", open: true, initial });
   const setConfigureFromCloudGameId = (gameId: string | null) => dispatch({ type: "SET_CONFIGURE_FROM_CLOUD", gameId });
   const setGameToRemove = (game: ConfiguredGame | null) => dispatch({ type: "SET_GAME_TO_REMOVE", game });
@@ -307,9 +307,7 @@ export function useGamesPage() {
     const idToUse = configureFromCloudGameId ?? suggestedId;
     if (configureFromCloudGameId) dispatch({ type: "SET_CONFIGURE_FROM_CLOUD", gameId: null });
     if (paths.length > 1) {
-      for (const path of paths) {
-        await addGame(idToUse, path);
-      }
+      await addGame(idToUse, paths);
       scheduleConfigBackupToCloud();
 
       await new Promise((resolve) => setTimeout(resolve, 150));
@@ -322,7 +320,7 @@ export function useGamesPage() {
     dispatch({
       type: "SET_ADD_MODAL",
       open: true,
-      initial: { path: paths[0] ?? "", suggestedId: idToUse },
+      initial: { paths: paths.length ? [paths[0]!] : [], suggestedId: idToUse },
     });
   };
 
@@ -352,7 +350,7 @@ export function useGamesPage() {
       if (!trimmed) {
         throw new Error("La ruta seleccionada está vacía.");
       }
-      await addGame(gameId, trimmed);
+      await addGame(gameId, [trimmed]);
       scheduleConfigBackupToCloud();
       await new Promise((resolve) => setTimeout(resolve, 150));
       queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
