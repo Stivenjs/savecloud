@@ -137,9 +137,11 @@ function useOverlayNotifications() {
  */
 export function OverlayApp() {
   const { notifications, addNotification, cleanup } = useOverlayNotifications();
+  const hasSignaledReadyRef = useRef(false);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let mounted = true;
 
     const setupListenerAndSignalReady = async () => {
       try {
@@ -147,13 +149,17 @@ export function OverlayApp() {
           const { title, body } = event.payload;
 
           if (!title?.trim() || !body?.trim()) {
+            console.warn("[Overlay] Notificación inválida descartada", event.payload);
             return;
           }
 
           addNotification({ title, body });
         });
 
-        await emit("overlay-ready");
+        if (mounted && !hasSignaledReadyRef.current) {
+          await emit("overlay-ready");
+          hasSignaledReadyRef.current = true;
+        }
       } catch (error) {
         console.error("[Overlay] Error en setup inicial:", error);
       }
@@ -162,6 +168,7 @@ export function OverlayApp() {
     setupListenerAndSignalReady();
 
     return () => {
+      mounted = false;
       unlisten?.();
       cleanup();
     };
