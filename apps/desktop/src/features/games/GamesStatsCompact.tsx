@@ -28,7 +28,8 @@ interface GamesStatsCompactProps {
   hasSyncConfig?: boolean;
   cloudGames?: CloudGameSummary[];
   totalCloudSize?: number;
-  onConfigureFromCloud?: (gameId: string) => void;
+  localGameIdsLower?: ReadonlySet<string>;
+  onRestoreFromCloud?: (gameId: string) => void;
 }
 
 export function GamesStatsCompact({
@@ -39,7 +40,8 @@ export function GamesStatsCompact({
   hasSyncConfig = false,
   cloudGames = [],
   totalCloudSize = 0,
-  onConfigureFromCloud,
+  localGameIdsLower,
+  onRestoreFromCloud,
 }: GamesStatsCompactProps) {
   const showCloudSection = hasSyncConfig;
   const hasCloudGames = cloudGames.length > 0;
@@ -63,32 +65,40 @@ export function GamesStatsCompact({
           <span className="text-xs">No se encontraron juegos</span>
         </li>
       ) : (
-        games.map((g) => (
-          <li
-            key={g.gameId}
-            className="flex flex-col gap-1.5 rounded-lg border border-default-200/70 px-3 py-2.5 transition-colors hover:border-default-300 hover:bg-default-50 outline-none focus-within:ring-0 focus-within:border-default-200/70">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="truncate text-sm font-medium text-foreground">{formatGameDisplayName(g.gameId)}</span>
-              <span className="shrink-0 text-xs text-default-400">
-                {g.fileCount} archivo{g.fileCount !== 1 ? "s" : ""} · {formatSize(g.totalSize)}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Code size="sm" className="max-w-[200px] truncate text-default-400 text-[11px]">
-                {g.gameId}
-              </Code>
-              {onConfigureFromCloud && (
-                <Button
-                  size="sm"
-                  variant="light"
-                  className="h-6 min-w-0 px-2 text-[11px] text-default-500 cursor-pointer"
-                  onPress={() => onConfigureFromCloud(g.gameId)}>
-                  Configurar
-                </Button>
-              )}
-            </div>
-          </li>
-        ))
+        games.map((g) => {
+          const inLibrary = localGameIdsLower?.has(g.gameId.toLowerCase()) ?? false;
+          return (
+            <li
+              key={g.gameId}
+              className="flex flex-col gap-1.5 rounded-lg border border-default-200/70 px-3 py-2.5 transition-colors hover:border-default-300 hover:bg-default-50 outline-none focus-within:ring-0 focus-within:border-default-200/70">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="truncate text-sm font-medium text-foreground">{formatGameDisplayName(g.gameId)}</span>
+                <span className="shrink-0 text-xs text-default-400">
+                  {g.fileCount} archivo{g.fileCount !== 1 ? "s" : ""} · {formatSize(g.totalSize)}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Code size="sm" className="max-w-[200px] truncate text-default-400 text-[11px]">
+                  {g.gameId}
+                </Code>
+                {onRestoreFromCloud &&
+                  (inLibrary ? (
+                    <span className="text-[11px] text-default-400">Ya en biblioteca</span>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="flat"
+                      color="primary"
+                      className="h-7 min-w-0 shrink-0 px-2 text-[11px] cursor-pointer"
+                      title="Asistente: elegir carpeta local para poder descargar guardados desde la nube."
+                      onPress={() => onRestoreFromCloud(g.gameId)}>
+                      Traer a este equipo
+                    </Button>
+                  ))}
+              </div>
+            </li>
+          );
+        })
       )}
     </ul>
   );
@@ -184,6 +194,10 @@ export function GamesStatsCompact({
                       }}>
                       <ModalContent>
                         <ModalHeader className="flex flex-col gap-2.5">
+                          <p className="text-[11px] font-normal leading-relaxed text-default-500">
+                            Los juegos que no están abajo como «configurados» pueden traerse con «Traer a este equipo»:
+                            se explica paso a paso (carpeta local y descarga opcional).
+                          </p>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2 text-sm font-medium">
                               <Database size={14} className="text-default-500" />
@@ -259,8 +273,11 @@ export function GamesStatsCompact({
                     {/* Called sin argumentos para que PopoverTrigger maneje el botón */}
                     <PopoverTrigger>{renderInfoButton()}</PopoverTrigger>
                     <PopoverContent className="w-[calc(100vw-2rem)] max-w-xs p-0 shadow-sm border border-default-200/80">
-                      <div className="border-b border-default-200/80 px-4 py-2.5">
+                      <div className="border-b border-default-200/80 px-4 py-2.5 space-y-1">
                         <p className="text-xs font-medium text-default-600">Guardados en la nube</p>
+                        <p className="text-[10px] leading-snug text-default-500">
+                          «Traer a este equipo» abre el asistente si el juego aún no está en tu biblioteca.
+                        </p>
                       </div>
                       <div className="max-h-64 overflow-y-auto p-2.5">{cloudGamesList(cloudGames)}</div>
                     </PopoverContent>

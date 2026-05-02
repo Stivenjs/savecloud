@@ -2,6 +2,7 @@ import { Button, Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader, 
 import { Gamepad2, Image, Play } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import { toGameId } from "@utils/gameImage";
+import { dedupePreserveGamePaths } from "@utils/gameSavePaths";
 import {
   addGame,
   renameGame,
@@ -11,7 +12,7 @@ import {
   setGameLaunchExecutable,
   updateGame,
 } from "@services/tauri";
-import { useGameForm } from "@/hooks/useGameForm";
+import { STABLE_EMPTY_GAME_PATHS, useGameForm } from "@/hooks/useGameForm";
 import { GameDrawerGeneralTab } from "@/features/games/GameDrawerGeneralTab";
 import { GameDrawerLaunchTab } from "@/features/games/GameDrawerLaunchTab";
 import { GameDrawerMediaTab } from "@/features/games/GameDrawerMediaTab";
@@ -22,7 +23,7 @@ interface GameDrawerProps {
   onSuccess: () => void;
   mode: "add" | "edit";
   game?: ConfiguredGame | null;
-  initialPath?: string;
+  initialPaths?: string[];
   suggestedId?: string;
 }
 
@@ -32,14 +33,14 @@ export function GameDrawer({
   onSuccess,
   mode,
   game = null,
-  initialPath = "",
+  initialPaths = STABLE_EMPTY_GAME_PATHS,
   suggestedId = "",
 }: GameDrawerProps) {
   const { form, setField, resetForm, error, setError, loading, setLoading, isDirty } = useGameForm({
     isOpen,
     mode,
     game,
-    initialPath,
+    initialPaths,
     suggestedId,
   });
 
@@ -50,7 +51,7 @@ export function GameDrawer({
 
   const handleSubmit = async () => {
     const rawName = form.gameId.trim();
-    const path = form.path.trim();
+    const paths = dedupePreserveGamePaths(form.paths);
 
     if (!rawName) {
       setError("El nombre del juego es obligatorio.");
@@ -66,7 +67,7 @@ export function GameDrawer({
       if (mode === "add") {
         await addGame(
           finalId,
-          path,
+          paths,
           form.editionLabel.trim() || undefined,
           form.sourceUrl.trim() || undefined,
           form.selectedSteamAppId || undefined,
@@ -77,12 +78,6 @@ export function GameDrawer({
         if (idChanged) {
           await renameGameInCloud(game.id, finalId);
           await renameGame(game.id, finalId);
-        }
-
-        const paths = [...(game.paths ?? [])];
-        if (path) {
-          if (paths.length > 0) paths[0] = path;
-          else paths.push(path);
         }
 
         await updateGame(

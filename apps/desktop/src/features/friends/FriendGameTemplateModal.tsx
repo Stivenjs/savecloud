@@ -55,7 +55,7 @@ export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: Fr
     }
     setSaving(true);
     try {
-      await addGame(trimmedId, trimmedPath, editionLabel, sourceUrl, steamAppId);
+      await addGame(trimmedId, [trimmedPath], editionLabel, sourceUrl, steamAppId);
       toastSuccess("Juego creado desde plantilla", `Se añadió ${trimmedId} usando la configuración del amigo.`);
       onCreated?.();
       onClose();

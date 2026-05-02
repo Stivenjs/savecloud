@@ -317,7 +317,7 @@ pub fn set_share_visual_profile_with_members(enabled: bool) -> Result<(), String
 #[tauri::command]
 pub fn add_game(
     game_id: String,
-    path: String,
+    paths: Vec<String>,
     edition_label: Option<String>,
     source_url: Option<String>,
     steam_app_id: Option<String>,
@@ -325,7 +325,12 @@ pub fn add_game(
 ) -> Result<(), String> {
     let mut library = config::load_library();
     let game_id = game_id.trim().to_string();
-    let path = path.trim().to_string();
+
+    let paths: Vec<String> = paths
+        .into_iter()
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .collect();
 
     if game_id.is_empty() {
         return Err("Identificador ausente".to_string());
@@ -339,8 +344,10 @@ pub fn add_game(
         .iter_mut()
         .find(|g| g.id.eq_ignore_ascii_case(&game_id))
     {
-        if !path.is_empty() && !g.paths.contains(&path) {
-            g.paths.push(path);
+        for p in paths {
+            if !g.paths.contains(&p) {
+                g.paths.push(p);
+            }
         }
         if let Some(label) = trim_opt(edition_label) {
             g.edition_label = Some(label);
@@ -357,7 +364,7 @@ pub fn add_game(
     } else {
         library.games.push(ConfiguredGame {
             id: game_id,
-            paths: if path.is_empty() { vec![] } else { vec![path] },
+            paths,
             steam_app_id: trim_opt(steam_app_id),
             image_url: trim_opt(image_url),
             executable_names: None,

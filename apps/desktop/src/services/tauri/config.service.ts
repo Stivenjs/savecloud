@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Config } from "@app-types/config";
 import type { GameSaveGraph } from "@app-types/saveGraph";
+import { dedupePreserveGamePaths } from "@utils/gameSavePaths";
 
 export interface PluginLogEntry {
   timestamp: string;
@@ -165,18 +166,19 @@ export function checkGamesRunning(gameIds: readonly string[]): Promise<Record<st
   });
 }
 
-/** Añade un juego a la configuración */
+/** Añade un juego a la configuración (`paths` pueden ser varias carpetas de guardados). */
 export async function addGame(
   gameId: string,
-  path: string,
+  pathsInput: readonly string[],
   editionLabel?: string,
   sourceUrl?: string,
   steamAppId?: string,
   imageUrl?: string
 ): Promise<void> {
+  const paths = dedupePreserveGamePaths(pathsInput);
   await invoke("add_game", {
     gameId,
-    path,
+    paths,
     editionLabel: editionLabel?.trim() || null,
     sourceUrl: sourceUrl?.trim() || null,
     steamAppId: steamAppId?.trim() || null,

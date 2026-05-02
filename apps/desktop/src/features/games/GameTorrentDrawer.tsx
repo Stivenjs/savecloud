@@ -42,7 +42,7 @@ export function GameTorrentDrawer({ isOpen, onClose, game, cloudEnabled = true }
               setField={setField}
               setError={setError}
               gameId={form.gameId}
-              savePath={form.path}
+              savePath={form.paths[0] ?? ""}
               mode="edit"
               cloudEnabled={cloudEnabled}
             />

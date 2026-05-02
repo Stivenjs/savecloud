@@ -30,14 +30,15 @@ interface GamesStatsProps {
   hasSyncConfig?: boolean;
   /** Juegos en la nube con conteo y tamaño (solo si hasSyncConfig). */
   cloudGames?: CloudGameSummary[];
+  localGameIdsLower?: ReadonlySet<string>;
   /** Tamaño total en la nube en bytes. */
   totalCloudSize?: number;
   /** Tiempo total de juego en segundos. */
   totalPlaytimeSeconds?: number;
   /** Cargando datos de tiempo de juego. */
   playtimeLoading?: boolean;
-  /** Permite configurar un juego local a partir de un juego que solo existe en la nube. */
-  onConfigureFromCloud?: (gameId: string) => void;
+  /** Asistente explícito «traer desde la nube» (carpeta + descarga opcional). */
+  onRestoreFromCloud?: (gameId: string) => void;
 }
 
 export function GamesStats({
@@ -47,10 +48,11 @@ export function GamesStats({
   lastSyncLoading = false,
   hasSyncConfig = false,
   cloudGames = [],
+  localGameIdsLower,
   totalCloudSize = 0,
   totalPlaytimeSeconds = 0,
   playtimeLoading = false,
-  onConfigureFromCloud,
+  onRestoreFromCloud,
 }: GamesStatsProps) {
   const showCloudSection = hasSyncConfig;
   const hasCloudGames = cloudGames.length > 0;
@@ -60,31 +62,38 @@ export function GamesStats({
   // Contenido compartido para el detalle de la nube (Popover o Modal)
   const cloudDetailContent = (
     <ul className="space-y-2">
-      {cloudGames.map((g) => (
-        <li key={g.gameId} className="flex flex-col gap-1 rounded-lg bg-default-100 px-3 py-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-sm font-medium text-foreground">{formatGameDisplayName(g.gameId)}</span>
-            <span className="shrink-0 text-xs text-default-500">
-              {g.fileCount} archivo{g.fileCount !== 1 ? "s" : ""} · {formatSize(g.totalSize)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <Code size="sm" className="max-w-[200px] truncate text-[10px]">
-              {g.gameId}
-            </Code>
-            {onConfigureFromCloud && (
-              <Button
-                size="sm"
-                variant="flat"
-                color="primary"
-                className="h-7 text-xs"
-                onPress={() => onConfigureFromCloud(g.gameId)}>
-                Configurar
-              </Button>
-            )}
-          </div>
-        </li>
-      ))}
+      {cloudGames.map((g) => {
+        const inLibrary = localGameIdsLower?.has(g.gameId.toLowerCase()) ?? false;
+        return (
+          <li key={g.gameId} className="flex flex-col gap-1 rounded-lg bg-default-100 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-sm font-medium text-foreground">{formatGameDisplayName(g.gameId)}</span>
+              <span className="shrink-0 text-xs text-default-500">
+                {g.fileCount} archivo{g.fileCount !== 1 ? "s" : ""} · {formatSize(g.totalSize)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <Code size="sm" className="max-w-[200px] truncate text-[10px]">
+                {g.gameId}
+              </Code>
+              {onRestoreFromCloud &&
+                (inLibrary ? (
+                  <span className="text-xs text-default-400">Ya en biblioteca</span>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="flat"
+                    color="primary"
+                    className="h-7 text-xs"
+                    title="Asistente: elegir carpeta local para poder descargar guardados desde la nube."
+                    onPress={() => onRestoreFromCloud(g.gameId)}>
+                    Traer a este equipo
+                  </Button>
+                ))}
+            </div>
+          </li>
+        );
+      })}
     </ul>
   );
 
