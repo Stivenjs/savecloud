@@ -19,7 +19,7 @@ export function SettingsSidebar({ tabs, selectedTab, onSelectTab }: SettingsSide
   return (
     <aside className="h-full min-h-0 overflow-y-auto rounded-xl border border-default-200/80 bg-default-50/35 p-3">
       <div className="pb-3">
-        <div className="rounded-lg border border-default-200/80 bg-default-100/30 px-3 py-2.5">
+        <div className="rounded-lg bg-default-100/50 px-3 py-2.5">
           <p className="text-xs font-semibold uppercase tracking-wide text-default-500">Ajustes</p>
           <p className="mt-1 text-xs text-default-500">Configura cuenta, app e integraciones</p>
         </div>

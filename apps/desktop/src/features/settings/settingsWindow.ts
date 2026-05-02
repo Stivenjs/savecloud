@@ -20,6 +20,12 @@ export async function openOrFocusSettingsWindow(): Promise<void> {
     resizable: true,
     decorations: false,
     transparent: true,
+    visible: false,
+  });
+
+  settingsWindow.once("tauri://created", async () => {
+    await settingsWindow.show();
+    await settingsWindow.setFocus();
   });
 
   settingsWindow.once("tauri://error", (event) => {

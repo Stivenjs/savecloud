@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { listen, emit } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { AnimatePresence, motion, type Transition } from "framer-motion";
 import { Gamepad2 } from "lucide-react";
 
@@ -24,6 +25,9 @@ const NOTIFICATION_DURATION = 5000;
 
 /** Número máximo de notificaciones simultáneas */
 const MAX_NOTIFICATIONS = 5;
+
+/** Delay para ocultar overlay al finalizar animación de salida (ms) */
+const OVERLAY_HIDE_DELAY = 350;
 
 /** Configuración de animación - estilo Steam: slide desde la derecha */
 const ANIMATION_CONFIG: {
@@ -173,6 +177,22 @@ export function OverlayApp() {
       cleanup();
     };
   }, [addNotification, cleanup]);
+
+  useEffect(() => {
+    if (notifications.length > 0) {
+      return;
+    }
+
+    const hideTimer = setTimeout(() => {
+      void invoke("hide_overlay_window").catch((error) => {
+        console.error("[Overlay] No se pudo ocultar la ventana:", error);
+      });
+    }, OVERLAY_HIDE_DELAY);
+
+    return () => {
+      clearTimeout(hideTimer);
+    };
+  }, [notifications.length]);
 
   return (
     <div className="fixed inset-0 m-0 p-0 pointer-events-none bg-transparent overflow-hidden">

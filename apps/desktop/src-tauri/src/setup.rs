@@ -9,7 +9,7 @@ use crate::system::game_exit_sync;
 //use crate::system::watch_sync;
 use crate::cloud;
 use crate::controller::start_gamepad_loop;
-use crate::plugins::{log_buffer::new_log_buffer, AppPluginManager};
+use crate::plugins::{log_buffer::new_log_buffer, AppPluginManager, manager::PluginManager};
 use crate::shutdown::coordinator::ShutdownPhase;
 use crate::shutdown::{ShutdownBus, ShutdownCoordinator, ShutdownGuard};
 use crate::sources::commands;
@@ -92,14 +92,14 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     app.manage(logs.clone());
 
     let shared_manager: AppPluginManager =
-        Arc::new(Mutex::new(crate::plugins::manager::PluginManager::new()));
+        Arc::new(Mutex::new(PluginManager::new()));
     app.manage(shared_manager.clone());
 
     let tokio_handle = tauri::async_runtime::handle();
     let handle = app.handle().clone();
 
     std::thread::spawn(move || {
-        let mut manager = crate::plugins::manager::PluginManager::new();
+        let mut manager = PluginManager::new();
         manager.load_all(plugins_dir, handle, logs);
         tokio_handle.block_on(async {
             *shared_manager.lock().await = manager;

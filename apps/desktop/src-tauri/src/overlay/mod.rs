@@ -108,8 +108,10 @@ fn register_overlay_ready_listener(app: &AppHandle) {
             state.consecutive_emit_errors = 0;
         }
 
-        if let Some(window) = app_clone.get_webview_window("overlay") {
-            let _ = window.show();
+        if pending_count > 0 {
+            if let Some(window) = app_clone.get_webview_window("overlay") {
+                let _ = window.show();
+            }
         }
 
         flush_pending_notifications(&app_clone);
@@ -270,7 +272,8 @@ pub fn setup_overlay_window(app: &AppHandle) -> Result<(), Box<dyn std::error::E
         .build()?
     };
 
-    let _ = window.maximize();
+    let _ = window.set_fullscreen(true);
+
     let _ = window.set_ignore_cursor_events(true);
 
     #[cfg(target_os = "windows")]
@@ -300,10 +303,6 @@ pub async fn show_overlay_notification(
         .get_webview_window("overlay")
         .ok_or("Overlay window not found")?;
 
-    if let Ok(false) = window.is_visible() {
-        let _ = window.show();
-    }
-
     #[cfg(target_os = "windows")]
     force_topmost(&window);
 
@@ -319,6 +318,10 @@ pub async fn show_overlay_notification(
         return Ok(());
     }
 
+    if let Ok(false) = window.is_visible() {
+        let _ = window.show();
+    }
+
     sync_logger::log_operation("overlay_notification_emit_immediate", "overlayReady=true");
     if let Err(err) = emit_overlay_notification(&app, &payload) {
         sync_logger::log_operation(
@@ -332,6 +335,18 @@ pub async fn show_overlay_notification(
                 "No se pudo recuperar overlay tras fallo de emisión",
                 &recovery_err,
             );
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn hide_overlay_window(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("overlay") {
+        if let Ok(true) = window.is_visible() {
+            let _ = window.hide();
+            sync_logger::log_operation("overlay_hidden", "reason=no_active_notifications");
         }
     }
 
