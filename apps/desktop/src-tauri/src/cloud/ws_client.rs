@@ -133,9 +133,6 @@ pub async fn start_ws_loop(
 
     let mut backoff = Duration::from_secs(2);
 
-    // Mapa de deduplicación: friendUserId → último gameId notificado con overlay.
-    // Se resetea en cada reconexión para que, si el amigo estaba jugando cuando
-    // perdimos la conexión, volvamos a notificar al reconectar.
     let mut last_friend_game: HashMap<String, String> = HashMap::new();
 
     loop {
@@ -143,7 +140,6 @@ pub async fn start_ws_loop(
             Ok((ws_stream, _)) => {
                 backoff = Duration::from_secs(2);
 
-                // Resetear deduplicación en cada nueva conexión.
                 last_friend_game.clear();
 
                 log_cloud(
@@ -162,8 +158,6 @@ pub async fn start_ws_loop(
                         g.total_successful_connections.saturating_add(1);
                 }
 
-                // Se consume solo la primera vez (Option::take); en reconexiones
-                // el canal ya no existe y esto es un no-op.
                 if let Some(tx) = ready_notify.take() {
                     let _ = tx.send(());
                 }
@@ -172,7 +166,6 @@ pub async fn start_ws_loop(
 
                 loop {
                     tokio::select! {
-                        // 1. Mensajes entrantes del servidor
                         Some(msg) = ws_receiver.next() => {
                             match msg {
                                 Ok(Message::Text(text)) => {
@@ -217,7 +210,7 @@ pub async fn start_ws_loop(
                                                         data.game_id.clone(),
                                                     );
 
-                                                    let _ = crate::overlay::show_overlay_notification(
+                                                    if let Err(e) = crate::overlay::show_overlay_notification(
                                                         app_handle.clone(),
                                                         "Amigo jugando".to_string(),
                                                         format!(
@@ -225,7 +218,17 @@ pub async fn start_ws_loop(
                                                             data.friend_user_id, data.game_name
                                                         ),
                                                     )
-                                                    .await;
+                                                    .await
+                                                    {
+                                                        sync_logger::log_error(
+                                                            "overlay_notification_from_ws_failed",
+                                                            &format!(
+                                                                "friendUserId={} gameId={} gameName={}",
+                                                                data.friend_user_id, data.game_id, data.game_name
+                                                            ),
+                                                            &e,
+                                                        );
+                                                    }
                                                 } else if data.game_id.is_empty() {
                                                     last_friend_game.remove(&data.friend_user_id);
                                                 }
