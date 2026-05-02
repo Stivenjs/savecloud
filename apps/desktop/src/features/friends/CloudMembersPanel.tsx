@@ -28,6 +28,7 @@ interface CloudMembersPanelProps {
   containerRef?: React.RefObject<HTMLElement>;
   draggable?: boolean;
   onDetachToWindow?: () => void;
+  showCloseButton?: boolean;
 }
 
 export function CloudMembersPanel({
@@ -39,6 +40,7 @@ export function CloudMembersPanel({
   containerRef,
   draggable = true,
   onDetachToWindow,
+  showCloseButton = true,
 }: CloudMembersPanelProps) {
   const { activeProfile } = useProfileSession();
   const { config } = useConfig();
@@ -203,6 +205,7 @@ export function CloudMembersPanel({
             onSearchChange={setSearchQuery}
             moveProps={draggable ? moveProps : undefined}
             onDetachToWindow={onDetachToWindow}
+            showCloseButton={showCloseButton}
           />
         </div>
       </motion.div>

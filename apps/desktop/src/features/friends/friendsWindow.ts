@@ -22,6 +22,12 @@ export async function openOrFocusFriendsWindow(): Promise<void> {
     resizable: true,
     decorations: false,
     transparent: true,
+    visible: false,
+  });
+
+  friendsWindow.once("tauri://created", async () => {
+    await friendsWindow.show();
+    await friendsWindow.setFocus();
   });
 
   friendsWindow.once("tauri://error", (event) => {

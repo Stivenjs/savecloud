@@ -23,19 +23,18 @@ export function FriendsWindowPage() {
   return (
     <div className="min-h-screen bg-background">
       <TitleBar />
-      <div className="h-screen px-2 pb-2 pt-12">
-        <div className="h-full overflow-hidden rounded-[18px] border border-default-200/80 bg-background/65 shadow-2xl backdrop-blur-md">
-          <CloudMembersPanel
-            isOpen
-            onClose={handleHideWindow}
-            onViewProfile={(userId) => {
-              void handleViewProfile(userId);
-            }}
-            onRemoveMember={handleRemoveMember}
-            onLeaveMembership={handleLeaveMembership}
-            draggable={false}
-          />
-        </div>
+      <div className="h-screen overflow-hidden px-2 pb-2 pt-12">
+        <CloudMembersPanel
+          isOpen
+          onClose={handleHideWindow}
+          onViewProfile={(userId) => {
+            void handleViewProfile(userId);
+          }}
+          onRemoveMember={handleRemoveMember}
+          onLeaveMembership={handleLeaveMembership}
+          draggable={false}
+          showCloseButton={false}
+        />
       </div>
     </div>
   );

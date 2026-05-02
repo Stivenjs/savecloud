@@ -11,6 +11,7 @@ interface CloudMembersHeaderProps {
   onSearchChange: (value: string) => void;
   moveProps?: Record<string, any>;
   onDetachToWindow?: () => void;
+  showCloseButton?: boolean;
 }
 
 export function CloudMembersHeader({
@@ -21,6 +22,7 @@ export function CloudMembersHeader({
   onSearchChange,
   moveProps = {},
   onDetachToWindow,
+  showCloseButton = true,
 }: CloudMembersHeaderProps) {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -94,16 +96,18 @@ export function CloudMembersHeader({
               </Button>
             </Tooltip>
           ) : null}
-          <Button
-            isIconOnly
-            size="sm"
-            variant="light"
-            color="danger"
-            aria-label="Cerrar modal"
-            onPointerDownCapture={(event) => event.stopPropagation()}
-            onPress={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
+          {showCloseButton ? (
+            <Button
+              isIconOnly
+              size="sm"
+              variant="light"
+              color="danger"
+              aria-label="Cerrar modal"
+              onPointerDownCapture={(event) => event.stopPropagation()}
+              onPress={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+          ) : null}
         </div>
       </div>
 
