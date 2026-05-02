@@ -5,6 +5,7 @@ export const SETTINGS_WINDOW_LABEL = "settings-window";
 export async function openOrFocusSettingsWindow(): Promise<void> {
   const existing = await WebviewWindow.getByLabel(SETTINGS_WINDOW_LABEL);
   if (existing) {
+    await existing.center();
     await existing.show();
     await existing.setFocus();
     return;
@@ -21,6 +22,7 @@ export async function openOrFocusSettingsWindow(): Promise<void> {
     decorations: false,
     transparent: true,
     visible: false,
+    center: true,
   });
 
   settingsWindow.once("tauri://created", async () => {

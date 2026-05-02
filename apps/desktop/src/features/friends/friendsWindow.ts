@@ -5,6 +5,7 @@ export const FRIENDS_WINDOW_LABEL = "friends-window";
 export async function openOrFocusFriendsWindow(): Promise<void> {
   const existing = await WebviewWindow.getByLabel(FRIENDS_WINDOW_LABEL);
   if (existing) {
+    await existing.center();
     await existing.show();
     await existing.setFocus();
     return;
@@ -23,6 +24,7 @@ export async function openOrFocusFriendsWindow(): Promise<void> {
     decorations: false,
     transparent: true,
     visible: false,
+    center: true,
   });
 
   friendsWindow.once("tauri://created", async () => {

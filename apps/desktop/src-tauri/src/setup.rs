@@ -9,7 +9,7 @@ use crate::system::game_exit_sync;
 //use crate::system::watch_sync;
 use crate::cloud;
 use crate::controller::start_gamepad_loop;
-use crate::plugins::{log_buffer::new_log_buffer, AppPluginManager, manager::PluginManager};
+use crate::plugins::{log_buffer::new_log_buffer, manager::PluginManager, AppPluginManager};
 use crate::shutdown::coordinator::ShutdownPhase;
 use crate::shutdown::{ShutdownBus, ShutdownCoordinator, ShutdownGuard};
 use crate::sources::commands;
@@ -91,8 +91,7 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     let logs = new_log_buffer();
     app.manage(logs.clone());
 
-    let shared_manager: AppPluginManager =
-        Arc::new(Mutex::new(PluginManager::new()));
+    let shared_manager: AppPluginManager = Arc::new(Mutex::new(PluginManager::new()));
     app.manage(shared_manager.clone());
 
     let tokio_handle = tauri::async_runtime::handle();
