@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Button, Input, Tooltip } from "@heroui/react";
-import { Cloud, RefreshCcw, Search, X } from "lucide-react";
+import { Cloud, RefreshCcw, Search, SquareArrowOutUpRight, X } from "lucide-react";
 
 interface CloudMembersHeaderProps {
   isRefreshing: boolean;
@@ -10,6 +10,7 @@ interface CloudMembersHeaderProps {
   searchValue: string;
   onSearchChange: (value: string) => void;
   moveProps?: Record<string, any>;
+  onDetachToWindow?: () => void;
 }
 
 export function CloudMembersHeader({
@@ -19,6 +20,7 @@ export function CloudMembersHeader({
   searchValue,
   onSearchChange,
   moveProps = {},
+  onDetachToWindow,
 }: CloudMembersHeaderProps) {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -80,6 +82,18 @@ export function CloudMembersHeader({
               {!isRefreshing && <RefreshCcw className="h-4 w-4" />}
             </Button>
           </Tooltip>
+          {onDetachToWindow ? (
+            <Tooltip content="Abrir en ventana separada" placement="bottom">
+              <Button
+                isIconOnly
+                size="sm"
+                variant="light"
+                onPointerDownCapture={(event) => event.stopPropagation()}
+                onPress={onDetachToWindow}>
+                <SquareArrowOutUpRight className="h-4 w-4" />
+              </Button>
+            </Tooltip>
+          ) : null}
           <Button
             isIconOnly
             size="sm"

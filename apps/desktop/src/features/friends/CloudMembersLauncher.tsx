@@ -5,6 +5,7 @@ import { Users } from "lucide-react";
 import { CloudMembersModal } from "@features/friends/CloudMembersModal";
 import { useCloudMembersActions } from "@hooks/useCloudMembersActions";
 import { requestOpenFriendProfile } from "@features/friends/friendProfileNavigation";
+import { openOrFocusFriendsWindow } from "@features/friends/friendsWindow";
 
 export function CloudMembersLauncher() {
   const navigate = useNavigate();
@@ -17,6 +18,11 @@ export function CloudMembersLauncher() {
     requestOpenFriendProfile(userId);
     setIsOpen(false);
     navigate("/friends");
+  };
+
+  const handleDetachToWindow = async () => {
+    setIsOpen(false);
+    await openOrFocusFriendsWindow();
   };
 
   return (
@@ -40,6 +46,9 @@ export function CloudMembersLauncher() {
         onRemoveMember={handleRemoveMember}
         onLeaveMembership={handleLeaveMembership}
         modalRef={modalRef}
+        onDetachToWindow={() => {
+          void handleDetachToWindow();
+        }}
       />
     </>
   );
