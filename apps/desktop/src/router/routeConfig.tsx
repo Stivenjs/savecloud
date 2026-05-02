@@ -7,7 +7,6 @@ import {
   FriendsPage,
   StreamViewerPage,
   HistoryPage,
-  SettingsPage,
   AboutPage,
   PlaceholderPage,
 } from "@router/lazyRoutes";
@@ -26,7 +25,6 @@ export const routeConfig: RouteConfig[] = [
   { path: "/friends", element: <FriendsPage /> },
   { path: "/stream-viewer", element: <StreamViewerPage /> },
   { path: "/history", element: <HistoryPage /> },
-  { path: "/settings", element: <SettingsPage /> },
   { path: "/about", element: <AboutPage /> },
   { path: "*", element: <PlaceholderPage /> },
 ];

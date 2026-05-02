@@ -21,15 +21,26 @@ function AppContent() {
   };
 
   useEffect(() => {
-    let unlisten: (() => void) | null = null;
+    let unlistenOpenFriends: (() => void) | null = null;
+    let unlistenOpenRoute: (() => void) | null = null;
+
     void listen("open-friends-page", () => {
       navigate("/friends");
     }).then((fn) => {
-      unlisten = fn;
+      unlistenOpenFriends = fn;
+    });
+
+    void listen<{ route: string }>("open-main-route", (event) => {
+      const route = event.payload?.route?.trim();
+      if (!route) return;
+      navigate(route);
+    }).then((fn) => {
+      unlistenOpenRoute = fn;
     });
 
     return () => {
-      unlisten?.();
+      unlistenOpenFriends?.();
+      unlistenOpenRoute?.();
     };
   }, [navigate]);
 

@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from "react";
+import { useState, lazy, Suspense, type ReactNode } from "react";
 import { Tab, Tabs } from "@heroui/react";
 import { AppWindow, Bell, Cloud, FlaskConical, RefreshCw } from "lucide-react";
 import { AutostartCard } from "@features/settings/AutostartCard";
@@ -22,16 +22,33 @@ import { DevSdk } from "@features/settings/DevSdk";
 import { SourceInstallSettingsCard } from "@features/settings/SourceInstallSettingsCard";
 import { VoiceCommandsCard } from "@features/voice-commands";
 import { HealthObservabilityCard } from "@features/settings/HealthObservabilityCard";
+import { SettingsSidebar, type SettingsTabKey } from "@features/settings/SettingsSidebar";
 
 const ReleaseNotesDialogLazy = lazy(() =>
   import("@features/settings/ReleaseNotesDialog").then((module) => ({ default: module.ReleaseNotesDialog }))
 );
 
-export function SettingsPage() {
+const SETTINGS_TABS: Array<{
+  key: SettingsTabKey;
+  label: string;
+  icon: ReactNode;
+}> = [
+  { key: "account", label: "Cuenta", icon: <Cloud size={17} className="opacity-90" /> },
+  { key: "app", label: "Inicio y app", icon: <AppWindow size={17} className="opacity-90" /> },
+  { key: "integrations", label: "Integraciones", icon: <Bell size={17} className="opacity-90" /> },
+  { key: "updates", label: "Versiones", icon: <RefreshCw size={17} className="opacity-90" /> },
+  { key: "advanced", label: "Avanzado", icon: <FlaskConical size={17} className="opacity-90" /> },
+];
+
+interface SettingsPageProps {
+  compactWindowMode?: boolean;
+}
+
+export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
   const { activeProfile } = useProfileSession();
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [resetCloudSeedModalOpen, setResetCloudSeedModalOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<string>("account");
+  const [settingsTab, setSettingsTab] = useState<SettingsTabKey>("account");
   const {
     autostart,
     alwaysShowProfileSelector,
@@ -136,34 +153,10 @@ export function SettingsPage() {
     }
   });
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Configuración</h1>
-        <p className="mt-1 text-sm text-default-500">
-          Ajusta tu cuenta, comportamiento de la app e integraciones desde un solo lugar.
-        </p>
-      </div>
-
-      <Tabs
-        aria-label="Secciones de configuración"
-        selectedKey={settingsTab}
-        onSelectionChange={(key) => setSettingsTab(String(key))}
-        variant="underlined"
-        color="primary"
-        classNames={{
-          tabList: "gap-4 w-full border-b border-default-200",
-          tab: "h-11 px-0 data-[selected=true]:font-semibold",
-          panel: "pt-5",
-        }}>
-        <Tab
-          key="account"
-          title={
-            <span className="flex items-center gap-2">
-              <Cloud size={17} className="opacity-90" />
-              Cuenta
-            </span>
-          }>
+  const renderTabContent = (tab: SettingsTabKey) => {
+    switch (tab) {
+      case "account":
+        return (
           <ConfigSection
             exporting={exporting}
             importing={importing}
@@ -192,17 +185,10 @@ export function SettingsPage() {
             onImportCloudSeedFromCloud={handleImportCloudSeedFromCloud}
             onOpenResetCloudSeedModal={() => setResetCloudSeedModalOpen(true)}
           />
-        </Tab>
-
-        <Tab
-          key="app"
-          title={
-            <span className="flex items-center gap-2">
-              <AppWindow size={17} className="opacity-90" />
-              Inicio y app
-            </span>
-          }>
-          <div className="space-y-4">
+        );
+      case "app":
+        return (
+          <div className="space-y-3">
             <AutostartCard autostart={autostart} loading={loading} onChange={handleAutostartChange} />
             <ProfileStartupBehaviorCard
               alwaysShowProfileSelector={alwaysShowProfileSelector}
@@ -210,17 +196,10 @@ export function SettingsPage() {
               onChange={handleAlwaysShowProfileSelectorChange}
             />
           </div>
-        </Tab>
-
-        <Tab
-          key="integrations"
-          title={
-            <span className="flex items-center gap-2">
-              <Bell size={17} className="opacity-90" />
-              Integraciones y alertas
-            </span>
-          }>
-          <div className="space-y-4">
+        );
+      case "integrations":
+        return (
+          <div className="space-y-3">
             <NotificationsCard testingNotification={testingNotification} onTestNotification={handleTestNotification} />
             <VoiceCommandsCard />
             <SourceInstallSettingsCard
@@ -239,31 +218,17 @@ export function SettingsPage() {
               onDeleteSource={handleDeleteSource}
             />
           </div>
-        </Tab>
-
-        <Tab
-          key="updates"
-          title={
-            <span className="flex items-center gap-2">
-              <RefreshCw size={17} className="opacity-90" />
-              Versiones
-            </span>
-          }>
-          <div className="grid gap-4 sm:grid-cols-2">
+        );
+      case "updates":
+        return (
+          <div className="grid gap-3 xl:grid-cols-2">
             <UpdatesCard checkingUpdate={checkingUpdate} onCheckUpdates={handleCheckUpdates} />
             <ReleaseNotesCard onOpenNotes={() => setReleaseNotesOpen(true)} />
           </div>
-        </Tab>
-
-        <Tab
-          key="advanced"
-          title={
-            <span className="flex items-center gap-2">
-              <FlaskConical size={17} className="opacity-90" />
-              Avanzado y diagnóstico
-            </span>
-          }>
-          <div className="space-y-4">
+        );
+      case "advanced":
+        return (
+          <div className="space-y-3">
             <HealthObservabilityCard />
             <LocalBackupInfoCard />
             <ExperimentalFeaturesCard
@@ -274,8 +239,54 @@ export function SettingsPage() {
             />
             <DevSdk />
           </div>
-        </Tab>
-      </Tabs>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className={compactWindowMode ? "h-full min-h-0" : "space-y-6"}>
+      {compactWindowMode ? (
+        <div className="grid h-full min-h-0 grid-cols-[240px_minmax(0,1fr)] gap-4">
+          <SettingsSidebar tabs={SETTINGS_TABS} selectedTab={settingsTab} onSelectTab={setSettingsTab} />
+          <section className="min-w-0 h-full min-h-0 overflow-y-auto pr-1">{renderTabContent(settingsTab)}</section>
+        </div>
+      ) : (
+        <>
+          <div>
+            <h1 className="text-2xl font-semibold">Configuración</h1>
+            <p className="mt-1 text-sm text-default-500">
+              Ajusta tu cuenta, comportamiento de la app e integraciones desde un solo lugar.
+            </p>
+          </div>
+
+          <Tabs
+            aria-label="Secciones de configuración"
+            selectedKey={settingsTab}
+            onSelectionChange={(key) => setSettingsTab(String(key) as SettingsTabKey)}
+            variant="underlined"
+            color="primary"
+            classNames={{
+              tabList: "gap-4 w-full border-b border-default-200",
+              tab: "h-11 px-0 data-[selected=true]:font-semibold",
+              panel: "pt-5",
+            }}>
+            {SETTINGS_TABS.map((tab) => (
+              <Tab
+                key={tab.key}
+                title={
+                  <span className="flex items-center gap-2">
+                    {tab.icon}
+                    {tab.label}
+                  </span>
+                }>
+                {renderTabContent(tab.key)}
+              </Tab>
+            ))}
+          </Tabs>
+        </>
+      )}
       <CreateConfigModal
         isOpen={createConfigModalOpen}
         apiBaseUrl={createApiBaseUrl}

@@ -20,6 +20,7 @@ import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { featureFlags } from "@/constants/featureFlags";
+import { openOrFocusSettingsWindow } from "@features/settings/settingsWindow";
 import type { ConfiguredGame } from "@app-types/config";
 
 const ProfileDrawer = lazy(() => import("@features/profile/ProfileDrawer").then((m) => ({ default: m.ProfileDrawer })));
@@ -133,6 +134,10 @@ export function AppLayout({ navItems, children, games, onMenuGameClick }: AppLay
    * Ignora la navegación si ya estamos en esa ruta.
    */
   const handleNavigation = (link: string) => {
+    if (link === "/settings") {
+      void openOrFocusSettingsWindow();
+      return;
+    }
     if (location.pathname === link) return;
     startTransition(() => {
       navigate(link);

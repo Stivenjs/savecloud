@@ -1,11 +1,9 @@
 import { Button, Card, CardBody } from "@heroui/react";
 import { CloudOff, Settings } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { openOrFocusSettingsWindow } from "@features/settings/settingsWindow";
 
 /** Aviso en detalle de juego cuando no hay cuenta/API de nube (misma idea que en la lista: acciones de nube no disponibles). */
 export function GameDetailSyncSetupBanner() {
-  const navigate = useNavigate();
-
   return (
     <Card className="border border-primary-200/50 bg-primary-50/30 dark:border-primary-500/20 dark:bg-primary-500/5">
       <CardBody className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -25,7 +23,9 @@ export function GameDetailSyncSetupBanner() {
           variant="flat"
           className="shrink-0 self-start sm:self-auto"
           startContent={<Settings size={18} />}
-          onPress={() => navigate("/settings")}>
+          onPress={() => {
+            void openOrFocusSettingsWindow();
+          }}>
           Ir a configuración
         </Button>
       </CardBody>
