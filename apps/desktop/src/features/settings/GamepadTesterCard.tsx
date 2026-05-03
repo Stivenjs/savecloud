@@ -1,8 +1,32 @@
+import { useMemo, useState } from "react";
 import { Button, Card, CardBody, Select, SelectItem } from "@heroui/react";
 import { Gamepad2 } from "lucide-react";
 import { featureFlags } from "@/constants/featureFlags";
-import { axisRowCopy, formatPressedButtonsDisplay, layoutKindDescription } from "@/lib/gamepadLabelMaps";
-import { formatGamepadFloat, gamepadAxisValue, useGamepadTester } from "@/features/settings/useGamepadTester";
+import { GamepadDiagram } from "@/features/settings/GamepadDiagram";
+import {
+  axisRowCopy,
+  formatPressedButtonsDisplay,
+  layoutKindDescription,
+  type GamepadLayoutKind,
+} from "@/lib/gamepadLabelMaps";
+import {
+  formatGamepadFloat,
+  gamepadAxisValue,
+  gamepadTriggerLevel,
+  useGamepadTester,
+  type GamepadTelemetryDto,
+} from "@/hooks/useGamepadTester";
+
+/** Cómo dibujar el HUD Kenney y las leyendas; «auto» usa la heurística por nombre USB/del SO. */
+type DiagramLayoutChoice = "auto" | GamepadLayoutKind;
+
+const DIAGRAM_LAYOUT_OPTIONS: { id: DiagramLayoutChoice; label: string }[] = [
+  { id: "auto", label: "Automático (según nombre del mando)" },
+  { id: "xbox", label: "Xbox" },
+  { id: "playstation", label: "PlayStation" },
+  { id: "nintendo", label: "Nintendo Switch" },
+  { id: "generic", label: "Genérico (leyendas tipo Xbox)" },
+];
 
 export function GamepadTesterCard() {
   const {
@@ -22,7 +46,31 @@ export function GamepadTesterCard() {
     triggerRumble,
   } = useGamepadTester();
 
-  const axisLabels = axisRowCopy(selectedLayoutKind);
+  const [diagramLayoutChoice, setDiagramLayoutChoice] = useState<DiagramLayoutChoice>("auto");
+
+  const diagramLayoutKind = useMemo((): GamepadLayoutKind => {
+    if (diagramLayoutChoice === "auto") return selectedLayoutKind;
+    return diagramLayoutChoice;
+  }, [diagramLayoutChoice, selectedLayoutKind]);
+
+  const axisLabels = axisRowCopy(diagramLayoutKind);
+
+  const emptyTelemetry = useMemo((): GamepadTelemetryDto => {
+    return {
+      id: selectedId ?? -1,
+      name: selectedGamepadName ?? "",
+      axes: {},
+      pressed_buttons: [],
+      button_values: {},
+    };
+  }, [selectedId, selectedGamepadName]);
+
+  const diagramTelemetry = selectedTelemetry ?? emptyTelemetry;
+
+  const detailPressed = useMemo(() => {
+    if (!selectedTelemetry) return new Set<string>();
+    return new Set(selectedTelemetry.pressed_buttons.map((p) => p.trim()));
+  }, [selectedTelemetry]);
 
   if (!isDesktop) {
     return (
@@ -68,8 +116,9 @@ export function GamepadTesterCard() {
           <>
             {selectedGamepadName ? (
               <p className="text-xs text-default-400">
-                Mostramos los botones {layoutKindDescription(selectedLayoutKind)} según el nombre «{selectedGamepadName}
-                ». Si no acierta del todo con tu modelo, igualmente sirve para ver que todo responde.
+                Detección por nombre «{selectedGamepadName}»: el perfil automático es{" "}
+                {layoutKindDescription(selectedLayoutKind)}. Puedes fijar otro esquema abajo para la vista y las
+                etiquetas.
               </p>
             ) : null}
 
@@ -110,20 +159,69 @@ export function GamepadTesterCard() {
               </Button>
             </div>
 
+            {selectedId != null ? (
+              <div className="rounded-xl border border-default-200/70 bg-content1/40 p-4 dark:border-default-100/40">
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <p className="text-center text-xs font-medium uppercase tracking-wide text-default-500 sm:text-left">
+                    Vista del mando
+                  </p>
+                  <Select
+                    label="Esquema visual"
+                    selectedKeys={new Set([diagramLayoutChoice])}
+                    onSelectionChange={(keys) => {
+                      const raw = Array.from(keys)[0];
+                      const k = raw != null ? String(raw) : "";
+                      if (k === "auto" || k === "xbox" || k === "playstation" || k === "nintendo" || k === "generic") {
+                        setDiagramLayoutChoice(k);
+                      }
+                    }}
+                    className="min-w-[min(100%,280px)] sm:max-w-xs"
+                    size="sm"
+                    variant="bordered"
+                    aria-label="Esquema del mando (silueta Kenney y leyendas)">
+                    {DIAGRAM_LAYOUT_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.id} textValue={opt.label}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </Select>
+                </div>
+                <p className="mb-3 text-center text-[11px] text-default-400 sm:text-left">
+                  Mostrando {layoutKindDescription(diagramLayoutKind)}
+                  {diagramLayoutChoice === "auto" ? " (automático)." : " (elección manual)."}
+                </p>
+                <GamepadDiagram layoutKind={diagramLayoutKind} telemetry={diagramTelemetry} />
+              </div>
+            ) : null}
+
             {selectedTelemetry ? (
               <div className="grid gap-4 rounded-lg border border-default-200/80 bg-default-50/40 p-4 dark:border-default-100/60 dark:bg-default-100/10">
-                <p className="text-xs font-medium uppercase tracking-wide text-default-500">Respuesta en tiempo real</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-default-500">Detalle numérico</p>
                 <div className="grid gap-2 text-sm sm:grid-cols-2">
                   <div>
                     <span className="text-default-600">{axisLabels.triggers.left}: </span>
                     <span className="font-mono tabular-nums text-default-800">
-                      {formatGamepadFloat(gamepadAxisValue(selectedTelemetry.axes, "LeftZ"))}
+                      {formatGamepadFloat(
+                        gamepadTriggerLevel(
+                          selectedTelemetry.axes,
+                          selectedTelemetry.button_values,
+                          detailPressed,
+                          "left"
+                        )
+                      )}
                     </span>
                   </div>
                   <div>
                     <span className="text-default-600">{axisLabels.triggers.right}: </span>
                     <span className="font-mono tabular-nums text-default-800">
-                      {formatGamepadFloat(gamepadAxisValue(selectedTelemetry.axes, "RightZ"))}
+                      {formatGamepadFloat(
+                        gamepadTriggerLevel(
+                          selectedTelemetry.axes,
+                          selectedTelemetry.button_values,
+                          detailPressed,
+                          "right"
+                        )
+                      )}
                     </span>
                   </div>
                   <div>
@@ -154,7 +252,7 @@ export function GamepadTesterCard() {
                     <p className="text-sm text-default-400">Ninguno pulsado. Prueba la cruceta o la cara de botones.</p>
                   ) : (
                     <p className="text-sm leading-relaxed text-default-800">
-                      {formatPressedButtonsDisplay(selectedLayoutKind, selectedTelemetry.pressed_buttons)}
+                      {formatPressedButtonsDisplay(diagramLayoutKind, selectedTelemetry.pressed_buttons)}
                     </p>
                   )}
                 </div>

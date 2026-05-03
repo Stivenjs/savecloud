@@ -5,6 +5,17 @@
 
 export type GamepadLayoutKind = "xbox" | "playstation" | "nintendo" | "generic";
 
+/** Letras o símbolos en la cara del mando (orden gilrs: North, West, East, South). */
+export const BUTTON_FACE_LABELS: Record<
+  GamepadLayoutKind,
+  { north: string; south: string; east: string; west: string }
+> = {
+  xbox: { north: "Y", south: "A", east: "B", west: "X" },
+  playstation: { north: "△", south: "✕", east: "○", west: "□" },
+  nintendo: { north: "X", south: "B", east: "A", west: "Y" },
+  generic: { north: "Y", south: "A", east: "B", west: "X" },
+};
+
 /** Heurística por nombre que devuelve el SO / gilrs (sin VID fiable en el frontend). */
 export function inferGamepadLayoutKind(deviceName: string): GamepadLayoutKind {
   const n = deviceName.toLowerCase();
@@ -133,7 +144,6 @@ export function formatPressedButtonsDisplay(kind: GamepadLayoutKind, pressed: st
   return pressed.map((b) => friendlyButtonLabel(kind, b)).join(" · ");
 }
 
-/** Títulos de filas para ejes analógicos (sin jerga LeftStickX). */
 /** Texto corto para explicar cómo nombramos los botones. */
 export function layoutKindDescription(kind: GamepadLayoutKind): string {
   switch (kind) {

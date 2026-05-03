@@ -34,6 +34,25 @@ export function gamepadAxisValue(axes: Record<string, number>, key: string): num
   return typeof v === "number" ? v : 0;
 }
 
+/**
+ * Presión efectiva del gatillo (0–1): eje analógico (`LeftZ`/`RightZ`), valor del botón en gilrs
+ * (`button_values`) y pulsación digital. En XInput a veces el eje llega vacío pero el botón lleva el valor.
+ */
+export function gamepadTriggerLevel(
+  axes: Record<string, number>,
+  buttonValues: Record<string, number>,
+  pressed: Set<string>,
+  side: "left" | "right"
+): number {
+  const zKey = side === "left" ? "LeftZ" : "RightZ";
+  const btnKey = side === "left" ? "LeftTrigger" : "RightTrigger";
+  const fromAxis = gamepadAxisValue(axes, zKey);
+  const fromBtn = gamepadAxisValue(buttonValues, btnKey);
+  const digital = pressed.has(btnKey) ? 1 : 0;
+  const v = Math.max(fromAxis, fromBtn, digital);
+  return Math.max(0, Math.min(1, v));
+}
+
 export interface UseGamepadTesterResult {
   /** `false` en navegador sin Tauri. */
   isDesktop: boolean;
