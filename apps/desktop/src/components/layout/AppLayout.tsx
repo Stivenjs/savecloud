@@ -123,6 +123,26 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
   }, []);
 
   useEffect(() => {
+    let last = useShellUiStore.getState().profileToggleRequest;
+    return useShellUiStore.subscribe((state) => {
+      const n = state.profileToggleRequest;
+      if (n > last) {
+        last = n;
+        setProfileDrawerOpen((open) => !open);
+      }
+    });
+  }, []);
+
+  /** Con drawer abierto, B/atras debe cerrarlo antes que el router. */
+  useEffect(() => {
+    if (!profileDrawerOpen) return;
+    return useShellUiStore.getState().registerBackHandler(() => {
+      setProfileDrawerOpen(false);
+      return true;
+    });
+  }, [profileDrawerOpen]);
+
+  useEffect(() => {
     if (configLoading || !config) return;
     if (typeof window.requestIdleCallback === "function") {
       const id = window.requestIdleCallback(() => prefetchProfileDrawer(), { timeout: 2500 });

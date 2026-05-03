@@ -82,6 +82,7 @@ function resetShellUiForBigPictureWindowEntry(): void {
     staggeredMenuToggleRequest: 0,
     sideMenuCloseRequest: 0,
     sideMenuOpen: false,
+    profileToggleRequest: 0,
   });
 }
 

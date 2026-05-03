@@ -5,6 +5,8 @@ interface ShellUiStore {
   staggeredMenuToggleRequest: number;
   /** Contador: cada incremento pide abrir el drawer de perfil (GamesPage). */
   profileOpenRequest: number;
+  /** Contador: cada incremento hace toggle del drawer (mando Share / perfil repetido). */
+  profileToggleRequest: number;
   /** Si el menú lateral está abierto (lo actualiza StaggeredMenu vía AppLayout). */
   sideMenuOpen: boolean;
   /** Contador: cada incremento pide cerrar el menú lateral sin toggle (p. ej. botón B / Escape). */
@@ -16,6 +18,7 @@ interface ShellUiStore {
   backHandlers: Array<() => boolean>;
   requestStaggeredMenuToggle: () => void;
   requestProfileOpen: () => void;
+  requestProfileToggle: () => void;
   setSideMenuOpen: (open: boolean) => void;
   requestCloseSideMenu: () => void;
   /** Cierra el menú lateral si está abierto; si no, `requestGlobalBack` (misma lógica que B / Escape). */
@@ -32,11 +35,13 @@ interface ShellUiStore {
 export const useShellUiStore = create<ShellUiStore>((set, get) => ({
   staggeredMenuToggleRequest: 0,
   profileOpenRequest: 0,
+  profileToggleRequest: 0,
   sideMenuOpen: false,
   sideMenuCloseRequest: 0,
   backHandlers: [],
   requestStaggeredMenuToggle: () => set((s) => ({ staggeredMenuToggleRequest: s.staggeredMenuToggleRequest + 1 })),
   requestProfileOpen: () => set((s) => ({ profileOpenRequest: s.profileOpenRequest + 1 })),
+  requestProfileToggle: () => set((s) => ({ profileToggleRequest: s.profileToggleRequest + 1 })),
   setSideMenuOpen: (open) => set({ sideMenuOpen: open }),
   requestCloseSideMenu: () => set((s) => ({ sideMenuCloseRequest: s.sideMenuCloseRequest + 1 })),
   dispatchBackNavigation: () => {

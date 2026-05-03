@@ -7,6 +7,7 @@ export type SemanticAction =
   | "confirm"
   | "back"
   | "menu"
+  | "options"
   | "profile";
 
 export interface FocusNode {
