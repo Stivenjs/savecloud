@@ -26,6 +26,20 @@ const SORT_OPTIONS: SortOption[] = [
   { key: "size_asc", field: "size", dir: "asc", label: "Tamaño (menor)" },
 ];
 
+/** Estilos del listbox del Select en Big Picture (tipografía y altura de fila). */
+const CONSOLE_SORT_LISTBOX_PROPS = {
+  itemClasses: {
+    base: "min-h-14 rounded-lg px-3 py-2 data-[hover=true]:bg-default-200/55 dark:data-[hover=true]:bg-default-100/25",
+    title: "text-lg font-semibold leading-snug text-foreground sm:text-xl",
+    wrapper: "py-1",
+    selectedIcon: "text-primary [&_svg]:size-6",
+  },
+  classNames: {
+    list: "gap-1 px-1 py-2",
+    base: "p-0",
+  },
+} as const;
+
 interface LayoutButtonProps {
   value: GamesLayout;
   current: GamesLayout;
@@ -109,6 +123,8 @@ export function GamesViewControls({
           size={consoleMode ? "lg" : "sm"}
           variant="bordered"
           aria-label="Ordenar juegos por"
+          maxListboxHeight={consoleMode ? 520 : undefined}
+          listboxProps={consoleMode ? { ...CONSOLE_SORT_LISTBOX_PROPS } : undefined}
           classNames={{
             trigger: [
               "border-default-200 dark:border-default-100",
@@ -119,11 +135,11 @@ export function GamesViewControls({
               .filter(Boolean)
               .join(" "),
             value: consoleMode ? "text-lg" : undefined,
-            listbox: consoleMode ? "text-lg" : undefined,
-            popoverContent: consoleMode ? "min-w-[var(--trigger-width)]" : undefined,
+            listbox: consoleMode ? "gap-0 p-0 text-lg" : undefined,
+            popoverContent: consoleMode ? "min-w-[var(--trigger-width)] p-2 text-lg" : undefined,
           }}>
           {SORT_OPTIONS.map((opt) => (
-            <SelectItem key={opt.key} textValue={opt.label} className={consoleMode ? "py-3.5 text-lg" : undefined}>
+            <SelectItem key={opt.key} textValue={opt.label}>
               {opt.label}
             </SelectItem>
           ))}
