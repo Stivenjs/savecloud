@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { AppRuntime } from "@/app/AppRuntime";
+import { BigPictureControlHints } from "@/features/big-picture/BigPictureControlHints";
 import { switchToNormalMode } from "@/windows/bigPictureWindow";
 
 export function BigPictureWindowPage() {
@@ -15,6 +16,7 @@ export function BigPictureWindowPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <AppRuntime hideTitleBar />
+      <BigPictureControlHints />
     </div>
   );
 }
