@@ -9,7 +9,7 @@ import { MenuGamesList } from "@components/layout/Menugameslist";
 import { NotificationCenter } from "@components/layout/NotificationCenter";
 import { TitleBar } from "@components/layout/TitleBar";
 import { useShellUiStore } from "@store/ShellUiStore";
-import { BigPictureHeaderHud } from "@features/big-picture/BigPictureHeaderHud";
+import { BigPictureConsoleTopRail } from "@features/big-picture/BigPictureConsoleTopRail";
 import { UserBadge } from "@features/games/UserBadge";
 import { CloudMembersLauncher } from "@features/friends/CloudMembersLauncher";
 import { CloudStreamsLauncher } from "@features/friends/CloudStreamsLauncher";
@@ -95,7 +95,6 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
   const { resolvedTheme, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const isGamesLibraryRoute = location.pathname === "/";
   const isDark = resolvedTheme === "dark";
   const setSideMenuOpen = useShellUiStore((s) => s.setSideMenuOpen);
 
@@ -174,16 +173,26 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
 
       <main
         className={`min-h-screen overflow-x-clip px-6 pb-6 ${
-          hideTitleBar ? (isGamesLibraryRoute ? "pt-(--savecloud-bp-library-header-h)" : "pt-6") : "pt-26"
+          hideTitleBar ? "pt-(--savecloud-bp-library-header-h)" : "pt-26"
         }`}>
         {children}
       </main>
+
+      {hideTitleBar ? (
+        <BigPictureConsoleTopRail
+          hidden={profileDrawerOpen}
+          profileAvatar={config?.profileAvatar}
+          profileFrame={config?.profileFrame}
+          onOpenProfile={() => setProfileDrawerOpen(true)}
+          onIntentOpenProfile={prefetchProfileDrawer}
+        />
+      ) : null}
 
       <StaggeredMenu
         isFixed
         position="left"
         bigPictureMode={hideTitleBar}
-        hideFloatingHeader={hideTitleBar && isGamesLibraryRoute}
+        hideFloatingHeader={hideTitleBar}
         headerOffset={hideTitleBar ? 0 : 40}
         items={menuItemsFromNav(navItems, location.pathname)}
         displaySocials={true}
@@ -202,16 +211,7 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
           setTimeout(() => handleNavigation(item.link), 320);
         }}
         headerActions={
-          hideTitleBar ? (
-            isGamesLibraryRoute ? null : (
-              <BigPictureHeaderHud
-                profileAvatar={config?.profileAvatar}
-                profileFrame={config?.profileFrame}
-                onOpenProfile={() => setProfileDrawerOpen(true)}
-                onIntentOpenProfile={prefetchProfileDrawer}
-              />
-            )
-          ) : (
+          hideTitleBar ? null : (
             <div className="flex items-center gap-4">
               <UserBadge
                 userId={activeProfile?.localUserId || config?.userId}
@@ -279,6 +279,7 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
           hasSyncConfig={hasSyncConfig}
           connectionStatus={connectionStatus}
           bigPictureConsole={hideTitleBar}
+          bpReserveGlobalTopChromeSlot={hideTitleBar && !profileDrawerOpen}
         />
       </Suspense>
     </div>

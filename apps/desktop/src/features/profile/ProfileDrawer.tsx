@@ -62,8 +62,8 @@ interface ProfileDrawerProps {
   gamification?: GamificationState | null;
   hasSyncConfig?: boolean;
   connectionStatus?: ConnectionStatus;
-  /** Big Picture / 10-ft UI: tipografía y controles más grandes, panel ancho tipo consola. */
   bigPictureConsole?: boolean;
+  bpReserveGlobalTopChromeSlot?: boolean;
 }
 
 function connectionLabel(status: ConnectionStatus | undefined): { text: string; tone: string } {
@@ -97,6 +97,7 @@ export function ProfileDrawer({
   hasSyncConfig,
   connectionStatus,
   bigPictureConsole = false,
+  bpReserveGlobalTopChromeSlot = true,
 }: ProfileDrawerProps) {
   const bp = bigPictureConsole;
   const { activeProfile } = useProfileSession();
@@ -219,23 +220,23 @@ export function ProfileDrawer({
       }}
       placement="right"
       size="lg"
-      backdrop={bp ? "blur" : "opaque"}
+      backdrop="blur"
       classNames={{
         base: bp ? "!w-[min(100%,min(96vw,44rem))] sm:!max-w-[min(96vw,44rem)] shadow-2xl" : "sm:max-w-lg",
-        /**
-         * BP: dejar la altura del header de biblioteca libre para no solapar el hero del perfil
-         * con el globo/hora/avatar (alineado con --savecloud-bp-library-header-h).
-         */
         wrapper: bp
-          ? "overflow-hidden px-2 pt-[var(--savecloud-bp-library-header-h)] pb-3 sm:px-4 sm:pb-4"
+          ? `${
+              bpReserveGlobalTopChromeSlot
+                ? "overflow-hidden px-2 pt-[var(--savecloud-bp-library-header-h)] pb-3 sm:px-4 sm:pb-4"
+                : "overflow-hidden px-2 pb-3 pt-[max(12px,env(safe-area-inset-top))] sm:px-4 sm:pb-4 sm:pt-4"
+            } !z-[120]`
           : "overflow-hidden",
-        backdrop: bp ? "bg-black/65 backdrop-blur-md" : undefined,
+        backdrop: bp ? "!bg-black/45" : undefined,
       }}>
       <DrawerContent
         data-profile-console={bp ? "true" : undefined}
         className={`flex max-h-[min(100dvh,100vh)] flex-col rounded-l-3xl md:rounded-l-[28px] ${
           bp
-            ? "border border-white/15 bg-content1/95 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.85)] ring-1 ring-white/10 backdrop-blur-xl dark:border-white/10"
+            ? "border border-white/15 bg-[#121214] shadow-[0_24px_80px_-20px_rgba(0,0,0,0.85)] ring-1 ring-white/10 dark:border-white/10"
             : "bg-content1"
         }`}>
         <DrawerHeader

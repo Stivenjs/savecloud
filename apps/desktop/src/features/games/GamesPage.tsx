@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Spinner, Tooltip } from "@heroui/react";
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import { BarChart3, RefreshCw } from "lucide-react";
@@ -28,8 +28,6 @@ import { createShareLink } from "@/services/tauri/share.service";
 import { toastError, toastSuccess } from "@utils/toast";
 import { useNavigationStore } from "@features/input/store";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
-import { prefetchProfileDrawer } from "@features/profile/profileDrawerPrefetch";
-import { BigPictureGamesTopRail } from "@features/big-picture/BigPictureGamesTopRail";
 import { useShellUiStore } from "@store/ShellUiStore";
 
 export function GamesPage() {
@@ -113,6 +111,22 @@ export function GamesPage() {
     () => typeof document !== "undefined" && document.documentElement.classList.contains("savecloud-big-picture"),
     []
   );
+
+  useEffect(() => {
+    if (!bigPictureConsole) return;
+    const reg = useShellUiStore.getState().registerGamesBpSearchValueSetter;
+    const put = useShellUiStore.getState().setGamesBpSearchTerm;
+    reg(setSearchTerm);
+    put(searchTerm);
+    return () => {
+      reg(null);
+      put("");
+    };
+  }, [bigPictureConsole, setSearchTerm]);
+
+  useEffect(() => {
+    if (bigPictureConsole) useShellUiStore.getState().setGamesBpSearchTerm(searchTerm);
+  }, [bigPictureConsole, searchTerm]);
 
   const [gamesSummaryOpen, setGamesSummaryOpen] = useState(false);
   const gamesSummaryOpenRef = useRef(false);
@@ -226,15 +240,6 @@ export function GamesPage() {
         {/* Cabecera */}
         {bigPictureConsole ? (
           <>
-            <BigPictureGamesTopRail
-              searchTerm={searchTerm}
-              onSearchChange={setSearchTerm}
-              profileAvatar={config?.profileAvatar}
-              profileFrame={config?.profileFrame}
-              onOpenProfile={() => useShellUiStore.getState().requestProfileOpen()}
-              onIntentOpenProfile={prefetchProfileDrawer}
-            />
-
             <div className="mt-6 flex flex-col gap-4 sm:mt-8">
               <div className="flex flex-wrap items-center justify-between gap-3 gap-y-4">
                 <div className="flex min-w-0 flex-wrap items-center gap-3">

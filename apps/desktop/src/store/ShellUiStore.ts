@@ -1,6 +1,15 @@
 import { create } from "zustand";
 
 interface ShellUiStore {
+  /**
+   * Biblioteca en modo consola: término de búsqueda y setter registrados desde GamesPage.
+   * La rail superior global lee esto en la ruta `/`.
+   */
+  gamesBpSearchTerm: string;
+  gamesBpSearchSetValue: ((value: string) => void) | null;
+  setGamesBpSearchTerm: (term: string) => void;
+  registerGamesBpSearchValueSetter: (setter: ((value: string) => void) | null) => void;
+
   /** Contador: cada incremento dispara un toggle del menú lateral (StaggeredMenu). */
   staggeredMenuToggleRequest: number;
   /** Contador: cada incremento pide abrir el drawer de perfil (GamesPage). */
@@ -33,6 +42,11 @@ interface ShellUiStore {
 }
 
 export const useShellUiStore = create<ShellUiStore>((set, get) => ({
+  gamesBpSearchTerm: "",
+  gamesBpSearchSetValue: null,
+  setGamesBpSearchTerm: (term) => set({ gamesBpSearchTerm: term }),
+  registerGamesBpSearchValueSetter: (setter) => set({ gamesBpSearchSetValue: setter }),
+
   staggeredMenuToggleRequest: 0,
   profileOpenRequest: 0,
   profileToggleRequest: 0,
