@@ -1,6 +1,4 @@
 import { useEffect } from "react";
-import { Button } from "@heroui/react";
-import { Minimize2 } from "lucide-react";
 import { AppRuntime } from "@/app/AppRuntime";
 import { switchToNormalMode } from "@/windows/bigPictureWindow";
 
@@ -16,17 +14,7 @@ export function BigPictureWindowPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="fixed right-4 top-3 z-1000">
-        <Button
-          size="sm"
-          color="primary"
-          variant="flat"
-          startContent={<Minimize2 size={14} />}
-          onPress={() => void switchToNormalMode()}>
-          Modo normal
-        </Button>
-      </div>
-      <AppRuntime />
+      <AppRuntime hideTitleBar />
     </div>
   );
 }

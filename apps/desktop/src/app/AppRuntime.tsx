@@ -10,7 +10,7 @@ import { useAppInitialization } from "@hooks/useAppInitialization";
 import { useConfig } from "@hooks/useConfig";
 import type { ConfiguredGame } from "@app-types/config";
 
-function AppContent() {
+function AppContent({ hideTitleBar }: { hideTitleBar: boolean }) {
   const navigate = useNavigate();
   const { config } = useConfig();
 
@@ -45,13 +45,17 @@ function AppContent() {
   }, [navigate]);
 
   return (
-    <AppLayout navItems={NAV_ITEMS} games={games} onMenuGameClick={handleMenuGameClick}>
+    <AppLayout navItems={NAV_ITEMS} games={games} onMenuGameClick={handleMenuGameClick} hideTitleBar={hideTitleBar}>
       <AppRoutes />
     </AppLayout>
   );
 }
 
-export function AppRuntime() {
+interface AppRuntimeProps {
+  hideTitleBar?: boolean;
+}
+
+export function AppRuntime({ hideTitleBar = false }: AppRuntimeProps) {
   useAppInitialization();
 
   return (
@@ -60,7 +64,7 @@ export function AppRuntime() {
       <UnsyncedSavesModalWithProgress />
 
       <MemoryRouter>
-        <AppContent />
+        <AppContent hideTitleBar={hideTitleBar} />
       </MemoryRouter>
 
       <TransferOverlayRouter />
