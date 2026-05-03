@@ -1,6 +1,6 @@
 import { useState, lazy, Suspense, type ReactNode } from "react";
 import { Tab, Tabs } from "@heroui/react";
-import { AppWindow, Bell, Cloud, FlaskConical, RefreshCw } from "lucide-react";
+import { AppWindow, Bell, Cloud, FlaskConical, Gamepad2, RefreshCw } from "lucide-react";
 import { AutostartCard } from "@features/settings/AutostartCard";
 import { ConfigSection } from "@features/settings/ConfigSection";
 import { CreateConfigModal } from "@features/settings/CreateConfigModal";
@@ -20,6 +20,7 @@ import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigationStore } from "@features/input/store";
 import { DevSdk } from "@features/settings/DevSdk";
 import { SourceInstallSettingsCard } from "@features/settings/SourceInstallSettingsCard";
+import { GamepadTesterCard } from "@features/settings/GamepadTesterCard";
 import { VoiceCommandsCard } from "@features/voice-commands";
 import { HealthObservabilityCard } from "@features/settings/HealthObservabilityCard";
 import { SettingsSidebar, type SettingsTabKey } from "@features/settings/SettingsSidebar";
@@ -36,6 +37,7 @@ const SETTINGS_TABS: Array<{
   { key: "account", label: "Cuenta", icon: <Cloud size={17} className="opacity-90" /> },
   { key: "app", label: "Inicio y app", icon: <AppWindow size={17} className="opacity-90" /> },
   { key: "integrations", label: "Integraciones", icon: <Bell size={17} className="opacity-90" /> },
+  { key: "gamepad", label: "Mando", icon: <Gamepad2 size={17} className="opacity-90" /> },
   { key: "updates", label: "Versiones", icon: <RefreshCw size={17} className="opacity-90" /> },
   { key: "advanced", label: "Avanzado", icon: <FlaskConical size={17} className="opacity-90" /> },
 ];
@@ -219,6 +221,12 @@ export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
             />
           </div>
         );
+      case "gamepad":
+        return (
+          <div className="space-y-3">
+            <GamepadTesterCard />
+          </div>
+        );
       case "updates":
         return (
           <div className="grid gap-3 xl:grid-cols-2">
@@ -257,7 +265,7 @@ export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
           <div>
             <h1 className="text-2xl font-semibold">Configuración</h1>
             <p className="mt-1 text-sm text-default-500">
-              Ajusta tu cuenta, comportamiento de la app e integraciones desde un solo lugar.
+              Ajusta tu cuenta, la app, los mandos conectados y las integraciones desde un solo lugar.
             </p>
           </div>
 
