@@ -155,6 +155,7 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
       <StaggeredMenu
         isFixed
         position="left"
+        bigPictureMode={hideTitleBar}
         headerOffset={40}
         items={menuItemsFromNav(navItems, location.pathname)}
         displaySocials={true}
@@ -204,6 +205,7 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
               }}>
               <MenuGamesList
                 games={games}
+                bigPictureConsole={hideTitleBar}
                 onGameClick={(game) => {
                   useShellUiStore.getState().requestCloseSideMenu();
                   onMenuGameClick?.(game);
@@ -213,17 +215,19 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
           ) : undefined
         }
         panelFooter={
-          <Button
-            isIconOnly
-            variant="flat"
-            radius="md"
-            color="default"
-            size="lg"
-            className="text-foreground"
-            aria-label={isDark ? "Modo claro" : "Modo oscuro"}
-            onPress={() => setTheme(isDark ? "light" : "dark")}>
-            {isDark ? <Sun size={22} /> : <Moon size={22} />}
-          </Button>
+          hideTitleBar ? null : (
+            <Button
+              isIconOnly
+              variant="flat"
+              radius="md"
+              color="default"
+              size="lg"
+              className="text-foreground"
+              aria-label={isDark ? "Modo claro" : "Modo oscuro"}
+              onPress={() => setTheme(isDark ? "light" : "dark")}>
+              {isDark ? <Sun size={22} /> : <Moon size={22} />}
+            </Button>
+          )
         }
       />
 

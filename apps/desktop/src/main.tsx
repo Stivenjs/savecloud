@@ -75,6 +75,15 @@ function detectRenderMode(): RenderMode {
   return "main";
 }
 
+/** Shell solo en la webview Big Picture (scrollbars tipo consola). */
+function applyShellFlagsForRenderMode(mode: RenderMode): void {
+  if (mode === "bigPictureWindow") {
+    document.documentElement.classList.add("savecloud-big-picture");
+  } else {
+    document.documentElement.classList.remove("savecloud-big-picture");
+  }
+}
+
 function renderWithRoot(content: React.ReactNode): void {
   const root = ReactDOM.createRoot(getRootElement());
   root.render(content);
@@ -146,6 +155,7 @@ async function maybeOpenStartupBigPicture(): Promise<void> {
 async function bootstrap(): Promise<void> {
   try {
     const mode = detectRenderMode();
+    applyShellFlagsForRenderMode(mode);
     const renderByMode: Record<RenderMode, () => Promise<void>> = {
       overlay: renderOverlayApp,
       streamViewer: renderStreamViewerApp,
