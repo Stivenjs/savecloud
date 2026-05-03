@@ -6,7 +6,6 @@ import {
   CloudUpload,
   ExternalLink,
   FolderOpen,
-  History,
   Link2,
   Magnet,
   Pencil,
@@ -72,16 +71,16 @@ export function GameActionsDropdownMenu(props: GameActionsMenuModelProps) {
       </DropdownItem>
 
       <DropdownItem
-        key="download"
-        className={isGameActionItemHidden("download", props) ? "hidden" : ""}
+        key="recoverFromCloud"
+        className={isGameActionItemHidden("recoverFromCloud", props) ? "hidden" : ""}
         startContent={
-          props.isDownloading ? (
+          props.isDownloading || props.isSyncing || props.isFullBackupUploading ? (
             <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
           ) : (
             <CloudDownload size={16} />
           )
         }>
-        Descargar de la nube
+        Traer guardados
       </DropdownItem>
 
       <DropdownItem
@@ -104,13 +103,6 @@ export function GameActionsDropdownMenu(props: GameActionsMenuModelProps) {
           )
         }>
         {props.isUploadTooLarge ? "Empaquetar y subir (obligatorio)" : "Empaquetar y subir"}
-      </DropdownItem>
-
-      <DropdownItem
-        key="restore"
-        className={isGameActionItemHidden("restore", props) ? "hidden" : ""}
-        startContent={<History size={16} />}>
-        Restaurar backup
       </DropdownItem>
 
       <DropdownItem

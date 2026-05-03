@@ -33,14 +33,12 @@ export interface GameCardProps {
   onSync?: (game: ConfiguredGame) => void;
   /** Muestra spinner en el botón de sincronizar. */
   isSyncing?: boolean;
-  /** Callback al descargar el juego. Si no se pasa, no se muestra el botón. */
-  onDownload?: (game: ConfiguredGame) => void;
-  /** Muestra spinner en el botón de descargar. */
+  /** Muestra spinner en Traer guardados cuando hay descarga en curso para esta tarjeta. */
   isDownloading?: boolean;
   /** Callback al abrir la carpeta de guardados. Si no se pasa, no se muestra el botón. */
   onOpenFolder?: (game: ConfiguredGame) => void;
-  /** Callback para restaurar desde backup. */
-  onRestoreBackup?: (game: ConfiguredGame) => void;
+  /** Abre el modal Traer guardados (nube + copias locales + snapshots). */
+  onRecoverFromCloud?: (game: ConfiguredGame) => void;
   /** Callback para empaquetar y subir (backup completo en la nube). */
   onFullBackupUpload?: (game: ConfiguredGame) => void;
   /** Muestra spinner en empaquetar y subir. */

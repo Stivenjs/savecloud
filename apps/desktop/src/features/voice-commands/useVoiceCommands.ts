@@ -20,6 +20,44 @@ interface GameMatch {
 const WAKE_WORD_EVENT = "voice://wake-word-detected";
 const VOICE_HOLD_KEY = "KeyV";
 const RELEASE_GRACE_MS = 180;
+const NON_TYPING_INPUT_TYPES = new Set([
+  "button",
+  "checkbox",
+  "color",
+  "date",
+  "datetime-local",
+  "file",
+  "hidden",
+  "image",
+  "month",
+  "radio",
+  "range",
+  "reset",
+  "submit",
+  "time",
+  "week",
+]);
+
+/** No interceptar mantener-V cuando el usuario escribe en un campo de texto. */
+function isVoiceHoldSuppressedForTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  const el = target.closest<HTMLElement>("input, textarea, select, [contenteditable], [role='textbox']");
+  if (!el) return false;
+
+  if (el.isContentEditable) return true;
+
+  if (el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+    return !el.disabled;
+  }
+
+  if (el instanceof HTMLInputElement) {
+    if (el.disabled) return false;
+    const type = (el.type || "text").toLowerCase();
+    return !NON_TYPING_INPUT_TYPES.has(type);
+  }
+
+  return el.getAttribute("role") === "textbox";
+}
 const VOICE_CORRECTIONS_STORAGE_KEY = "voice-commands:learned-corrections:v1";
 
 type LearnedCorrection = {
@@ -302,6 +340,7 @@ export function useVoiceCommands() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.code !== VOICE_HOLD_KEY && event.key.toLowerCase() !== "v") return;
+      if (isVoiceHoldSuppressedForTarget(event.target)) return;
       if (event.repeat) return;
       event.preventDefault();
       event.stopPropagation();
@@ -319,6 +358,7 @@ export function useVoiceCommands() {
 
     const onKeyUp = (event: KeyboardEvent) => {
       if (event.code !== VOICE_HOLD_KEY && event.key.toLowerCase() !== "v") return;
+      if (isVoiceHoldSuppressedForTarget(event.target)) return;
       event.preventDefault();
       event.stopPropagation();
       holdTriggerActiveRef.current = false;

@@ -65,14 +65,12 @@ interface GamesListProps {
   onSync?: (game: ConfiguredGame) => void;
   /** ID del juego que está sincronizando (muestra spinner). */
   syncingId?: string | null;
-  /** Callback al descargar un juego. Si no se pasa, no se muestra el botón. */
-  onDownload?: (game: ConfiguredGame) => void;
-  /** ID del juego que está descargando (muestra spinner). */
+  /** ID del juego que está descargando (spinner en Traer guardados + barra global). */
   downloadingId?: string | null;
   /** Callback al abrir la carpeta de guardados. */
   onOpenFolder?: (game: ConfiguredGame) => void;
-  /** Callback para restaurar desde backup. */
-  onRestoreBackup?: (game: ConfiguredGame) => void;
+  /** Abre el modal Traer guardados */
+  onRecoverFromCloud?: (game: ConfiguredGame) => void;
   /** Callback para empaquetar y subir (backup completo). */
   onFullBackupUpload?: (game: ConfiguredGame) => void;
   /** ID del juego que está empaquetando/subiendo backup completo. */
@@ -97,10 +95,9 @@ export function GamesList({
   onRemove,
   onSync,
   syncingId,
-  onDownload,
   downloadingId,
   onOpenFolder,
-  onRestoreBackup,
+  onRecoverFromCloud,
   onFullBackupUpload,
   fullBackupUploadingGameId,
   onEdit,
@@ -241,10 +238,9 @@ export function GamesList({
               onRemove={onRemove}
               onSync={onSync}
               isSyncing={syncingId === game.id || syncingId === "all"}
-              onDownload={onDownload}
               isDownloading={downloadingId === game.id || downloadingId === "all"}
               onOpenFolder={onOpenFolder}
-              onRestoreBackup={onRestoreBackup}
+              onRecoverFromCloud={onRecoverFromCloud}
               onFullBackupUpload={onFullBackupUpload}
               isFullBackupUploading={fullBackupUploadingGameId === game.id}
               onEdit={onEdit}

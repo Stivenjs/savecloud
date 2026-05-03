@@ -16,9 +16,9 @@ export interface GameActionsMenuModelProps {
   onTorrent?: (game: ConfiguredGame) => void;
   onOpenFolder?: (game: ConfiguredGame) => void;
   onSync?: (game: ConfiguredGame) => void;
-  onDownload?: (game: ConfiguredGame) => void;
+  /** Unifica descarga desde la nube + restauraciones (abre modal con todas las opciones). */
+  onRecoverFromCloud?: (game: ConfiguredGame) => void;
   onFullBackupUpload?: (game: ConfiguredGame) => void;
-  onRestoreBackup?: (game: ConfiguredGame) => void;
   onShare?: (game: ConfiguredGame) => void;
   onRemove?: (game: ConfiguredGame) => void;
 }
@@ -26,10 +26,10 @@ export interface GameActionsMenuModelProps {
 export function getGameActionsDisabledKeys(p: GameActionsMenuModelProps): string[] {
   const { isDownloading, isSyncing, isFullBackupUploading, isGameRunning } = p;
   if (isDownloading || isSyncing || isFullBackupUploading) {
-    return ["folder", "download", "sync", "fullBackup", "restore"];
+    return ["folder", "recoverFromCloud", "sync", "fullBackup"];
   }
   if (isGameRunning) {
-    return ["download", "sync", "fullBackup", "restore"];
+    return ["recoverFromCloud", "sync", "fullBackup"];
   }
   return [];
 }
@@ -45,11 +45,8 @@ export async function runGameAction(key: string, game: ConfiguredGame, p: GameAc
     case "folder":
       p.onOpenFolder?.(game);
       break;
-    case "download":
-      p.onDownload?.(game);
-      break;
-    case "restore":
-      p.onRestoreBackup?.(game);
+    case "recoverFromCloud":
+      p.onRecoverFromCloud?.(game);
       break;
     case "share":
       p.onShare?.(game);
@@ -72,7 +69,7 @@ export async function runGameAction(key: string, game: ConfiguredGame, p: GameAc
 }
 
 export function isGameActionItemHidden(
-  item: "edit" | "torrent" | "source" | "folder" | "download" | "sync" | "fullBackup" | "restore" | "share" | "remove",
+  item: "edit" | "torrent" | "source" | "folder" | "recoverFromCloud" | "sync" | "fullBackup" | "share" | "remove",
   p: GameActionsMenuModelProps
 ): boolean {
   const { game, isUploadTooLarge } = p;
@@ -85,14 +82,12 @@ export function isGameActionItemHidden(
       return !game.sourceUrl;
     case "folder":
       return !p.onOpenFolder;
-    case "download":
-      return !p.onDownload;
+    case "recoverFromCloud":
+      return !p.onRecoverFromCloud;
     case "sync":
       return !p.onSync || !!isUploadTooLarge;
     case "fullBackup":
       return !p.onFullBackupUpload;
-    case "restore":
-      return !p.onRestoreBackup;
     case "share":
       return !p.onShare;
     case "remove":
