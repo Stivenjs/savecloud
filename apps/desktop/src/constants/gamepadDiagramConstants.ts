@@ -72,47 +72,42 @@ export const ICON_GEOM: Record<KenneyChassisProfile, KenneyIconGeom> = {
     shoulderL: [9.4, 15.2, 8.6, 2.85],
     shoulderR: [46, 15.2, 8.6, 2.85],
   },
-  /**
-   * `controller_playstation5.svg`: M28 32 ≈ cruceta; sticks en la base del mando (y≈36, x≈23 / 41).
-   * Caras: círculos del cluster derecho (△□○✕).
-   */
+
   playstation: {
-    dpad: [25, 32],
-    stickL: [23.6, 36.4],
-    stickR: [40.4, 36.4],
-    stickRingR: 2.85,
+    dpad: [18, 26],
+    stickL: [25, 32],
+    stickR: [39, 32],
+    stickRingR: 2.65,
     stickNubR: 1.26,
     nubTravel: 1.0,
     face: {
-      North: [47.6, 24],
-      West: [43.1, 29],
-      East: [52.1, 29],
-      South: [47.6, 33.8],
+      North: [46.5, 23.5],
+      West: [43.5, 26.5],
+      East: [49.5, 26.5],
+      South: [46.5, 29.5],
     },
     faceIcon: 4.15,
     select: [26.2, 20.8],
     start: [37.8, 20.8],
-    mode: [32, 20.9],
+    mode: [32, 22],
     centerIcon: 3.65,
     triggerTrack: { h: 9.2, w: 3.9, leftX: 14.1, rightX: 46, top: 6.1 },
     shoulderL: [10, 14.6, 7.9, 2.75],
     shoulderR: [46.1, 14.6, 7.9, 2.75],
   },
-  /**
-   * `controller_switch_pro.svg`: M22 24 stick izq.; M47 / M41 cruceta y cara; stick der. ~45, 28.
-   */
+
   nintendo: {
-    dpad: [25, 31],
-    stickL: [19, 24.5],
-    stickR: [45, 28.5],
+    dpad: [25, 32],
+    stickL: [19, 24],
+    stickR: [38, 32],
     stickRingR: 2.85,
     stickNubR: 1.26,
     nubTravel: 1.0,
     face: {
-      North: [38, 26],
-      West: [33.5, 31],
-      East: [42.5, 31],
-      South: [38, 36],
+      North: [45, 22],
+      West: [41, 25],
+      East: [49, 25],
+      South: [45, 28],
     },
     faceIcon: 4.1,
     select: [28.4, 18.6],
