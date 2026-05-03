@@ -236,11 +236,11 @@ export function GamesPage() {
 
   return (
     <LayoutGroup id="games-page-layout">
-      <div className="flex flex-col gap-8">
+      <div className={`flex flex-col ${bigPictureConsole ? "gap-5" : "gap-8"}`}>
         {/* Cabecera */}
         {bigPictureConsole ? (
           <>
-            <div className="mt-6 flex flex-col gap-4 sm:mt-8">
+            <div className="mt-4 flex flex-col gap-3 sm:mt-6">
               <div className="flex flex-wrap items-center justify-between gap-3 gap-y-4">
                 <div className="flex min-w-0 flex-wrap items-center gap-3">
                   <h1 className="text-2xl font-semibold text-foreground md:text-[1.875rem]">Juegos configurados</h1>
@@ -501,10 +501,11 @@ export function GamesPage() {
         <motion.div
           layout={bigPictureConsole ? "position" : false}
           transition={{ layout: layoutShiftTransition }}
-          className="flex flex-col gap-8">
+          className={`flex flex-col ${bigPictureConsole ? "gap-5" : "gap-8"}`}>
           {/* Filtros de la lista */}
-          <section className="space-y-2">
-            <h2 className="text-sm font-medium text-default-500">
+          <section className={bigPictureConsole ? "flex flex-wrap items-center gap-x-4 gap-y-2" : "space-y-2"}>
+            <h2
+              className={`font-medium text-default-500 ${bigPictureConsole ? "shrink-0 text-base md:text-lg" : "text-sm"}`}>
               {bigPictureConsole ? "Filtrar por origen" : "Buscar y filtrar"}
             </h2>
             <GamesFilters
@@ -513,13 +514,17 @@ export function GamesPage() {
               originFilter={originFilter}
               onOriginFilterChange={setOriginFilter}
               omitSearch={bigPictureConsole}
+              consoleMode={bigPictureConsole}
             />
           </section>
           {/* Lista de juegos */}
           <section className="space-y-2">
-            <h2 className="text-sm font-medium text-default-500">Lista de juegos</h2>
+            <h2 className={`font-medium text-default-500 ${bigPictureConsole ? "text-base md:text-lg" : "text-sm"}`}>
+              Lista de juegos
+            </h2>
             <GamesList
               games={filteredGames}
+              consoleMode={bigPictureConsole}
               animationKey={`${originFilter}|${debouncedSearchTerm}`}
               emptyFilterMessage={emptyFilterMessage}
               unsyncedGameIds={unsyncedGameIds}

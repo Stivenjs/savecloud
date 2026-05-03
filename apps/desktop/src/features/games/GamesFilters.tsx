@@ -14,6 +14,8 @@ export interface GamesFiltersProps {
   onOriginFilterChange: (value: OriginFilter) => void;
   /** Ocultar el campo de búsqueda (p. ej. cuando vive en la rail de Big Picture). */
   omitSearch?: boolean;
+  /** Big Picture / mando: filtro de origen compacto (no usa Tabs de HeroUI). */
+  consoleMode?: boolean;
   className?: string;
 }
 
@@ -108,31 +110,87 @@ export function filterGames(
   return result;
 }
 
+const ORIGIN_SEGMENTS: { key: OriginFilter; label: string }[] = [
+  { key: "all", label: "Todos" },
+  { key: "steam", label: "Steam" },
+  { key: "other", label: "Otros" },
+];
+
+/** Filtro de origen ligero para consola (evita el componente Tabs, muy pesado visualmente). */
+function ConsoleOriginSegments({
+  originFilter,
+  onOriginFilterChange,
+}: {
+  originFilter: OriginFilter;
+  onOriginFilterChange: (value: OriginFilter) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Filtros de origen"
+      className="inline-flex w-fit max-w-full flex-wrap items-center gap-1 self-start rounded-xl border border-default-200/70 bg-default-100/30 p-1 dark:border-default-100/25 dark:bg-default-50/15">
+      {ORIGIN_SEGMENTS.map(({ key, label }) => {
+        const selected = originFilter === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onOriginFilterChange(key)}
+            className={[
+              "min-h-11 shrink-0 rounded-lg px-4 py-2 text-base font-semibold transition-colors tap-highlight-transparent outline-none sm:min-h-12 sm:px-5",
+              "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              selected
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-default-600 hover:bg-default-200/50 dark:text-default-400 dark:hover:bg-default-100/15",
+            ].join(" ")}>
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function GamesFilters({
   searchTerm,
   onSearchChange,
   originFilter,
   onOriginFilterChange,
   omitSearch = false,
+  consoleMode = false,
   className: rootClassName,
 }: GamesFiltersProps) {
+  const rowLayout = consoleMode
+    ? "flex flex-col items-start gap-3"
+    : `flex flex-col gap-4 sm:flex-row sm:items-center ${omitSearch ? "sm:justify-end" : "sm:justify-between"}`;
+
   return (
-    <div
-      className={`flex flex-col gap-4 sm:flex-row sm:items-center ${omitSearch ? "sm:justify-end" : "sm:justify-between"} ${rootClassName ?? ""}`}>
+    <div className={`${rowLayout} ${rootClassName ?? ""}`}>
       {!omitSearch ? (
-        <DebouncedGamesSearchInput searchTerm={searchTerm} onSearchChange={onSearchChange} className="max-w-xs" />
+        <DebouncedGamesSearchInput
+          searchTerm={searchTerm}
+          onSearchChange={onSearchChange}
+          className={consoleMode ? "max-w-full sm:max-w-md" : "max-w-xs"}
+          size={consoleMode ? "lg" : "md"}
+        />
       ) : null}
-      <Tabs
-        selectedKey={originFilter}
-        onSelectionChange={(key) => onOriginFilterChange(key as OriginFilter)}
-        variant="solid"
-        color="primary"
-        size="sm"
-        aria-label="Filtros de origen">
-        <Tab key="all" title="Todos" />
-        <Tab key="steam" title="Steam" />
-        <Tab key="other" title="Otros" />
-      </Tabs>
+      {consoleMode ? (
+        <ConsoleOriginSegments originFilter={originFilter} onOriginFilterChange={onOriginFilterChange} />
+      ) : (
+        <Tabs
+          selectedKey={originFilter}
+          onSelectionChange={(key) => onOriginFilterChange(key as OriginFilter)}
+          variant="solid"
+          color="primary"
+          size="sm"
+          aria-label="Filtros de origen">
+          <Tab key="all" title="Todos" />
+          <Tab key="steam" title="Steam" />
+          <Tab key="other" title="Otros" />
+        </Tabs>
+      )}
     </div>
   );
 }
