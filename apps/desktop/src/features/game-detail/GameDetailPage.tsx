@@ -297,10 +297,9 @@ export function GameDetailPage() {
         onEdit={isSteamCatalogOnly ? undefined : setGameToEdit}
         onTorrent={isSteamCatalogOnly ? undefined : setGameForTorrent}
         onSync={!isSteamCatalogOnly && hasSyncConfig ? handleSync : undefined}
-        onDownload={!isSteamCatalogOnly && hasSyncConfig ? handleDownload : undefined}
+        onRecoverFromCloud={isSteamCatalogOnly ? undefined : (g) => setGameToRestoreBackup(g)}
         onShare={!isSteamCatalogOnly && hasSyncConfig ? handleShare : undefined}
         onRemove={isSteamCatalogOnly ? undefined : handleRemove}
-        onRestoreBackup={isSteamCatalogOnly ? undefined : setGameToRestoreBackup}
         onFullBackupUpload={!isSteamCatalogOnly && hasSyncConfig ? setGameToFullBackupConfirm : undefined}
       />
 
@@ -391,6 +390,15 @@ export function GameDetailPage() {
         isOpen={!!gameToRestoreBackup}
         onClose={() => setGameToRestoreBackup(null)}
         game={gameToRestoreBackup}
+        hasCloudIntegration={hasSyncConfig}
+        onDownloadFromCloud={
+          gameToRestoreBackup && hasSyncConfig
+            ? () => {
+                void handleDownload(gameToRestoreBackup);
+              }
+            : undefined
+        }
+        isDownloadingFromCloud={Boolean(isDownloading && gameToRestoreBackup)}
         onSuccess={() => {
           void queryClient.invalidateQueries({ queryKey: ["game-stats"] });
           void queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });

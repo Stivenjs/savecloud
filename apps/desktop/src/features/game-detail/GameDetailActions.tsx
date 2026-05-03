@@ -30,7 +30,16 @@ export function GameDetailActions({
       ? "El juego parece estar en ejecución"
       : undefined;
 
-  const hasActions = Boolean(menuProps.onEdit || menuProps.onRemove || menuProps.onOpenFolder || onOpenGraph);
+  const hasActions = Boolean(
+    menuProps.onEdit ||
+    menuProps.onRemove ||
+    menuProps.onOpenFolder ||
+    menuProps.onRecoverFromCloud ||
+    menuProps.onSync ||
+    menuProps.onFullBackupUpload ||
+    menuProps.onShare ||
+    onOpenGraph
+  );
 
   if (!onPlay && !hasActions) {
     return null;

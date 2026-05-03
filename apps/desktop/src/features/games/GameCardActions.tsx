@@ -12,9 +12,9 @@ export interface GameCardActionsProps {
   isFullBackupUploading?: boolean;
   onRemove?: (game: ConfiguredGame) => void;
   onSync?: (game: ConfiguredGame) => void;
-  onDownload?: (game: ConfiguredGame) => void;
   onOpenFolder?: (game: ConfiguredGame) => void;
-  onRestoreBackup?: (game: ConfiguredGame) => void;
+  /** Abre el modal unificado Traer guardados */
+  onRecoverFromCloud?: (game: ConfiguredGame) => void;
   onFullBackupUpload?: (game: ConfiguredGame) => void;
   onEdit?: (game: ConfiguredGame) => void;
   onTorrent?: (game: ConfiguredGame) => void;
@@ -32,9 +32,8 @@ export function GameCardActions({
   isFullBackupUploading,
   onRemove,
   onSync,
-  onDownload,
   onOpenFolder,
-  onRestoreBackup,
+  onRecoverFromCloud,
   onFullBackupUpload,
   onEdit,
   onTorrent,
@@ -70,9 +69,8 @@ export function GameCardActions({
           onTorrent={onTorrent}
           onOpenFolder={onOpenFolder}
           onSync={onSync}
-          onDownload={onDownload}
           onFullBackupUpload={onFullBackupUpload}
-          onRestoreBackup={onRestoreBackup}
+          onRecoverFromCloud={onRecoverFromCloud}
           onShare={onShare}
           onRemove={onRemove}
         />

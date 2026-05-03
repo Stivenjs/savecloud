@@ -350,6 +350,15 @@ export function GamesPage() {
         onClose={handleCloseRestoreBackup}
         game={gameToRestoreBackup}
         onSuccess={handleRefresh}
+        hasCloudIntegration={hasSyncConfig}
+        onDownloadFromCloud={
+          gameToRestoreBackup && hasSyncConfig
+            ? () => {
+                void handleDownloadOne(gameToRestoreBackup);
+              }
+            : undefined
+        }
+        isDownloadingFromCloud={!!(gameToRestoreBackup && downloading === gameToRestoreBackup.id)}
       />
       <GameDrawer
         isOpen={!!gameToEdit}
@@ -394,10 +403,9 @@ export function GamesPage() {
           onRemove={handleRemoveGame}
           onSync={hasSyncConfig ? handleSyncOne : undefined}
           syncingId={syncing}
-          onDownload={hasSyncConfig ? handleDownloadOne : undefined}
           downloadingId={downloading}
           onOpenFolder={handleOpenFolder}
-          onRestoreBackup={handleRestoreBackup}
+          onRecoverFromCloud={handleRestoreBackup}
           onFullBackupUpload={hasSyncConfig ? setGameToFullBackupConfirm : undefined}
           fullBackupUploadingGameId={fullBackupUploadingGameId}
           onEdit={setGameToEdit}
