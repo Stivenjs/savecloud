@@ -34,10 +34,3 @@ export async function openOrFocusSettingsWindow(): Promise<void> {
     console.error("[SettingsWindow] Error creando ventana:", event);
   });
 }
-
-export async function focusMainWindow(): Promise<void> {
-  const mainWindow = await WebviewWindow.getByLabel("main");
-  if (!mainWindow) return;
-  await mainWindow.show();
-  await mainWindow.setFocus();
-}

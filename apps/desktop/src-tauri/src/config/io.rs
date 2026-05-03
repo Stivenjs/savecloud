@@ -298,6 +298,7 @@ pub fn get_combined_config() -> Config {
         full_backup_streaming: settings.full_backup_streaming,
         full_backup_streaming_dry_run: settings.full_backup_streaming_dry_run,
         preferred_gamepad_layout: settings.preferred_gamepad_layout,
+        startup_window_mode: settings.startup_window_mode.clone(),
         default_source_download_dir: settings.default_source_download_dir,
         profile_background: settings.profile_background.clone(),
         profile_avatar: settings.profile_avatar.clone(),
@@ -336,6 +337,10 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
         .preferred_gamepad_layout
         .clone()
         .or(current_settings.preferred_gamepad_layout);
+    current_settings.startup_window_mode = cfg
+        .startup_window_mode
+        .clone()
+        .or(current_settings.startup_window_mode);
     current_settings.default_source_download_dir = cfg
         .default_source_download_dir
         .clone()

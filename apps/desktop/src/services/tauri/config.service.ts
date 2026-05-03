@@ -46,6 +46,13 @@ export async function setShareVisualProfileWithMembers(enabled: boolean): Promis
   await invoke("set_share_visual_profile_with_members", { enabled });
 }
 
+export type StartupWindowMode = "normal" | "big_picture";
+
+/** Preferencia de arranque: ventana normal o Big Picture (pantalla completa en la ventana principal). */
+export async function setStartupWindowMode(mode: StartupWindowMode): Promise<void> {
+  await invoke("set_startup_window_mode", { mode });
+}
+
 /** Ruta del archivo de configuración (para mostrar al usuario) */
 export async function getConfigPath(): Promise<string> {
   return invoke<string>("get_config_path");

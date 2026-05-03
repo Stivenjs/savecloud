@@ -1,7 +1,7 @@
 import { Button } from "@heroui/react";
 import type { ReactNode } from "react";
 
-export type SettingsTabKey = "account" | "app" | "integrations" | "gamepad" | "updates" | "advanced";
+export type SettingsTabKey = "account" | "app" | "big-picture" | "integrations" | "gamepad" | "updates" | "advanced";
 
 interface SettingsTabItem {
   key: SettingsTabKey;
@@ -21,7 +21,7 @@ export function SettingsSidebar({ tabs, selectedTab, onSelectTab }: SettingsSide
       <div className="pb-3">
         <div className="rounded-lg bg-default-100/50 px-3 py-2.5">
           <p className="text-xs font-semibold uppercase tracking-wide text-default-500">Ajustes</p>
-          <p className="mt-1 text-xs text-default-500">Cuenta, app, mandos conectados e integraciones</p>
+          <p className="mt-1 text-xs text-default-500">Cuenta, app, Big Picture, mandos e integraciones</p>
         </div>
       </div>
       <div className="space-y-1">

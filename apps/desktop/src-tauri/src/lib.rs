@@ -24,6 +24,7 @@ mod torrent;
 mod tray;
 mod utils;
 mod voice;
+mod window_startup;
 use tauri::Manager;
 
 fn load_dotenv() {
@@ -72,6 +73,8 @@ pub fn run() {
             tray::create_tray(app)?;
 
             setup::init_states_and_background_tasks(app)?;
+
+            window_startup::apply_main_window_launch_window_state(app)?;
 
             Ok(())
         })

@@ -20,7 +20,7 @@ import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { featureFlags } from "@/constants/featureFlags";
-import { openOrFocusSettingsWindow } from "@features/settings/settingsWindow";
+import { openOrFocusSettingsWindow } from "@/windows/settingsWindow";
 import type { ConfiguredGame } from "@app-types/config";
 
 const ProfileDrawer = lazy(() => import("@features/profile/ProfileDrawer").then((m) => ({ default: m.ProfileDrawer })));

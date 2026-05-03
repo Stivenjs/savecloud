@@ -36,10 +36,3 @@ export async function openOrFocusFriendsWindow(): Promise<void> {
     console.error("[FriendsWindow] Error creando ventana separada:", event);
   });
 }
-
-export async function focusMainWindow(): Promise<void> {
-  const mainWindow = await WebviewWindow.getByLabel("main");
-  if (!mainWindow) return;
-  await mainWindow.show();
-  await mainWindow.setFocus();
-}

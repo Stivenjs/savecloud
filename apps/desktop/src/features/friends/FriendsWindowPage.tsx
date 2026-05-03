@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCloudMembersActions } from "@hooks/useCloudMembersActions";
 import { TitleBar } from "@components/layout/TitleBar";
 import { CloudMembersPanel } from "@features/friends/CloudMembersPanel";
-import { focusMainWindow } from "@features/friends/friendsWindow";
+import { focusMainWindow } from "@/windows/mainWindow";
 import { requestOpenFriendProfile } from "@features/friends/friendProfileNavigation";
 
 export function FriendsWindowPage() {

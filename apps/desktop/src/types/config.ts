@@ -44,6 +44,8 @@ export interface Config {
   readonly fullBackupStreamingDryRun?: boolean;
   /** Tipo de layout del mando preferido para UI ("xbox" | "playstation" | "nintendo" | "generic"). */
   readonly preferredGamepadLayout?: string;
+  /** Arranque de la ventana principal: ventana estándar o Big Picture (pantalla completa). */
+  readonly startupWindowMode?: "normal" | "big_picture";
   /** Carpeta destino por defecto para descargas de fuentes JSON. */
   readonly defaultSourceDownloadDir?: string;
   /** URL o ruta local del fondo del perfil (imagen, GIF o vídeo). */
