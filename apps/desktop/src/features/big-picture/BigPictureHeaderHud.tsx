@@ -8,6 +8,8 @@ export interface BigPictureHeaderHudProps {
   profileFrame?: string | null;
   onOpenProfile: () => void;
   onIntentOpenProfile?: () => void;
+  /** Cromo muy ligero sobre fondos de arte; tipografía/iconos claros tipo Steam Deck. */
+  overlayMode?: boolean;
 }
 
 function formatLocalTime(now: Date) {
@@ -26,6 +28,7 @@ export function BigPictureHeaderHud({
   profileFrame,
   onOpenProfile,
   onIntentOpenProfile,
+  overlayMode = false,
 }: BigPictureHeaderHudProps) {
   const [now, setNow] = useState(() => new Date());
   const frameSrc = useMemo(() => resolveProfileAsset(profileFrame ?? undefined), [profileFrame]);
@@ -39,17 +42,23 @@ export function BigPictureHeaderHud({
 
   const timeLabel = formatLocalTime(now);
 
+  const timeTone = overlayMode ? "text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]" : "text-foreground";
+
   return (
-    <div className="sm-bp-header-hud flex items-center gap-5">
+    <div className={`sm-bp-header-hud flex items-center ${overlayMode ? "gap-5 md:gap-6" : "gap-5"}`}>
       <time
         dateTime={now.toISOString()}
-        className="select-none whitespace-nowrap text-lg font-semibold tabular-nums tracking-tight text-foreground md:text-xl">
+        className={`select-none whitespace-nowrap text-lg font-semibold tabular-nums tracking-tight md:text-xl ${timeTone}`}>
         {timeLabel}
       </time>
 
       <button
         type="button"
-        className="group sm-bp-header-hud-profile tap-highlight-transparent relative shrink-0 cursor-pointer rounded-md border-0 bg-transparent p-0 outline-none transition-transform duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className={`group sm-bp-header-hud-profile tap-highlight-transparent relative shrink-0 cursor-pointer rounded-md border-0 bg-transparent p-0 outline-none transition-transform duration-150 active:scale-[0.97] focus-visible:ring-2 ${
+          overlayMode
+            ? "focus-visible:ring-white/80 focus-visible:ring-offset-0"
+            : "focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        }`}
         aria-label="Abrir perfil"
         onPointerEnter={() => onIntentOpenProfile?.()}
         onFocus={() => onIntentOpenProfile?.()}

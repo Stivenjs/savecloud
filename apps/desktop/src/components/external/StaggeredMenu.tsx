@@ -67,6 +67,8 @@ export interface StaggeredMenuProps {
   headerActions?: React.ReactNode;
   /** Desplazamiento vertical del header en px. */
   headerOffset?: number;
+  /** Big Picture: no renderizar la franja de header flotante (menú toggle / HUD). Útil si otra rail lo cubre (p. ej. biblioteca). */
+  hideFloatingHeader?: boolean;
   /** Cambia el color del botón al abrir. */
   changeMenuColorOnOpen?: boolean;
   /**
@@ -283,6 +285,7 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
   panelSection,
   headerActions,
   headerOffset = 0,
+  hideFloatingHeader = false,
   changeMenuColorOnOpen = true,
   bigPictureMode = false,
 }: StaggeredMenuProps) => {
@@ -707,67 +710,69 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
           })()}
         </div>
 
-        <header
-          className="staggered-menu-header absolute left-0 w-full flex items-center justify-between p-4 bg-transparent pointer-events-none z-20"
-          style={{ top: `${headerOffset}px` }}
-          aria-label="Main navigation header"
-          data-shell-menu-ignore-outside-close={bigPictureMode ? true : undefined}>
-          {showLogo ? (
-            <div className="sm-logo flex items-center select-none pointer-events-auto" aria-label="Logo">
-              <img
-                src={logoUrl || "/src/assets/128x128.png"}
-                alt="Logo"
-                className="sm-logo-img block h-8 w-auto object-contain"
-                draggable={false}
-                width={110}
-                height={24}
-              />
-            </div>
-          ) : (
-            <div aria-hidden="true" />
-          )}
-
-          <div className="sm-header-controls flex items-center gap-2 pointer-events-auto">
-            {headerActions}
-            {bigPictureMode ? null : (
-              <button
-                ref={toggleBtnRef}
-                className="sm-toggle relative inline-flex items-center gap-[0.3rem] bg-transparent border-0 cursor-pointer font-medium leading-none overflow-visible pointer-events-auto"
-                aria-label={open ? "Cerrar menú" : "Abrir menú"}
-                aria-expanded={open}
-                aria-controls="staggered-menu-panel"
-                onClick={toggleMenu}
-                type="button">
-                <span
-                  ref={textWrapRef}
-                  className="sm-toggle-textWrap relative inline-block h-[1em] overflow-hidden whitespace-nowrap"
-                  aria-hidden="true">
-                  <span ref={textInnerRef} className="sm-toggle-textInner flex flex-col leading-none">
-                    {textLines.map((l, i) => (
-                      <span className="sm-toggle-line block h-[1em] leading-none" key={i}>
-                        {l}
-                      </span>
-                    ))}
-                  </span>
-                </span>
-
-                <span
-                  ref={iconRef}
-                  className="sm-icon relative w-3.5 h-3.5 shrink-0 inline-flex items-center justify-center will-change-transform"
-                  aria-hidden="true">
-                  <span
-                    ref={plusHRef}
-                    className="sm-icon-line absolute left-1/2 top-1/2 w-full h-0.5 bg-current rounded-xs -translate-x-1/2 -translate-y-1/2 will-change-transform"
-                  />
-                  <span
-                    ref={plusVRef}
-                    className="sm-icon-line sm-icon-line-v absolute left-1/2 top-1/2 w-full h-0.5 bg-current rounded-xs -translate-x-1/2 -translate-y-1/2 will-change-transform"
-                  />
-                </span>
-              </button>
+        {!hideFloatingHeader ? (
+          <header
+            className="staggered-menu-header absolute left-0 w-full flex items-center justify-between p-4 bg-transparent pointer-events-none z-20"
+            style={{ top: `${headerOffset}px` }}
+            aria-label="Main navigation header"
+            data-shell-menu-ignore-outside-close={bigPictureMode ? true : undefined}>
+            {showLogo ? (
+              <div className="sm-logo flex items-center select-none pointer-events-auto" aria-label="Logo">
+                <img
+                  src={logoUrl || "/src/assets/128x128.png"}
+                  alt="Logo"
+                  className="sm-logo-img block h-8 w-auto object-contain"
+                  draggable={false}
+                  width={110}
+                  height={24}
+                />
+              </div>
+            ) : (
+              <div aria-hidden="true" />
             )}
-          </div>
-        </header>
+
+            <div className="sm-header-controls flex items-center gap-2 pointer-events-auto">
+              {headerActions}
+              {bigPictureMode ? null : (
+                <button
+                  ref={toggleBtnRef}
+                  className="sm-toggle relative inline-flex items-center gap-[0.3rem] bg-transparent border-0 cursor-pointer font-medium leading-none overflow-visible pointer-events-auto"
+                  aria-label={open ? "Cerrar menú" : "Abrir menú"}
+                  aria-expanded={open}
+                  aria-controls="staggered-menu-panel"
+                  onClick={toggleMenu}
+                  type="button">
+                  <span
+                    ref={textWrapRef}
+                    className="sm-toggle-textWrap relative inline-block h-[1em] overflow-hidden whitespace-nowrap"
+                    aria-hidden="true">
+                    <span ref={textInnerRef} className="sm-toggle-textInner flex flex-col leading-none">
+                      {textLines.map((l, i) => (
+                        <span className="sm-toggle-line block h-[1em] leading-none" key={i}>
+                          {l}
+                        </span>
+                      ))}
+                    </span>
+                  </span>
+
+                  <span
+                    ref={iconRef}
+                    className="sm-icon relative w-3.5 h-3.5 shrink-0 inline-flex items-center justify-center will-change-transform"
+                    aria-hidden="true">
+                    <span
+                      ref={plusHRef}
+                      className="sm-icon-line absolute left-1/2 top-1/2 w-full h-0.5 bg-current rounded-xs -translate-x-1/2 -translate-y-1/2 will-change-transform"
+                    />
+                    <span
+                      ref={plusVRef}
+                      className="sm-icon-line sm-icon-line-v absolute left-1/2 top-1/2 w-full h-0.5 bg-current rounded-xs -translate-x-1/2 -translate-y-1/2 will-change-transform"
+                    />
+                  </span>
+                </button>
+              )}
+            </div>
+          </header>
+        ) : null}
 
         <aside
           id="staggered-menu-panel"

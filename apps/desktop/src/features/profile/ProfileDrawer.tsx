@@ -62,6 +62,8 @@ interface ProfileDrawerProps {
   gamification?: GamificationState | null;
   hasSyncConfig?: boolean;
   connectionStatus?: ConnectionStatus;
+  /** Big Picture / 10-ft UI: tipografía y controles más grandes, panel ancho tipo consola. */
+  bigPictureConsole?: boolean;
 }
 
 function connectionLabel(status: ConnectionStatus | undefined): { text: string; tone: string } {
@@ -94,7 +96,9 @@ export function ProfileDrawer({
   gamification,
   hasSyncConfig,
   connectionStatus,
+  bigPictureConsole = false,
 }: ProfileDrawerProps) {
+  const bp = bigPictureConsole;
   const { activeProfile } = useProfileSession();
   const queryClient = useQueryClient();
   const [bg, setBg] = useState("");
@@ -215,18 +219,36 @@ export function ProfileDrawer({
       }}
       placement="right"
       size="lg"
-      backdrop="opaque"
+      backdrop={bp ? "blur" : "opaque"}
       classNames={{
-        base: "sm:max-w-lg",
-        wrapper: "overflow-hidden",
+        base: bp ? "!w-[min(100%,min(96vw,44rem))] sm:!max-w-[min(96vw,44rem)] shadow-2xl" : "sm:max-w-lg",
+        /**
+         * BP: dejar la altura del header de biblioteca libre para no solapar el hero del perfil
+         * con el globo/hora/avatar (alineado con --savecloud-bp-library-header-h).
+         */
+        wrapper: bp
+          ? "overflow-hidden px-2 pt-[var(--savecloud-bp-library-header-h)] pb-3 sm:px-4 sm:pb-4"
+          : "overflow-hidden",
+        backdrop: bp ? "bg-black/65 backdrop-blur-md" : undefined,
       }}>
-      <DrawerContent className="flex max-h-dvh flex-col bg-content1">
-        <DrawerHeader className="flex shrink-0 flex-col gap-0 border-b border-default-200 p-0">
+      <DrawerContent
+        data-profile-console={bp ? "true" : undefined}
+        className={`flex max-h-[min(100dvh,100vh)] flex-col rounded-l-3xl md:rounded-l-[28px] ${
+          bp
+            ? "border border-white/15 bg-content1/95 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.85)] ring-1 ring-white/10 backdrop-blur-xl dark:border-white/10"
+            : "bg-content1"
+        }`}>
+        <DrawerHeader
+          className={`flex shrink-0 flex-col gap-0 border-b p-0 ${bp ? "border-white/15" : "border-default-200"}`}>
           <div
             className={`relative w-full overflow-hidden ${
-              bg.trim()
-                ? "min-h-[min(55vh,28rem)] max-h-[min(65vh,32rem)]"
-                : "min-h-[min(42vh,18rem)] max-h-[min(50vh,22rem)]"
+              bp
+                ? bg.trim()
+                  ? "min-h-[min(52vh,32rem)] max-h-[min(60vh,36rem)]"
+                  : "min-h-[min(44vh,22rem)] max-h-[min(52vh,28rem)]"
+                : bg.trim()
+                  ? "min-h-[min(55vh,28rem)] max-h-[min(65vh,32rem)]"
+                  : "min-h-[min(42vh,18rem)] max-h-[min(50vh,22rem)]"
             }`}>
             {bg.trim() ? (
               <ProfileHeroBackground rawUrl={bg.trim()} imageMode="cover" />
@@ -236,15 +258,19 @@ export function ProfileDrawer({
             {/* Gradiente más oscuro y alto para máxima legibilidad */}
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-linear-to-t from-black/90 via-black/30 to-transparent z-10" />
 
-            <div className="absolute inset-x-0 bottom-0 flex items-end gap-4 px-4 pb-3 z-20">
+            <div
+              className={`absolute inset-x-0 bottom-0 flex items-end z-20 ${bp ? "gap-6 px-6 pb-5" : "gap-4 px-4 pb-3"}`}>
               {/* Avatar */}
-              <div className="relative size-18 shrink-0">
-                <div className="relative size-full overflow-hidden rounded-md border border-white/10 bg-black/30 shadow-lg">
+              <div className={`relative shrink-0 ${bp ? "size-28 md:size-32" : "size-18"}`}>
+                <div
+                  className={`relative size-full overflow-hidden rounded-md border bg-black/30 shadow-lg ${
+                    bp ? "border-white/25 ring-2 ring-black/80" : "border-white/10"
+                  }`}>
                   {avatar.trim() ? (
                     <ProfileAvatarVisual rawAvatar={avatar} alt="user avatar" className="size-full object-cover" />
                   ) : (
                     <div className="flex size-full items-center justify-center text-default-400">
-                      <User size={36} strokeWidth={1.2} />
+                      <User size={bp ? 52 : 36} strokeWidth={1.2} />
                     </div>
                   )}
                 </div>
@@ -259,11 +285,14 @@ export function ProfileDrawer({
               </div>
 
               {/* Name + meta */}
-              <div className="min-w-0 flex-1 pb-1">
-                <h2 className="truncate text-lg font-semibold text-foreground drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+              <div className={`min-w-0 flex-1 ${bp ? "pb-2" : "pb-1"}`}>
+                <h2
+                  className={`truncate font-semibold text-foreground drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] ${
+                    bp ? "text-2xl md:text-[1.75rem] tracking-tight" : "text-lg"
+                  }`}>
                   {displayName}
                 </h2>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                <div className={`mt-1 flex flex-wrap items-center gap-2 ${bp ? "text-sm" : "text-xs"}`}>
                   <span className={`font-medium ${conn.tone} drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]`}>
                     {conn.text}
                   </span>
@@ -285,15 +314,23 @@ export function ProfileDrawer({
                   </span>
                 </div>
                 {ownPresence?.status === "playing" && ownPresence?.gameName ? (
-                  <p className="mt-1 text-xs text-default-500">Jugando: {ownPresence.gameName}</p>
+                  <p className={`mt-1 text-default-500 ${bp ? "text-sm" : "text-xs"}`}>
+                    Jugando: {ownPresence.gameName}
+                  </p>
                 ) : null}
               </div>
 
               {/* Level badge */}
-              <div className="flex shrink-0 flex-col items-end gap-1 pb-0.5">
-                <div className="flex items-center gap-1.5 rounded-full border border-default-200/80 bg-default-100/80 px-2.5 py-0.5 text-xs dark:bg-default-50/10">
+              <div className={`flex shrink-0 flex-col items-end gap-1 ${bp ? "pb-1.5" : "pb-0.5"}`}>
+                <div
+                  className={`flex items-center rounded-full border border-default-200/80 bg-default-100/80 dark:bg-default-50/10 ${
+                    bp ? "gap-2 px-4 py-1 text-sm" : "gap-1.5 px-2.5 py-0.5 text-xs"
+                  }`}>
                   <span className="text-default-500">Nivel</span>
-                  <span className="flex size-6 items-center justify-center rounded-full border border-primary/40 bg-primary/10 font-semibold text-primary">
+                  <span
+                    className={`flex items-center justify-center rounded-full border border-primary/40 bg-primary/10 font-semibold text-primary ${
+                      bp ? "size-9 text-base" : "size-6"
+                    }`}>
                     {level}
                   </span>
                 </div>
@@ -302,92 +339,146 @@ export function ProfileDrawer({
           </div>
         </DrawerHeader>
 
-        <DrawerBody className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
-          <div className="grid grid-cols-4 gap-2">
-            <div className="flex flex-col items-center gap-1 rounded-lg border border-default-200 bg-default-50/60 py-2.5 dark:bg-default-100/5">
-              <Gamepad2 size={14} className="text-default-400" />
-              <span className="text-sm font-semibold text-foreground">{gamesCount}</span>
-              <span className="text-[10px] text-default-500">Juegos</span>
+        <DrawerBody
+          className={`flex min-h-0 flex-1 flex-col overflow-y-auto ${bp ? "profile-drawer-console-scroll gap-5 px-6 py-5" : "gap-3 px-4 py-3"}`}>
+          <div className={`grid grid-cols-4 ${bp ? "gap-3" : "gap-2"}`}>
+            <div
+              className={`flex flex-col items-center rounded-xl border bg-default-50/60 dark:bg-default-100/5 ${
+                bp
+                  ? "gap-2 border-white/15 py-4 ring-1 ring-white/[0.07]"
+                  : "gap-1 rounded-lg border-default-200 py-2.5"
+              }`}>
+              <Gamepad2 size={bp ? 20 : 14} className="text-default-400" />
+              <span className={`font-semibold text-foreground ${bp ? "text-xl" : "text-sm"}`}>{gamesCount}</span>
+              <span
+                className={`font-medium uppercase tracking-wider text-default-500 ${bp ? "text-xs" : "text-[10px]"}`}>
+                Juegos
+              </span>
             </div>
-            <div className="flex flex-col items-center gap-1 rounded-lg border border-default-200 bg-default-50/60 py-2.5 dark:bg-default-100/5">
-              <Trophy size={14} className="text-warning" />
-              <span className="text-sm font-semibold text-foreground">{achievementsUnlocked.length}</span>
-              <span className="text-[10px] text-default-500">Logros</span>
+            <div
+              className={`flex flex-col items-center rounded-xl border bg-default-50/60 dark:bg-default-100/5 ${
+                bp
+                  ? "gap-2 border-white/15 py-4 ring-1 ring-white/[0.07]"
+                  : "gap-1 rounded-lg border-default-200 py-2.5"
+              }`}>
+              <Trophy size={bp ? 20 : 14} className="text-warning" />
+              <span className={`font-semibold text-foreground ${bp ? "text-xl" : "text-sm"}`}>
+                {achievementsUnlocked.length}
+              </span>
+              <span
+                className={`font-medium uppercase tracking-wider text-default-500 ${bp ? "text-xs" : "text-[10px]"}`}>
+                Logros
+              </span>
             </div>
-            <div className="flex flex-col items-center gap-1 rounded-lg border border-default-200 bg-default-50/60 py-2.5 dark:bg-default-100/5">
-              <CloudUpload size={14} className="text-primary" />
-              <span className="text-sm font-semibold text-foreground">{uploadSuccessCount}</span>
-              <span className="text-[10px] text-default-500">Subidas</span>
+            <div
+              className={`flex flex-col items-center rounded-xl border bg-default-50/60 dark:bg-default-100/5 ${
+                bp
+                  ? "gap-2 border-white/15 py-4 ring-1 ring-white/[0.07]"
+                  : "gap-1 rounded-lg border-default-200 py-2.5"
+              }`}>
+              <CloudUpload size={bp ? 20 : 14} className="text-primary" />
+              <span className={`font-semibold text-foreground ${bp ? "text-xl" : "text-sm"}`}>
+                {uploadSuccessCount}
+              </span>
+              <span
+                className={`font-medium uppercase tracking-wider text-default-500 ${bp ? "text-xs" : "text-[10px]"}`}>
+                Subidas
+              </span>
             </div>
-            <div className="flex flex-col items-center gap-1 rounded-lg border border-default-200 bg-default-50/60 py-2.5 dark:bg-default-100/5">
-              <Flame size={14} className={syncStreakDays > 0 ? "text-danger" : "text-default-400"} />
-              <span className="text-sm font-semibold text-foreground">{syncStreakDays}</span>
-              <span className="text-[10px] text-default-500">{syncStreakDays === 1 ? "día racha" : "días racha"}</span>
+            <div
+              className={`flex flex-col items-center rounded-xl border bg-default-50/60 dark:bg-default-100/5 ${
+                bp
+                  ? "gap-2 border-white/15 py-4 ring-1 ring-white/[0.07]"
+                  : "gap-1 rounded-lg border-default-200 py-2.5"
+              }`}>
+              <Flame size={bp ? 20 : 14} className={syncStreakDays > 0 ? "text-danger" : "text-default-400"} />
+              <span className={`font-semibold text-foreground ${bp ? "text-xl" : "text-sm"}`}>{syncStreakDays}</span>
+              <span
+                className={`font-medium uppercase tracking-wider text-default-500 ${bp ? "text-xs" : "text-[10px]"}`}>
+                {syncStreakDays === 1 ? "día racha" : "días racha"}
+              </span>
             </div>
           </div>
 
           {(weeklyPlaytimeSeconds > 0 || playStreakDays > 0) && (
-            <div className="flex items-center gap-3 rounded-lg border border-default-200 bg-default-50/60 px-3 py-2 dark:bg-default-100/5">
-              <Zap size={14} className="shrink-0 text-warning" />
-              <span className="flex-1 text-xs text-default-600">
+            <div
+              className={`flex items-center rounded-xl border bg-default-50/60 dark:bg-default-100/5 ${
+                bp
+                  ? "gap-4 border-white/15 px-5 py-3.5 ring-1 ring-white/[0.07]"
+                  : "gap-3 rounded-lg border-default-200 px-3 py-2"
+              }`}>
+              <Zap size={bp ? 20 : 14} className="shrink-0 text-warning" />
+              <span className={`flex-1 text-default-600 ${bp ? "text-sm font-medium" : "text-xs"}`}>
                 Esta semana:{" "}
                 <span className="font-medium text-foreground">{formatPlaytime(weeklyPlaytimeSeconds)}</span> jugados
               </span>
               {playStreakDays > 0 && (
-                <span className="flex items-center gap-1 text-xs text-default-500">
-                  <Flame size={12} className="text-danger" />
+                <span className={`flex items-center gap-1 text-default-500 ${bp ? "gap-2 text-sm" : "text-xs"}`}>
+                  <Flame size={bp ? 16 : 12} className="text-danger" />
                   {playStreakDays} {playStreakDays === 1 ? "día" : "días"} seguidos
                 </span>
               )}
             </div>
           )}
 
-          <div className="rounded-lg border border-default-200 bg-default-50/60 p-3 dark:bg-default-100/5">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                <Trophy size={15} className="text-warning" />
+          <div
+            className={`border bg-default-50/60 dark:bg-default-100/5 ${
+              bp ? "rounded-xl border-white/15 p-5 ring-1 ring-white/[0.07]" : "rounded-lg border-default-200 p-3"
+            }`}>
+            <div className={`mb-2 flex items-center justify-between gap-2 ${bp ? "mb-3" : ""}`}>
+              <span
+                className={`flex items-center font-medium text-foreground ${bp ? "gap-2 text-lg" : "gap-1.5 text-sm"}`}>
+                <Trophy size={bp ? 22 : 15} className="text-warning" />
                 Progreso de nivel
               </span>
               {!atMaxLevel && nextLevel != null ? (
-                <span className="text-xs text-default-500">
+                <span className={`text-default-500 ${bp ? "text-sm" : "text-xs"}`}>
                   Nivel {level} → {nextLevel}
                 </span>
               ) : (
-                <span className="text-xs text-default-500">Nivel máximo</span>
+                <span className={`text-default-500 ${bp ? "text-sm" : "text-xs"}`}>Nivel máximo</span>
               )}
             </div>
 
             {!atMaxLevel ? (
               <>
-                <div className="h-2 overflow-hidden rounded-full bg-default-200 dark:bg-default-100/20">
+                <div
+                  className={`overflow-hidden rounded-full bg-default-200 dark:bg-default-100/20 ${bp ? "h-3" : "h-2"}`}>
                   <div
                     className="h-full rounded-full bg-primary transition-[width]"
                     style={{ width: `${Math.min(100, Math.max(0, progressPct))}%` }}
                   />
                 </div>
-                <div className="mt-1.5 flex items-center justify-between">
-                  <span className="text-xs text-default-500">{progressPct}% completado</span>
-                  <span className="flex items-center gap-1 text-xs text-default-500">
-                    <Clock size={11} />
+                <div className={`flex items-center justify-between ${bp ? "mt-2.5" : "mt-1.5"}`}>
+                  <span className={`text-default-500 ${bp ? "text-sm" : "text-xs"}`}>{progressPct}% completado</span>
+                  <span className={`flex items-center gap-1 text-default-500 ${bp ? "gap-2 text-sm" : "text-xs"}`}>
+                    <Clock size={bp ? 14 : 11} />
                     {formatHoursToNextLevel(secondsToNext)} para nivel {nextLevel ?? "—"}
                   </span>
                 </div>
               </>
             ) : (
-              <p className="text-xs text-default-500">Has alcanzado el nivel 99.</p>
+              <p className={`text-default-500 ${bp ? "text-sm" : "text-xs"}`}>Has alcanzado el nivel 99.</p>
             )}
 
             {/* Achievements list */}
             {achievementsUnlocked.length > 0 && (
-              <div className="mt-3 border-t border-default-200 pt-3">
-                <p className="mb-2 text-xs font-medium text-default-600">Logros desbloqueados</p>
-                <ul className="flex flex-col gap-2">
+              <div className={bp ? "mt-5 border-t border-white/15 pt-4" : "mt-3 border-t border-default-200 pt-3"}>
+                <p className={`mb-2 font-medium text-default-600 ${bp ? "mb-3 text-base" : "text-xs"}`}>
+                  Logros desbloqueados
+                </p>
+                <ul className={`flex flex-col ${bp ? "gap-3" : "gap-2"}`}>
                   {achievementsUnlocked.map((id) => (
-                    <li key={id} className="flex items-center gap-2">
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-default-200 bg-default-100 dark:bg-default-50/10">
-                        <AchievementIcon id={id} size={14} />
+                    <li key={id} className={`flex items-center ${bp ? "gap-4" : "gap-2"}`}>
+                      <span
+                        className={`flex shrink-0 items-center justify-center rounded-md border bg-default-100 dark:bg-default-50/10 ${
+                          bp ? "size-11 border-white/15" : "size-7 border-default-200"
+                        }`}>
+                        <AchievementIcon id={id} size={bp ? 18 : 14} />
                       </span>
-                      <span className="text-xs text-default-600">{achievementLabel(id)}</span>
+                      <span className={`text-default-600 ${bp ? "text-sm font-medium" : "text-xs"}`}>
+                        {achievementLabel(id)}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -396,40 +487,40 @@ export function ProfileDrawer({
           </div>
 
           <Accordion
-            isCompact
+            isCompact={!bp}
             selectionMode="multiple"
             defaultExpandedKeys={[]}
             className="px-0"
             itemClasses={{
               base: "px-0",
-              title: "text-sm font-medium",
-              trigger: "py-2",
-              content: "pb-3 pt-0",
+              title: bp ? "text-base font-bold uppercase tracking-[0.06em] text-default-600" : "text-sm font-medium",
+              trigger: bp ? "min-h-[3.75rem] py-2 data-[hover=true]:bg-white/[0.06]" : "py-2",
+              content: bp ? "pb-5 pt-1" : "pb-3 pt-0",
             }}>
             <AccordionItem
               key="bg"
               aria-label="Fondo"
               title={
-                <span className="flex items-center gap-2">
-                  <MonitorPlay size={15} className="text-default-500" />
+                <span className={`flex items-center ${bp ? "gap-3 text-foreground" : "gap-2"}`}>
+                  <MonitorPlay size={bp ? 20 : 15} className="text-default-500" />
                   Fondo
                 </span>
               }>
-              <div className="flex flex-col gap-2">
+              <div className={`flex flex-col ${bp ? "gap-3" : "gap-2"}`}>
                 <Input
-                  size="sm"
+                  size={bp ? "lg" : "sm"}
                   label="URL"
                   placeholder="https://… · vacío quita el fondo"
                   value={bg}
                   onValueChange={setBg}
                   variant="bordered"
-                  startContent={<Link2 size={14} className="text-default-400" />}
+                  startContent={<Link2 size={bp ? 18 : 14} className="text-default-400" />}
                 />
                 <Button
-                  size="sm"
+                  size={bp ? "lg" : "sm"}
                   variant="bordered"
-                  className="w-full justify-start"
-                  startContent={<FolderOpen size={16} />}
+                  className={`w-full justify-start ${bp ? "min-h-12 text-base" : ""}`}
+                  startContent={<FolderOpen size={bp ? 20 : 16} />}
                   onPress={() => void pickFile("background")}>
                   Archivo en disco…
                 </Button>
@@ -440,38 +531,46 @@ export function ProfileDrawer({
               key="avatar"
               aria-label="Foto de perfil"
               title={
-                <span className="flex items-center gap-2">
-                  <ImageIcon size={15} className="text-default-500" />
+                <span className={`flex items-center ${bp ? "gap-3 text-foreground" : "gap-2"}`}>
+                  <ImageIcon size={bp ? 20 : 15} className="text-default-500" />
                   Foto de perfil
                 </span>
               }>
-              <div className="flex flex-col gap-2">
+              <div className={`flex flex-col ${bp ? "gap-3" : "gap-2"}`}>
                 <Input
-                  size="sm"
+                  size={bp ? "lg" : "sm"}
                   label="URL"
                   placeholder="https://…"
                   value={avatar}
                   onValueChange={setAvatar}
                   variant="bordered"
-                  startContent={<Link2 size={14} className="text-default-400" />}
+                  startContent={<Link2 size={bp ? 18 : 14} className="text-default-400" />}
                 />
                 <Button
-                  size="sm"
+                  size={bp ? "lg" : "sm"}
                   variant="bordered"
-                  className="w-full justify-start"
-                  startContent={<FolderOpen size={16} />}
+                  className={`w-full justify-start ${bp ? "min-h-12 text-base" : ""}`}
+                  startContent={<FolderOpen size={bp ? 20 : 16} />}
                   onPress={() => void pickFile("avatar")}>
                   Imagen local…
                 </Button>
 
-                <div className="mt-1 rounded-lg border border-default-200 bg-default-50/60 p-2.5 dark:bg-default-100/5">
-                  <p className="mb-2 text-xs font-medium text-default-600">Avatar generado con librería</p>
-                  <div className="flex items-center gap-2">
-                    <div className="relative size-14 overflow-hidden rounded-md border border-default-200 bg-default-100/60 dark:border-default-100/35 dark:bg-default-50/20">
+                <div
+                  className={`mt-1 rounded-xl border bg-default-50/60 dark:bg-default-100/5 ${
+                    bp ? "border-white/15 p-4 ring-1 ring-white/[0.07]" : "rounded-lg border-default-200 p-2.5"
+                  }`}>
+                  <p className={`mb-2 font-medium text-default-600 ${bp ? "mb-3 text-base" : "text-xs"}`}>
+                    Avatar generado con librería
+                  </p>
+                  <div className={`flex items-center ${bp ? "gap-4" : "gap-2"}`}>
+                    <div
+                      className={`relative overflow-hidden rounded-md border bg-default-100/60 dark:border-default-100/35 dark:bg-default-50/20 ${
+                        bp ? "size-20 border-white/15" : "size-14 border-default-200"
+                      }`}>
                       <ProfileAvatarVisual rawAvatar={avatar} alt="preview" className="size-full object-cover" />
                     </div>
                     <Input
-                      size="sm"
+                      size={bp ? "lg" : "sm"}
                       label="Semilla"
                       placeholder="nombre, email o texto"
                       value={avatarGeneratorSeed}
@@ -480,14 +579,19 @@ export function ProfileDrawer({
                       className="flex-1"
                     />
                   </div>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <Button size="sm" variant="flat" onPress={() => applyGeneratedAvatar(avatarGeneratorSeed)}>
+                  <div className={`mt-2 grid grid-cols-2 ${bp ? "gap-3" : "gap-2"}`}>
+                    <Button
+                      size={bp ? "lg" : "sm"}
+                      variant="flat"
+                      className={bp ? "min-h-12 text-base font-medium" : ""}
+                      onPress={() => applyGeneratedAvatar(avatarGeneratorSeed)}>
                       Usar semilla
                     </Button>
                     <Button
-                      size="sm"
+                      size={bp ? "lg" : "sm"}
                       variant="flat"
-                      startContent={<RefreshCw size={14} />}
+                      className={bp ? "min-h-12 text-base font-medium" : ""}
+                      startContent={<RefreshCw size={bp ? 18 : 14} />}
                       onPress={() => {
                         const seed = generateNiceAvatarSeed();
                         setAvatarGeneratorSeed(seed);
@@ -504,26 +608,26 @@ export function ProfileDrawer({
               key="frame"
               aria-label="Marco"
               title={
-                <span className="flex items-center gap-2">
-                  <Layers size={15} className="text-default-500" />
+                <span className={`flex items-center ${bp ? "gap-3 text-foreground" : "gap-2"}`}>
+                  <Layers size={bp ? 20 : 15} className="text-default-500" />
                   Marco
                 </span>
               }>
-              <div className="flex flex-col gap-2">
+              <div className={`flex flex-col ${bp ? "gap-3" : "gap-2"}`}>
                 <Input
-                  size="sm"
+                  size={bp ? "lg" : "sm"}
                   label="URL"
                   placeholder="PNG con transparencia"
                   value={frame}
                   onValueChange={setFrame}
                   variant="bordered"
-                  startContent={<Link2 size={14} className="text-default-400" />}
+                  startContent={<Link2 size={bp ? 18 : 14} className="text-default-400" />}
                 />
                 <Button
-                  size="sm"
+                  size={bp ? "lg" : "sm"}
                   variant="bordered"
-                  className="w-full justify-start"
-                  startContent={<FolderOpen size={16} />}
+                  className={`w-full justify-start ${bp ? "min-h-12 text-base" : ""}`}
+                  startContent={<FolderOpen size={bp ? 20 : 16} />}
                   onPress={() => void pickFile("frame")}>
                   Imagen local…
                 </Button>
@@ -534,30 +638,38 @@ export function ProfileDrawer({
               key="sharing"
               aria-label="Privacidad en la nube"
               title={
-                <span className="flex items-center gap-2">
-                  <Shield size={15} className="text-default-500" />
+                <span className={`flex items-center ${bp ? "gap-3 text-foreground" : "gap-2"}`}>
+                  <Shield size={bp ? 20 : 15} className="text-default-500" />
                   Privacidad en la nube
                 </span>
               }>
-              <div className="flex flex-col gap-2">
+              <div className={`flex flex-col ${bp ? "gap-4" : "gap-2"}`}>
                 <Switch
                   isSelected={shareVisualWithHosts}
                   onValueChange={setShareVisualWithHosts}
-                  size="sm"
-                  classNames={{ label: "text-sm text-foreground" }}>
+                  size={bp ? "lg" : "sm"}
+                  classNames={
+                    bp
+                      ? { label: "text-base font-semibold text-foreground", base: "gap-4" }
+                      : { label: "text-sm text-foreground" }
+                  }>
                   Compartir con anfitriones
                 </Switch>
-                <p className="text-[11px] leading-snug text-default-500">
+                <p className={`leading-snug text-default-500 ${bp ? "text-sm" : "text-[11px]"}`}>
                   Quienes te invitaron como miembro podrán ver fondo, avatar y marco al cargar tu usuario en Amigos.
                 </p>
                 <Switch
                   isSelected={shareVisualWithMembers}
                   onValueChange={setShareVisualWithMembers}
-                  size="sm"
-                  classNames={{ label: "text-sm text-foreground" }}>
+                  size={bp ? "lg" : "sm"}
+                  classNames={
+                    bp
+                      ? { label: "text-base font-semibold text-foreground", base: "gap-4" }
+                      : { label: "text-sm text-foreground" }
+                  }>
                   Compartir con miembros de tu nube
                 </Switch>
-                <p className="text-[11px] leading-snug text-default-500">
+                <p className={`leading-snug text-default-500 ${bp ? "text-sm" : "text-[11px]"}`}>
                   Si eres anfitrión, los miembros de tu nube podrán ver tu perfil visual en Amigos.
                 </p>
               </div>
@@ -567,27 +679,35 @@ export function ProfileDrawer({
               key="help"
               aria-label="Ayuda"
               title={
-                <span className="flex items-center gap-2">
-                  <CircleHelp size={15} className="text-default-500" />
+                <span className={`flex items-center ${bp ? "gap-3 text-foreground" : "gap-2"}`}>
+                  <CircleHelp size={bp ? 20 : 15} className="text-default-500" />
                   Ayuda
                 </span>
               }>
-              <p className="text-[11px] leading-snug text-default-500">
+              <p className={`leading-snug text-default-500 ${bp ? "text-sm" : "text-[11px]"}`}>
                 Puedes usar enlaces https o rutas a archivos locales. Las rutas locales dependen del archivo en disco;
                 si mueves o borras el archivo, el perfil dejará de mostrarlo.
               </p>
             </AccordionItem>
           </Accordion>
 
-          <div className="mt-auto flex shrink-0 gap-2 border-t border-default-200 pt-3">
-            <Button variant="flat" className="flex-1" onPress={onClose}>
+          <div
+            className={`mt-auto flex shrink-0 border-t pt-3 ${
+              bp ? "gap-3 border-white/15 pt-5" : "gap-2 border-default-200"
+            }`}>
+            <Button
+              variant="flat"
+              size={bp ? "lg" : "md"}
+              className={`flex-1 ${bp ? "min-h-14 text-base font-semibold" : ""}`}
+              onPress={onClose}>
               Cancelar
             </Button>
             <Button
               color="primary"
-              className="flex-1"
+              size={bp ? "lg" : "md"}
+              className={`flex-1 ${bp ? "min-h-14 text-base font-semibold" : ""}`}
               isLoading={saving}
-              startContent={<Save size={18} />}
+              startContent={<Save size={bp ? 22 : 18} />}
               onPress={() => void handleSave()}>
               Guardar
             </Button>

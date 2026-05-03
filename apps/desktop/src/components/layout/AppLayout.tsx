@@ -95,6 +95,7 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
   const { resolvedTheme, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
+  const isGamesLibraryRoute = location.pathname === "/";
   const isDark = resolvedTheme === "dark";
   const setSideMenuOpen = useShellUiStore((s) => s.setSideMenuOpen);
 
@@ -171,13 +172,19 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
     <div className="relative min-h-screen">
       {!hideTitleBar ? <TitleBar /> : null}
 
-      <main className={`min-h-screen overflow-x-clip px-6 pb-6 ${hideTitleBar ? "pt-6" : "pt-26"}`}>{children}</main>
+      <main
+        className={`min-h-screen overflow-x-clip px-6 pb-6 ${
+          hideTitleBar ? (isGamesLibraryRoute ? "pt-(--savecloud-bp-library-header-h)" : "pt-6") : "pt-26"
+        }`}>
+        {children}
+      </main>
 
       <StaggeredMenu
         isFixed
         position="left"
         bigPictureMode={hideTitleBar}
-        headerOffset={40}
+        hideFloatingHeader={hideTitleBar && isGamesLibraryRoute}
+        headerOffset={hideTitleBar ? 0 : 40}
         items={menuItemsFromNav(navItems, location.pathname)}
         displaySocials={true}
         displayItemNumbering
@@ -196,12 +203,14 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
         }}
         headerActions={
           hideTitleBar ? (
-            <BigPictureHeaderHud
-              profileAvatar={config?.profileAvatar}
-              profileFrame={config?.profileFrame}
-              onOpenProfile={() => setProfileDrawerOpen(true)}
-              onIntentOpenProfile={prefetchProfileDrawer}
-            />
+            isGamesLibraryRoute ? null : (
+              <BigPictureHeaderHud
+                profileAvatar={config?.profileAvatar}
+                profileFrame={config?.profileFrame}
+                onOpenProfile={() => setProfileDrawerOpen(true)}
+                onIntentOpenProfile={prefetchProfileDrawer}
+              />
+            )
           ) : (
             <div className="flex items-center gap-4">
               <UserBadge
@@ -269,6 +278,7 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
           gamification={gamification ?? null}
           hasSyncConfig={hasSyncConfig}
           connectionStatus={connectionStatus}
+          bigPictureConsole={hideTitleBar}
         />
       </Suspense>
     </div>
