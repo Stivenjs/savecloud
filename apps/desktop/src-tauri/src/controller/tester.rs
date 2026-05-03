@@ -165,16 +165,65 @@ static AXES_ALL: &[Axis] = &[
     Axis::DPadY,
 ];
 
+/// Alguna ventana SaveCloud debe recibir entrada (mando / HUD).
+///
+/// En Windows + WebView2, `WebviewWindow::is_focused()` a veces sigue en `false` justo tras
+/// `show` + fullscreen aunque **el foreground de Windows** ya es esa ventana — el mando queda
+/// “mudo” hasta un alt-tab que fuerza otro ciclo de activación. Comparamos el **HWND raíz**
+/// (`GetAncestor(..., GA_ROOT)`) con `GetForegroundWindow()` para alinear con lo que el SO
+/// considera ventana activa.
 pub fn relevant_app_focus(app: &AppHandle) -> bool {
-    let main = app
-        .get_webview_window("main")
-        .and_then(|w| w.is_focused().ok())
-        .unwrap_or(false);
-    let settings = app
-        .get_webview_window("settings-window")
-        .and_then(|w| w.is_focused().ok())
-        .unwrap_or(false);
-    main || settings
+    [
+        "main",
+        "settings-window",
+        "big-picture-window",
+        "friends-window",
+    ]
+    .into_iter()
+    .any(|label| {
+        let Some(w) = app.get_webview_window(label) else {
+            return false;
+        };
+        if w.is_focused().unwrap_or(false) {
+            return true;
+        }
+        #[cfg(windows)]
+        {
+            return webview_root_matches_foreground(&w).unwrap_or(false);
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = w;
+            false
+        }
+    })
+}
+
+#[cfg(windows)]
+fn webview_root_matches_foreground(w: &tauri::WebviewWindow) -> Option<bool> {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use std::ffi::c_void;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{GetAncestor, GetForegroundWindow, GA_ROOT};
+
+    let handle = w.window_handle().ok()?;
+    let RawWindowHandle::Win32(h) = handle.as_raw() else {
+        return Some(false);
+    };
+
+    unsafe {
+        let self_hwnd = HWND(h.hwnd.get() as usize as *mut c_void);
+        let fg = GetForegroundWindow();
+        if self_hwnd.0.is_null() || fg.0.is_null() {
+            return Some(false);
+        }
+        let self_root = GetAncestor(self_hwnd, GA_ROOT);
+        let fg_root = GetAncestor(fg, GA_ROOT);
+        if self_root.is_invalid() || fg_root.is_invalid() {
+            return Some(false);
+        }
+        Some(self_root == fg_root)
+    }
 }
 
 pub fn gamepad_tester_session_start() {
@@ -259,6 +308,16 @@ fn telemetry_for_gamepad(id: GamepadId, gp: &gilrs::Gamepad<'_>) -> GamepadTelem
     let mut pressed_buttons = Vec::new();
     let mut button_values = HashMap::new();
     for &btn in BUTTONS_ALL {
+        #[cfg(windows)]
+        {
+            if matches!(btn, Button::Mode)
+                && usize::from(id) < 4
+                && super::xinput_guide::is_guide_pressed(usize::from(id))
+            {
+                pressed_buttons.push("Mode".to_string());
+                continue;
+            }
+        }
         if let Some(bd) = gp.button_data(btn) {
             if bd.is_pressed() {
                 pressed_buttons.push(format!("{btn:?}"));

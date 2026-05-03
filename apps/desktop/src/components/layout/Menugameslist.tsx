@@ -1,5 +1,6 @@
-import { useRef, type ChangeEvent } from "react";
-import { Search, Gamepad2 } from "lucide-react";
+import { useRef, useState, type ChangeEvent } from "react";
+import { motion, useReducedMotion } from "framer-motion";
+import { ChevronDown, Search, Gamepad2 } from "lucide-react";
 import { useGameMedia } from "@hooks/useGameMedia";
 import { useMenuGamesList } from "@hooks/useMenuGameList";
 import type { ConfiguredGame } from "@app-types/config";
@@ -34,6 +35,14 @@ export interface MenuGamesListProps {
    * Recibe el objeto `ConfiguredGame` completo.
    */
   onGameClick?: (game: ConfiguredGame) => void;
+  /**
+   * Modo TV/mando: tipografía y miniaturas más grandes; opcional lista plegada (ver props siguientes).
+   */
+  bigPictureConsole?: boolean;
+  /**
+   * Solo con `bigPictureConsole`: empieza con la biblioteca expandida (por defecto `false`).
+   */
+  bigPictureGamesStartExpanded?: boolean;
 }
 
 const MENU_GAMES_STYLES = `
@@ -238,6 +247,166 @@ const MENU_GAMES_STYLES = `
   margin: 0 0 0.5rem 0;
   padding-left: 0.15rem;
 }
+
+.mg-scope.mg-bp-console {
+  --mg-gap: clamp(0.45rem, 1.1vh, 0.65rem);
+  --mg-radius: 0.65rem;
+  --mg-item-pad: clamp(0.55rem, 1.2vh, 0.85rem) clamp(0.75rem, 1.8vw, 1rem);
+}
+.mg-scope.mg-bp-console .mg-section-title {
+  font-size: clamp(0.75rem, min(1.5vw, 1.85vh), 0.875rem);
+  margin-bottom: clamp(0.55rem, 1.2vh, 0.85rem);
+  letter-spacing: 0.07em;
+}
+.mg-scope.mg-bp-console .mg-search-wrap {
+  margin-bottom: clamp(0.85rem, 1.8vh, 1.15rem);
+}
+.mg-scope.mg-bp-console .mg-search-input {
+  font-size: clamp(0.9rem, min(2vw, 2.35vh), 1.05rem);
+  padding: clamp(0.55rem, 1.2vh, 0.75rem) 0.85rem clamp(0.55rem, 1.2vh, 0.75rem)
+    clamp(2.35rem, 5vw, 2.85rem);
+  border-radius: 0.625rem;
+  line-height: 1.35;
+}
+.mg-scope.mg-bp-console .mg-search-icon {
+  left: clamp(0.75rem, 2vw, 1rem);
+}
+.mg-scope.mg-bp-console .mg-search-icon svg {
+  width: clamp(1rem, 2.6vw, 1.25rem);
+  height: clamp(1rem, 2.6vw, 1.25rem);
+}
+.mg-scope.mg-bp-console .mg-list {
+  max-height: min(42vh, 520px);
+  gap: var(--mg-gap);
+}
+.mg-scope.mg-bp-console .mg-item {
+  min-height: clamp(3rem, 6.25vh, 3.85rem);
+  gap: clamp(0.85rem, 2vw, 1.15rem);
+  border-radius: var(--mg-radius);
+}
+.mg-scope.mg-bp-console .mg-thumb-wrap {
+  width: clamp(76px, 18vw, 104px);
+  height: clamp(42px, 10vw, 58px);
+  border-radius: calc(var(--mg-radius) * 0.8);
+}
+.mg-scope.mg-bp-console .mg-thumb-fallback svg {
+  width: clamp(1.35rem, 3.2vw, 1.65rem);
+  height: clamp(1.35rem, 3.2vw, 1.65rem);
+}
+.mg-scope.mg-bp-console .mg-name {
+  font-size: clamp(0.92rem, min(2vw, 2.35vh), 1.12rem);
+  font-weight: 600;
+  line-height: 1.28;
+}
+.mg-scope.mg-bp-console .mg-empty {
+  padding: clamp(1.75rem, 4vh, 2.35rem) 0;
+}
+.mg-scope.mg-bp-console .mg-empty-text {
+  font-size: clamp(0.88rem, min(2vw, 2.2vh), 1rem);
+}
+.mg-scope.mg-bp-console .mg-skeleton-item {
+  min-height: clamp(3rem, 6.25vh, 3.85rem);
+  gap: clamp(0.85rem, 2vw, 1.15rem);
+}
+.mg-scope.mg-bp-console .mg-skeleton-thumb {
+  width: clamp(76px, 18vw, 104px);
+  height: clamp(42px, 10vw, 58px);
+  border-radius: calc(var(--mg-radius) * 0.8);
+}
+.mg-scope.mg-bp-console .mg-skeleton-text {
+  height: clamp(0.8rem, 2vh, 0.95rem);
+}
+  
+.mg-scope.mg-bp-console .mg-bp-library-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 0.75rem;
+  min-height: clamp(3rem, 6.75vh, 4rem);
+  margin: 0 0 clamp(0.65rem, 1.25vh, 0.95rem) 0;
+  padding: clamp(0.65rem, 1.4vh, 1rem) clamp(1rem, 2vw, 1.25rem);
+  border: none;
+  border-radius: 0.65rem;
+  cursor: pointer;
+  text-align: left;
+  font-size: clamp(1.05rem, min(2.1vw, 2.55vh), 1.3rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--heroui-foreground, #18181b);
+  background: color-mix(in oklab, var(--heroui-default-100, #f4f4f5) 55%, transparent);
+  transition: background 0.18s ease, transform 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.dark .mg-scope.mg-bp-console .mg-bp-library-toggle,
+[data-theme='dark'] .mg-scope.mg-bp-console .mg-bp-library-toggle {
+  color: #f4f4f5;
+  background: color-mix(in oklab, #3f3f46 45%, transparent);
+}
+.mg-scope.mg-bp-console .mg-bp-library-toggle:hover {
+  background: color-mix(in oklab, var(--heroui-default-100, #f4f4f5) 82%, transparent);
+}
+.dark .mg-scope.mg-bp-console .mg-bp-library-toggle:hover,
+[data-theme='dark'] .mg-scope.mg-bp-console .mg-bp-library-toggle:hover {
+  background: color-mix(in oklab, #52525b 55%, transparent);
+}
+.mg-scope.mg-bp-console .mg-bp-library-toggle:focus-visible {
+  outline: 2px solid var(--heroui-primary, #6366f1);
+  outline-offset: 2px;
+}
+.mg-scope.mg-bp-console .mg-bp-library-toggle-count {
+  font-size: clamp(0.78rem, min(1.6vw, 1.9vh), 0.92rem);
+  font-weight: 600;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+.mg-scope.mg-bp-console .mg-bp-library-toggle svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+  width: clamp(1.35rem, 3.2vw, 1.6rem);
+  height: clamp(1.35rem, 3.2vw, 1.6rem);
+  transition: transform 0.28s ease;
+}
+.mg-scope.mg-bp-console .mg-bp-library-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.mg-library-expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mg-library-expand[data-expanded='true'] {
+  grid-template-rows: 1fr;
+}
+.mg-library-expand-inner {
+  overflow: hidden;
+  min-height: 0;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity 0.26s cubic-bezier(0.16, 1, 0.3, 1) 0.04s,
+    transform 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.mg-library-expand[data-expanded='true'] .mg-library-expand-inner {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition:
+    opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1) 0.05s,
+    transform 0.42s cubic-bezier(0.16, 1, 0.3, 1) 0.02s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mg-library-expand,
+  .mg-library-expand-inner {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+  .mg-library-expand-inner {
+    transform: none !important;
+  }
+}
 `;
 
 /**
@@ -280,38 +449,56 @@ function MenuGameItem({ game, resolvedSteamAppId, mediaBySteamAppId, onClick }: 
   const showFallback = !imageUrl || imgError;
 
   return (
-    <li>
-      <button
-        type="button"
-        className="mg-item"
-        aria-label={`Ir a ${formatGameDisplayName(game.id)}`}
-        onClick={() => onClick?.(game)}>
-        {/* Thumbnail */}
-        <div className="mg-thumb-wrap" aria-hidden="true">
-          {!showFallback && (
-            <img
-              src={imageUrl}
-              alt=""
-              className="mg-thumb"
-              data-loaded={imgLoaded ? "true" : "false"}
-              onLoad={handleImgLoad}
-              onError={handleImgError}
-              draggable={false}
-            />
-          )}
-          {(showFallback || !imgLoaded) && (
-            <span className="mg-thumb-fallback">
-              <Gamepad2 size={18} strokeWidth={1.5} />
-            </span>
-          )}
-        </div>
+    <button
+      type="button"
+      className="mg-item"
+      aria-label={`Ir a ${formatGameDisplayName(game.id)}`}
+      onClick={() => onClick?.(game)}>
+      <div className="mg-thumb-wrap" aria-hidden="true">
+        {!showFallback && (
+          <img
+            src={imageUrl}
+            alt=""
+            className="mg-thumb"
+            data-loaded={imgLoaded ? "true" : "false"}
+            onLoad={handleImgLoad}
+            onError={handleImgError}
+            draggable={false}
+          />
+        )}
+        {(showFallback || !imgLoaded) && (
+          <span className="mg-thumb-fallback">
+            <Gamepad2 size={18} strokeWidth={1.5} />
+          </span>
+        )}
+      </div>
 
-        {/* Nombre */}
-        <span className="mg-name">{formatGameDisplayName(game.id)}</span>
-      </button>
-    </li>
+      <span className="mg-name">{formatGameDisplayName(game.id)}</span>
+    </button>
   );
 }
+
+const MG_LIST_CONTAINER = {
+  hidden: {
+    transition: { staggerChildren: 0.03, staggerDirection: -1 },
+  },
+  show: {
+    transition: { staggerChildren: 0.045, delayChildren: 0.08 },
+  },
+} as const;
+
+const MG_LIST_ITEM = {
+  hidden: {
+    opacity: 0,
+    y: 8,
+    transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] as const },
+  },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { type: "spring" as const, stiffness: 420, damping: 32, mass: 0.85 },
+  },
+} as const;
 
 /**
  * Sección de juegos para el panel lateral del menú (`StaggeredMenu`).
@@ -331,8 +518,18 @@ function MenuGameItem({ game, resolvedSteamAppId, mediaBySteamAppId, onClick }: 
  * />
  * ```
  */
-export function MenuGamesList({ games, onGameClick }: MenuGamesListProps) {
+export function MenuGamesList({
+  games,
+  onGameClick,
+  bigPictureConsole = false,
+  bigPictureGamesStartExpanded = false,
+}: MenuGamesListProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const reduceMotionFm = useReducedMotion();
+  const hasGames = games.length > 0;
+  const collapsibleLibrary = Boolean(bigPictureConsole && hasGames);
+
+  const [libraryExpanded, setLibraryExpanded] = useState(bigPictureGamesStartExpanded);
 
   const { searchValue, setSearchValue, filteredGames, mediaBySteamAppId, resolvedSteamAppIds, isBatchLoading } =
     useMenuGamesList({ games });
@@ -342,19 +539,61 @@ export function MenuGamesList({ games, onGameClick }: MenuGamesListProps) {
     setSearchValue(e.target.value);
   };
 
-  return (
-    <div className="mg-scope">
-      <style>{MENU_GAMES_STYLES}</style>
+  const shellClass = ["mg-scope", bigPictureConsole ? "mg-bp-console" : ""].filter(Boolean).join(" ");
 
-      {/* Título de sección */}
-      <p className="mg-section-title" aria-label="Sección juegos">
-        Juegos
+  const searchIconSize = bigPictureConsole ? 17 : 13;
+  const emptyIconSize = bigPictureConsole ? 36 : 28;
+
+  const useAnimatedBpList = bigPictureConsole && !reduceMotionFm && !isBatchLoading && filteredGames.length > 0;
+
+  const gamesListSection = isBatchLoading ? (
+    <MenuGamesSkeletons count={games.length} />
+  ) : filteredGames.length === 0 ? (
+    <div className="mg-empty" role="status" aria-live="polite">
+      <Gamepad2 size={emptyIconSize} strokeWidth={1.2} />
+      <p className="mg-empty-text">
+        {searchValue.trim() ? `Sin resultados para "${searchValue.trim()}"` : "No hay juegos configurados"}
       </p>
+    </div>
+  ) : useAnimatedBpList ? (
+    <motion.ul
+      className="mg-list"
+      role="list"
+      aria-label="Lista de juegos"
+      variants={MG_LIST_CONTAINER}
+      initial={false}
+      animate={!collapsibleLibrary || libraryExpanded ? "show" : "hidden"}>
+      {filteredGames.map((game) => (
+        <motion.li key={game.id} variants={MG_LIST_ITEM} style={{ listStyle: "none" }}>
+          <MenuGameItem
+            game={game}
+            resolvedSteamAppId={resolvedSteamAppIds[game.id] ?? undefined}
+            mediaBySteamAppId={mediaBySteamAppId}
+            onClick={onGameClick}
+          />
+        </motion.li>
+      ))}
+    </motion.ul>
+  ) : (
+    <ul className="mg-list" role="list" aria-label="Lista de juegos">
+      {filteredGames.map((game) => (
+        <li key={game.id}>
+          <MenuGameItem
+            game={game}
+            resolvedSteamAppId={resolvedSteamAppIds[game.id] ?? undefined}
+            mediaBySteamAppId={mediaBySteamAppId}
+            onClick={onGameClick}
+          />
+        </li>
+      ))}
+    </ul>
+  );
 
-      {/* Barra de búsqueda */}
+  const gamesBody = (
+    <>
       <div className="mg-search-wrap">
         <span className="mg-search-icon" aria-hidden="true">
-          <Search size={13} />
+          <Search size={searchIconSize} />
         </span>
         <input
           ref={inputRef}
@@ -368,29 +607,44 @@ export function MenuGamesList({ games, onGameClick }: MenuGamesListProps) {
           spellCheck={false}
         />
       </div>
+      {gamesListSection}
+    </>
+  );
 
-      {/* Contenido */}
-      {isBatchLoading ? (
-        <MenuGamesSkeletons count={games.length} />
-      ) : filteredGames.length === 0 ? (
-        <div className="mg-empty" role="status" aria-live="polite">
-          <Gamepad2 size={28} strokeWidth={1.2} />
-          <p className="mg-empty-text">
-            {searchValue.trim() ? `Sin resultados para "${searchValue.trim()}"` : "No hay juegos configurados"}
-          </p>
+  return (
+    <div className={shellClass}>
+      <style>{MENU_GAMES_STYLES}</style>
+
+      {collapsibleLibrary ? (
+        <button
+          type="button"
+          className="mg-bp-library-toggle"
+          aria-expanded={libraryExpanded}
+          aria-controls="menu-games-list-body"
+          onClick={() => setLibraryExpanded((v) => !v)}>
+          <span>Biblioteca</span>
+          <span className="inline-flex shrink-0 items-center gap-2">
+            <span className="mg-bp-library-toggle-count">{`${games.length} juego${games.length === 1 ? "" : "s"}`}</span>
+            <ChevronDown aria-hidden />
+          </span>
+        </button>
+      ) : (
+        <p className="mg-section-title" aria-label="Sección juegos">
+          Juegos
+        </p>
+      )}
+
+      {collapsibleLibrary ? (
+        <div id="menu-games-list-body" className="mg-library-expand" data-expanded={libraryExpanded}>
+          <div
+            className="mg-library-expand-inner"
+            inert={!libraryExpanded ? true : undefined}
+            aria-hidden={!libraryExpanded}>
+            {gamesBody}
+          </div>
         </div>
       ) : (
-        <ul className="mg-list" role="list" aria-label="Lista de juegos">
-          {filteredGames.map((game) => (
-            <MenuGameItem
-              key={game.id}
-              game={game}
-              resolvedSteamAppId={resolvedSteamAppIds[game.id] ?? undefined}
-              mediaBySteamAppId={mediaBySteamAppId}
-              onClick={onGameClick}
-            />
-          ))}
-        </ul>
+        <div id="menu-games-list-body">{gamesBody}</div>
       )}
     </div>
   );

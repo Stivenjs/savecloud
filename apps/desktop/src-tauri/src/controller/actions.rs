@@ -10,6 +10,8 @@ pub enum SemanticAction {
     Confirm,
     Back,
     Menu,
+    /// Start / Opciones (ventana Ajustes en Big Picture desde el cliente).
+    Options,
     /// Perfil / cuenta (p. ej. View en Xbox, Share en PlayStation).
     Profile,
 }

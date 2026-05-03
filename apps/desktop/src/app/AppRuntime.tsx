@@ -8,6 +8,7 @@ import { TrayActionsListener } from "@components/sync/TrayActionsListener";
 import { UnsyncedSavesModalWithProgress } from "@features/games";
 import { useAppInitialization } from "@hooks/useAppInitialization";
 import { useConfig } from "@hooks/useConfig";
+import { useProfileSessionHydration } from "@hooks/useProfileSession";
 import type { ConfiguredGame } from "@app-types/config";
 
 function AppContent({ hideTitleBar }: { hideTitleBar: boolean }) {
@@ -56,6 +57,7 @@ interface AppRuntimeProps {
 }
 
 export function AppRuntime({ hideTitleBar = false }: AppRuntimeProps) {
+  useProfileSessionHydration();
   useAppInitialization();
 
   return (

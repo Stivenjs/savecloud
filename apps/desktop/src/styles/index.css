@@ -53,6 +53,26 @@
   background: transparent;
 }
 
+html.savecloud-big-picture {
+  --savecloud-bp-library-header-h: calc(max(0px, env(safe-area-inset-top)) + 3.775rem);
+}
+
+html.savecloud-big-picture,
+html.savecloud-big-picture * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html.savecloud-big-picture *::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+html.savecloud-big-picture *::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 video::-webkit-media-controls-fullscreen-button {
   display: none;
 }

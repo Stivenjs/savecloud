@@ -16,6 +16,9 @@ pub mod state;
 pub mod tester;
 pub mod tester_ipc;
 
+#[cfg(windows)]
+mod xinput_guide;
+
 use actions::{ControllerEvent, SemanticAction};
 use gilrs::{Event as GilrsEvent, EventType, Gilrs};
 use state::InputState;
@@ -44,6 +47,13 @@ pub fn start_gamepad_loop(app_handle: AppHandle) {
 
             if !focused {
                 input_state.clear();
+                #[cfg(windows)]
+                xinput_guide::sync_after_unfocused();
+            }
+
+            #[cfg(windows)]
+            if focused {
+                xinput_guide::inject_guide_synthetic_events(&mut gilrs);
             }
 
             while let Some(GilrsEvent { id, event, .. }) = gilrs.next_event() {

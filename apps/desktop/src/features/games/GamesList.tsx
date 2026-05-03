@@ -83,6 +83,8 @@ interface GamesListProps {
   onShare?: (game: ConfiguredGame) => void;
   /** Si hay configuración de nube (para cargar conteo de backups empaquetados). */
   hasSyncConfig?: boolean;
+  /** Big Picture / mando: barra de orden y vista más grande. */
+  consoleMode?: boolean;
 }
 
 export function GamesList({
@@ -104,6 +106,7 @@ export function GamesList({
   onTorrent,
   onShare,
   hasSyncConfig = false,
+  consoleMode = false,
 }: GamesListProps) {
   const { layout, sortBy, sortDir, setLayout, setSortBy, setSortDir } = useGamesViewPreferences();
 
@@ -143,13 +146,14 @@ export function GamesList({
     return (
       <>
         {/* Siempre mostramos los controles aunque la lista esté vacía */}
-        <div className="mb-4 flex items-center justify-end">
+        <div className={`mb-4 flex w-full items-center ${consoleMode ? "" : "justify-end"}`}>
           <GamesViewControls
             sortBy={sortBy}
             sortDir={sortDir}
             layout={layout}
             onSortChange={handleSortChange}
             onLayoutChange={setLayout}
+            consoleMode={consoleMode}
           />
         </div>
         <Card className="border border-dashed border-default-300">
@@ -199,8 +203,14 @@ export function GamesList({
   return (
     <div className="space-y-4">
       {/* Controls bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-default-400">
+      <div
+        className={[
+          "flex flex-wrap items-center gap-3",
+          consoleMode
+            ? "flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between"
+            : "justify-between",
+        ].join(" ")}>
+        <p className={consoleMode ? "text-base font-semibold text-default-400 md:text-lg" : "text-xs text-default-400"}>
           {sortedGames.length} {sortedGames.length === 1 ? "juego" : "juegos"}
         </p>
         <GamesViewControls
@@ -209,6 +219,7 @@ export function GamesList({
           layout={layout}
           onSortChange={handleSortChange}
           onLayoutChange={setLayout}
+          consoleMode={consoleMode}
         />
       </div>
 

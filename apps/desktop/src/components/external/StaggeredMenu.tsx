@@ -67,8 +67,15 @@ export interface StaggeredMenuProps {
   headerActions?: React.ReactNode;
   /** Desplazamiento vertical del header en px. */
   headerOffset?: number;
+  /** Big Picture: no renderizar la franja de header flotante (menú toggle / HUD). Útil si otra rail lo cubre (p. ej. biblioteca). */
+  hideFloatingHeader?: boolean;
   /** Cambia el color del botón al abrir. */
   changeMenuColorOnOpen?: boolean;
+  /**
+   * Big Picture / TV: cuando el panel está abierto, difumina el contenido detrás del menú
+   * sin cambiar la paleta del panel (`--sm-panel-bg`).
+   */
+  bigPictureMode?: boolean;
 }
 
 const STAGGERED_MENU_STYLES = `
@@ -120,6 +127,97 @@ const STAGGERED_MENU_STYLES = `
 .sm-scope .sm-socials-title { margin: 0; font-size: 1rem; font-weight: 500; color: var(--sm-accent, #ff0000); }
 .sm-scope .sm-socials-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: row; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .sm-scope .sm-socials-list .sm-socials-link { opacity: 1; transition: opacity 0.3s ease; }
+
+.sm-scope.sm-big-picture .sm-bp-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  transition: opacity 0.38s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.38s;
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  background-color: transparent;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+}
+.sm-scope.sm-big-picture.sm-bp-panel-open .sm-bp-scrim {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
+}
+.sm-scope.sm-big-picture.sm-bp-panel-open .sm-prelayers { opacity: 0; pointer-events: none; visibility: hidden; }
+.sm-scope.sm-big-picture .staggered-menu-panel {
+  width: clamp(300px, 20vw, 420px);
+  padding: clamp(2.5rem, 5vh, 3.25rem) clamp(1.25rem, 2vw, 1.75rem) clamp(1.75rem, 4vh, 2.5rem)
+    clamp(1.35rem, 2.2vw, 1.85rem);
+  box-sizing: border-box;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+.sm-scope.sm-big-picture .sm-prelayers {
+  width: clamp(300px, 20vw, 420px);
+}
+.sm-scope.sm-big-picture .sm-panel-inner {
+  gap: clamp(1.35rem, 2.8vh, 1.85rem);
+}
+.sm-scope.sm-big-picture .sm-panel-list {
+  gap: clamp(0.3rem, 0.65vh, 0.55rem);
+}
+.sm-scope.sm-big-picture .sm-panel-item {
+  min-height: clamp(3rem, 6.75vh, 4rem);
+  padding: clamp(0.65rem, 1.4vh, 1rem) clamp(1rem, 2vw, 1.25rem);
+  font-size: clamp(1.05rem, min(2.1vw, 2.55vh), 1.35rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 0.65rem;
+  line-height: 1.15;
+}
+.sm-scope.sm-big-picture .sm-panel-item:hover,
+.sm-scope.sm-big-picture .sm-panel-item:focus-visible {
+  background: color-mix(in oklab, var(--sm-panel-text) 12%, transparent);
+}
+.sm-scope.sm-big-picture .sm-panel-itemLabel {
+  gap: clamp(0.95rem, 2vw, 1.35rem);
+}
+.sm-scope.sm-big-picture .sm-item-icon svg {
+  width: clamp(1.5rem, min(3.2vw, 3.5vh), 1.875rem);
+  height: clamp(1.5rem, min(3.2vw, 3.5vh), 1.875rem);
+}
+.sm-scope.sm-big-picture .sm-panel-list[data-numbering] .sm-panel-item::after {
+  font-size: clamp(0.8rem, min(1.6vw, 2vh), 0.95rem);
+  font-weight: 600;
+  right: clamp(0.85rem, 2vw, 1.15rem);
+}
+.sm-scope.sm-big-picture .staggered-menu-header {
+  padding-left: clamp(1rem, 2.2vw, 1.5rem);
+  padding-right: clamp(1rem, 2.2vw, 1.5rem);
+}
+.sm-scope.sm-big-picture .sm-header-controls {
+  align-items: center;
+  padding: 0;
+  gap: clamp(0.65rem, 2vw, 1.1rem);
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.sm-scope.sm-big-picture .sm-bp-header-hud {
+  margin-right: 0;
+}
+
+@media (max-width: 1024px) {
+  .sm-scope.sm-big-picture .staggered-menu-panel,
+  .sm-scope.sm-big-picture .sm-prelayers {
+    width: clamp(272px, 52vw, 400px);
+  }
+}
+@media (max-width: 640px) {
+  .sm-scope.sm-big-picture .staggered-menu-panel,
+  .sm-scope.sm-big-picture .sm-prelayers {
+    width: clamp(260px, 86vw, 100%);
+  }
+}
 .sm-scope .sm-socials-list:hover .sm-socials-link:not(:hover) { opacity: 0.35; }
 .sm-scope .sm-socials-list:focus-within .sm-socials-link:not(:focus-visible) { opacity: 0.35; }
 .sm-scope .sm-socials-list .sm-socials-link:hover,
@@ -187,7 +285,9 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
   panelSection,
   headerActions,
   headerOffset = 0,
+  hideFloatingHeader = false,
   changeMenuColorOnOpen = true,
+  bigPictureMode = false,
 }: StaggeredMenuProps) => {
   const [open, setOpen] = useState(false);
   const openRef = useRef(false);
@@ -245,6 +345,15 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
     });
     return () => ctx.revert();
   }, [menuButtonColor, position]);
+
+  useLayoutEffect(() => {
+    if (!bigPictureMode) return;
+    const panel = panelRef.current;
+    if (!panel || openRef.current) return;
+    const offscreen = position === "left" ? -100 : 100;
+    gsap.killTweensOf(panel);
+    gsap.set(panel, { xPercent: offscreen });
+  }, [bigPictureMode, position]);
 
   const buildOpenTimeline = useCallback(() => {
     const panel = panelRef.current;
@@ -539,38 +648,52 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
   React.useEffect(() => {
     if (!closeOnClickAway || !open) return;
 
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        panelRef.current &&
-        !panelRef.current.contains(event.target as Node) &&
-        toggleBtnRef.current &&
-        !toggleBtnRef.current.contains(event.target as Node)
-      ) {
+    const handlePointerOutsideClose = (event: MouseEvent) => {
+      const el = event.target instanceof Element ? event.target : null;
+      if (!el || el.closest("[data-shell-menu-ignore-outside-close]")) return;
+
+      const target = event.target as Node;
+      const clickedToggle = toggleBtnRef.current?.contains(target) ?? false;
+      if (panelRef.current && !panelRef.current.contains(target) && !clickedToggle) {
         closeMenu();
       }
     };
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", handlePointerOutsideClose);
+    return () => document.removeEventListener("mousedown", handlePointerOutsideClose);
   }, [closeOnClickAway, open, closeMenu]);
 
   return (
     <div
-      className={`sm-scope z-40 ${
-        isFixed ? "pointer-events-none fixed top-0 left-0 w-screen h-screen overflow-hidden" : "w-full h-full"
-      }`}>
+      className={`sm-scope z-40 ${bigPictureMode ? "sm-big-picture" : ""} ${
+        bigPictureMode && open ? "sm-bp-panel-open" : ""
+      } ${isFixed ? "pointer-events-none fixed top-0 left-0 w-screen h-screen overflow-hidden" : "w-full h-full"}`}>
       <div
         className={
           (className ? className + " " : "") + "staggered-menu-wrapper pointer-events-none relative w-full h-full z-40"
         }
         style={accentColor ? ({ ["--sm-accent" as any]: accentColor } as React.CSSProperties) : undefined}
         data-position={position}
-        data-open={open || undefined}>
+        data-open={open || undefined}
+        data-big-picture={bigPictureMode || undefined}>
+        {bigPictureMode ? (
+          <div
+            className="sm-bp-scrim"
+            aria-hidden="true"
+            onMouseDown={(e) => {
+              if (!closeOnClickAway || !openRef.current) return;
+              e.preventDefault();
+              closeMenu();
+            }}
+          />
+        ) : null}
+
         <div
           ref={preLayersRef}
           className="sm-prelayers absolute top-0 right-0 bottom-0 pointer-events-none z-5"
           aria-hidden="true">
           {(() => {
+            if (bigPictureMode) return null;
             const raw = colors && colors.length ? colors.slice(0, 4) : ["#1e1e22", "#35353c"];
             let arr = [...raw];
             if (arr.length >= 3) {
@@ -587,70 +710,74 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
           })()}
         </div>
 
-        <header
-          className="staggered-menu-header absolute left-0 w-full flex items-center justify-between p-4 bg-transparent pointer-events-none z-20"
-          style={{ top: `${headerOffset}px` }}
-          aria-label="Main navigation header">
-          {showLogo ? (
-            <div className="sm-logo flex items-center select-none pointer-events-auto" aria-label="Logo">
-              <img
-                src={logoUrl || "/src/assets/128x128.png"}
-                alt="Logo"
-                className="sm-logo-img block h-8 w-auto object-contain"
-                draggable={false}
-                width={110}
-                height={24}
-              />
-            </div>
-          ) : (
-            <div aria-hidden="true" />
-          )}
+        {!hideFloatingHeader ? (
+          <header
+            className="staggered-menu-header absolute left-0 w-full flex items-center justify-between p-4 bg-transparent pointer-events-none z-20"
+            style={{ top: `${headerOffset}px` }}
+            aria-label="Main navigation header"
+            data-shell-menu-ignore-outside-close={bigPictureMode ? true : undefined}>
+            {showLogo ? (
+              <div className="sm-logo flex items-center select-none pointer-events-auto" aria-label="Logo">
+                <img
+                  src={logoUrl || "/src/assets/128x128.png"}
+                  alt="Logo"
+                  className="sm-logo-img block h-8 w-auto object-contain"
+                  draggable={false}
+                  width={110}
+                  height={24}
+                />
+              </div>
+            ) : (
+              <div aria-hidden="true" />
+            )}
 
-          <div className="sm-header-controls flex items-center gap-2 pointer-events-auto">
-            {headerActions}
-            <button
-              ref={toggleBtnRef}
-              className="sm-toggle relative inline-flex items-center gap-[0.3rem] bg-transparent border-0 cursor-pointer font-medium leading-none overflow-visible pointer-events-auto"
-              aria-label={open ? "Cerrar menú" : "Abrir menú"}
-              aria-expanded={open}
-              aria-controls="staggered-menu-panel"
-              onClick={toggleMenu}
-              type="button">
-              <span
-                ref={textWrapRef}
-                className="sm-toggle-textWrap relative inline-block h-[1em] overflow-hidden whitespace-nowrap"
-                aria-hidden="true">
-                <span ref={textInnerRef} className="sm-toggle-textInner flex flex-col leading-none">
-                  {textLines.map((l, i) => (
-                    <span className="sm-toggle-line block h-[1em] leading-none" key={i}>
-                      {l}
+            <div className="sm-header-controls flex items-center gap-2 pointer-events-auto">
+              {headerActions}
+              {bigPictureMode ? null : (
+                <button
+                  ref={toggleBtnRef}
+                  className="sm-toggle relative inline-flex items-center gap-[0.3rem] bg-transparent border-0 cursor-pointer font-medium leading-none overflow-visible pointer-events-auto"
+                  aria-label={open ? "Cerrar menú" : "Abrir menú"}
+                  aria-expanded={open}
+                  aria-controls="staggered-menu-panel"
+                  onClick={toggleMenu}
+                  type="button">
+                  <span
+                    ref={textWrapRef}
+                    className="sm-toggle-textWrap relative inline-block h-[1em] overflow-hidden whitespace-nowrap"
+                    aria-hidden="true">
+                    <span ref={textInnerRef} className="sm-toggle-textInner flex flex-col leading-none">
+                      {textLines.map((l, i) => (
+                        <span className="sm-toggle-line block h-[1em] leading-none" key={i}>
+                          {l}
+                        </span>
+                      ))}
                     </span>
-                  ))}
-                </span>
-              </span>
+                  </span>
 
-              <span
-                ref={iconRef}
-                className="sm-icon relative w-3.5 h-3.5 shrink-0 inline-flex items-center justify-center will-change-transform"
-                aria-hidden="true">
-                <span
-                  ref={plusHRef}
-                  className="sm-icon-line absolute left-1/2 top-1/2 w-full h-0.5 bg-current rounded-xs -translate-x-1/2 -translate-y-1/2 will-change-transform"
-                />
-                <span
-                  ref={plusVRef}
-                  className="sm-icon-line sm-icon-line-v absolute left-1/2 top-1/2 w-full h-0.5 bg-current rounded-xs -translate-x-1/2 -translate-y-1/2 will-change-transform"
-                />
-              </span>
-            </button>
-          </div>
-        </header>
+                  <span
+                    ref={iconRef}
+                    className="sm-icon relative w-3.5 h-3.5 shrink-0 inline-flex items-center justify-center will-change-transform"
+                    aria-hidden="true">
+                    <span
+                      ref={plusHRef}
+                      className="sm-icon-line absolute left-1/2 top-1/2 w-full h-0.5 bg-current rounded-xs -translate-x-1/2 -translate-y-1/2 will-change-transform"
+                    />
+                    <span
+                      ref={plusVRef}
+                      className="sm-icon-line sm-icon-line-v absolute left-1/2 top-1/2 w-full h-0.5 bg-current rounded-xs -translate-x-1/2 -translate-y-1/2 will-change-transform"
+                    />
+                  </span>
+                </button>
+              )}
+            </div>
+          </header>
+        ) : null}
 
         <aside
           id="staggered-menu-panel"
           ref={panelRef}
           className="staggered-menu-panel absolute top-0 right-0 h-full flex flex-col p-8 overflow-y-auto z-10 backdrop-blur-md pointer-events-auto"
-          style={{ WebkitBackdropFilter: "blur(12px)" }}
           aria-hidden={!open}>
           <div className="sm-panel-inner flex-1 flex flex-col gap-5">
             <ul

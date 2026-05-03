@@ -75,10 +75,11 @@ half = "=2.3.1"
 [dev-dependencies]
 tempfile = "3.10"
 
-# Windows: WGI (default de gilrs) suele requerir ventana enfocada y puede no emitir en un hilo aparte.
-# XInput funciona bien con el bucle en segundo plano (ver gilrs / Windows Gaming Input).
+# Windows: gilrs `wgi` vs `xinput` son excluyentes; usamos xinput en hilo de fondo.
+# Guide Xbox: **`XInputGetState` público NO informa ese bit** → `rusty-xinput::get_state_ex` (ordinal 100).
 [target.'cfg(windows)'.dependencies]
 gilrs = { version = "0.10", default-features = false, features = ["xinput"] }
+rusty-xinput = "1.3"
 winreg = "0.52"
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", ] }
 wmi = "0.14"

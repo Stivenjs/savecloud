@@ -5918,6 +5918,7 @@ dependencies = [
  "ringbuf",
  "rusqlite",
  "rustpotter",
+ "rusty-xinput",
  "serde",
  "serde_json",
  "serde_yaml",

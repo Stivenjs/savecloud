@@ -1,27 +1,31 @@
 import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useNavigationStore } from "@features/input/store";
-import { SemanticAction } from "@features/input/types";
+import type { SemanticAction } from "@features/input/types";
 import { featureFlags } from "@/constants/featureFlags";
+import { toggleSettingsWindowFromBigPicture } from "@/windows/settingsWindow";
 import { useShellUiStore } from "@store/ShellUiStore";
 
 const NAVIGATION_THROTTLE_MS = 120;
 
 function dispatchBackAction() {
-  const shell = useShellUiStore.getState();
-  if (shell.sideMenuOpen) {
-    shell.requestCloseSideMenu();
-    return;
+  useShellUiStore.getState().dispatchBackNavigation();
+}
+
+function ensureGamepadShellMode(setInputMode: (m: "gamepad" | "mouse") => void) {
+  if (useNavigationStore.getState().inputMode !== "gamepad") {
+    setInputMode("gamepad");
   }
-  shell.requestGlobalBack();
 }
 
 /**
  * Atajos de teclado (además del mando):
- * - Menú lateral: F10, Alt+M, o Ctrl+Shift+M (este último suele funcionar aunque el WebView se coma F10).
- * - Perfil (Juegos): Alt+P o Ctrl+Shift+P.
+ * - Menú lateral: F10, Alt+M, o Ctrl+Shift+M.
+ * - Perfil abrir (no toggle): Alt+P o Ctrl+Shift+P.
  *
- * El listener usa fase capture para recibir la pulsación antes que el SO/WebView la consuma.
+ * Listener de mando (`controller_action`) siempre activo: menú, atrás, opciones, perfil (toggle).
+ * La navegación espacial (`navigate_*`, `confirm` completa) sólo cuando `featureFlags.gamepadNavigation`.
+ * Sin ese flag, `confirm` sigue llegando como `confirmFocusedNodeFromHud` para Big Picture HUD.
  */
 export function useInputManager() {
   const { setInputMode, navigate, confirm } = useNavigationStore();
@@ -120,49 +124,66 @@ export function useInputManager() {
     window.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("keydown", handleKeyDown, true);
 
-    const unlisten = featureFlags.gamepadNavigation
-      ? listen<{ action: SemanticAction; player: number }>("controller_action", (event) => {
-          const now = Date.now();
-          if (now - lastGamepadInput.current < NAVIGATION_THROTTLE_MS) return;
-          lastGamepadInput.current = now;
+    const unlisten = listen<{ action: SemanticAction; player: number }>("controller_action", (event) => {
+      const action = event.payload.action;
 
-          if (useNavigationStore.getState().inputMode !== "gamepad") {
-            setInputMode("gamepad");
-          }
+      switch (action) {
+        case "menu":
+          ensureGamepadShellMode(setInputMode);
+          useShellUiStore.getState().requestStaggeredMenuToggle();
+          return;
+        case "options":
+          ensureGamepadShellMode(setInputMode);
+          void toggleSettingsWindowFromBigPicture();
+          return;
+        case "profile":
+          ensureGamepadShellMode(setInputMode);
+          useShellUiStore.getState().requestProfileToggle();
+          return;
+        case "back":
+          ensureGamepadShellMode(setInputMode);
+          dispatchBackAction();
+          return;
+        default:
+          break;
+      }
 
-          switch (event.payload.action) {
-            case "navigate_up":
-              navigate("UP");
-              break;
-            case "navigate_down":
-              navigate("DOWN");
-              break;
-            case "navigate_left":
-              navigate("LEFT");
-              break;
-            case "navigate_right":
-              navigate("RIGHT");
-              break;
-            case "confirm":
-              confirm();
-              break;
-            case "back":
-              dispatchBackAction();
-              break;
-            case "menu":
-              useShellUiStore.getState().requestStaggeredMenuToggle();
-              break;
-            case "profile":
-              useShellUiStore.getState().requestProfileOpen();
-              break;
-          }
-        })
-      : Promise.resolve(() => {});
+      if (!featureFlags.gamepadNavigation) {
+        if (action === "confirm") {
+          if (useNavigationStore.getState().confirmFocusedNodeFromHud()) ensureGamepadShellMode(setInputMode);
+        }
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastGamepadInput.current < NAVIGATION_THROTTLE_MS) return;
+      lastGamepadInput.current = now;
+
+      ensureGamepadShellMode(setInputMode);
+
+      switch (action) {
+        case "navigate_up":
+          navigate("UP");
+          break;
+        case "navigate_down":
+          navigate("DOWN");
+          break;
+        case "navigate_left":
+          navigate("LEFT");
+          break;
+        case "navigate_right":
+          navigate("RIGHT");
+          break;
+        case "confirm":
+          confirm();
+          break;
+      }
+    });
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("keydown", handleKeyDown, true);
-      unlisten.then((f) => f());
+      void unlisten.then((f) => f());
     };
   }, [navigate, confirm, setInputMode]);
 }

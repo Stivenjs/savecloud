@@ -19,6 +19,11 @@ interface NavigationState {
   setFocus: (id: string) => void;
   navigate: (direction: "UP" | "DOWN" | "LEFT" | "RIGHT") => void;
   confirm: () => void;
+  /**
+   * Dispara `onPress` del nodo espacial enfocado si existe (p. ej. clic «Seleccionar» en HUD Big Picture).
+   * No exige modo mando ni actualiza modo de entrada.
+   */
+  confirmFocusedNodeFromHud: () => boolean;
 }
 
 export const useNavigationStore = create<NavigationState>((set, get) => ({
@@ -132,5 +137,20 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       playSound(Sounds.confirm);
       node.onPress();
     }
+  },
+
+  confirmFocusedNodeFromHud: () => {
+    const { layers, focusedId } = get();
+    if (!focusedId) return false;
+
+    const activeLayer = layers[layers.length - 1];
+    const node = activeLayer.nodes.get(focusedId);
+
+    if (node?.onPress) {
+      playSound(Sounds.confirm);
+      node.onPress();
+      return true;
+    }
+    return false;
   },
 }));

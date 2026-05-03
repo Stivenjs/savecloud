@@ -3,6 +3,27 @@ import { resolveExistingWebviewWindow, showCenteredAndFocus } from "@/windows/we
 
 export const SETTINGS_WINDOW_LABEL = "settings-window";
 
+/**
+ * Desde Big Picture: si la ventana de Ajustes ya existe y está visible la oculta;
+ * si está oculta o no existe, la muestra o crea como `openOrFocusSettingsWindow`.
+ */
+export async function toggleSettingsWindowFromBigPicture(): Promise<void> {
+  const existing = await resolveExistingWebviewWindow(SETTINGS_WINDOW_LABEL);
+  if (existing) {
+    try {
+      if (await existing.isVisible()) {
+        await existing.hide();
+        return;
+      }
+    } catch {
+      /* mostrar enfocado */
+    }
+    await showCenteredAndFocus(existing);
+    return;
+  }
+  await openOrFocusSettingsWindow();
+}
+
 export async function openOrFocusSettingsWindow(): Promise<void> {
   const existing = await resolveExistingWebviewWindow(SETTINGS_WINDOW_LABEL);
   if (existing) {

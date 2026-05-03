@@ -9,6 +9,7 @@ import { MenuGamesList } from "@components/layout/Menugameslist";
 import { NotificationCenter } from "@components/layout/NotificationCenter";
 import { TitleBar } from "@components/layout/TitleBar";
 import { useShellUiStore } from "@store/ShellUiStore";
+import { BigPictureConsoleTopRail } from "@features/big-picture/BigPictureConsoleTopRail";
 import { UserBadge } from "@features/games/UserBadge";
 import { CloudMembersLauncher } from "@features/friends/CloudMembersLauncher";
 import { CloudStreamsLauncher } from "@features/friends/CloudStreamsLauncher";
@@ -122,6 +123,26 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
   }, []);
 
   useEffect(() => {
+    let last = useShellUiStore.getState().profileToggleRequest;
+    return useShellUiStore.subscribe((state) => {
+      const n = state.profileToggleRequest;
+      if (n > last) {
+        last = n;
+        setProfileDrawerOpen((open) => !open);
+      }
+    });
+  }, []);
+
+  /** Con drawer abierto, B/atras debe cerrarlo antes que el router. */
+  useEffect(() => {
+    if (!profileDrawerOpen) return;
+    return useShellUiStore.getState().registerBackHandler(() => {
+      setProfileDrawerOpen(false);
+      return true;
+    });
+  }, [profileDrawerOpen]);
+
+  useEffect(() => {
     if (configLoading || !config) return;
     if (typeof window.requestIdleCallback === "function") {
       const id = window.requestIdleCallback(() => prefetchProfileDrawer(), { timeout: 2500 });
@@ -150,12 +171,29 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
     <div className="relative min-h-screen">
       {!hideTitleBar ? <TitleBar /> : null}
 
-      <main className={`min-h-screen overflow-x-clip px-6 pb-6 ${hideTitleBar ? "pt-6" : "pt-26"}`}>{children}</main>
+      <main
+        className={`min-h-screen overflow-x-clip px-6 pb-6 ${
+          hideTitleBar ? "pt-(--savecloud-bp-library-header-h)" : "pt-26"
+        }`}>
+        {children}
+      </main>
+
+      {hideTitleBar ? (
+        <BigPictureConsoleTopRail
+          hidden={profileDrawerOpen}
+          profileAvatar={config?.profileAvatar}
+          profileFrame={config?.profileFrame}
+          onOpenProfile={() => setProfileDrawerOpen(true)}
+          onIntentOpenProfile={prefetchProfileDrawer}
+        />
+      ) : null}
 
       <StaggeredMenu
         isFixed
         position="left"
-        headerOffset={40}
+        bigPictureMode={hideTitleBar}
+        hideFloatingHeader={hideTitleBar}
+        headerOffset={hideTitleBar ? 0 : 40}
         items={menuItemsFromNav(navItems, location.pathname)}
         displaySocials={true}
         displayItemNumbering
@@ -173,20 +211,22 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
           setTimeout(() => handleNavigation(item.link), 320);
         }}
         headerActions={
-          <div className="flex items-center gap-4">
-            <UserBadge
-              userId={activeProfile?.localUserId || config?.userId}
-              profileAvatar={config?.profileAvatar}
-              profileFrame={config?.profileFrame}
-              hasSyncConfig={hasSyncConfig}
-              connectionStatus={connectionStatus}
-              onOpenProfile={() => setProfileDrawerOpen(true)}
-              onIntentOpenProfile={prefetchProfileDrawer}
-            />
-            {showStreamsLauncher ? <CloudStreamsLauncher /> : null}
-            <CloudMembersLauncher />
-            <NotificationCenter />
-          </div>
+          hideTitleBar ? null : (
+            <div className="flex items-center gap-4">
+              <UserBadge
+                userId={activeProfile?.localUserId || config?.userId}
+                profileAvatar={config?.profileAvatar}
+                profileFrame={config?.profileFrame}
+                hasSyncConfig={hasSyncConfig}
+                connectionStatus={connectionStatus}
+                onOpenProfile={() => setProfileDrawerOpen(true)}
+                onIntentOpenProfile={prefetchProfileDrawer}
+              />
+              {showStreamsLauncher ? <CloudStreamsLauncher /> : null}
+              <CloudMembersLauncher />
+              <NotificationCenter />
+            </div>
+          )
         }
         /**
          * Sección de juegos inyectada en el panel del menú.
@@ -204,6 +244,7 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
               }}>
               <MenuGamesList
                 games={games}
+                bigPictureConsole={hideTitleBar}
                 onGameClick={(game) => {
                   useShellUiStore.getState().requestCloseSideMenu();
                   onMenuGameClick?.(game);
@@ -213,17 +254,19 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
           ) : undefined
         }
         panelFooter={
-          <Button
-            isIconOnly
-            variant="flat"
-            radius="md"
-            color="default"
-            size="lg"
-            className="text-foreground"
-            aria-label={isDark ? "Modo claro" : "Modo oscuro"}
-            onPress={() => setTheme(isDark ? "light" : "dark")}>
-            {isDark ? <Sun size={22} /> : <Moon size={22} />}
-          </Button>
+          hideTitleBar ? null : (
+            <Button
+              isIconOnly
+              variant="flat"
+              radius="md"
+              color="default"
+              size="lg"
+              className="text-foreground"
+              aria-label={isDark ? "Modo claro" : "Modo oscuro"}
+              onPress={() => setTheme(isDark ? "light" : "dark")}>
+              {isDark ? <Sun size={22} /> : <Moon size={22} />}
+            </Button>
+          )
         }
       />
 
@@ -235,6 +278,8 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
           gamification={gamification ?? null}
           hasSyncConfig={hasSyncConfig}
           connectionStatus={connectionStatus}
+          bigPictureConsole={hideTitleBar}
+          bpReserveGlobalTopChromeSlot={hideTitleBar && !profileDrawerOpen}
         />
       </Suspense>
     </div>
