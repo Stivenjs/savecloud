@@ -20,7 +20,7 @@ import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { featureFlags } from "@/constants/featureFlags";
-import { openOrFocusSettingsWindow } from "@features/settings/settingsWindow";
+import { openOrFocusSettingsWindow } from "@/windows/settingsWindow";
 import type { ConfiguredGame } from "@app-types/config";
 
 const ProfileDrawer = lazy(() => import("@features/profile/ProfileDrawer").then((m) => ({ default: m.ProfileDrawer })));
@@ -44,6 +44,8 @@ interface AppLayoutProps {
    * Recibe el `ConfiguredGame` seleccionado.
    */
   onMenuGameClick?: (game: ConfiguredGame) => void;
+  /** Oculta la barra superior nativa de la app para vistas inmersivas. */
+  hideTitleBar?: boolean;
 }
 
 /**
@@ -88,7 +90,7 @@ const menuItemsFromNav = (navItems: NavItem[], currentPath: string) =>
  * </AppLayout>
  * ```
  */
-export function AppLayout({ navItems, children, games, onMenuGameClick }: AppLayoutProps) {
+export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitleBar = false }: AppLayoutProps) {
   const { resolvedTheme, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -146,9 +148,9 @@ export function AppLayout({ navItems, children, games, onMenuGameClick }: AppLay
 
   return (
     <div className="relative min-h-screen">
-      <TitleBar />
+      {!hideTitleBar ? <TitleBar /> : null}
 
-      <main className="min-h-screen overflow-x-clip pt-26 px-6 pb-6">{children}</main>
+      <main className={`min-h-screen overflow-x-clip px-6 pb-6 ${hideTitleBar ? "pt-6" : "pt-26"}`}>{children}</main>
 
       <StaggeredMenu
         isFixed

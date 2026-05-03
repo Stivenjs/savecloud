@@ -10,6 +10,7 @@
 //! - Listado y telemetría opcional para Ajustes (ver `tester`).
 
 pub mod actions;
+pub mod driver_installer;
 pub mod mapper;
 pub mod state;
 pub mod tester;

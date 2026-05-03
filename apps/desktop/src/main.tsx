@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { ThemeProvider } from "next-themes";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { HeroUIProvider, ToastProvider } from "@heroui/react";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AppErrorBoundary } from "@components/error/AppErrorBoundary";
 import { queryClient } from "@lib/queryClient";
@@ -24,7 +25,7 @@ const TOAST_CONFIG = {
   toastProps: { timeout: 3000 },
 } as const;
 
-type RenderMode = "overlay" | "streamViewer" | "friendsWindow" | "settingsWindow" | "main";
+type RenderMode = "overlay" | "streamViewer" | "friendsWindow" | "settingsWindow" | "bigPictureWindow" | "main";
 
 /**
  * Obtiene el elemento root del DOM de forma segura
@@ -70,6 +71,7 @@ function detectRenderMode(): RenderMode {
   if (params.get("streamViewer") === "true") return "streamViewer";
   if (params.get("friendsWindow") === "true") return "friendsWindow";
   if (params.get("settingsWindow") === "true") return "settingsWindow";
+  if (params.get("bigPictureWindow") === "true") return "bigPictureWindow";
   return "main";
 }
 
@@ -105,11 +107,17 @@ async function renderFriendsWindowApp(): Promise<void> {
 
 async function renderMainApp(): Promise<void> {
   await renderMainWrapped(<App />);
+  await maybeOpenStartupBigPicture();
 }
 
 async function renderSettingsWindowApp(): Promise<void> {
   const { SettingsWindowPage } = await import("@features/settings/SettingsWindowPage");
   await renderMainWrapped(<SettingsWindowPage />);
+}
+
+async function renderBigPictureWindowApp(): Promise<void> {
+  const { BigPictureWindowPage } = await import("@features/big-picture/BigPictureWindowPage");
+  await renderMainWrapped(<BigPictureWindowPage />);
 }
 
 /**
@@ -118,6 +126,17 @@ async function renderSettingsWindowApp(): Promise<void> {
 async function showMainWindow(): Promise<void> {
   const appWindow = getCurrentWindow();
   await appWindow.show();
+}
+
+async function maybeOpenStartupBigPicture(): Promise<void> {
+  try {
+    const cfg = await invoke<{ startupWindowMode?: string }>("get_config");
+    if (cfg?.startupWindowMode !== "big_picture") return;
+    const { openOrFocusBigPictureWindow } = await import("@/windows/bigPictureWindow");
+    await openOrFocusBigPictureWindow();
+  } catch {
+    // Si falla lectura de config, seguimos con arranque normal.
+  }
 }
 
 /**
@@ -132,6 +151,7 @@ async function bootstrap(): Promise<void> {
       streamViewer: renderStreamViewerApp,
       friendsWindow: renderFriendsWindowApp,
       settingsWindow: renderSettingsWindowApp,
+      bigPictureWindow: renderBigPictureWindowApp,
       main: renderMainApp,
     };
     await renderByMode[mode]();

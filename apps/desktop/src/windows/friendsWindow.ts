@@ -1,13 +1,12 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { resolveExistingWebviewWindow, showCenteredAndFocus } from "@/windows/webviewRecovery";
 
 export const FRIENDS_WINDOW_LABEL = "friends-window";
 
 export async function openOrFocusFriendsWindow(): Promise<void> {
-  const existing = await WebviewWindow.getByLabel(FRIENDS_WINDOW_LABEL);
+  const existing = await resolveExistingWebviewWindow(FRIENDS_WINDOW_LABEL);
   if (existing) {
-    await existing.center();
-    await existing.show();
-    await existing.setFocus();
+    await showCenteredAndFocus(existing);
     return;
   }
 
@@ -32,14 +31,11 @@ export async function openOrFocusFriendsWindow(): Promise<void> {
     await friendsWindow.setFocus();
   });
 
-  friendsWindow.once("tauri://error", (event) => {
+  friendsWindow.once("tauri://error", async (event) => {
     console.error("[FriendsWindow] Error creando ventana separada:", event);
+    const recovered = await resolveExistingWebviewWindow(FRIENDS_WINDOW_LABEL);
+    if (recovered) {
+      await showCenteredAndFocus(recovered);
+    }
   });
-}
-
-export async function focusMainWindow(): Promise<void> {
-  const mainWindow = await WebviewWindow.getByLabel("main");
-  if (!mainWindow) return;
-  await mainWindow.show();
-  await mainWindow.setFocus();
 }

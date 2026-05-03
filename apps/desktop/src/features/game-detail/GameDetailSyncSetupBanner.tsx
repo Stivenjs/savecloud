@@ -1,6 +1,6 @@
 import { Button, Card, CardBody } from "@heroui/react";
 import { CloudOff, Settings } from "lucide-react";
-import { openOrFocusSettingsWindow } from "@features/settings/settingsWindow";
+import { openOrFocusSettingsWindow } from "@/windows/settingsWindow";
 
 /** Aviso en detalle de juego cuando no hay cuenta/API de nube (misma idea que en la lista: acciones de nube no disponibles). */
 export function GameDetailSyncSetupBanner() {

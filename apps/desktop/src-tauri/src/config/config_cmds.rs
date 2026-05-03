@@ -86,6 +86,8 @@ pub fn get_config() -> ConfigDto {
         keep_backups_per_game: settings.keep_backups_per_game,
         full_backup_streaming: settings.full_backup_streaming,
         full_backup_streaming_dry_run: settings.full_backup_streaming_dry_run,
+        preferred_gamepad_layout: settings.preferred_gamepad_layout.clone(),
+        startup_window_mode: settings.startup_window_mode.clone(),
         default_source_download_dir: settings.default_source_download_dir.clone(),
         total_playtime: time::get_total_playtime(),
         profile_background: settings.profile_background.clone(),
@@ -251,6 +253,36 @@ pub fn set_full_backup_streaming(enabled: bool) -> Result<(), String> {
 pub fn set_full_backup_streaming_dry_run(enabled: bool) -> Result<(), String> {
     let mut settings = config::load_settings();
     settings.full_backup_streaming_dry_run = Some(enabled);
+    config::save_settings(&settings)
+}
+
+/// Lee el layout de mando preferido persistido en configuración.
+#[tauri::command]
+pub fn get_preferred_gamepad_layout() -> Option<String> {
+    config::load_settings().preferred_gamepad_layout
+}
+
+/// Guarda el layout de mando preferido (`xbox`, `playstation`, `nintendo`, `generic` o `None` para automático).
+#[tauri::command]
+pub fn set_preferred_gamepad_layout(layout: Option<String>) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.preferred_gamepad_layout = layout
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    config::save_settings(&settings)
+}
+
+/// Guarda cómo debe mostrarse la ventana principal al iniciar: `normal` o `big_picture`.
+#[tauri::command]
+pub fn set_startup_window_mode(mode: String) -> Result<(), String> {
+    let m = mode.trim().to_ascii_lowercase();
+    if m != "normal" && m != "big_picture" {
+        return Err("Modo de ventana inválido: usa «normal» o «big_picture».".to_string());
+    }
+    let mut settings = config::load_settings();
+    settings.startup_window_mode = Some(m);
     config::save_settings(&settings)
 }
 
@@ -699,6 +731,9 @@ pub fn import_config_from_file(path: String, mode: String) -> Result<(), String>
             current.share_visual_profile_with_hosts || imported.share_visual_profile_with_hosts;
         current.share_visual_profile_with_members =
             current.share_visual_profile_with_members || imported.share_visual_profile_with_members;
+        if imported.startup_window_mode.is_some() {
+            current.startup_window_mode = imported.startup_window_mode.clone();
+        }
         return config::apply_combined_config(&current);
     }
 

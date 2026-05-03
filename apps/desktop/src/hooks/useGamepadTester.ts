@@ -2,6 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { inferGamepadLayoutKind, type GamepadLayoutKind } from "@/lib/gamepadLabelMaps";
+import { toastError, toastInfo, toastSuccess } from "@/utils/toast";
 
 export interface GamepadSummaryDto {
   id: number;
@@ -56,6 +57,7 @@ export function gamepadTriggerLevel(
 export interface UseGamepadTesterResult {
   /** `false` en navegador sin Tauri. */
   isDesktop: boolean;
+  isWindowsDesktop: boolean;
   gamepads: GamepadSummaryDto[];
   selectedId: number | null;
   setSelectedId: Dispatch<SetStateAction<number | null>>;
@@ -65,12 +67,17 @@ export interface UseGamepadTesterResult {
   selectedGamepadName: string | null;
   /** Perfil de etiquetas inferido del nombre del mando. */
   selectedLayoutKind: GamepadLayoutKind;
+  /** Layout persistido por el usuario (`null` = automático por detección). */
+  preferredLayoutKind: GamepadLayoutKind | null;
+  setPreferredLayoutKind: (layout: GamepadLayoutKind | null) => Promise<void>;
   loadErr: string | null;
   rumbleErr: string | null;
   rumbleBusy: boolean;
+  driverInstallBusy: boolean;
   listRefreshing: boolean;
   refreshList: (opts?: { showLoading?: boolean }) => Promise<void>;
   triggerRumble: () => Promise<void>;
+  installGamepadDriver: () => Promise<void>;
 }
 
 /**
@@ -79,13 +86,22 @@ export interface UseGamepadTesterResult {
  */
 export function useGamepadTester(): UseGamepadTesterResult {
   const isDesktop = isTauri();
+  const isWindowsDesktop = useMemo(() => {
+    if (!isDesktop || typeof navigator === "undefined") return false;
+    const nav = navigator as Navigator & { userAgentData?: { platform?: string } };
+    const platform = nav.userAgentData?.platform?.toLowerCase();
+    if (platform) return platform.includes("win");
+    return navigator.userAgent.toLowerCase().includes("windows");
+  }, [isDesktop]);
 
   const [gamepads, setGamepads] = useState<GamepadSummaryDto[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [latestState, setLatestState] = useState<GamepadStatePayload | null>(null);
+  const [preferredLayoutKind, setPreferredLayoutKindState] = useState<GamepadLayoutKind | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [rumbleBusy, setRumbleBusy] = useState(false);
   const [rumbleErr, setRumbleErr] = useState<string | null>(null);
+  const [driverInstallBusy, setDriverInstallBusy] = useState(false);
   const [listRefreshing, setListRefreshing] = useState(false);
 
   const refreshList = useCallback(async (opts?: { showLoading?: boolean }) => {
@@ -115,6 +131,37 @@ export function useGamepadTester(): UseGamepadTesterResult {
     }
   }, [selectedId]);
 
+  const installGamepadDriver = useCallback(async () => {
+    if (!isTauri()) return;
+    setDriverInstallBusy(true);
+    toastInfo(
+      "Instalando driver de mandos",
+      "Descargando el instalador oficial de Microsoft. Puede tardar unos segundos."
+    );
+    try {
+      await invoke("gamepad_install_windows_runtime");
+      toastSuccess(
+        "Instalador iniciado",
+        "Se abrió el instalador oficial de DirectX/XInput. Si aparece UAC, acepta la elevación."
+      );
+    } catch (e) {
+      toastError("No se pudo iniciar la instalación", e instanceof Error ? e.message : String(e));
+    } finally {
+      setDriverInstallBusy(false);
+    }
+  }, []);
+
+  const setPreferredLayoutKind = useCallback(async (layout: GamepadLayoutKind | null) => {
+    if (!isTauri()) return;
+    const next = layout ?? null;
+    setPreferredLayoutKindState(next);
+    try {
+      await invoke("set_preferred_gamepad_layout", { layout: next });
+    } catch (e) {
+      setLoadErr(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
   useEffect(() => {
     if (!isTauri()) return;
 
@@ -125,6 +172,17 @@ export function useGamepadTester(): UseGamepadTesterResult {
     void (async () => {
       try {
         await refreshList();
+        const savedLayout = await invoke<string | null>("get_preferred_gamepad_layout");
+        if (
+          savedLayout === "xbox" ||
+          savedLayout === "playstation" ||
+          savedLayout === "nintendo" ||
+          savedLayout === "generic"
+        ) {
+          setPreferredLayoutKindState(savedLayout);
+        } else {
+          setPreferredLayoutKindState(null);
+        }
         await invoke("gamepad_tester_session_start");
 
         unlistenList = await listen<GamepadListChangedPayload>("gamepad_list_changed", (ev) => {
@@ -176,6 +234,7 @@ export function useGamepadTester(): UseGamepadTesterResult {
 
   return {
     isDesktop,
+    isWindowsDesktop,
     gamepads,
     selectedId,
     setSelectedId,
@@ -183,11 +242,15 @@ export function useGamepadTester(): UseGamepadTesterResult {
     selectedTelemetry,
     selectedGamepadName,
     selectedLayoutKind,
+    preferredLayoutKind,
+    setPreferredLayoutKind,
     loadErr,
     rumbleErr,
     rumbleBusy,
+    driverInstallBusy,
     listRefreshing,
     refreshList,
     triggerRumble,
+    installGamepadDriver,
   };
 }

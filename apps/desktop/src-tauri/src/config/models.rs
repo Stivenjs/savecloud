@@ -45,6 +45,11 @@ pub struct AppSettings {
     #[serde(default)]
     pub full_backup_streaming_dry_run: Option<bool>,
     #[serde(default)]
+    pub preferred_gamepad_layout: Option<String>,
+    /// `normal` | `big_picture` — cómo mostrar la ventana principal al iniciar.
+    #[serde(default)]
+    pub startup_window_mode: Option<String>,
+    #[serde(default)]
     pub default_source_download_dir: Option<String>,
     /// URL o ruta local: fondo del perfil (imagen, GIF o vídeo).
     #[serde(default)]
@@ -167,6 +172,10 @@ pub struct Config {
     pub full_backup_streaming: Option<bool>,
     pub full_backup_streaming_dry_run: Option<bool>,
     #[serde(default)]
+    pub preferred_gamepad_layout: Option<String>,
+    #[serde(default)]
+    pub startup_window_mode: Option<String>,
+    #[serde(default)]
     pub default_source_download_dir: Option<String>,
     /// Perfil (mismos campos que `AppSettings`; incluidos en export/import y backup en nube).
     #[serde(default)]
@@ -205,6 +214,10 @@ pub struct ConfigDto {
     pub keep_backups_per_game: Option<u32>,
     pub full_backup_streaming: Option<bool>,
     pub full_backup_streaming_dry_run: Option<bool>,
+    #[serde(default)]
+    pub preferred_gamepad_layout: Option<String>,
+    #[serde(default)]
+    pub startup_window_mode: Option<String>,
     #[serde(default)]
     pub default_source_download_dir: Option<String>,
     pub total_playtime: u64,

@@ -5,7 +5,7 @@ import { Users } from "lucide-react";
 import { CloudMembersModal } from "@features/friends/CloudMembersModal";
 import { useCloudMembersActions } from "@hooks/useCloudMembersActions";
 import { requestOpenFriendProfile } from "@features/friends/friendProfileNavigation";
-import { openOrFocusFriendsWindow } from "@features/friends/friendsWindow";
+import { openOrFocusFriendsWindow } from "@/windows/friendsWindow";
 
 export function CloudMembersLauncher() {
   const navigate = useNavigate();

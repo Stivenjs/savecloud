@@ -1,7 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Button, Card, CardBody, Select, SelectItem } from "@heroui/react";
 import { Gamepad2 } from "lucide-react";
-import { featureFlags } from "@/constants/featureFlags";
 import { GamepadDiagram } from "@/features/settings/GamepadDiagram";
 import {
   axisRowCopy,
@@ -31,26 +30,30 @@ const DIAGRAM_LAYOUT_OPTIONS: { id: DiagramLayoutChoice; label: string }[] = [
 export function GamepadTesterCard() {
   const {
     isDesktop,
+    isWindowsDesktop,
     gamepads,
     selectedId,
     setSelectedId,
     selectedKey,
     selectedTelemetry,
     selectedLayoutKind,
+    preferredLayoutKind,
+    setPreferredLayoutKind,
     selectedGamepadName,
     loadErr,
     rumbleErr,
     rumbleBusy,
+    driverInstallBusy,
     listRefreshing,
     refreshList,
     triggerRumble,
+    installGamepadDriver,
   } = useGamepadTester();
 
-  const [diagramLayoutChoice, setDiagramLayoutChoice] = useState<DiagramLayoutChoice>("auto");
+  const diagramLayoutChoice: DiagramLayoutChoice = preferredLayoutKind ?? "auto";
 
   const diagramLayoutKind = useMemo((): GamepadLayoutKind => {
-    if (diagramLayoutChoice === "auto") return selectedLayoutKind;
-    return diagramLayoutChoice;
+    return diagramLayoutChoice === "auto" ? selectedLayoutKind : diagramLayoutChoice;
   }, [diagramLayoutChoice, selectedLayoutKind]);
 
   const axisLabels = axisRowCopy(diagramLayoutKind);
@@ -101,15 +104,12 @@ export function GamepadTesterCard() {
           algunos Mac no hay vibración).
         </p>
         <p className="text-xs text-default-400">
-          {featureFlags.gamepadNavigation
-            ? "Puedes usar el mando también para moverte por la app."
-            : "Por ahora el mando se usa sobre todo aquí; moverte por toda la app con el mando depende de la configuración de tu compilación."}
+          Puedes usar el mando también para moverte por la app (navegación, confirmar y atrás).
         </p>
 
         {loadErr ? <p className="text-sm text-danger">{loadErr}</p> : null}
 
         {rumbleErr ? <p className="text-sm text-danger">{rumbleErr}</p> : null}
-
         {gamepads.length === 0 ? (
           <p className="text-sm text-default-500">No detectamos ningún mando. Enchufa uno y pulsa «Buscar de nuevo».</p>
         ) : (
@@ -157,6 +157,18 @@ export function GamepadTesterCard() {
                 aria-label="Probar vibración del mando">
                 Probar vibración
               </Button>
+              {isWindowsDesktop ? (
+                <Button
+                  size="sm"
+                  color="secondary"
+                  variant="flat"
+                  isLoading={driverInstallBusy}
+                  isDisabled={driverInstallBusy}
+                  onPress={() => void installGamepadDriver()}
+                  aria-label="Instalar driver">
+                  Instalar drivers
+                </Button>
+              ) : null}
             </div>
 
             {selectedId != null ? (
@@ -171,8 +183,12 @@ export function GamepadTesterCard() {
                     onSelectionChange={(keys) => {
                       const raw = Array.from(keys)[0];
                       const k = raw != null ? String(raw) : "";
-                      if (k === "auto" || k === "xbox" || k === "playstation" || k === "nintendo" || k === "generic") {
-                        setDiagramLayoutChoice(k);
+                      if (k === "auto") {
+                        void setPreferredLayoutKind(null);
+                        return;
+                      }
+                      if (k === "xbox" || k === "playstation" || k === "nintendo" || k === "generic") {
+                        void setPreferredLayoutKind(k);
                       }
                     }}
                     className="min-w-[min(100%,280px)] sm:max-w-xs"
@@ -188,7 +204,7 @@ export function GamepadTesterCard() {
                 </div>
                 <p className="mb-3 text-center text-[11px] text-default-400 sm:text-left">
                   Mostrando {layoutKindDescription(diagramLayoutKind)}
-                  {diagramLayoutChoice === "auto" ? " (automático)." : " (elección manual)."}
+                  {diagramLayoutChoice === "auto" ? " (automático)." : " (elección manual guardada)."}
                 </p>
                 <GamepadDiagram layoutKind={diagramLayoutKind} telemetry={diagramTelemetry} />
               </div>

@@ -1,7 +1,8 @@
 import { useState, lazy, Suspense, type ReactNode } from "react";
 import { Tab, Tabs } from "@heroui/react";
-import { AppWindow, Bell, Cloud, FlaskConical, Gamepad2, RefreshCw } from "lucide-react";
+import { AppWindow, Bell, Cloud, FlaskConical, Gamepad2, Monitor, RefreshCw } from "lucide-react";
 import { AutostartCard } from "@features/settings/AutostartCard";
+import { BigPictureModeCard } from "@features/settings/BigPictureModeCard";
 import { ConfigSection } from "@features/settings/ConfigSection";
 import { CreateConfigModal } from "@features/settings/CreateConfigModal";
 import { ExperimentalFeaturesCard } from "@features/settings/ExperimentalFeaturesCard";
@@ -36,6 +37,7 @@ const SETTINGS_TABS: Array<{
 }> = [
   { key: "account", label: "Cuenta", icon: <Cloud size={17} className="opacity-90" /> },
   { key: "app", label: "Inicio y app", icon: <AppWindow size={17} className="opacity-90" /> },
+  { key: "big-picture", label: "Big Picture", icon: <Monitor size={17} className="opacity-90" /> },
   { key: "integrations", label: "Integraciones", icon: <Bell size={17} className="opacity-90" /> },
   { key: "gamepad", label: "Mando", icon: <Gamepad2 size={17} className="opacity-90" /> },
   { key: "updates", label: "Versiones", icon: <RefreshCw size={17} className="opacity-90" /> },
@@ -197,6 +199,12 @@ export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
               loading={loadingAlwaysShowProfileSelector}
               onChange={handleAlwaysShowProfileSelectorChange}
             />
+          </div>
+        );
+      case "big-picture":
+        return (
+          <div className="space-y-3">
+            <BigPictureModeCard />
           </div>
         );
       case "integrations":

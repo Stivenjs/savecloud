@@ -19,6 +19,9 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::config::config_cmds::set_keep_backups_per_game,
         crate::config::config_cmds::set_full_backup_streaming,
         crate::config::config_cmds::set_full_backup_streaming_dry_run,
+        crate::config::config_cmds::get_preferred_gamepad_layout,
+        crate::config::config_cmds::set_preferred_gamepad_layout,
+        crate::config::config_cmds::set_startup_window_mode,
         crate::config::config_cmds::get_default_source_download_dir,
         crate::config::config_cmds::set_default_source_download_dir,
         crate::config::config_cmds::set_profile_appearance,
@@ -178,5 +181,6 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::controller::tester_ipc::gamepad_tester_session_start,
         crate::controller::tester_ipc::gamepad_tester_session_stop,
         crate::controller::tester_ipc::gamepad_tester_trigger_rumble,
+        crate::controller::tester_ipc::gamepad_install_windows_runtime,
     ])
 }
