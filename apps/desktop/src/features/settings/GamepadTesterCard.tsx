@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button, Card, CardBody, Select, SelectItem } from "@heroui/react";
 import { Gamepad2 } from "lucide-react";
-import { featureFlags } from "@/constants/featureFlags";
 import { GamepadDiagram } from "@/features/settings/GamepadDiagram";
 import {
   axisRowCopy,
@@ -31,6 +30,7 @@ const DIAGRAM_LAYOUT_OPTIONS: { id: DiagramLayoutChoice; label: string }[] = [
 export function GamepadTesterCard() {
   const {
     isDesktop,
+    isWindowsDesktop,
     gamepads,
     selectedId,
     setSelectedId,
@@ -41,9 +41,11 @@ export function GamepadTesterCard() {
     loadErr,
     rumbleErr,
     rumbleBusy,
+    driverInstallBusy,
     listRefreshing,
     refreshList,
     triggerRumble,
+    installGamepadDriver,
   } = useGamepadTester();
 
   const [diagramLayoutChoice, setDiagramLayoutChoice] = useState<DiagramLayoutChoice>("auto");
@@ -101,15 +103,12 @@ export function GamepadTesterCard() {
           algunos Mac no hay vibración).
         </p>
         <p className="text-xs text-default-400">
-          {featureFlags.gamepadNavigation
-            ? "Puedes usar el mando también para moverte por la app."
-            : "Por ahora el mando se usa sobre todo aquí; moverte por toda la app con el mando depende de la configuración de tu compilación."}
+          Puedes usar el mando también para moverte por la app (navegación, confirmar y atrás).
         </p>
 
         {loadErr ? <p className="text-sm text-danger">{loadErr}</p> : null}
 
         {rumbleErr ? <p className="text-sm text-danger">{rumbleErr}</p> : null}
-
         {gamepads.length === 0 ? (
           <p className="text-sm text-default-500">No detectamos ningún mando. Enchufa uno y pulsa «Buscar de nuevo».</p>
         ) : (
@@ -157,6 +156,18 @@ export function GamepadTesterCard() {
                 aria-label="Probar vibración del mando">
                 Probar vibración
               </Button>
+              {isWindowsDesktop ? (
+                <Button
+                  size="sm"
+                  color="secondary"
+                  variant="flat"
+                  isLoading={driverInstallBusy}
+                  isDisabled={driverInstallBusy}
+                  onPress={() => void installGamepadDriver()}
+                  aria-label="Instalar driver">
+                  Instalar drivers
+                </Button>
+              ) : null}
             </div>
 
             {selectedId != null ? (
