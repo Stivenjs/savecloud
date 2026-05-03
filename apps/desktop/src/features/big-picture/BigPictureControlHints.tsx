@@ -2,7 +2,12 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
 import type { GamepadLayoutKind } from "@/lib/gamepadLabelMaps";
 import { useProfileSession } from "@/hooks/useProfileSession";
-import { getKenneyGamepadAssetUrl, kenneyFaceAssetId, kenneyStartAssetId } from "@/lib/kenneyGamepadAssets";
+import {
+  getKenneyGamepadAssetUrl,
+  kenneyFaceAssetId,
+  kenneyModeAssetId,
+  kenneyStartAssetId,
+} from "@/lib/kenneyGamepadAssets";
 
 function normalizeLayoutKind(value: string | undefined): GamepadLayoutKind {
   if (value === "playstation" || value === "nintendo" || value === "generic") return value;
@@ -68,12 +73,24 @@ export function BigPictureControlHints() {
     ];
   }, [layoutKind]);
 
+  const leftHints = useMemo<HintItem[]>(() => {
+    const menuUrl = getKenneyGamepadAssetUrl(layoutKind, kenneyModeAssetId(layoutKind));
+    return [{ id: "menu", iconUrl: menuUrl, label: "Menú" }];
+  }, [layoutKind]);
+
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 bg-black/85 px-8 py-2.5 backdrop-blur-md">
-      <div className="flex items-center justify-end gap-12">
-        {rightHints.map((item) => (
-          <Hint key={item.id} item={item} />
-        ))}
+      <div className="flex items-center justify-between gap-8">
+        <div className="flex items-center gap-12">
+          {leftHints.map((item) => (
+            <Hint key={item.id} item={item} />
+          ))}
+        </div>
+        <div className="flex items-center gap-12">
+          {rightHints.map((item) => (
+            <Hint key={item.id} item={item} />
+          ))}
+        </div>
       </div>
     </div>
   );
