@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useQueryClient } from "@tanstack/react-query";
 import { useConfig, CONFIG_QUERY_KEY } from "@/hooks/useConfig";
 import {
@@ -9,12 +8,13 @@ import {
   type StartupWindowMode,
 } from "@services/tauri/config.service";
 import { toastError, toastSuccess } from "@/utils/toast";
+import { isBigPictureWindowOpen, openOrFocusBigPictureWindow, switchToNormalMode } from "@/windows/bigPictureWindow";
 
 export function useBigPictureMode() {
   const { config, loading } = useConfig();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
-  const [mainFullscreen, setMainFullscreen] = useState<boolean | null>(null);
+  const [bigPictureActive, setBigPictureActive] = useState(false);
   const [toggleBusy, setToggleBusy] = useState(false);
 
   const startupMode: StartupWindowMode = config?.startupWindowMode === "big_picture" ? "big_picture" : "normal";
@@ -22,13 +22,12 @@ export function useBigPictureMode() {
   useEffect(() => {
     if (!isTauri()) return;
     let cancelled = false;
-    void WebviewWindow.getByLabel("main").then(async (mainWindow) => {
-      if (!mainWindow || cancelled) return;
+    void isBigPictureWindowOpen().then((isOpen) => {
+      if (cancelled) return;
       try {
-        const fullscreen = await mainWindow.isFullscreen();
-        if (!cancelled) setMainFullscreen(fullscreen);
+        setBigPictureActive(isOpen);
       } catch {
-        if (!cancelled) setMainFullscreen(null);
+        if (!cancelled) setBigPictureActive(false);
       }
     });
     return () => {
@@ -47,7 +46,7 @@ export function useBigPictureMode() {
         toastSuccess(
           "Preferencia guardada",
           mode === "big_picture"
-            ? "La próxima vez Savecloud abrirá en pantalla completa (anúlalo una vez con Shift/Ctrl/Alt al arrancar)."
+            ? "La próxima vez Savecloud abrirá en la ventana Big Picture."
             : "La próxima vez Savecloud abrirá en ventana normal."
         );
       } catch (e) {
@@ -63,24 +62,21 @@ export function useBigPictureMode() {
     if (!isTauri()) return;
     setToggleBusy(true);
     try {
-      const mainWindow = await WebviewWindow.getByLabel("main");
-      if (!mainWindow) {
-        toastError("Ventana principal", "No se encontró la ventana «main».");
-        return;
+      if (bigPictureActive) {
+        await switchToNormalMode();
+        setBigPictureActive(false);
+        toastSuccess("Modo normal", "Se cerró Big Picture y volvió la ventana principal.");
+      } else {
+        await openOrFocusBigPictureWindow();
+        setBigPictureActive(true);
+        toastSuccess("Big Picture", "La ventana principal se ocultó al tray y se abrió Big Picture.");
       }
-      const fullscreen = await mainWindow.isFullscreen();
-      await mainWindow.setFullscreen(!fullscreen);
-      setMainFullscreen(!fullscreen);
-      toastSuccess(
-        fullscreen ? "Ventana normal" : "Big Picture",
-        fullscreen ? "Saliste de pantalla completa." : "Pantalla completa activada."
-      );
     } catch (e) {
       toastError("No se pudo cambiar el modo", e instanceof Error ? e.message : String(e));
     } finally {
       setToggleBusy(false);
     }
-  }, []);
+  }, [bigPictureActive]);
 
   return {
     isDesktop: isTauri(),
@@ -88,7 +84,7 @@ export function useBigPictureMode() {
     saving,
     toggleBusy,
     startupMode,
-    mainFullscreen,
+    bigPictureActive,
     changeStartupMode,
     toggleNow,
   };

@@ -3,7 +3,7 @@ import { Monitor } from "lucide-react";
 import { useBigPictureMode } from "@/hooks/useBigPictureMode";
 
 export function BigPictureModeCard() {
-  const { isDesktop, loading, saving, toggleBusy, startupMode, mainFullscreen, changeStartupMode, toggleNow } =
+  const { isDesktop, loading, saving, toggleBusy, startupMode, bigPictureActive, changeStartupMode, toggleNow } =
     useBigPictureMode();
 
   if (!isDesktop) {
@@ -19,13 +19,11 @@ export function BigPictureModeCard() {
             <div>
               <h2 className="text-base font-semibold text-foreground">Modo Big Picture</h2>
               <p className="mt-0.5 text-sm text-default-500">
-                Misma interfaz en pantalla completa, estilo Steam Big Picture. Puedes salir con Escape o el botón de
-                abajo.
+                Abre una ventana dedicada Big Picture y oculta la ventana principal en el tray mientras esté activo.
               </p>
               <p className="mt-1 text-xs text-default-400">
-                Si guardas arranque en Big Picture, mantén pulsado <strong className="font-medium">Shift</strong>,{" "}
-                <strong className="font-medium">Ctrl</strong> o <strong className="font-medium">Alt</strong> al abrir la
-                app (Windows/macOS) para forzar una sola vez en ventana normal sin cambiar la preferencia.
+                Puedes volver al modo normal desde el botón de abajo o con{" "}
+                <strong className="font-medium">Escape</strong> dentro de la ventana Big Picture.
               </p>
             </div>
 
@@ -57,8 +55,8 @@ export function BigPictureModeCard() {
                 variant="flat"
                 isLoading={toggleBusy}
                 onPress={() => void toggleNow()}
-                aria-label={mainFullscreen ? "Salir de pantalla completa" : "Entrar en Big Picture ahora"}>
-                {mainFullscreen ? "Salir de pantalla completa" : "Entrar en Big Picture ahora"}
+                aria-label={bigPictureActive ? "Volver a modo normal" : "Entrar en Big Picture ahora"}>
+                {bigPictureActive ? "Volver a modo normal" : "Entrar en Big Picture ahora"}
               </Button>
             </div>
           </div>

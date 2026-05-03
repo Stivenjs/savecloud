@@ -1,13 +1,12 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { resolveExistingWebviewWindow, showCenteredAndFocus } from "@/windows/webviewRecovery";
 
 export const SETTINGS_WINDOW_LABEL = "settings-window";
 
 export async function openOrFocusSettingsWindow(): Promise<void> {
-  const existing = await WebviewWindow.getByLabel(SETTINGS_WINDOW_LABEL);
+  const existing = await resolveExistingWebviewWindow(SETTINGS_WINDOW_LABEL);
   if (existing) {
-    await existing.center();
-    await existing.show();
-    await existing.setFocus();
+    await showCenteredAndFocus(existing);
     return;
   }
 
@@ -30,7 +29,11 @@ export async function openOrFocusSettingsWindow(): Promise<void> {
     await settingsWindow.setFocus();
   });
 
-  settingsWindow.once("tauri://error", (event) => {
+  settingsWindow.once("tauri://error", async (event) => {
     console.error("[SettingsWindow] Error creando ventana:", event);
+    const recovered = await resolveExistingWebviewWindow(SETTINGS_WINDOW_LABEL);
+    if (recovered) {
+      await showCenteredAndFocus(recovered);
+    }
   });
 }
