@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Button, Card, CardBody, Select, SelectItem } from "@heroui/react";
 import { Gamepad2 } from "lucide-react";
 import { GamepadDiagram } from "@/features/settings/GamepadDiagram";
@@ -37,6 +37,8 @@ export function GamepadTesterCard() {
     selectedKey,
     selectedTelemetry,
     selectedLayoutKind,
+    preferredLayoutKind,
+    setPreferredLayoutKind,
     selectedGamepadName,
     loadErr,
     rumbleErr,
@@ -48,11 +50,10 @@ export function GamepadTesterCard() {
     installGamepadDriver,
   } = useGamepadTester();
 
-  const [diagramLayoutChoice, setDiagramLayoutChoice] = useState<DiagramLayoutChoice>("auto");
+  const diagramLayoutChoice: DiagramLayoutChoice = preferredLayoutKind ?? "auto";
 
   const diagramLayoutKind = useMemo((): GamepadLayoutKind => {
-    if (diagramLayoutChoice === "auto") return selectedLayoutKind;
-    return diagramLayoutChoice;
+    return diagramLayoutChoice === "auto" ? selectedLayoutKind : diagramLayoutChoice;
   }, [diagramLayoutChoice, selectedLayoutKind]);
 
   const axisLabels = axisRowCopy(diagramLayoutKind);
@@ -182,8 +183,12 @@ export function GamepadTesterCard() {
                     onSelectionChange={(keys) => {
                       const raw = Array.from(keys)[0];
                       const k = raw != null ? String(raw) : "";
-                      if (k === "auto" || k === "xbox" || k === "playstation" || k === "nintendo" || k === "generic") {
-                        setDiagramLayoutChoice(k);
+                      if (k === "auto") {
+                        void setPreferredLayoutKind(null);
+                        return;
+                      }
+                      if (k === "xbox" || k === "playstation" || k === "nintendo" || k === "generic") {
+                        void setPreferredLayoutKind(k);
                       }
                     }}
                     className="min-w-[min(100%,280px)] sm:max-w-xs"
@@ -199,7 +204,7 @@ export function GamepadTesterCard() {
                 </div>
                 <p className="mb-3 text-center text-[11px] text-default-400 sm:text-left">
                   Mostrando {layoutKindDescription(diagramLayoutKind)}
-                  {diagramLayoutChoice === "auto" ? " (automático)." : " (elección manual)."}
+                  {diagramLayoutChoice === "auto" ? " (automático)." : " (elección manual guardada)."}
                 </p>
                 <GamepadDiagram layoutKind={diagramLayoutKind} telemetry={diagramTelemetry} />
               </div>

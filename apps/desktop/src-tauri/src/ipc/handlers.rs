@@ -19,6 +19,8 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::config::config_cmds::set_keep_backups_per_game,
         crate::config::config_cmds::set_full_backup_streaming,
         crate::config::config_cmds::set_full_backup_streaming_dry_run,
+        crate::config::config_cmds::get_preferred_gamepad_layout,
+        crate::config::config_cmds::set_preferred_gamepad_layout,
         crate::config::config_cmds::get_default_source_download_dir,
         crate::config::config_cmds::set_default_source_download_dir,
         crate::config::config_cmds::set_profile_appearance,

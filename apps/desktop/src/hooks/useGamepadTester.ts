@@ -67,6 +67,9 @@ export interface UseGamepadTesterResult {
   selectedGamepadName: string | null;
   /** Perfil de etiquetas inferido del nombre del mando. */
   selectedLayoutKind: GamepadLayoutKind;
+  /** Layout persistido por el usuario (`null` = automático por detección). */
+  preferredLayoutKind: GamepadLayoutKind | null;
+  setPreferredLayoutKind: (layout: GamepadLayoutKind | null) => Promise<void>;
   loadErr: string | null;
   rumbleErr: string | null;
   rumbleBusy: boolean;
@@ -94,6 +97,7 @@ export function useGamepadTester(): UseGamepadTesterResult {
   const [gamepads, setGamepads] = useState<GamepadSummaryDto[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [latestState, setLatestState] = useState<GamepadStatePayload | null>(null);
+  const [preferredLayoutKind, setPreferredLayoutKindState] = useState<GamepadLayoutKind | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [rumbleBusy, setRumbleBusy] = useState(false);
   const [rumbleErr, setRumbleErr] = useState<string | null>(null);
@@ -147,6 +151,17 @@ export function useGamepadTester(): UseGamepadTesterResult {
     }
   }, []);
 
+  const setPreferredLayoutKind = useCallback(async (layout: GamepadLayoutKind | null) => {
+    if (!isTauri()) return;
+    const next = layout ?? null;
+    setPreferredLayoutKindState(next);
+    try {
+      await invoke("set_preferred_gamepad_layout", { layout: next });
+    } catch (e) {
+      setLoadErr(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
   useEffect(() => {
     if (!isTauri()) return;
 
@@ -157,6 +172,17 @@ export function useGamepadTester(): UseGamepadTesterResult {
     void (async () => {
       try {
         await refreshList();
+        const savedLayout = await invoke<string | null>("get_preferred_gamepad_layout");
+        if (
+          savedLayout === "xbox" ||
+          savedLayout === "playstation" ||
+          savedLayout === "nintendo" ||
+          savedLayout === "generic"
+        ) {
+          setPreferredLayoutKindState(savedLayout);
+        } else {
+          setPreferredLayoutKindState(null);
+        }
         await invoke("gamepad_tester_session_start");
 
         unlistenList = await listen<GamepadListChangedPayload>("gamepad_list_changed", (ev) => {
@@ -216,6 +242,8 @@ export function useGamepadTester(): UseGamepadTesterResult {
     selectedTelemetry,
     selectedGamepadName,
     selectedLayoutKind,
+    preferredLayoutKind,
+    setPreferredLayoutKind,
     loadErr,
     rumbleErr,
     rumbleBusy,

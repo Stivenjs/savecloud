@@ -86,6 +86,7 @@ pub fn get_config() -> ConfigDto {
         keep_backups_per_game: settings.keep_backups_per_game,
         full_backup_streaming: settings.full_backup_streaming,
         full_backup_streaming_dry_run: settings.full_backup_streaming_dry_run,
+        preferred_gamepad_layout: settings.preferred_gamepad_layout.clone(),
         default_source_download_dir: settings.default_source_download_dir.clone(),
         total_playtime: time::get_total_playtime(),
         profile_background: settings.profile_background.clone(),
@@ -251,6 +252,24 @@ pub fn set_full_backup_streaming(enabled: bool) -> Result<(), String> {
 pub fn set_full_backup_streaming_dry_run(enabled: bool) -> Result<(), String> {
     let mut settings = config::load_settings();
     settings.full_backup_streaming_dry_run = Some(enabled);
+    config::save_settings(&settings)
+}
+
+/// Lee el layout de mando preferido persistido en configuración.
+#[tauri::command]
+pub fn get_preferred_gamepad_layout() -> Option<String> {
+    config::load_settings().preferred_gamepad_layout
+}
+
+/// Guarda el layout de mando preferido (`xbox`, `playstation`, `nintendo`, `generic` o `None` para automático).
+#[tauri::command]
+pub fn set_preferred_gamepad_layout(layout: Option<String>) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.preferred_gamepad_layout = layout
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
     config::save_settings(&settings)
 }
 

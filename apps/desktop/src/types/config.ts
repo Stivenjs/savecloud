@@ -42,6 +42,8 @@ export interface Config {
   readonly fullBackupStreaming?: boolean;
   /** Modo prueba: streaming sin subir a la nube. */
   readonly fullBackupStreamingDryRun?: boolean;
+  /** Tipo de layout del mando preferido para UI ("xbox" | "playstation" | "nintendo" | "generic"). */
+  readonly preferredGamepadLayout?: string;
   /** Carpeta destino por defecto para descargas de fuentes JSON. */
   readonly defaultSourceDownloadDir?: string;
   /** URL o ruta local del fondo del perfil (imagen, GIF o vídeo). */

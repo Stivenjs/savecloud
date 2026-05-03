@@ -361,6 +361,7 @@ pub fn initialize_profile_storage(profile: &super::profiles::Profile) -> Result<
         api_key: None,
         user_id: Some(profile.local_user_id.clone()),
         active_cloud_host_user_id: None,
+        preferred_gamepad_layout: None,
         cloud_host_api_base_urls: Default::default(),
         cloud_host_ws_base_urls: Default::default(),
         custom_scan_paths: profile.custom_scan_paths.clone(),
