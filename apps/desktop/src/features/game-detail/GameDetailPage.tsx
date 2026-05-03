@@ -8,7 +8,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Button, Select, SelectItem, Spinner, Tab, Tabs, Skeleton } from "@heroui/react";
 import { ArrowLeft, Cpu, Gamepad2, LayoutList, ScrollText } from "lucide-react";
 import { formatGameDisplayName, getGameImageUrl } from "@utils/gameImage";
-import { launchGame, openSaveFolder, removeGame, scheduleConfigBackupToCloud } from "@services/tauri";
+import {
+  launchGame,
+  openSaveFolder,
+  removeGame,
+  scheduleConfigBackupToCloud,
+  syncCheckDownloadConflicts,
+} from "@services/tauri";
+import type { DownloadConflict } from "@services/tauri";
 import { sourcesFindMatchForGame, startSourceDownload } from "@services/tauri";
 import { createShareLink } from "@/services/tauri/share.service";
 import { toastError, toastSuccess } from "@utils/toast";
@@ -18,6 +25,8 @@ import { GameDrawer } from "@features/games/GameDrawer";
 import { GameTorrentDrawer } from "@features/games/GameTorrentDrawer";
 import { FullBackupConfirmModal } from "@features/games/FullBackupConfirmModal";
 import { RestoreBackupModal } from "@features/games/RestoreBackupModal";
+import { SyncPreviewModal } from "@features/games/SyncPreviewModal";
+import { DownloadConflictModal } from "@features/games/DownloadConflictModal";
 import { useGameDetail } from "@/hooks/useGameDetail";
 import { useGameDetailCloudActions } from "@/hooks/useGameDetailCloudActions";
 import { GameDetailHero } from "@features/game-detail/GameDetailHero";
@@ -62,6 +71,11 @@ export function GameDetailPage() {
   const [gameForTorrent, setGameForTorrent] = useState<ConfiguredGame | null>(null);
   const [gameToFullBackupConfirm, setGameToFullBackupConfirm] = useState<ConfiguredGame | null>(null);
   const [gameToRestoreBackup, setGameToRestoreBackup] = useState<ConfiguredGame | null>(null);
+  const [downloadPreviewGameId, setDownloadPreviewGameId] = useState<string | null>(null);
+  const [downloadConflictState, setDownloadConflictState] = useState<{
+    gameId: string;
+    conflicts: DownloadConflict[];
+  } | null>(null);
   const {
     isOpen: isInstallModalOpen,
     onOpen: onInstallModalOpen,
@@ -91,8 +105,27 @@ export function GameDetailPage() {
     });
   }, [goBackFromDetail]);
 
+  const requestDownloadFromCloud = useCallback(async (target: ConfiguredGame) => {
+    try {
+      const { conflicts } = await syncCheckDownloadConflicts(target.id);
+      if (conflicts.length > 0) {
+        setDownloadConflictState({ gameId: target.id, conflicts });
+        return;
+      }
+      setDownloadPreviewGameId(target.id);
+    } catch (e) {
+      toastError("No se pudo preparar la descarga", e instanceof Error ? e.message : "Error inesperado");
+    }
+  }, []);
+
   useRegisterGlobalBack(() => {
     switch (true) {
+      case !!downloadPreviewGameId:
+        setDownloadPreviewGameId(null);
+        return true;
+      case !!downloadConflictState:
+        setDownloadConflictState(null);
+        return true;
       case !!gameToEdit:
         setGameToEdit(null);
         return true;
@@ -394,15 +427,39 @@ export function GameDetailPage() {
         onDownloadFromCloud={
           gameToRestoreBackup && hasSyncConfig
             ? () => {
-                void handleDownload(gameToRestoreBackup);
+                void requestDownloadFromCloud(gameToRestoreBackup);
               }
             : undefined
         }
-        isDownloadingFromCloud={Boolean(isDownloading && gameToRestoreBackup)}
+        isDownloadingFromCloud={Boolean(isDownloading && gameToRestoreBackup && game?.id === gameToRestoreBackup.id)}
         onSuccess={() => {
           void queryClient.invalidateQueries({ queryKey: ["game-stats"] });
           void queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
         }}
+      />
+      <SyncPreviewModal
+        isOpen={!!downloadPreviewGameId}
+        onClose={() => setDownloadPreviewGameId(null)}
+        type="download"
+        gameId={downloadPreviewGameId ?? ""}
+        onConfirm={async () => {
+          if (!downloadPreviewGameId || !game || game.id !== downloadPreviewGameId) return;
+          await handleDownload(game);
+          setDownloadPreviewGameId(null);
+        }}
+        isLoading={isDownloading && !!downloadPreviewGameId && game?.id === downloadPreviewGameId}
+      />
+      <DownloadConflictModal
+        isOpen={!!downloadConflictState && downloadConflictState.conflicts.length > 0}
+        onClose={() => setDownloadConflictState(null)}
+        gameId={downloadConflictState?.gameId ?? ""}
+        conflicts={downloadConflictState?.conflicts ?? []}
+        onConfirm={async () => {
+          if (!downloadConflictState || !game || game.id !== downloadConflictState.gameId) return;
+          setDownloadConflictState(null);
+          await handleDownload(game);
+        }}
+        isLoading={isDownloading && !!downloadConflictState && game?.id === downloadConflictState.gameId}
       />
 
       {steamDetails ? (
