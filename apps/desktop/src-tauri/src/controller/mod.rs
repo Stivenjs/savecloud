@@ -7,88 +7,107 @@
 //! - Manejar los eventos del Gamepad.
 //! - Manejar los estados del Gamepad.
 //! - Manejar las repeticiones de las acciones del Gamepad.
+//! - Listado y telemetría opcional para Ajustes (ver `tester`).
 
 pub mod actions;
 pub mod mapper;
 pub mod state;
+pub mod tester;
+pub mod tester_ipc;
 
 use actions::{ControllerEvent, SemanticAction};
 use gilrs::{Event as GilrsEvent, EventType, Gilrs};
 use state::InputState;
 use std::thread;
-use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager};
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter};
 
 pub fn start_gamepad_loop(app_handle: AppHandle) {
+    let ff_rx = tester::init_gamepad_ff_channel();
+
     thread::spawn(move || {
         let mut gilrs = match Gilrs::new() {
             Ok(g) => g,
             Err(_) => return,
         };
+
+        tester::sync_gamepad_list_cache_emit(&app_handle, &gilrs);
+
         let mut input_state = InputState::new();
+        let mut last_telemetry_emit = Instant::now() - Duration::from_secs(1);
 
         loop {
-            let is_focused = app_handle
-                .get_webview_window("main")
-                .and_then(|w| w.is_focused().ok())
-                .unwrap_or(false);
+            let focused = tester::relevant_app_focus(&app_handle);
 
-            if !is_focused {
+            tester::drain_ff_queue(&mut gilrs, &ff_rx);
+
+            if !focused {
                 input_state.clear();
             }
 
             while let Some(GilrsEvent { id, event, .. }) = gilrs.next_event() {
-                // siempre debemos sacar los eventos de gilrs para vaciar su cola,
-                // pero si la ventana no tiene el foco, simplemente los ignoramos.
-                if !is_focused {
-                    continue;
-                }
-
-                let player_id = id.into();
-
                 match event {
-                    EventType::ButtonPressed(button, _) => {
-                        if let Some(action) = mapper::map_button(button) {
-                            if input_state.press(player_id, action) {
-                                emit_action(&app_handle, player_id, action);
-                            }
-                        }
+                    EventType::Connected | EventType::Disconnected => {
+                        tester::sync_gamepad_list_cache_emit(&app_handle, &gilrs);
                     }
-                    EventType::ButtonReleased(button, _) => {
-                        if let Some(action) = mapper::map_button(button) {
-                            input_state.release(player_id, action);
-                        }
-                    }
-                    EventType::AxisChanged(axis, value, _) => {
-                        for a in [
-                            SemanticAction::NavigateUp,
-                            SemanticAction::NavigateDown,
-                            SemanticAction::NavigateLeft,
-                            SemanticAction::NavigateRight,
-                        ] {
-                            input_state.release(player_id, a);
-                        }
+                    _ if !focused => {}
+                    evt => {
+                        let player_id: usize = id.into();
 
-                        if let Some(action) = mapper::map_axis(axis, value) {
-                            if input_state.press(player_id, action) {
-                                emit_action(&app_handle, player_id, action);
+                        match evt {
+                            EventType::ButtonPressed(button, _) => {
+                                if let Some(action) = mapper::map_button(button) {
+                                    if input_state.press(player_id, action) {
+                                        emit_action(&app_handle, player_id, action);
+                                    }
+                                }
                             }
+                            EventType::ButtonReleased(button, _) => {
+                                if let Some(action) = mapper::map_button(button) {
+                                    input_state.release(player_id, action);
+                                }
+                            }
+                            EventType::AxisChanged(axis, value, _) => {
+                                for nav in [
+                                    SemanticAction::NavigateUp,
+                                    SemanticAction::NavigateDown,
+                                    SemanticAction::NavigateLeft,
+                                    SemanticAction::NavigateRight,
+                                ] {
+                                    input_state.release(player_id, nav);
+                                }
+
+                                if let Some(action) = mapper::map_axis(axis, value) {
+                                    if input_state.press(player_id, action) {
+                                        emit_action(&app_handle, player_id, action);
+                                    }
+                                }
+                            }
+                            EventType::ButtonRepeated(_, _)
+                            | EventType::ButtonChanged(_, _, _)
+                            | EventType::Dropped
+                            | EventType::Connected
+                            | EventType::Disconnected => {}
                         }
                     }
-                    EventType::ButtonRepeated(_, _) | EventType::ButtonChanged(_, _, _) => {}
-                    EventType::Dropped => {}
-                    EventType::Connected | EventType::Disconnected => {}
                 }
             }
 
-            // Solo emitimos las repeticiones continuas si la ventana está activa
-            if is_focused {
+            if focused {
                 for (player_id, action) in input_state.get_repeats() {
                     emit_action(&app_handle, player_id, action);
                 }
             }
 
             gilrs.inc();
+            tester::refresh_gamepad_cache(&gilrs);
+            tester::emit_gamepad_state_if_due(
+                &app_handle,
+                &gilrs,
+                focused,
+                &mut last_telemetry_emit,
+            );
+
             thread::sleep(Duration::from_millis(10));
         }
     });

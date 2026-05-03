@@ -174,5 +174,9 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::voice::commands::find_game_voice_candidates,
         crate::voice::commands::emit_test_wake_word,
         crate::voice::commands::list_voice_input_devices,
+        crate::controller::tester_ipc::list_connected_gamepads,
+        crate::controller::tester_ipc::gamepad_tester_session_start,
+        crate::controller::tester_ipc::gamepad_tester_session_stop,
+        crate::controller::tester_ipc::gamepad_tester_trigger_rumble,
     ])
 }
