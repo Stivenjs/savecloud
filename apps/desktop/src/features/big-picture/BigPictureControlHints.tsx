@@ -1,6 +1,7 @@
-import { useMemo } from "react";
-import { useConfig } from "@/hooks/useConfig";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { useEffect, useMemo, useState } from "react";
 import type { GamepadLayoutKind } from "@/lib/gamepadLabelMaps";
+import { useProfileSession } from "@/hooks/useProfileSession";
 import { getKenneyGamepadAssetUrl, kenneyFaceAssetId, kenneyStartAssetId } from "@/lib/kenneyGamepadAssets";
 
 function normalizeLayoutKind(value: string | undefined): GamepadLayoutKind {
@@ -32,8 +33,29 @@ function Hint({ item }: { item: HintItem }) {
 }
 
 export function BigPictureControlHints() {
-  const { config } = useConfig();
-  const layoutKind = normalizeLayoutKind(config?.preferredGamepadLayout);
+  const { activeProfile } = useProfileSession();
+  const [layoutKind, setLayoutKind] = useState<GamepadLayoutKind>("xbox");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPreferredLayout = async () => {
+      if (!isTauri()) return;
+      try {
+        const savedLayout = await invoke<string | null>("get_preferred_gamepad_layout");
+        if (cancelled) return;
+        setLayoutKind(normalizeLayoutKind(savedLayout ?? undefined));
+      } catch {
+        if (cancelled) return;
+        setLayoutKind("xbox");
+      }
+    };
+
+    void loadPreferredLayout();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProfile?.id]);
 
   const rightHints = useMemo<HintItem[]>(() => {
     const optionsUrl = getKenneyGamepadAssetUrl(layoutKind, kenneyStartAssetId(layoutKind));

@@ -40,8 +40,8 @@ interface CloudIncomingMessage {
  * se establece.
  */
 export function useCloudWebSockets() {
-  const { config, refetch } = useConfig();
-  const { activeProfile } = useProfileSession();
+  const { config, loading: configLoading, refetch } = useConfig();
+  const { activeProfile, loading: profileLoading } = useProfileSession();
   const queryClient = useQueryClient();
 
   /**
@@ -71,6 +71,10 @@ export function useCloudWebSockets() {
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
 
   useEffect(() => {
+    if (configLoading || profileLoading) {
+      return;
+    }
+
     if (!activeUserId || cloudConfig == null || !hasUsableCloudConnection(cloudConfig)) {
       invoke("stop_cloud_ws").catch(() => {});
       return;
@@ -120,7 +124,7 @@ export function useCloudWebSockets() {
       isComponentMounted = false;
       unlistenIncoming?.();
     };
-  }, [activeUserId, cloudConfig, refetch, queryClient]);
+  }, [activeUserId, cloudConfig, configLoading, profileLoading, refetch, queryClient]);
 
   useEffect(() => {
     if (!activeUserId) return;
