@@ -18,6 +18,8 @@ interface ShellUiStore {
   requestProfileOpen: () => void;
   setSideMenuOpen: (open: boolean) => void;
   requestCloseSideMenu: () => void;
+  /** Cierra el menú lateral si está abierto; si no, `requestGlobalBack` (misma lógica que B / Escape). */
+  dispatchBackNavigation: () => void;
   /** Registra un manejador; devuelve función para desregistrar al desmontar. */
   registerBackHandler: (handler: () => boolean) => () => void;
   requestGlobalBack: () => void;
@@ -37,6 +39,11 @@ export const useShellUiStore = create<ShellUiStore>((set, get) => ({
   requestProfileOpen: () => set((s) => ({ profileOpenRequest: s.profileOpenRequest + 1 })),
   setSideMenuOpen: (open) => set({ sideMenuOpen: open }),
   requestCloseSideMenu: () => set((s) => ({ sideMenuCloseRequest: s.sideMenuCloseRequest + 1 })),
+  dispatchBackNavigation: () => {
+    const s = get();
+    if (s.sideMenuOpen) s.requestCloseSideMenu();
+    else s.requestGlobalBack();
+  },
   registerBackHandler: (handler) => {
     set((s) => ({ backHandlers: [...s.backHandlers, handler] }));
     return () => {

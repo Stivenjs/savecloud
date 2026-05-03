@@ -191,8 +191,17 @@ const STAGGERED_MENU_STYLES = `
   padding-right: clamp(1rem, 2.2vw, 1.5rem);
 }
 .sm-scope.sm-big-picture .sm-header-controls {
-  padding: 0.4rem 0.55rem;
-  gap: 0.5rem;
+  align-items: center;
+  padding: 0;
+  gap: clamp(0.65rem, 2vw, 1.1rem);
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.sm-scope.sm-big-picture .sm-bp-header-hud {
+  margin-right: 0;
 }
 
 @media (max-width: 1024px) {
@@ -333,6 +342,15 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
     });
     return () => ctx.revert();
   }, [menuButtonColor, position]);
+
+  useLayoutEffect(() => {
+    if (!bigPictureMode) return;
+    const panel = panelRef.current;
+    if (!panel || openRef.current) return;
+    const offscreen = position === "left" ? -100 : 100;
+    gsap.killTweensOf(panel);
+    gsap.set(panel, { xPercent: offscreen });
+  }, [bigPictureMode, position]);
 
   const buildOpenTimeline = useCallback(() => {
     const panel = panelRef.current;
@@ -627,19 +645,19 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
   React.useEffect(() => {
     if (!closeOnClickAway || !open) return;
 
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        panelRef.current &&
-        !panelRef.current.contains(event.target as Node) &&
-        toggleBtnRef.current &&
-        !toggleBtnRef.current.contains(event.target as Node)
-      ) {
+    const handlePointerOutsideClose = (event: MouseEvent) => {
+      const el = event.target instanceof Element ? event.target : null;
+      if (!el || el.closest("[data-shell-menu-ignore-outside-close]")) return;
+
+      const target = event.target as Node;
+      const clickedToggle = toggleBtnRef.current?.contains(target) ?? false;
+      if (panelRef.current && !panelRef.current.contains(target) && !clickedToggle) {
         closeMenu();
       }
     };
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", handlePointerOutsideClose);
+    return () => document.removeEventListener("mousedown", handlePointerOutsideClose);
   }, [closeOnClickAway, open, closeMenu]);
 
   return (
@@ -692,7 +710,8 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
         <header
           className="staggered-menu-header absolute left-0 w-full flex items-center justify-between p-4 bg-transparent pointer-events-none z-20"
           style={{ top: `${headerOffset}px` }}
-          aria-label="Main navigation header">
+          aria-label="Main navigation header"
+          data-shell-menu-ignore-outside-close={bigPictureMode ? true : undefined}>
           {showLogo ? (
             <div className="sm-logo flex items-center select-none pointer-events-auto" aria-label="Logo">
               <img
@@ -710,41 +729,43 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
 
           <div className="sm-header-controls flex items-center gap-2 pointer-events-auto">
             {headerActions}
-            <button
-              ref={toggleBtnRef}
-              className="sm-toggle relative inline-flex items-center gap-[0.3rem] bg-transparent border-0 cursor-pointer font-medium leading-none overflow-visible pointer-events-auto"
-              aria-label={open ? "Cerrar menú" : "Abrir menú"}
-              aria-expanded={open}
-              aria-controls="staggered-menu-panel"
-              onClick={toggleMenu}
-              type="button">
-              <span
-                ref={textWrapRef}
-                className="sm-toggle-textWrap relative inline-block h-[1em] overflow-hidden whitespace-nowrap"
-                aria-hidden="true">
-                <span ref={textInnerRef} className="sm-toggle-textInner flex flex-col leading-none">
-                  {textLines.map((l, i) => (
-                    <span className="sm-toggle-line block h-[1em] leading-none" key={i}>
-                      {l}
-                    </span>
-                  ))}
+            {bigPictureMode ? null : (
+              <button
+                ref={toggleBtnRef}
+                className="sm-toggle relative inline-flex items-center gap-[0.3rem] bg-transparent border-0 cursor-pointer font-medium leading-none overflow-visible pointer-events-auto"
+                aria-label={open ? "Cerrar menú" : "Abrir menú"}
+                aria-expanded={open}
+                aria-controls="staggered-menu-panel"
+                onClick={toggleMenu}
+                type="button">
+                <span
+                  ref={textWrapRef}
+                  className="sm-toggle-textWrap relative inline-block h-[1em] overflow-hidden whitespace-nowrap"
+                  aria-hidden="true">
+                  <span ref={textInnerRef} className="sm-toggle-textInner flex flex-col leading-none">
+                    {textLines.map((l, i) => (
+                      <span className="sm-toggle-line block h-[1em] leading-none" key={i}>
+                        {l}
+                      </span>
+                    ))}
+                  </span>
                 </span>
-              </span>
 
-              <span
-                ref={iconRef}
-                className="sm-icon relative w-3.5 h-3.5 shrink-0 inline-flex items-center justify-center will-change-transform"
-                aria-hidden="true">
                 <span
-                  ref={plusHRef}
-                  className="sm-icon-line absolute left-1/2 top-1/2 w-full h-0.5 bg-current rounded-xs -translate-x-1/2 -translate-y-1/2 will-change-transform"
-                />
-                <span
-                  ref={plusVRef}
-                  className="sm-icon-line sm-icon-line-v absolute left-1/2 top-1/2 w-full h-0.5 bg-current rounded-xs -translate-x-1/2 -translate-y-1/2 will-change-transform"
-                />
-              </span>
-            </button>
+                  ref={iconRef}
+                  className="sm-icon relative w-3.5 h-3.5 shrink-0 inline-flex items-center justify-center will-change-transform"
+                  aria-hidden="true">
+                  <span
+                    ref={plusHRef}
+                    className="sm-icon-line absolute left-1/2 top-1/2 w-full h-0.5 bg-current rounded-xs -translate-x-1/2 -translate-y-1/2 will-change-transform"
+                  />
+                  <span
+                    ref={plusVRef}
+                    className="sm-icon-line sm-icon-line-v absolute left-1/2 top-1/2 w-full h-0.5 bg-current rounded-xs -translate-x-1/2 -translate-y-1/2 will-change-transform"
+                  />
+                </span>
+              </button>
+            )}
           </div>
         </header>
 

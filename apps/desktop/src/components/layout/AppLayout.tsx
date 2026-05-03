@@ -9,6 +9,7 @@ import { MenuGamesList } from "@components/layout/Menugameslist";
 import { NotificationCenter } from "@components/layout/NotificationCenter";
 import { TitleBar } from "@components/layout/TitleBar";
 import { useShellUiStore } from "@store/ShellUiStore";
+import { BigPictureHeaderHud } from "@features/big-picture/BigPictureHeaderHud";
 import { UserBadge } from "@features/games/UserBadge";
 import { CloudMembersLauncher } from "@features/friends/CloudMembersLauncher";
 import { CloudStreamsLauncher } from "@features/friends/CloudStreamsLauncher";
@@ -174,20 +175,29 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
           setTimeout(() => handleNavigation(item.link), 320);
         }}
         headerActions={
-          <div className="flex items-center gap-4">
-            <UserBadge
-              userId={activeProfile?.localUserId || config?.userId}
+          hideTitleBar ? (
+            <BigPictureHeaderHud
               profileAvatar={config?.profileAvatar}
               profileFrame={config?.profileFrame}
-              hasSyncConfig={hasSyncConfig}
-              connectionStatus={connectionStatus}
               onOpenProfile={() => setProfileDrawerOpen(true)}
               onIntentOpenProfile={prefetchProfileDrawer}
             />
-            {showStreamsLauncher ? <CloudStreamsLauncher /> : null}
-            <CloudMembersLauncher />
-            <NotificationCenter />
-          </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <UserBadge
+                userId={activeProfile?.localUserId || config?.userId}
+                profileAvatar={config?.profileAvatar}
+                profileFrame={config?.profileFrame}
+                hasSyncConfig={hasSyncConfig}
+                connectionStatus={connectionStatus}
+                onOpenProfile={() => setProfileDrawerOpen(true)}
+                onIntentOpenProfile={prefetchProfileDrawer}
+              />
+              {showStreamsLauncher ? <CloudStreamsLauncher /> : null}
+              <CloudMembersLauncher />
+              <NotificationCenter />
+            </div>
+          )
         }
         /**
          * Sección de juegos inyectada en el panel del menú.

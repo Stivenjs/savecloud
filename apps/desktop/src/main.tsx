@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AppErrorBoundary } from "@components/error/AppErrorBoundary";
 import { queryClient } from "@lib/queryClient";
+import { useShellUiStore } from "@store/ShellUiStore";
 import App from "@/App";
 import "@/styles/index.css";
 
@@ -75,6 +76,15 @@ function detectRenderMode(): RenderMode {
   return "main";
 }
 
+/** Webview nueva: sin residuos de contadores IPC que disparan toggle al montar React. */
+function resetShellUiForBigPictureWindowEntry(): void {
+  useShellUiStore.setState({
+    staggeredMenuToggleRequest: 0,
+    sideMenuCloseRequest: 0,
+    sideMenuOpen: false,
+  });
+}
+
 /** Shell solo en la webview Big Picture (scrollbars tipo consola). */
 function applyShellFlagsForRenderMode(mode: RenderMode): void {
   if (mode === "bigPictureWindow") {
@@ -125,6 +135,7 @@ async function renderSettingsWindowApp(): Promise<void> {
 }
 
 async function renderBigPictureWindowApp(): Promise<void> {
+  resetShellUiForBigPictureWindowEntry();
   const { BigPictureWindowPage } = await import("@features/big-picture/BigPictureWindowPage");
   await renderMainWrapped(<BigPictureWindowPage />);
 }

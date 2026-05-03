@@ -8,12 +8,7 @@ import { useShellUiStore } from "@store/ShellUiStore";
 const NAVIGATION_THROTTLE_MS = 120;
 
 function dispatchBackAction() {
-  const shell = useShellUiStore.getState();
-  if (shell.sideMenuOpen) {
-    shell.requestCloseSideMenu();
-    return;
-  }
-  shell.requestGlobalBack();
+  useShellUiStore.getState().dispatchBackNavigation();
 }
 
 /**
