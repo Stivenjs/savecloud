@@ -7,6 +7,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+/// Nivel Zstd usado si no hay preferencia guardada (mismo valor que antes de exponer la opción).
+pub const FULL_BACKUP_PACKAGED_ZSTD_DEFAULT: i32 = 5;
+
 /// Configuraciones generales de la aplicación y del usuario.
 ///
 /// Esta estructura se persiste independientemente para evitar reescribir
@@ -44,6 +47,9 @@ pub struct AppSettings {
     pub full_backup_streaming: Option<bool>,
     #[serde(default)]
     pub full_backup_streaming_dry_run: Option<bool>,
+    /// Nivel Zstd (1–22) para backups completos en modo streaming empaquetado. `None` = 5 (histórico en la app).
+    #[serde(default)]
+    pub full_backup_packaged_compression_level: Option<i32>,
     #[serde(default)]
     pub preferred_gamepad_layout: Option<String>,
     /// `normal` | `big_picture` — cómo mostrar la ventana principal al iniciar.
@@ -172,6 +178,8 @@ pub struct Config {
     pub full_backup_streaming: Option<bool>,
     pub full_backup_streaming_dry_run: Option<bool>,
     #[serde(default)]
+    pub full_backup_packaged_compression_level: Option<i32>,
+    #[serde(default)]
     pub preferred_gamepad_layout: Option<String>,
     #[serde(default)]
     pub startup_window_mode: Option<String>,
@@ -214,6 +222,8 @@ pub struct ConfigDto {
     pub keep_backups_per_game: Option<u32>,
     pub full_backup_streaming: Option<bool>,
     pub full_backup_streaming_dry_run: Option<bool>,
+    #[serde(default)]
+    pub full_backup_packaged_compression_level: Option<i32>,
     #[serde(default)]
     pub preferred_gamepad_layout: Option<String>,
     #[serde(default)]

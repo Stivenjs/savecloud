@@ -86,6 +86,7 @@ pub fn get_config() -> ConfigDto {
         keep_backups_per_game: settings.keep_backups_per_game,
         full_backup_streaming: settings.full_backup_streaming,
         full_backup_streaming_dry_run: settings.full_backup_streaming_dry_run,
+        full_backup_packaged_compression_level: settings.full_backup_packaged_compression_level,
         preferred_gamepad_layout: settings.preferred_gamepad_layout.clone(),
         startup_window_mode: settings.startup_window_mode.clone(),
         default_source_download_dir: settings.default_source_download_dir.clone(),
@@ -253,6 +254,19 @@ pub fn set_full_backup_streaming(enabled: bool) -> Result<(), String> {
 pub fn set_full_backup_streaming_dry_run(enabled: bool) -> Result<(), String> {
     let mut settings = config::load_settings();
     settings.full_backup_streaming_dry_run = Some(enabled);
+    config::save_settings(&settings)
+}
+
+/// Nivel Zstd (1–22) para backups completos empaquetados en modo streaming. `None` en disco restaura el valor por defecto (5).
+#[tauri::command]
+pub fn set_full_backup_packaged_compression_level(level: Option<i32>) -> Result<(), String> {
+    if let Some(n) = level {
+        if !(1..=22).contains(&n) {
+            return Err("El nivel debe estar entre 1 y 22 (Zstd).".to_string());
+        }
+    }
+    let mut settings = config::load_settings();
+    settings.full_backup_packaged_compression_level = level;
     config::save_settings(&settings)
 }
 

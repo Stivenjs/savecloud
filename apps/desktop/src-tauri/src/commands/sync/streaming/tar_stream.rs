@@ -140,6 +140,7 @@ impl Write for ChannelWriter {
 pub(crate) fn spawn_tar_stream(
     source_dir: PathBuf,
     channel_capacity: usize,
+    zstd_compression_level: i32,
 ) -> (
     tokio::sync::mpsc::Receiver<TarStreamMsg>,
     tokio::task::JoinHandle<()>,
@@ -147,7 +148,7 @@ pub(crate) fn spawn_tar_stream(
     let (tx, rx) = tokio::sync::mpsc::channel::<TarStreamMsg>(channel_capacity);
 
     let handle = tokio::task::spawn_blocking(move || {
-        match run_tar_pipeline(&source_dir, tx.clone()) {
+        match run_tar_pipeline(&source_dir, tx.clone(), zstd_compression_level) {
             Ok(()) => {
                 let _ = tx.blocking_send(TarStreamMsg::Done);
             }
@@ -176,6 +177,7 @@ pub(crate) fn spawn_tar_stream(
 fn run_tar_pipeline(
     source_dir: &Path,
     tx: tokio::sync::mpsc::Sender<TarStreamMsg>,
+    zstd_compression_level: i32,
 ) -> Result<(), String> {
     // Contador compartido para trackear el progreso original (crudo) mientras zstd comprime.
     let original_counter = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -183,8 +185,8 @@ fn run_tar_pipeline(
     // Pipeline: tar::Builder -> ProgressWrapper -> zstd::Encoder -> ChannelWriter -> mpsc
     let writer = ChannelWriter::new(tx, original_counter.clone());
 
-    // Nivel 3: Equilibrio óptimo entre ratio de compresión y uso de CPU (rendimiento).
-    let mut encoder = zstd::Encoder::new(writer, 5)
+    let level = zstd_compression_level.clamp(1, 22);
+    let mut encoder = zstd::Encoder::new(writer, level)
         .map_err(|e| format!("fallo al inicializar encoder Zstd: {}", e))?;
 
     let threads = (num_cpus::get() - 1).max(1) as u32;

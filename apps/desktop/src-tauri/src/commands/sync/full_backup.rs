@@ -31,6 +31,7 @@ use super::models::{SyncOperationStrategy, SyncProgressPayload};
 use super::multipart_upload;
 use super::streaming;
 use crate::config;
+use crate::config::models::FULL_BACKUP_PACKAGED_ZSTD_DEFAULT;
 use crate::network::DATA_CLIENT;
 use crate::tray::tray_state::TrayState;
 use tauri::{AppHandle, Manager, State};
@@ -491,6 +492,10 @@ pub async fn create_and_upload_full_backup(
 
     let use_streaming = cfg.full_backup_streaming.unwrap_or(false);
     let dry_run = cfg.full_backup_streaming_dry_run.unwrap_or(false);
+    let zstd_packaged_level = cfg
+        .full_backup_packaged_compression_level
+        .unwrap_or(FULL_BACKUP_PACKAGED_ZSTD_DEFAULT)
+        .clamp(1, 22);
     let backup_strategy = if use_streaming {
         SyncOperationStrategy::Streaming
     } else {
@@ -523,8 +528,11 @@ pub async fn create_and_upload_full_backup(
     let result = if use_streaming && dry_run {
         let strategy = streaming::upload_strategy::UploadStrategy::for_file(estimated_total);
 
-        let (rx, tar_handle) =
-            streaming::tar_stream::spawn_tar_stream(source_dir, strategy.tar_channel_capacity);
+        let (rx, tar_handle) = streaming::tar_stream::spawn_tar_stream(
+            source_dir,
+            strategy.tar_channel_capacity,
+            zstd_packaged_level,
+        );
         let upload_res = streaming::multipart::upload_tar_stream_multipart_dry_run(
             rx,
             &game_id,
@@ -540,8 +548,11 @@ pub async fn create_and_upload_full_backup(
     } else if use_streaming {
         let strategy = streaming::upload_strategy::UploadStrategy::for_file(estimated_total);
 
-        let (rx, tar_handle) =
-            streaming::tar_stream::spawn_tar_stream(source_dir, strategy.tar_channel_capacity);
+        let (rx, tar_handle) = streaming::tar_stream::spawn_tar_stream(
+            source_dir,
+            strategy.tar_channel_capacity,
+            zstd_packaged_level,
+        );
 
         // ── Registrar guard dinámico en el coordinator ──────────────────────
         // Esto garantiza que si el usuario cierra la app durante una subida,

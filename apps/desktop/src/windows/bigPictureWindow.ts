@@ -1,5 +1,6 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { focusMainWindow } from "@/windows/mainWindow";
+import { restoreSettingsWindowTitleBarAfterBigPicture } from "@/windows/settingsWindow";
 import { resolveExistingWebviewWindow } from "@/windows/webviewRecovery";
 
 export const BIG_PICTURE_WINDOW_LABEL = "big-picture-window";
@@ -64,6 +65,7 @@ export async function openOrFocusBigPictureWindow(): Promise<void> {
 
   await bigPictureWindow.onCloseRequested(async () => {
     await focusMainWindow();
+    await restoreSettingsWindowTitleBarAfterBigPicture();
   });
 }
 
@@ -71,6 +73,7 @@ export async function switchToNormalMode(): Promise<void> {
   const bigPictureWindow = await resolveExistingWebviewWindow(BIG_PICTURE_WINDOW_LABEL);
   if (!bigPictureWindow) {
     await focusMainWindow();
+    await restoreSettingsWindowTitleBarAfterBigPicture();
     return;
   }
 
@@ -86,4 +89,6 @@ export async function switchToNormalMode(): Promise<void> {
   } catch {
     await bigPictureWindow.close();
   }
+
+  await restoreSettingsWindowTitleBarAfterBigPicture();
 }

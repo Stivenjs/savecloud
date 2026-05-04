@@ -42,6 +42,11 @@ export interface Config {
   readonly fullBackupStreaming?: boolean;
   /** Modo prueba: streaming sin subir a la nube. */
   readonly fullBackupStreamingDryRun?: boolean;
+  /**
+   * Nivel Zstd (1–22) para backups completos empaquetados en modo streaming.
+   * Si no está definido, la app usa el valor histórico por defecto (5).
+   */
+  readonly fullBackupPackagedCompressionLevel?: number | null;
   /** Tipo de layout del mando preferido para UI ("xbox" | "playstation" | "nintendo" | "generic"). */
   readonly preferredGamepadLayout?: string;
   /** Arranque de la ventana principal: ventana estándar o Big Picture (pantalla completa). */

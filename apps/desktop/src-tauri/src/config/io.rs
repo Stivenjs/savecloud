@@ -297,6 +297,7 @@ pub fn get_combined_config() -> Config {
         keep_backups_per_game: settings.keep_backups_per_game,
         full_backup_streaming: settings.full_backup_streaming,
         full_backup_streaming_dry_run: settings.full_backup_streaming_dry_run,
+        full_backup_packaged_compression_level: settings.full_backup_packaged_compression_level,
         preferred_gamepad_layout: settings.preferred_gamepad_layout,
         startup_window_mode: settings.startup_window_mode.clone(),
         default_source_download_dir: settings.default_source_download_dir,
@@ -333,6 +334,7 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
     current_settings.keep_backups_per_game = cfg.keep_backups_per_game;
     current_settings.full_backup_streaming = cfg.full_backup_streaming;
     current_settings.full_backup_streaming_dry_run = cfg.full_backup_streaming_dry_run;
+    current_settings.full_backup_packaged_compression_level = cfg.full_backup_packaged_compression_level;
     current_settings.preferred_gamepad_layout = cfg
         .preferred_gamepad_layout
         .clone()

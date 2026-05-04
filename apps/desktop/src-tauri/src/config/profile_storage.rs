@@ -307,6 +307,7 @@ pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
             profile.keep_backups_per_game = settings.keep_backups_per_game;
             profile.full_backup_streaming = settings.full_backup_streaming;
             profile.full_backup_streaming_dry_run = settings.full_backup_streaming_dry_run;
+            profile.full_backup_packaged_compression_level = settings.full_backup_packaged_compression_level;
             profile.default_source_download_dir = settings.default_source_download_dir.clone();
             profile.share_visual_profile_with_hosts = settings.share_visual_profile_with_hosts;
             profile.share_visual_profile_with_members = settings.share_visual_profile_with_members;
@@ -369,6 +370,7 @@ pub fn initialize_profile_storage(profile: &super::profiles::Profile) -> Result<
         keep_backups_per_game: profile.keep_backups_per_game,
         full_backup_streaming: profile.full_backup_streaming,
         full_backup_streaming_dry_run: profile.full_backup_streaming_dry_run,
+        full_backup_packaged_compression_level: profile.full_backup_packaged_compression_level,
         default_source_download_dir: profile.default_source_download_dir.clone(),
         profile_background: profile.profile_background.clone(),
         profile_avatar: profile.profile_avatar_url.clone(),
