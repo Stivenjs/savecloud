@@ -24,7 +24,9 @@ import { SourceInstallSettingsCard } from "@features/settings/SourceInstallSetti
 import { GamepadTesterCard } from "@features/settings/GamepadTesterCard";
 import { VoiceCommandsCard } from "@features/voice-commands";
 import { HealthObservabilityCard } from "@features/settings/HealthObservabilityCard";
+import { SettingsSidebarAnimatedPanel } from "@features/settings/SettingsSidebarAnimatedPanel";
 import { SettingsSidebar, type SettingsTabKey } from "@features/settings/SettingsSidebar";
+import { useSettingsSidebarPanelDirection } from "@features/settings/useSettingsSidebarPanelDirection";
 
 const ReleaseNotesDialogLazy = lazy(() =>
   import("@features/settings/ReleaseNotesDialog").then((module) => ({ default: module.ReleaseNotesDialog }))
@@ -128,6 +130,8 @@ export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
     deletingSourceIds,
     handleDeleteSource,
   } = useSettingsPage();
+
+  const settingsSidebarPanelDirection = useSettingsSidebarPanelDirection(settingsTab);
 
   const popLayer = useNavigationStore((s) => s.popLayer);
 
@@ -266,7 +270,14 @@ export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
       {compactWindowMode ? (
         <div className="grid h-full min-h-0 grid-cols-[240px_minmax(0,1fr)] gap-4">
           <SettingsSidebar tabs={SETTINGS_TABS} selectedTab={settingsTab} onSelectTab={setSettingsTab} />
-          <section className="min-w-0 h-full min-h-0 overflow-y-auto pr-1">{renderTabContent(settingsTab)}</section>
+          <section className="min-w-0 h-full min-h-0 overflow-y-auto pr-1">
+            <SettingsSidebarAnimatedPanel
+              panelKey={settingsTab}
+              direction={settingsSidebarPanelDirection}
+              className="min-h-0">
+              {renderTabContent(settingsTab)}
+            </SettingsSidebarAnimatedPanel>
+          </section>
         </div>
       ) : (
         <>
