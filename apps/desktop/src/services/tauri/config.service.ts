@@ -912,6 +912,11 @@ export async function setFullBackupStreamingDryRun(enabled: boolean): Promise<vo
   await invoke("set_full_backup_streaming_dry_run", { enabled });
 }
 
+/** Nivel Zstd (1–22) para backup completo empaquetado en streaming; `null` restaura el predeterminado (5). */
+export async function setFullBackupPackagedCompressionLevel(level: number | null): Promise<void> {
+  await invoke("set_full_backup_packaged_compression_level", { level });
+}
+
 /** Elimina todos los backups locales (carpeta SaveCloud/backups completa). */
 export async function deleteAllLocalBackups(): Promise<void> {
   await invoke("delete_all_local_backups");

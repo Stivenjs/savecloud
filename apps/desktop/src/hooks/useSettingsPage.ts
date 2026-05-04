@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { isEnabled, enable, disable } from "@tauri-apps/plugin-autostart";
@@ -14,6 +14,7 @@ import {
   checkForUpdatesWithPrompt,
   setFullBackupStreaming,
   setFullBackupStreamingDryRun,
+  setFullBackupPackagedCompressionLevel,
   importFriendConfig,
   syncSteamCatalog,
   resetSteamCatalogSync,
@@ -510,6 +511,21 @@ export function useSettingsPage() {
     }
   };
 
+  const handleFullBackupPackagedCompressionLevelChange = useCallback(
+    async (level: number | null) => {
+      try {
+        await setFullBackupPackagedCompressionLevel(level);
+        scheduleConfigBackupToCloud();
+        refetchConfig?.();
+        queryClient.invalidateQueries({ queryKey: ["config"] });
+        toastSuccess("Configuración guardada", "Nivel de compresión de backups empaquetados actualizado.");
+      } catch (e) {
+        toastError("Error al guardar", e instanceof Error ? e.message : String(e));
+      }
+    },
+    [queryClient, refetchConfig]
+  );
+
   const openCreateConfigModal = () => {
     dispatch({ type: "SET_CREATE_CONFIG_ERROR", payload: null });
     dispatch({ type: "SET_CREATE_MODAL", open: true });
@@ -780,6 +796,7 @@ export function useSettingsPage() {
     handleAlwaysShowProfileSelectorChange,
     handleFullBackupStreamingChange,
     handleFullBackupStreamingDryRunChange,
+    handleFullBackupPackagedCompressionLevelChange,
     handleSyncSteamCatalog,
     handleResetSteamCatalogSync,
     confirmResetSteamCatalogSync,

@@ -21,6 +21,7 @@ pub fn build_default_profile() -> Profile {
         keep_backups_per_game: settings.keep_backups_per_game,
         full_backup_streaming: settings.full_backup_streaming,
         full_backup_streaming_dry_run: settings.full_backup_streaming_dry_run,
+        full_backup_packaged_compression_level: settings.full_backup_packaged_compression_level,
         default_source_download_dir: settings.default_source_download_dir,
         profile_background: settings.profile_background,
         profile_frame: settings.profile_frame,

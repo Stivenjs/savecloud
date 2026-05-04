@@ -95,6 +95,7 @@ export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
     handleAlwaysShowProfileSelectorChange,
     handleFullBackupStreamingChange,
     handleFullBackupStreamingDryRunChange,
+    handleFullBackupPackagedCompressionLevelChange,
     handleSyncSteamCatalog,
     handleResetSteamCatalogSync,
     confirmResetSteamCatalogSync,
@@ -252,10 +253,13 @@ export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
             <HealthObservabilityCard />
             <LocalBackupInfoCard />
             <ExperimentalFeaturesCard
+              key={`experimental-${activeProfile?.id ?? "no-profile"}`}
               fullBackupStreaming={!!config?.fullBackupStreaming}
               onFullBackupStreamingChange={handleFullBackupStreamingChange}
               fullBackupStreamingDryRun={!!config?.fullBackupStreamingDryRun}
               onFullBackupStreamingDryRunChange={handleFullBackupStreamingDryRunChange}
+              fullBackupPackagedCompressionLevel={config?.fullBackupPackagedCompressionLevel}
+              onFullBackupPackagedCompressionLevelChange={handleFullBackupPackagedCompressionLevelChange}
             />
             <DevSdk />
           </div>

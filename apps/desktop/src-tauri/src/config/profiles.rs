@@ -70,6 +70,10 @@ pub struct Profile {
     #[serde(default)]
     pub full_backup_streaming_dry_run: Option<bool>,
 
+    /// Nivel Zstd (1–22) para backup completo empaquetado en streaming.
+    #[serde(default)]
+    pub full_backup_packaged_compression_level: Option<i32>,
+
     /// Directorio por defecto para descargas de fuentes.
     #[serde(default)]
     pub default_source_download_dir: Option<String>,
@@ -215,6 +219,7 @@ mod tests {
             keep_backups_per_game: None,
             full_backup_streaming: None,
             full_backup_streaming_dry_run: None,
+            full_backup_packaged_compression_level: None,
             default_source_download_dir: None,
             profile_background: None,
             profile_frame: None,
@@ -244,6 +249,7 @@ mod tests {
             keep_backups_per_game: None,
             full_backup_streaming: None,
             full_backup_streaming_dry_run: None,
+            full_backup_packaged_compression_level: None,
             default_source_download_dir: None,
             profile_background: None,
             profile_frame: None,
