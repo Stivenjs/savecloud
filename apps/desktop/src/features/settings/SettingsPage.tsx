@@ -268,7 +268,7 @@ export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
   return (
     <div className={compactWindowMode ? "h-full min-h-0" : "space-y-6"}>
       {compactWindowMode ? (
-        <div className="grid h-full min-h-0 grid-cols-[240px_minmax(0,1fr)] gap-4">
+        <div className="grid h-full min-h-0 grid-cols-[minmax(248px,280px)_minmax(0,1fr)] gap-4">
           <SettingsSidebar tabs={SETTINGS_TABS} selectedTab={settingsTab} onSelectTab={setSettingsTab} />
           <section className="min-w-0 h-full min-h-0 overflow-y-auto pr-1">
             <SettingsSidebarAnimatedPanel
