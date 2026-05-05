@@ -7,6 +7,35 @@ import { resolveSteamSummaryBlurb } from "@utils/steamText";
 import { useRunCompatibility } from "@hooks/useRunCompatibility";
 import { GameDetailRunCompatibility } from "@features/game-detail/GameDetailRunCompatibility";
 
+const STEAM_EMBED_CLASSES = [
+  "mr-auto w-full max-w-[min(65ch,100%)] px-4 py-6 text-left sm:px-5 sm:py-7",
+  "text-[15px] leading-[1.72] tracking-[0.01em]",
+  "text-default-700 selection:bg-primary/15 dark:text-default-300 dark:selection:bg-primary/25",
+  // Primer bloque sin margen superior extra
+  "[&>*:first-child]:mt-0",
+  // Párrafos
+  "[&_p]:my-4 [&_p:last-child]:mb-0",
+  // Titulares (Steam usa h2 / h3 con frecuencia)
+  "[&_h1]:mt-10 [&_h1]:scroll-mt-6 [&_h1]:border-b [&_h1]:border-default-300/55 [&_h1]:pb-2 [&_h1]:text-xl [&_h1]:font-bold [&_h1]:tracking-tight [&_h1]:text-foreground dark:[&_h1]:border-default-100/25 [&_h1:first-child]:mt-0",
+  "[&_h2]:mt-10 [&_h2]:scroll-mt-6 [&_h2]:border-b [&_h2]:border-default-300/55 [&_h2]:pb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:tracking-tight [&_h2]:text-foreground dark:[&_h2]:border-default-100/25 [&_h2:first-child]:mt-0",
+  "[&_h3]:mt-8 [&_h3]:scroll-mt-6 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:uppercase [&_h3]:tracking-[0.08em] [&_h3]:text-default-900 dark:[&_h3]:text-default-100 [&_h3:first-child]:mt-0",
+  // Imagenes al ancho útil del panel (alineadas con tarjetas de la misma vista)
+  "[&_img]:my-7 [&_img]:block [&_img]:max-w-full! [&_img]:h-auto! [&_img]:w-full [&_img]:rounded-xl",
+  "[&_img]:border [&_img]:border-default-200/50 [&_img]:shadow-[0_18px_40px_-24px_rgba(0,0,0,0.55)] dark:[&_img]:border-default-100/25",
+  // Enlaces, listas, énfasis
+  "[&_a]:font-medium [&_a]:text-primary [&_a]:underline-offset-4 [&_a]:transition-colors hover:[&_a]:underline",
+  "[&_ul]:my-4 [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-5",
+  "[&_ol]:my-4 [&_ol]:list-decimal [&_ol]:space-y-1.5 [&_ol]:pl-5",
+  "[&_li]:marker:text-default-400",
+  "[&_strong]:font-semibold [&_strong]:text-foreground",
+  "[&_blockquote]:my-6 [&_blockquote]:border-l-2 [&_blockquote]:border-primary/40 [&_blockquote]:pl-4 [&_blockquote]:text-default-600 [&_blockquote]:italic dark:[&_blockquote]:text-default-400",
+  "[&_hr]:my-8 [&_hr]:border-default-200/70 dark:[&_hr]:border-default-100/20",
+  "[&_iframe]:my-6 [&_iframe]:aspect-video [&_iframe]:w-full [&_iframe]:rounded-xl [&_iframe]:border [&_iframe]:border-default-200/50 dark:[&_iframe]:border-default-100/20",
+  "[&_table]:my-6 [&_table]:w-full [&_table]:text-left [&_table]:text-sm",
+  "[&_th]:border-b [&_th]:border-default-200/70 [&_th]:pb-2 [&_th]:font-semibold dark:[&_th]:border-default-100/20",
+  "[&_td]:border-b [&_td]:border-default-200/35 [&_td]:py-2 dark:[&_td]:border-default-100/10",
+].join(" ");
+
 /** Etiqueta de sección secundaria (estilo ficha, no tarjeta genérica). */
 function FieldLabel({ icon, label }: { icon: ReactNode; label: string }) {
   return (
@@ -140,17 +169,14 @@ export function GameDetailSteamDetailsPanel({ details }: { details: SteamAppDeta
       </div>
 
       {details.detailedDescription ? (
-        <div>
-          <div className="mb-3">
+        <div className="space-y-4">
+          <div className="flex flex-col gap-1 border-b border-default-200/50 pb-4 dark:border-default-100/15">
             <h3 className="text-lg font-semibold tracking-tight text-foreground">Información sobre el juego</h3>
-            <p className="mt-0.5 text-xs text-default-500">Texto de la tienda (puede incluir imágenes)</p>
+            <p className="text-xs text-default-500">Texto de la tienda (puede incluir imágenes)</p>
           </div>
-          <div className="overflow-hidden rounded-xl border border-default-200/60 bg-content1 dark:border-default-100/20">
+          <div className="overflow-hidden rounded-xl border border-default-200/60 bg-default-50/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] dark:border-default-100/20 dark:bg-default-50/5">
             <ScrollShadow className="max-h-[min(70vh,42rem)]" size={72}>
-              <div
-                className="prose prose-sm max-w-none px-5 py-4 text-default-600 dark:prose-invert [&_img]:max-w-full [&_img]:rounded-lg [&_a]:text-primary"
-                dangerouslySetInnerHTML={{ __html: details.detailedDescription }}
-              />
+              <div className={STEAM_EMBED_CLASSES} dangerouslySetInnerHTML={{ __html: details.detailedDescription }} />
             </ScrollShadow>
           </div>
         </div>
