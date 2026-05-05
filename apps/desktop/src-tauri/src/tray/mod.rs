@@ -73,8 +73,7 @@ pub fn create_tray(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
                 "quit" => {
                     let handle = app.app_handle().clone();
                     tauri::async_runtime::spawn(async move {
-                        log::info!("[Tray] Cierre solicitado desde menú 'Salir'.");
-                        crate::shutdown::hooks::request_app_shutdown(handle).await;
+                        crate::shutdown::hooks::quit_from_tray_with_splash(handle).await;
                     });
                 }
 

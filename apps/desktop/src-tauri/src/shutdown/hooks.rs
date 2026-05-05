@@ -37,9 +37,68 @@
 //! }
 //! ```
 
+use std::time::{Duration, Instant};
+
 use tauri::{AppHandle, Manager, WindowEvent};
 
+use crate::torrent::shutdown_idle::complete_torrent_shutdown_guard_if_idle;
+
 use super::coordinator::ShutdownCoordinator;
+use super::splash::{
+    arm_shutdown_splash_mount_ack, show_shutdown_splash_window, signal_shutdown_splash_mounted,
+};
+
+/// Tiempo mínimo visible del splash antes de lanzar el coordinador de cierre y `exit`.
+const MIN_TRAY_SPLASH_VISIBLE: Duration = Duration::from_secs(3);
+
+/// Salida desde el ícono de bandeja: muestra la ventana informativa en el **hilo principal**
+/// (necesario en Windows/WebView2), espera a que el frontend confirme el montaje o un timeout,
+/// **mantiene el splash visible al menos** [`MIN_TRAY_SPLASH_VISIBLE`], y recién después inicia el cierre.
+pub async fn quit_from_tray_with_splash(app: AppHandle) {
+    log::info!("[Tray] Flujo Salir con ventana de cierre…");
+
+    let splash_clock = Instant::now();
+    let mount_rx = arm_shutdown_splash_mount_ack();
+
+    let app_for_main = app.clone();
+    let schedule = app.run_on_main_thread(move || {
+        if let Err(e) = show_shutdown_splash_window(&app_for_main) {
+            log::warn!(
+                "[Tray] No se pudo mostrar ventana de cierre desde hilo principal: {}. ",
+                e
+            );
+            signal_shutdown_splash_mounted();
+        }
+    });
+
+    if let Err(e) = schedule {
+        log::warn!("[Tray] run_on_main_thread falló ({e}); intentando crear ventana igualmente.");
+        let _ = show_shutdown_splash_window(&app);
+        signal_shutdown_splash_mounted();
+    }
+
+    tokio::select! {
+        _ = mount_rx => {
+            log::debug!("[Tray] Splash de cierre lista (front ACK).");
+        }
+        _ = tokio::time::sleep(std::time::Duration::from_millis(2800)) => {
+            log::warn!("[Tray] Timeout esperando splash; continuando con shutdown igualmente.");
+        }
+    }
+
+    let pending = MIN_TRAY_SPLASH_VISIBLE.saturating_sub(splash_clock.elapsed());
+    if !pending.is_zero() {
+        tokio::time::sleep(pending).await;
+    }
+
+    execute_graceful_shutdown(app).await;
+}
+
+/// ACK desde la webview `shutdown-window` cuando ya montó UI (splash visible).
+#[tauri::command]
+pub fn shutdown_splash_mounted() {
+    signal_shutdown_splash_mounted();
+}
 
 /// Handler para registrar en `tauri::Builder::on_window_event`.
 ///
@@ -81,6 +140,9 @@ pub fn register_shutdown_hook(window: &tauri::Window, event: &WindowEvent) {
 /// configuración en main.rs), registra el error y fuerza la salida de todos modos.
 async fn execute_graceful_shutdown(app: AppHandle) {
     log::info!("[Shutdown] Cierre de ventana detectado. Iniciando secuencia de cierre seguro...");
+
+    // Sin torrents activos el guard quedaba esperando hasta el timeout completo de fase.
+    complete_torrent_shutdown_guard_if_idle(&app).await;
 
     // Obtener el coordinador del estado gestionado de Tauri.
     match app.try_state::<ShutdownCoordinator>() {

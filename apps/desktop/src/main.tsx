@@ -26,7 +26,14 @@ const TOAST_CONFIG = {
   toastProps: { timeout: 3000 },
 } as const;
 
-type RenderMode = "overlay" | "streamViewer" | "friendsWindow" | "settingsWindow" | "bigPictureWindow" | "main";
+type RenderMode =
+  | "overlay"
+  | "streamViewer"
+  | "friendsWindow"
+  | "settingsWindow"
+  | "bigPictureWindow"
+  | "shutdownWindow"
+  | "main";
 
 /**
  * Obtiene el elemento root del DOM de forma segura
@@ -73,6 +80,7 @@ function detectRenderMode(): RenderMode {
   if (params.get("friendsWindow") === "true") return "friendsWindow";
   if (params.get("settingsWindow") === "true") return "settingsWindow";
   if (params.get("bigPictureWindow") === "true") return "bigPictureWindow";
+  if (params.get("shutdownWindow") === "true") return "shutdownWindow";
   return "main";
 }
 
@@ -141,6 +149,11 @@ async function renderBigPictureWindowApp(): Promise<void> {
   await renderMainWrapped(<BigPictureWindowPage />);
 }
 
+async function renderShutdownWindowApp(): Promise<void> {
+  const { ShutdownWindowPage } = await import("@features/shutdown/ShutdownWindowPage");
+  await renderMainWrapped(<ShutdownWindowPage />);
+}
+
 /**
  * Muestra la ventana principal de la aplicación
  */
@@ -174,6 +187,7 @@ async function bootstrap(): Promise<void> {
       friendsWindow: renderFriendsWindowApp,
       settingsWindow: renderSettingsWindowApp,
       bigPictureWindow: renderBigPictureWindowApp,
+      shutdownWindow: renderShutdownWindowApp,
       main: renderMainApp,
     };
     await renderByMode[mode]();

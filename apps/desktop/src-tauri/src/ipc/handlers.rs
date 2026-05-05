@@ -162,6 +162,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::overlay::show_overlay_notification,
         crate::overlay::hide_overlay_window,
         crate::shutdown::hooks::request_app_shutdown,
+        crate::shutdown::hooks::shutdown_splash_mounted,
         crate::config::profile_cmds::list_profiles_cmd,
         crate::config::profile_cmds::get_active_profile_cmd,
         crate::config::profile_cmds::set_active_profile_cmd,

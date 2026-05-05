@@ -9,18 +9,19 @@
 //!
 //! # Fases
 //!
-//! | Fase                | Subsistemas                            | Timeout  |
-//! |---------------------|----------------------------------------|----------|
-//! | `UiAndWatchers`     | file watchers, process check, tray     | 2s       |
-//! | `BackgroundTasks`   | auto-sync, game exit sync              | 5s       |
-//! | `NetworkUploads`    | multipart uploads, TAR streaming       | 15s      |
-//! | `TorrentSession`    | librqbit session, P2P downloads        | 10s      |
-//! | `Cleanup`           | logs, temp files, estado persistente   | 3s       |
+//! | Fase                | Subsistemas                              | Timeout  |
+//! |---------------------|------------------------------------------|----------|
+//! | `UiAndWatchers`     | file watchers, process check, tray       | 1.5s     |
+//! | `BackgroundTasks`   | auto-sync, game exit sync                | 3.5s     |
+//! | `NetworkUploads`    | multipart uploads, TAR streaming         | 10s      |
+//! | `TorrentSession`    | librqbit session, P2P downloads        | 6.5s     |
+//! | `Cleanup`           | logs, temp files, estado persistente     | 2s       |
 //!
 //! # Timeout de emergencia
 //!
 //! Si todas las fases superan su timeout y el proceso sigue vivo, el coordinador
-//! dispara un `std::process::exit(0)` después de [`EMERGENCY_KILL_SECS`] segundos.
+//! dispara un `std::process::exit(0)` después de [`EMERGENCY_KILL_SECS`] segundos
+//! (debe ser mayor que la suma de los timeouts por fase por si ningún subsistema responde).
 //! Esto garantiza que la app nunca quede "zombie" en el administrador de tareas.
 //!
 //! # Uso
@@ -50,7 +51,7 @@ use super::guard::{CompletionHandle, CompletionState};
 ///
 /// Este es el último recurso: si después de este tiempo el proceso sigue vivo,
 /// se fuerza la salida. Debe ser mayor que la suma de timeouts de todas las fases.
-const EMERGENCY_KILL_SECS: u64 = 45;
+const EMERGENCY_KILL_SECS: u64 = 36;
 
 /// Fases del cierre ordenadas de menor a mayor "peso" operacional.
 ///
@@ -84,11 +85,13 @@ impl ShutdownPhase {
     /// Timeout máximo que se espera para que todos los subsistemas de esta fase terminen.
     pub fn timeout(&self) -> Duration {
         match self {
-            ShutdownPhase::UiAndWatchers => Duration::from_secs(2),
-            ShutdownPhase::BackgroundTasks => Duration::from_secs(5),
-            ShutdownPhase::NetworkUploads => Duration::from_secs(15),
-            ShutdownPhase::TorrentSession => Duration::from_secs(10),
-            ShutdownPhase::Cleanup => Duration::from_secs(3),
+            // Límites por fase: si un subsistema se cuelga, no bloqueamos el cierre tanto tiempo.
+            // Las fases igualmente terminan antes si todos los guards completan antes del timeout.
+            ShutdownPhase::UiAndWatchers => Duration::from_millis(1500),
+            ShutdownPhase::BackgroundTasks => Duration::from_millis(3500),
+            ShutdownPhase::NetworkUploads => Duration::from_secs(10),
+            ShutdownPhase::TorrentSession => Duration::from_millis(6500),
+            ShutdownPhase::Cleanup => Duration::from_secs(2),
         }
     }
 
@@ -246,9 +249,9 @@ impl ShutdownCoordinator {
             }
             Err(_timeout) => {
                 log::error!(
-                    "[Shutdown] Fase '{}' excedió el timeout de {}s. Continuando con la siguiente fase.",
+                    "[Shutdown] Fase '{}' excedió el timeout de {} ms. Continuando con la siguiente fase.",
                     phase_name,
-                    timeout.as_secs()
+                    timeout.as_millis()
                 );
             }
         }
