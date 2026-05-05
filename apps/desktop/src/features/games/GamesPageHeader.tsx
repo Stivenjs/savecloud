@@ -1,6 +1,17 @@
 import { useState, type ReactNode } from "react";
 import { Button, Dropdown, DropdownItem, DropdownMenu, DropdownTrigger, Spinner, Tooltip } from "@heroui/react";
-import { ChevronDown, CloudDownload, CloudUpload, Network, Search, Plus, Zap, RefreshCw, ScanLine } from "lucide-react";
+import {
+  ChevronDown,
+  CloudDownload,
+  CloudUpload,
+  Library as LibraryIcon,
+  Network as NetworkIcon,
+  Plus,
+  RefreshCw,
+  ScanLine,
+  Search,
+  Zap,
+} from "lucide-react";
 import { useNavigable } from "@features/input/useNavigable";
 import { useNavigationStore } from "@features/input/store";
 import { getGamepadFocusClass } from "@features/input/styles";
@@ -17,7 +28,7 @@ interface GamesPageHeaderProps {
   onRefreshPress: () => void;
   onSaveGraphPress: () => void;
   isRefreshing?: boolean;
-  density?: "comfortable" | "compact";
+  density?: "comfortable" | "compact" | "unified";
   /** Mapa general se muestra fuera del header (p. ej. icono mundo en rail BP). */
   omitMapGraph?: boolean;
   /** Contenido extra al final del grupo (ej. estadísticas BP). */
@@ -43,12 +54,22 @@ export function GamesPageHeader({
   const isOperationRunning = !!syncing || !!downloading;
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isUnifiedMenuOpen, setIsUnifiedMenuOpen] = useState(false);
   const { pushLayer, popLayer } = useNavigationStore();
 
   const handleDropdownChange = (isOpen: boolean) => {
     setIsDropdownOpen(isOpen);
     if (isOpen) {
       pushLayer("header-dropdown", "drop-download-all");
+    } else {
+      popLayer();
+    }
+  };
+
+  const handleUnifiedMenuChange = (isOpen: boolean) => {
+    setIsUnifiedMenuOpen(isOpen);
+    if (isOpen) {
+      pushLayer("header-unified-menu", "unified-scan");
     } else {
       popLayer();
     }
@@ -82,6 +103,214 @@ export function GamesPageHeader({
     },
   });
 
+  const navUnifiedTrigger = useNavigable({
+    id: "btn-unified-actions",
+    onPress: () => handleUnifiedMenuChange(!isUnifiedMenuOpen),
+  });
+
+  const navUnifiedScan = useNavigable({
+    id: "unified-scan",
+    layerId: "header-unified-menu",
+    onPress: () => {
+      onScanPress();
+      handleUnifiedMenuChange(false);
+    },
+  });
+
+  const navUnifiedGraph = useNavigable({
+    id: "unified-graph",
+    layerId: "header-unified-menu",
+    onPress: () => {
+      onSaveGraphPress();
+      handleUnifiedMenuChange(false);
+    },
+  });
+
+  const navUnifiedAdd = useNavigable({
+    id: "unified-add",
+    layerId: "header-unified-menu",
+    onPress: () => {
+      onAddPress();
+      handleUnifiedMenuChange(false);
+    },
+  });
+
+  const navUnifiedDlAll = useNavigable({
+    id: "unified-dl-all",
+    layerId: "header-unified-menu",
+    onPress: () => {
+      onDownloadAllPress();
+      handleUnifiedMenuChange(false);
+    },
+  });
+
+  const navUnifiedUpAll = useNavigable({
+    id: "unified-up-all",
+    layerId: "header-unified-menu",
+    onPress: () => {
+      onSyncAllPress();
+      handleUnifiedMenuChange(false);
+    },
+  });
+
+  const navUnifiedRefresh = useNavigable({
+    id: "unified-refresh",
+    layerId: "header-unified-menu",
+    onPress: () => {
+      if (!isRefreshing) onRefreshPress();
+    },
+  });
+
+  if (density === "unified") {
+    const syncDisabled = !gamesCount || isOperationRunning;
+
+    return (
+      <div className="flex flex-nowrap items-center gap-1.5">
+        <Dropdown placement="bottom-end" isOpen={isUnifiedMenuOpen} onOpenChange={handleUnifiedMenuChange}>
+          <DropdownTrigger>
+            <Button
+              variant="flat"
+              radius="lg"
+              aria-label="Abrir menú de gestión de la biblioteca"
+              aria-haspopup="menu"
+              aria-expanded={isUnifiedMenuOpen}
+              aria-busy={isRefreshing}
+              className={`h-10 min-h-10 gap-2 border border-default-200/55 bg-default-100/40 px-4 font-semibold tracking-tight shadow-[inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-sm dark:border-white/8 dark:bg-default-50/10 ${getGamepadFocusClass(
+                navUnifiedTrigger.isFocused,
+                navUnifiedTrigger.inputMode
+              )}`}
+              startContent={<LibraryIcon className="text-default-600" size={19} aria-hidden />}
+              endContent={
+                isRefreshing ? (
+                  <Spinner size="sm" color="current" aria-label="Actualizando lista" />
+                ) : (
+                  <ChevronDown size={17} aria-hidden />
+                )
+              }
+              {...navUnifiedTrigger.navProps}>
+              <span>Gestión</span>
+              <span className="hidden font-semibold text-foreground sm:inline"> de biblioteca</span>
+            </Button>
+          </DropdownTrigger>
+
+          <DropdownMenu
+            aria-label="Gestión de la biblioteca de juegos"
+            variant="flat"
+            classNames={{ base: "min-w-[16.5rem]" }}>
+            <DropdownItem
+              key="scan"
+              startContent={<ScanLine size={16} />}
+              onPress={() => {
+                onScanPress();
+                handleUnifiedMenuChange(false);
+              }}
+              className={
+                navUnifiedScan.isFocused && navUnifiedScan.inputMode === "gamepad" ? "bg-default-100 text-primary" : ""
+              }
+              {...navUnifiedScan.navProps}>
+              Buscar juegos
+            </DropdownItem>
+
+            {!omitMapGraph ? (
+              <DropdownItem
+                key="graph"
+                startContent={<NetworkIcon size={16} />}
+                onPress={() => {
+                  onSaveGraphPress();
+                  handleUnifiedMenuChange(false);
+                }}
+                className={
+                  navUnifiedGraph.isFocused && navUnifiedGraph.inputMode === "gamepad"
+                    ? "bg-default-100 text-primary"
+                    : ""
+                }
+                {...navUnifiedGraph.navProps}>
+                Mapa general
+              </DropdownItem>
+            ) : null}
+
+            <DropdownItem
+              key="add"
+              color="primary"
+              className={navUnifiedAdd.isFocused && navUnifiedAdd.inputMode === "gamepad" ? "bg-default-100" : ""}
+              startContent={<Plus size={16} />}
+              onPress={() => {
+                onAddPress();
+                handleUnifiedMenuChange(false);
+              }}
+              {...navUnifiedAdd.navProps}
+              showDivider>
+              Añadir a tu biblioteca
+            </DropdownItem>
+
+            {hasSyncConfig ? (
+              <>
+                <DropdownItem
+                  key="download-all"
+                  startContent={
+                    downloading === "all" ? <Spinner size="sm" color="current" /> : <CloudDownload size={16} />
+                  }
+                  isDisabled={syncDisabled}
+                  description="Todos los juegos configurados"
+                  onPress={() => {
+                    if (syncDisabled) return;
+                    onDownloadAllPress();
+                    handleUnifiedMenuChange(false);
+                  }}
+                  className={
+                    navUnifiedDlAll.isFocused && navUnifiedDlAll.inputMode === "gamepad"
+                      ? "bg-default-100 text-primary"
+                      : ""
+                  }
+                  {...navUnifiedDlAll.navProps}>
+                  Descargar guardados (nube → PC)
+                </DropdownItem>
+                <DropdownItem
+                  key="upload-all"
+                  startContent={syncing === "all" ? <Spinner size="sm" color="current" /> : <CloudUpload size={16} />}
+                  isDisabled={syncDisabled}
+                  description="Todos los juegos configurados"
+                  onPress={() => {
+                    if (syncDisabled) return;
+                    onSyncAllPress();
+                    handleUnifiedMenuChange(false);
+                  }}
+                  className={
+                    navUnifiedUpAll.isFocused && navUnifiedUpAll.inputMode === "gamepad"
+                      ? "bg-default-100 text-primary"
+                      : ""
+                  }
+                  {...navUnifiedUpAll.navProps}
+                  showDivider>
+                  Subir guardados (PC → nube)
+                </DropdownItem>
+              </>
+            ) : null}
+
+            <DropdownItem
+              key="refresh"
+              closeOnSelect={false}
+              startContent={isRefreshing ? <Spinner size="sm" color="current" /> : <RefreshCw size={16} />}
+              isDisabled={isRefreshing}
+              onPress={() => {
+                if (!isRefreshing) onRefreshPress();
+              }}
+              className={
+                navUnifiedRefresh.isFocused && navUnifiedRefresh.inputMode === "gamepad"
+                  ? "bg-default-100 text-primary"
+                  : ""
+              }
+              {...navUnifiedRefresh.navProps}>
+              {isRefreshing ? "Actualizando…" : "Actualizar lista"}
+            </DropdownItem>
+          </DropdownMenu>
+        </Dropdown>
+
+        {trailingSlot}
+      </div>
+    );
+  }
+
   if (density === "compact") {
     return (
       <div className="flex flex-nowrap items-center gap-1.5">
@@ -110,7 +339,7 @@ export function GamesPageHeader({
               onPress={onSaveGraphPress}
               className={`h-10 min-w-10 shrink-0 ${getGamepadFocusClass(navGraph.isFocused, navGraph.inputMode)}`}
               {...navGraph.navProps}>
-              <Network size={19} aria-hidden />
+              <NetworkIcon size={19} aria-hidden />
             </Button>
           </Tooltip>
         ) : null}
@@ -219,7 +448,7 @@ export function GamesPageHeader({
           <>
             <Button
               variant="flat"
-              startContent={<Network size={18} />}
+              startContent={<NetworkIcon size={18} />}
               onPress={onSaveGraphPress}
               className={`h-10 min-w-[150px] ${getGamepadFocusClass(navGraph.isFocused, navGraph.inputMode)}`}
               {...navGraph.navProps}>

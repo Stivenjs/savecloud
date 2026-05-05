@@ -306,58 +306,56 @@ export function GamesPage() {
             </div>
           </>
         ) : (
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-semibold text-foreground">Juegos configurados</h1>
-                {hasSyncConfig && unsyncedGameIds.length > 0 ? (
-                  <span className="rounded-full bg-warning/20 px-3 py-1 text-sm font-medium text-warning">
-                    {unsyncedGameIds.length} con cambios sin subir
-                  </span>
-                ) : null}
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between xl:gap-6">
+            <div className="flex min-w-0 flex-1 flex-col gap-4">
+              <div className="flex flex-col gap-3">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+                  <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground">
+                    Juegos configurados
+                  </h1>
+                  {hasSyncConfig && unsyncedGameIds.length > 0 ? (
+                    <span className="rounded-full bg-warning/20 px-3 py-1 text-sm font-medium text-warning">
+                      {unsyncedGameIds.length} con cambios sin subir
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex w-fit max-w-full">
+                  <GamesPageHeader
+                    density="unified"
+                    hasSyncConfig={hasSyncConfig}
+                    gamesCount={config?.games?.length ?? 0}
+                    syncing={syncing}
+                    downloading={downloading}
+                    onScanPress={() => {
+                      pushLayer("scan-modal", "scan-search-input");
+                      setScanModalOpen(true);
+                    }}
+                    onAddPress={() => {
+                      setAddModalInitial({ paths: [], suggestedId: "" });
+                      setAddModalOpen(true);
+                    }}
+                    onDownloadAllPress={openDownloadAllConfirm}
+                    onSyncAllPress={openSyncAllConfirm}
+                    onRefreshPress={handleRefresh}
+                    onSaveGraphPress={() => navigate("/graph")}
+                    isRefreshing={refreshing}
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex min-w-0 flex-1 flex-col gap-4">
-                <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between md:gap-4">
-                  <div className="min-w-0 flex-1">
-                    <GamesPageHeader
-                      hasSyncConfig={hasSyncConfig}
-                      gamesCount={config?.games?.length ?? 0}
-                      syncing={syncing}
-                      downloading={downloading}
-                      onScanPress={() => {
-                        pushLayer("scan-modal", "scan-search-input");
-                        setScanModalOpen(true);
-                      }}
-                      onAddPress={() => {
-                        setAddModalInitial({ paths: [], suggestedId: "" });
-                        setAddModalOpen(true);
-                      }}
-                      onDownloadAllPress={openDownloadAllConfirm}
-                      onSyncAllPress={openSyncAllConfirm}
-                      onRefreshPress={handleRefresh}
-                      onSaveGraphPress={() => navigate("/graph")}
-                      isRefreshing={refreshing}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="w-full xl:w-auto">
-                <GamesStatsCompact
-                  gamesCount={config?.games?.length ?? 0}
-                  lastSyncAt={lastSyncAt}
-                  lastSyncGameId={lastSyncGameId}
-                  lastSyncLoading={hasSyncConfig && lastSyncLoading}
-                  hasSyncConfig={hasSyncConfig}
-                  cloudGames={cloudGames}
-                  totalCloudSize={totalCloudSize}
-                  localGameIdsLower={localGameIdsLower}
-                  onRestoreFromCloud={handleOpenRestoreFromCloud}
-                />
-              </div>
+            <div className="w-full xl:w-auto xl:max-w-xl xl:self-start xl:mt-8">
+              <GamesStatsCompact
+                gamesCount={config?.games?.length ?? 0}
+                lastSyncAt={lastSyncAt}
+                lastSyncGameId={lastSyncGameId}
+                lastSyncLoading={hasSyncConfig && lastSyncLoading}
+                hasSyncConfig={hasSyncConfig}
+                cloudGames={cloudGames}
+                totalCloudSize={totalCloudSize}
+                localGameIdsLower={localGameIdsLower}
+                onRestoreFromCloud={handleOpenRestoreFromCloud}
+              />
             </div>
           </div>
         )}
