@@ -72,6 +72,7 @@ pub mod bus;
 pub mod coordinator;
 pub mod guard;
 pub mod hooks;
+pub mod splash;
 
 pub use bus::ShutdownBus;
 pub use coordinator::ShutdownCoordinator;
