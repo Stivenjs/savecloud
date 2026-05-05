@@ -236,7 +236,7 @@ export function GamesPage() {
 
   return (
     <LayoutGroup id="games-page-layout">
-      <div className={`flex flex-col ${bigPictureConsole ? "gap-5" : "gap-8"}`}>
+      <div className={`flex flex-col ${bigPictureConsole ? "gap-5" : "gap-0"}`}>
         {/* Cabecera */}
         {bigPictureConsole ? (
           <>
@@ -499,7 +499,7 @@ export function GamesPage() {
         <motion.div
           layout={bigPictureConsole ? "position" : false}
           transition={{ layout: layoutShiftTransition }}
-          className={`flex flex-col ${bigPictureConsole ? "gap-5" : "gap-8"}`}>
+          className={`flex flex-col ${bigPictureConsole ? "gap-5" : "gap-6"} ${!bigPictureConsole ? "-mt-1" : ""}`}>
           {/* Filtros de la lista */}
           <section className={bigPictureConsole ? "flex flex-wrap items-center gap-x-4 gap-y-2" : "space-y-2"}>
             <h2
