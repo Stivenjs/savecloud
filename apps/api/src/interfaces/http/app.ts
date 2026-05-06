@@ -53,6 +53,26 @@ export interface AppDependencies {
   connectionRepository?: ConnectionRepository;
 }
 
+interface SavesRouteUseCases {
+  getUploadUrlUseCase: GetUploadUrlUseCase;
+  getUploadUrlsUseCase: GetUploadUrlsUseCase;
+  getDownloadUrlUseCase: GetDownloadUrlUseCase;
+  getDownloadUrlsUseCase: GetDownloadUrlsUseCase;
+  deleteGameFromCloudUseCase: DeleteGameFromCloudUseCase;
+  renameGameInCloudUseCase: RenameGameInCloudUseCase;
+  listSavesUseCase: ListSavesUseCase;
+  getGameSummaryUseCase?: GetGameSummaryUseCase;
+  listBackupsUseCase: ListBackupsUseCase;
+  deleteBackupUseCase: DeleteBackupUseCase;
+  renameBackupUseCase: RenameBackupUseCase;
+  createMultipartUploadUseCase: CreateMultipartUploadUseCase;
+  createMultipartUploadWithPartUrlsUseCase: CreateMultipartUploadWithPartUrlsUseCase;
+  getUploadPartUrlsUseCase: GetUploadPartUrlsUseCase;
+  completeMultipartUploadUseCase: CompleteMultipartUploadUseCase;
+  abortMultipartUploadUseCase: AbortMultipartUploadUseCase;
+  resolveCloudStorageScopeUseCase?: ResolveCloudStorageScopeUseCase;
+}
+
 /**
  * Crea y configura la aplicación Fastify con las rutas y casos de uso.
  * Inyección de dependencias en el punto de entrada (composition root).
@@ -80,91 +100,14 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     },
   });
 
-  app.addHook("onRequest", async (request: FastifyRequest) => {
-    request._scMetricsStartNs = process.hrtime.bigint();
-  });
-
-  app.addHook("onResponse", async (request: FastifyRequest, reply: FastifyReply) => {
-    const start = request._scMetricsStartNs;
-    if (start === undefined) return;
-    const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
-    const path = (request.url ?? "").split("?")[0] ?? "";
-    if (path === "/health" || path === "/favicon.ico" || path.startsWith("/observability/")) return;
-    const routeTemplate =
-      typeof request.routeOptions?.url === "string" && request.routeOptions.url.length > 0
-        ? request.routeOptions.url
-        : null;
-    recordHttpMetric({
-      method: request.method,
-      path,
-      routeUrl: routeTemplate,
-      statusCode: reply.statusCode,
-      durationMs,
-    });
-  });
-
-  const expectedApiKey = process.env.API_KEY;
-
-  if (expectedApiKey) {
-    app.addHook("onRequest", async (request, reply) => {
-      if (isPublicRoute(request)) return;
-
-      const key = request.headers["x-api-key"];
-      if (key === expectedApiKey) return;
-
-      if (typeof key === "string" && key.trim()) {
-        const token = verifyUserAccessToken(key);
-        if (token) {
-          const userId = request.headers["x-user-id"];
-          if (typeof userId === "string" && userId.trim() && userId.trim() === token.userId) return;
-        }
-      }
-
-      return reply.status(401).send({ error: "Unauthorized" });
-    });
-  }
-
-  const getUploadUrlUseCase = new GetUploadUrlUseCase(deps.saveRepository);
-  const getUploadUrlsUseCase = new GetUploadUrlsUseCase(deps.saveRepository);
-  const getDownloadUrlUseCase = new GetDownloadUrlUseCase(deps.saveRepository);
-  const getDownloadUrlsUseCase = new GetDownloadUrlsUseCase(deps.saveRepository);
-  const deleteGameFromCloudUseCase = new DeleteGameFromCloudUseCase(deps.saveRepository);
-  const renameGameInCloudUseCase = new RenameGameInCloudUseCase(deps.saveRepository);
-  const listSavesUseCase = new ListSavesUseCase(deps.saveRepository, deps.saveFileIndexRepository);
-  const listBackupsUseCase = new ListBackupsUseCase(deps.saveRepository);
-  const deleteBackupUseCase = new DeleteBackupUseCase(deps.saveRepository);
-  const renameBackupUseCase = new RenameBackupUseCase(deps.saveRepository);
-  const getGameSummaryUseCase = deps.gameStatRepository
-    ? new GetGameSummaryUseCase(deps.gameStatRepository)
-    : undefined;
-  const createMultipartUploadUseCase = new CreateMultipartUploadUseCase(deps.saveRepository);
-  const createMultipartUploadWithPartUrlsUseCase = new CreateMultipartUploadWithPartUrlsUseCase(deps.saveRepository);
-  const getUploadPartUrlsUseCase = new GetUploadPartUrlsUseCase(deps.saveRepository);
-  const completeMultipartUploadUseCase = new CompleteMultipartUploadUseCase(deps.saveRepository);
-  const abortMultipartUploadUseCase = new AbortMultipartUploadUseCase(deps.saveRepository);
-  const resolveCloudStorageScopeUseCase = deps.cloudInviteRepository
-    ? new ResolveCloudStorageScopeUseCase(deps.cloudInviteRepository)
-    : undefined;
+  registerHttpMetricsHooks(app);
+  registerApiKeyAuthHook(app, process.env.API_KEY);
+  const savesUseCases = buildSavesRouteUseCases(deps);
 
   await registerSavesRoutes(app, {
-    getUploadUrlUseCase,
-    getUploadUrlsUseCase,
-    getDownloadUrlUseCase,
-    getDownloadUrlsUseCase,
-    deleteGameFromCloudUseCase,
-    renameGameInCloudUseCase,
-    listSavesUseCase,
-    getGameSummaryUseCase,
-    listBackupsUseCase,
-    deleteBackupUseCase,
-    renameBackupUseCase,
-    createMultipartUploadUseCase,
-    createMultipartUploadWithPartUrlsUseCase,
-    getUploadPartUrlsUseCase,
-    completeMultipartUploadUseCase,
-    abortMultipartUploadUseCase,
+    ...savesUseCases,
     steamSeedRepository: deps.steamSeedRepository,
-    resolveCloudStorageScopeUseCase,
+    resolveCloudStorageScopeUseCase: savesUseCases.resolveCloudStorageScopeUseCase,
     cloudInviteRepository: deps.cloudInviteRepository,
   });
 
@@ -189,12 +132,12 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     });
   }
 
-  if (deps.cloudInviteRepository && resolveCloudStorageScopeUseCase) {
+  if (deps.cloudInviteRepository && savesUseCases.resolveCloudStorageScopeUseCase) {
     await registerProfileRoutes(app, {
       getFriendProfileUseCase: new GetFriendProfileUseCase(
         deps.saveRepository,
         deps.cloudInviteRepository,
-        resolveCloudStorageScopeUseCase
+        savesUseCases.resolveCloudStorageScopeUseCase
       ),
     });
   }
@@ -217,4 +160,77 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   await registerObservabilityRoutes(app);
 
   return app;
+}
+
+function registerHttpMetricsHooks(app: FastifyInstance): void {
+  app.addHook("onRequest", async (request: FastifyRequest) => {
+    request._scMetricsStartNs = process.hrtime.bigint();
+  });
+
+  app.addHook("onResponse", async (request: FastifyRequest, reply: FastifyReply) => {
+    const start = request._scMetricsStartNs;
+    if (start === undefined) return;
+
+    const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
+    const path = (request.url ?? "").split("?")[0] ?? "";
+    if (path === "/health" || path === "/favicon.ico" || path.startsWith("/observability/")) return;
+
+    const routeTemplate =
+      typeof request.routeOptions?.url === "string" && request.routeOptions.url.length > 0
+        ? request.routeOptions.url
+        : null;
+
+    recordHttpMetric({
+      method: request.method,
+      path,
+      routeUrl: routeTemplate,
+      statusCode: reply.statusCode,
+      durationMs,
+    });
+  });
+}
+
+function registerApiKeyAuthHook(app: FastifyInstance, expectedApiKey?: string): void {
+  if (!expectedApiKey) return;
+
+  app.addHook("onRequest", async (request, reply) => {
+    if (isPublicRoute(request)) return;
+
+    const key = request.headers["x-api-key"];
+    if (key === expectedApiKey) return;
+
+    if (typeof key === "string" && key.trim()) {
+      const token = verifyUserAccessToken(key);
+      if (token) {
+        const userId = request.headers["x-user-id"];
+        if (typeof userId === "string" && userId.trim() && userId.trim() === token.userId) return;
+      }
+    }
+
+    return reply.status(401).send({ error: "Unauthorized" });
+  });
+}
+
+function buildSavesRouteUseCases(deps: AppDependencies): SavesRouteUseCases {
+  return {
+    getUploadUrlUseCase: new GetUploadUrlUseCase(deps.saveRepository),
+    getUploadUrlsUseCase: new GetUploadUrlsUseCase(deps.saveRepository),
+    getDownloadUrlUseCase: new GetDownloadUrlUseCase(deps.saveRepository),
+    getDownloadUrlsUseCase: new GetDownloadUrlsUseCase(deps.saveRepository),
+    deleteGameFromCloudUseCase: new DeleteGameFromCloudUseCase(deps.saveRepository),
+    renameGameInCloudUseCase: new RenameGameInCloudUseCase(deps.saveRepository),
+    listSavesUseCase: new ListSavesUseCase(deps.saveRepository, deps.saveFileIndexRepository),
+    getGameSummaryUseCase: deps.gameStatRepository ? new GetGameSummaryUseCase(deps.gameStatRepository) : undefined,
+    listBackupsUseCase: new ListBackupsUseCase(deps.saveRepository),
+    deleteBackupUseCase: new DeleteBackupUseCase(deps.saveRepository),
+    renameBackupUseCase: new RenameBackupUseCase(deps.saveRepository),
+    createMultipartUploadUseCase: new CreateMultipartUploadUseCase(deps.saveRepository),
+    createMultipartUploadWithPartUrlsUseCase: new CreateMultipartUploadWithPartUrlsUseCase(deps.saveRepository),
+    getUploadPartUrlsUseCase: new GetUploadPartUrlsUseCase(deps.saveRepository),
+    completeMultipartUploadUseCase: new CompleteMultipartUploadUseCase(deps.saveRepository),
+    abortMultipartUploadUseCase: new AbortMultipartUploadUseCase(deps.saveRepository),
+    resolveCloudStorageScopeUseCase: deps.cloudInviteRepository
+      ? new ResolveCloudStorageScopeUseCase(deps.cloudInviteRepository)
+      : undefined,
+  };
 }
