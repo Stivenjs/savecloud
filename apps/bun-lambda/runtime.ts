@@ -1,13 +1,15 @@
 import { AwsClient } from "aws4fetch";
-import type { Server, ServerWebSocket } from "bun";
+import type { Server } from "bun";
+
+type LambdaHeadersInit = Headers | Record<string, string> | Array<[string, string]>;
 
 type Lambda = {
-  fetch: (request: Request, server: Server) => Promise<Response | undefined>;
+  fetch: (request: Request, server: Server<undefined>) => Promise<Response | undefined>;
   error?: (error: unknown) => Promise<Response>;
   websocket?: {
-    open?: (ws: ServerWebSocket) => Promise<void>;
-    message?: (ws: ServerWebSocket, message: string) => Promise<void>;
-    close?: (ws: ServerWebSocket, code: number, reason: string) => Promise<void>;
+    open?: (ws: LambdaWebSocket) => Promise<void> | void;
+    message?: (ws: LambdaWebSocket, message: string) => Promise<void> | void;
+    close?: (ws: LambdaWebSocket, code: number, reason: string) => Promise<void> | void;
   };
 };
 
@@ -73,10 +75,7 @@ const runtimeUrl = new URL(`http://${env("AWS_LAMBDA_RUNTIME_API")}/2018-06-01/`
 
 async function fetch(url: string, options?: RequestInit): Promise<Response> {
   const { href } = new URL(url, runtimeUrl);
-  const response = await globalThis.fetch(href, {
-    ...options,
-    timeout: false,
-  });
+  const response = await globalThis.fetch(href, options);
   if (!response.ok) {
     exit(`Runtime failed to send request to Lambda [status: ${response.status}]`);
   }
@@ -476,7 +475,7 @@ function formatRequest(input: LambdaRequest): Request | undefined {
   return request;
 }
 
-class LambdaServer implements Server {
+class LambdaServer {
   #lambda: Lambda;
   #webSockets: Map<string, LambdaWebSocket>;
   #upgrade: Response | null;
@@ -601,7 +600,7 @@ class LambdaServer implements Server {
   async fetch(request: Request): Promise<Response> {
     this.pendingRequests++;
     try {
-      let response = await this.#lambda.fetch(request, this);
+      let response = await this.#lambda.fetch(request, this as unknown as Server<undefined>);
       if (response instanceof Response) {
         return response;
       }
@@ -628,7 +627,7 @@ class LambdaServer implements Server {
   upgrade<T = undefined>(
     request: Request,
     options?: {
-      headers?: HeadersInit;
+      headers?: LambdaHeadersInit;
       data?: T;
     }
   ): boolean {
@@ -656,13 +655,13 @@ class LambdaServer implements Server {
   }
 }
 
-class LambdaWebSocket implements ServerWebSocket {
+class LambdaWebSocket {
   #connectionId: string;
   #url: string;
   #invokeArn: string;
   #topics: Set<string> | null;
   remoteAddress: string;
-  readyState: 0 | 2 | 1 | -1 | 3;
+  readyState: 0 | 1 | 2 | 3;
   binaryType?: "arraybuffer" | "uint8array";
   data: any;
 
@@ -798,7 +797,7 @@ class LambdaWebSocket implements ServerWebSocket {
     return this.#topics !== null && this.#topics.has(topic);
   }
 
-  cork(callback: (ws: ServerWebSocket<undefined>) => any): void | Promise<void> {
+  cork(callback: (ws: LambdaWebSocket) => unknown): unknown {
     // Lambda does not support sending multiple messages at a time.
     return callback(this);
   }
