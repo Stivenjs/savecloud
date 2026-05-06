@@ -110,7 +110,8 @@ functions:
   api:
     handler: apps/api/src/interfaces/lambda/handler.handler
     description: API de guardados en la nube (savecloud) - entorno ${sls:stage, 'dev'}
-    timeout: 60
+    timeout: 30
+    memorySize: 1536
     events:
       - httpApi:
           path: /{proxy+}
