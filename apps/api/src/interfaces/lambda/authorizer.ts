@@ -9,6 +9,7 @@ import { verifyUserAccessToken } from "@shared/accessToken";
 import { isPublicHttpRoute } from "@interfaces/http/security/public-routes";
 
 const expectedApiKey = process.env.API_KEY?.trim() ?? "";
+const logAuthorizerSuccess = process.env.AUTH_LOG_SUCCESS === "true";
 
 if (!expectedApiKey) {
   console.error("[authorizer] FATAL: API_KEY env var is not set — all requests will be rejected");
@@ -55,7 +56,9 @@ function deny(reason: string, context: Record<string, string>): DenyResult {
 
 /** Registra un acceso concedido para auditoría. */
 function allow(mode: "api-key" | "access-token" | "public", context: Record<string, string>): { isAuthorized: true } {
-  console.info(JSON.stringify({ level: "INFO", authorizer: "ALLOWED", mode, ...context }));
+  if (logAuthorizerSuccess) {
+    console.info(JSON.stringify({ level: "INFO", authorizer: "ALLOWED", mode, ...context }));
+  }
   return { isAuthorized: true };
 }
 
@@ -76,6 +79,10 @@ export async function handler(event: AuthorizerEvent): Promise<AuthorizerResult>
 
   if (expectedApiKey && safeCompare(key, expectedApiKey)) {
     return allow("api-key", { path: rawPath, method });
+  }
+
+  if (!key.includes(".")) {
+    return deny("invalid x-api-key/access-token", { path: rawPath, method });
   }
 
   const token = verifyUserAccessToken(key);
