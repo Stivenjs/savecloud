@@ -555,8 +555,8 @@ export class S3SaveRepository implements SaveRepository {
     if (oldGameId === newGameId) return;
 
     const prefix = `${userId}/${oldGameId}/`;
-    const allKeys: string[] = [];
     let continuationToken: string | undefined;
+    let movedAny = false;
 
     do {
       const list = await this.s3.send(
@@ -566,31 +566,33 @@ export class S3SaveRepository implements SaveRepository {
           ContinuationToken: continuationToken,
         })
       );
-      for (const obj of list.Contents ?? []) {
-        if (obj.Key) allKeys.push(obj.Key);
+
+      const pageKeys = (list.Contents ?? []).map((obj) => obj.Key).filter((k): k is string => !!k);
+      if (pageKeys.length > 0) {
+        movedAny = true;
+        const copyLimit = pLimit(COPY_CONCURRENCY);
+        await Promise.all(
+          pageKeys.map((oldKey) =>
+            copyLimit(() => {
+              const filename = oldKey.slice(prefix.length);
+              const newKey = `${userId}/${newGameId}/${filename}`;
+              return this.s3.send(
+                new CopyObjectCommand({
+                  Bucket: this.bucketName,
+                  CopySource: `${this.bucketName}/${encodeURIComponent(oldKey)}`,
+                  Key: newKey,
+                })
+              );
+            })
+          )
+        );
+
+        await this.deleteKeys(pageKeys);
       }
+
       continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
     } while (continuationToken);
 
-    if (allKeys.length === 0) return;
-
-    const copyLimit = pLimit(COPY_CONCURRENCY);
-    await Promise.all(
-      allKeys.map((oldKey) =>
-        copyLimit(() => {
-          const filename = oldKey.slice(prefix.length);
-          const newKey = `${userId}/${newGameId}/${filename}`;
-          return this.s3.send(
-            new CopyObjectCommand({
-              Bucket: this.bucketName,
-              CopySource: `${this.bucketName}/${encodeURIComponent(oldKey)}`,
-              Key: newKey,
-            })
-          );
-        })
-      )
-    );
-
-    await this.deleteKeys(allKeys);
+    if (!movedAny) return;
   }
 }

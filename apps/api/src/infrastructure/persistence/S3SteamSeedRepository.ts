@@ -1,5 +1,6 @@
 import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import pLimit from "p-limit";
 import { batchKey } from "@interfaces/lambda/steam-seed/layout";
 import { PRESIGN_EXPIRES_IN_SECONDS } from "@infrastructure/persistence/S3SaveRepository";
 
@@ -74,7 +75,7 @@ function defaultState(): SeedState {
  * Las conexiones AWS SDK se agrupan por cliente, por lo que mantén este número razonable para
  * evitar agotar el pool de sockets del agente HTTP.
  */
-const PRESIGN_CONCURRENCY = 250;
+const PRESIGN_CONCURRENCY = 64;
 
 export class S3SteamSeedRepository {
   constructor(
@@ -127,10 +128,7 @@ export class S3SteamSeedRepository {
         ContinuationToken: continuationToken,
       })
     );
-    const keys = (out.Contents ?? [])
-      .map((x) => x.Key)
-      .filter((k): k is string => !!k)
-      .sort();
+    const keys = (out.Contents ?? []).map((x) => x.Key).filter((k): k is string => !!k);
     return {
       keys,
       nextCursor: out.IsTruncated ? out.NextContinuationToken : undefined,
@@ -241,15 +239,10 @@ export class S3SteamSeedRepository {
       }
 
       const results: BatchDownloadResult[] = new Array(keyOrKeys.length);
-      const chunks = chunkArray(
-        keyOrKeys.map((key, idx) => ({ key, idx })),
-        PRESIGN_CONCURRENCY
-      );
-
-      for (const chunk of chunks) {
-        // Todos los elementos en un lote se emiten simultáneamente.
-        await Promise.all(
-          chunk.map(async ({ key, idx }) => {
+      const limit = pLimit(PRESIGN_CONCURRENCY);
+      await Promise.all(
+        keyOrKeys.map((key, idx) =>
+          limit(async () => {
             try {
               const command = new GetObjectCommand({ Bucket: this.bucketName, Key: key });
               const url = await getSignedUrl(this.s3, command, { expiresIn: PRESIGN_EXPIRES_IN_SECONDS });
@@ -262,8 +255,8 @@ export class S3SteamSeedRepository {
               };
             }
           })
-        );
-      }
+        )
+      );
 
       return results;
     }

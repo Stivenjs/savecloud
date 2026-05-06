@@ -223,29 +223,37 @@ export class S3CloudInviteRepository implements CloudInviteRepository {
 
   async listMembershipsForMember(memberUserId: string): Promise<CloudMembership[]> {
     const inviteeKeys = await this.listKeys(`cloud-invites/invitees/${memberUserId}/`);
+    if (inviteeKeys.length === 0) return [];
+
+    const markers = await Promise.all(inviteeKeys.map((idxKey) => this.getJsonOrNull<{ inviteId: string }>(idxKey)));
+    const inviteIds = markers.map((m) => m?.inviteId).filter((id): id is string => !!id);
+    if (inviteIds.length === 0) return [];
+
+    const invites = await Promise.all(inviteIds.map((id) => this.getInviteByIdIgnoreExpiry(id)));
     const hosts = new Map<string, string | null | undefined>();
-
-    for (const idxKey of inviteeKeys) {
-      const marker = await this.getJsonOrNull<{ inviteId: string }>(idxKey);
-      if (!marker?.inviteId) continue;
-
-      const invite = await this.getInviteByIdIgnoreExpiry(marker.inviteId);
-
+    for (const invite of invites) {
       if (invite?.inviteeUserId === memberUserId) {
         hosts.set(invite.hostUserId, invite.wsUrl);
       }
     }
+    if (hosts.size === 0) return [];
+
+    const hostEntries = [...hosts.entries()];
+    const membershipFiles = await Promise.all(hostEntries.map(([hostUserId]) => this.loadMembershipFile(hostUserId)));
 
     const out: CloudMembership[] = [];
-    for (const [host, wsUrl] of hosts.entries()) {
-      const membership = await this.getMembership(host, memberUserId);
-      if (membership) {
-        // "Patch" en caliente si el archivo de membresía es viejo y no tenía wsUrl
-        if (!membership.wsUrl && wsUrl) {
-          membership.wsUrl = wsUrl;
-        }
-        out.push(membership);
+    for (let i = 0; i < hostEntries.length; i++) {
+      const [, wsUrl] = hostEntries[i] as [string, string | null | undefined];
+      const file = membershipFiles[i];
+      if (!file) continue;
+      const membership = file.items.find((x) => x.memberUserId === memberUserId);
+      if (!membership) continue;
+
+      // "Patch" en caliente si el archivo de membresía es viejo y no tenía wsUrl
+      if (!membership.wsUrl && wsUrl) {
+        membership.wsUrl = wsUrl;
       }
+      out.push(membership);
     }
     return out;
   }
