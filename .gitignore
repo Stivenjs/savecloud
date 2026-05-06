@@ -2,6 +2,7 @@ node_modules/
 dist/
 .serverless/
 .esbuild/
+.build/
 .env
 .env.*
 !.env.example

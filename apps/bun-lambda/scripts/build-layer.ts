@@ -4,7 +4,7 @@ process.stderr.getWindowSize = () => [80, 80];
 
 import { Command, Flags } from "@oclif/core";
 import JSZip from "jszip";
-import { createReadStream, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export class BuildCommand extends Command {
@@ -80,10 +80,14 @@ export class BuildCommand extends Command {
     }
     const cwd = bun.name.split("/")[0];
     archive = archive.folder(cwd) ?? archive;
-    for (const filename of ["bootstrap", "runtime.ts"]) {
-      const path = join(__dirname, "..", filename);
-      archive.file(filename, createReadStream(path));
-    }
+    const bootstrapPath = join(__dirname, "..", "bootstrap");
+    const runtimePath = join(__dirname, "..", "runtime.ts");
+
+    const bootstrapContent = readFileSync(bootstrapPath, "utf8").replace(/\r\n/g, "\n");
+    archive.file("bootstrap", bootstrapContent, { unixPermissions: 0o755 });
+
+    const runtimeContent = readFileSync(runtimePath, "utf8").replace(/\r\n/g, "\n");
+    archive.file("runtime.ts", runtimeContent, { unixPermissions: 0o644 });
     this.log("Saving...", output);
     const archiveBuffer = await archive
       .generateAsync({
@@ -94,7 +98,7 @@ export class BuildCommand extends Command {
         },
       })
       .then((blob) => blob.arrayBuffer());
-    writeFileSync(output, archiveBuffer);
+    writeFileSync(output, new Uint8Array(archiveBuffer) as unknown as string);
     this.log("Saved");
   }
 }
