@@ -200,7 +200,6 @@ export async function registerSavesRoutes(
     "/saves/backups",
     { schema: { querystring: ListBackupsQuerySchema } },
     async (request, reply) => {
-      const userId = getUserId(request);
       const storageUserId = await getStorageUserIdFromRequest(request);
       const result = await deps.listBackupsUseCase.execute({
         userId: storageUserId,
@@ -344,16 +343,18 @@ export async function registerSavesRoutes(
         const requesterUserId = getUserId(request);
         const userId = await getStorageUserIdFromRequest(request);
         const { gameId, key, range } = request.body;
+        const trimmedGameId = gameId.trim();
+        const trimmedKey = key.trim();
         if (
           deps.cloudInviteRepository &&
-          key.startsWith(`${requesterUserId}/${gameId.trim()}/`) &&
+          trimmedKey.startsWith(`${requesterUserId}/${trimmedGameId}/`) &&
           userId !== requesterUserId
         ) {
           const hostUserId = userId.split("::member::")[0];
           const canReadShared = await deps.cloudInviteRepository.isGameSharedWithMember(
             hostUserId,
             requesterUserId,
-            gameId.trim()
+            trimmedGameId
           );
           if (!canReadShared) {
             return reply.status(403).send({ error: "Forbidden", message: "Game is not shared for this member" });
@@ -362,8 +363,8 @@ export async function registerSavesRoutes(
 
         const result = await deps.getDownloadUrlUseCase.execute({
           userId,
-          gameId: gameId.trim(),
-          key: key.trim(),
+          gameId: trimmedGameId,
+          key: trimmedKey,
           range,
         });
         return reply.send(result);

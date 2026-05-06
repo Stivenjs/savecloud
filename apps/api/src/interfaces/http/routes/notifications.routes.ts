@@ -23,19 +23,30 @@ export async function registerNotificationRoutes(app: FastifyInstance, store: S3
 
         const file = await store.load(userId);
         let items = file.items.filter((n) => !n.dismissedAt);
+        if (items.length === 0) {
+          return reply.send({ items });
+        }
 
         if (cursor) {
           items = items.filter((n) => n.updatedAt > cursor);
+          if (items.length === 0) {
+            return reply.send({ items });
+          }
         }
 
         items.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
         const page = items.slice(0, Math.min(limit, 500));
 
-        const now = new Date().toISOString();
-        const stamped: NotificationRecord[] = page.map((n) => ({
-          ...n,
-          serverUpdatedAt: n.serverUpdatedAt ?? now,
-        }));
+        const needsStamp = page.some((n) => !n.serverUpdatedAt);
+        const stamped: NotificationRecord[] = needsStamp
+          ? (() => {
+              const now = new Date().toISOString();
+              return page.map((n) => ({
+                ...n,
+                serverUpdatedAt: n.serverUpdatedAt ?? now,
+              }));
+            })()
+          : page;
 
         return reply.send({ items: stamped });
       } catch (err) {
@@ -83,6 +94,9 @@ export async function registerNotificationRoutes(app: FastifyInstance, store: S3
       try {
         const userId = getUserId(request);
         const { ids, read, dismiss } = request.body;
+        if (ids.length === 0 || (!read && !dismiss)) {
+          return reply.status(204).send();
+        }
         const now = new Date().toISOString();
 
         const file = await store.load(userId);
