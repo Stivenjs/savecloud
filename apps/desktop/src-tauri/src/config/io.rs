@@ -334,7 +334,8 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
     current_settings.keep_backups_per_game = cfg.keep_backups_per_game;
     current_settings.full_backup_streaming = cfg.full_backup_streaming;
     current_settings.full_backup_streaming_dry_run = cfg.full_backup_streaming_dry_run;
-    current_settings.full_backup_packaged_compression_level = cfg.full_backup_packaged_compression_level;
+    current_settings.full_backup_packaged_compression_level =
+        cfg.full_backup_packaged_compression_level;
     current_settings.preferred_gamepad_layout = cfg
         .preferred_gamepad_layout
         .clone()
