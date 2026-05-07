@@ -96,10 +96,22 @@ fn apply_env_fallback(
 
 fn save_json<T: serde::Serialize>(path: &std::path::Path, data: &T) -> Result<(), String> {
     if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let content = serde_json::to_string_pretty(data).map_err(|e| e.to_string())?;
-    fs::write(path, content).map_err(|e| e.to_string())
+    if let Ok(existing) = fs::read_to_string(path) {
+        if existing == content {
+            return Ok(());
+        }
+    }
+
+    let temp_path = path.with_extension("json.tmp");
+    fs::write(&temp_path, content).map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    if path.exists() {
+        fs::remove_file(path).map_err(|e| e.to_string())?;
+    }
+    fs::rename(&temp_path, path).map_err(|e| e.to_string())
 }
 
 type GetProfileSecretFn = fn(&str) -> Option<String>;

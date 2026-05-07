@@ -68,22 +68,40 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     let db_for_maintenance = db.clone();
     app.manage(db);
 
-    // 4. Hilo de mantenimiento de la base de datos
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-        if let Ok((total, free)) = db_for_maintenance.stats() {
-            if total > 0 {
-                let fragmentation = (free as f64 / total as f64) * 100.0;
-                if fragmentation > 25.0 && total > 500 {
-                    println!(
-                        "Optimizando base de datos... ({:.2}% fragmentación)",
-                        fragmentation
-                    );
-                    let _ = db_for_maintenance.compact();
+    // 4. Hilo de mantenimiento de la base de datos (periódico + cierre limpio)
+    {
+        let (guard, handle) = ShutdownGuard::new("sqlite_maintenance", &shutdown_bus.token());
+        let coord = coordinator.clone();
+        tauri::async_runtime::block_on(async move {
+            coord.register(ShutdownPhase::Cleanup, handle).await;
+        });
+
+        tauri::async_runtime::spawn(async move {
+            let token = guard.token();
+            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(15 * 60));
+            ticker.tick().await;
+
+            loop {
+                tokio::select! {
+                    _ = token.cancelled() => {
+                        let _ = db_for_maintenance.checkpoint_truncate();
+                        let _ = db_for_maintenance.compact_if_fragmented(
+                            AppDb::DEFAULT_MIN_PAGES_FOR_COMPACTION,
+                            AppDb::DEFAULT_FRAGMENTATION_THRESHOLD_PERCENT,
+                        );
+                        guard.complete();
+                        break;
+                    }
+                    _ = ticker.tick() => {
+                        let _ = db_for_maintenance.compact_if_fragmented(
+                            AppDb::DEFAULT_MIN_PAGES_FOR_COMPACTION,
+                            AppDb::DEFAULT_FRAGMENTATION_THRESHOLD_PERCENT,
+                        );
+                    }
                 }
             }
-        }
-    });
+        });
+    }
 
     // 4.5 Ventana abstracta Overlay para notificaciones
     let _ = crate::overlay::setup_overlay_window(&app.handle());
