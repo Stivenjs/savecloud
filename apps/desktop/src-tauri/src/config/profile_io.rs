@@ -17,9 +17,11 @@ use std::path::PathBuf;
 /// # Errors
 /// Devuelve error si el directorio de configuración no puede resolverse.
 pub fn profiles_path() -> Result<PathBuf, String> {
-    paths::config_dir()
-        .ok_or("Unable to resolve config directory".to_string())
-        .map(|dir| dir.join("data").join("profiles.json"))
+    paths::profiles_index_path().ok_or("Unable to resolve profiles path".to_string())
+}
+
+fn legacy_profiles_path() -> Result<PathBuf, String> {
+    paths::legacy_profiles_index_path().ok_or("Unable to resolve legacy profiles path".to_string())
 }
 
 /// Carga el índice de perfiles desde disco.
@@ -30,12 +32,21 @@ pub fn profiles_path() -> Result<PathBuf, String> {
 /// `Ok(ProfilesIndex)` con los perfiles cargados, o índice vacío si no existen.
 pub fn load_profiles_index() -> Result<ProfilesIndex, String> {
     let path = profiles_path()?;
+    let legacy_path = legacy_profiles_path()?;
 
-    let mut index = if !path.exists() {
+    let source_path = if path.exists() {
+        path
+    } else if legacy_path.exists() {
+        legacy_path
+    } else {
+        path
+    };
+
+    let mut index = if !source_path.exists() {
         ProfilesIndex::new()
     } else {
-        let content =
-            fs::read_to_string(&path).map_err(|e| format!("Failed to read profiles.json: {e}"))?;
+        let content = fs::read_to_string(&source_path)
+            .map_err(|e| format!("Failed to read profiles.json: {e}"))?;
         serde_json::from_str::<ProfilesIndex>(&content)
             .map_err(|e| format!("Failed to parse profiles.json: {e}"))?
     };
@@ -90,10 +101,14 @@ pub fn save_profiles_index(index: &ProfilesIndex) -> Result<(), String> {
 /// # Errors
 /// Devuelve error si falla la copia de seguridad.
 pub fn backup_profiles_index() -> Result<(), String> {
-    let path = profiles_path()?;
-    if path.exists() {
-        let backup_path = path.with_extension("json.backup");
-        fs::copy(&path, backup_path).map_err(|e| format!("Failed to backup profiles: {e}"))?;
+    let primary = profiles_path()?;
+    let legacy = legacy_profiles_path()?;
+    let source_path = if primary.exists() { primary } else { legacy };
+
+    if source_path.exists() {
+        let backup_path = source_path.with_extension("json.backup");
+        fs::copy(&source_path, backup_path)
+            .map_err(|e| format!("Failed to backup profiles: {e}"))?;
     }
     Ok(())
 }

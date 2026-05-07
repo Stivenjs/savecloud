@@ -7,24 +7,28 @@ use crate::config::paths;
 use super::domain::{ImportMode, SourceCatalog, SourceDownloadJob};
 
 fn sources_path() -> Result<PathBuf, String> {
-    let Some(data_dir) = paths::data_dir() else {
-        return Err("No se pudo resolver data_dir".to_string());
+    let Some(path) = paths::sources_path() else {
+        return Err("No se pudo resolver sources_path".to_string());
     };
-    std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
-    Ok(data_dir.join("sources.json"))
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    Ok(path)
 }
 
 fn jobs_path() -> Result<PathBuf, String> {
-    let Some(data_dir) = paths::data_dir() else {
-        return Err("No se pudo resolver data_dir".to_string());
+    let Some(path) = paths::active_jobs_path() else {
+        return Err("No se pudo resolver active_jobs_path".to_string());
     };
-    std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
-    Ok(data_dir.join("active_jobs.json"))
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    Ok(path)
 }
 
 /// Carga catálogo de fuentes persistido.
 pub fn load_sources() -> Result<Vec<SourceCatalog>, String> {
-    let path = sources_path()?;
+    let path = resolve_read_path(paths::sources_path(), paths::legacy_sources_path())?;
     if !path.exists() {
         return Ok(Vec::new());
     }
@@ -78,7 +82,7 @@ pub fn remove_catalog(source_id: &str) -> Result<(), String> {
 
 /// Carga jobs activos/históricos.
 pub fn load_jobs() -> Result<Vec<SourceDownloadJob>, String> {
-    let path = jobs_path()?;
+    let path = resolve_read_path(paths::active_jobs_path(), paths::legacy_active_jobs_path())?;
     if !path.exists() {
         return Ok(Vec::new());
     }
@@ -91,4 +95,19 @@ pub fn save_jobs(jobs: &[SourceDownloadJob]) -> Result<(), String> {
     let path = jobs_path()?;
     let payload = serde_json::to_vec_pretty(jobs).map_err(|e| e.to_string())?;
     std::fs::write(path, payload).map_err(|e| e.to_string())
+}
+
+fn resolve_read_path(primary: Option<PathBuf>, legacy: Option<PathBuf>) -> Result<PathBuf, String> {
+    let Some(primary) = primary else {
+        return Err("No se pudo resolver ruta principal".to_string());
+    };
+    if primary.exists() {
+        return Ok(primary);
+    }
+    if let Some(legacy) = legacy {
+        if legacy.exists() {
+            return Ok(legacy);
+        }
+    }
+    Ok(primary)
 }

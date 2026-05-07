@@ -8,6 +8,7 @@
 use crate::system::game_exit_sync;
 //use crate::system::watch_sync;
 use crate::cloud;
+use crate::config::storage_layout::ensure_storage_layout;
 use crate::controller::start_gamepad_loop;
 use crate::plugins::{log_buffer::new_log_buffer, manager::PluginManager, AppPluginManager};
 use crate::shutdown::coordinator::ShutdownPhase;
@@ -19,7 +20,6 @@ use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray::tray_state::TrayState;
 use crate::voice::VoiceState;
-
 use std::sync::Arc;
 use tauri::{App, Manager};
 use tokio::sync::Mutex;
@@ -36,6 +36,9 @@ pub struct TorrentShutdownGuard(pub std::sync::Mutex<Option<ShutdownGuard>>);
 ///
 /// * `app` - Referencia mutable a la instancia principal de la aplicación Tauri.
 pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
+    ensure_storage_layout()
+        .map_err(|error| format!("No se pudo preparar storage layout: {error}"))?;
+
     // 1. Herramientas de desarrollo
     #[cfg(debug_assertions)]
     {

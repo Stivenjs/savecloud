@@ -9,12 +9,13 @@ pub mod gamification;
 pub mod io;
 pub mod models;
 pub mod paths;
-pub mod profiles;
+pub mod profile_cmds;
 pub mod profile_defaults;
 pub mod profile_io;
 pub mod profile_manager;
-pub mod profile_cmds;
 pub mod profile_storage;
+pub mod profiles;
+pub mod storage_layout;
 
 pub use io::*;
 pub use models::*;
