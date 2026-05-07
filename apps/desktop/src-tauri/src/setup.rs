@@ -8,6 +8,7 @@
 use crate::system::game_exit_sync;
 //use crate::system::watch_sync;
 use crate::cloud;
+use crate::config::storage_layout::ensure_storage_layout;
 use crate::controller::start_gamepad_loop;
 use crate::plugins::{log_buffer::new_log_buffer, manager::PluginManager, AppPluginManager};
 use crate::shutdown::coordinator::ShutdownPhase;
@@ -19,7 +20,6 @@ use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray::tray_state::TrayState;
 use crate::voice::VoiceState;
-
 use std::sync::Arc;
 use tauri::{App, Manager};
 use tokio::sync::Mutex;
@@ -36,6 +36,9 @@ pub struct TorrentShutdownGuard(pub std::sync::Mutex<Option<ShutdownGuard>>);
 ///
 /// * `app` - Referencia mutable a la instancia principal de la aplicación Tauri.
 pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
+    ensure_storage_layout()
+        .map_err(|error| format!("No se pudo preparar storage layout: {error}"))?;
+
     // 1. Herramientas de desarrollo
     #[cfg(debug_assertions)]
     {
@@ -44,8 +47,6 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
         }
     }
 
-    // Crear bus y coordinator UNA sola vez, antes de cualquier subsistema,
-    // para que los guards puedan registrarse desde el principio.
     let shutdown_bus = ShutdownBus::new();
     let coordinator = ShutdownCoordinator::new(shutdown_bus.clone());
 
@@ -153,8 +154,6 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     // 7. Estados compartidos del tray
     let tray_state = app.state::<TrayState>();
 
-    // El watcher necesita un token para poder salir limpiamente antes de los
-    // 2 s de timeout sin que el coordinator tenga que esperar a su próximo tick.
     {
         let (guard, handle) = ShutdownGuard::new("process_watcher", &shutdown_bus.token());
         let coord = coordinator.clone();
@@ -167,14 +166,10 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
 
         tauri::async_runtime::spawn(async move {
             process_check::run_watcher_loop_with_token(&app_handle, token).await;
-            // El guard se completa por Drop si run_watcher_loop_with_token retorna,
-            // pero llamamos complete() explícitamente para ser explícitos.
             guard.complete();
         });
     }
 
-    // spawn_exit_watcher registra un listener de evento y no bloquea.
-    // El guard se completa cuando el token del bus es cancelado.
     {
         let (guard, handle) = ShutdownGuard::new("game_exit_sync", &shutdown_bus.token());
         let coord = coordinator.clone();
@@ -187,19 +182,13 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
         let token = guard.token();
 
         tauri::async_runtime::spawn(async move {
-            // spawn_exit_watcher es fire-and-forget: registra el listener y retorna.
             game_exit_sync::spawn_exit_watcher(app_handle, tray_inner);
 
-            // Esperar el shutdown para señalizar al coordinator.
             token.cancelled().await;
             guard.complete();
         });
     }
 
-    // El guard se pasa a TorrentShutdownGuard (estado de Tauri) para que
-    // engine.rs lo complete cuando active_hashes() quede vacío al cerrar.
-    // Si no hay torrents activos al cerrar, el Drop impl del guard lo marca
-    // como Completed automáticamente.
     {
         let (guard, handle) = ShutdownGuard::new("torrent_session", &shutdown_bus.token());
         let coord = coordinator.clone();
@@ -210,12 +199,6 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
         app.manage(TorrentShutdownGuard(std::sync::Mutex::new(Some(guard))));
     }
 
-    // Los guards de subidas multipart se crean bajo demanda en full_backup.rs
-    // cada vez que se inicia una subida. Ver full_backup.rs para el patrón.
-    // No hay nada que pre-registrar aquí.
-
-    // Deben registrarse DESPUÉS de todos los block_on anteriores para que el
-    // hooks.rs pueda recuperarlos desde app.try_state() al cerrar la ventana.
     app.manage(shutdown_bus);
     app.manage(coordinator);
 

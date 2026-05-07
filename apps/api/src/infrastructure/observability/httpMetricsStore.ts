@@ -19,17 +19,40 @@ export interface HttpMetricsSample {
 
 const MAX_SAMPLES = 2500;
 const samples: HttpMetricsSample[] = [];
+let ringStart = 0;
+let ringCount = 0;
 
 /** Expuesto solo para pruebas. */
 export function resetHttpMetricsForTests(): void {
   samples.length = 0;
+  ringStart = 0;
+  ringCount = 0;
 }
 
 export function recordHttpMetric(entry: Omit<HttpMetricsSample, "ts">): void {
-  samples.push({ ...entry, ts: Date.now() });
-  if (samples.length > MAX_SAMPLES) {
-    samples.splice(0, samples.length - MAX_SAMPLES);
+  const sample: HttpMetricsSample = { ...entry, ts: Date.now() };
+
+  if (ringCount < MAX_SAMPLES) {
+    samples.push(sample);
+    ringCount += 1;
+    return;
   }
+
+  samples[ringStart] = sample;
+  ringStart = (ringStart + 1) % MAX_SAMPLES;
+}
+
+function snapshotSamples(): HttpMetricsSample[] {
+  if (ringCount === 0) return [];
+  if (ringCount < MAX_SAMPLES || ringStart === 0) return samples.slice(0, ringCount);
+
+  const out = new Array<HttpMetricsSample>(ringCount);
+  let cursor = ringStart;
+  for (let i = 0; i < ringCount; i++) {
+    out[i] = samples[cursor] as HttpMetricsSample;
+    cursor = (cursor + 1) % MAX_SAMPLES;
+  }
+  return out;
 }
 
 export function windowParamToMs(window: string): number {
@@ -363,7 +386,8 @@ export function summarizeHttpMetrics(windowParam: string): ObservabilitySummaryD
   const windowMs = windowParamToMs(window);
   const now = Date.now();
   const cutoff = now - windowMs;
-  const rows = samples.filter((s) => s.ts >= cutoff);
+  const snapshot = snapshotSamples();
+  const rows = snapshot.filter((s) => s.ts >= cutoff);
 
   const byPathScope = {
     saves: rows.filter((r) => classifyPath(r.path) === "saves"),
@@ -465,7 +489,7 @@ export function summarizeHttpMetrics(windowParam: string): ObservabilitySummaryD
       oldestSampleAtMs: oldestTs,
       newestSampleAtMs: newestTs,
       retentionLimit: MAX_SAMPLES,
-      retainedSamples: samples.length,
+      retainedSamples: ringCount,
     },
     items,
     unreadCount: items.length,

@@ -20,6 +20,12 @@ import {
   type MembershipActionBody,
 } from "@interfaces/schema/invites";
 
+function inviteErrorStatus(message: string): number {
+  if (message.includes("not found")) return 404;
+  if (message.includes("does not belong")) return 403;
+  return 400;
+}
+
 export async function registerInviteRoutes(
   app: FastifyInstance,
   deps: {
@@ -79,7 +85,7 @@ export async function registerInviteRoutes(
         return reply.status(204).send();
       } catch (err) {
         const message = getErrorMessage(err);
-        const status = message.includes("not found") ? 404 : message.includes("does not belong") ? 403 : 400;
+        const status = inviteErrorStatus(message);
         return reply.status(status).send({ error: "Bad Request", message });
       }
     }
@@ -113,7 +119,7 @@ export async function registerInviteRoutes(
         });
       } catch (err) {
         const message = getErrorMessage(err);
-        const status = message.includes("not found") ? 404 : message.includes("does not belong") ? 403 : 400;
+        const status = inviteErrorStatus(message);
         return reply.status(status).send({ error: "Bad Request", message });
       }
     }
@@ -122,8 +128,10 @@ export async function registerInviteRoutes(
   app.get("/invites/memberships", async (request, reply: FastifyReply) => {
     try {
       const userId = getUserId(request);
-      const hostMemberships = await deps.cloudInviteRepository.listMembershipsForHost(userId);
-      const memberMemberships = await deps.cloudInviteRepository.listMembershipsForMember(userId);
+      const [hostMemberships, memberMemberships] = await Promise.all([
+        deps.cloudInviteRepository.listMembershipsForHost(userId),
+        deps.cloudInviteRepository.listMembershipsForMember(userId),
+      ]);
       return reply.send({ hostMemberships, memberMemberships });
     } catch (err) {
       return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
@@ -148,10 +156,12 @@ export async function registerInviteRoutes(
     async (request, reply: FastifyReply) => {
       try {
         const hostUserId = getUserId(request);
+        const memberUserId = request.body.memberUserId.trim();
+        const gameId = request.body.gameId.trim();
         await deps.setCloudGameShareUseCase.execute({
           hostUserId,
-          memberUserId: request.body.memberUserId.trim(),
-          gameId: request.body.gameId.trim(),
+          memberUserId,
+          gameId,
           shared: true,
         });
         return reply.status(204).send();
@@ -167,10 +177,12 @@ export async function registerInviteRoutes(
     async (request, reply: FastifyReply) => {
       try {
         const hostUserId = getUserId(request);
+        const memberUserId = request.body.memberUserId.trim();
+        const gameId = request.body.gameId.trim();
         await deps.setCloudGameShareUseCase.execute({
           hostUserId,
-          memberUserId: request.body.memberUserId.trim(),
-          gameId: request.body.gameId.trim(),
+          memberUserId,
+          gameId,
           shared: false,
         });
         return reply.status(204).send();

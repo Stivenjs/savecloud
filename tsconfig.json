@@ -14,6 +14,7 @@
     "paths": {
       "@domain/*": ["./apps/api/src/domain/*"],
       "@application/*": ["./apps/api/src/application/*"],
+      "@adapters/*": ["./apps/api/src/adapters/*"],
       "@infrastructure/*": ["./apps/api/src/infrastructure/*"],
       "@interfaces/*": ["./apps/api/src/interfaces/*"],
       "@shared/*": ["./apps/api/src/shared/*"],

@@ -45,31 +45,31 @@ fn scoped_data_path(file_name: &str) -> Option<PathBuf> {
     }
 }
 
-fn scoped_or_legacy_path(file_name: &str) -> Option<PathBuf> {
-    if is_default_profile_active() {
-        let scoped = scoped_data_path(file_name);
-        let legacy = match file_name {
-            paths::SETTINGS_FILE_NAME => paths::settings_path(),
-            paths::LIBRARY_FILE_NAME => paths::library_path(),
-            paths::HISTORY_FILE_NAME => paths::history_path(),
-            paths::GAMIFICATION_FILE_NAME => paths::gamification_path(),
-            _ => scoped.clone(),
-        };
+fn legacy_root_path(file_name: &str) -> Option<PathBuf> {
+    match file_name {
+        paths::SETTINGS_FILE_NAME => paths::settings_path(),
+        paths::LIBRARY_FILE_NAME => paths::library_path(),
+        paths::HISTORY_FILE_NAME => paths::history_path(),
+        paths::GAMIFICATION_FILE_NAME => paths::gamification_path(),
+        _ => paths::data_dir().map(|dir| dir.join(file_name)),
+    }
+}
 
-        // Para el perfil principal priorizamos el storage legado para mantener
-        // compatibilidad con instalaciones previas donde viven los datos reales.
+fn scoped_or_legacy_path(file_name: &str) -> Option<PathBuf> {
+    let scoped = scoped_data_path(file_name);
+    if scoped.as_ref().is_some_and(|path| path.exists()) {
+        return scoped;
+    }
+
+    if is_default_profile_active() {
+        let legacy = legacy_root_path(file_name);
         if legacy.as_ref().is_some_and(|path| path.exists()) {
             return legacy;
         }
-
-        if scoped.as_ref().is_some_and(|path| path.exists()) {
-            return scoped;
-        }
-
-        return legacy.or(scoped);
+        return scoped.or(legacy);
     }
 
-    scoped_data_path(file_name)
+    scoped
 }
 
 fn apply_env_fallback(
@@ -307,18 +307,13 @@ pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
             profile.keep_backups_per_game = settings.keep_backups_per_game;
             profile.full_backup_streaming = settings.full_backup_streaming;
             profile.full_backup_streaming_dry_run = settings.full_backup_streaming_dry_run;
-            profile.full_backup_packaged_compression_level = settings.full_backup_packaged_compression_level;
+            profile.full_backup_packaged_compression_level =
+                settings.full_backup_packaged_compression_level;
             profile.default_source_download_dir = settings.default_source_download_dir.clone();
             profile.share_visual_profile_with_hosts = settings.share_visual_profile_with_hosts;
             profile.share_visual_profile_with_members = settings.share_visual_profile_with_members;
 
             profile_io::save_profiles_index(&index)?;
-        }
-    }
-
-    if is_default_profile_active() {
-        if let Some(legacy_path) = paths::settings_path() {
-            let _ = save_json(&legacy_path, settings);
         }
     }
 
@@ -411,12 +406,6 @@ pub fn save_library(library: &GameLibrary) -> Result<(), String> {
     let path = scoped_data_path(paths::LIBRARY_FILE_NAME).ok_or("Ruta no disponible")?;
     save_json(&path, library)?;
 
-    if is_default_profile_active() {
-        if let Some(legacy_path) = paths::library_path() {
-            let _ = save_json(&legacy_path, library);
-        }
-    }
-
     Ok(())
 }
 
@@ -430,12 +419,6 @@ pub fn load_history() -> OperationHistory {
 pub fn save_history(history: &OperationHistory) -> Result<(), String> {
     let path = scoped_data_path(paths::HISTORY_FILE_NAME).ok_or("Ruta no disponible")?;
     save_json(&path, history)?;
-
-    if is_default_profile_active() {
-        if let Some(legacy_path) = paths::history_path() {
-            let _ = save_json(&legacy_path, history);
-        }
-    }
 
     Ok(())
 }
@@ -455,12 +438,6 @@ pub fn save_gamification(gamification: &GamificationConfig) -> Result<(), String
         return Err("Ruta de datos no disponible".to_string());
     };
     save_json(&path, gamification)?;
-
-    if is_default_profile_active() {
-        if let Some(legacy_path) = paths::gamification_path() {
-            let _ = save_json(&legacy_path, gamification);
-        }
-    }
 
     Ok(())
 }

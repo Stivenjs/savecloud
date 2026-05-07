@@ -40,7 +40,7 @@ import type { GetDownloadUrlsUseCase } from "@application/use-cases/GetDownloadU
 import type { DeleteGameFromCloudUseCase } from "@application/use-cases/DeleteGameFromCloudUseCase";
 import type { RenameGameInCloudUseCase } from "@application/use-cases/RenameGameInCloudUseCase";
 import type { GetGameSummaryUseCase } from "@application/use-cases/GetGameSummaryUseCase";
-import type { ListBackupsUseCase } from "@application/use-cases/ListBackupsUseCase";
+import type { ListBackupsOutput, ListBackupsUseCase } from "@application/use-cases/ListBackupsUseCase";
 import type { DeleteBackupUseCase } from "@application/use-cases/DeleteBackupUseCase";
 import type { RenameBackupUseCase } from "@application/use-cases/RenameBackupUseCase";
 import type { ListSavesUseCase } from "@application/use-cases/ListSavesUseCase";
@@ -57,6 +57,7 @@ import { getUserId, getErrorMessage } from "@shared/utils";
 import { TtlCache } from "@shared/ttlCache";
 
 const savesSummaryCache = new TtlCache<string, unknown[]>({ ttlMs: 20_000, maxEntries: 200 });
+const backupsListCache = new TtlCache<string, ListBackupsOutput>({ ttlMs: 10_000, maxEntries: 300 });
 const CLOUD_HOST_HEADER = "x-cloud-host-user-id";
 
 function ownerIdFromStorageUserId(storageUserId: string): string {
@@ -68,6 +69,14 @@ function ownerIdFromStorageUserId(storageUserId: string): string {
 function invalidateSavesCaches(userId: string, gameId?: string): void {
   savesSummaryCache.delete(userId);
   invalidateListSavesByGameCache(userId, gameId);
+}
+
+function backupsCacheKey(storageUserId: string, gameId: string): string {
+  return `${storageUserId}::${gameId.trim()}`;
+}
+
+function invalidateBackupsCache(storageUserId: string, gameId: string): void {
+  backupsListCache.delete(backupsCacheKey(storageUserId, gameId));
 }
 
 /**
@@ -200,12 +209,14 @@ export async function registerSavesRoutes(
     "/saves/backups",
     { schema: { querystring: ListBackupsQuerySchema } },
     async (request, reply) => {
-      const userId = getUserId(request);
       const storageUserId = await getStorageUserIdFromRequest(request);
-      const result = await deps.listBackupsUseCase.execute({
-        userId: storageUserId,
-        gameId: request.query.gameId.trim(),
-      });
+      const gameId = request.query.gameId.trim();
+      const cacheKey = backupsCacheKey(storageUserId, gameId);
+      const cached = backupsListCache.get(cacheKey);
+      if (cached) return reply.send(cached);
+
+      const result = await deps.listBackupsUseCase.execute({ userId: storageUserId, gameId });
+      backupsListCache.set(cacheKey, result);
       return reply.send(result);
     }
   );
@@ -221,6 +232,7 @@ export async function registerSavesRoutes(
 
         await deps.deleteBackupUseCase.execute({ userId: storageUserId, gameId: gameId.trim(), key: key.trim() });
         invalidateSavesCaches(userId, gameId);
+        invalidateBackupsCache(storageUserId, gameId);
         return reply.status(204).send();
       } catch (err) {
         const message = getErrorMessage(err);
@@ -248,6 +260,7 @@ export async function registerSavesRoutes(
           newFilename: newFilename.trim(),
         });
         invalidateSavesCaches(userId, gameId);
+        invalidateBackupsCache(storageUserId, gameId);
         return reply.status(204).send();
       } catch (err) {
         const message = getErrorMessage(err);
@@ -270,6 +283,7 @@ export async function registerSavesRoutes(
         const gameId = request.body.gameId.trim();
         await deps.deleteGameFromCloudUseCase.execute({ userId: storageUserId, gameId });
         invalidateSavesCaches(userId, gameId);
+        invalidateBackupsCache(storageUserId, gameId);
         return reply.status(204).send();
       } catch (err) {
         request.log.error({ err }, "delete-game failed");
@@ -295,6 +309,8 @@ export async function registerSavesRoutes(
         await deps.renameGameInCloudUseCase.execute({ userId: storageUserId, oldGameId, newGameId });
         invalidateSavesCaches(userId, oldGameId);
         invalidateSavesCaches(userId, newGameId);
+        invalidateBackupsCache(storageUserId, oldGameId);
+        invalidateBackupsCache(storageUserId, newGameId);
         return reply.status(204).send();
       } catch (err) {
         request.log.error({ err }, "rename-game failed");
@@ -344,16 +360,18 @@ export async function registerSavesRoutes(
         const requesterUserId = getUserId(request);
         const userId = await getStorageUserIdFromRequest(request);
         const { gameId, key, range } = request.body;
+        const trimmedGameId = gameId.trim();
+        const trimmedKey = key.trim();
         if (
           deps.cloudInviteRepository &&
-          key.startsWith(`${requesterUserId}/${gameId.trim()}/`) &&
+          trimmedKey.startsWith(`${requesterUserId}/${trimmedGameId}/`) &&
           userId !== requesterUserId
         ) {
           const hostUserId = userId.split("::member::")[0];
           const canReadShared = await deps.cloudInviteRepository.isGameSharedWithMember(
             hostUserId,
             requesterUserId,
-            gameId.trim()
+            trimmedGameId
           );
           if (!canReadShared) {
             return reply.status(403).send({ error: "Forbidden", message: "Game is not shared for this member" });
@@ -362,8 +380,8 @@ export async function registerSavesRoutes(
 
         const result = await deps.getDownloadUrlUseCase.execute({
           userId,
-          gameId: gameId.trim(),
-          key: key.trim(),
+          gameId: trimmedGameId,
+          key: trimmedKey,
           range,
         });
         return reply.send(result);

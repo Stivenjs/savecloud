@@ -50,7 +50,7 @@ impl AppDb {
     /// let db = AppDb::open().expect("No se pudo abrir la base de datos");
     /// ```
     pub fn open() -> Result<Self, SqliteError> {
-        let path = paths::sqlite_catalog_path().ok_or(SqliteError::PathNotResolved)?;
+        let path = resolve_catalog_path()?;
 
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -215,4 +215,17 @@ impl AppDb {
             Ok((page_count, freelist_count))
         })
     }
+}
+
+fn resolve_catalog_path() -> Result<std::path::PathBuf, SqliteError> {
+    let primary = paths::sqlite_catalog_path().ok_or(SqliteError::PathNotResolved)?;
+    if primary.exists() {
+        return Ok(primary);
+    }
+    if let Some(legacy) = paths::legacy_sqlite_catalog_path() {
+        if legacy.exists() {
+            return Ok(legacy);
+        }
+    }
+    Ok(primary)
 }

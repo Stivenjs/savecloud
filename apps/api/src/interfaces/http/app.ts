@@ -84,7 +84,13 @@ declare module "fastify" {
 }
 
 export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> {
-  const app = Fastify({ logger: true });
+  const app = Fastify({
+    logger: {
+      level: process.env.LOG_LEVEL ?? "warn",
+    },
+    disableRequestLogging: process.env.HTTP_REQUEST_LOGS !== "true",
+    trustProxy: true,
+  });
 
   await app.register(cors, { origin: true });
   await app.register(import("@fastify/compress"));
