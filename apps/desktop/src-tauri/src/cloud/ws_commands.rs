@@ -78,7 +78,7 @@ pub async fn start_cloud_ws(
             "{}?userId={}&apiKey={}",
             ws_base.trim_end_matches('/'),
             urlencoding::encode(&user_id),
-            urlencoding::encode(&api_key)
+            urlencoding::encode(api_key)
         )
     };
 

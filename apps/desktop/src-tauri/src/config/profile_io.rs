@@ -80,6 +80,11 @@ pub fn save_profiles_index(index: &ProfilesIndex) -> Result<(), String> {
     let temp_path = path.with_extension("json.tmp");
     let content = serde_json::to_string_pretty(index)
         .map_err(|e| format!("Failed to serialize profiles: {e}"))?;
+    if let Ok(existing) = fs::read_to_string(&path) {
+        if existing == content {
+            return Ok(());
+        }
+    }
     fs::write(&temp_path, content).map_err(|e| format!("Failed to write temp file: {e}"))?;
 
     // Renombrar atómicamente el archivo temporal al destino

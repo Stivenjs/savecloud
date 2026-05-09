@@ -189,7 +189,7 @@ pub fn relevant_app_focus(app: &AppHandle) -> bool {
         }
         #[cfg(windows)]
         {
-            return webview_root_matches_foreground(&w).unwrap_or(false);
+            webview_root_matches_foreground(&w).unwrap_or(false)
         }
         #[cfg(not(windows))]
         {

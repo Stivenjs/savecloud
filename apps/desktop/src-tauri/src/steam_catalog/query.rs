@@ -114,10 +114,8 @@ pub fn count_catalog_filtered(
         return Ok(n as u64);
     }
 
-    let mut sql = format!(
-        "SELECT COUNT(*) FROM (\
-           SELECT 1 FROM steam_catalog_apps WHERE 1=1"
-    );
+    let mut sql = "SELECT COUNT(*) FROM (\
+           SELECT 1 FROM steam_catalog_apps WHERE 1=1".to_string();
     let mut params: Vec<String> = Vec::new();
     append_genre_filter(&mut sql, &mut params, genres, "steam_catalog_apps");
     append_tag_filter(&mut sql, &mut params, tags, "steam_catalog_apps");
@@ -189,11 +187,7 @@ pub fn list_catalog_page_filtered(
 
     if results.len() < limit as usize {
         let remaining_limit = limit - results.len() as u32;
-        let normal_offset = if offset >= t_count {
-            offset - t_count
-        } else {
-            0
-        };
+        let normal_offset = offset.saturating_sub(t_count);
 
         let mut n_sql = String::from(
             "SELECT a.app_id, a.name \

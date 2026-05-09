@@ -149,7 +149,7 @@ fn register_db_module(lua: &Lua, parent_table: &Table) -> Result<()> {
 
 fn build_response_table(lua: &Lua, status: u16, body: String) -> Result<Table> {
     let t = lua.create_table()?;
-    t.set("ok", status >= 200 && status < 300)?;
+    t.set("ok", (200..300).contains(&status))?;
     t.set("status", status)?;
     t.set("body", body)?;
     Ok(t)
@@ -168,14 +168,12 @@ fn headers_from_lua(tabla: Option<Table>) -> reqwest::header::HeaderMap {
     let mut map = reqwest::header::HeaderMap::new();
 
     if let Some(t) = tabla {
-        for pair in t.pairs::<String, String>() {
-            if let Ok((k, v)) = pair {
-                if let (Ok(name), Ok(value)) = (
-                    reqwest::header::HeaderName::from_bytes(k.as_bytes()),
-                    reqwest::header::HeaderValue::from_str(&v),
-                ) {
-                    map.insert(name, value);
-                }
+        for (k, v) in t.pairs::<String, String>().flatten() {
+            if let (Ok(name), Ok(value)) = (
+                reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+                reqwest::header::HeaderValue::from_str(&v),
+            ) {
+                map.insert(name, value);
             }
         }
     }

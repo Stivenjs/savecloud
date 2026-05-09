@@ -112,7 +112,7 @@ async fn create_file_with_retry(path: &std::path::Path) -> Result<tokio::fs::Fil
         match tokio::fs::File::create(path).await {
             Ok(f) => return Ok(f),
             Err(e) => {
-                let io_err = std::io::Error::from(e);
+                let io_err = e;
                 if is_access_denied(&io_err) && attempt + 1 < FILE_CREATE_MAX_RETRIES {
                     let wait_ms = FILE_CREATE_BACKOFF_BASE_MS * (attempt as u64 + 1);
                     tokio::time::sleep(Duration::from_millis(wait_ms)).await;
@@ -557,7 +557,7 @@ async fn download_one_file(
                 if let Err(e) = writer.write_all(&chunk).await {
                     write_err = Some(file_write_error_message(
                         &save.filename,
-                        &std::io::Error::from(e),
+                        &e,
                     ));
                     break;
                 }
@@ -597,7 +597,7 @@ async fn download_one_file(
         if let Err(e) = writer.flush().await {
             write_err = Some(file_write_error_message(
                 &save.filename,
-                &std::io::Error::from(e),
+                &e,
             ));
         }
     }

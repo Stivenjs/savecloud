@@ -195,7 +195,7 @@ fn optimal_part_size(total_bytes: u64) -> usize {
 
 /// Número de partes estimado para un archivo de `total_bytes` con partes de `part_size`.
 fn estimated_part_count(total_bytes: u64, part_size: usize) -> u32 {
-    ((total_bytes + part_size as u64 - 1) / part_size as u64).min(u32::MAX as u64) as u32
+    total_bytes.div_ceil(part_size as u64).min(u32::MAX as u64) as u32
 }
 
 /// Concurrencia inicial conservadora basada en el tamaño de parte.

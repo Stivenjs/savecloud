@@ -86,7 +86,7 @@ pub async fn collect_cursor_keys(
     'pages: loop {
         let page = list_batch_page(ctx, list_cursor.as_deref()).await?;
         for k in page.keys {
-            if last_key.map_or(false, |lk| k.as_str() <= lk) {
+            if last_key.is_some_and(|lk| k.as_str() <= lk) {
                 continue;
             }
             collected.push(k);
@@ -114,7 +114,7 @@ pub async fn collect_cursor_review_keys(
     'pages: loop {
         let page = list_reviews_batch_page(ctx, list_cursor.as_deref()).await?;
         for k in page.keys {
-            if last_key.map_or(false, |lk| k.as_str() <= lk) {
+            if last_key.is_some_and(|lk| k.as_str() <= lk) {
                 continue;
             }
             collected.push(k);

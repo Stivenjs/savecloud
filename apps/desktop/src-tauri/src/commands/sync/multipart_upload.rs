@@ -392,7 +392,7 @@ pub(crate) async fn upload_one_file_multipart(
     let num_parts = if total_size == 0 {
         0u32
     } else {
-        ((total_size + PART_SIZE - 1) / PART_SIZE) as u32
+        total_size.div_ceil(PART_SIZE) as u32
     };
 
     let (upload_id, key) = if num_parts == 0 {
@@ -581,7 +581,7 @@ pub(crate) async fn resume_paused_upload(
     let num_parts = if state.total_size == 0 {
         0u32
     } else {
-        ((state.total_size + PART_SIZE - 1) / PART_SIZE) as u32
+        state.total_size.div_ceil(PART_SIZE) as u32
     };
 
     let completed_set: HashSet<u32> = state

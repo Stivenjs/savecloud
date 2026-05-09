@@ -29,10 +29,6 @@
     ".vscode",
     ".github",
     ".husky",
-    ".prettierignore",
-    ".prettierrc",
-    ".prettierrc.json",
-    ".prettierrc.json",
     "src-tauri"
   ]
 }

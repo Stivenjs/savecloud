@@ -84,7 +84,7 @@ const FUSED_TWENTIES: &[(&str, u32)] = &[
     ("veintinueve", 29),
 ];
 
-fn lookup<'a>(table: &'a [(&str, u32)], token: &str) -> Option<u32> {
+fn lookup(table: &[(&str, u32)], token: &str) -> Option<u32> {
     table
         .iter()
         .find_map(|&(word, val)| (word == token).then_some(val))

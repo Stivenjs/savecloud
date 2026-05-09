@@ -28,6 +28,8 @@ pub struct AppDb {
 }
 
 impl AppDb {
+    pub const DEFAULT_MIN_PAGES_FOR_COMPACTION: i64 = 500;
+    pub const DEFAULT_FRAGMENTATION_THRESHOLD_PERCENT: f64 = 25.0;
     /// Abre o crea la base de datos SQLite en disco y configura el Pool.
     ///
     /// Resuelve la ruta del archivo mediante [`paths::sqlite_catalog_path`],
@@ -189,6 +191,11 @@ impl AppDb {
         })
     }
 
+    /// Ejecuta `wal_checkpoint(TRUNCATE)` para compactar el WAL al mínimo.
+    pub fn checkpoint_truncate(&self) -> Result<(), SqliteError> {
+        self.checkpoint("TRUNCATE")
+    }
+
     /// Retorna estadísticas básicas del archivo SQLite.
     ///
     /// Consulta `PRAGMA page_count` y `PRAGMA freelist_count` para estimar
@@ -214,6 +221,26 @@ impl AppDb {
                 conn.query_row("PRAGMA freelist_count;", [], |row| row.get(0))?;
             Ok((page_count, freelist_count))
         })
+    }
+
+    /// Compacta la DB solo si la fragmentación supera el umbral.
+    ///
+    /// Retorna `Ok(true)` cuando se ejecutó `VACUUM`, `Ok(false)` cuando se omitió.
+    pub fn compact_if_fragmented(
+        &self,
+        min_total_pages: i64,
+        fragmentation_threshold_percent: f64,
+    ) -> Result<bool, SqliteError> {
+        let (total, free) = self.stats()?;
+        if total <= 0 || total < min_total_pages {
+            return Ok(false);
+        }
+        let fragmentation = (free as f64 / total as f64) * 100.0;
+        if fragmentation >= fragmentation_threshold_percent {
+            self.compact()?;
+            return Ok(true);
+        }
+        Ok(false)
     }
 }
 

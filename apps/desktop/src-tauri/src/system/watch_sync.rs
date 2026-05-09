@@ -52,7 +52,7 @@ fn expand_path(raw: &str) -> Option<PathBuf> {
             result = if rest.is_empty() {
                 home
             } else {
-                format!("{}/{}", home.trim_end_matches(&['/', '\\']), rest)
+                format!("{}/{}", home.trim_end_matches(['/', '\\']), rest)
             };
         }
     }
@@ -116,8 +116,8 @@ pub fn spawn_watcher(app: AppHandle, tray_state: Arc<crate::tray::tray_state::Tr
     if cfg
         .api_base_url
         .as_ref()
-        .map_or(true, |s| s.trim().is_empty())
-        || cfg.user_id.as_ref().map_or(true, |s| s.trim().is_empty())
+        .is_none_or(|s| s.trim().is_empty())
+        || cfg.user_id.as_ref().is_none_or(|s| s.trim().is_empty())
     {
         return;
     }

@@ -40,7 +40,7 @@ pub fn load_sources() -> Result<Vec<SourceCatalog>, String> {
 pub fn save_sources(sources: &[SourceCatalog]) -> Result<(), String> {
     let path = sources_path()?;
     let payload = serde_json::to_vec_pretty(sources).map_err(|e| e.to_string())?;
-    std::fs::write(path, payload).map_err(|e| e.to_string())
+    write_bytes_if_changed(&path, &payload)
 }
 
 /// Aplica merge/replace/update sobre fuentes existentes.
@@ -94,7 +94,7 @@ pub fn load_jobs() -> Result<Vec<SourceDownloadJob>, String> {
 pub fn save_jobs(jobs: &[SourceDownloadJob]) -> Result<(), String> {
     let path = jobs_path()?;
     let payload = serde_json::to_vec_pretty(jobs).map_err(|e| e.to_string())?;
-    std::fs::write(path, payload).map_err(|e| e.to_string())
+    write_bytes_if_changed(&path, &payload)
 }
 
 fn resolve_read_path(primary: Option<PathBuf>, legacy: Option<PathBuf>) -> Result<PathBuf, String> {
@@ -110,4 +110,20 @@ fn resolve_read_path(primary: Option<PathBuf>, legacy: Option<PathBuf>) -> Resul
         }
     }
     Ok(primary)
+}
+
+fn write_bytes_if_changed(path: &std::path::Path, payload: &[u8]) -> Result<(), String> {
+    if let Ok(existing) = std::fs::read(path) {
+        if existing == payload {
+            return Ok(());
+        }
+    }
+
+    let temp = path.with_extension("json.tmp");
+    std::fs::write(&temp, payload).map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    if path.exists() {
+        std::fs::remove_file(path).map_err(|e| e.to_string())?;
+    }
+    std::fs::rename(&temp, path).map_err(|e| e.to_string())
 }

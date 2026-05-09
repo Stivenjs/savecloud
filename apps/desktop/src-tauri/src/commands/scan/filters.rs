@@ -86,7 +86,7 @@ pub(super) fn name_hints_save(name: &str) -> bool {
 /// Si el nombre de la carpeta sugiere que contiene guardados (ej. "Saves", "SaveGames").
 pub(super) fn folder_name_hints_save(folder_name: &str) -> bool {
     let lower = folder_name.to_lowercase().trim().to_string();
-    save_folder_names().iter().any(|n| *n == lower)
+    save_folder_names().contains(&lower)
 }
 
 /// Devuelve `true` si el nombre de carpeta coincide con algún hint de emulador

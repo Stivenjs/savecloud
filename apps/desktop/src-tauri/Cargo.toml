@@ -2,7 +2,6 @@
 name = "savecloud-desktop"
 version = "1.20.8"
 description = "Sync your game saves to the cloud. Auto-upload on change, local backups before overwrite. Works with Steam, non-Steam, and emulated games."
-authors = ["Steven Jaime"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -75,8 +74,6 @@ half = "=2.3.1"
 [dev-dependencies]
 tempfile = "3.10"
 
-# Windows: gilrs `wgi` vs `xinput` son excluyentes; usamos xinput en hilo de fondo.
-# Guide Xbox: **`XInputGetState` público NO informa ese bit** → `rusty-xinput::get_state_ex` (ordinal 100).
 [target.'cfg(windows)'.dependencies]
 gilrs = { version = "0.10", default-features = false, features = ["xinput"] }
 rusty-xinput = "1.3"

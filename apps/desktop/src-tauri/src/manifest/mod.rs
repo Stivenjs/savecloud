@@ -165,7 +165,7 @@ fn when_has_windows(when_list: &Option<Vec<WhenCondition>>) -> bool {
     conditions.iter().any(|cond| {
         cond.os
             .as_deref()
-            .map_or(true, |o| o.eq_ignore_ascii_case("windows"))
+            .is_none_or(|o| o.eq_ignore_ascii_case("windows"))
     })
 }
 
@@ -213,7 +213,7 @@ fn parse_manifest_yaml(content: &str) -> Result<ManifestIndex, String> {
                     continue;
                 }
 
-                let has_save_or_config = entry.tags.as_ref().map_or(true, |tags| {
+                let has_save_or_config = entry.tags.as_ref().is_none_or(|tags| {
                     tags.iter()
                         .any(|t| t.eq_ignore_ascii_case("save") || t.eq_ignore_ascii_case("config"))
                 });
@@ -359,10 +359,10 @@ pub fn resolve_path_template(template: &PathTemplate, install_dir: Option<&str>)
         PathTemplate::Absolute(s) => expand_ludusavi_placeholders(s),
         PathTemplate::RelativeToInstall(rel) => {
             let rel_expanded = expand_ludusavi_placeholders(rel);
-            let rel_trim = rel_expanded.trim_start_matches(|c| c == ' ' || c == '\\' || c == '/');
+            let rel_trim = rel_expanded.trim_start_matches([' ', '\\', '/']);
 
             if let Some(base) = install_dir.filter(|s| !s.is_empty()) {
-                let base = base.trim_end_matches(&['/', '\\']);
+                let base = base.trim_end_matches(['/', '\\']);
                 format!("{}{}{}", base, std::path::MAIN_SEPARATOR, rel_trim)
             } else {
                 String::new()

@@ -158,7 +158,7 @@ async fn sync_notifications_push_internal(db: &AppDb) -> Result<usize, String> {
     }
 
     let ids: Vec<String> = pending.iter().map(|p| p.id.clone()).collect();
-    sync_http::push_batch(pending).await.map_err(|e| e)?;
+    sync_http::push_batch(pending).await?;
 
     db.with_conn(|conn| db::clear_pending_sync(conn, &ids))
         .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
@@ -184,8 +184,7 @@ async fn sync_notifications_pull_internal(app: &AppHandle, db: &AppDb, emit: boo
         .filter(|s| !s.trim().is_empty());
 
     let resp = sync_http::pull_since(cursor.as_deref(), 200)
-        .await
-        .map_err(|e| e)?;
+        .await?;
     let items = resp.items;
     let n = items.len();
     if n == 0 {
