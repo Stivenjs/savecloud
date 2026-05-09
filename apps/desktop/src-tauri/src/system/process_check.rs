@@ -5,7 +5,9 @@ use crate::game_mode::sync_detected_game_cpu_boost;
 use crate::game_mode::DetectedGameProcess;
 use crate::time;
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+#[cfg(windows)]
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::time::Instant;
