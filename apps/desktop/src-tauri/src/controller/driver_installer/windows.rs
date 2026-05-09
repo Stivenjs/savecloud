@@ -1,15 +1,13 @@
-//! Instalación asistida del runtime de DirectX/XInput para mandos en Windows.
+//! Implementación sólo compilada en `target_os = "windows"`.
 
 use crate::network::DATA_CLIENT;
+use crate::utils::launch_exe;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
-use crate::utils::launch_exe;
-
 const DIRECTX_DETAILS_URL: &str = "https://www.microsoft.com/en-us/download/details.aspx?id=35";
 
-#[cfg(target_os = "windows")]
 pub async fn install_windows_gamepad_runtime() -> Result<(), String> {
     let download_url = resolve_dxwebsetup_url().await?;
     let installer_path = download_installer(&download_url).await?;
@@ -18,15 +16,6 @@ pub async fn install_windows_gamepad_runtime() -> Result<(), String> {
     install_result
 }
 
-#[cfg(not(target_os = "windows"))]
-pub async fn install_windows_gamepad_runtime() -> Result<(), String> {
-    Err(
-        "La instalación automática del driver de mandos solo está disponible en Windows."
-            .to_string(),
-    )
-}
-
-#[cfg(target_os = "windows")]
 async fn resolve_dxwebsetup_url() -> Result<String, String> {
     let html = DATA_CLIENT
         .get(DIRECTX_DETAILS_URL)
@@ -53,7 +42,6 @@ async fn resolve_dxwebsetup_url() -> Result<String, String> {
     Ok(url)
 }
 
-#[cfg(target_os = "windows")]
 async fn download_installer(url: &str) -> Result<PathBuf, String> {
     let bytes = DATA_CLIENT
         .get(url)
@@ -77,7 +65,6 @@ async fn download_installer(url: &str) -> Result<PathBuf, String> {
     Ok(target)
 }
 
-#[cfg(target_os = "windows")]
 fn run_installer(installer_path: &PathBuf) -> Result<(), String> {
     let path = installer_path.to_string_lossy().to_string();
     launch_exe::launch_game_executable(&path).map_err(|e| {

@@ -66,10 +66,7 @@ pub fn get_config() -> ConfigDto {
     let settings = config::load_settings();
     let library = config::load_library();
 
-    #[cfg(target_os = "windows")]
     let steam_map = steam::get_steam_path_to_appid_map();
-    #[cfg(not(target_os = "windows"))]
-    let steam_map = std::collections::HashMap::new();
 
     ConfigDto {
         api_base_url: settings.api_base_url.clone(),

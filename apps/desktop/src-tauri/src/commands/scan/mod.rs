@@ -31,6 +31,7 @@ use std::sync::LazyLock;
 static ENV_VAR_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"%([^%]+)%").unwrap());
 static NUMBER_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\d+$").unwrap());
 
+#[cfg(target_os = "windows")]
 static COMMON_ROOT_DIRS: LazyLock<HashSet<String>> = LazyLock::new(|| {
     let user_profile = std::env::var("USERPROFILE")
         .unwrap_or_default()
@@ -59,6 +60,19 @@ static COMMON_ROOT_DIRS: LazyLock<HashSet<String>> = LazyLock::new(|| {
     .filter(|s| !s.is_empty())
     .collect()
 });
+
+/// Devuelve `true` si el path es una raíz genérica del sistema (Windows).
+#[cfg(target_os = "windows")]
+fn is_common_root_dir(path_str: &str) -> bool {
+    let mut p = path_str.to_lowercase();
+    p = p.trim_end_matches(['\\', '/']).to_string();
+
+    if p.len() <= 3 && p.ends_with(':') {
+        return true;
+    }
+
+    COMMON_ROOT_DIRS.contains(&p)
+}
 
 struct EnvContext {
     user_profile: String,
@@ -125,19 +139,6 @@ impl CandidateList {
     fn into_vec(self) -> Vec<PathCandidateDto> {
         self.map.into_values().collect()
     }
-}
-
-/// Devuelve `true` si el path es una raíz genérica del sistema.
-fn is_common_root_dir(path_str: &str) -> bool {
-    let mut p = path_str.to_lowercase();
-    p = p.trim_end_matches(['\\', '/']).to_string();
-
-    // Discos base (C:, D:, …)
-    if p.len() <= 3 && p.ends_with(':') {
-        return true;
-    }
-
-    COMMON_ROOT_DIRS.contains(&p)
 }
 
 fn expand_path(raw: &str, env: &EnvContext) -> Option<String> {
@@ -806,9 +807,10 @@ pub fn scan_path_candidates_sync(
                                 && fs::read_dir(&folder_path)
                                     .map(|mut i| i.next().is_some())
                                     .unwrap_or(false)
-                                && !valid_game_paths.contains(&folder_path) {
-                                    valid_game_paths.push(folder_path);
-                                }
+                                && !valid_game_paths.contains(&folder_path)
+                            {
+                                valid_game_paths.push(folder_path);
+                            }
                         }
                     }
                 }
