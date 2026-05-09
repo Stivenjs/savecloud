@@ -1,6 +1,8 @@
 //! Detección de procesos de juego y monitoreo de actividad en tiempo real.
 
 use crate::config;
+use crate::game_mode::sync_detected_game_cpu_boost;
+use crate::game_mode::DetectedGameProcess;
 use crate::time;
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -70,11 +72,18 @@ pub fn is_game_running(game_id: &str, _paths: &[String]) -> bool {
 /// # Returns
 /// Un `HashMap` donde la clave es el `game_id` y el valor es un booleano de ejecución.
 pub fn are_games_running(game_ids: &[String]) -> HashMap<String, bool> {
+    scan_games_running(game_ids).0
+}
+
+pub fn scan_games_running(
+    game_ids: &[String],
+) -> (HashMap<String, bool>, Vec<DetectedGameProcess>) {
     let cfg = config::load_config();
     let mut result: HashMap<String, bool> = HashMap::with_capacity(game_ids.len());
+    let mut processes_out: Vec<DetectedGameProcess> = Vec::new();
 
     if game_ids.is_empty() {
-        return result;
+        return (result, processes_out);
     }
 
     let mut names_by_game: HashMap<String, Vec<String>> = HashMap::with_capacity(game_ids.len());
@@ -119,20 +128,27 @@ pub fn are_games_running(game_ids: &[String]) -> HashMap<String, bool> {
         ProcessRefreshKind::new().with_exe(UpdateKind::OnlyIfNotSet),
     );
 
-    for process in sys.processes().values() {
+    for (pid, process) in sys.processes() {
         let proc_name = process.name().to_string_lossy().to_lowercase();
         for game_id in game_ids {
-            if result[game_id] {
+            let Some(check_names) = names_by_game.get(game_id) else {
+                continue;
+            };
+            if !check_names.contains(&proc_name) {
                 continue;
             }
-            if let Some(check_names) = names_by_game.get(game_id) {
-                if check_names.contains(&proc_name) {
-                    result.insert(game_id.clone(), true);
-                }
+            if !result[game_id] {
+                result.insert(game_id.clone(), true);
             }
+            processes_out.push(DetectedGameProcess {
+                game_id: game_id.clone(),
+                pid: pid.as_u32(),
+                exe_name_lc: proc_name.clone(),
+            });
         }
     }
-    result
+
+    (result, processes_out)
 }
 
 /// Comando Tauri original — sin cambios en su firma pública.
@@ -179,7 +195,13 @@ pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationTok
 
         let cfg = config::load_config();
         let game_ids: Vec<String> = cfg.games.iter().map(|g| g.id.clone()).collect();
-        let current = are_games_running(&game_ids);
+        let (current, pid_candidates) = scan_games_running(&game_ids);
+
+        sync_detected_game_cpu_boost(
+            cfg.game_mode_boost_detected_game_cpu,
+            current.values().any(|&r| r),
+            &pid_candidates,
+        );
 
         if current != previous_state {
             let _ = app.emit("games-running-status", &current);

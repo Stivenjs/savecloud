@@ -1049,3 +1049,7 @@ export async function setGameModeReduceCaptureOverhead(enabled: boolean): Promis
 export async function setGameModeThrottleSavecloudBackground(enabled: boolean): Promise<void> {
   await invoke("set_game_mode_throttle_savecloud_background", { enabled });
 }
+
+export async function setGameModeBoostDetectedGameCpu(enabled: boolean): Promise<void> {
+  await invoke("set_game_mode_boost_detected_game_cpu", { enabled });
+}

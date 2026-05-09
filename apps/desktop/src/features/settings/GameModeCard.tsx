@@ -9,6 +9,7 @@ import {
   gameModeRefresh,
   gameModeSetEnabled,
   setGameModeApplyPowerProfile,
+  setGameModeBoostDetectedGameCpu,
   setGameModeReduceCaptureOverhead,
   setGameModeThrottleSavecloudBackground,
 } from "@services/tauri";
@@ -137,6 +138,27 @@ export function GameModeCard() {
               <span className="block text-xs text-default-500 leading-relaxed font-normal">
                 Opcional: ajusta AppCaptureEnabled bajo HKCU para reducir grabación/fondo relacionado con Game Bar. Se
                 revierte al desactivar modo juego.
+              </span>
+            </div>
+          </Checkbox>
+
+          <Checkbox
+            classNames={{
+              base: "max-w-full w-full items-start",
+              label: "w-full",
+            }}
+            isSelected={!!config?.gameModeBoostDetectedGameCpu}
+            onValueChange={(v) => void saveOptionThenRefreshOs(() => setGameModeBoostDetectedGameCpu(v))}
+            isDisabled={loading}>
+            <div className="space-y-0.5">
+              <span className="block text-sm font-medium text-foreground">Prioridad de CPU al detectar partida</span>
+              <span className="block text-xs text-default-500 leading-relaxed font-normal">
+                Tras unos segundos (~intervalo del monitor de procesos), solo si el{" "}
+                <span className="font-medium text-default-600">nombre del .exe</span> del juego en ejecución coincide
+                con lo configurado para ese juego en la biblioteca — por ejemplo{" "}
+                <code className="text-xs">re9.exe</code>. Si no coincide, SaveCloud no toca ese proceso. En Windows, en
+                los logs aparece «[CpuBoost] Prioridad elevada…» cuando funciona o un aviso si el proceso denegó acceso
+                (antivirus o título muy protegido). Independiente del interruptor «Modo juego».
               </span>
             </div>
           </Checkbox>

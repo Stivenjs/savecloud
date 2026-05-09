@@ -89,6 +89,9 @@ pub struct AppSettings {
     /// Pausar subidas/torrents/descargas de fuentes de SaveCloud mientras el modo está activo.
     #[serde(default = "default_true")]
     pub game_mode_throttle_savecloud_background: bool,
+    /// Detectar si un juego de la biblioteca está en ejecución y darle más prioridad de CPU (automático).
+    #[serde(default)]
+    pub game_mode_boost_detected_game_cpu: bool,
 }
 
 fn default_true() -> bool {
@@ -226,6 +229,8 @@ pub struct Config {
     pub game_mode_reduce_capture_overhead: bool,
     #[serde(default = "default_true")]
     pub game_mode_throttle_savecloud_background: bool,
+    #[serde(default)]
+    pub game_mode_boost_detected_game_cpu: bool,
 }
 
 /// Objeto de transferencia de datos (DTO) de la configuración principal,
@@ -277,6 +282,8 @@ pub struct ConfigDto {
     pub game_mode_reduce_capture_overhead: bool,
     #[serde(default = "default_true")]
     pub game_mode_throttle_savecloud_background: bool,
+    #[serde(default)]
+    pub game_mode_boost_detected_game_cpu: bool,
 }
 
 /// DTO representativo de un juego para el frontend.

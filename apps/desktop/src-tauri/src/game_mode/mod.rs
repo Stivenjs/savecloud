@@ -4,6 +4,7 @@
 
 pub mod apply;
 pub mod commands;
+pub(crate) mod cpu_boost;
 
 mod session_file;
 
@@ -14,6 +15,9 @@ mod os_macos_linux;
 pub(crate) mod os_windows;
 
 use std::sync::Arc;
+
+pub(crate) use cpu_boost::sync_detected_game_cpu_boost;
+pub use cpu_boost::DetectedGameProcess;
 
 /// Exclusión mútua de activación/desactivación concurrente desde la UI u otros invokes.
 #[derive(Clone)]

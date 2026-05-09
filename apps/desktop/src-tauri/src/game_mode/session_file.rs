@@ -6,7 +6,18 @@ use crate::config::paths;
 
 const SESSION_FORMAT_VERSION: u32 = 1;
 
-/// Datos para deshacer sólo los efectos que aplicó modo juego.
+/// Registro reversible de prioridades CPU modificadas por el boost automático al detectar juego.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CpuBoostRecord {
+    pub(crate) pid: u32,
+    pub(crate) exe_name_lc: String,
+    #[serde(default)]
+    pub(crate) prev_windows_priority_class: Option<u32>,
+    #[serde(default)]
+    pub(crate) prev_unix_nice: Option<i32>,
+}
+
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GameModeSessionFile {
@@ -33,6 +44,8 @@ pub(crate) struct GameModeSessionFile {
     pub(crate) paused_source_jobs: Vec<String>,
     #[serde(default)]
     pub(crate) upload_pause_caused_by_mode: bool,
+    #[serde(default)]
+    pub(crate) cpu_boost_records: Vec<CpuBoostRecord>,
 }
 
 pub(crate) fn load_session() -> GameModeSessionFile {
@@ -54,6 +67,18 @@ pub(crate) fn save_session(session: &GameModeSessionFile) -> Result<(), String> 
     s.version = SESSION_FORMAT_VERSION;
     let json = serde_json::to_string_pretty(&s).map_err(|e| format!("serde modo juego: {e}"))?;
     std::fs::write(&path, json).map_err(|e| format!("escribir session modo juego: {e}"))
+}
+
+/// True cuando no queda ningún efecto reversible en el archivo de sesión.
+pub(crate) fn session_fully_cleared(s: &GameModeSessionFile) -> bool {
+    !s.upload_pause_caused_by_mode
+        && s.paused_source_jobs.is_empty()
+        && s.paused_torrents.is_empty()
+        && s.windows_previous_power_scheme_guid.is_none()
+        && s.linux_power_profile_before.is_none()
+        && s.macos_caffeinate_pid.is_none()
+        && !s.windows_capture_changed
+        && s.cpu_boost_records.is_empty()
 }
 
 pub(crate) fn clear_session_file() -> Result<(), String> {

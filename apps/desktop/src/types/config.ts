@@ -71,4 +71,9 @@ export interface Config {
   readonly gameModeReduceCaptureOverhead?: boolean;
   /** Pausar subidas, torrents y descargas de fuentes gestionadas por SaveCloud. */
   readonly gameModeThrottleSavecloudBackground?: boolean;
+  /**
+   * Si la app detecta un juego de la biblioteca en ejecución, sube ligeramente la prioridad de CPU
+   * de esos procesos (independiente del interruptor «Modo juego»).
+   */
+  readonly gameModeBoostDetectedGameCpu?: boolean;
 }

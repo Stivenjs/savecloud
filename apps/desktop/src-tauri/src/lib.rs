@@ -31,9 +31,17 @@ fn load_dotenv() {
     let _ = dotenvy::dotenv();
 }
 
+fn init_logging() {
+    let filter = concat!("warn,", "savecloud_desktop_lib=info");
+    let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(filter))
+        .format_timestamp_millis()
+        .try_init();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     load_dotenv();
+    init_logging();
 
     let mut builder = tauri::Builder::default();
 

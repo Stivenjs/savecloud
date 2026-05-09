@@ -189,5 +189,6 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::config::config_cmds::set_game_mode_apply_power_profile,
         crate::config::config_cmds::set_game_mode_reduce_capture_overhead,
         crate::config::config_cmds::set_game_mode_throttle_savecloud_background,
+        crate::config::config_cmds::set_game_mode_boost_detected_game_cpu,
     ])
 }

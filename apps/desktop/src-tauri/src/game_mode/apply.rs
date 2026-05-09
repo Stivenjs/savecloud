@@ -17,6 +17,8 @@ fn settings_from_disk() -> AppSettings {
 
 /// Si hay sesión huérfana tras un cierre abrupto pero el modo figura como desactivado, restauramos el SO.
 pub async fn reconcile_orphans(app: AppHandle) {
+    super::cpu_boost::reconcile_stale_on_startup();
+
     let s = settings_from_disk();
     if s.game_mode_enabled {
         let _ = apply_enable_follow_prefs(&app, &s).await;
@@ -51,13 +53,7 @@ fn persist_after_change(sess: &GameModeSessionFile) {
 }
 
 fn session_is_totally_clear(s: &GameModeSessionFile) -> bool {
-    !s.upload_pause_caused_by_mode
-        && s.paused_source_jobs.is_empty()
-        && s.paused_torrents.is_empty()
-        && s.windows_previous_power_scheme_guid.is_none()
-        && s.linux_power_profile_before.is_none()
-        && s.macos_caffeinate_pid.is_none()
-        && !s.windows_capture_changed
+    sf::session_fully_cleared(s)
 }
 
 pub async fn set_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
