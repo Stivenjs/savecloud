@@ -184,5 +184,11 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::controller::tester_ipc::gamepad_tester_session_stop,
         crate::controller::tester_ipc::gamepad_tester_trigger_rumble,
         crate::controller::tester_ipc::gamepad_install_windows_runtime,
+        crate::game_mode::commands::game_mode_set_enabled,
+        crate::game_mode::commands::game_mode_refresh,
+        crate::config::config_cmds::set_game_mode_apply_power_profile,
+        crate::config::config_cmds::set_game_mode_reduce_capture_overhead,
+        crate::config::config_cmds::set_game_mode_throttle_savecloud_background,
+        crate::config::config_cmds::set_game_mode_boost_detected_game_cpu,
     ])
 }

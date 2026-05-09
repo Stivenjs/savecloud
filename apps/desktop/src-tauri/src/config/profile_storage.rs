@@ -385,6 +385,11 @@ pub fn initialize_profile_storage(profile: &super::profiles::Profile) -> Result<
         share_visual_profile_with_hosts: profile.share_visual_profile_with_hosts,
         share_visual_profile_with_members: profile.share_visual_profile_with_members,
         steam_web_api_key: None,
+        game_mode_enabled: false,
+        game_mode_apply_power_profile: true,
+        game_mode_reduce_capture_overhead: false,
+        game_mode_throttle_savecloud_background: true,
+        game_mode_boost_detected_game_cpu: false,
     };
 
     save_settings_for_profile(&profile.id, &settings)?;

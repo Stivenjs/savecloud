@@ -23,6 +23,7 @@ import { DevSdk } from "@features/settings/DevSdk";
 import { SourceInstallSettingsCard } from "@features/settings/SourceInstallSettingsCard";
 import { GamepadTesterCard } from "@features/settings/GamepadTesterCard";
 import { VoiceCommandsCard } from "@features/voice-commands";
+import { GameModeCard } from "@features/settings/GameModeCard";
 import { HealthObservabilityCard } from "@features/settings/HealthObservabilityCard";
 import { SettingsSidebarAnimatedPanel } from "@features/settings/SettingsSidebarAnimatedPanel";
 import { SettingsSidebar, type SettingsTabKey } from "@features/settings/SettingsSidebar";
@@ -198,6 +199,7 @@ export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
       case "app":
         return (
           <div className="space-y-3">
+            <GameModeCard />
             <AutostartCard autostart={autostart} loading={loading} onChange={handleAutostartChange} />
             <ProfileStartupBehaviorCard
               alwaysShowProfileSelector={alwaysShowProfileSelector}

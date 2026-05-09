@@ -63,4 +63,17 @@ export interface Config {
   readonly shareVisualProfileWithHosts?: boolean;
   /** Si es true, los miembros de tu nube pueden ver tu perfil visual al cargar tu usuario. */
   readonly shareVisualProfileWithMembers?: boolean;
+  /** Modo juego activo en SaveCloud (mitigaciones conservadoras). */
+  readonly gameModeEnabled?: boolean;
+  /** Aplicar perfil de alto rendimiento (Windows powercfg Alto rendimiento, Linux performance, macOS caffeinate cuando hay soporte). */
+  readonly gameModeApplyPowerProfile?: boolean;
+  /** Solo Windows HKCU: desactivar captura de fondo tipo Game DVR donde sea posible. */
+  readonly gameModeReduceCaptureOverhead?: boolean;
+  /** Pausar subidas, torrents y descargas de fuentes gestionadas por SaveCloud. */
+  readonly gameModeThrottleSavecloudBackground?: boolean;
+  /**
+   * Si la app detecta un juego de la biblioteca en ejecución, sube ligeramente la prioridad de CPU
+   * de esos procesos (independiente del interruptor «Modo juego»).
+   */
+  readonly gameModeBoostDetectedGameCpu?: boolean;
 }

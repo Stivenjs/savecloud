@@ -101,6 +101,11 @@ pub fn get_config() -> ConfigDto {
             .map(|_| config::MASKED_STEAM_WEB_API_KEY.to_string()),
         share_visual_profile_with_hosts: settings.share_visual_profile_with_hosts,
         share_visual_profile_with_members: settings.share_visual_profile_with_members,
+        game_mode_enabled: settings.game_mode_enabled,
+        game_mode_apply_power_profile: settings.game_mode_apply_power_profile,
+        game_mode_reduce_capture_overhead: settings.game_mode_reduce_capture_overhead,
+        game_mode_throttle_savecloud_background: settings.game_mode_throttle_savecloud_background,
+        game_mode_boost_detected_game_cpu: settings.game_mode_boost_detected_game_cpu,
         games: library
             .games
             .into_iter()
@@ -349,6 +354,34 @@ pub fn set_share_visual_profile_with_hosts(enabled: bool) -> Result<(), String> 
 pub fn set_share_visual_profile_with_members(enabled: bool) -> Result<(), String> {
     let mut settings = config::load_settings();
     settings.share_visual_profile_with_members = enabled;
+    config::save_settings(&settings)
+}
+
+#[tauri::command]
+pub fn set_game_mode_apply_power_profile(enabled: bool) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.game_mode_apply_power_profile = enabled;
+    config::save_settings(&settings)
+}
+
+#[tauri::command]
+pub fn set_game_mode_reduce_capture_overhead(enabled: bool) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.game_mode_reduce_capture_overhead = enabled;
+    config::save_settings(&settings)
+}
+
+#[tauri::command]
+pub fn set_game_mode_throttle_savecloud_background(enabled: bool) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.game_mode_throttle_savecloud_background = enabled;
+    config::save_settings(&settings)
+}
+
+#[tauri::command]
+pub fn set_game_mode_boost_detected_game_cpu(enabled: bool) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.game_mode_boost_detected_game_cpu = enabled;
     config::save_settings(&settings)
 }
 

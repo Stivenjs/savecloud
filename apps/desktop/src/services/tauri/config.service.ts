@@ -1027,3 +1027,29 @@ export async function exportPluginSdk(): Promise<string> {
 export async function getPluginLogs(): Promise<PluginLogEntry[]> {
   return invoke<PluginLogEntry[]>("get_plugin_logs");
 }
+
+/** Activa o desactiva modo juego (mitigaciones SaveCloud + ajustes de SO donde aplique). */
+export async function gameModeSetEnabled(enabled: boolean): Promise<void> {
+  await invoke("game_mode_set_enabled", { enabled });
+}
+
+/** Reaplica la configuración vigente cuando el modo ya está activo (tras cambiar opciones). */
+export async function gameModeRefresh(): Promise<void> {
+  await invoke("game_mode_refresh");
+}
+
+export async function setGameModeApplyPowerProfile(enabled: boolean): Promise<void> {
+  await invoke("set_game_mode_apply_power_profile", { enabled });
+}
+
+export async function setGameModeReduceCaptureOverhead(enabled: boolean): Promise<void> {
+  await invoke("set_game_mode_reduce_capture_overhead", { enabled });
+}
+
+export async function setGameModeThrottleSavecloudBackground(enabled: boolean): Promise<void> {
+  await invoke("set_game_mode_throttle_savecloud_background", { enabled });
+}
+
+export async function setGameModeBoostDetectedGameCpu(enabled: boolean): Promise<void> {
+  await invoke("set_game_mode_boost_detected_game_cpu", { enabled });
+}
