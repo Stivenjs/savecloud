@@ -15,9 +15,9 @@ import {
 } from "@heroui/react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { type as getOsType } from "@tauri-apps/plugin-os";
-import { Cpu, FileSearch, RotateCcw, Trash2 } from "lucide-react";
+import { AppWindow, Cpu, FileSearch, RotateCcw, Trash2 } from "lucide-react";
 import type { GameFormState } from "@/hooks/useGameForm";
-import { listRunningProcessExeNames } from "@/services/tauri";
+import { listRunningProcessesForPick } from "@/services/tauri";
 
 /** Diálogo del SO: permite launchers tipo .jar, scripts y ejecutables sin forzar marca comercial ni rutas fijas. */
 function launchTargetDialogFilters(): { name: string; extensions: string[] }[] {
@@ -55,21 +55,21 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
   const [filter, setFilter] = useState("");
 
   const {
-    data: runningNames = [],
+    data: runningRows = [],
     isLoading: runningLoading,
     refetch: refetchProcesses,
   } = useQuery({
-    queryKey: ["running-process-exe-names"],
-    queryFn: listRunningProcessExeNames,
+    queryKey: ["running-processes-for-pick"],
+    queryFn: listRunningProcessesForPick,
     enabled: processModalOpen && isOpen,
     staleTime: 15_000,
   });
 
-  const filteredNames = useMemo(() => {
+  const filteredRows = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    if (!q) return runningNames;
-    return runningNames.filter((n) => n.toLowerCase().includes(q));
-  }, [runningNames, filter]);
+    if (!q) return runningRows;
+    return runningRows.filter((r) => r.name.toLowerCase().includes(q));
+  }, [runningRows, filter]);
 
   const handlePickExecutable = useCallback(async () => {
     setError(null);
@@ -211,7 +211,8 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
           <ModalHeader className="flex flex-col gap-1">
             <span>Proceso en ejecución</span>
             <span className="text-xs font-normal text-default-500">
-              Elige el nombre de proceso que coincida con tu juego en ejecución.
+              Elige el proceso que coincida con tu juego (en Windows suele llevar el mismo icono que en Administrador de
+              tareas).
             </span>
           </ModalHeader>
           <ModalBody className="gap-3">
@@ -227,19 +228,32 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
                 <div className="flex justify-center py-8">
                   <Spinner size="sm" />
                 </div>
-              ) : filteredNames.length === 0 ? (
+              ) : filteredRows.length === 0 ? (
                 <p className="py-6 text-center text-sm text-default-400">
-                  {runningNames.length === 0 ? "No hay procesos listados." : "Ningún resultado con ese filtro."}
+                  {runningRows.length === 0 ? "No hay procesos listados." : "Ningún resultado con ese filtro."}
                 </p>
               ) : (
                 <ul className="space-y-1">
-                  {filteredNames.map((name) => (
-                    <li key={name}>
+                  {filteredRows.map((row) => (
+                    <li key={row.name}>
                       <button
                         type="button"
-                        className="w-full rounded-medium px-3 py-2 text-left text-sm transition-colors hover:bg-default-100"
-                        onClick={() => handleSelectProcess(name)}>
-                        {name}
+                        className="flex w-full items-center gap-2 rounded-medium px-3 py-2 text-left text-sm transition-colors hover:bg-default-100"
+                        onClick={() => handleSelectProcess(row.name)}>
+                        {row.iconPngBase64 ? (
+                          <img
+                            src={`data:image/png;base64,${row.iconPngBase64}`}
+                            alt=""
+                            className="h-7 w-7 shrink-0 rounded-medium object-contain"
+                            draggable={false}
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-medium bg-default-100">
+                            <AppWindow className="h-4 w-4 text-default-400" aria-hidden />
+                          </span>
+                        )}
+                        <span className="min-w-0 truncate">{row.name}</span>
                       </button>
                     </li>
                   ))}

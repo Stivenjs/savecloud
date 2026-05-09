@@ -41,6 +41,7 @@ fn push_unique(out: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>, p: PathBuf) 
     }
 }
 
+#[cfg(windows)]
 fn java_runner_candidates_windows() -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut seen = HashSet::new();

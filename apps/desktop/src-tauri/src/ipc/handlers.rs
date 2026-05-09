@@ -44,7 +44,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::config::config_cmds::update_game,
         crate::config::config_cmds::rename_game,
         crate::config::config_cmds::remove_game,
-        crate::config::config_cmds::list_running_process_exe_names,
+        crate::config::config_cmds::list_running_processes_for_pick,
         crate::config::config_cmds::launch_game,
         crate::config::config_cmds::set_game_launch_executable,
         crate::config::config_cmds::set_game_executable_names,

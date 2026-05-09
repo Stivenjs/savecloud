@@ -140,7 +140,7 @@ fn try_apply_boost(c: &DetectedGameProcess) -> Option<CpuBoostRecord> {
             );
             return None;
         }
-        if let Err(e) = win_set_priority_class(c.pid, win_above_normal()) {
+        if let Err(e) = win_set_priority_class(c.pid, win_target_boost_priority_class()) {
             log::warn!(
                 "[CpuBoost] SetPriorityClass pid={} ({}) falló ({e}); antivirus/proceso protegido pueden bloquearlo",
                 c.pid,
@@ -197,10 +197,9 @@ fn try_apply_boost(c: &DetectedGameProcess) -> Option<CpuBoostRecord> {
 mod win {
     use windows::Win32::Foundation::{CloseHandle, HANDLE};
     use windows::Win32::System::Threading::{
-        GetPriorityClass, OpenProcess, SetPriorityClass, ABOVE_NORMAL_PRIORITY_CLASS,
-        HIGH_PRIORITY_CLASS, PROCESS_ACCESS_RIGHTS, PROCESS_CREATION_FLAGS,
-        PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SET_INFORMATION,
-        REALTIME_PRIORITY_CLASS,
+        GetPriorityClass, OpenProcess, SetPriorityClass, HIGH_PRIORITY_CLASS,
+        PROCESS_ACCESS_RIGHTS, PROCESS_CREATION_FLAGS, PROCESS_QUERY_INFORMATION,
+        PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SET_INFORMATION, REALTIME_PRIORITY_CLASS,
     };
 
     const OPEN_PRIORITY_TRY: PROCESS_ACCESS_RIGHTS =
@@ -214,14 +213,12 @@ mod win {
             .or_else(|_| OpenProcess(OPEN_PRIORITY_FALLBACK, false, pid))
     }
 
-    pub(super) fn above_normal() -> u32 {
-        ABOVE_NORMAL_PRIORITY_CLASS.0
+    pub(super) fn target_boost_priority_class() -> u32 {
+        HIGH_PRIORITY_CLASS.0
     }
 
     pub(super) fn should_skip_boost(current: u32) -> bool {
-        current == ABOVE_NORMAL_PRIORITY_CLASS.0
-            || current == HIGH_PRIORITY_CLASS.0
-            || current == REALTIME_PRIORITY_CLASS.0
+        current == HIGH_PRIORITY_CLASS.0 || current == REALTIME_PRIORITY_CLASS.0
     }
 
     pub(super) fn get_priority_class(pid: u32) -> Result<u32, String> {
@@ -254,8 +251,8 @@ mod win {
 use win as win_impl;
 
 #[cfg(target_os = "windows")]
-fn win_above_normal() -> u32 {
-    win_impl::above_normal()
+fn win_target_boost_priority_class() -> u32 {
+    win_impl::target_boost_priority_class()
 }
 
 #[cfg(target_os = "windows")]
@@ -335,6 +332,6 @@ mod win_skip_policy_tests {
         assert!(!super::win_should_skip_boost(IDLE_PRIORITY_CLASS.0));
         assert!(super::win_should_skip_boost(HIGH_PRIORITY_CLASS.0));
         assert!(super::win_should_skip_boost(REALTIME_PRIORITY_CLASS.0));
-        assert!(super::win_should_skip_boost(ABOVE_NORMAL_PRIORITY_CLASS.0));
+        assert!(!super::win_should_skip_boost(ABOVE_NORMAL_PRIORITY_CLASS.0));
     }
 }
