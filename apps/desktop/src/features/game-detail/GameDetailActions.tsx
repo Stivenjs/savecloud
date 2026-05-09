@@ -5,7 +5,7 @@ import type { GameActionsMenuModelProps } from "@features/games/game-actions";
 import { GameActionsDropdownMenu } from "@features/games/game-actions";
 
 export type GameDetailActionsProps = Omit<GameActionsMenuModelProps, "surface"> & {
-  /** Lanza el .exe configurado en el drawer (Ejecución). Deshabilitado si no hay ruta. */
+  /** Lanza el archivo configurado en el drawer (Ejecución). Deshabilitado si no hay ruta. */
   onPlay?: (game: ConfiguredGame) => void;
   /** Abre el mapa visual del juego. */
   onOpenGraph?: (game: ConfiguredGame) => void;

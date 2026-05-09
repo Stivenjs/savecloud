@@ -65,7 +65,7 @@ fn run_powerprofiles(args: &[&str]) -> Result<std::process::Output, String> {
 
 #[cfg(target_os = "linux")]
 pub(crate) fn read_linux_power_profile() -> Option<String> {
-    let out = run_powerprofiles(["get"]).ok()?;
+    let out = run_powerprofiles(&["get"]).ok()?;
     if !out.status.success() {
         return None;
     }
@@ -79,7 +79,7 @@ pub(crate) fn read_linux_power_profile() -> Option<String> {
 
 #[cfg(target_os = "linux")]
 pub(crate) fn set_linux_power_profile(profile: &str) -> Result<(), String> {
-    let out = run_powerprofiles(["set", profile.trim()])?;
+    let out = run_powerprofiles(&["set", profile.trim()])?;
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr);
         let stdout = String::from_utf8_lossy(&out.stdout);

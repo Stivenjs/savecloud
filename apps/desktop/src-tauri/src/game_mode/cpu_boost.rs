@@ -276,8 +276,7 @@ fn win_set_priority_class(pid: u32, class: u32) -> Result<(), String> {
 #[cfg(all(unix, not(target_os = "windows")))]
 fn unix_get_nice(pid: u32) -> Result<i32, String> {
     clear_errno();
-    let r =
-        unsafe { libc::getpriority(libc::PRIO_PROCESS as libc::c_int, pid as libc::id_t) as i32 };
+    let r = unsafe { libc::getpriority(libc::PRIO_PROCESS as _, pid as libc::id_t) as i32 };
     if r == -1 && errno_nonzero() {
         Err(format!("getpriority {pid}"))
     } else {
@@ -287,8 +286,7 @@ fn unix_get_nice(pid: u32) -> Result<i32, String> {
 
 #[cfg(all(unix, not(target_os = "windows")))]
 fn unix_set_nice(pid: u32, nice: i32) -> Result<(), String> {
-    let rc =
-        unsafe { libc::setpriority(libc::PRIO_PROCESS as libc::c_int, pid as libc::id_t, nice) };
+    let rc = unsafe { libc::setpriority(libc::PRIO_PROCESS as _, pid as libc::id_t, nice) };
     if rc != 0 {
         Err(format!("setpriority {pid} -> {nice}: errno"))
     } else {

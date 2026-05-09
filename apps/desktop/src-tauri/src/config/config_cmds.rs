@@ -66,10 +66,7 @@ pub fn get_config() -> ConfigDto {
     let settings = config::load_settings();
     let library = config::load_library();
 
-    #[cfg(target_os = "windows")]
     let steam_map = steam::get_steam_path_to_appid_map();
-    #[cfg(not(target_os = "windows"))]
-    let steam_map = std::collections::HashMap::new();
 
     ConfigDto {
         api_base_url: settings.api_base_url.clone(),
@@ -561,7 +558,7 @@ pub fn list_running_process_exe_names() -> Vec<String> {
     crate::system::process_check::list_running_process_exe_names()
 }
 
-/// Inicia el ejecutable configurado para este juego (ruta absoluta guardada en config).
+/// Inicia el recurso configurado para este juego (ruta absoluta: .exe, .jar, script, etc.).
 #[tauri::command]
 pub fn launch_game(game_id: String) -> Result<(), String> {
     let library = config::load_library();
@@ -583,7 +580,7 @@ pub fn launch_game(game_id: String) -> Result<(), String> {
     launch_exe::launch_game_executable(path)
 }
 
-/// Guarda la ruta al .exe para abrir el juego desde la app (`None` o cadena vacía borra la ruta).
+/// Guarda la ruta para abrir el juego desde la app (`.exe`, `.jar`, script, etc.; `None` o cadena vacía borra).
 #[tauri::command]
 pub fn set_game_launch_executable(game_id: String, path: Option<String>) -> Result<(), String> {
     let mut library = config::load_library();

@@ -12,7 +12,7 @@ export interface ConfiguredGame {
   readonly imageUrl?: string;
   /** Nombres de ejecutable para detectar si el juego está en ejecución (ej. ["eldenring.exe"]). */
   readonly executableNames?: readonly string[];
-  /** Ruta absoluta al .exe para abrir el juego desde la app. */
+  /** Ruta absoluta al recurso para abrir el juego desde la app (.exe, .jar, script, etc.). */
   readonly launchExecutablePath?: string;
   /** Etiqueta de origen/edición (ej. Steam, Empress, RUNE). Solo informativa. */
   readonly editionLabel?: string;

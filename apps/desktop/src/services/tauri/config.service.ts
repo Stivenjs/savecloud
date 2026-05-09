@@ -147,7 +147,7 @@ export function launchGame(gameId: string): Promise<void> {
   return invoke("launch_game", { gameId });
 }
 
-/** Guarda la ruta al .exe para abrir el juego desde la app (`null` borra). */
+/** Guarda la ruta al programa para abrir el juego (.exe, .jar, …; `null` borra). */
 export function setGameLaunchExecutable(gameId: string, path: string | null): Promise<void> {
   return invoke("set_game_launch_executable", { gameId, path });
 }

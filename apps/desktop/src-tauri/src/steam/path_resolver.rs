@@ -210,7 +210,7 @@ pub fn get_steam_path_to_appid_map() -> HashMap<PathBuf, String> {
     build_path_to_appid_map(&library_paths)
 }
 
-/// Stub para Linux/macOS para evitar warnings.
+/// En Linux/macOS no construimos el mapa desde `libraryfolders.vdf`; devuelve mapa vacío.
 #[cfg(not(target_os = "windows"))]
 pub fn get_steam_path_to_appid_map() -> HashMap<PathBuf, String> {
     HashMap::new()
