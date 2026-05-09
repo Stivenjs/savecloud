@@ -40,11 +40,6 @@ pub(crate) fn stop_caffeinate(pid: Option<u32>) -> Result<(), String> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-pub(crate) fn stop_caffeinate(_pid: Option<u32>) -> Result<(), String> {
-    Ok(())
-}
-
 #[cfg(not(target_os = "linux"))]
 pub(crate) fn read_linux_power_profile() -> Option<String> {
     None
