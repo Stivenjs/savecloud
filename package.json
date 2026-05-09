@@ -21,6 +21,8 @@
     "desktop:build": "bun run --cwd apps/desktop tauri build",
     "cargo:check": "bun run --cwd apps/desktop/src-tauri cargo check",
     "cargo:clean": "bun run --cwd apps/desktop/src-tauri cargo clean",
+    "cargo:build": "bun run --cwd apps/desktop/src-tauri cargo build",
+    "cargo:clippy": "bun run --cwd apps/desktop/src-tauri cargo clippy",
     "version": "bun run scripts/sync-version.ts",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
