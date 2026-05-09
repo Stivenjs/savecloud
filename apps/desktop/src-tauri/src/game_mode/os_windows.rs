@@ -34,7 +34,7 @@ pub(crate) fn get_active_power_scheme_guid() -> Result<String, String> {
     )
     .map_err(|e| format!("powercfg /getactivescheme: {e}"))?;
     let text = String::from_utf8_lossy(&out.stdout).to_string()
-        + &String::from_utf8_lossy(&out.stderr).to_string();
+        + String::from_utf8_lossy(&out.stderr).as_ref();
     if !out.status.success() {
         return Err(format!("powercfg devolvió error: {}", text.trim()));
     }

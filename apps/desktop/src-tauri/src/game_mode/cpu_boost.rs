@@ -154,12 +154,12 @@ fn try_apply_boost(c: &DetectedGameProcess) -> Option<CpuBoostRecord> {
             c.exe_name_lc,
             prev
         );
-        return Some(CpuBoostRecord {
+        Some(CpuBoostRecord {
             pid: c.pid,
             exe_name_lc: c.exe_name_lc.clone(),
             prev_windows_priority_class: Some(prev),
             prev_unix_nice: None,
-        });
+        })
     }
     #[cfg(all(unix, not(target_os = "windows")))]
     {

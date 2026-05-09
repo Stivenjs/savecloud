@@ -188,7 +188,7 @@ async fn throttle_savecloud_off(app: &AppHandle, sess: &mut GameModeSessionFile)
                 if let Err(e) = crate::commands::sync::upload::sync_upload_resume(app_clone).await {
                     log::warn!(
                         "[GameMode] multipart no reanudado automático: {}",
-                        e.to_string()
+                        e
                     );
                 }
             });
