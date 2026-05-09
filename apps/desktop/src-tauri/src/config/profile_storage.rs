@@ -77,7 +77,7 @@ fn apply_env_fallback(
     compile_env: Option<&'static str>,
     runtime_env: &str,
 ) {
-    if field.as_deref().map_or(true, str::is_empty) {
+    if field.as_deref().is_none_or(str::is_empty) {
         let env_val = compile_env
             .map(str::trim)
             .filter(|s| !s.is_empty())

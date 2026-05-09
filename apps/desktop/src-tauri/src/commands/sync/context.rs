@@ -42,8 +42,7 @@ pub(crate) fn resolve_api_context() -> Result<ApiContext, String> {
         )?;
         let host_ws_base_url = settings
             .cloud_host_ws_base_urls
-            .get(active_host)
-            .map(|s| s.clone());
+            .get(active_host).cloned();
         return Ok(ApiContext {
             base_url: host_base_url.trim_end_matches('/').to_string(),
             ws_base_url: host_ws_base_url,

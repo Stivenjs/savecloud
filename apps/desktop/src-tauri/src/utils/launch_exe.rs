@@ -54,7 +54,7 @@ fn windows_launch(path: &str) -> Result<(), String> {
                 path_w.as_ptr(),
                 ptr::null(),
                 dir_ptr,
-                SW_SHOWNORMAL as i32,
+                SW_SHOWNORMAL,
             );
             if (h as isize) <= 32 {
                 Err(format!(

@@ -32,7 +32,7 @@ pub fn expand_path(raw: &str) -> Option<String> {
             result = if rest.is_empty() {
                 home
             } else {
-                format!("{}/{}", home.trim_end_matches(&['/', '\\']), rest)
+                format!("{}/{}", home.trim_end_matches(['/', '\\']), rest)
             };
         }
     }
@@ -105,7 +105,7 @@ pub fn compute_sync_multi_root_prefixes(paths: &[String]) -> Vec<String> {
             format!("{}-{}", label, *n + 1)
         };
         *n += 1;
-        out.push(format!("{}/", segment.replace('/', "_").replace('\\', "_")));
+        out.push(format!("{}/", segment.replace(['/', '\\'], "_")));
     }
     out
 }
@@ -135,7 +135,7 @@ pub fn sync_abs_path_for_cloud_save(
             return pb;
         }
         for seg in tail
-            .split(|c| c == '/' || c == '\\')
+            .split(['/', '\\'])
             .filter(|s| !s.is_empty())
         {
             pb.push(seg);
@@ -157,7 +157,7 @@ pub fn sync_abs_path_for_cloud_save(
         for &(idx, ref pref) in prefs {
             if rf.starts_with(pref.as_str()) {
                 let len = pref.len();
-                if best.map_or(true, |(_, _, l)| len > l) {
+                if best.is_none_or(|(_, _, l)| len > l) {
                     best = Some((idx, &rf[len..], len));
                 }
             }
@@ -195,7 +195,7 @@ pub fn collect_files_with_mtime(
     };
 
     for e in entries.flatten() {
-        if e.file_name().to_str().map_or(false, |s| s.starts_with('.')) {
+        if e.file_name().to_str().is_some_and(|s| s.starts_with('.')) {
             continue;
         }
 

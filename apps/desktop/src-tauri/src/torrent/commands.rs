@@ -184,7 +184,7 @@ pub async fn upload_torrent_to_cloud(
         &[remote_filename],
     )
     .await
-    .map_err(|e| TorrentError::CloudUrls(e))?;
+    .map_err(TorrentError::CloudUrls)?;
 
     let (upload_url, _) = upload_urls
         .into_iter()
@@ -214,10 +214,9 @@ pub async fn upload_torrent_to_cloud(
 /// Lista los archivos .torrent almacenados en la nube para un juego.
 #[tauri::command]
 pub async fn list_cloud_torrents(game_id: String) -> Result<Vec<CloudTorrentInfo>, TorrentError> {
-    // Optimización: lista solo los objetos de este juego.
     let all_saves = crate::commands::sync::api::sync_list_remote_saves_for_game(game_id.clone())
         .await
-        .map_err(|e| TorrentError::CloudUrls(e))?;
+        .map_err(TorrentError::CloudUrls)?;
 
     let torrents = all_saves
         .into_iter()
@@ -256,7 +255,7 @@ pub async fn download_torrent_from_cloud(
         &[(game_id.clone(), torrent_key.clone())],
     )
     .await
-    .map_err(|e| TorrentError::CloudUrls(e))?;
+    .map_err(TorrentError::CloudUrls)?;
 
     let (download_url, _) = download_urls
         .into_iter()
@@ -349,7 +348,7 @@ pub async fn delete_cloud_torrent(
         Some(body.to_string().as_bytes()),
     )
     .await
-    .map_err(|e| TorrentError::CloudUrls(e))?;
+    .map_err(TorrentError::CloudUrls)?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
         return Err(TorrentError::CloudDownload(format!(

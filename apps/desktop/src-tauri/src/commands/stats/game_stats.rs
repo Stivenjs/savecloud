@@ -301,7 +301,7 @@ fn expand_path(raw: &str) -> Option<PathBuf> {
             result = if rest.is_empty() {
                 home
             } else {
-                format!("{}/{}", home.trim_end_matches(&['/', '\\']), rest)
+                format!("{}/{}", home.trim_end_matches(['/', '\\']), rest)
             };
         }
     }

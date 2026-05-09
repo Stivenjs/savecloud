@@ -113,13 +113,10 @@ pub fn try_record_source_download_terminal(app: &AppHandle, job: &SourceDownload
         SourceJobStatus::Failed => (
             "error",
             format!("Error al descargar: {}", job.title),
-            format!(
-                "{}",
-                job.error
+            job.error
                     .as_deref()
                     .filter(|s| !s.trim().is_empty())
-                    .unwrap_or("La descarga falló.")
-            ),
+                    .unwrap_or("La descarga falló.").to_string(),
         ),
         SourceJobStatus::Cancelled => (
             "warning",
@@ -410,7 +407,7 @@ pub fn try_record_torrent_done(app: &AppHandle, name: &str, info_hash: &str) {
         kind: kind.to_string(),
         severity: "success".to_string(),
         title: "Descarga torrent completada".to_string(),
-        body: format!("{name}"),
+        body: name.to_string(),
         game_id: None,
         operation_id: Some(info_hash.to_string()),
         status: Some("completed".to_string()),
@@ -458,7 +455,7 @@ pub fn try_record_torrent_cancelled(app: &AppHandle, name: &str, info_hash: &str
         kind: kind.to_string(),
         severity: "warning".to_string(),
         title: "Descarga torrent cancelada".to_string(),
-        body: format!("{name}"),
+        body: name.to_string(),
         game_id: None,
         operation_id: Some(info_hash.to_string()),
         status: Some("cancelled".to_string()),

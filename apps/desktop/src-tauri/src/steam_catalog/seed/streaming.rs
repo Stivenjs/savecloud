@@ -62,7 +62,7 @@ pub async fn stream_import_batch(
 
     let bytes_stream = response
         .bytes_stream()
-        .map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)));
+        .map(|r| r.map_err(|e| std::io::Error::other(e)));
     let stream_reader = StreamReader::new(bytes_stream);
     let mut lines_reader = BufReader::new(stream_reader).lines();
 
@@ -83,7 +83,7 @@ pub async fn stream_import_batch(
     // Dividimos las líneas en chunks iguales, uno por worker.
     // Cada worker tiene su propio subvector → cero contención.
     let total_lines = raw_lines.len();
-    let chunk_per_worker = (total_lines + worker_count - 1) / worker_count;
+    let chunk_per_worker = total_lines.div_ceil(worker_count);
 
     let chunks: Vec<Vec<String>> = raw_lines
         .chunks(chunk_per_worker)
@@ -206,7 +206,7 @@ pub async fn stream_import_reviews_batch(
 
     let bytes_stream = response
         .bytes_stream()
-        .map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)));
+        .map(|r| r.map_err(|e| std::io::Error::other(e)));
     let stream_reader = StreamReader::new(bytes_stream);
     let mut lines_reader = BufReader::new(stream_reader).lines();
 

@@ -315,9 +315,7 @@ pub fn find_top_matches(
 
 pub fn find_best_match(text: &str, library: &GameLibrary) -> Option<GameMatchCandidate> {
     let target = canonicalize_query(text);
-    if search_phrase_and_tokens(&target).is_none() {
-        return None;
-    }
+    search_phrase_and_tokens(&target)?;
 
     let mut scored = score_library(text, library);
     let best = scored.first()?;

@@ -130,7 +130,7 @@ impl CandidateList {
 /// Devuelve `true` si el path es una raíz genérica del sistema.
 fn is_common_root_dir(path_str: &str) -> bool {
     let mut p = path_str.to_lowercase();
-    p = p.trim_end_matches(&['\\', '/']).to_string();
+    p = p.trim_end_matches(['\\', '/']).to_string();
 
     // Discos base (C:, D:, …)
     if p.len() <= 3 && p.ends_with(':') {
@@ -162,7 +162,7 @@ fn expand_path(raw: &str, env: &EnvContext) -> Option<String> {
             result = if rest.is_empty() {
                 home.clone()
             } else {
-                format!("{}/{}", home.trim_end_matches(&['/', '\\']), rest)
+                format!("{}/{}", home.trim_end_matches(['/', '\\']), rest)
             };
         }
     }
@@ -639,14 +639,14 @@ mod windows_scanners {
 
 fn base_scan_jobs(cfg: &config::Config, env: &EnvContext) -> Vec<(String, String)> {
     let mut jobs: Vec<(String, String)> = paths::base_scan_templates()
-        .into_iter()
+        .iter()
         .filter_map(|entry| expand_path(&entry.path, env).map(|exp| (exp, entry.label.clone())))
         .collect();
 
     #[cfg(target_os = "windows")]
     {
         jobs.extend(windows_scanners::logical_drives().into_iter().map(|root| {
-            let label = format!("Disco {}", root.trim_end_matches(&['\\', ':']));
+            let label = format!("Disco {}", root.trim_end_matches(['\\', ':']));
             (root, label)
         }));
     }
@@ -784,7 +784,7 @@ pub fn scan_path_candidates_sync(
                     if let Some(expanded) = expanded_path_opt {
                         let clean_path_str = if let Some(idx) = expanded.find('*') {
                             let before = &expanded[..idx];
-                            if let Some(sep) = before.rfind(|c| c == '\\' || c == '/') {
+                            if let Some(sep) = before.rfind(['\\', '/']) {
                                 before[..sep].to_string()
                             } else {
                                 before.to_string()
@@ -806,11 +806,9 @@ pub fn scan_path_candidates_sync(
                                 && fs::read_dir(&folder_path)
                                     .map(|mut i| i.next().is_some())
                                     .unwrap_or(false)
-                            {
-                                if !valid_game_paths.contains(&folder_path) {
+                                && !valid_game_paths.contains(&folder_path) {
                                     valid_game_paths.push(folder_path);
                                 }
-                            }
                         }
                     }
                 }

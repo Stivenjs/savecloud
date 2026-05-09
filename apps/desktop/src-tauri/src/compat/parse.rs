@@ -31,7 +31,7 @@ fn extract_gpu_line(text: &str) -> Option<String> {
         let start = pos + key.len();
         let rest = text.get(start..).unwrap_or("").trim_start();
         let clipped = clip_gpu_section(rest);
-        let trimmed = clipped.trim().trim_end_matches(|c| c == ',' || c == '.');
+        let trimmed = clipped.trim().trim_end_matches([',', '.']);
         if !trimmed.is_empty() {
             return Some(trimmed.to_string());
         }
@@ -78,7 +78,7 @@ fn extract_ram_mb(text: &str) -> Option<u64> {
     let lower = text.to_lowercase();
     let ram_line = RAM_HINT.iter().find_map(|hint| {
         lower
-            .split(|c: char| c == '\n' || c == '•' || c == '·')
+            .split(['\n', '•', '·'])
             .map(str::trim)
             .find(|line| line.contains(hint))
             .map(|s| s.to_string())
@@ -90,7 +90,7 @@ fn extract_ram_mb(text: &str) -> Option<u64> {
         return Some(mb);
     }
 
-    if let Some(gb) = extract_gb_near_keywords(segment, &RAM_NEAR) {
+    if let Some(gb) = extract_gb_near_keywords(segment, RAM_NEAR) {
         return Some(gb * 1024);
     }
 
@@ -146,7 +146,7 @@ fn extract_storage_gb(text: &str) -> Option<u64> {
         .iter()
         .find_map(|hint| {
             lower
-                .split(|c: char| c == '\n' || c == '•' || c == '·')
+                .split(['\n', '•', '·'])
                 .map(str::trim)
                 .find(|line| line.contains(hint))
                 .map(|s| s.to_string())

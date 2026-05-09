@@ -216,7 +216,7 @@ pub async fn sync_upload_resume(app: AppHandle) -> Result<SyncResultDto, String>
         || result
             .as_ref()
             .err()
-            .map_or(false, |e| e == multipart_upload::PAUSED_ERR_MSG)
+            .is_some_and(|e| e == multipart_upload::PAUSED_ERR_MSG)
     {
         "paused"
     } else {
@@ -542,7 +542,7 @@ pub(crate) async fn sync_upload_game_impl(
             }
 
             put_count += 1;
-            if put_count % 500 == 0 {
+            if put_count.is_multiple_of(500) {
                 crate::commands::logs::sync_logger::log_operation(
                     "upload_simple_progress",
                     &format!("gameId={} done={}/{}", game_id, put_count, total_simple),

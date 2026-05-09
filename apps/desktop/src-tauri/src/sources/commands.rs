@@ -151,7 +151,7 @@ fn get_or_build_index() -> Result<Arc<Vec<IndexedSourceItem>>, String> {
         if guard.is_none() {
             *guard = Some(Arc::clone(&new_index));
         }
-        return Ok(Arc::clone(guard.as_ref().unwrap()));
+        Ok(Arc::clone(guard.as_ref().unwrap()))
     }
 }
 

@@ -22,8 +22,8 @@ pub fn spawn_exit_watcher(app: AppHandle, tray_state: Arc<crate::tray::tray_stat
         if cfg
             .api_base_url
             .as_ref()
-            .map_or(true, |s| s.trim().is_empty())
-            || cfg.user_id.as_ref().map_or(true, |s| s.trim().is_empty())
+            .is_none_or(|s| s.trim().is_empty())
+            || cfg.user_id.as_ref().is_none_or(|s| s.trim().is_empty())
         {
             return;
         }
