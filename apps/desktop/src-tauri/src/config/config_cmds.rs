@@ -552,10 +552,10 @@ pub fn remove_game(game_id: String, path: Option<String>) -> Result<(), String> 
     config::save_library(&library)
 }
 
-/// Lista ejecutables de procesos en ejecución (nombres únicos, ordenados) para el selector manual.
+/// Lista procesos en ejecución (nombre + icono asociado al binario donde el SO lo permite).
 #[tauri::command]
-pub fn list_running_process_exe_names() -> Vec<String> {
-    crate::system::process_check::list_running_process_exe_names()
+pub fn list_running_processes_for_pick() -> Vec<crate::system::process_check::RunningProcessPickRow> {
+    crate::system::process_check::list_running_processes_for_pick()
 }
 
 /// Inicia el recurso configurado para este juego (ruta absoluta: .exe, .jar, script, etc.).

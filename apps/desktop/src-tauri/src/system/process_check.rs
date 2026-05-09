@@ -5,6 +5,7 @@ use crate::game_mode::sync_detected_game_cpu_boost;
 use crate::game_mode::DetectedGameProcess;
 use crate::time;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -21,28 +22,102 @@ pub(crate) fn get_sys() -> std::sync::MutexGuard<'static, System> {
         .expect("Mutex de sysinfo envenenado")
 }
 
-/// Determina si un juego específico está en ejecución basándose en sus ejecutables conocidos.
-///
-/// # Arguments
-/// * `game_id` - Identificador único del juego.
-/// * `_paths` - Rutas de guardado (actualmente no utilizadas para la detección de proceso).
-/// Lista nombres de ejecutable únicos de procesos en ejecución (ordenados), para el selector manual en la UI.
-pub fn list_running_process_exe_names() -> Vec<String> {
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunningProcessPickRow {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon_png_base64: Option<String>,
+}
+
+/// Lista procesos únicos por nombre para el selector manual: misma clase de iconos asociados
+/// al `.exe`/binario que muestra Windows (Administrador de tareas) cuando `get_file_icon` aplica.
+pub fn list_running_processes_for_pick() -> Vec<RunningProcessPickRow> {
     let mut sys = get_sys();
     sys.refresh_processes_specifics(
         ProcessesToUpdate::All,
         ProcessRefreshKind::new().with_exe(UpdateKind::OnlyIfNotSet),
     );
-    let mut names: Vec<String> = sys
-        .processes()
-        .values()
-        .map(|p| p.name().to_string_lossy().into_owned())
-        .collect();
-    names.sort();
-    names.dedup();
+
+    let mut exe_by_name: HashMap<String, PathBuf> = HashMap::new();
+    for (_, proc) in sys.processes() {
+        let name = proc.name().to_string_lossy().into_owned();
+        if exe_by_name.contains_key(&name) {
+            continue;
+        }
+        let Some(exe_path) = proc.exe() else {
+            continue;
+        };
+        if exe_path.as_os_str().is_empty() {
+            continue;
+        }
+        exe_by_name.insert(name, exe_path.to_path_buf());
+    }
+
+    let mut names: Vec<String> = exe_by_name.keys().cloned().collect();
+    names.sort_unstable();
+
     names
+        .into_iter()
+        .map(|name| {
+            let path = exe_by_name.get(&name);
+            RunningProcessPickRow {
+                name,
+                icon_png_base64: path.and_then(|p| {
+                    #[cfg(windows)]
+                    {
+                        exe_icon_png_b64(p.as_path())
+                    }
+                    #[cfg(not(windows))]
+                    {
+                        let _ = p;
+                        None::<String>
+                    }
+                }),
+            }
+        })
+        .collect()
 }
 
+#[cfg(windows)]
+fn exe_icon_png_b64(path: &Path) -> Option<String> {
+    if !path.exists() {
+        return None;
+    }
+    encode_icon_rgba_png_b64(file_icon_provider::get_file_icon(path, 32).ok()?)
+}
+
+#[cfg(windows)]
+fn encode_icon_rgba_png_b64(icon: file_icon_provider::Icon) -> Option<String> {
+    encode_rgba_png_base64(icon.width, icon.height, &icon.pixels)
+}
+
+#[cfg(windows)]
+fn encode_rgba_png_base64(width: u32, height: u32, rgba: &[u8]) -> Option<String> {
+    use base64::Engine;
+    use png::{BitDepth, ColorType, Encoder};
+    use std::io::Cursor;
+
+    let pixels = usize::checked_mul(width as usize, height as usize)?.checked_mul(4)?;
+    if rgba.len() != pixels {
+        return None;
+    }
+    let mut buf = Cursor::new(Vec::new());
+    {
+        let mut encoder = Encoder::new(&mut buf, width, height);
+        encoder.set_color(ColorType::Rgba);
+        encoder.set_depth(BitDepth::Eight);
+        let mut writer = encoder.write_header().ok()?;
+        writer.write_image_data(rgba).ok()?;
+    }
+    Some(base64::engine::general_purpose::STANDARD.encode(buf.into_inner()))
+}
+
+/// Determina si un juego específico está en ejecución basándose en sus ejecutables conocidos.
+///
+/// # Arguments
+/// * `game_id` - Identificador único del juego.
+/// * `_paths` - Rutas de guardado (actualmente no utilizadas para la detección de proceso).
 pub fn is_game_running(game_id: &str, _paths: &[String]) -> bool {
     let names = get_executable_names_to_check(game_id);
     if names.is_empty() {

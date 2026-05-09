@@ -137,9 +137,15 @@ export async function getSteamAppDetails(appId: string): Promise<SteamAppDetails
   return invoke<SteamAppDetailsResult>("get_steam_app_details", { appId });
 }
 
-/** Lista nombres de ejecutable únicos de procesos en ejecución (para asignar detección manual). */
-export function listRunningProcessExeNames(): Promise<string[]> {
-  return invoke<string[]>("list_running_process_exe_names");
+/** Proceso visible en el selector manual (nombre como en el Administrador de tareas + icono del .exe en Windows). */
+export interface RunningProcessPickRow {
+  name: string;
+  iconPngBase64?: string | null;
+}
+
+/** Lista procesos en ejecución para asignar detección manual (iconos donde el backend los pueda obtener). */
+export function listRunningProcessesForPick(): Promise<RunningProcessPickRow[]> {
+  return invoke<RunningProcessPickRow[]>("list_running_processes_for_pick");
 }
 
 /** Inicia el ejecutable configurado para el juego. */
