@@ -62,7 +62,7 @@ pub async fn stream_import_batch(
 
     let bytes_stream = response
         .bytes_stream()
-        .map(|r| r.map_err(|e| std::io::Error::other(e)));
+        .map(|r| r.map_err(std::io::Error::other));
     let stream_reader = StreamReader::new(bytes_stream);
     let mut lines_reader = BufReader::new(stream_reader).lines();
 
@@ -206,7 +206,7 @@ pub async fn stream_import_reviews_batch(
 
     let bytes_stream = response
         .bytes_stream()
-        .map(|r| r.map_err(|e| std::io::Error::other(e)));
+        .map(|r| r.map_err(std::io::Error::other));
     let stream_reader = StreamReader::new(bytes_stream);
     let mut lines_reader = BufReader::new(stream_reader).lines();
 
