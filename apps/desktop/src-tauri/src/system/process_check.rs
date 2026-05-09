@@ -4,12 +4,12 @@ use crate::config;
 use crate::game_mode::sync_detected_game_cpu_boost;
 use crate::game_mode::DetectedGameProcess;
 use crate::time;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::time::Instant;
-use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tauri::{AppHandle, Emitter};
 use tokio_util::sync::CancellationToken;
 
@@ -200,27 +200,99 @@ pub fn scan_games_running(
     let mut sys = get_sys();
     sys.refresh_processes_specifics(
         ProcessesToUpdate::All,
-        ProcessRefreshKind::new().with_exe(UpdateKind::OnlyIfNotSet),
+        ProcessRefreshKind::new()
+            .with_exe(UpdateKind::OnlyIfNotSet)
+            .with_memory(),
     );
 
+    #[derive(Clone)]
+    struct CpuBoostCand {
+        pid: u32,
+        exe_lc: String,
+        rss: u64,
+    }
+
+    const CPU_BOOST_TOP_PIDS_PER_GAME: usize = 3;
+
+    let mut pools: HashMap<String, Vec<CpuBoostCand>> = HashMap::new();
+    let mut matched_root_pids: HashMap<String, HashSet<u32>> = HashMap::new();
+
     for (pid, process) in sys.processes() {
-        let proc_name = process.name().to_string_lossy().to_lowercase();
+        let exe_lc = process.name().to_string_lossy().to_lowercase();
         for game_id in game_ids {
-            let Some(check_names) = names_by_game.get(game_id) else {
+            let Some(names) = names_by_game.get(game_id) else {
                 continue;
             };
-            if !check_names.contains(&proc_name) {
+            if !names.contains(&exe_lc) {
                 continue;
             }
-            if !result[game_id] {
-                result.insert(game_id.clone(), true);
-            }
-            processes_out.push(DetectedGameProcess {
-                game_id: game_id.clone(),
-                pid: pid.as_u32(),
-                exe_name_lc: proc_name.clone(),
-            });
+            *result.entry(game_id.clone()).or_insert(false) = true;
+            pools
+                .entry(game_id.clone())
+                .or_default()
+                .push(CpuBoostCand {
+                    pid: pid.as_u32(),
+                    exe_lc: exe_lc.clone(),
+                    rss: process.memory(),
+                });
+            matched_root_pids
+                .entry(game_id.clone())
+                .or_default()
+                .insert(pid.as_u32());
         }
+    }
+
+    // Subprocesos directos del árbol: padre coincide con exe del juego (un solo nivel).
+    for (pid, process) in sys.processes() {
+        let exe_lc = process.name().to_string_lossy().to_lowercase();
+        let rss = process.memory();
+        let Some(ppid_u32) = process.parent().map(Pid::as_u32) else {
+            continue;
+        };
+        for game_id in game_ids {
+            let Some(roots) = matched_root_pids.get(game_id) else {
+                continue;
+            };
+            if !roots.contains(&ppid_u32) {
+                continue;
+            }
+            pools
+                .entry(game_id.clone())
+                .or_default()
+                .push(CpuBoostCand {
+                    pid: pid.as_u32(),
+                    exe_lc: exe_lc.clone(),
+                    rss,
+                });
+        }
+    }
+
+    for game_id in game_ids {
+        let Some(mut cands) = pools.remove(game_id) else {
+            continue;
+        };
+        let mut by_pid: HashMap<u32, CpuBoostCand> = HashMap::new();
+        for c in cands.drain(..) {
+            match by_pid.entry(c.pid) {
+                std::collections::hash_map::Entry::Occupied(mut o) => {
+                    if c.rss > o.get().rss {
+                        o.insert(c);
+                    }
+                }
+                std::collections::hash_map::Entry::Vacant(v) => {
+                    v.insert(c);
+                }
+            }
+        }
+        let mut v: Vec<CpuBoostCand> = by_pid.into_values().collect();
+        v.sort_by_key(|c| std::cmp::Reverse(c.rss));
+        processes_out.extend(v.into_iter().take(CPU_BOOST_TOP_PIDS_PER_GAME).map(|c| {
+            DetectedGameProcess {
+                game_id: game_id.clone(),
+                pid: c.pid,
+                exe_name_lc: c.exe_lc,
+            }
+        }));
     }
 
     (result, processes_out)
