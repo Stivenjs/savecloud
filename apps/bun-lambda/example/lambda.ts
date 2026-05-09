@@ -1,7 +1,7 @@
-import type { Server, ServerWebSocket } from "bun";
+import type { Server, ServerWebSocket, WebSocket } from "bun";
 
 export default {
-  async fetch(request: Request, server: Server): Promise<Response | undefined> {
+  async fetch(request: Request, server: Server<WebSocket>): Promise<Response | undefined> {
     console.log("Request", {
       url: request.url,
       method: request.method,
