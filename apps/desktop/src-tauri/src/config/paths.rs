@@ -17,6 +17,7 @@ pub const PROFILES_INDEX_FILE_NAME: &str = "profiles.json";
 pub const STORAGE_MANIFEST_FILE_NAME: &str = "storage_manifest.json";
 pub const SOURCES_FILE_NAME: &str = "sources.json";
 pub const ACTIVE_JOBS_FILE_NAME: &str = "active_jobs.json";
+pub const GAME_MODE_SESSION_FILE_NAME: &str = "game_mode_session.json";
 pub const SQLITE_CATALOG_DB_NAME: &str = "catalog.sqlite";
 
 /// Obtiene el directorio base de configuración de la aplicación.
@@ -112,6 +113,11 @@ pub fn sources_path() -> Option<PathBuf> {
 /// Ruta del estado de jobs activos en runtime.
 pub fn active_jobs_path() -> Option<PathBuf> {
     runtime_dir().map(|d| d.join(ACTIVE_JOBS_FILE_NAME))
+}
+
+/// Estado temporal del modo juego (restauración de energía, torrents pausados, etc.).
+pub fn game_mode_session_path() -> Option<PathBuf> {
+    runtime_dir().map(|d| d.join(GAME_MODE_SESSION_FILE_NAME))
 }
 
 /// Ruta legado del catálogo de fuentes.

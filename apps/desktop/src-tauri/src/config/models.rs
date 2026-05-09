@@ -77,6 +77,22 @@ pub struct AppSettings {
     /// No se serializa en JSON; se guarda en el almacén seguro del SO (Keyring), igual que `api_key`.
     #[serde(skip_serializing, default)]
     pub steam_web_api_key: Option<String>,
+    /// Modo juego: activa mitigaciones conservadoras (SaveCloud + ajustes de SO donde aplique).
+    #[serde(default)]
+    pub game_mode_enabled: bool,
+    /// En Windows/Linux/macOS: aplicar perfil de energía / rendimiento cuando el modo está activo.
+    #[serde(default = "default_true")]
+    pub game_mode_apply_power_profile: bool,
+    /// Solo Windows (HKCU): reduce captura DVR de Xbox/Game Bar; opcional por si el jugador usa otras herramientas.
+    #[serde(default)]
+    pub game_mode_reduce_capture_overhead: bool,
+    /// Pausar subidas/torrents/descargas de fuentes de SaveCloud mientras el modo está activo.
+    #[serde(default = "default_true")]
+    pub game_mode_throttle_savecloud_background: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Biblioteca local de juegos configurados.
@@ -201,6 +217,15 @@ pub struct Config {
     pub operation_history: Vec<OperationLogEntry>,
     #[serde(default)]
     pub gamification: GamificationConfig,
+    /// Preferencias modo juego (incluidas en export/import monolítico).
+    #[serde(default)]
+    pub game_mode_enabled: bool,
+    #[serde(default = "default_true")]
+    pub game_mode_apply_power_profile: bool,
+    #[serde(default)]
+    pub game_mode_reduce_capture_overhead: bool,
+    #[serde(default = "default_true")]
+    pub game_mode_throttle_savecloud_background: bool,
 }
 
 /// Objeto de transferencia de datos (DTO) de la configuración principal,
@@ -244,6 +269,14 @@ pub struct ConfigDto {
     pub share_visual_profile_with_hosts: bool,
     #[serde(default)]
     pub share_visual_profile_with_members: bool,
+    #[serde(default)]
+    pub game_mode_enabled: bool,
+    #[serde(default = "default_true")]
+    pub game_mode_apply_power_profile: bool,
+    #[serde(default)]
+    pub game_mode_reduce_capture_overhead: bool,
+    #[serde(default = "default_true")]
+    pub game_mode_throttle_savecloud_background: bool,
 }
 
 /// DTO representativo de un juego para el frontend.

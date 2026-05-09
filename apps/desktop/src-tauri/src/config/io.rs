@@ -309,6 +309,10 @@ pub fn get_combined_config() -> Config {
         games: library.games,
         operation_history: history.entries,
         gamification: load_gamification(),
+        game_mode_enabled: settings.game_mode_enabled,
+        game_mode_apply_power_profile: settings.game_mode_apply_power_profile,
+        game_mode_reduce_capture_overhead: settings.game_mode_reduce_capture_overhead,
+        game_mode_throttle_savecloud_background: settings.game_mode_throttle_savecloud_background,
     }
 }
 
@@ -360,6 +364,12 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
     current_settings.profile_frame = cfg.profile_frame.clone().or(current_settings.profile_frame);
     current_settings.share_visual_profile_with_hosts = cfg.share_visual_profile_with_hosts;
     current_settings.share_visual_profile_with_members = cfg.share_visual_profile_with_members;
+
+    current_settings.game_mode_enabled = cfg.game_mode_enabled;
+    current_settings.game_mode_apply_power_profile = cfg.game_mode_apply_power_profile;
+    current_settings.game_mode_reduce_capture_overhead = cfg.game_mode_reduce_capture_overhead;
+    current_settings.game_mode_throttle_savecloud_background =
+        cfg.game_mode_throttle_savecloud_background;
 
     save_settings(&current_settings)?;
     save_library(&GameLibrary {

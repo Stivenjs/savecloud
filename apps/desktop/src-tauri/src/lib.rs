@@ -3,6 +3,7 @@ mod commands;
 mod compat;
 mod config;
 mod controller;
+mod game_mode;
 mod ipc;
 #[cfg(target_os = "windows")]
 mod manifest;
@@ -72,6 +73,12 @@ pub fn run() {
             tray::create_tray(app)?;
 
             setup::init_states_and_background_tasks(app)?;
+
+            app.manage(crate::game_mode::GameModeCtl::default());
+            let game_mode_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                crate::game_mode::apply::reconcile_orphans(game_mode_handle).await;
+            });
 
             Ok(())
         })
