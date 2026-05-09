@@ -14,9 +14,34 @@ import {
   Spinner,
 } from "@heroui/react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { type as getOsType } from "@tauri-apps/plugin-os";
 import { Cpu, FileSearch, RotateCcw, Trash2 } from "lucide-react";
 import type { GameFormState } from "@/hooks/useGameForm";
 import { listRunningProcessExeNames } from "@/services/tauri";
+
+/** Diálogo del SO: permite launchers tipo .jar, scripts y ejecutables sin forzar marca comercial ni rutas fijas. */
+function launchTargetDialogFilters(): { name: string; extensions: string[] }[] {
+  const os = getOsType();
+  if (os === "windows") {
+    return [
+      { name: "Ejecutables, Java .jar y scripts", extensions: ["exe", "jar", "bat", "cmd"] },
+      { name: "Todos los archivos", extensions: ["*"] },
+    ];
+  }
+  if (os === "macos") {
+    return [
+      { name: "Apps y scripts", extensions: ["app", "jar", "sh", "command"] },
+      { name: "Todos los archivos", extensions: ["*"] },
+    ];
+  }
+  return [
+    {
+      name: "Ejecutables y scripts",
+      extensions: ["jar", "sh", "AppImage", "run"],
+    },
+    { name: "Todos los archivos", extensions: ["*"] },
+  ];
+}
 
 interface GameDrawerLaunchTabProps {
   form: GameFormState;
@@ -52,8 +77,8 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
       const selected = await open({
         directory: false,
         multiple: false,
-        title: "Seleccionar ejecutable del juego",
-        filters: [{ name: "Ejecutable", extensions: ["exe"] }],
+        title: "Seleccionar programa para lanzar el juego",
+        filters: launchTargetDialogFilters(),
       });
       if (selected && typeof selected === "string") {
         setField("launchExecutablePath", selected);
@@ -92,21 +117,21 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
     <>
       <div className="flex flex-col gap-4">
         <p className="text-xs text-default-500">
-          Estos datos se guardan al pulsar «Añadir» o «Guardar cambios». El botón «Jugar» en la ficha del juego solo se
-          habilita cuando hay un ejecutable elegido aquí.
+          Estos datos se guardan al pulsar «Añadir» o «Guardar cambios». El botón «Jugar» solo se habilita cuando hay
+          aquí un archivo elegido (.exe en Windows; también puedes usar .jar, .bat/.cmd / scripts según sistema).
         </p>
 
         <Card className="border border-default-200/60 shadow-sm">
           <CardBody className="space-y-3 px-4 py-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-sm font-semibold text-default-700">Ejecutable para lanzar</span>
+              <span className="text-sm font-semibold text-default-700">Archivo para lanzar</span>
               <div className="flex flex-wrap gap-2">
                 <Button
                   size="sm"
                   variant="bordered"
                   startContent={<FileSearch size={16} />}
                   onPress={handlePickExecutable}>
-                  Elegir .exe
+                  Elegir archivo
                 </Button>
                 {hasLaunchPath && (
                   <Button
@@ -126,7 +151,8 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
               </p>
             ) : (
               <p className="text-xs text-default-400">
-                Sin ejecutable: no podrás usar «Jugar» en la ficha hasta que elijas uno.
+                Sin archivo: no podrás usar «Jugar» hasta que elijas uno (filtro amplio en el selector; también «Todos
+                los archivos»).
               </p>
             )}
           </CardBody>

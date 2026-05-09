@@ -13,7 +13,7 @@ export interface GameFormState {
   selectedSteamAppId: string | null;
   imageUrl: string;
   magnetLink: string;
-  /** Ruta absoluta al .exe para lanzar el juego desde la ficha (se guarda al pulsar Guardar). */
+  /** Ruta absoluta al programa que abre el juego (.exe, .jar, script, etc.; se guarda al pulsar Guardar). */
   launchExecutablePath: string;
   /** Nombres de proceso para detección manual (se guardan al pulsar Guardar). */
   executableNames: string[];
