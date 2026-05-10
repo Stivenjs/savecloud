@@ -6,6 +6,11 @@
 use super::profile_manager::ProfileManager;
 use super::profiles::ProfileDTO;
 
+fn merge_profile_dto_disk_session(mut dto: ProfileDTO) -> ProfileDTO {
+    dto.developer_mode = super::load_settings().developer_mode;
+    dto
+}
+
 /// Lista todos los perfiles disponibles.
 ///
 /// # Returns
@@ -26,7 +31,8 @@ pub async fn list_profiles_cmd() -> Result<Vec<ProfileDTO>, String> {
 #[tauri::command]
 pub async fn get_active_profile_cmd() -> Result<ProfileDTO, String> {
     let index = ProfileManager::load_profiles()?;
-    ProfileManager::get_active_profile_dto(&index)
+    let dto = ProfileManager::get_active_profile_dto(&index)?;
+    Ok(merge_profile_dto_disk_session(dto))
 }
 
 /// Cambia el perfil activo a uno específico.
@@ -46,7 +52,7 @@ pub async fn get_active_profile_cmd() -> Result<ProfileDTO, String> {
 pub async fn set_active_profile_cmd(profile_id: String) -> Result<ProfileDTO, String> {
     let mut index = ProfileManager::load_profiles()?;
     let profile = ProfileManager::set_active_profile(&mut index, &profile_id)?;
-    Ok(ProfileDTO::from(&profile))
+    Ok(merge_profile_dto_disk_session(ProfileDTO::from(&profile)))
 }
 
 /// Crea un nuevo perfil.

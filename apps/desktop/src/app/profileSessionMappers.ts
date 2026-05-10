@@ -22,6 +22,7 @@ export function profileDtoToSession(profile: ProfileDto): ActiveProfileSession {
     apiBaseUrl: profile.apiBaseUrl,
     wsBaseUrl: profile.wsBaseUrl,
     profileAvatarUrl: profile.profileAvatarUrl ?? null,
+    developerMode: Boolean(profile.developerMode),
   };
 }
 
@@ -33,5 +34,6 @@ export function configDefaultToSession(config: Config | null | undefined): Activ
     apiBaseUrl: config?.apiBaseUrl?.trim() ?? "",
     wsBaseUrl: config?.wsBaseUrl?.trim() ?? "",
     profileAvatarUrl: config?.profileAvatar?.trim() || null,
+    developerMode: Boolean(config?.developerMode),
   };
 }

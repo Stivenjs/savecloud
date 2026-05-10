@@ -39,10 +39,11 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     ensure_storage_layout()
         .map_err(|error| format!("No se pudo preparar storage layout: {error}"))?;
 
-    // 1. Herramientas de desarrollo
-    #[cfg(debug_assertions)]
-    {
-        if let Some(window) = app.get_webview_window("main") {
+    // 1. Inspector del webview (DevTools): siempre en builds debug; en release solo si el perfil activo tiene
+    //    `developer_mode` en su `settings.json`.
+    if let Some(window) = app.get_webview_window("main") {
+        let open = cfg!(debug_assertions) || crate::config::load_settings().developer_mode;
+        if open {
             window.open_devtools();
         }
     }

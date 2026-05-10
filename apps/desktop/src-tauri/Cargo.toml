@@ -1,6 +1,6 @@
 [package]
 name = "savecloud-desktop"
-version = "1.20.8"
+version = "1.24.2"
 description = "Sync your game saves to the cloud. Auto-upload on change, local backups before overwrite. Works with Steam, non-Steam, and emulated games."
 edition = "2021"
 
@@ -18,7 +18,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 dotenvy = "0.15"
-tauri = { version = "2", features = ["protocol-asset", "tray-icon", "image-ico", "macos-private-api"] }
+tauri = { version = "2", features = ["protocol-asset", "tray-icon", "image-ico", "macos-private-api", "devtools"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

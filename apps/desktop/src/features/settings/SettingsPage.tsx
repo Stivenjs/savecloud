@@ -20,6 +20,7 @@ import { useProfileSession } from "@hooks/useProfileSession";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigationStore } from "@features/input/store";
 import { DevSdk } from "@features/settings/DevSdk";
+import { DeveloperModeCard } from "@features/settings/DeveloperModeCard";
 import { SourceInstallSettingsCard } from "@features/settings/SourceInstallSettingsCard";
 import { GamepadTesterCard } from "@features/settings/GamepadTesterCard";
 import { VoiceCommandsCard } from "@features/voice-commands";
@@ -97,6 +98,7 @@ export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
     handleFullBackupStreamingChange,
     handleFullBackupStreamingDryRunChange,
     handleFullBackupPackagedCompressionLevelChange,
+    handleDeveloperModeChange,
     handleSyncSteamCatalog,
     handleResetSteamCatalogSync,
     confirmResetSteamCatalogSync,
@@ -249,11 +251,13 @@ export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
             <ReleaseNotesCard onOpenNotes={() => setReleaseNotesOpen(true)} />
           </div>
         );
-      case "advanced":
+      case "advanced": {
+        const showDeveloperSurface = import.meta.env.DEV || !!activeProfile?.developerMode;
         return (
           <div className="space-y-3">
             <HealthObservabilityCard />
             <LocalBackupInfoCard />
+            <DeveloperModeCard enabled={!!activeProfile?.developerMode} onEnabledChange={handleDeveloperModeChange} />
             <ExperimentalFeaturesCard
               key={`experimental-${activeProfile?.id ?? "no-profile"}`}
               fullBackupStreaming={!!config?.fullBackupStreaming}
@@ -263,9 +267,10 @@ export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
               fullBackupPackagedCompressionLevel={config?.fullBackupPackagedCompressionLevel}
               onFullBackupPackagedCompressionLevelChange={handleFullBackupPackagedCompressionLevelChange}
             />
-            <DevSdk />
+            {showDeveloperSurface ? <DevSdk /> : null}
           </div>
         );
+      }
       default:
         return null;
     }

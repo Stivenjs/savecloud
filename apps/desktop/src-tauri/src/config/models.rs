@@ -92,6 +92,9 @@ pub struct AppSettings {
     /// Detectar si un juego de la biblioteca está en ejecución y darle más prioridad de CPU (automático).
     #[serde(default)]
     pub game_mode_boost_detected_game_cpu: bool,
+    /// Por perfil (`settings.json` del perfil activo): DevTools del webview, atajos y herramientas de plugins en UI.
+    #[serde(default)]
+    pub developer_mode: bool,
 }
 
 fn default_true() -> bool {
@@ -231,6 +234,8 @@ pub struct Config {
     pub game_mode_throttle_savecloud_background: bool,
     #[serde(default)]
     pub game_mode_boost_detected_game_cpu: bool,
+    #[serde(default)]
+    pub developer_mode: bool,
 }
 
 /// Objeto de transferencia de datos (DTO) de la configuración principal,
@@ -284,6 +289,8 @@ pub struct ConfigDto {
     pub game_mode_throttle_savecloud_background: bool,
     #[serde(default)]
     pub game_mode_boost_detected_game_cpu: bool,
+    #[serde(default)]
+    pub developer_mode: bool,
 }
 
 /// DTO representativo de un juego para el frontend.

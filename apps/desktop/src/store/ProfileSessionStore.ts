@@ -14,6 +14,8 @@ export interface ActiveProfileSession {
   readonly apiBaseUrl: string;
   readonly wsBaseUrl: string;
   readonly profileAvatarUrl: string | null;
+  /** Preferencia del perfil activo en disco (`developer_mode` en settings del perfil). */
+  readonly developerMode: boolean;
 }
 
 interface ProfileSessionStore {
@@ -23,6 +25,7 @@ interface ProfileSessionStore {
   error: string | null;
   hydrateSession: () => Promise<void>;
   setActiveProfile: (profile: ActiveProfileSession, source: ProfileSessionSource) => void;
+  patchSession: (partial: Partial<Pick<ActiveProfileSession, "developerMode">>) => void;
   clearError: () => void;
 }
 
@@ -36,6 +39,7 @@ function toDefaultProfile(config: Config): ActiveProfileSession {
     apiBaseUrl: config.apiBaseUrl?.trim() ?? "",
     wsBaseUrl: config.wsBaseUrl?.trim() ?? "",
     profileAvatarUrl: config.profileAvatar?.trim() || null,
+    developerMode: Boolean(config.developerMode),
   };
 }
 
@@ -78,6 +82,7 @@ export const useProfileSessionStore = create<ProfileSessionStore>((set) => ({
             apiBaseUrl: activeProfile.apiBaseUrl,
             wsBaseUrl: activeProfile.wsBaseUrl,
             profileAvatarUrl: activeProfile.profileAvatarUrl ?? fallbackProfile.profileAvatarUrl,
+            developerMode: Boolean(activeProfile.developerMode),
           };
           nextSource = "profiles-api";
         } catch {
@@ -108,6 +113,11 @@ export const useProfileSessionStore = create<ProfileSessionStore>((set) => ({
   setActiveProfile: (profile, source) => {
     set({ activeProfile: profile, source, error: null });
   },
+
+  patchSession: (partial) =>
+    set((s) => ({
+      activeProfile: s.activeProfile ? { ...s.activeProfile, ...partial } : null,
+    })),
 
   clearError: () => set({ error: null }),
 }));

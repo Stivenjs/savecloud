@@ -1,9 +1,37 @@
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
 
 const host = process.env.TAURI_DEV_HOST;
+
+function readAppVersion(): string {
+  try {
+    const raw = readFileSync(resolve(__dirname, "package.json"), "utf-8");
+    const pkg = JSON.parse(raw) as { version?: string };
+    return typeof pkg.version === "string" ? pkg.version : "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+}
+
+function readGitShortSha(): string {
+  try {
+    return execSync("git rev-parse --short HEAD", {
+      encoding: "utf-8",
+      cwd: resolve(__dirname, "../.."),
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
+const savecloudBuildDefines = {
+  __SAVECLOUD_APP_VERSION__: JSON.stringify(readAppVersion()),
+  __SAVECLOUD_GIT_SHORT_SHA__: JSON.stringify(readGitShortSha()),
+} as const;
 
 const ReactCompilerConfig = {
   target: "19" as const,
@@ -37,6 +65,7 @@ export default defineConfig(() => ({
   },
 
   clearScreen: false,
+  define: savecloudBuildDefines,
   esbuild: {
     drop: process.env.TAURI_ENV_DEBUG ? [] : ["console", "debugger"],
   },
