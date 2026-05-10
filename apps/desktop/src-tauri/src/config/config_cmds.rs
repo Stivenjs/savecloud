@@ -103,6 +103,7 @@ pub fn get_config() -> ConfigDto {
         game_mode_reduce_capture_overhead: settings.game_mode_reduce_capture_overhead,
         game_mode_throttle_savecloud_background: settings.game_mode_throttle_savecloud_background,
         game_mode_boost_detected_game_cpu: settings.game_mode_boost_detected_game_cpu,
+        developer_mode: settings.developer_mode,
         games: library
             .games
             .into_iter()
@@ -269,6 +270,14 @@ pub fn set_full_backup_packaged_compression_level(level: Option<i32>) -> Result<
     }
     let mut settings = config::load_settings();
     settings.full_backup_packaged_compression_level = level;
+    config::save_settings(&settings)
+}
+
+/// Activa o desactiva el modo desarrollador del **perfil activo** (`settings.json` bajo ese perfil).
+#[tauri::command]
+pub fn set_developer_mode(enabled: bool) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.developer_mode = enabled;
     config::save_settings(&settings)
 }
 
@@ -554,7 +563,8 @@ pub fn remove_game(game_id: String, path: Option<String>) -> Result<(), String> 
 
 /// Lista procesos en ejecución (nombre + icono asociado al binario donde el SO lo permite).
 #[tauri::command]
-pub fn list_running_processes_for_pick() -> Vec<crate::system::process_check::RunningProcessPickRow> {
+pub fn list_running_processes_for_pick() -> Vec<crate::system::process_check::RunningProcessPickRow>
+{
     crate::system::process_check::list_running_processes_for_pick()
 }
 

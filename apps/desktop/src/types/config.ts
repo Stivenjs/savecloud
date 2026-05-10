@@ -76,4 +76,6 @@ export interface Config {
    * de esos procesos (independiente del interruptor «Modo juego»).
    */
   readonly gameModeBoostDetectedGameCpu?: boolean;
+  /** Por perfil: DevTools del webview y herramientas de plugins en la UI de producción. */
+  readonly developerMode?: boolean;
 }

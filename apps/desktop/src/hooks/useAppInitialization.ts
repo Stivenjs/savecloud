@@ -8,13 +8,13 @@ import { notifySyncComplete, notifySyncError } from "@utils/notification";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { useInputManager } from "@features/input/useInputManager";
 import { useNotificationStore } from "@store/NotificationStore";
-import { useProfileSessionStore } from "@store/ProfileSessionStore";
 import { initSyncListeners } from "@store/SyncStore";
 import { initSourcesListeners } from "@store/SourcesDownloadsStore";
 import { initTorrentListeners } from "@store/TorrentStore";
 import { useCloudWebSockets } from "@hooks/useCloudWebSockets";
 import { useCloudStreamRealtime } from "@hooks/useCloudStreamRealtime";
 import { useCloudStreamHostSignaling } from "@hooks/useCloudStreamHostSignaling";
+import { useProfileSessionStore } from "@store/ProfileSessionStore";
 
 /**
  * Hook encargado de inicializar comportamientos globales de la aplicación.
@@ -27,7 +27,7 @@ import { useCloudStreamHostSignaling } from "@hooks/useCloudStreamHostSignaling"
  * - Respaldar periódicamente la configuración del usuario en la nube.
  * - Comprobar actualizaciones de la aplicación (solo en producción).
  * - Escuchar eventos de sincronización automática emitidos desde el backend de Tauri.
- * - Bloquear acciones de desarrollo en producción (reload, devtools, click derecho).
+ * - Bloquear acciones de desarrollo en producción salvo «Modo desarrollador» del perfil activo (sesión).
  *
  * Debe usarse una sola vez en el nivel raíz de la aplicación
  * (por ejemplo en `App.tsx`).
@@ -41,6 +41,7 @@ import { useCloudStreamHostSignaling } from "@hooks/useCloudStreamHostSignaling"
  * ```
  */
 export function useAppInitialization() {
+  const developerMode = useProfileSessionStore((s) => s.activeProfile?.developerMode ?? false);
   useInputManager();
   initSyncListeners();
   initSourcesListeners();
@@ -245,7 +246,7 @@ export function useAppInitialization() {
    * - Abrir menú contextual (click derecho)
    */
   useEffect(() => {
-    if (import.meta.env.DEV) return;
+    if (import.meta.env.DEV || developerMode) return;
 
     const blockKeys = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
@@ -273,5 +274,5 @@ export function useAppInitialization() {
       window.removeEventListener("keydown", blockKeys);
       window.removeEventListener("contextmenu", blockContextMenu);
     };
-  }, []);
+  }, [developerMode]);
 }

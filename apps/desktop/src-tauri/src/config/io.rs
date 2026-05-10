@@ -314,6 +314,7 @@ pub fn get_combined_config() -> Config {
         game_mode_reduce_capture_overhead: settings.game_mode_reduce_capture_overhead,
         game_mode_throttle_savecloud_background: settings.game_mode_throttle_savecloud_background,
         game_mode_boost_detected_game_cpu: settings.game_mode_boost_detected_game_cpu,
+        developer_mode: settings.developer_mode,
     }
 }
 
@@ -372,6 +373,8 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
     current_settings.game_mode_throttle_savecloud_background =
         cfg.game_mode_throttle_savecloud_background;
     current_settings.game_mode_boost_detected_game_cpu = cfg.game_mode_boost_detected_game_cpu;
+
+    current_settings.developer_mode = cfg.developer_mode;
 
     save_settings(&current_settings)?;
     save_library(&GameLibrary {

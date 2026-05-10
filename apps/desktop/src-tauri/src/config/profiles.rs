@@ -179,6 +179,9 @@ pub struct ProfileDTO {
     pub created_at: i64,
     pub last_used: i64,
     pub cloud_host_count: usize,
+    /// Leído del `settings.json` del perfil **activo** (no forma parte del índice de perfiles en disco).
+    #[serde(default)]
+    pub developer_mode: bool,
 }
 
 impl From<&Profile> for ProfileDTO {
@@ -193,6 +196,7 @@ impl From<&Profile> for ProfileDTO {
             created_at: profile.created_at,
             last_used: profile.last_used,
             cloud_host_count: profile.cloud_host_api_base_urls.len(),
+            developer_mode: false,
         }
     }
 }

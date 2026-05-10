@@ -25,6 +25,7 @@ import {
   type SteamSeedImportProgressPayload,
   getDefaultSourceDownloadDir,
   setDefaultSourceDownloadDir,
+  setDeveloperMode,
 } from "@services/tauri";
 import {
   importSourceFromFile,
@@ -37,6 +38,7 @@ import { getAlwaysShowSelectorCmd, setAlwaysShowSelectorCmd } from "@services/ta
 import { MASKED_CONFIG_SECRET } from "@/constants/configMask";
 import { useConfig } from "@hooks/useConfig";
 import { useProfileSession } from "@hooks/useProfileSession";
+import { useProfileSessionStore } from "@store/ProfileSessionStore";
 import { STEAM_SEED_FRESHNESS_QUERY_KEY } from "@features/steam-catalog/hooks/useSteamSeedFreshness";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastError, toastSuccess } from "@utils/toast";
@@ -222,7 +224,7 @@ export function useSettingsPage() {
   );
   const [steamSeedImportProgress, setSteamSeedImportProgress] = useState<SteamSeedImportProgressPayload | null>(null);
   const [deletingSourceIds, setDeletingSourceIds] = useState<Set<string>>(new Set());
-  const { config, loading: loadingUseConfig, refetch: refetchConfig } = useConfig();
+  const { config, loading: loadingUseConfig } = useConfig();
   const { activeProfile } = useProfileSession();
   const queryClient = useQueryClient();
 
@@ -431,7 +433,6 @@ export function useSettingsPage() {
       );
       dispatch({ type: "SET_CREATE_MODAL", open: false });
 
-      refetchConfig?.();
       queryClient.invalidateQueries({ queryKey: ["config"] });
       queryClient.invalidateQueries({ queryKey: ["configPath"] });
 
@@ -483,7 +484,6 @@ export function useSettingsPage() {
     try {
       await setFullBackupStreaming(enabled);
       scheduleConfigBackupToCloud();
-      refetchConfig?.();
       queryClient.invalidateQueries({ queryKey: ["config"] });
       toastSuccess(
         "Configuración guardada",
@@ -498,7 +498,6 @@ export function useSettingsPage() {
     try {
       await setFullBackupStreamingDryRun(enabled);
       scheduleConfigBackupToCloud();
-      refetchConfig?.();
       queryClient.invalidateQueries({ queryKey: ["config"] });
       toastSuccess(
         "Configuración guardada",
@@ -516,15 +515,31 @@ export function useSettingsPage() {
       try {
         await setFullBackupPackagedCompressionLevel(level);
         scheduleConfigBackupToCloud();
-        refetchConfig?.();
         queryClient.invalidateQueries({ queryKey: ["config"] });
         toastSuccess("Configuración guardada", "Nivel de compresión de backups empaquetados actualizado.");
       } catch (e) {
         toastError("Error al guardar", e instanceof Error ? e.message : String(e));
       }
     },
-    [queryClient, refetchConfig]
+    [queryClient]
   );
+
+  const handleDeveloperModeChange = async (enabled: boolean) => {
+    const prev = useProfileSessionStore.getState().activeProfile?.developerMode ?? false;
+    useProfileSessionStore.getState().patchSession({ developerMode: enabled });
+    try {
+      await setDeveloperMode(enabled);
+      scheduleConfigBackupToCloud();
+      queryClient.invalidateQueries({ queryKey: ["config"] });
+      toastSuccess(
+        "Preferencia guardada",
+        enabled ? "Modo desarrollador activado para este perfil." : "Modo desarrollador desactivado para este perfil."
+      );
+    } catch (e) {
+      useProfileSessionStore.getState().patchSession({ developerMode: prev });
+      toastError("Error al guardar", e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const openCreateConfigModal = () => {
     dispatch({ type: "SET_CREATE_CONFIG_ERROR", payload: null });
@@ -549,7 +564,6 @@ export function useSettingsPage() {
         "Listado de juegos actualizado",
         `Se guardaron ${stats.appsUpserted.toLocaleString()} entradas en ${stats.batches} pasos (${stats.mode === "full" ? "descarga completa" : "solo novedades"}).`
       );
-      refetchConfig?.();
       queryClient.invalidateQueries({ queryKey: ["config"] });
     } catch (e) {
       toastError("No se pudo actualizar el listado de Steam", e instanceof Error ? e.message : String(e));
@@ -797,6 +811,7 @@ export function useSettingsPage() {
     handleFullBackupStreamingChange,
     handleFullBackupStreamingDryRunChange,
     handleFullBackupPackagedCompressionLevelChange,
+    handleDeveloperModeChange,
     handleSyncSteamCatalog,
     handleResetSteamCatalogSync,
     confirmResetSteamCatalogSync,

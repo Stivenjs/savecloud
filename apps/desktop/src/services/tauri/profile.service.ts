@@ -10,6 +10,8 @@ export interface ProfileDto {
   readonly createdAt: number;
   readonly lastUsed: number;
   readonly cloudHostCount: number;
+  /** Preferencia en el `settings.json` del perfil activo (solo fiable en perfil activo / comandos que fusionan sesión). */
+  readonly developerMode?: boolean;
 }
 
 export interface CreateProfileInput {

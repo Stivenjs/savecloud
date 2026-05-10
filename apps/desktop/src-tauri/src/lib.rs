@@ -3,6 +3,7 @@ mod commands;
 mod compat;
 mod config;
 mod controller;
+mod devtools_cmds;
 mod game_mode;
 mod ipc;
 #[cfg(target_os = "windows")]

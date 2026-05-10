@@ -2,6 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { TitleBar } from "@components/layout/TitleBar";
 import { SettingsPage } from "@features/settings/SettingsPage";
+import { useProfileSessionHydration } from "@hooks/useProfileSession";
 import { SAVECLOUD_SETTINGS_CHROME_EVENT, type SavecloudSettingsChromePayload } from "@/windows/settingsWindow";
 
 function readInitialHideTitleBarFromSearch(): boolean {
@@ -9,6 +10,7 @@ function readInitialHideTitleBarFromSearch(): boolean {
 }
 
 export function SettingsWindowPage() {
+  useProfileSessionHydration();
   const [hideTitleBar, setHideTitleBar] = useState(readInitialHideTitleBarFromSearch);
 
   useEffect(() => {

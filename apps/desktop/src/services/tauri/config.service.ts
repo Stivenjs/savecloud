@@ -923,6 +923,11 @@ export async function setFullBackupPackagedCompressionLevel(level: number | null
   await invoke("set_full_backup_packaged_compression_level", { level });
 }
 
+/** Modo desarrollador del perfil activo (persistido en el `settings.json` de ese perfil). */
+export async function setDeveloperMode(enabled: boolean): Promise<void> {
+  await invoke("set_developer_mode", { enabled });
+}
+
 /** Elimina todos los backups locales (carpeta SaveCloud/backups completa). */
 export async function deleteAllLocalBackups(): Promise<void> {
   await invoke("delete_all_local_backups");
