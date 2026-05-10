@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { SETTINGS_SIDEBAR_SECTIONS } from "@/constants/settingsSidebarSections";
+import { SettingsSidebarVersionFooter } from "@/features/settings/SettingsSidebarVersionFooter";
 
 export type SettingsTabKey = "account" | "app" | "big-picture" | "integrations" | "gamepad" | "updates" | "advanced";
 
@@ -71,6 +72,7 @@ export function SettingsSidebar({ tabs, selectedTab, onSelectTab }: SettingsSide
           ))}
         </nav>
       </div>
+      <SettingsSidebarVersionFooter onGoToUpdates={() => onSelectTab("updates")} />
     </aside>
   );
 }
