@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { MemoryRouter, useNavigate } from "react-router-dom";
+import { HashRouter, useNavigate } from "react-router-dom";
 import { AppLayout, TransferOverlayRouter } from "@components/layout";
 import { AppRoutes } from "@router/AppRoutes";
 import { NAV_ITEMS } from "@components/navigation/navItems";
@@ -65,9 +65,9 @@ export function AppRuntime({ hideTitleBar = false }: AppRuntimeProps) {
       <TrayActionsListener />
       <UnsyncedSavesModalWithProgress />
 
-      <MemoryRouter>
+      <HashRouter>
         <AppContent hideTitleBar={hideTitleBar} />
-      </MemoryRouter>
+      </HashRouter>
 
       <TransferOverlayRouter />
     </>
