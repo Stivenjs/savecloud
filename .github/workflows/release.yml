@@ -137,6 +137,7 @@ jobs:
         env:
           GITHUB_REF: ${{ github.ref }}
 
+      # Paquetes de *compilación* (equivalentes runtime en apps/desktop/src-tauri/tauri.conf.json → bundle.linux.deb.depends).
       - name: Install dependencies (Ubuntu)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
