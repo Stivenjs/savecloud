@@ -150,6 +150,11 @@ jobs:
         run: bun install --frozen-lockfile
         working-directory: apps/desktop
 
+      - name: NSIS branding (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: bun run nsis-branding
+        working-directory: apps/desktop
+
       - name: Build Tauri
         run: bun run tauri build ${{ matrix.args }}
         working-directory: apps/desktop

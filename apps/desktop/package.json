@@ -10,7 +10,8 @@
     "preview": "bun run --bun vite preview",
     "tauri": "tauri",
     "icon": "bun run scripts/make-icon-square.ts && tauri icon src-tauri/icons/icon-square.png",
-    "latest-json": "bun run scripts/generate-latest-json.ts"
+    "latest-json": "bun run scripts/generate-latest-json.ts",
+    "nsis-branding": "bun run scripts/generate-nsis-branding-bmps.ts"
   },
   "dependencies": {
     "@heroui/react": "^2.8.9",

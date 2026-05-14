@@ -79,6 +79,19 @@
       "webviewInstallMode": {
         "silent": true,
         "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "compression": "lzma",
+        "displayLanguageSelector": false,
+        "headerImage": "windows/nsis/header.bmp",
+        "sidebarImage": "windows/nsis/sidebar.bmp",
+        "uninstallerHeaderImage": "windows/nsis/uninstaller-header.bmp",
+        "installerIcon": "icons/icon.ico",
+        "languages": [
+          "SpanishInternational",
+          "English"
+        ],
+        "startMenuFolder": "SaveCloud"
       }
     },
     "resources": [
