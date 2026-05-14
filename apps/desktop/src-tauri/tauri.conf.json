@@ -60,6 +60,19 @@
           "libnotify4",
           "libsecret-1-0"
         ]
+      },
+      "rpm": {
+        "depends": [
+          "webkitgtk4.1",
+          "gtk3",
+          "libayatana-appindicator-gtk3",
+          "alsa-lib",
+          "librsvg2",
+          "systemd-libs",
+          "libxdo",
+          "libnotify",
+          "libsecret"
+        ]
       }
     },
     "windows": {

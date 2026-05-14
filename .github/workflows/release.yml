@@ -137,7 +137,9 @@ jobs:
         env:
           GITHUB_REF: ${{ github.ref }}
 
-      # Paquetes de *compilación* (equivalentes runtime en apps/desktop/src-tauri/tauri.conf.json → bundle.linux.deb.depends).
+      # Build deps on Ubuntu; runtime deps for installers live in tauri.conf.json:
+      # bundle.linux.deb.depends (apt/dpkg), bundle.linux.rpm.depends (dnf/rpm).
+      # AUR / pacman: no .deb/.rpm metadata — mirror the same libs in PKGBUILD depends (see those lists).
       - name: Install dependencies (Ubuntu)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -181,7 +183,7 @@ jobs:
           find cli-windows -type f -exec cp {} release/ \;
           find cli-unix -type f -exec cp {} release/ \;
           for dir in desktop-*; do
-            [ -d "$dir" ] && find "$dir" -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.sig" -o -name "*.app.tar.gz" -o -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release/ \;
+            [ -d "$dir" ] && find "$dir" -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.dmg" -o -name "*.sig" -o -name "*.app.tar.gz" -o -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release/ \;
           done
 
       - name: Generate updater latest.json
