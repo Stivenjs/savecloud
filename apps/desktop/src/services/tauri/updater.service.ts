@@ -9,6 +9,23 @@ export type UpdateCheckResult =
   | { ok: false; error: string };
 
 /**
+ * El plugin de Tauri devuelve esto cuando el endpoint responde pero el JSON de release
+ * no es válido o aún no está publicado (p. ej. GitHub Actions subiendo `latest.json`).
+ * No es un fallo grave de la app: conviene reintentar más tarde.
+ */
+function isTransientUpdaterReleaseMetadataError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("valid release json") ||
+    m.includes("could not fetch a valid release") ||
+    (m.includes("could not fetch") && m.includes("release") && m.includes("json"))
+  );
+}
+
+const TRANSIENT_UPDATE_USER_MESSAGE =
+  "El servidor de actualizaciones aún no tiene la información de esta versión (suele ocurrir mientras se publica una release). Vuelve a intentarlo en unos minutos.";
+
+/**
  * Comprueba si hay actualizaciones disponibles.
  * Devuelve el resultado sin mostrar diálogos (útil para comprobar al inicio).
  */
@@ -26,6 +43,9 @@ export async function checkForUpdatesSilent(): Promise<UpdateCheckResult> {
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    if (isTransientUpdaterReleaseMetadataError(msg)) {
+      return { ok: true, hasUpdate: false };
+    }
     return { ok: false, error: msg };
   }
 }
@@ -71,6 +91,12 @@ export async function checkForUpdatesWithPrompt(silentWhenUpToDate = false): Pro
     await relaunch();
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    if (isTransientUpdaterReleaseMetadataError(msg)) {
+      if (!silentWhenUpToDate) {
+        toastInfo("No se pudo comprobar la actualización", TRANSIENT_UPDATE_USER_MESSAGE);
+      }
+      return;
+    }
     toastError("Error al buscar actualizaciones", msg);
   }
 }
