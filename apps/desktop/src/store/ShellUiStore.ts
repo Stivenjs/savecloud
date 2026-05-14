@@ -39,6 +39,14 @@ interface ShellUiStore {
   catalogScrollPosition: number;
   /** Establece la posición del scroll del catálogo. */
   setCatalogScrollPosition: (position: number) => void;
+
+  /**
+   * Petición desde otra ventana (p. ej. Ajustes) para abrir el asistente «Traer a este equipo» en la biblioteca.
+   * Se incrementa `openRestoreFromCloudRequest` junto con el `gameId`; GamesPage consume y limpia el id.
+   */
+  openRestoreFromCloudRequest: number;
+  openRestoreFromCloudGameId: string | null;
+  requestOpenRestoreFromCloud: (gameId: string) => void;
 }
 
 export const useShellUiStore = create<ShellUiStore>((set, get) => ({
@@ -77,4 +85,12 @@ export const useShellUiStore = create<ShellUiStore>((set, get) => ({
   },
   catalogScrollPosition: 0,
   setCatalogScrollPosition: (position) => set({ catalogScrollPosition: position }),
+
+  openRestoreFromCloudRequest: 0,
+  openRestoreFromCloudGameId: null,
+  requestOpenRestoreFromCloud: (gameId) =>
+    set((s) => ({
+      openRestoreFromCloudGameId: gameId.trim(),
+      openRestoreFromCloudRequest: s.openRestoreFromCloudRequest + 1,
+    })),
 }));

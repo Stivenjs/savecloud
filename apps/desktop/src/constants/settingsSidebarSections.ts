@@ -8,7 +8,7 @@ export const SETTINGS_SIDEBAR_SECTIONS: ReadonlyArray<{
   title: string;
   tabKeys: readonly SettingsTabKey[];
 }> = [
-  { title: "Cuenta y datos", tabKeys: ["account"] },
+  { title: "Cuenta y datos", tabKeys: ["account", "cloud"] },
   { title: "Aplicación", tabKeys: ["app", "big-picture"] },
   { title: "Dispositivos e integraciones", tabKeys: ["integrations", "gamepad"] },
   { title: "Sistema", tabKeys: ["updates", "advanced"] },

@@ -445,7 +445,7 @@ function MenuGameItem({ game, resolvedSteamAppId, mediaBySteamAppId, onClick }: 
     mediaFromBatch: true,
   });
 
-  const imageUrl = capsuleImage || game.imageUrl || null;
+  const imageUrl = capsuleImage;
   const showFallback = !imageUrl || imgError;
 
   return (

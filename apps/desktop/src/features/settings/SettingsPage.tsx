@@ -1,6 +1,7 @@
-import { useState, lazy, Suspense, type ReactNode } from "react";
+import { useState, lazy, Suspense, useEffect, type ReactNode } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { Tab, Tabs } from "@heroui/react";
-import { AppWindow, Bell, Cloud, FlaskConical, Gamepad2, Monitor, RefreshCw } from "lucide-react";
+import { AppWindow, Bell, Cloud, FlaskConical, Gamepad2, Monitor, RefreshCw, User } from "lucide-react";
 import { AutostartCard } from "@features/settings/AutostartCard";
 import { BigPictureModeCard } from "@features/settings/BigPictureModeCard";
 import { ConfigSection } from "@features/settings/ConfigSection";
@@ -26,9 +27,15 @@ import { GamepadTesterCard } from "@features/settings/GamepadTesterCard";
 import { VoiceCommandsCard } from "@features/voice-commands";
 import { GameModeCard } from "@features/settings/GameModeCard";
 import { HealthObservabilityCard } from "@features/settings/HealthObservabilityCard";
+import { CloudDashboardPanel } from "@features/settings/CloudDashboardPanel";
 import { SettingsSidebarAnimatedPanel } from "@features/settings/SettingsSidebarAnimatedPanel";
 import { SettingsSidebar, type SettingsTabKey } from "@features/settings/SettingsSidebar";
 import { useSettingsSidebarPanelDirection } from "@features/settings/useSettingsSidebarPanelDirection";
+import {
+  parseSettingsTabQueryValue,
+  SAVECLOUD_SETTINGS_SELECT_TAB_EVENT,
+  type SavecloudSettingsSelectTabPayload,
+} from "@/constants/savecloudCrossWindow";
 
 const ReleaseNotesDialogLazy = lazy(() =>
   import("@features/settings/ReleaseNotesDialog").then((module) => ({ default: module.ReleaseNotesDialog }))
@@ -39,7 +46,8 @@ const SETTINGS_TABS: Array<{
   label: string;
   icon: ReactNode;
 }> = [
-  { key: "account", label: "Cuenta", icon: <Cloud size={17} className="opacity-90" /> },
+  { key: "account", label: "Cuenta", icon: <User size={17} className="opacity-90" /> },
+  { key: "cloud", label: "Nube", icon: <Cloud size={17} className="opacity-90" /> },
   { key: "app", label: "Inicio y app", icon: <AppWindow size={17} className="opacity-90" /> },
   { key: "big-picture", label: "Big Picture", icon: <Monitor size={17} className="opacity-90" /> },
   { key: "integrations", label: "Integraciones", icon: <Bell size={17} className="opacity-90" /> },
@@ -50,13 +58,17 @@ const SETTINGS_TABS: Array<{
 
 interface SettingsPageProps {
   compactWindowMode?: boolean;
+  /** Solo ventana de ajustes: pestaña inicial desde query `tab`. */
+  initialSelectedTab?: SettingsTabKey | null;
 }
 
-export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
+export function SettingsPage({ compactWindowMode = false, initialSelectedTab = null }: SettingsPageProps) {
   const { activeProfile } = useProfileSession();
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [resetCloudSeedModalOpen, setResetCloudSeedModalOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTabKey>("account");
+  const [settingsTab, setSettingsTab] = useState<SettingsTabKey>(
+    () => parseSettingsTabQueryValue(initialSelectedTab ?? null) ?? "account"
+  );
   const {
     autostart,
     alwaysShowProfileSelector,
@@ -137,6 +149,20 @@ export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
 
   const settingsSidebarPanelDirection = useSettingsSidebarPanelDirection(settingsTab);
 
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<SavecloudSettingsSelectTabPayload>(SAVECLOUD_SETTINGS_SELECT_TAB_EVENT, (e) => {
+      const raw = e.payload?.tab;
+      const next = raw ? parseSettingsTabQueryValue(String(raw)) : null;
+      if (next) setSettingsTab(next);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
   const popLayer = useNavigationStore((s) => s.popLayer);
 
   useRegisterGlobalBack(() => {
@@ -198,6 +224,8 @@ export function SettingsPage({ compactWindowMode = false }: SettingsPageProps) {
             onOpenResetCloudSeedModal={() => setResetCloudSeedModalOpen(true)}
           />
         );
+      case "cloud":
+        return <CloudDashboardPanel onSelectAccountTab={() => setSettingsTab("account")} />;
       case "app":
         return (
           <div className="space-y-3">

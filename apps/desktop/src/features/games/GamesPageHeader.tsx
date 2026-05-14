@@ -165,7 +165,7 @@ export function GamesPageHeader({
     const syncDisabled = !gamesCount || isOperationRunning;
 
     return (
-      <div className="flex flex-nowrap items-center gap-1.5">
+      <div className="flex min-w-0 flex-nowrap items-center gap-1.5">
         <Dropdown placement="bottom-end" isOpen={isUnifiedMenuOpen} onOpenChange={handleUnifiedMenuChange}>
           <DropdownTrigger>
             <Button

@@ -1,5 +1,10 @@
 import { emitTo } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import {
+  SAVECLOUD_SETTINGS_SELECT_TAB_EVENT,
+  type SavecloudSettingsSelectTabPayload,
+} from "@/constants/savecloudCrossWindow";
+import type { SettingsTabKey } from "@features/settings/SettingsSidebar";
 import { resolveExistingWebviewWindow, showCenteredAndFocus } from "@/windows/webviewRecovery";
 
 export const SETTINGS_WINDOW_LABEL = "settings-window";
@@ -14,6 +19,8 @@ export type SavecloudSettingsChromePayload = {
 export type OpenSettingsWindowOptions = {
   /** true cuando la ventana se abre o enfoca desde Big Picture (sin title bar). */
   launchedFromBigPicture?: boolean;
+  /** Pestaña inicial al crear o al enfocar la ventana de ajustes. */
+  initialTab?: SettingsTabKey;
 };
 
 async function syncSettingsWindowChrome(hideTitleBar: boolean): Promise<void> {
@@ -53,14 +60,24 @@ export async function toggleSettingsWindowFromBigPicture(): Promise<void> {
 
 export async function openOrFocusSettingsWindow(options?: OpenSettingsWindowOptions): Promise<void> {
   const fromBigPicture = options?.launchedFromBigPicture === true;
+  const tabQs = options?.initialTab ? `&tab=${encodeURIComponent(options.initialTab)}` : "";
   const existing = await resolveExistingWebviewWindow(SETTINGS_WINDOW_LABEL);
   if (existing) {
     await showCenteredAndFocus(existing);
     await syncSettingsWindowChrome(fromBigPicture);
+    if (options?.initialTab) {
+      try {
+        await emitTo(SETTINGS_WINDOW_LABEL, SAVECLOUD_SETTINGS_SELECT_TAB_EVENT, {
+          tab: options.initialTab,
+        } as SavecloudSettingsSelectTabPayload);
+      } catch {
+        /* webview aún no escucha */
+      }
+    }
     return;
   }
 
-  const settingsUrl = `/?settingsWindow=true${fromBigPicture ? "&bpSettings=1" : ""}`;
+  const settingsUrl = `/?settingsWindow=true${fromBigPicture ? "&bpSettings=1" : ""}${tabQs}`;
 
   const settingsWindow = new WebviewWindow(SETTINGS_WINDOW_LABEL, {
     title: "Ajustes",

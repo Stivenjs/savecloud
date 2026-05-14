@@ -43,7 +43,7 @@ interface UseGameMediaOptions {
 export interface UseGameMediaResult {
   /** URL de la imagen principal a mostrar, o `null` mientras carga. */
   displayImageUrl: string | null;
-  /** URL de la imagen de cápsula (icono pequeño) desde la DB, o `null` si no existe. */
+  /** URL de cápsula / miniatura: Steam si no hay portada propia; si hay `imageUrl`, la misma portada del usuario. */
   capsuleImage: string | null;
   /** Lista completa de URLs de media disponibles para el juego. */
   mediaUrls: string[];
@@ -71,8 +71,10 @@ export interface UseGameMediaResult {
  * Estrategia de datos:
  * 1. Si se recibe `mediaBySteamAppId` (batch), se usa directamente y la query
  *    individual queda desactivada.
- * 2. En caso contrario ejecuta una query individual por `steamAppId`.
- * 3. Si el juego tiene `imageUrl` personalizada, se omite Steam por completo.
+ * 2. En caso contrario ejecuta una query individual por `steamAppId` (solo si no hay `imageUrl`).
+ * 3. Si el juego tiene `imageUrl` personalizada, esa URL es la portada principal y la
+ *    cápsula (`capsuleImage`); si además hay datos de Steam (batch o query), se añaden
+ *    a `mediaUrls` para la galería/hover sin sustituir la imagen del usuario.
  *
  * @example
  * ```tsx
@@ -90,10 +92,12 @@ export function useGameMedia({
   const extraImageUrl = getGameLibraryHeroUrl(game, resolvedSteamAppId);
   const steamAppId = getSteamAppId(game, resolvedSteamAppId);
 
+  const hasUserCover = !!game.imageUrl?.trim();
+
   const { data: appdetailsMedia, isPending: isSteamQueryPending } = useQuery({
     queryKey: ["steam-appdetails-media", steamAppId ?? ""],
     queryFn: () => getSteamAppdetailsMedia(steamAppId!),
-    enabled: !!steamAppId && !mediaFromBatch,
+    enabled: !!steamAppId && !mediaFromBatch && !hasUserCover,
     staleTime: 5 * 60 * 1000,
     gcTime: 1000 * 60 * 60 * 24,
     refetchOnWindowFocus: false,
@@ -103,13 +107,20 @@ export function useGameMedia({
   const mediaSource = (mediaBySteamAppId && steamAppId ? mediaBySteamAppId[steamAppId] : undefined) ?? appdetailsMedia;
 
   const { displayImageUrl, mediaUrls, isEffectivelyLoading } = useMemo(() => {
-    const isCustomImage = !!game.imageUrl?.trim();
+    const isCustomImage = hasUserCover;
     const fallbackDisplay = staticImageUrl ?? "";
     const fallbackUrls = [fallbackDisplay, extraImageUrl].filter(Boolean) as string[];
 
-    // Imagen personalizada: sin Steam
+    // Portada personalizada: prioridad absoluta; galería = usuario + arte Steam si llegó (batch/query).
     if (isCustomImage) {
-      return { displayImageUrl: fallbackDisplay, mediaUrls: fallbackUrls, isEffectivelyLoading: false };
+      const steamExtras = (mediaSource?.mediaUrls ?? []).filter((u) => u && u !== fallbackDisplay);
+      const merged = [fallbackDisplay, ...steamExtras];
+      const deduped = [...new Set(merged)];
+      return {
+        displayImageUrl: fallbackDisplay,
+        mediaUrls: deduped.length > 0 ? deduped : fallbackUrls,
+        isEffectivelyLoading: false,
+      };
     }
 
     // Steam tiene media
@@ -134,6 +145,7 @@ export function useGameMedia({
 
     return { displayImageUrl: fallbackDisplay, mediaUrls: fallbackUrls, isEffectivelyLoading: false };
   }, [
+    hasUserCover,
     game.imageUrl,
     staticImageUrl,
     extraImageUrl,
@@ -166,7 +178,9 @@ export function useGameMedia({
 
   const genres = mediaSource?.genres?.filter(Boolean) ?? [];
   const steamStoreName = mediaSource?.name?.trim() ?? "";
-  const capsuleImage = mediaSource?.capsuleImage ?? null;
+  const capsuleImage = hasUserCover
+    ? (staticImageUrl ?? mediaSource?.capsuleImage ?? null)
+    : (mediaSource?.capsuleImage ?? null);
 
   return {
     displayImageUrl,

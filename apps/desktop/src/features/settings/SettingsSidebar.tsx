@@ -2,7 +2,15 @@ import type { ReactNode } from "react";
 import { SETTINGS_SIDEBAR_SECTIONS } from "@/constants/settingsSidebarSections";
 import { SettingsSidebarVersionFooter } from "@/features/settings/SettingsSidebarVersionFooter";
 
-export type SettingsTabKey = "account" | "app" | "big-picture" | "integrations" | "gamepad" | "updates" | "advanced";
+export type SettingsTabKey =
+  | "account"
+  | "cloud"
+  | "app"
+  | "big-picture"
+  | "integrations"
+  | "gamepad"
+  | "updates"
+  | "advanced";
 
 export interface SettingsTabItem {
   key: SettingsTabKey;
@@ -24,7 +32,7 @@ export function SettingsSidebar({ tabs, selectedTab, onSelectTab }: SettingsSide
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2.5 py-3">
         <header className="border-b border-default-200/60 px-1 pb-3 dark:border-default-100/15">
           <p className="text-[11px] font-bold uppercase leading-tight tracking-[0.14em] text-primary">Configuración</p>
-          <p className="mt-1.5 text-[11px] leading-snug text-default-500">Cuenta, aplicación, mandos e integraciones</p>
+          <p className="mt-1.5 text-[11px] leading-snug text-default-500">Cuenta, nube, app, mandos e integraciones</p>
         </header>
 
         <nav className="mt-3 space-y-0" aria-label="Secciones de configuración">
