@@ -14,6 +14,8 @@ export interface CloudGameSummary {
   gameId: string;
   fileCount: number;
   totalSize: number;
+  /** Última modificación reportada por la API para ese juego en la nube (si está disponible). */
+  lastModified?: string | null;
 }
 
 export type ConnectionStatus = "idle" | "connecting" | "connected" | "error" | "retrying";
@@ -73,7 +75,9 @@ function chooseMostRecentSync(remoteSync: LastSyncInfo, localSync: LastSyncInfo)
   return localSync.lastSyncAt > remoteSync.lastSyncAt ? localSync : remoteSync;
 }
 
-function computeCloudGames(saves: { gameId: string; totalSizeBytes: number; fileCount: number }[]): {
+function computeCloudGames(
+  saves: { gameId: string; totalSizeBytes: number; fileCount: number; lastModified: string | null }[]
+): {
   cloudGames: CloudGameSummary[];
   totalSize: number;
 } {
@@ -81,6 +85,7 @@ function computeCloudGames(saves: { gameId: string; totalSizeBytes: number; file
     gameId: s.gameId,
     fileCount: s.fileCount,
     totalSize: s.totalSizeBytes,
+    lastModified: s.lastModified,
   }));
 
   const totalSize = cloudGames.reduce((sum, g) => sum + g.totalSize, 0);

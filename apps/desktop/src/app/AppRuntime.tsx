@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { HashRouter, useNavigate } from "react-router-dom";
 import { AppLayout, TransferOverlayRouter } from "@components/layout";
 import { AppRoutes } from "@router/AppRoutes";
@@ -10,6 +11,11 @@ import { useAppInitialization } from "@hooks/useAppInitialization";
 import { useConfig } from "@hooks/useConfig";
 import { useProfileSessionHydration } from "@hooks/useProfileSession";
 import type { ConfiguredGame } from "@app-types/config";
+import {
+  SAVECLOUD_OPEN_RESTORE_FROM_CLOUD_EVENT,
+  type SavecloudOpenRestoreFromCloudPayload,
+} from "@/constants/savecloudCrossWindow";
+import { useShellUiStore } from "@store/ShellUiStore";
 
 function AppContent({ hideTitleBar }: { hideTitleBar: boolean }) {
   const navigate = useNavigate();
@@ -39,9 +45,23 @@ function AppContent({ hideTitleBar }: { hideTitleBar: boolean }) {
       unlistenOpenRoute = fn;
     });
 
+    let unlistenRestoreFromCloud: (() => void) | null = null;
+    void listen<SavecloudOpenRestoreFromCloudPayload>(SAVECLOUD_OPEN_RESTORE_FROM_CLOUD_EVENT, (event) => {
+      const gameId = event.payload?.gameId?.trim();
+      if (!gameId) return;
+      navigate("/");
+      useShellUiStore.getState().requestOpenRestoreFromCloud(gameId);
+      void WebviewWindow.getByLabel("main").then((w) => {
+        void w?.setFocus().catch(() => {});
+      });
+    }).then((fn) => {
+      unlistenRestoreFromCloud = fn;
+    });
+
     return () => {
       unlistenOpenFriends?.();
       unlistenOpenRoute?.();
+      unlistenRestoreFromCloud?.();
     };
   }, [navigate]);
 

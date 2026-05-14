@@ -20,6 +20,7 @@ import { sourcesFindMatchForGame, startSourceDownload } from "@services/tauri";
 import { createShareLink } from "@/services/tauri/share.service";
 import { toastError, toastSuccess } from "@utils/toast";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
+import { LAST_SYNC_QUERY_KEY } from "@hooks/useLastSyncInfo";
 import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";
 import { GameDrawer } from "@features/games/GameDrawer";
 import { GameTorrentDrawer } from "@features/games/GameTorrentDrawer";
@@ -195,12 +196,16 @@ export function GameDetailPage() {
       try {
         await removeGame(g.id);
         toastSuccess("Eliminado", `${formatGameDisplayName(g.id)} eliminado.`);
+        await Promise.all([
+          queryClient.refetchQueries({ queryKey: CONFIG_QUERY_KEY }),
+          queryClient.refetchQueries({ queryKey: LAST_SYNC_QUERY_KEY }),
+        ]);
         navigate("/");
       } catch (e) {
         toastError("Error al eliminar", e instanceof Error ? e.message : "Error inesperado");
       }
     },
-    [navigate]
+    [navigate, queryClient]
   );
 
   const showRequirementsTab = steamDetails ? hasSteamRequirements(steamDetails) : false;

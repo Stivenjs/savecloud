@@ -3,15 +3,23 @@ import { useEffect, useState } from "react";
 import { TitleBar } from "@components/layout/TitleBar";
 import { SettingsPage } from "@features/settings/SettingsPage";
 import { useProfileSessionHydration } from "@hooks/useProfileSession";
+import { parseSettingsTabQueryValue } from "@/constants/savecloudCrossWindow";
+import type { SettingsTabKey } from "@features/settings/SettingsSidebar";
 import { SAVECLOUD_SETTINGS_CHROME_EVENT, type SavecloudSettingsChromePayload } from "@/windows/settingsWindow";
 
 function readInitialHideTitleBarFromSearch(): boolean {
   return new URLSearchParams(window.location.search).get("bpSettings") === "1";
 }
 
+function readInitialSettingsTabFromSearch(): SettingsTabKey | null {
+  const q = new URLSearchParams(window.location.search);
+  return parseSettingsTabQueryValue(q.get("tab") ?? q.get("settingsTab"));
+}
+
 export function SettingsWindowPage() {
   useProfileSessionHydration();
   const [hideTitleBar, setHideTitleBar] = useState(readInitialHideTitleBarFromSearch);
+  const [initialSelectedTab] = useState<SettingsTabKey | null>(() => readInitialSettingsTabFromSearch());
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -32,7 +40,7 @@ export function SettingsWindowPage() {
         className={
           hideTitleBar ? "h-screen overflow-hidden px-3 pb-3 pt-3" : "h-screen overflow-hidden px-3 pb-3 pt-12"
         }>
-        <SettingsPage compactWindowMode />
+        <SettingsPage compactWindowMode initialSelectedTab={initialSelectedTab} />
       </div>
     </div>
   );

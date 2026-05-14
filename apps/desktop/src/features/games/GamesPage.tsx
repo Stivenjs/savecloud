@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Spinner, Tooltip } from "@heroui/react";
-import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "framer-motion";
-import { BarChart3, RefreshCw } from "lucide-react";
+import { Button, Spinner } from "@heroui/react";
+import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
+import { RefreshCw } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import { useNavigate } from "react-router-dom";
 import { DownloadAllConflictModal } from "@features/games/DownloadAllConflictModal";
@@ -14,7 +14,6 @@ import { SyncPreviewModal } from "@features/games/SyncPreviewModal";
 import { GamesFilters } from "@features/games/GamesFilters";
 import { GamesList } from "@features/games/GamesList";
 import { GamesPageHeader } from "@features/games/GamesPageHeader";
-import { GamesStatsCompact } from "@features/games/GamesStatsCompact";
 /* import { OperationErrorCard } from "@features/games/OperationErrorCard"; */
 import { BulkActionConfirmModal } from "@features/games/BulkActionConfirmModal";
 import { RemoveGameModal } from "@features/games/RemoveGameModal";
@@ -41,11 +40,6 @@ export function GamesPage() {
     error,
     refetch,
     hasSyncConfig,
-    lastSyncAt,
-    lastSyncGameId,
-    cloudGames,
-    totalCloudSize,
-    lastSyncLoading,
     searchTerm,
     setSearchTerm,
     originFilter,
@@ -128,37 +122,26 @@ export function GamesPage() {
     if (bigPictureConsole) useShellUiStore.getState().setGamesBpSearchTerm(searchTerm);
   }, [bigPictureConsole, searchTerm]);
 
-  const [gamesSummaryOpen, setGamesSummaryOpen] = useState(false);
-  const gamesSummaryOpenRef = useRef(false);
-  gamesSummaryOpenRef.current = gamesSummaryOpen;
+  const openRestoreReq = useShellUiStore((s) => s.openRestoreFromCloudRequest);
+  const prevRestoreReqRef = useRef(0);
+
+  useEffect(() => {
+    if (openRestoreReq <= prevRestoreReqRef.current) return;
+    prevRestoreReqRef.current = openRestoreReq;
+    const gid = useShellUiStore.getState().openRestoreFromCloudGameId?.trim();
+    useShellUiStore.setState({ openRestoreFromCloudGameId: null });
+    if (gid) handleOpenRestoreFromCloud(gid);
+  }, [openRestoreReq, handleOpenRestoreFromCloud]);
 
   const [gameToEdit, setGameToEdit] = useState<ConfiguredGame | null>(null);
   const [gameForTorrent, setGameForTorrent] = useState<ConfiguredGame | null>(null);
   const [gameToFullBackupConfirm, setGameToFullBackupConfirm] = useState<ConfiguredGame | null>(null);
-
-  const localGameIdsLower = useMemo(
-    () => new Set((config?.games ?? []).map((g: ConfiguredGame) => g.id.toLowerCase())),
-    [config?.games]
-  );
-
-  const gamesSummaryMotion = prefersReducedMotion
-    ? ({ initial: false, animate: {}, exit: {}, transition: { duration: 0 } } as const)
-    : ({
-        initial: { opacity: 0, y: -10 },
-        animate: { opacity: 1, y: 0 },
-        exit: { opacity: 0, y: -6 },
-        transition: { type: "spring" as const, stiffness: 380, damping: 30, mass: 0.85 },
-      } as const);
 
   const layoutShiftTransition = prefersReducedMotion
     ? { duration: 0 }
     : { type: "spring" as const, stiffness: 320, damping: 32, mass: 0.9 };
 
   useRegisterGlobalBack(() => {
-    if (bigPictureConsole && gamesSummaryOpenRef.current) {
-      setGamesSummaryOpen(false);
-      return true;
-    }
     switch (true) {
       case !!restoreFromCloudGameId:
         handleCloseRestoreFromCloud();
@@ -241,7 +224,7 @@ export function GamesPage() {
         {bigPictureConsole ? (
           <>
             <div className="mt-4 flex flex-col gap-3 sm:mt-6">
-              <div className="flex flex-wrap items-center justify-between gap-3 gap-y-4">
+              <div className="flex flex-wrap items-center gap-3 gap-y-4">
                 <div className="flex min-w-0 flex-wrap items-center gap-3">
                   <h1 className="text-2xl font-semibold text-foreground md:text-[1.875rem]">Juegos configurados</h1>
                   {hasSyncConfig && unsyncedGameIds.length > 0 ? (
@@ -250,65 +233,13 @@ export function GamesPage() {
                     </span>
                   ) : null}
                 </div>
-                <Tooltip
-                  placement="bottom"
-                  delay={350}
-                  content={gamesSummaryOpen ? "Ocultar estadísticas" : "Ver estadísticas"}>
-                  <Button
-                    id="games-summary-toggle"
-                    variant="bordered"
-                    radius="lg"
-                    size="lg"
-                    className="h-11 min-h-11 shrink-0 border-default-300/70 font-semibold md:h-12 md:min-h-12"
-                    startContent={<BarChart3 className="text-default-600" size={20} />}
-                    aria-expanded={gamesSummaryOpen}
-                    aria-controls="games-summary-panel"
-                    onPress={() => setGamesSummaryOpen((o) => !o)}>
-                    {gamesSummaryOpen ? "Ocultar estadísticas" : "Estadísticas"}
-                  </Button>
-                </Tooltip>
               </div>
-
-              <AnimatePresence initial={false} mode="popLayout">
-                {gamesSummaryOpen ? (
-                  <motion.div
-                    key="games-summary-panel"
-                    layout="position"
-                    id="games-summary-panel"
-                    role="region"
-                    aria-labelledby="games-summary-toggle"
-                    {...gamesSummaryMotion}
-                    className="origin-top overflow-hidden rounded-xl border border-default-300/55 bg-default-100/35 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] dark:border-default-100/25 dark:bg-default-50/10"
-                    style={{ willChange: prefersReducedMotion ? undefined : "opacity, transform" }}>
-                    <motion.div
-                      {...(prefersReducedMotion
-                        ? { initial: false, animate: {}, transition: { duration: 0 } }
-                        : {
-                            initial: { opacity: 0, filter: "blur(4px)" },
-                            animate: { opacity: 1, filter: "blur(0px)" },
-                            transition: { delay: 0.035, duration: 0.22, ease: [0.16, 1, 0.3, 1] },
-                          })}>
-                      <GamesStatsCompact
-                        gamesCount={config?.games?.length ?? 0}
-                        lastSyncAt={lastSyncAt}
-                        lastSyncGameId={lastSyncGameId}
-                        lastSyncLoading={hasSyncConfig && lastSyncLoading}
-                        hasSyncConfig={hasSyncConfig}
-                        cloudGames={cloudGames}
-                        totalCloudSize={totalCloudSize}
-                        localGameIdsLower={localGameIdsLower}
-                        onRestoreFromCloud={handleOpenRestoreFromCloud}
-                      />
-                    </motion.div>
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
             </div>
           </>
         ) : (
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between xl:gap-6">
+          <div className="flex flex-col gap-4">
             <div className="flex min-w-0 flex-1 flex-col gap-4">
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-4">
                 <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
                   <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground">
                     Juegos configurados
@@ -319,7 +250,7 @@ export function GamesPage() {
                     </span>
                   ) : null}
                 </div>
-                <div className="flex w-fit max-w-full">
+                <div className="flex w-full min-w-0 max-w-full justify-start pr-2">
                   <GamesPageHeader
                     density="unified"
                     hasSyncConfig={hasSyncConfig}
@@ -342,20 +273,6 @@ export function GamesPage() {
                   />
                 </div>
               </div>
-            </div>
-
-            <div className="w-full xl:w-auto xl:max-w-xl xl:self-start xl:mt-8">
-              <GamesStatsCompact
-                gamesCount={config?.games?.length ?? 0}
-                lastSyncAt={lastSyncAt}
-                lastSyncGameId={lastSyncGameId}
-                lastSyncLoading={hasSyncConfig && lastSyncLoading}
-                hasSyncConfig={hasSyncConfig}
-                cloudGames={cloudGames}
-                totalCloudSize={totalCloudSize}
-                localGameIdsLower={localGameIdsLower}
-                onRestoreFromCloud={handleOpenRestoreFromCloud}
-              />
             </div>
           </div>
         )}
@@ -499,7 +416,7 @@ export function GamesPage() {
         <motion.div
           layout={bigPictureConsole ? "position" : false}
           transition={{ layout: layoutShiftTransition }}
-          className={`flex flex-col ${bigPictureConsole ? "gap-5" : "gap-6"} ${!bigPictureConsole ? "-mt-1" : ""}`}>
+          className={`flex flex-col ${bigPictureConsole ? "gap-5" : "gap-6"} ${!bigPictureConsole ? "mt-6 sm:mt-8" : ""}`}>
           {/* Filtros de la lista */}
           <section className={bigPictureConsole ? "flex flex-wrap items-center gap-x-4 gap-y-2" : "space-y-2"}>
             <h2
