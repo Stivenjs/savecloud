@@ -1,9 +1,3 @@
-/**
- * Genera BMP 24 bits para el instalador NSIS (MUI): cabecera, lateral con logo centrado, desinstalador.
- * NSIS no inserta el icono de la app solo; hay que dibujarlo en el bitmap del lateral.
- *
- * Ejecutar desde apps/desktop: `bun run nsis-branding`
- */
 import { join } from "path";
 import sharp from "sharp";
 
