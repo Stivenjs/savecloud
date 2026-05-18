@@ -1,5 +1,30 @@
 @import "tailwindcss";
 @config "../../tailwind.config.js";
+@import "sileo/styles.css";
+
+/* Sileo: el toast es un <button> sin clases; en tema oscuro puede heredar fondo negro */
+[data-sileo-viewport] {
+  color-scheme: only light;
+  background: transparent !important;
+}
+
+[data-sileo-toast],
+[data-sileo-toast]:hover,
+[data-sileo-toast]:focus,
+[data-sileo-toast]:focus-visible {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+[data-sileo-canvas],
+[data-sileo-canvas] [data-sileo-svg] {
+  background: transparent !important;
+}
 
 @layer utilities {
   @keyframes sg-fade-in-up {
