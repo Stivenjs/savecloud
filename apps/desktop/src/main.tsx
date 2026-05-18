@@ -2,7 +2,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { ThemeProvider } from "next-themes";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { HeroUIProvider, ToastProvider } from "@heroui/react";
+import { HeroUIProvider } from "@heroui/react";
+import { SavecloudToaster } from "@components/toast/SavecloudToaster";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AppErrorBoundary } from "@components/error/AppErrorBoundary";
@@ -17,13 +18,6 @@ const THEME_CONFIG = {
   defaultTheme: "dark",
   storageKey: "savecloud-theme",
   enableSystem: true,
-} as const;
-
-/** Configuración de toasts */
-const TOAST_CONFIG = {
-  toastOffset: 40,
-  placement: "top-right" as const,
-  toastProps: { timeout: 3000 },
 } as const;
 
 type RenderMode =
@@ -64,7 +58,7 @@ const MainAppWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) =
   <React.StrictMode>
     <ThemeProvider {...THEME_CONFIG}>
       <HeroUIProvider>
-        <ToastProvider {...TOAST_CONFIG} />
+        <SavecloudToaster />
         <QueryClientProvider client={queryClient}>
           <AppErrorBoundary>{children}</AppErrorBoundary>
         </QueryClientProvider>
