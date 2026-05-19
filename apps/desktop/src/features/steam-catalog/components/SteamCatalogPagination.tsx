@@ -19,24 +19,29 @@ export const SteamCatalogPagination = memo(function SteamCatalogPagination({
   }
 
   return (
-    <div className="flex flex-col items-center gap-2 pt-6 pb-2 cursor-pointer">
+    <nav className="flex justify-center pt-6 pb-2" aria-label="Páginas del catálogo">
       <Pagination
         aria-label="Páginas del catálogo"
         total={totalPages}
         page={page}
         onChange={onChange}
         showControls
-        showShadow
         color="primary"
         variant="bordered"
+        radius="md"
         size="sm"
         isDisabled={isDisabled}
         boundaries={1}
         siblings={1}
         classNames={{
-          wrapper: "shadow-sm",
+          base: "sg-catalog-pagination",
+          wrapper: "sg-catalog-pagination__wrapper",
+          item: "sg-catalog-pagination__item",
+          cursor: "sg-catalog-pagination__active",
+          prev: "sg-catalog-pagination__nav",
+          next: "sg-catalog-pagination__nav",
         }}
       />
-    </div>
+    </nav>
   );
 });

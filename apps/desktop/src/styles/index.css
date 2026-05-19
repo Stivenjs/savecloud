@@ -2,7 +2,6 @@
 @config "../../tailwind.config.js";
 @import "sileo/styles.css";
 
-/* Sileo: el toast es un <button> sin clases; en tema oscuro puede heredar fondo negro */
 [data-sileo-viewport] {
   color-scheme: only light;
   background: transparent !important;
@@ -120,4 +119,81 @@ html.paused-bg *::after {
 
 html.paused-bg * {
   will-change: auto !important;
+}
+
+.sg-catalog-pagination,
+.sg-catalog-pagination__wrapper {
+  cursor: default;
+}
+
+.sg-catalog-pagination__wrapper {
+  gap: 0.25rem;
+}
+
+.sg-catalog-pagination__item,
+.sg-catalog-pagination__nav {
+  min-width: 2.25rem;
+  height: 2.25rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.sg-catalog-pagination__nav[data-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.sg-catalog-pagination__active {
+  min-width: 2.25rem;
+  height: 2.25rem;
+  cursor: pointer;
+  font-weight: 700;
+  background: var(--heroui-primary, #006fee) !important;
+  color: var(--heroui-primary-foreground, #fff) !important;
+  border-color: var(--heroui-primary, #006fee) !important;
+}
+
+@keyframes sg-hero-ken-burns {
+  0% {
+    transform: scale(1.02) translate(0%, 0%);
+  }
+  100% {
+    transform: scale(1.1) translate(-1.8%, -1.2%);
+  }
+}
+
+@keyframes sg-hero-mesh-drift {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: translate3d(-4%, 0, 0) scale(1.05);
+  }
+  50% {
+    opacity: 0.75;
+    transform: translate3d(5%, 0, 0) scale(1.12);
+  }
+}
+
+.sg-hero-ken-burns {
+  animation: sg-hero-ken-burns 22s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.sg-hero-mesh {
+  animation: sg-hero-mesh-drift 14s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes sg-thumb-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.sg-thumb-progress-bar {
+  transform-origin: left center;
+  animation: sg-thumb-progress var(--sg-thumb-duration, 5.5s) linear forwards;
 }
