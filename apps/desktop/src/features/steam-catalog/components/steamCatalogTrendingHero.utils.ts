@@ -1,4 +1,6 @@
 import type { CatalogListItem, SteamAppdetailsMediaResult } from "@services/tauri";
+import { catalogListItemToConfiguredGame } from "@features/steam-catalog/model/catalogConfiguredGame";
+import { buildGameMediaCoverCandidates } from "@hooks/useGameMedia";
 import { STEAM_CATALOG_GAME_ID_PREFIX } from "@utils/steamCatalogGameId";
 
 const STEAM_ASSET_BASE = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps";
@@ -40,12 +42,29 @@ export function getImageForCatalogItem(
   item: CatalogListItem | null,
   mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null
 ): string | null {
-  if (!item || !mediaBySteamAppId) return null;
-  const media = mediaBySteamAppId[item.steamAppId];
-  if (!media) return null;
+  const candidates = getCoverCandidatesForCatalogItem(item, mediaBySteamAppId);
+  return candidates[0] ?? null;
+}
 
-  const prioritized = prioritizeMediaUrls(media.mediaUrls);
-  return prioritized[0] ?? media.capsuleImage ?? null;
+/** URLs de portada alineadas con {@link useGameMedia} (Store API + fallbacks CDN). */
+export function getCoverCandidatesForCatalogItem(
+  item: CatalogListItem | null,
+  mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null
+): string[] {
+  if (!item) return [];
+
+  const game = catalogListItemToConfiguredGame(item);
+  const media = mediaBySteamAppId?.[item.steamAppId];
+  const prioritized = media?.mediaUrls?.length ? prioritizeMediaUrls(media.mediaUrls) : [];
+  const displayImageUrl = prioritized[0] ?? null;
+
+  return buildGameMediaCoverCandidates(
+    game,
+    item.steamAppId,
+    displayImageUrl,
+    prioritized,
+    media?.capsuleImage ?? null
+  );
 }
 
 export function getGalleryForCatalogItem(

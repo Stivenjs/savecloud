@@ -63,6 +63,31 @@ export interface UseGameMediaResult {
   handleImgLoad: () => void;
   /** Handler para el evento `onError` del elemento `<img>`. */
   handleImgError: () => void;
+  /** URLs de portada en orden de preferencia (para fallback en `<img>`). */
+  coverCandidates: string[];
+}
+
+/**
+ * Construye la lista de URLs de portada a partir del estado resuelto de {@link useGameMedia}.
+ */
+export function buildGameMediaCoverCandidates(
+  game: ConfiguredGame,
+  resolvedSteamAppId: string | null | undefined,
+  displayImageUrl: string | null,
+  mediaUrls: readonly string[],
+  capsuleImage: string | null
+): string[] {
+  const urls: string[] = [];
+  if (displayImageUrl?.trim()) urls.push(displayImageUrl.trim());
+  if (capsuleImage?.trim()) urls.push(capsuleImage.trim());
+  for (const url of mediaUrls) {
+    if (url?.trim()) urls.push(url.trim());
+  }
+  const libraryHero = getGameLibraryHeroUrl(game, resolvedSteamAppId);
+  const legacyHeader = getGameImageUrl(game, resolvedSteamAppId);
+  if (libraryHero) urls.push(libraryHero);
+  if (legacyHeader) urls.push(legacyHeader);
+  return [...new Set(urls)];
 }
 
 /**
@@ -182,6 +207,11 @@ export function useGameMedia({
     ? (staticImageUrl ?? mediaSource?.capsuleImage ?? null)
     : (mediaSource?.capsuleImage ?? null);
 
+  const coverCandidates = useMemo(
+    () => buildGameMediaCoverCandidates(game, resolvedSteamAppId, displayImageUrl, mediaUrls, capsuleImage),
+    [game, resolvedSteamAppId, displayImageUrl, mediaUrls, capsuleImage]
+  );
+
   return {
     displayImageUrl,
     capsuleImage,
@@ -194,6 +224,7 @@ export function useGameMedia({
     imgError,
     handleImgLoad,
     handleImgError,
+    coverCandidates,
   };
 }
 
