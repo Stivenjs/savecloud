@@ -169,8 +169,6 @@ export function SteamCatalogPage() {
                   {totalForRange.toLocaleString()}
                 </span>{" "}
                 {totalForRange === 1 ? "resultado" : "resultados"}
-                <span className="mx-2 text-default-300">·</span>
-                Página {page}/{totalPages}
               </p>
 
               {isMediaBatchPending ? (

@@ -1,23 +1,35 @@
 import { useState, useMemo } from "react";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, ScrollShadow, cn } from "@heroui/react";
 import { HardDrive, AlertCircle, FolderOpen } from "lucide-react";
+import type { ConfiguredGame } from "@app-types/config";
+import type { SteamAppdetailsMediaResult } from "@services/tauri";
 import { useDisks } from "@hooks/useDisks";
 import { formatBytes } from "@utils/format";
 import { open } from "@tauri-apps/plugin-dialog";
 import { parseSize } from "@utils/size";
+import { InstallModalGameCover } from "@features/steam-catalog/components/InstallModalGameCover";
 
 export interface InstallModalProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   gameName: string;
   gameSizeStr?: string | null;
-  gameImage?: string | null;
+  game: ConfiguredGame;
+  mediaBySteamAppId?: Record<string, SteamAppdetailsMediaResult> | null;
   onConfirm: (path: string) => void;
 }
 
 const DEFAULT_DOWNLOAD_SUBFOLDER = "SaveCloudGames";
 
-export function InstallModal({ isOpen, onOpenChange, gameName, gameSizeStr, gameImage, onConfirm }: InstallModalProps) {
+export function InstallModal({
+  isOpen,
+  onOpenChange,
+  gameName,
+  gameSizeStr,
+  game,
+  mediaBySteamAppId,
+  onConfirm,
+}: InstallModalProps) {
   const { disks } = useDisks();
   const [selectedDisk, setSelectedDisk] = useState<string | null>(null);
   const [customPath, setCustomPath] = useState<string | null>(null);
@@ -100,14 +112,8 @@ export function InstallModal({ isOpen, onOpenChange, gameName, gameSizeStr, game
             <ModalBody className="py-6">
               {/* Game Info Header */}
               <div className="flex gap-4 items-center bg-content2 p-4 rounded-xl border border-divider mb-6">
-                <div className="w-32 aspect-video bg-default-100 rounded-lg overflow-hidden flex-shrink-0">
-                  {gameImage ? (
-                    <img src={gameImage} alt={gameName} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-default-400">
-                      <FolderOpen size={32} />
-                    </div>
-                  )}
+                <div className="aspect-video w-32 shrink-0 overflow-hidden rounded-lg bg-default-100">
+                  <InstallModalGameCover game={game} alt={gameName} mediaBySteamAppId={mediaBySteamAppId} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-lg font-bold truncate">{gameName}</h3>

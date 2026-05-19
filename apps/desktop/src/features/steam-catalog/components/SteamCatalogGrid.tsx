@@ -5,7 +5,6 @@ import type { SourceBestMatch } from "@services/tauri";
 import { GameCard } from "@features/games/GameCard";
 import { GamesListMotionContainer, GamesListMotionItem } from "@features/games/GamesListMotion";
 import { catalogListItemToConfiguredGame } from "@features/steam-catalog/model/catalogConfiguredGame";
-import { getGameImageUrl } from "@utils/gameImage";
 import { Button, Select, SelectItem } from "@heroui/react";
 import { startSourceDownload } from "@services/tauri";
 import { pickCandidate, sourceCandidateKey } from "@utils/sourceMatch";
@@ -154,7 +153,7 @@ export function SteamCatalogGrid({
   const [installingGame, setInstallingGame] = useState<{
     name: string;
     size?: string | null;
-    image?: string | null;
+    game: ConfiguredGame;
     chosen: SourceBestMatch;
   } | null>(null);
 
@@ -206,14 +205,12 @@ export function SteamCatalogGrid({
       if (!chosen) return;
 
       const item = items.find((i) => i.name === gameName);
-      const catalogGame = item ? catalogListItemToConfiguredGame(item) : null;
-      const cdnOrConfiguredCover = catalogGame ? getGameImageUrl(catalogGame) : null;
-      const media = item?.steamAppId ? mediaBySteamAppId?.[item.steamAppId] : null;
+      if (!item) return;
 
       setInstallingGame({
         name: gameName,
         size: chosen.file_size,
-        image: cdnOrConfiguredCover || media?.capsuleImage || media?.mediaUrls?.[0] || null,
+        game: catalogListItemToConfiguredGame(item),
         chosen,
       });
       onOpen();
@@ -274,7 +271,8 @@ export function SteamCatalogGrid({
           onOpenChange={onOpenChange}
           gameName={installingGame.name}
           gameSizeStr={installingGame.size}
-          gameImage={installingGame.image}
+          game={installingGame.game}
+          mediaBySteamAppId={mediaBySteamAppId}
           onConfirm={handleConfirmInstall}
         />
       )}
