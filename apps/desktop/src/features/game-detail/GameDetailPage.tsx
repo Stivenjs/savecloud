@@ -1,4 +1,13 @@
-import { addTransitionType, startTransition, useCallback, useEffect, useRef, useState, useLayoutEffect } from "react";
+import {
+  addTransitionType,
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useLayoutEffect,
+} from "react";
 import { pickCandidate, sourceCandidateKey } from "@utils/sourceMatch";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigate } from "react-router-dom";
@@ -7,7 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { Button, Select, SelectItem, Spinner, Tab, Tabs, Skeleton } from "@heroui/react";
 import { ArrowLeft, Cpu, Gamepad2, LayoutList, ScrollText } from "lucide-react";
-import { formatGameDisplayName, getGameImageUrl } from "@utils/gameImage";
+import { formatGameDisplayName } from "@utils/gameImage";
 import {
   launchGame,
   openSaveFolder,
@@ -44,6 +53,7 @@ import {
   hasSteamRequirements,
 } from "@features/game-detail/GameDetailInfo";
 import type { ConfiguredGame } from "@app-types/config";
+import type { SteamAppdetailsMediaResult } from "@services/tauri";
 
 export function GameDetailPage() {
   const navigate = useNavigate();
@@ -82,10 +92,7 @@ export function GameDetailPage() {
     onOpen: onInstallModalOpen,
     onOpenChange: onInstallModalOpenChange,
   } = useDisclosure();
-  const [installingFromSource, setInstallingFromSource] = useState<{
-    size?: string | null;
-    image?: string | null;
-  } | null>(null);
+  const [installingFromSource, setInstallingFromSource] = useState<{ size?: string | null } | null>(null);
 
   useLayoutEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -244,17 +251,22 @@ export function GameDetailPage() {
     const chosen = pickCandidate(sourceCandidates, selectedSourceKey);
     if (!chosen) return;
 
-    setInstallingFromSource({
-      size: chosen.file_size,
-      image:
-        steamDetails?.media.capsuleImage ||
-        steamDetails?.headerImage ||
-        (game ? getGameImageUrl(game, steamAppId) : null) ||
-        steamDetails?.media.mediaUrls?.[0],
-    });
-
+    setInstallingFromSource({ size: chosen.file_size });
     onInstallModalOpen();
-  }, [sourceCandidates, selectedSourceKey, steamDetails, game, steamAppId, onInstallModalOpen]);
+  }, [sourceCandidates, selectedSourceKey, onInstallModalOpen]);
+
+  const installModalMediaBySteamAppId = useMemo((): Record<string, SteamAppdetailsMediaResult> | null => {
+    if (!steamAppId || !steamDetails) return null;
+    return {
+      [steamAppId]: {
+        mediaUrls: steamDetails.media.mediaUrls,
+        videoUrl: steamDetails.media.videoUrl,
+        genres: steamDetails.genres,
+        name: steamDetails.name,
+        capsuleImage: steamDetails.media.capsuleImage,
+      },
+    };
+  }, [steamAppId, steamDetails]);
 
   const handleConfirmInstall = useCallback(
     async (selectedPath: string) => {
@@ -525,16 +537,17 @@ export function GameDetailPage() {
           <GameDetailLocalSummary game={game} />
         </section>
       )}
-      {installingFromSource && (
+      {installingFromSource && game ? (
         <InstallModal
           isOpen={isInstallModalOpen}
           onOpenChange={onInstallModalOpenChange}
           gameName={displayName}
           gameSizeStr={installingFromSource.size}
-          gameImage={installingFromSource.image}
+          game={game}
+          mediaBySteamAppId={installModalMediaBySteamAppId}
           onConfirm={handleConfirmInstall}
         />
-      )}
+      ) : null}
     </div>
   );
 }
