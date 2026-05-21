@@ -6,26 +6,30 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
-use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
 
-use crate::network::{DATA_CLIENT, HOSTER_BROWSER_USER_AGENT};
+use crate::network::{ensure_download_success, get_with_profile, HOSTER_DOWNLOAD_CLIENT};
 
 use super::hosters::{self, HosterError};
 use super::parser::slugify;
+
+/// Tamaño mínimo razonable para un instalador de juego (evita guardar HTML/error como .bin).
+const MIN_VALID_DOWNLOAD_BYTES: u64 = 512 * 1024;
 
 /// Resultado del runner HTTP.
 pub struct HttpRunResult {
     pub loaded: u64,
     pub total: u64,
+    pub output_file_name: String,
 }
 
-/// Descarga una URI HTTP a disco con cancelación cooperativa y soporte para resume.
+/// Descarga una URI HTTP a disco con cancelación cooperativa (sin pausa/resume).
 pub async fn run_http_download(
     title: &str,
     destination_dir: &str,
     uri: &str,
     cancel_flag: Arc<AtomicBool>,
+    mut on_prepared: impl FnMut(&str) -> Result<(), String>,
     mut on_progress: impl FnMut(u64, u64) -> Result<(), String>,
 ) -> Result<HttpRunResult, String> {
     let destination = PathBuf::from(destination_dir);
@@ -33,85 +37,70 @@ pub async fn run_http_download(
         .await
         .map_err(|e| format!("No se pudo crear destino: {e}"))?;
 
-    let resolved = hosters::resolve_download_url(uri)
+    on_progress(0, 0)?;
+
+    let client = HOSTER_DOWNLOAD_CLIENT.clone();
+    let resolved = hosters::resolve_download_url_with_client(&client, uri)
         .await
-        .map_err(|e: HosterError| e.to_user_string())?;
+        .map_err(|e: HosterError| e.to_user_string_for_uri(uri))?;
     let effective_uri = resolved.url.as_ref();
 
-    let output = destination.join(build_output_name(title, effective_uri));
+    let output_file_name =
+        build_output_name(title, effective_uri, resolved.file_name_hint.as_deref());
+    on_prepared(&output_file_name)?;
+    let output = destination.join(&output_file_name);
 
-    // 1. Comprobar si ya existe un archivo parcial para reanudar (Resume)
-    let mut loaded = 0_u64;
-    if output.exists() {
-        loaded = tokio::fs::metadata(&output)
-            .await
-            .map(|m| m.len())
-            .unwrap_or(0);
-    }
-
-    let mut request = DATA_CLIENT.get(effective_uri);
-
-    if let Some(cookie) = &resolved.cookie {
-        request = request
-            .header("Cookie", cookie)
-            .header("User-Agent", HOSTER_BROWSER_USER_AGENT)
-            .header("Referer", "https://gofile.io/")
-            .header("Origin", "https://gofile.io")
-            .header("Accept", "*/*");
-    }
-
-    // 2. Si ya tenemos progreso, pedimos al servidor continuar desde ahí
-    if loaded > 0 {
-        request = request.header("Range", format!("bytes={}-", loaded));
-    }
-
-    let response = request
-        .send()
+    let response = get_with_profile(&client, effective_uri, &resolved.download_profile)
         .await
         .map_err(|e| format!("Error HTTP al descargar: {e}"))?;
 
-    let status = response.status();
-    let mut file;
-    let total;
+    let response = ensure_download_success(response).map_err(|e| e.user_message())?;
 
-    // 3. Evaluar si el servidor acepta el Range header
-    if status == reqwest::StatusCode::PARTIAL_CONTENT {
-        // El servidor soporta reanudación, anexamos al archivo
-        file = OpenOptions::new()
-            .append(true)
-            .open(&output)
-            .await
-            .map_err(|e| format!("No se pudo abrir archivo para anexar: {e}"))?;
-        total = loaded + response.content_length().unwrap_or(0);
-    } else if status.is_success() {
-        // El servidor no soporta reanudación o no teníamos archivo parcial, empezamos de cero
-        file = tokio::fs::File::create(&output)
-            .await
-            .map_err(|e| format!("No se pudo crear archivo destino: {e}"))?;
-        loaded = 0;
-        total = response.content_length().unwrap_or(0);
-    } else {
-        return Err(format!("HTTP falló con código {}", status));
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if content_type.contains("text/html") || content_type.contains("application/json") {
+        return Err(invalid_download_body_message(uri, None));
     }
 
+    let total = response.content_length().unwrap_or(0);
+    let mut file = tokio::fs::File::create(&output)
+        .await
+        .map_err(|e| format!("No se pudo crear archivo destino: {e}"))?;
+
+    let mut loaded = 0_u64;
     on_progress(loaded, total)?;
 
-    let mut last_emit_loaded = loaded;
+    let mut last_emit_loaded = 0_u64;
     let mut last_emit_at = Instant::now();
     let mut stream = response.bytes_stream();
+    let mut header_checked = false;
 
     while let Some(next) = stream.next().await {
         if cancel_flag.load(Ordering::Relaxed) {
+            let _ = tokio::fs::remove_file(&output).await;
             return Err("stopped_by_user".to_string());
         }
 
         let chunk = next.map_err(|e| format!("Error leyendo stream HTTP: {e}"))?;
+
+        if !header_checked {
+            header_checked = true;
+            if looks_like_html_or_json(&chunk) {
+                let _ = tokio::fs::remove_file(&output).await;
+                let preview = String::from_utf8_lossy(&chunk[..chunk.len().min(512)]);
+                return Err(invalid_download_body_message(uri, Some(preview.as_ref())));
+            }
+        }
+
         file.write_all(&chunk)
             .await
             .map_err(|e| format!("Error escribiendo archivo: {e}"))?;
         loaded = loaded.saturating_add(chunk.len() as u64);
 
-        // Throttle de progreso para evitar saturar el frontend
         let advanced_enough = loaded.saturating_sub(last_emit_loaded) >= 256 * 1024;
         let time_elapsed = last_emit_at.elapsed() >= Duration::from_millis(250);
         let reached_end = total > 0 && loaded >= total;
@@ -127,10 +116,71 @@ pub async fn run_http_download(
         .await
         .map_err(|e| format!("No se pudo flush del archivo: {e}"))?;
 
-    Ok(HttpRunResult { loaded, total })
+    if loaded < MIN_VALID_DOWNLOAD_BYTES {
+        let _ = tokio::fs::remove_file(&output).await;
+        let lower_uri = uri.to_ascii_lowercase();
+        if lower_uri.contains("vikingfile") || lower_uri.contains("vik1ngfile") {
+            return Err(invalid_download_body_message(uri, None));
+        }
+        return Err(format!(
+            "Descarga demasiado pequeña ({loaded} bytes); el enlace no apunta al archivo real"
+        ));
+    }
+
+    Ok(HttpRunResult {
+        loaded,
+        total,
+        output_file_name,
+    })
 }
 
-pub fn build_output_name(title: &str, uri: &str) -> String {
+fn looks_like_html_or_json(chunk: &[u8]) -> bool {
+    let preview = String::from_utf8_lossy(&chunk[..chunk.len().min(128)]);
+    let trimmed = preview.trim_start();
+    trimmed.starts_with("<!DOCTYPE")
+        || trimmed.starts_with("<html")
+        || trimmed.starts_with("<?xml")
+        || trimmed.starts_with('{')
+        || trimmed.starts_with('[')
+}
+
+fn looks_like_cloudflare_challenge(preview: &str) -> bool {
+    let lower = preview.to_ascii_lowercase();
+    lower.contains("cloudflare")
+        || lower.contains("cf-turnstile")
+        || lower.contains("challenge-platform")
+        || lower.contains("cdn-cgi/challenge")
+        || lower.contains("just a moment")
+        || lower.contains("attention required")
+}
+
+fn invalid_download_body_message(uri: &str, preview: Option<&str>) -> String {
+    let lower = uri.to_ascii_lowercase();
+    let is_viking = lower.contains("vikingfile") || lower.contains("vik1ngfile");
+    let cf = preview.is_some_and(looks_like_cloudflare_challenge);
+
+    if is_viking || cf {
+        return "VikingFile devolvió una página de protección (Cloudflare/CAPTCHA), no el instalador. Abre el enlace en el navegador, completa la verificación y descarga manualmente.".into();
+    }
+
+    if lower.contains("gofile.io") {
+        return hosters::error::gofile_html_instead_of_json();
+    }
+
+    "El enlace no devolvió un archivo válido (página web en lugar del instalador)".into()
+}
+
+pub fn build_output_name(title: &str, uri: &str, hint: Option<&str>) -> String {
+    if let Some(name) = hint {
+        let safe = Path::new(name)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(name);
+        if safe.contains('.') {
+            return format!("{}-{}", slugify(title), safe);
+        }
+    }
+
     let extension = reqwest::Url::parse(uri)
         .ok()
         .and_then(|url| {
@@ -139,7 +189,7 @@ pub fn build_output_name(title: &str, uri: &str) -> String {
                 .and_then(|ext| ext.to_str())
                 .map(|v| v.to_ascii_lowercase())
         })
-        .filter(|ext| ext.len() <= 8)
+        .filter(|ext| !ext.is_empty() && ext.len() <= 8)
         .unwrap_or_else(|| "bin".to_string());
     format!("{}.{}", slugify(title), extension)
 }

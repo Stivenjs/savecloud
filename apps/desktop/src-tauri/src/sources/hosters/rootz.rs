@@ -1,10 +1,10 @@
-//! Rootz.so API 
+//! Rootz.so API
 
 use serde::Deserialize;
 
-use crate::network::HOSTER_CLIENT;
+use crate::network::{get, ProfilePreset};
 
-use super::error::HosterError;
+use super::error::{ensure_resolve, HosterError};
 
 #[derive(Deserialize)]
 struct RootzEnvelope {
@@ -18,9 +18,8 @@ struct RootzData {
     url: String,
 }
 
-pub async fn resolve(url: &str) -> Result<String, HosterError> {
-    let parsed =
-        reqwest::Url::parse(url).map_err(|_| HosterError::InvalidUrl(url.to_string()))?;
+pub async fn resolve(client: &reqwest::Client, url: &str) -> Result<(String, String), HosterError> {
+    let parsed = reqwest::Url::parse(url).map_err(|_| HosterError::InvalidUrl(url.to_string()))?;
     let segments: Vec<&str> = parsed.path().split('/').filter(|s| !s.is_empty()).collect();
     if segments.len() < 2 || segments[0] != "d" {
         return Err(HosterError::ResolutionFailed(
@@ -29,8 +28,9 @@ pub async fn resolve(url: &str) -> Result<String, HosterError> {
     }
     let id = segments[1];
     let api_url = format!("https://www.rootz.so/api/files/download-by-short/{id}");
+    let referer = format!("https://www.rootz.so/d/{id}");
 
-    let response = HOSTER_CLIENT.get(api_url).send().await?;
+    let response = get(client, &api_url, ProfilePreset::RootzApi).await?;
 
     if response.status() == 404 {
         let msg = response
@@ -42,14 +42,11 @@ pub async fn resolve(url: &str) -> Result<String, HosterError> {
         return Err(HosterError::ResolutionFailed(msg));
     }
 
-    if !response.status().is_success() {
-        return Err(HosterError::Http(response.status().as_u16()));
-    }
-
+    let response = ensure_resolve(response)?;
     let envelope: RootzEnvelope = response.json().await?;
     if envelope.success {
         if let Some(d) = envelope.data {
-            return Ok(d.url);
+            return Ok((d.url, referer));
         }
     }
 

@@ -42,7 +42,7 @@ pub fn list_running_processes_for_pick() -> Vec<RunningProcessPickRow> {
     );
 
     let mut exe_by_name: HashMap<String, PathBuf> = HashMap::new();
-    for (_, proc) in sys.processes() {
+    for proc in sys.processes().values() {
         let name = proc.name().to_string_lossy().into_owned();
         if exe_by_name.contains_key(&name) {
             continue;

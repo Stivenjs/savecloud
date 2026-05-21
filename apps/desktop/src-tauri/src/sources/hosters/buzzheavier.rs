@@ -1,9 +1,8 @@
-//! Buzzheavier / dominios relacionados 
+//! Buzzheavier / dominios relacionados
 
-use reqwest::redirect::Policy;
+use crate::network::{get, head_no_redirect, ProfilePreset};
 
-use super::constants::HOSTER_DOWNLOADER_USER_AGENT;
-use super::error::HosterError;
+use super::error::{ensure_resolve, HosterError};
 
 const DOMAINS: &[&str] = &["buzzheavier.com", "bzzhr.co", "fuckingfast.net"];
 
@@ -12,16 +11,7 @@ pub fn is_supported_domain(url: &str) -> bool {
     DOMAINS.iter().any(|d| lower.contains(d))
 }
 
-fn buzzheavier_client_no_redirect() -> Result<reqwest::Client, HosterError> {
-    reqwest::Client::builder()
-        .user_agent(HOSTER_DOWNLOADER_USER_AGENT)
-        .redirect(Policy::none())
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| HosterError::ResolutionFailed(format!("buzzheavier: cliente: {e}")))
-}
-
-pub async fn resolve(url: &str) -> Result<String, HosterError> {
+pub async fn resolve(client: &reqwest::Client, url: &str) -> Result<(String, String), HosterError> {
     if !is_supported_domain(url) {
         return Err(HosterError::ResolutionFailed(
             "buzzheavier: dominio no soportado".into(),
@@ -30,29 +20,20 @@ pub async fn resolve(url: &str) -> Result<String, HosterError> {
 
     let base_url = url.split('#').next().unwrap_or(url).to_string();
 
-    let get_client = reqwest::Client::builder()
-        .user_agent(HOSTER_DOWNLOADER_USER_AGENT)
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| HosterError::ResolutionFailed(format!("buzzheavier: cliente: {e}")))?;
-
-    get_client.get(&base_url).send().await?;
+    let response = get(client, &base_url, ProfilePreset::BuzzheavierPage).await?;
+    ensure_resolve(response)?;
 
     let download_url = format!("{}/download", base_url.trim_end_matches('/'));
-    let head_client = buzzheavier_client_no_redirect()?;
 
-    let head_response = head_client
-        .head(&download_url)
-        .header("hx-current-url", &base_url)
-        .header("hx-request", "true")
-        .header("referer", &base_url)
-        .send()
-        .await?;
+    let head_response = head_no_redirect(
+        &download_url,
+        ProfilePreset::BuzzheavierHead {
+            page_url: base_url.clone(),
+        },
+    )
+    .await?;
 
-    let status = head_response.status();
-    if !(status.is_success() || status == 204 || status == 301 || status == 302) {
-        return Err(HosterError::Http(status.as_u16()));
-    }
+    let head_response = ensure_resolve(head_response)?;
 
     let hx_redirect = head_response
         .headers()
@@ -76,5 +57,5 @@ pub async fn resolve(url: &str) -> Result<String, HosterError> {
         hx_redirect.to_string()
     };
 
-    Ok(direct)
+    Ok((direct, base_url))
 }

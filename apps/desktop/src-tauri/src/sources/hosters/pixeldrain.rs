@@ -1,6 +1,6 @@
-//! Pixeldrain: bypass CDN opcional + API 
+//! Pixeldrain: bypass CDN opcional + API
 
-use crate::network::HOSTER_CLIENT;
+use crate::network::{head_short, ProfilePreset};
 
 use super::error::HosterError;
 
@@ -16,12 +16,9 @@ fn extract_id(url: &reqwest::Url) -> Result<String, HosterError> {
     Ok(parts[1].to_string())
 }
 
-async fn try_bypass(id: &str) -> Option<String> {
+async fn try_bypass(client: &reqwest::Client, id: &str) -> Option<String> {
     let bypass_url = format!("{BYPASS_BASE}/{id}");
-    let response = HOSTER_CLIENT
-        .head(&bypass_url)
-        .timeout(std::time::Duration::from_secs(5))
-        .send()
+    let response = head_short(client, &bypass_url, ProfilePreset::PixeldrainBypass)
         .await
         .ok()?;
     let status = response.status();
@@ -32,12 +29,16 @@ async fn try_bypass(id: &str) -> Option<String> {
     }
 }
 
-async fn check_availability(id: &str) -> Result<(), HosterError> {
+async fn check_availability(client: &reqwest::Client, id: &str) -> Result<(), HosterError> {
     let check = format!("https://pixeldrain.com/u/{id}");
-    let response = HOSTER_CLIENT
-        .head(&check)
-        .send()
-        .await?;
+    let response = head_short(
+        client,
+        &check,
+        ProfilePreset::PixeldrainCheck {
+            page_url: check.clone(),
+        },
+    )
+    .await?;
     if response.status() == 404 {
         return Err(HosterError::ResolutionFailed(
             "pixeldrain: archivo no encontrado".into(),
@@ -46,17 +47,22 @@ async fn check_availability(id: &str) -> Result<(), HosterError> {
     Ok(())
 }
 
-pub async fn resolve(url: &str) -> Result<String, HosterError> {
+pub async fn resolve(
+    client: &reqwest::Client,
+    url: &str,
+) -> Result<(String, String), HosterError> {
     let parsed =
         reqwest::Url::parse(url).map_err(|_| HosterError::InvalidUrl(url.to_string()))?;
     let id = extract_id(&parsed)?;
+    let page_referer = format!("https://pixeldrain.com/u/{id}");
 
-    if let Some(u) = try_bypass(&id).await {
-        return Ok(u);
+    if let Some(u) = try_bypass(client, &id).await {
+        return Ok((u, page_referer));
     }
 
-    check_availability(&id).await?;
-    Ok(format!(
-        "https://pixeldrain.com/api/file/{id}?download"
+    check_availability(client, &id).await?;
+    Ok((
+        format!("https://pixeldrain.com/api/file/{id}?download"),
+        page_referer,
     ))
 }

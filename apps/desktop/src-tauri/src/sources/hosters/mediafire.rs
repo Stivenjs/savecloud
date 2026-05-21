@@ -1,11 +1,11 @@
-//! Mediafire: página HTML + regex 
+//! Mediafire: página HTML + regex
 
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-use crate::network::HOSTER_CLIENT;
+use crate::network::{get, ProfilePreset};
 
-use super::error::HosterError;
+use super::error::{ensure_resolve, HosterError};
 
 static VALID_MEDIAFIRE_IDENTIFIER_DL: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^[a-zA-Z0-9]+$").expect("regex mediafire id"));
@@ -49,14 +49,21 @@ fn extract_direct_url(html: &str) -> Result<String, HosterError> {
     ))
 }
 
-pub async fn resolve(url: &str) -> Result<String, HosterError> {
+pub async fn resolve(client: &reqwest::Client, url: &str) -> Result<(String, String), HosterError> {
     let processed = process_url(url);
-    let response = HOSTER_CLIENT.get(&processed).send().await?;
-    if !response.status().is_success() {
-        return Err(HosterError::Http(response.status().as_u16()));
-    }
+    let response = get(
+        client,
+        &processed,
+        ProfilePreset::BrowserSameOrigin {
+            referer: "https://www.mediafire.com/".to_string(),
+        },
+    )
+    .await?;
+
+    let response = ensure_resolve(response)?;
     let html = response.text().await?;
-    extract_direct_url(&html)
+    let direct = extract_direct_url(&html)?;
+    Ok((direct, processed))
 }
 
 #[cfg(test)]

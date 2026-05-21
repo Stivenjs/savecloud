@@ -26,6 +26,7 @@ type DownloadRow = {
   infoHash?: string;
   isPaused?: boolean;
   canPause?: boolean;
+  canResume?: boolean;
   canCancel?: boolean;
   loaded?: number;
   total?: number;
@@ -234,7 +235,8 @@ export function DownloadsPanel() {
         value,
         source: "sources" as const,
         isPaused: task.status === "paused",
-        canPause: task.status === "running",
+        canPause: task.protocol !== "http" && (task.status === "running" || task.status === "queued"),
+        canResume: task.protocol !== "http" && task.status === "paused",
         canCancel: task.status === "queued" || task.status === "running" || task.status === "paused",
         loaded,
         total,
@@ -432,7 +434,7 @@ export function DownloadsPanel() {
                         Pausar
                       </button>
                     ) : null}
-                    {row.isPaused ? (
+                    {row.canResume ? (
                       <button
                         className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-success-50 px-2.5 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success-100"
                         onClick={() => void resumeSourceDownload(row.jobId!)}>
