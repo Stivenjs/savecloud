@@ -90,6 +90,13 @@ pub fn resume_pending_jobs(app: &AppHandle) {
     let jobs = state.list_jobs();
 
     for mut job in jobs {
+        if job.protocol == DownloadProtocol::Http && job.status == SourceJobStatus::Paused {
+            job.status = SourceJobStatus::Cancelled;
+            job.error = Some("Descarga HTTP interrumpida (pausa no soportada)".to_string());
+            job.updated_at = now_iso();
+            let _ = state.upsert_job(job);
+            continue;
+        }
         if job.status == SourceJobStatus::Running || job.status == SourceJobStatus::Queued {
             job.status = SourceJobStatus::Queued;
             job.updated_at = now_iso();
@@ -107,10 +114,11 @@ pub fn spawn_job(app: AppHandle, job_id: String) {
 
         if let Err(err) = result {
             if let Ok(mut job) = find_job(&state, &job_id) {
-                if err == "stopped_by_user"
-                    || job.status == SourceJobStatus::Cancelled
-                    || job.status == SourceJobStatus::Paused
-                {
+                if err == "stopped_by_user" && job.status == SourceJobStatus::Cancelled {
+                    let _ = state.remove_job(&job_id);
+                } else if err == "stopped_by_user" {
+                    // Detención cooperativa sin cancelar (p. ej. torrent pausado): conservar job.
+                } else if job.status == SourceJobStatus::Cancelled {
                     let _ = state.remove_job(&job_id);
                 } else {
                     job.status = SourceJobStatus::Failed;
@@ -142,6 +150,14 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
                 &job.destination_dir,
                 &job.selected_uri,
                 cancel_flag,
+                |output_file_name| {
+                    let mut current = find_job(state, job_id)?;
+                    current.output_file_name = Some(output_file_name.to_string());
+                    current.updated_at = now_iso();
+                    state.upsert_job(current.clone())?;
+                    emit_progress(app, &current);
+                    Ok(())
+                },
                 |loaded, total| {
                     let mut current = find_job(state, job_id)?;
                     current.loaded = loaded;
@@ -160,6 +176,7 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
                     done_job.status = SourceJobStatus::Completed;
                     done_job.loaded = done.loaded;
                     done_job.total = done.total;
+                    done_job.output_file_name = Some(done.output_file_name);
                     done_job.updated_at = now_iso();
                     state.upsert_job(done_job.clone())?;
                     emit_progress(app, &done_job);

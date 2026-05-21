@@ -94,6 +94,9 @@ pub struct SourceDownloadJob {
     pub error: Option<String>,
     /// ID externo asociado (ejemplo: info-hash torrent).
     pub external_id: Option<String>,
+    /// Nombre de archivo en disco para descargas HTTP (tras resolver URI).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_file_name: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

@@ -646,6 +646,7 @@ pub async fn start_source_download(
         total: 0,
         error: None,
         external_id: None,
+        output_file_name: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -709,10 +710,10 @@ pub async fn cancel_source_download(
             }
         }
         DownloadProtocol::Http => {
-            let path = std::path::PathBuf::from(&job.destination_dir).join(
-                super::http_runner::build_output_name(&job.title, &job.selected_uri),
-            );
-            let _ = tokio::fs::remove_file(path).await;
+            if let Some(ref name) = job.output_file_name {
+                let path = std::path::PathBuf::from(&job.destination_dir).join(name);
+                let _ = tokio::fs::remove_file(path).await;
+            }
         }
         _ => {}
     }
@@ -730,7 +731,7 @@ pub async fn cancel_source_download(
 
 /// Congela momentáneamente el flujo de paquetes de descarga sobre P2P sin cancelar la tarea real.
 ///
-/// Las descargas HTTP caerán inmediatamente a cancelación pues el backend nativo no asume streams HTTP resumibles.
+/// Las descargas HTTP no admiten pausa; use cancelar en su lugar.
 ///
 /// # Arguments
 ///
@@ -749,10 +750,11 @@ pub async fn pause_source_download(job_id: String, app: AppHandle) -> Result<(),
         .find(|j| j.job_id == job_id)
         .ok_or_else(|| "Job no encontrado".to_string())?;
 
+    if job.protocol == DownloadProtocol::Http {
+        return Err("Las descargas HTTP no se pueden pausar. Usa cancelar.".to_string());
+    }
+
     match job.protocol {
-        DownloadProtocol::Http => {
-            sources.cancel(&job_id);
-        }
         DownloadProtocol::TorrentMagnet | DownloadProtocol::TorrentFile => {
             if let Some(info_hash) = job.external_id.clone() {
                 let torrent_state = app.state::<crate::torrent::state::TorrentState>();
@@ -799,6 +801,10 @@ pub async fn resume_source_download(job_id: String, app: AppHandle) -> Result<()
         .into_iter()
         .find(|j| j.job_id == job_id)
         .ok_or_else(|| "Job no encontrado".to_string())?;
+
+    if job.protocol == DownloadProtocol::Http {
+        return Err("Las descargas HTTP no se pueden reanudar. Inicia la descarga de nuevo.".to_string());
+    }
 
     job.status = SourceJobStatus::Queued;
     job.updated_at = super::queue::now_iso();

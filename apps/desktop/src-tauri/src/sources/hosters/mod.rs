@@ -1,7 +1,6 @@
-//! Resolución de enlaces de hosters gratuitos 
+//! Resolución de enlaces de hosters gratuitos
 
 mod buzzheavier;
-mod constants;
 mod datanodes;
 mod fuckingfast;
 mod gofile;
@@ -14,12 +13,18 @@ pub mod error;
 
 use std::borrow::Cow;
 
+use reqwest::Client;
+
+use crate::network::{DownloadProfile, ProfilePreset, HOSTER_DOWNLOAD_CLIENT};
+
 pub use error::HosterError;
 
-/// Resultado de resolver una URI: URL efectiva para el GET y cookie opcional (Gofile).
+/// Resultado de resolver una URI: URL efectiva y perfil para el GET de descarga.
 pub struct ResolvedDownload<'a> {
     pub url: Cow<'a, str>,
-    pub cookie: Option<String>,
+    pub download_profile: DownloadProfile,
+    /// Nombre de archivo sugerido por el hoster (extensión correcta).
+    pub file_name_hint: Option<String>,
 }
 
 fn normalized_host(url: &reqwest::Url) -> String {
@@ -29,84 +34,119 @@ fn normalized_host(url: &reqwest::Url) -> String {
         .to_ascii_lowercase()
 }
 
-/// Si el host es conocido, obtiene la URL directa; si no, devuelve el mismo URI sin asignar.
-pub async fn resolve_download_url<'a>(
+/// Resuelve la URL directa y el perfil de descarga usando el cliente compartido con cookie jar.
+#[allow(dead_code)]
+pub async fn resolve_download_url<'a>(uri: &'a str) -> Result<ResolvedDownload<'a>, HosterError> {
+    resolve_download_url_with_client(&HOSTER_DOWNLOAD_CLIENT, uri).await
+}
+
+/// Igual que [`resolve_download_url`] pero con un cliente explícito (misma sesión resolve + download).
+pub async fn resolve_download_url_with_client<'a>(
+    client: &Client,
     uri: &'a str,
 ) -> Result<ResolvedDownload<'a>, HosterError> {
     let parsed = reqwest::Url::parse(uri).map_err(|_| HosterError::InvalidUrl(uri.to_string()))?;
     let host = normalized_host(&parsed);
 
     if host.contains("gofile.io") {
-        let (url, token) = gofile::resolve(uri).await?;
-        let cookie = format!("accountToken={token}");
+        let (url, account_token) = gofile::resolve(client, uri).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
-            cookie: Some(cookie),
+            download_profile: ProfilePreset::GofileDownload { account_token }.build(),
+            file_name_hint: None,
         });
     }
 
     if host.contains("mediafire.com") {
-        let url = mediafire::resolve(uri).await?;
+        let (url, referer) = mediafire::resolve(client, uri).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
-            cookie: None,
+            download_profile: ProfilePreset::BrowserSameOrigin { referer }.build(),
+            file_name_hint: None,
         });
     }
 
     if host.contains("pixeldrain.com") {
-        let url = pixeldrain::resolve(uri).await?;
+        let (url, referer) = pixeldrain::resolve(client, uri).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
-            cookie: None,
+            download_profile: ProfilePreset::BrowserSameOrigin { referer }.build(),
+            file_name_hint: None,
         });
     }
 
     if host.contains("datanodes.to") {
-        let url = datanodes::resolve(uri).await?;
+        let url = datanodes::resolve(client, uri).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
-            cookie: None,
+            download_profile: ProfilePreset::DatanodesDownload.build(),
+            file_name_hint: None,
         });
     }
 
     if buzzheavier::is_supported_domain(uri) {
-        let url = buzzheavier::resolve(uri).await?;
+        let (url, page_url) = buzzheavier::resolve(client, uri).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
-            cookie: None,
+            download_profile: ProfilePreset::Downloader { referer: page_url }.build(),
+            file_name_hint: None,
         });
     }
 
     if fuckingfast::is_supported_domain(uri) {
-        let url = fuckingfast::resolve(uri).await?;
+        let (url, page_url) = fuckingfast::resolve(client, uri).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
-            cookie: None,
+            download_profile: ProfilePreset::Downloader { referer: page_url }.build(),
+            file_name_hint: None,
         });
     }
 
-    if vikingfile::is_vikingfile_host(&host) {
-        return Err(HosterError::VikingFileNimbus);
+    if vikingfile::is_vikingfile_url(uri) {
+        let (url, referer, name_hint) = vikingfile::resolve(client, uri).await?;
+        return Ok(ResolvedDownload {
+            url: Cow::Owned(url),
+            download_profile: ProfilePreset::Downloader { referer }.build(),
+            file_name_hint: name_hint,
+        });
     }
 
     if host.contains("rootz.so") {
-        let url = rootz::resolve(uri).await?;
+        let (url, referer) = rootz::resolve(client, uri).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
-            cookie: None,
+            download_profile: ProfilePreset::BrowserSameOrigin { referer }.build(),
+            file_name_hint: None,
         });
     }
 
     Ok(ResolvedDownload {
         url: Cow::Borrowed(uri),
-        cookie: None,
+        download_profile: ProfilePreset::Passthrough.build(),
+        file_name_hint: None,
     })
 }
 
 impl HosterError {
     pub fn to_user_string(&self) -> String {
-        self.to_string()
+        match self {
+            HosterError::Network(err) => network_user_message(err),
+            _ => self.to_string(),
+        }
     }
+}
+
+fn network_user_message(err: &reqwest::Error) -> String {
+    if err.is_decode() {
+        return "El hoster devolvió una página web en lugar de datos válidos (suele ser Cloudflare/CAPTCHA o el servicio caído). Abre el enlace en el navegador.".into();
+    }
+    if err.is_timeout() {
+        return "El hoster no respondió a tiempo. Si la web del hoster tampoco carga en el navegador, puede estar caído o bloqueado en tu red.".into();
+    }
+    if err.is_connect() {
+        return "No se pudo conectar con el hoster (red, DNS o servicio caído). Comprueba que el enlace abre en el navegador.".into();
+    }
+    format!("Error de red: {err}")
 }
 
 #[cfg(test)]
