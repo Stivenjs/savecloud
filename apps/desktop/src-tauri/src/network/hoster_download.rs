@@ -111,7 +111,10 @@ pub enum ProfilePreset {
     PixeldrainCheck {
         page_url: String,
     },
-    RootzApi,
+    RootzApi {
+        page_token: String,
+        referer: String,
+    },
     VikingfileApi,
     Passthrough,
 }
@@ -234,12 +237,18 @@ impl ProfilePreset {
                 cookie: None,
                 extras: Vec::new(),
             },
-            ProfilePreset::RootzApi => DownloadProfile {
+            ProfilePreset::RootzApi {
+                page_token,
+                referer,
+            } => DownloadProfile {
                 user_agent: HOSTER_BROWSER_USER_AGENT,
-                referer: Some(Cow::Borrowed("https://www.rootz.so/")),
-                origin: None,
+                referer: Some(Cow::Owned(referer)),
+                origin: Some(Cow::Borrowed("https://rootz.so")),
                 cookie: None,
-                extras: vec![("Accept", "application/json".to_string())],
+                extras: vec![
+                    ("Accept", "application/json".to_string()),
+                    ("X-Page-Token", page_token),
+                ],
             },
             ProfilePreset::VikingfileApi => DownloadProfile {
                 user_agent: HOSTER_BROWSER_USER_AGENT,
@@ -375,6 +384,16 @@ pub async fn head_no_redirect(
     apply_profile(HOSTER_NO_REDIRECT_CLIENT.head(url), &profile)
         .send()
         .await
+}
+
+/// HEAD con el cliente compartido (cookie jar). Sigue redirecciones por defecto.
+pub async fn head_with_client(
+    client: &Client,
+    url: &str,
+    preset: ProfilePreset,
+) -> Result<Response, reqwest::Error> {
+    let profile = preset.build();
+    apply_profile(client.head(url), &profile).send().await
 }
 
 #[allow(dead_code)]
