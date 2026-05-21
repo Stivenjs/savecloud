@@ -27,6 +27,13 @@ pub struct ResolvedDownload<'a> {
     pub file_name_hint: Option<String>,
 }
 
+fn is_signed_cdn_url(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    lower.contains("cloudflarestorage.com")
+        || lower.contains("alcyone.so")
+        || lower.contains(".r2.cloudflarestorage.com")
+}
+
 fn normalized_host(url: &reqwest::Url) -> String {
     url.host_str()
         .unwrap_or("")
@@ -112,11 +119,16 @@ pub async fn resolve_download_url_with_client<'a>(
     }
 
     if host.contains("rootz.so") {
-        let (url, referer) = rootz::resolve(client, uri).await?;
+        let (url, referer, file_name_hint) = rootz::resolve(client, uri).await?;
+        let download_profile = if is_signed_cdn_url(&url) {
+            ProfilePreset::Passthrough.build()
+        } else {
+            ProfilePreset::BrowserSameOrigin { referer }.build()
+        };
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
-            download_profile: ProfilePreset::BrowserSameOrigin { referer }.build(),
-            file_name_hint: None,
+            download_profile,
+            file_name_hint,
         });
     }
 

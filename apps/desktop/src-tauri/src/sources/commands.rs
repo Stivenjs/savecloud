@@ -604,7 +604,7 @@ pub async fn start_source_download(
         .ok_or_else(|| format!("Item no encontrado: {item_id}"))?;
 
     // Selecciona la URI según protocolo preferido; si no hay preferencia,
-    // prioriza torrent sobre HTTP y cae en la primera disponible.
+    // prioriza torrent sobre HTTP. Para HTTP, la primera URI del fallback global (prioridad JSON).
     let selected = if let Some(pref) = preferred_protocol {
         item.uris
             .iter()
@@ -803,7 +803,9 @@ pub async fn resume_source_download(job_id: String, app: AppHandle) -> Result<()
         .ok_or_else(|| "Job no encontrado".to_string())?;
 
     if job.protocol == DownloadProtocol::Http {
-        return Err("Las descargas HTTP no se pueden reanudar. Inicia la descarga de nuevo.".to_string());
+        return Err(
+            "Las descargas HTTP no se pueden reanudar. Inicia la descarga de nuevo.".to_string(),
+        );
     }
 
     job.status = SourceJobStatus::Queued;

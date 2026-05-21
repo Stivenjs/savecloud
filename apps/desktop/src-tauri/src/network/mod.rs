@@ -41,8 +41,9 @@ pub mod hoster_download;
 
 pub use hoster_download::{
     ensure_download_success, ensure_resolve_success, get, get_with_profile, head_no_redirect,
-    head_short, post_form_urlencoded, post_json, post_multipart, DownloadProfile, HttpStatusError,
-    ProfilePreset, RequestPhase, HOSTER_BROWSER_USER_AGENT, HOSTER_DOWNLOAD_CLIENT,
+    head_short, head_with_client, post_form_urlencoded, post_json, post_multipart, DownloadProfile,
+    HttpStatusError, ProfilePreset, RequestPhase, HOSTER_BROWSER_USER_AGENT,
+    HOSTER_DOWNLOAD_CLIENT,
 };
 
 /// Identificador de agente de usuario para todas las peticiones de la aplicación.
