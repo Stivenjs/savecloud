@@ -127,28 +127,6 @@ pub async fn resolve_download_url_with_client<'a>(
     })
 }
 
-impl HosterError {
-    pub fn to_user_string(&self) -> String {
-        match self {
-            HosterError::Network(err) => network_user_message(err),
-            _ => self.to_string(),
-        }
-    }
-}
-
-fn network_user_message(err: &reqwest::Error) -> String {
-    if err.is_decode() {
-        return "El hoster devolvió una página web en lugar de datos válidos (suele ser Cloudflare/CAPTCHA o el servicio caído). Abre el enlace en el navegador.".into();
-    }
-    if err.is_timeout() {
-        return "El hoster no respondió a tiempo. Si la web del hoster tampoco carga en el navegador, puede estar caído o bloqueado en tu red.".into();
-    }
-    if err.is_connect() {
-        return "No se pudo conectar con el hoster (red, DNS o servicio caído). Comprueba que el enlace abre en el navegador.".into();
-    }
-    format!("Error de red: {err}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::gofile::generate_website_token_at;

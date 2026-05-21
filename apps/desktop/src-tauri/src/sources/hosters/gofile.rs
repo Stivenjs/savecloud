@@ -12,7 +12,10 @@ use tokio::sync::Mutex as AsyncMutex;
 
 use crate::network::{get, post_json, ProfilePreset, HOSTER_BROWSER_USER_AGENT};
 
-use super::error::{ensure_resolve, HosterError};
+use super::error::{
+    ensure_resolve, gofile_api_status, gofile_folder_empty, gofile_http_not_found, gofile_timeout,
+    map_json_error, HosterError,
+};
 
 static GOFILE_ACCOUNT_TOKEN: Mutex<Option<String>> = Mutex::new(None);
 static GOFILE_CREATE_LOCK: LazyLock<AsyncMutex<()>> = LazyLock::new(|| AsyncMutex::new(()));
@@ -151,16 +154,13 @@ async fn create_guest_account(client: &Client) -> Result<String, HosterError> {
         let parsed: GofileAccountsEnvelope = match response.json().await {
             Ok(p) => p,
             Err(e) => {
-                last_err = HosterError::Network(e);
+                last_err = map_json_error(e, "gofile");
                 continue;
             }
         };
 
         if parsed.status != "ok" {
-            last_err = HosterError::ResolutionFailed(format!(
-                "gofile: creación de cuenta: {}",
-                parsed.status
-            ));
+            last_err = HosterError::ResolutionFailed(gofile_api_status(&parsed.status));
             continue;
         }
 
@@ -238,13 +238,16 @@ async fn fetch_contents(
 
     let status = response.status().as_u16();
     if status == 401 {
-        return Err(HosterError::ResolutionFailed(
-            "gofile: sesión inválida (HTTP 401)".into(),
-        ));
+        return Err(HosterError::ResolutionFailed(gofile_api_status(
+            "error-notAuthenticated",
+        )));
+    }
+    if status == 404 {
+        return Err(HosterError::ResolutionFailed(gofile_http_not_found()));
     }
     if is_retryable_status(status) {
-        return Err(HosterError::ResolutionFailed(format!(
-            "gofile: límite de peticiones (HTTP {status})"
+        return Err(HosterError::ResolutionFailed(gofile_api_status(
+            "error-rateLimit",
         )));
     }
 
@@ -252,11 +255,10 @@ async fn fetch_contents(
     let envelope: GofileContentsEnvelope = response
         .json()
         .await
-        .map_err(|e| super::error::map_json_error(e, "gofile"))?;
+        .map_err(|e| map_json_error(e, "gofile"))?;
     if envelope.status != "ok" {
-        return Err(HosterError::ResolutionFailed(format!(
-            "gofile: API respondió: {}",
-            envelope.status
+        return Err(HosterError::ResolutionFailed(gofile_api_status(
+            &envelope.status,
         )));
     }
     envelope
@@ -360,9 +362,7 @@ async fn resolve_inner(client: &Client, url: &str) -> Result<(String, String), H
     let (direct, _name) =
         parse_links_recursively(client, &id, &account_token, None, 0, &mut scanned)
             .await?
-            .ok_or_else(|| {
-                HosterError::ResolutionFailed("gofile: sin enlaces de archivo".into())
-            })?;
+            .ok_or_else(|| HosterError::ResolutionFailed(gofile_folder_empty()))?;
 
     Ok((direct, account_token))
 }
@@ -371,11 +371,7 @@ async fn resolve_inner(client: &Client, url: &str) -> Result<(String, String), H
 pub async fn resolve(client: &Client, url: &str) -> Result<(String, String), HosterError> {
     tokio::time::timeout(GOFILE_RESOLVE_TIMEOUT, resolve_inner(client, url))
         .await
-        .map_err(|_| {
-            HosterError::ResolutionFailed(
-                "gofile: tiempo de espera agotado al resolver el enlace (90s)".into(),
-            )
-        })?
+        .map_err(|_| HosterError::ResolutionFailed(gofile_timeout()))?
 }
 
 #[cfg(test)]

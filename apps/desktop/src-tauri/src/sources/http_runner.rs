@@ -42,7 +42,7 @@ pub async fn run_http_download(
     let client = HOSTER_DOWNLOAD_CLIENT.clone();
     let resolved = hosters::resolve_download_url_with_client(&client, uri)
         .await
-        .map_err(|e: HosterError| e.to_user_string())?;
+        .map_err(|e: HosterError| e.to_user_string_for_uri(uri))?;
     let effective_uri = resolved.url.as_ref();
 
     let output_file_name =
@@ -164,7 +164,7 @@ fn invalid_download_body_message(uri: &str, preview: Option<&str>) -> String {
     }
 
     if lower.contains("gofile.io") {
-        return "Gofile devolvió una página web en lugar del archivo. Si gofile.io no carga en el navegador, el servicio puede estar caído o bloqueado.".into();
+        return hosters::error::gofile_html_instead_of_json();
     }
 
     "El enlace no devolvió un archivo válido (página web en lugar del instalador)".into()
