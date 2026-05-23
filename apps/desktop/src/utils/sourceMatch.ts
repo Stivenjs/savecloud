@@ -1,7 +1,44 @@
-import type { SourceBestMatch } from "@services/tauri";
+import type { DownloadProtocol, SourceBestMatch } from "@services/tauri";
 
 /** Separador improbable; válido en atributos `id` de HeroUI ListBox. */
 const SEP = "|||";
+
+/** Método de descarga que usará `start_source_download` sin `preferredProtocol`. */
+export type EffectiveDownloadKind = "http" | "torrent" | "unknown";
+
+/** Replica la prioridad de `start_source_download` en Rust: torrent antes que HTTP. */
+export function resolveDefaultDownloadKind(
+  protocols: readonly (DownloadProtocol | string)[] | undefined
+): EffectiveDownloadKind {
+  if (!protocols?.length) return "unknown";
+  if (protocols.some((p) => p === "torrentMagnet" || p === "torrentFile")) {
+    return "torrent";
+  }
+  if (protocols.includes("http")) return "http";
+  return "unknown";
+}
+
+export function downloadKindLabel(kind: EffectiveDownloadKind): string {
+  switch (kind) {
+    case "torrent":
+      return "BitTorrent";
+    case "http":
+      return "HTTP";
+    default:
+      return "Desconocido";
+  }
+}
+
+export function downloadKindDescription(kind: EffectiveDownloadKind): string {
+  switch (kind) {
+    case "torrent":
+      return "Descarga P2P con el motor integrado (magnet o .torrent).";
+    case "http":
+      return "Descarga directa desde el hoster del enlace.";
+    default:
+      return "No se pudo determinar el método de descarga.";
+  }
+}
 
 /** Clave estable para identificar un candidato en selects y estado local. */
 export function sourceCandidateKey(c: SourceBestMatch): string {

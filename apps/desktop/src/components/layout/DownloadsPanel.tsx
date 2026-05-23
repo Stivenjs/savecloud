@@ -240,8 +240,8 @@ export function DownloadsPanel() {
         canCancel: task.status === "queued" || task.status === "running" || task.status === "paused",
         loaded,
         total,
-        speedBps: torrent ? torrent.downloadSpeedBytes : undefined,
-        etaSeconds: torrent ? torrent.etaSeconds : undefined,
+        speedBps: torrent ? torrent.downloadSpeedBytes : (task.downloadSpeedBytes ?? null),
+        etaSeconds: torrent ? torrent.etaSeconds : (task.etaSeconds ?? null),
         infoHash: torrent?.infoHash,
         // Las filas de sources con torrent también exponen peers y upload
         // para que el panel muestre la misma riqueza de información.

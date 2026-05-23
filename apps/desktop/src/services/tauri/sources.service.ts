@@ -53,6 +53,8 @@ export interface SourceDownloadJob {
   status: SourceJobStatus;
   loaded: number;
   total: number;
+  downloadSpeedBytes?: number;
+  etaSeconds?: number | null;
   error?: string | null;
   externalId?: string | null;
   createdAt: string;
@@ -66,6 +68,8 @@ export interface SourceProgressPayload {
   status: SourceJobStatus;
   loaded: number;
   total: number;
+  downloadSpeedBytes?: number;
+  etaSeconds?: number | null;
   externalId?: string | null;
   error?: string | null;
 }

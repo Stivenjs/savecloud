@@ -22,6 +22,8 @@ pub struct SourceProgressPayload {
     pub status: SourceJobStatus,
     pub loaded: u64,
     pub total: u64,
+    pub download_speed_bytes: u64,
+    pub eta_seconds: Option<u64>,
     pub external_id: Option<String>,
     pub error: Option<String>,
 }
@@ -35,6 +37,8 @@ pub fn emit_progress(app: &AppHandle, job: &SourceDownloadJob) {
         status: job.status.clone(),
         loaded: job.loaded,
         total: job.total,
+        download_speed_bytes: job.download_speed_bytes,
+        eta_seconds: job.eta_seconds,
         external_id: job.external_id.clone(),
         error: job.error.clone(),
     };
@@ -50,6 +54,8 @@ pub fn emit_terminal(app: &AppHandle, job: &SourceDownloadJob) {
         status: job.status.clone(),
         loaded: job.loaded,
         total: job.total,
+        download_speed_bytes: job.download_speed_bytes,
+        eta_seconds: job.eta_seconds,
         external_id: job.external_id.clone(),
         error: job.error.clone(),
     };

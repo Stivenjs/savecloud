@@ -91,6 +91,10 @@ pub struct SourceDownloadJob {
     pub status: SourceJobStatus,
     pub loaded: u64,
     pub total: u64,
+    #[serde(default)]
+    pub download_speed_bytes: u64,
+    #[serde(default)]
+    pub eta_seconds: Option<u64>,
     pub error: Option<String>,
     /// ID externo asociado (ejemplo: info-hash torrent).
     pub external_id: Option<String>,

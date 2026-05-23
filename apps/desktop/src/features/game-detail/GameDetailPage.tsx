@@ -92,7 +92,10 @@ export function GameDetailPage() {
     onOpen: onInstallModalOpen,
     onOpenChange: onInstallModalOpenChange,
   } = useDisclosure();
-  const [installingFromSource, setInstallingFromSource] = useState<{ size?: string | null } | null>(null);
+  const [installingFromSource, setInstallingFromSource] = useState<{
+    size?: string | null;
+    protocols?: string[];
+  } | null>(null);
 
   useLayoutEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -251,7 +254,7 @@ export function GameDetailPage() {
     const chosen = pickCandidate(sourceCandidates, selectedSourceKey);
     if (!chosen) return;
 
-    setInstallingFromSource({ size: chosen.file_size });
+    setInstallingFromSource({ size: chosen.file_size, protocols: chosen.protocols });
     onInstallModalOpen();
   }, [sourceCandidates, selectedSourceKey, onInstallModalOpen]);
 
@@ -543,6 +546,7 @@ export function GameDetailPage() {
           onOpenChange={onInstallModalOpenChange}
           gameName={displayName}
           gameSizeStr={installingFromSource.size}
+          protocols={installingFromSource.protocols}
           game={game}
           mediaBySteamAppId={installModalMediaBySteamAppId}
           onConfirm={handleConfirmInstall}

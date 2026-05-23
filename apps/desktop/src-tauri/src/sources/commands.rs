@@ -644,6 +644,8 @@ pub async fn start_source_download(
         status: SourceJobStatus::Queued,
         loaded: 0,
         total: 0,
+        download_speed_bytes: 0,
+        eta_seconds: None,
         error: None,
         external_id: None,
         output_file_name: None,

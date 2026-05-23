@@ -271,6 +271,7 @@ export function SteamCatalogGrid({
           onOpenChange={onOpenChange}
           gameName={installingGame.name}
           gameSizeStr={installingGame.size}
+          protocols={installingGame.chosen.protocols}
           game={installingGame.game}
           mediaBySteamAppId={mediaBySteamAppId}
           onConfirm={handleConfirmInstall}

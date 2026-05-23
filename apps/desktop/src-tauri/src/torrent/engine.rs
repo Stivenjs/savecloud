@@ -49,6 +49,7 @@ use super::torrent_enrichment::{
 };
 use crate::commands::logs::sync_logger;
 use crate::setup::TorrentShutdownGuard;
+use crate::utils::transfer_metrics::compute_eta;
 
 /// Evento emitido periódicamente mientras un torrent está activo.
 ///
@@ -397,24 +398,6 @@ fn mbps_to_bytes_per_sec(mbps: f64) -> u64 {
         return 0;
     }
     (mbps * 125_000.0).min(u64::MAX as f64) as u64
-}
-
-/// Estima el tiempo restante para completar una descarga, en segundos.
-///
-/// Devuelve `None` cuando la descarga ya está completa (`downloaded >= total`)
-/// o cuando no hay medición de velocidad disponible (`speed_bytes == 0`),
-/// ya que dividir entre cero o reportar un ETA infinito sería engañoso.
-///
-/// La división se redondea **hacia arriba** para que el ETA mostrado nunca
-/// caiga a cero mientras aún faltan bytes, un problema habitual cuando se usa
-/// división entera truncada con archivos pequeños o velocidades altas.
-#[inline]
-fn compute_eta(total: u64, downloaded: u64, speed_bytes: u64) -> Option<u64> {
-    if speed_bytes == 0 || downloaded >= total {
-        return None;
-    }
-    let remaining = total - downloaded;
-    Some(remaining.saturating_add(speed_bytes - 1) / speed_bytes)
 }
 
 /// Comprueba si una carpeta de destino contiene archivos descargables.
@@ -772,7 +755,7 @@ pub fn spawn_progress_monitor(
 
         loop {
             interval.tick().await;
- 
+
             // Si el motor ya no considera este torrent como activo (porque ha sido
             // cancelado), detenemos el monitor de inmediato para evitar enviar
             // eventos de progreso "fantasma" (ej. estado Pausado) al frontend.
@@ -785,14 +768,13 @@ pub fn spawn_progress_monitor(
                     break;
                 }
             }
- 
+
             let managed = match session.get(id) {
                 Some(m) => m,
                 None => break,
             };
- 
-            let stats = managed.stats();
 
+            let stats = managed.stats();
 
             // El snapshot `live` solo está presente mientras el torrent tiene
             // actividad de red. Si está ausente, todas las métricas de red se

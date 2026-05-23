@@ -1,6 +1,12 @@
 import { useState, useMemo } from "react";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, ScrollShadow, cn } from "@heroui/react";
-import { HardDrive, AlertCircle, FolderOpen } from "lucide-react";
+import { HardDrive, AlertCircle, FolderOpen, Globe, Share2 } from "lucide-react";
+import {
+  downloadKindDescription,
+  downloadKindLabel,
+  resolveDefaultDownloadKind,
+  type EffectiveDownloadKind,
+} from "@utils/sourceMatch";
 import type { ConfiguredGame } from "@app-types/config";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
 import { useDisks } from "@hooks/useDisks";
@@ -16,6 +22,8 @@ export interface InstallModalProps {
   gameSizeStr?: string | null;
   game: ConfiguredGame;
   mediaBySteamAppId?: Record<string, SteamAppdetailsMediaResult> | null;
+  /** Protocolos disponibles del ítem; define el método mostrado (torrent vs HTTP). */
+  protocols?: readonly string[] | null;
   onConfirm: (path: string) => void;
 }
 
@@ -28,6 +36,7 @@ export function InstallModal({
   gameSizeStr,
   game,
   mediaBySteamAppId,
+  protocols,
   onConfirm,
 }: InstallModalProps) {
   const { disks } = useDisks();
@@ -44,6 +53,11 @@ export function InstallModal({
   };
 
   const gameSizeBytes = useMemo(() => parseSize(gameSizeStr), [gameSizeStr]);
+
+  const downloadKind: EffectiveDownloadKind = useMemo(
+    () => resolveDefaultDownloadKind(protocols ?? undefined),
+    [protocols]
+  );
 
   const handleCustomFolder = async () => {
     const selected = await open({
@@ -120,6 +134,27 @@ export function InstallModal({
                   <p className="text-default-500 text-sm font-medium">
                     Tamaño necesario: <span className="text-foreground">{gameSizeStr || "Desconocido"}</span>
                   </p>
+                  {downloadKind !== "unknown" ? (
+                    <div
+                      className={cn(
+                        "mt-2 inline-flex max-w-full items-start gap-2 rounded-lg border px-2.5 py-1.5 text-xs",
+                        downloadKind === "torrent"
+                          ? "border-secondary/30 bg-secondary/10 text-secondary"
+                          : "border-primary/30 bg-primary/10 text-primary"
+                      )}>
+                      {downloadKind === "torrent" ? (
+                        <Share2 size={14} className="mt-0.5 shrink-0" aria-hidden />
+                      ) : (
+                        <Globe size={14} className="mt-0.5 shrink-0" aria-hidden />
+                      )}
+                      <span className="min-w-0">
+                        <span className="font-semibold">{downloadKindLabel(downloadKind)}</span>
+                        <span className="mt-0.5 block font-normal opacity-90">
+                          {downloadKindDescription(downloadKind)}
+                        </span>
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
