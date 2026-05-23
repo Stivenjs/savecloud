@@ -125,7 +125,7 @@ impl TransferSpeedTracker {
 
     fn maybe_publish(&mut self, total: u64, raw_speed: u64, now: Instant, force: bool) {
         let first_speed = self.published_speed == 0 && raw_speed > 0;
-        let interval_ok = self.last_publish_at.map_or(true, |t| {
+        let interval_ok = self.last_publish_at.is_none_or(|t| {
             now.saturating_duration_since(t) >= MIN_PUBLISH_INTERVAL
         });
 
