@@ -9,7 +9,8 @@ import { Button, Select, SelectItem } from "@heroui/react";
 import { startSourceDownload } from "@services/tauri";
 import { pickCandidate, sourceCandidateKey } from "@utils/sourceMatch";
 import { toastError, toastSuccess } from "@utils/toast";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { addTransitionType, startTransition } from "react";
 import { useConfig } from "@hooks/useConfig";
 import type { ConfiguredGame } from "@app-types/config";
 import { useDisclosure } from "@heroui/react";
@@ -48,6 +49,7 @@ const CatalogGridItem = memo(function CatalogGridItem({
 }: CatalogGridItemProps) {
   const game = libraryGame ?? catalogListItemToConfiguredGame(item);
   const navigate = useNavigate();
+  const location = useLocation();
   const candidates = match ?? [];
   const best = candidates.length > 0 ? candidates[0] : undefined;
 
@@ -66,7 +68,25 @@ const CatalogGridItem = memo(function CatalogGridItem({
             cardTitle={item.name}
             mediaBySteamAppId={mediaBySteamAppId ?? null}
             mediaFromBatch
-            onCardNavigate={libraryGame ? () => navigate(`/games/${libraryGame.id}`) : undefined}
+            onCardNavigate={() => {
+              const from = `${location.pathname}${location.search}`;
+              if (libraryGame) {
+                navigate(`/games/${libraryGame.id}`, {
+                  state: { catalogDisplayName: item.name, from },
+                });
+                return;
+              }
+              startTransition(() => {
+                addTransitionType("game-detail");
+                navigate(`/games/${game.id}`, {
+                  state: {
+                    resolvedSteamAppId: item.steamAppId,
+                    catalogDisplayName: item.name,
+                    from,
+                  },
+                });
+              });
+            }}
           />
         </div>
         <div className="min-h-8 space-y-2">
@@ -271,6 +291,7 @@ export function SteamCatalogGrid({
           onOpenChange={onOpenChange}
           gameName={installingGame.name}
           gameSizeStr={installingGame.size}
+          protocols={installingGame.chosen.protocols}
           game={installingGame.game}
           mediaBySteamAppId={mediaBySteamAppId}
           onConfirm={handleConfirmInstall}

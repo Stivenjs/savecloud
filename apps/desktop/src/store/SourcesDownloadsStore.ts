@@ -79,6 +79,8 @@ export const useSourcesDownloadsStore = create<SourcesDownloadsStore>((set) => (
         status: payload.status,
         loaded: payload.loaded,
         total: payload.total,
+        downloadSpeedBytes: payload.downloadSpeedBytes ?? 0,
+        etaSeconds: payload.etaSeconds ?? null,
         error: payload.error ?? current?.error ?? null,
         externalId: payload.externalId ?? current?.externalId ?? null,
         createdAt: current?.createdAt ?? new Date().toISOString(),

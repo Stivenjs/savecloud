@@ -74,6 +74,7 @@ export function GameDetailPage() {
     hasSyncConfig,
     isSteamCatalogOnly,
     backToPath,
+    catalogDisplayName,
     videoUrl,
   } = useGameDetail();
   const [activeTab, setActiveTab] = useState("summary");
@@ -92,7 +93,10 @@ export function GameDetailPage() {
     onOpen: onInstallModalOpen,
     onOpenChange: onInstallModalOpenChange,
   } = useDisclosure();
-  const [installingFromSource, setInstallingFromSource] = useState<{ size?: string | null } | null>(null);
+  const [installingFromSource, setInstallingFromSource] = useState<{
+    size?: string | null;
+    protocols?: string[];
+  } | null>(null);
 
   useLayoutEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -217,10 +221,18 @@ export function GameDetailPage() {
 
   const showRequirementsTab = steamDetails ? hasSteamRequirements(steamDetails) : false;
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
-  const nameForMatch = steamDetails?.name ?? formatGameDisplayName(gameId);
+  const nameForMatch = useMemo(() => {
+    const steamName = steamDetails?.name?.trim();
+    if (steamName) return steamName;
+    const catalogName = catalogDisplayName?.trim();
+    if (catalogName) return catalogName;
+    if (!isSteamCatalogOnly) return formatGameDisplayName(gameId);
+    return null;
+  }, [steamDetails?.name, catalogDisplayName, isSteamCatalogOnly, gameId]);
+
   const { data: sourceCandidates, isPending: isMatchingPending } = useQuery({
     queryKey: ["sources-match-detail", gameId, nameForMatch],
-    queryFn: () => sourcesFindMatchForGame(nameForMatch),
+    queryFn: () => sourcesFindMatchForGame(nameForMatch!),
     enabled: !!nameForMatch,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
@@ -251,7 +263,7 @@ export function GameDetailPage() {
     const chosen = pickCandidate(sourceCandidates, selectedSourceKey);
     if (!chosen) return;
 
-    setInstallingFromSource({ size: chosen.file_size });
+    setInstallingFromSource({ size: chosen.file_size, protocols: chosen.protocols });
     onInstallModalOpen();
   }, [sourceCandidates, selectedSourceKey, onInstallModalOpen]);
 
@@ -543,6 +555,7 @@ export function GameDetailPage() {
           onOpenChange={onInstallModalOpenChange}
           gameName={displayName}
           gameSizeStr={installingFromSource.size}
+          protocols={installingFromSource.protocols}
           game={game}
           mediaBySteamAppId={installModalMediaBySteamAppId}
           onConfirm={handleConfirmInstall}

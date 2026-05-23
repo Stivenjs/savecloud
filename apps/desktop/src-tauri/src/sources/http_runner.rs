@@ -9,12 +9,18 @@ use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;
 
 use crate::network::{ensure_download_success, get_with_profile, HOSTER_DOWNLOAD_CLIENT};
+use crate::utils::transfer_metrics::TransferSpeedTracker;
 
 use super::hosters::{self, HosterError};
 use super::parser::slugify;
 
 /// Tamaño mínimo razonable para un instalador de juego (evita guardar HTML/error como .bin).
 const MIN_VALID_DOWNLOAD_BYTES: u64 = 512 * 1024;
+
+/// Bytes descargados entre emisiones de progreso (evita saturar IPC/UI).
+const HTTP_PROGRESS_EMIT_BYTES: u64 = 512 * 1024;
+/// Intervalo mínimo entre emisiones de progreso.
+const HTTP_PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(500);
 
 /// Resultado del runner HTTP.
 pub struct HttpRunResult {
@@ -30,14 +36,30 @@ pub async fn run_http_download(
     uri: &str,
     cancel_flag: Arc<AtomicBool>,
     mut on_prepared: impl FnMut(&str) -> Result<(), String>,
-    mut on_progress: impl FnMut(u64, u64) -> Result<(), String>,
+    mut on_progress: impl FnMut(u64, u64, u64, Option<u64>) -> Result<(), String>,
 ) -> Result<HttpRunResult, String> {
     let destination = PathBuf::from(destination_dir);
     tokio::fs::create_dir_all(&destination)
         .await
         .map_err(|e| format!("No se pudo crear destino: {e}"))?;
 
-    on_progress(0, 0)?;
+    let mut speed_tracker = TransferSpeedTracker::new();
+    let mut emit_progress = |loaded: u64, total: u64, final_emit: bool| -> Result<(), String> {
+        let now = Instant::now();
+        let sample = if final_emit {
+            speed_tracker.record_final(loaded, total, now)
+        } else {
+            speed_tracker.record(loaded, total, now)
+        };
+        on_progress(
+            loaded,
+            total,
+            sample.download_speed_bytes,
+            sample.eta_seconds,
+        )
+    };
+
+    emit_progress(0, 0, false)?;
 
     let client = HOSTER_DOWNLOAD_CLIENT.clone();
     let resolved = hosters::resolve_download_url_with_client(&client, uri)
@@ -72,7 +94,7 @@ pub async fn run_http_download(
         .map_err(|e| format!("No se pudo crear archivo destino: {e}"))?;
 
     let mut loaded = 0_u64;
-    on_progress(loaded, total)?;
+    emit_progress(loaded, total, false)?;
 
     let mut last_emit_loaded = 0_u64;
     let mut last_emit_at = Instant::now();
@@ -101,15 +123,19 @@ pub async fn run_http_download(
             .map_err(|e| format!("Error escribiendo archivo: {e}"))?;
         loaded = loaded.saturating_add(chunk.len() as u64);
 
-        let advanced_enough = loaded.saturating_sub(last_emit_loaded) >= 256 * 1024;
-        let time_elapsed = last_emit_at.elapsed() >= Duration::from_millis(250);
+        let bytes_step = loaded.saturating_sub(last_emit_loaded) >= HTTP_PROGRESS_EMIT_BYTES;
+        let time_step = last_emit_at.elapsed() >= HTTP_PROGRESS_EMIT_INTERVAL;
         let reached_end = total > 0 && loaded >= total;
 
-        if advanced_enough || time_elapsed || reached_end {
-            on_progress(loaded, total)?;
+        if (bytes_step && time_step) || reached_end {
+            emit_progress(loaded, total, false)?;
             last_emit_loaded = loaded;
             last_emit_at = Instant::now();
         }
+    }
+
+    if loaded != last_emit_loaded {
+        emit_progress(loaded, total, true)?;
     }
 
     file.flush()

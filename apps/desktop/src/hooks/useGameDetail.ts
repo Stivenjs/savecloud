@@ -16,16 +16,18 @@ import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import type { ConfiguredGame } from "@app-types/config";
 
-interface LocationState {
+export interface GameDetailLocationState {
   resolvedSteamAppId?: string | null;
   /** Ruta desde la que se abrió el detalle (lista, catálogo, etc.). */
   from?: string;
+  /** Nombre del ítem en el catálogo Steam; evita matchear con el id sintético `steam-catalog:…`. */
+  catalogDisplayName?: string;
 }
 
 export function useGameDetail() {
   const { gameId } = useParams<{ gameId: string }>();
   const location = useLocation();
-  const navState = location.state as LocationState | undefined;
+  const navState = location.state as GameDetailLocationState | undefined;
   const { activeProfile } = useProfileSession();
 
   const { data: config, isLoading: isConfigLoading } = useQuery({
@@ -100,5 +102,6 @@ export function useGameDetail() {
     isSteamCatalogOnly: isCatalogRoute,
     /** Ruta para volver con atrás; si falta, el detalle usa `navigate(-1)`. */
     backToPath: navState?.from ?? null,
+    catalogDisplayName: navState?.catalogDisplayName?.trim() || null,
   };
 }
