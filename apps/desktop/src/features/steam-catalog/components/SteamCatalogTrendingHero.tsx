@@ -67,6 +67,7 @@ export function SteamCatalogTrendingHero({
         navigate(`/games/${toRouteGameId(item)}`, {
           state: {
             resolvedSteamAppId: item.steamAppId,
+            catalogDisplayName: item.name,
             from: `${location.pathname}${location.search}`,
           },
         });
