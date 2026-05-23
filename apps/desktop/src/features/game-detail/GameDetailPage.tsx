@@ -75,6 +75,7 @@ export function GameDetailPage() {
     isSteamCatalogOnly,
     backToPath,
     catalogDisplayName,
+    catalogListingName,
     videoUrl,
   } = useGameDetail();
   const [activeTab, setActiveTab] = useState("summary");
@@ -222,13 +223,14 @@ export function GameDetailPage() {
   const showRequirementsTab = steamDetails ? hasSteamRequirements(steamDetails) : false;
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
   const nameForMatch = useMemo(() => {
+    if (isSteamCatalogOnly) {
+      const catalogName = (catalogDisplayName ?? catalogListingName)?.trim();
+      return catalogName || null;
+    }
     const steamName = steamDetails?.name?.trim();
     if (steamName) return steamName;
-    const catalogName = catalogDisplayName?.trim();
-    if (catalogName) return catalogName;
-    if (!isSteamCatalogOnly) return formatGameDisplayName(gameId);
-    return null;
-  }, [steamDetails?.name, catalogDisplayName, isSteamCatalogOnly, gameId]);
+    return formatGameDisplayName(gameId);
+  }, [isSteamCatalogOnly, catalogDisplayName, catalogListingName, steamDetails?.name, gameId]);
 
   const { data: sourceCandidates, isPending: isMatchingPending } = useQuery({
     queryKey: ["sources-match-detail", gameId, nameForMatch],

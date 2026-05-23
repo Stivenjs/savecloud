@@ -4,6 +4,7 @@ import { useParams, useLocation } from "react-router-dom";
 import {
   getConfig,
   getSteamAppDetails,
+  getSteamCatalogListingName,
   getGameStats,
   type SteamAppDetailsResult,
   type GameStats,
@@ -49,11 +50,22 @@ export function useGameDetail() {
     [game, navState?.resolvedSteamAppId]
   );
 
+  const isCatalogRoute = isSteamCatalogRouteGameId(gameId);
+
   const { data: steamDetails, isLoading: isSteamLoading } = useQuery<SteamAppDetailsResult>({
     queryKey: ["steam-app-details", steamAppId],
     queryFn: () => getSteamAppDetails(steamAppId!),
     enabled: !!steamAppId,
     staleTime: 10 * 60_000,
+    gcTime: 60 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: catalogListingName } = useQuery({
+    queryKey: ["steam-catalog-listing-name", steamAppId],
+    queryFn: () => getSteamCatalogListingName(steamAppId!),
+    enabled: isCatalogRoute && !!steamAppId,
+    staleTime: 60 * 60_000,
     gcTime: 60 * 60_000,
     refetchOnWindowFocus: false,
   });
@@ -81,8 +93,6 @@ export function useGameDetail() {
     return getGameLibraryHeroUrl(game, navState?.resolvedSteamAppId);
   }, [game, navState?.resolvedSteamAppId]);
 
-  const isCatalogRoute = isSteamCatalogRouteGameId(gameId);
-
   const isLoading = !gameId || (!isCatalogRoute && isConfigLoading) || (!!steamAppId && isSteamLoading);
 
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
@@ -103,5 +113,6 @@ export function useGameDetail() {
     /** Ruta para volver con atrás; si falta, el detalle usa `navigate(-1)`. */
     backToPath: navState?.from ?? null,
     catalogDisplayName: navState?.catalogDisplayName?.trim() || null,
+    catalogListingName: catalogListingName?.trim() || null,
   };
 }

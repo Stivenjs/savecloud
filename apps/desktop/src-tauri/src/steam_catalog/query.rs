@@ -339,6 +339,19 @@ pub fn filter_facets(conn: &Connection) -> Result<CatalogFilterFacets, rusqlite:
     Ok(CatalogFilterFacets { genres, tags })
 }
 
+/// Nombre del listado local (`steam_catalog_apps.name`), distinto del título localizado de Store API.
+pub fn get_catalog_listing_name(conn: &Connection, app_id: u32) -> Result<Option<String>, rusqlite::Error> {
+    match conn.query_row(
+        "SELECT name FROM steam_catalog_apps WHERE app_id = ?1",
+        [app_id],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(name) => Ok(Some(name)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
 fn collect_facet_rows(
     conn: &Connection,
     sql: &str,
