@@ -473,6 +473,11 @@ export async function getSteamCatalogAppDetails(appId: string): Promise<SteamApp
   return invoke<SteamAppDetailsResult>("get_steam_catalog_app_details", { appId });
 }
 
+/** Nombre del listado local del catálogo (p. ej. inglés); no el título localizado de Store API. */
+export function getSteamCatalogListingName(appId: string): Promise<string | null> {
+  return invoke<string | null>("get_steam_catalog_listing_name", { appId });
+}
+
 /** Crea o actualiza el archivo de configuración con apiBaseUrl, apiKey y userId. Opcionalmente la clave Steam Web API (se guarda en el almacén seguro del SO). Devuelve la ruta del archivo. */
 export async function createConfigFile(
   apiBaseUrl: string,

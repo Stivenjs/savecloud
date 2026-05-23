@@ -5,6 +5,7 @@ use std::ops::Deref;
 use tauri::State;
 
 use crate::sqlite::AppDb;
+use crate::steam_cache::normalize_steam_app_id;
 
 use crate::steam_catalog::query as catalog_query;
 use crate::steam_catalog::types::{CatalogFilterFacets, CatalogListItem, CatalogPage};
@@ -90,6 +91,27 @@ pub async fn list_steam_catalog_trending_hero(
     let db = db.deref().clone();
     tokio::task::spawn_blocking(move || {
         db.with_conn(|c| catalog_query::list_catalog_trending_hero(c, cap))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())
+}
+
+/// Nombre del catálogo local para un App ID (el mismo que usa el grid y el matcher de fuentes).
+#[tauri::command]
+pub async fn get_steam_catalog_listing_name(
+    db: State<'_, AppDb>,
+    app_id: String,
+) -> Result<Option<String>, String> {
+    let Some(sid) = normalize_steam_app_id(&app_id) else {
+        return Ok(None);
+    };
+    let pid = sid
+        .parse::<u32>()
+        .map_err(|_| "App ID inválido".to_string())?;
+    let db = db.deref().clone();
+    tokio::task::spawn_blocking(move || {
+        db.with_conn(|c| catalog_query::get_catalog_listing_name(c, pid))
     })
     .await
     .map_err(|e| e.to_string())?
