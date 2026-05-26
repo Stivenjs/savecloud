@@ -25,7 +25,10 @@ const GOFILE_LANGUAGE: &str = "en-US";
 pub const GOFILE_STATIC_WEBSITE_TOKEN: &str = "4fd6sg89d7s6";
 const DATANODES_REFERER: &str = "https://datanodes.to/download";
 
+/// Timeout total para resolver enlaces (API/HTML); no aplicar al GET del archivo grande.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+/// Sin datos nuevos durante este intervalo → fallo (descargas multi-GB pueden tardar horas).
+const DOWNLOAD_READ_TIMEOUT: Duration = Duration::from_secs(120);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 const SHORT_TIMEOUT: Duration = Duration::from_secs(30);
 const PIXELDRAIN_HEAD_TIMEOUT: Duration = Duration::from_secs(5);
@@ -266,12 +269,16 @@ pub static HOSTER_DOWNLOAD_CLIENT: LazyLock<Client> = LazyLock::new(|| {
     Client::builder()
         .user_agent(HOSTER_BROWSER_USER_AGENT)
         .cookie_store(true)
-        .timeout(REQUEST_TIMEOUT)
         .connect_timeout(CONNECT_TIMEOUT)
+        .read_timeout(DOWNLOAD_READ_TIMEOUT)
         .tcp_nodelay(true)
         .build()
         .expect("fallo critico al inicializar HOSTER_DOWNLOAD_CLIENT")
 });
+
+fn apply_resolve_timeout(builder: RequestBuilder) -> RequestBuilder {
+    builder.timeout(REQUEST_TIMEOUT)
+}
 
 pub static HOSTER_NO_REDIRECT_CLIENT: LazyLock<Client> = LazyLock::new(|| {
     Client::builder()
@@ -344,7 +351,9 @@ pub async fn get(
     preset: ProfilePreset,
 ) -> Result<Response, reqwest::Error> {
     let profile = preset.build();
-    apply_profile(client.get(url), &profile).send().await
+    apply_resolve_timeout(apply_profile(client.get(url), &profile))
+        .send()
+        .await
 }
 
 pub async fn get_with_profile(
@@ -362,7 +371,9 @@ pub async fn head(
     preset: ProfilePreset,
 ) -> Result<Response, reqwest::Error> {
     let profile = preset.build();
-    apply_profile(client.head(url), &profile).send().await
+    apply_resolve_timeout(apply_profile(client.head(url), &profile))
+        .send()
+        .await
 }
 
 pub async fn head_short(
@@ -393,7 +404,9 @@ pub async fn head_with_client(
     preset: ProfilePreset,
 ) -> Result<Response, reqwest::Error> {
     let profile = preset.build();
-    apply_profile(client.head(url), &profile).send().await
+    apply_resolve_timeout(apply_profile(client.head(url), &profile))
+        .send()
+        .await
 }
 
 #[allow(dead_code)]
@@ -403,7 +416,9 @@ pub async fn post(
     preset: ProfilePreset,
 ) -> Result<Response, reqwest::Error> {
     let profile = preset.build();
-    apply_profile(client.post(url), &profile).send().await
+    apply_resolve_timeout(apply_profile(client.post(url), &profile))
+        .send()
+        .await
 }
 
 pub async fn post_form_urlencoded(
@@ -413,7 +428,7 @@ pub async fn post_form_urlencoded(
     fields: &[(&str, &str)],
 ) -> Result<Response, reqwest::Error> {
     let profile = preset.build();
-    apply_profile(client.post(url).form(fields), &profile)
+    apply_resolve_timeout(apply_profile(client.post(url).form(fields), &profile))
         .send()
         .await
 }
@@ -425,13 +440,13 @@ pub async fn post_json(
     body: &str,
 ) -> Result<Response, reqwest::Error> {
     let profile = preset.build();
-    apply_profile(
+    apply_resolve_timeout(apply_profile(
         client
             .post(url)
             .header("Content-Type", "application/json")
             .body(body.to_string()),
         &profile,
-    )
+    ))
     .send()
     .await
 }
@@ -443,7 +458,7 @@ pub async fn post_multipart(
     form: reqwest::multipart::Form,
 ) -> Result<Response, reqwest::Error> {
     let profile = preset.build();
-    apply_profile(client.post(url).multipart(form), &profile)
+    apply_resolve_timeout(apply_profile(client.post(url).multipart(form), &profile))
         .send()
         .await
 }
