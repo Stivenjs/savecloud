@@ -24,6 +24,46 @@ export interface SourceCatalog {
   sourceUrl?: string | null;
   importedAt: string;
   downloads: SourceItem[];
+  sync?: {
+    etag?: string | null;
+    lastModified?: string | null;
+    contentHash?: string | null;
+    lastCheckedAt?: string | null;
+    lastSyncedAt?: string | null;
+    syncError?: string | null;
+  } | null;
+}
+
+export interface RemoteSourceConfig {
+  id: string;
+  url: string;
+  enabled: boolean;
+  sync: {
+    etag?: string | null;
+    lastModified?: string | null;
+    contentHash?: string | null;
+    lastCheckedAt?: string | null;
+    lastSyncedAt?: string | null;
+    syncError?: string | null;
+  };
+}
+
+export interface RemoteSyncItemResult {
+  sourceId: string;
+  url: string;
+  success: boolean;
+  updated: boolean;
+  catalogId?: string | null;
+  catalogName?: string | null;
+  error?: string | null;
+}
+
+export interface RemoteSyncResult {
+  total: number;
+  updated: number;
+  unchanged: number;
+  failed: number;
+  items: RemoteSyncItemResult[];
 }
 
 export interface SourceCatalogSummary {
@@ -123,6 +163,26 @@ export function listSourceItemsPage(params: {
   limit?: number | null;
 }): Promise<SourceItemsPage> {
   return invoke<SourceItemsPage>("list_source_items_page", params);
+}
+
+export function listRemoteSources(): Promise<RemoteSourceConfig[]> {
+  return invoke<RemoteSourceConfig[]>("list_remote_sources");
+}
+
+export function upsertRemoteSource(url: string, enabled?: boolean | null): Promise<RemoteSourceConfig> {
+  return invoke<RemoteSourceConfig>("upsert_remote_source", { url, enabled: enabled ?? null });
+}
+
+export function removeRemoteSource(sourceId: string): Promise<void> {
+  return invoke("remove_remote_source", { sourceId });
+}
+
+export function setRemoteSourceEnabled(sourceId: string, enabled: boolean): Promise<RemoteSourceConfig> {
+  return invoke<RemoteSourceConfig>("set_remote_source_enabled", { sourceId, enabled });
+}
+
+export function syncRemoteSources(sourceIds?: string[] | null): Promise<RemoteSyncResult> {
+  return invoke<RemoteSyncResult>("sync_remote_sources", { sourceIds: sourceIds ?? null });
 }
 
 export function removeSource(sourceId: string): Promise<void> {

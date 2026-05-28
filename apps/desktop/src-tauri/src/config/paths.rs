@@ -16,6 +16,7 @@ pub const GAMIFICATION_FILE_NAME: &str = "gamification.json";
 pub const PROFILES_INDEX_FILE_NAME: &str = "profiles.json";
 pub const STORAGE_MANIFEST_FILE_NAME: &str = "storage_manifest.json";
 pub const SOURCES_FILE_NAME: &str = "sources.json";
+pub const REMOTE_SOURCES_FILE_NAME: &str = "remote_sources.json";
 pub const ACTIVE_JOBS_FILE_NAME: &str = "active_jobs.json";
 pub const GAME_MODE_SESSION_FILE_NAME: &str = "game_mode_session.json";
 pub const SQLITE_CATALOG_DB_NAME: &str = "catalog.sqlite";
@@ -110,6 +111,11 @@ pub fn sources_path() -> Option<PathBuf> {
     cache_dir().map(|d| d.join(SOURCES_FILE_NAME))
 }
 
+/// Ruta del archivo de fuentes remotas registradas.
+pub fn remote_sources_path() -> Option<PathBuf> {
+    cache_dir().map(|d| d.join(REMOTE_SOURCES_FILE_NAME))
+}
+
 /// Ruta del estado de jobs activos en runtime.
 pub fn active_jobs_path() -> Option<PathBuf> {
     runtime_dir().map(|d| d.join(ACTIVE_JOBS_FILE_NAME))
@@ -123,6 +129,11 @@ pub fn game_mode_session_path() -> Option<PathBuf> {
 /// Ruta legado del catálogo de fuentes.
 pub fn legacy_sources_path() -> Option<PathBuf> {
     data_dir().map(|d| d.join(SOURCES_FILE_NAME))
+}
+
+/// Ruta legado de fuentes remotas registradas.
+pub fn legacy_remote_sources_path() -> Option<PathBuf> {
+    data_dir().map(|d| d.join(REMOTE_SOURCES_FILE_NAME))
 }
 
 /// Ruta legado de jobs activos.

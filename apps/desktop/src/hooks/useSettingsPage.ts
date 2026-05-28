@@ -31,8 +31,13 @@ import {
   importSourceFromFile,
   importSourceFromUrl,
   importSourcesFromFilesBatch,
+  listRemoteSources,
   listSourcesSummary,
+  removeRemoteSource,
   removeSource,
+  setRemoteSourceEnabled,
+  syncRemoteSources,
+  upsertRemoteSource,
 } from "@services/tauri/sources.service";
 import { getAlwaysShowSelectorCmd, setAlwaysShowSelectorCmd } from "@services/tauri/profile.service";
 import { MASKED_CONFIG_SECRET } from "@/constants/configMask";
@@ -68,6 +73,7 @@ type SettingsPageState = {
   steamSeedBusy: boolean;
   sourcesBusy: boolean;
   sourceUrl: string;
+  remoteSourceUrl: string;
   defaultSourceDownloadDir: string;
 };
 
@@ -111,6 +117,7 @@ type SettingsPageAction =
   | { type: "SET_STEAM_SEED_BUSY"; payload: boolean }
   | { type: "SET_SOURCES_BUSY"; payload: boolean }
   | { type: "SET_SOURCE_URL"; payload: string }
+  | { type: "SET_REMOTE_SOURCE_URL"; payload: string }
   | { type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR"; payload: string };
 
 const initialState: SettingsPageState = {
@@ -137,6 +144,7 @@ const initialState: SettingsPageState = {
   steamSeedBusy: false,
   sourcesBusy: false,
   sourceUrl: "",
+  remoteSourceUrl: "",
   defaultSourceDownloadDir: "",
 };
 
@@ -210,6 +218,8 @@ function settingsPageReducer(state: SettingsPageState, action: SettingsPageActio
       return { ...state, sourcesBusy: action.payload };
     case "SET_SOURCE_URL":
       return { ...state, sourceUrl: action.payload };
+    case "SET_REMOTE_SOURCE_URL":
+      return { ...state, remoteSourceUrl: action.payload };
     case "SET_DEFAULT_SOURCE_DOWNLOAD_DIR":
       return { ...state, defaultSourceDownloadDir: action.payload };
     default:
@@ -224,6 +234,7 @@ export function useSettingsPage() {
   );
   const [steamSeedImportProgress, setSteamSeedImportProgress] = useState<SteamSeedImportProgressPayload | null>(null);
   const [deletingSourceIds, setDeletingSourceIds] = useState<Set<string>>(new Set());
+  const [deletingRemoteSourceIds, setDeletingRemoteSourceIds] = useState<Set<string>>(new Set());
   const { config, loading: loadingUseConfig } = useConfig();
   const { activeProfile } = useProfileSession();
   const queryClient = useQueryClient();
@@ -252,6 +263,11 @@ export function useSettingsPage() {
   const { data: sourcesSummary = [] } = useQuery({
     queryKey: ["sources-catalogs"],
     queryFn: listSourcesSummary,
+  });
+
+  const { data: remoteSources = [] } = useQuery({
+    queryKey: ["remote-sources"],
+    queryFn: listRemoteSources,
   });
 
   const { data: defaultSourceDownloadDirFromConfig = "" } = useQuery({
@@ -788,6 +804,68 @@ export function useSettingsPage() {
     }
   };
 
+  const handleRegisterRemoteSource = async () => {
+    const url = state.remoteSourceUrl.trim();
+    if (!url) return;
+
+    dispatch({ type: "SET_SOURCES_BUSY", payload: true });
+    try {
+      await upsertRemoteSource(url, true);
+      dispatch({ type: "SET_REMOTE_SOURCE_URL", payload: "" });
+      toastSuccess("Fuente remota agregada", "Se registró la URL para sincronización manual.");
+      queryClient.invalidateQueries({ queryKey: ["remote-sources"] });
+    } catch (e) {
+      toastError("Error al registrar URL", e instanceof Error ? e.message : String(e));
+    } finally {
+      dispatch({ type: "SET_SOURCES_BUSY", payload: false });
+    }
+  };
+
+  const handleToggleRemoteSourceEnabled = async (sourceId: string, enabled: boolean) => {
+    dispatch({ type: "SET_SOURCES_BUSY", payload: true });
+    try {
+      await setRemoteSourceEnabled(sourceId, enabled);
+      queryClient.invalidateQueries({ queryKey: ["remote-sources"] });
+      toastSuccess(enabled ? "Fuente activada" : "Fuente pausada", "El estado de la fuente remota se actualizó.");
+    } catch (e) {
+      toastError("Error al actualizar fuente remota", e instanceof Error ? e.message : String(e));
+    } finally {
+      dispatch({ type: "SET_SOURCES_BUSY", payload: false });
+    }
+  };
+
+  const handleDeleteRemoteSource = async (sourceId: string) => {
+    setDeletingRemoteSourceIds((prev) => new Set(prev).add(sourceId));
+    try {
+      await removeRemoteSource(sourceId);
+      toastSuccess("Fuente remota eliminada", "La URL fue quitada de la lista.");
+      queryClient.invalidateQueries({ queryKey: ["remote-sources"] });
+    } catch (e) {
+      toastError("Error al eliminar fuente remota", e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeletingRemoteSourceIds((prev) => {
+        const next = new Set(prev);
+        next.delete(sourceId);
+        return next;
+      });
+    }
+  };
+
+  const handleSyncRemoteSources = async () => {
+    dispatch({ type: "SET_SOURCES_BUSY", payload: true });
+    try {
+      const result = await syncRemoteSources();
+      const summary = `${result.updated} actualizadas, ${result.unchanged} sin cambios, ${result.failed} fallidas`;
+      toastSuccess(`Sincronización terminada (${result.total})`, summary);
+      queryClient.invalidateQueries({ queryKey: ["remote-sources"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
+    } catch (e) {
+      toastError("Error al sincronizar fuentes remotas", e instanceof Error ? e.message : String(e));
+    } finally {
+      dispatch({ type: "SET_SOURCES_BUSY", payload: false });
+    }
+  };
+
   return {
     ...state,
     config,
@@ -833,14 +911,21 @@ export function useSettingsPage() {
     setPullFriendConfigModalOpen: (open: boolean) => dispatch({ type: "SET_PULL_FRIEND_MODAL", open }),
     setPullFriendUserId: (id: string) => dispatch({ type: "SET_PULL_FRIEND_USER_ID", payload: id }),
     sourcesSummary,
+    remoteSources,
     setSourceUrl: (v: string) => dispatch({ type: "SET_SOURCE_URL", payload: v }),
+    setRemoteSourceUrl: (v: string) => dispatch({ type: "SET_REMOTE_SOURCE_URL", payload: v }),
     setDefaultSourceDownloadDir: (v: string) => dispatch({ type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR", payload: v }),
     handleImportSourceByUrl,
     handleImportSourceByFile,
     handleImportSourcesBatch,
+    handleRegisterRemoteSource,
+    handleToggleRemoteSourceEnabled,
+    handleDeleteRemoteSource,
+    handleSyncRemoteSources,
     handleSelectDefaultSourceDownloadDir,
     handleSaveDefaultSourceDownloadDir,
     deletingSourceIds,
+    deletingRemoteSourceIds,
     handleDeleteSource,
   };
 }

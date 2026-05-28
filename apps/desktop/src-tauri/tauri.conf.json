@@ -95,7 +95,8 @@
       }
     },
     "resources": [
-      "resources/oye_cloud.rpw"
+      "resources/oye_cloud.rpw",
+      "resources/scrapling_fetch.py"
     ]
   },
   "identifier": "com.savecloud.desktop",

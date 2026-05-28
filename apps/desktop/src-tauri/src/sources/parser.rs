@@ -108,6 +108,7 @@ pub fn parse_catalog(raw: &str, source_url: Option<String>) -> Result<SourceCata
         source_url,
         imported_at: chrono::Utc::now().to_rfc3339(),
         downloads: items,
+        sync: None,
     })
 }
 

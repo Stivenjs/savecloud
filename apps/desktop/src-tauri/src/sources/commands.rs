@@ -1,16 +1,22 @@
 //! Comandos Tauri del módulo de fuentes.
 
+use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use once_cell::sync::Lazy;
 use rayon::prelude::*;
-use tauri::{AppHandle, Emitter, Manager};
+use reqwest::header::{CONTENT_TYPE, ETAG, IF_MODIFIED_SINCE, IF_NONE_MATCH, LAST_MODIFIED};
+use sha2::{Digest, Sha256};
+use tauri::{path::BaseDirectory, AppHandle, Emitter, Manager};
+use url::Url;
 
 use crate::network::API_CLIENT;
 
 use super::domain::{
-    BatchImportItemResult, BatchImportResult, DownloadProtocol, ImportMode, SourceCatalogSummary,
-    SourceDownloadJob, SourceItemsPage, SourceJobStatus,
+    BatchImportItemResult, BatchImportResult, DownloadProtocol, ImportMode, RemoteSourceConfig,
+    RemoteSyncItemResult, RemoteSyncResult, SourceCatalogSummary, SourceDownloadJob,
+    SourceItemsPage, SourceJobStatus, SourceSyncMetadata,
 };
 use super::parser::parse_catalog;
 use super::queue::{new_job_id, now_iso, spawn_job, SourcesState};
@@ -193,6 +199,104 @@ fn build_match_index() -> Result<Vec<IndexedSourceItem>, String> {
     Ok(out)
 }
 
+fn normalize_remote_url(url: &str) -> Result<String, String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err("La URL no puede estar vacía".to_string());
+    }
+
+    let parsed = Url::parse(trimmed).map_err(|e| format!("URL inválida: {e}"))?;
+    if parsed.scheme() != "https" {
+        return Err("Solo se permiten URLs HTTPS para fuentes remotas".to_string());
+    }
+
+    Ok(parsed.to_string())
+}
+
+fn remote_source_id(url: &str) -> String {
+    let digest = Sha256::digest(url.as_bytes());
+    let hexed = hex::encode(digest);
+    format!("remote-{}", &hexed[..12])
+}
+
+fn extract_header_value(
+    headers: &reqwest::header::HeaderMap,
+    key: reqwest::header::HeaderName,
+) -> Option<String> {
+    headers
+        .get(key)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.to_string())
+}
+
+fn content_hash(raw: &str) -> String {
+    hex::encode(Sha256::digest(raw.as_bytes()))
+}
+
+fn looks_like_cloudflare_block(content_type: &str, raw: &str) -> bool {
+    let lower = raw.to_ascii_lowercase();
+    content_type.contains("text/html")
+        || lower.contains("cloudflare")
+        || lower.contains("cf-chl")
+        || lower.contains("captcha")
+        || lower.contains("attention required")
+}
+
+fn resolve_scrapling_script(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .resolve("resources/scrapling_fetch.py", BaseDirectory::Resource)
+        .map_err(|e| format!("No se pudo resolver el script de Scrapling: {e}"))
+}
+
+fn find_python_executable() -> Result<(String, Vec<String>), String> {
+    let candidates = [
+        (std::env::var("PYTHON").ok(), Vec::<String>::new()),
+        (Some("python".to_string()), Vec::<String>::new()),
+        (Some("python3".to_string()), Vec::<String>::new()),
+        (Some("py".to_string()), vec!["-3".to_string()]),
+    ];
+
+    for (candidate, args) in candidates {
+        if let Some(executable) = candidate {
+            if which::which(&executable).is_ok() {
+                return Ok((executable, args));
+            }
+        }
+    }
+
+    Err("No se encontró Python en PATH. Instala Python 3.10+ para usar Scrapling.".to_string())
+}
+
+fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String> {
+    let script_path = resolve_scrapling_script(app)?;
+    let (python_bin, prefix_args) = find_python_executable()?;
+    let script_dir = script_path
+        .parent()
+        .ok_or_else(|| "No se pudo resolver el directorio del script de Scrapling".to_string())?;
+
+    let output = std::process::Command::new(python_bin)
+        .current_dir(script_dir)
+        .args(prefix_args)
+        .arg(script_path)
+        .arg(url)
+        .env("PYTHONUNBUFFERED", "1")
+        .output()
+        .map_err(|e| format!("No se pudo ejecutar Scrapling: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let details = if stderr.is_empty() { stdout } else { stderr };
+        return Err(if details.is_empty() {
+            "Scrapling falló sin mensaje de error".to_string()
+        } else {
+            format!("Scrapling falló: {details}")
+        });
+    }
+
+    String::from_utf8(output.stdout).map_err(|e| format!("Scrapling devolvió texto no UTF-8: {e}"))
+}
+
 /// Lista todas las fuentes de catálogos completas almacenadas localmente.
 ///
 /// # Returns
@@ -221,6 +325,446 @@ pub async fn list_sources_summary() -> Result<Vec<SourceCatalogSummary>, String>
             downloads_count: s.downloads.len(),
         })
         .collect())
+}
+
+/// Lista fuentes remotas registradas para sincronización manual.
+#[tauri::command]
+pub async fn list_remote_sources() -> Result<Vec<RemoteSourceConfig>, String> {
+    store::load_remote_sources()
+}
+
+/// Crea o actualiza una fuente remota por URL.
+#[tauri::command]
+pub async fn upsert_remote_source(
+    url: String,
+    enabled: Option<bool>,
+) -> Result<RemoteSourceConfig, String> {
+    let normalized = normalize_remote_url(&url)?;
+    let mut config = store::load_remote_sources()?
+        .into_iter()
+        .find(|source| source.url == normalized)
+        .unwrap_or(RemoteSourceConfig {
+            id: remote_source_id(&normalized),
+            url: normalized.clone(),
+            enabled: true,
+            sync: SourceSyncMetadata::default(),
+        });
+
+    config.url = normalized;
+    if let Some(next_enabled) = enabled {
+        config.enabled = next_enabled;
+    }
+
+    store::upsert_remote_source(config)
+}
+
+/// Elimina una fuente remota por ID.
+#[tauri::command]
+pub async fn remove_remote_source(source_id: String) -> Result<(), String> {
+    store::remove_remote_source(&source_id)
+}
+
+/// Cambia el estado habilitado de una fuente remota.
+#[tauri::command]
+pub async fn set_remote_source_enabled(
+    source_id: String,
+    enabled: bool,
+) -> Result<RemoteSourceConfig, String> {
+    let mut remote_sources = store::load_remote_sources()?;
+    let Some(index) = remote_sources
+        .iter()
+        .position(|source| source.id == source_id)
+    else {
+        return Err(format!("Fuente remota no encontrada: {source_id}"));
+    };
+
+    remote_sources[index].enabled = enabled;
+    let updated = remote_sources[index].clone();
+    store::save_remote_sources(&remote_sources)?;
+    Ok(updated)
+}
+
+/// Sincroniza fuentes remotas de forma manual con detección de cambios por headers/hash.
+#[tauri::command]
+pub async fn sync_remote_sources(
+    app: AppHandle,
+    source_ids: Option<Vec<String>>,
+) -> Result<RemoteSyncResult, String> {
+    let selected_ids: Option<HashSet<String>> = source_ids.map(|ids| ids.into_iter().collect());
+    let mut remote_sources = store::load_remote_sources()?;
+
+    let mut total = 0usize;
+    let mut updated = 0usize;
+    let mut unchanged = 0usize;
+    let mut failed = 0usize;
+    let mut items: Vec<RemoteSyncItemResult> = Vec::new();
+
+    for remote_source in &mut remote_sources {
+        let should_sync = selected_ids
+            .as_ref()
+            .map(|ids| ids.contains(&remote_source.id))
+            .unwrap_or(remote_source.enabled);
+        if !should_sync {
+            continue;
+        }
+
+        total += 1;
+        remote_source.sync.last_checked_at = Some(now_iso());
+
+        let mut request = API_CLIENT.get(&remote_source.url);
+        if let Some(etag) = &remote_source.sync.etag {
+            request = request.header(IF_NONE_MATCH, etag);
+        }
+        if let Some(last_modified) = &remote_source.sync.last_modified {
+            request = request.header(IF_MODIFIED_SINCE, last_modified);
+        }
+
+        let response = match request.send().await {
+            Ok(response) => response,
+            Err(error) => {
+                failed += 1;
+                let message = format!("No se pudo descargar la fuente: {error}");
+                remote_source.sync.sync_error = Some(message.clone());
+                items.push(RemoteSyncItemResult {
+                    source_id: remote_source.id.clone(),
+                    url: remote_source.url.clone(),
+                    success: false,
+                    updated: false,
+                    catalog_id: None,
+                    catalog_name: None,
+                    error: Some(message),
+                });
+                continue;
+            }
+        };
+
+        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+            let catalog_missing = !store::catalog_exists_for_url(&remote_source.url)?;
+            if !catalog_missing {
+                unchanged += 1;
+                remote_source.sync.sync_error = None;
+                items.push(RemoteSyncItemResult {
+                    source_id: remote_source.id.clone(),
+                    url: remote_source.url.clone(),
+                    success: true,
+                    updated: false,
+                    catalog_id: None,
+                    catalog_name: None,
+                    error: None,
+                });
+                continue;
+            }
+
+            // Hash/etag en remoto pero catálogo ausente en sources.json: re-descargar sin validadores.
+            let response = match API_CLIENT.get(&remote_source.url).send().await {
+                Ok(response) => response,
+                Err(error) => {
+                    failed += 1;
+                    let message = format!("No se pudo re-descargar la fuente: {error}");
+                    remote_source.sync.sync_error = Some(message.clone());
+                    items.push(RemoteSyncItemResult {
+                        source_id: remote_source.id.clone(),
+                        url: remote_source.url.clone(),
+                        success: false,
+                        updated: false,
+                        catalog_id: None,
+                        catalog_name: None,
+                        error: Some(message),
+                    });
+                    continue;
+                }
+            };
+            if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+                failed += 1;
+                let message = format!(
+                    "El servidor devolvió 304 para {} pero el catálogo local no existe",
+                    remote_source.url
+                );
+                remote_source.sync.sync_error = Some(message.clone());
+                items.push(RemoteSyncItemResult {
+                    source_id: remote_source.id.clone(),
+                    url: remote_source.url.clone(),
+                    success: false,
+                    updated: false,
+                    catalog_id: None,
+                    catalog_name: None,
+                    error: Some(message),
+                });
+                continue;
+            }
+            // Sustituir la respuesta 304 y continuar el flujo normal con el cuerpo fresco.
+            let status = response.status();
+            let headers = response.headers().clone();
+            let content_type = extract_header_value(&headers, CONTENT_TYPE)
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            let mut raw = match response.text().await {
+                Ok(raw) => raw,
+                Err(error) => {
+                    failed += 1;
+                    let message = format!("No se pudo leer la respuesta: {error}");
+                    remote_source.sync.sync_error = Some(message.clone());
+                    items.push(RemoteSyncItemResult {
+                        source_id: remote_source.id.clone(),
+                        url: remote_source.url.clone(),
+                        success: false,
+                        updated: false,
+                        catalog_id: None,
+                        catalog_name: None,
+                        error: Some(message),
+                    });
+                    continue;
+                }
+            };
+
+            let should_attempt_scrapling = !status.is_success()
+                && matches!(
+                    status,
+                    reqwest::StatusCode::FORBIDDEN
+                        | reqwest::StatusCode::TOO_MANY_REQUESTS
+                        | reqwest::StatusCode::SERVICE_UNAVAILABLE
+                );
+
+            if should_attempt_scrapling || looks_like_cloudflare_block(&content_type, &raw) {
+                match run_scrapling_fetch(&app, &remote_source.url) {
+                    Ok(scraped) => raw = scraped,
+                    Err(error) => {
+                        failed += 1;
+                        remote_source.sync.sync_error = Some(error.clone());
+                        items.push(RemoteSyncItemResult {
+                            source_id: remote_source.id.clone(),
+                            url: remote_source.url.clone(),
+                            success: false,
+                            updated: false,
+                            catalog_id: None,
+                            catalog_name: None,
+                            error: Some(error),
+                        });
+                        continue;
+                    }
+                }
+            } else if !status.is_success() {
+                failed += 1;
+                let message = format!("La URL devolvió estado HTTP {}", status);
+                remote_source.sync.sync_error = Some(message.clone());
+                items.push(RemoteSyncItemResult {
+                    source_id: remote_source.id.clone(),
+                    url: remote_source.url.clone(),
+                    success: false,
+                    updated: false,
+                    catalog_id: None,
+                    catalog_name: None,
+                    error: Some(message),
+                });
+                continue;
+            }
+
+            let hash = content_hash(&raw);
+            let etag = extract_header_value(&headers, ETAG);
+            let last_modified = extract_header_value(&headers, LAST_MODIFIED);
+            remote_source.sync.etag = etag.or(remote_source.sync.etag.clone());
+            remote_source.sync.last_modified =
+                last_modified.or(remote_source.sync.last_modified.clone());
+            remote_source.sync.sync_error = None;
+
+            let mut catalog = match parse_catalog(&raw, Some(remote_source.url.clone())) {
+                Ok(catalog) => catalog,
+                Err(error) => {
+                    failed += 1;
+                    remote_source.sync.sync_error = Some(error.clone());
+                    items.push(RemoteSyncItemResult {
+                        source_id: remote_source.id.clone(),
+                        url: remote_source.url.clone(),
+                        success: false,
+                        updated: false,
+                        catalog_id: None,
+                        catalog_name: None,
+                        error: Some(error),
+                    });
+                    continue;
+                }
+            };
+
+            remote_source.sync.content_hash = Some(hash);
+            remote_source.sync.last_synced_at = Some(now_iso());
+            catalog.sync = Some(remote_source.sync.clone());
+
+            match store::upsert_catalog(catalog, ImportMode::Merge) {
+                Ok(saved) => {
+                    updated += 1;
+                    items.push(RemoteSyncItemResult {
+                        source_id: remote_source.id.clone(),
+                        url: remote_source.url.clone(),
+                        success: true,
+                        updated: true,
+                        catalog_id: Some(saved.id),
+                        catalog_name: Some(saved.name),
+                        error: None,
+                    });
+                }
+                Err(error) => {
+                    failed += 1;
+                    remote_source.sync.sync_error = Some(error.clone());
+                    items.push(RemoteSyncItemResult {
+                        source_id: remote_source.id.clone(),
+                        url: remote_source.url.clone(),
+                        success: false,
+                        updated: false,
+                        catalog_id: None,
+                        catalog_name: None,
+                        error: Some(error),
+                    });
+                }
+            }
+            continue;
+        }
+
+        let status = response.status();
+        let headers = response.headers().clone();
+        let content_type = extract_header_value(&headers, CONTENT_TYPE)
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let mut raw = match response.text().await {
+            Ok(raw) => raw,
+            Err(error) => {
+                failed += 1;
+                let message = format!("No se pudo leer la respuesta: {error}");
+                remote_source.sync.sync_error = Some(message.clone());
+                items.push(RemoteSyncItemResult {
+                    source_id: remote_source.id.clone(),
+                    url: remote_source.url.clone(),
+                    success: false,
+                    updated: false,
+                    catalog_id: None,
+                    catalog_name: None,
+                    error: Some(message),
+                });
+                continue;
+            }
+        };
+
+        let should_attempt_scrapling = !status.is_success()
+            && matches!(
+                status,
+                reqwest::StatusCode::FORBIDDEN
+                    | reqwest::StatusCode::TOO_MANY_REQUESTS
+                    | reqwest::StatusCode::SERVICE_UNAVAILABLE
+            );
+
+        if should_attempt_scrapling || looks_like_cloudflare_block(&content_type, &raw) {
+            match run_scrapling_fetch(&app, &remote_source.url) {
+                Ok(scraped) => raw = scraped,
+                Err(error) => {
+                    failed += 1;
+                    remote_source.sync.sync_error = Some(error.clone());
+                    items.push(RemoteSyncItemResult {
+                        source_id: remote_source.id.clone(),
+                        url: remote_source.url.clone(),
+                        success: false,
+                        updated: false,
+                        catalog_id: None,
+                        catalog_name: None,
+                        error: Some(error),
+                    });
+                    continue;
+                }
+            }
+        }
+
+        let hash = content_hash(&raw);
+        let etag = extract_header_value(&headers, ETAG);
+        let last_modified = extract_header_value(&headers, LAST_MODIFIED);
+        let hash_unchanged = remote_source.sync.content_hash.as_deref() == Some(hash.as_str());
+        let catalog_missing = !store::catalog_exists_for_url(&remote_source.url)?;
+
+        remote_source.sync.etag = etag.or(remote_source.sync.etag.clone());
+        remote_source.sync.last_modified =
+            last_modified.or(remote_source.sync.last_modified.clone());
+        remote_source.sync.last_checked_at = Some(now_iso());
+        remote_source.sync.sync_error = None;
+
+        if hash_unchanged && !catalog_missing {
+            unchanged += 1;
+            items.push(RemoteSyncItemResult {
+                source_id: remote_source.id.clone(),
+                url: remote_source.url.clone(),
+                success: true,
+                updated: false,
+                catalog_id: None,
+                catalog_name: None,
+                error: None,
+            });
+            continue;
+        }
+
+        let mut catalog = match parse_catalog(&raw, Some(remote_source.url.clone())) {
+            Ok(catalog) => catalog,
+            Err(error) => {
+                failed += 1;
+                remote_source.sync.sync_error = Some(error.clone());
+                items.push(RemoteSyncItemResult {
+                    source_id: remote_source.id.clone(),
+                    url: remote_source.url.clone(),
+                    success: false,
+                    updated: false,
+                    catalog_id: None,
+                    catalog_name: None,
+                    error: Some(error),
+                });
+                continue;
+            }
+        };
+
+        let previous_hash = remote_source.sync.content_hash.clone();
+        let previous_synced_at = remote_source.sync.last_synced_at.clone();
+        remote_source.sync.content_hash = Some(hash.clone());
+        remote_source.sync.last_synced_at = Some(now_iso());
+        catalog.sync = Some(remote_source.sync.clone());
+
+        match store::upsert_catalog(catalog, ImportMode::Merge) {
+            Ok(saved) => {
+                updated += 1;
+                items.push(RemoteSyncItemResult {
+                    source_id: remote_source.id.clone(),
+                    url: remote_source.url.clone(),
+                    success: true,
+                    updated: true,
+                    catalog_id: Some(saved.id),
+                    catalog_name: Some(saved.name),
+                    error: None,
+                });
+            }
+            Err(error) => {
+                failed += 1;
+                remote_source.sync.content_hash = previous_hash;
+                remote_source.sync.last_synced_at = previous_synced_at;
+                remote_source.sync.sync_error = Some(error.clone());
+                items.push(RemoteSyncItemResult {
+                    source_id: remote_source.id.clone(),
+                    url: remote_source.url.clone(),
+                    success: false,
+                    updated: false,
+                    catalog_id: None,
+                    catalog_name: None,
+                    error: Some(error),
+                });
+            }
+        }
+    }
+
+    if updated > 0 {
+        invalidate_index();
+    }
+
+    store::save_remote_sources(&remote_sources)?;
+
+    Ok(RemoteSyncResult {
+        total,
+        updated,
+        unchanged,
+        failed,
+        items,
+    })
 }
 
 /// Obtiene una página específica de resultados (items) para un catálogo dado.
@@ -441,6 +985,7 @@ pub async fn import_sources_from_files_batch(
 /// Retorna error ante fallos de red (`reqwest`), status HTTP erróneos o bloqueos anti-bot.
 #[tauri::command]
 pub async fn import_source_from_url(
+    app: AppHandle,
     url: String,
     mode: ImportMode,
 ) -> Result<super::domain::SourceCatalog, String> {
@@ -449,33 +994,37 @@ pub async fn import_source_from_url(
         .send()
         .await
         .map_err(|e| format!("No se pudo descargar la fuente: {e}"))?;
-    if !response.status().is_success() {
-        return Err(format!("La URL devolvió estado HTTP {}", response.status()));
-    }
-    let content_type = response
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
+    let status = response.status();
+    let headers = response.headers().clone();
+    let content_type = extract_header_value(&headers, CONTENT_TYPE)
         .unwrap_or_default()
         .to_ascii_lowercase();
-    let raw = response
+    let mut raw = response
         .text()
         .await
         .map_err(|e| format!("No se pudo leer la respuesta: {e}"))?;
-    let lower = raw.to_ascii_lowercase();
-    let looks_like_cloudflare_block = content_type.contains("text/html")
-        || lower.contains("cloudflare")
-        || lower.contains("cf-chl")
-        || lower.contains("captcha")
-        || lower.contains("attention required");
-    if looks_like_cloudflare_block {
-        return Err(
-            "La URL está protegida por Cloudflare/CAPTCHA y no permite importación automática. \
-             Descarga el JSON manualmente e impórtalo por archivo."
-                .to_string(),
+    let should_attempt_scrapling = !status.is_success()
+        && matches!(
+            status,
+            reqwest::StatusCode::FORBIDDEN
+                | reqwest::StatusCode::TOO_MANY_REQUESTS
+                | reqwest::StatusCode::SERVICE_UNAVAILABLE
         );
+    if should_attempt_scrapling || looks_like_cloudflare_block(&content_type, &raw) {
+        raw = run_scrapling_fetch(&app, &url)?;
+    } else if !status.is_success() {
+        return Err(format!("La URL devolvió estado HTTP {}", status));
     }
-    let catalog = parse_catalog(&raw, Some(url))?;
+
+    let mut catalog = parse_catalog(&raw, Some(url))?;
+    catalog.sync = Some(SourceSyncMetadata {
+        etag: extract_header_value(&headers, ETAG),
+        last_modified: extract_header_value(&headers, LAST_MODIFIED),
+        content_hash: Some(content_hash(&raw)),
+        last_checked_at: Some(now_iso()),
+        last_synced_at: Some(now_iso()),
+        sync_error: None,
+    });
     let result = store::upsert_catalog(catalog, mode)?;
     invalidate_index();
     Ok(result)

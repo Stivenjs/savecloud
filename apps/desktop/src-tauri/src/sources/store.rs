@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use crate::config::paths;
 
-use super::domain::{ImportMode, SourceCatalog, SourceDownloadJob};
+use super::domain::{ImportMode, RemoteSourceConfig, SourceCatalog, SourceDownloadJob};
 
 fn sources_path() -> Result<PathBuf, String> {
     let Some(path) = paths::sources_path() else {
@@ -26,21 +26,91 @@ fn jobs_path() -> Result<PathBuf, String> {
     Ok(path)
 }
 
-/// Carga catálogo de fuentes persistido.
-pub fn load_sources() -> Result<Vec<SourceCatalog>, String> {
-    let path = resolve_read_path(paths::sources_path(), paths::legacy_sources_path())?;
-    if !path.exists() {
-        return Ok(Vec::new());
+fn remote_sources_path() -> Result<PathBuf, String> {
+    let Some(path) = paths::remote_sources_path() else {
+        return Err("No se pudo resolver remote_sources_path".to_string());
+    };
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
+    Ok(path)
+}
+
+/// Indica si ya existe un catálogo persistido para la URL remota indicada.
+pub fn catalog_exists_for_url(url: &str) -> Result<bool, String> {
+    Ok(load_sources()?
+        .iter()
+        .any(|catalog| catalog.source_url.as_deref() == Some(url)))
+}
+
+/// Carga catálogo de fuentes persistido (siempre desde la ruta canónica en `cache/`).
+pub fn load_sources() -> Result<Vec<SourceCatalog>, String> {
+    let primary = sources_path()?;
+    if primary.exists() {
+        return read_sources_file(&primary);
+    }
+
+    if let Some(legacy) = paths::legacy_sources_path() {
+        if legacy.exists() {
+            let sources = read_sources_file(&legacy)?;
+            save_sources(&sources)?;
+            return Ok(sources);
+        }
+    }
+
+    Ok(Vec::new())
+}
+
+/// Guarda catálogo de fuentes en la ruta canónica (`cache/sources.json`).
+pub fn save_sources(sources: &[SourceCatalog]) -> Result<(), String> {
+    let path = sources_path()?;
+    let payload = serde_json::to_vec_pretty(sources).map_err(|e| e.to_string())?;
+    write_bytes_atomic(&path, &payload)
+}
+
+fn read_sources_file(path: &std::path::Path) -> Result<Vec<SourceCatalog>, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     serde_json::from_slice(&bytes).map_err(|e| format!("No se pudo parsear sources.json: {e}"))
 }
 
-/// Guarda catálogo de fuentes.
-pub fn save_sources(sources: &[SourceCatalog]) -> Result<(), String> {
-    let path = sources_path()?;
+/// Carga la configuración de fuentes remotas registradas.
+pub fn load_remote_sources() -> Result<Vec<RemoteSourceConfig>, String> {
+    let path = resolve_read_path(
+        paths::remote_sources_path(),
+        paths::legacy_remote_sources_path(),
+    )?;
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    serde_json::from_slice(&bytes)
+        .map_err(|e| format!("No se pudo parsear remote_sources.json: {e}"))
+}
+
+/// Guarda la configuración de fuentes remotas.
+pub fn save_remote_sources(sources: &[RemoteSourceConfig]) -> Result<(), String> {
+    let path = remote_sources_path()?;
     let payload = serde_json::to_vec_pretty(sources).map_err(|e| e.to_string())?;
     write_bytes_if_changed(&path, &payload)
+}
+
+/// Inserta o actualiza una fuente remota por `id`.
+pub fn upsert_remote_source(config: RemoteSourceConfig) -> Result<RemoteSourceConfig, String> {
+    let mut remote_sources = load_remote_sources()?;
+    if let Some(existing) = remote_sources.iter_mut().find(|s| s.id == config.id) {
+        *existing = config.clone();
+    } else {
+        remote_sources.push(config.clone());
+    }
+    save_remote_sources(&remote_sources)?;
+    Ok(config)
+}
+
+/// Elimina una fuente remota por `id`.
+pub fn remove_remote_source(source_id: &str) -> Result<(), String> {
+    let mut remote_sources = load_remote_sources()?;
+    remote_sources.retain(|s| s.id != source_id);
+    save_remote_sources(&remote_sources)
 }
 
 /// Aplica merge/replace/update sobre fuentes existentes.
@@ -118,8 +188,20 @@ fn write_bytes_if_changed(path: &std::path::Path, payload: &[u8]) -> Result<(), 
             return Ok(());
         }
     }
+    write_bytes_atomic(path, payload)
+}
 
-    let temp = path.with_extension("json.tmp");
+fn write_bytes_atomic(path: &std::path::Path, payload: &[u8]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+
+    let temp = path.with_file_name(format!(
+        "{}.tmp",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("file.json")
+    ));
     std::fs::write(&temp, payload).map_err(|e| e.to_string())?;
     #[cfg(windows)]
     if path.exists() {
