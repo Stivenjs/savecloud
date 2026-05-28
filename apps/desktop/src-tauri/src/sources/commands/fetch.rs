@@ -94,12 +94,81 @@ pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String>
     String::from_utf8(output.stdout).map_err(|e| format!("Scrapling devolvió texto no UTF-8: {e}"))
 }
 
-fn should_attempt_scrapling(status: StatusCode) -> bool {
+pub(crate) fn should_attempt_scrapling(status: StatusCode) -> bool {
     !status.is_success()
         && matches!(
             status,
             StatusCode::FORBIDDEN | StatusCode::TOO_MANY_REQUESTS | StatusCode::SERVICE_UNAVAILABLE
         )
+}
+
+pub(crate) fn needs_scrapling(status: StatusCode, content_type: &str, raw: &str) -> bool {
+    should_attempt_scrapling(status) || looks_like_cloudflare_block(content_type, raw)
+}
+
+/// Resultado de una descarga HTTP sin ejecutar Scrapling (para paralelizar la sync).
+pub(crate) enum HttpFetchOutcome {
+    NotModified,
+    Body(FetchedCatalogBody),
+    NeedsScrapling { headers: HeaderMap },
+    Failed(String),
+}
+
+/// Descarga por HTTP; si hace falta Scrapling, devuelve `NeedsScrapling` sin bloquear.
+pub(crate) async fn fetch_catalog_via_http(
+    url: &str,
+    sync: &SourceSyncMetadata,
+    repair_missing_catalog: bool,
+) -> HttpFetchOutcome {
+    let response = match fetch_with_validators(url, sync).await {
+        Ok(response) => response,
+        Err(message) => return HttpFetchOutcome::Failed(message),
+    };
+
+    if response.status() == StatusCode::NOT_MODIFIED {
+        if !repair_missing_catalog {
+            return HttpFetchOutcome::NotModified;
+        }
+
+        let response = match fetch_fresh(url).await {
+            Ok(response) => response,
+            Err(message) => return HttpFetchOutcome::Failed(message),
+        };
+
+        if response.status() == StatusCode::NOT_MODIFIED {
+            return HttpFetchOutcome::Failed(format!(
+                "El servidor devolvió 304 para {url} pero el catálogo local no existe"
+            ));
+        }
+
+        return read_http_response(url, response).await;
+    }
+
+    read_http_response(url, response).await
+}
+
+async fn read_http_response(_url: &str, response: reqwest::Response) -> HttpFetchOutcome {
+    let status = response.status();
+    let headers = response.headers().clone();
+    let content_type = extract_header_value(&headers, CONTENT_TYPE)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let raw = match response.text().await {
+        Ok(raw) => raw,
+        Err(error) => {
+            return HttpFetchOutcome::Failed(format!("No se pudo leer la respuesta: {error}"))
+        }
+    };
+
+    if needs_scrapling(status, &content_type, &raw) {
+        return HttpFetchOutcome::NeedsScrapling { headers };
+    }
+
+    if !status.is_success() {
+        return HttpFetchOutcome::Failed(format!("La URL devolvió estado HTTP {status}"));
+    }
+
+    HttpFetchOutcome::Body(FetchedCatalogBody { raw, headers })
 }
 
 /// Aplica Scrapling cuando la respuesta HTTP indica bloqueo o error recuperable.

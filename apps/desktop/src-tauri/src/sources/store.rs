@@ -37,6 +37,7 @@ fn remote_sources_path() -> Result<PathBuf, String> {
 }
 
 /// Indica si ya existe un catálogo persistido para la URL remota indicada.
+#[allow(dead_code)]
 pub fn catalog_exists_for_url(url: &str) -> Result<bool, String> {
     Ok(load_sources()?
         .iter()
