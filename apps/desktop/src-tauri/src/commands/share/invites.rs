@@ -80,6 +80,36 @@ pub struct CloudPresenceResponseDto {
     pub items: Vec<CloudPresenceDto>,
 }
 
+fn persist_cloud_invite_provision(
+    base_url: &str,
+    parsed: AcceptInviteProvisionResponseDto,
+) -> Result<(), String> {
+    let mut next = config::load_settings();
+
+    let resolved_host_api_url = base_url.trim_end_matches('/').to_string();
+    next.cloud_host_api_base_urls
+        .insert(parsed.host_user_id.clone(), resolved_host_api_url);
+
+    if let Some(ws_url) = parsed.ws_url {
+        let ws = ws_url.trim();
+        if !ws.is_empty() {
+            next.cloud_host_ws_base_urls
+                .insert(parsed.host_user_id.clone(), ws.to_string());
+        }
+    }
+
+    next.active_cloud_host_user_id = Some(parsed.host_user_id);
+
+    config::set_secure_api_key_for_cloud_host(
+        next.active_cloud_host_user_id
+            .as_deref()
+            .unwrap_or_default(),
+        parsed.access_token.as_str(),
+    )?;
+
+    config::save_settings(&next)
+}
+
 fn load_host_api_auth() -> Result<(String, String, String), String> {
     let settings = config::load_settings();
     let base_url_raw = settings
@@ -264,6 +294,13 @@ pub async fn accept_cloud_invite_by_token(token: String) -> Result<(), String> {
         .await
         .map_err(|e| format!("Fallo de red: {}", e))?;
     if response.status().is_success() || response.status().as_u16() == 204 {
+        let parsed = response
+            .json::<AcceptInviteProvisionResponseDto>()
+            .await
+            .map_err(|e| format!("Error de deserialización: {}", e))?;
+
+        persist_cloud_invite_provision(&base_url, parsed)?;
+
         return Ok(());
     }
     Err(format!(
@@ -324,34 +361,7 @@ pub async fn accept_cloud_invite_by_url(invite_url: String) -> Result<(), String
         .await
         .map_err(|e| format!("Error de deserialización: {}", e))?;
 
-    // Guardar provisionado por host:
-    // - apiBaseUrl del host invitador
-    // - accessToken en Keyring para ese host
-    // - activar ese host para que Sync apunte a la conexión correcta
-    let mut next = config::load_settings();
-    // Usar la base de la URL de invitación como fuente de verdad:
-    // evita problemas de protocolo/host cuando hay proxies o stage paths.
-    let resolved_host_api_url = base_url.clone();
-    next.cloud_host_api_base_urls.insert(
-        parsed.host_user_id.clone(),
-        resolved_host_api_url.trim_end_matches('/').to_string(),
-    );
-    if let Some(ws_url) = parsed.ws_url {
-        let ws = ws_url.trim();
-        if !ws.is_empty() {
-            next.cloud_host_ws_base_urls
-                .insert(parsed.host_user_id.clone(), ws.to_string());
-        }
-    }
-    next.active_cloud_host_user_id = Some(parsed.host_user_id);
-    config::set_secure_api_key_for_cloud_host(
-        next.active_cloud_host_user_id
-            .as_deref()
-            .unwrap_or_default(),
-        // access_token
-        parsed.access_token.as_str(),
-    )?;
-    config::save_settings(&next)?;
+    persist_cloud_invite_provision(&base_url, parsed)?;
 
     Ok(())
 }
