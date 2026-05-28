@@ -1,7 +1,19 @@
 import { useState } from "react";
 import { Button, Card, CardBody, Input, Tooltip, Chip } from "@heroui/react";
-import { Link, FileJson, FolderOpen, Trash2, Download, Globe, Files, FolderInput, Save } from "lucide-react";
-import type { SourceCatalogSummary } from "@services/tauri/sources.service";
+import {
+  FileJson,
+  FolderOpen,
+  Trash2,
+  Download,
+  Globe,
+  Files,
+  FolderInput,
+  Save,
+  RefreshCw,
+  Plus,
+  Power,
+} from "lucide-react";
+import type { RemoteSourceConfig, SourceCatalogSummary } from "@services/tauri/sources.service";
 import { getSourceDisplayName } from "@utils/format";
 
 type Props = {
@@ -9,12 +21,20 @@ type Props = {
   defaultDownloadDir: string;
   sourcesBusy: boolean;
   sources: SourceCatalogSummary[];
+  remoteSourceUrl: string;
+  remoteSources: RemoteSourceConfig[];
   deletingSourceIds: Set<string>;
+  deletingRemoteSourceIds: Set<string>;
   onSourceUrlChange: (value: string) => void;
+  onRemoteSourceUrlChange: (value: string) => void;
   onDefaultDownloadDirChange: (value: string) => void;
   onImportUrl: () => void;
   onImportFile: () => void;
   onImportBatch: () => void;
+  onRegisterRemoteSource: () => void;
+  onToggleRemoteSourceEnabled: (sourceId: string, enabled: boolean) => void;
+  onDeleteRemoteSource: (sourceId: string) => void;
+  onSyncRemoteSources: () => void;
   onPickFolder: () => void;
   onSaveDefaultDir: () => void;
   onDeleteSource: (sourceId: string) => void;
@@ -52,37 +72,6 @@ export function SourceInstallSettingsCard(props: Props) {
         {/* Divider */}
         <div className="h-px bg-default-100" />
 
-        {/* Import by URL Section */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-1.5">
-            <Globe size={13} className="text-default-500" />
-            <span className="text-xs font-medium text-default-600">Importar desde URL</span>
-          </div>
-          <div className="flex gap-2">
-            <Input
-              size="sm"
-              placeholder="https://hydralinks.cloud/sources/fitgirl.json"
-              value={props.sourceUrl}
-              onValueChange={props.onSourceUrlChange}
-              isDisabled={props.sourcesBusy}
-              startContent={<Link size={13} className="shrink-0 text-default-400" />}
-              classNames={{
-                input: "text-xs",
-                inputWrapper: "h-9",
-              }}
-            />
-            <Button
-              size="sm"
-              color="primary"
-              isLoading={props.sourcesBusy}
-              isDisabled={!props.sourceUrl.trim()}
-              onPress={props.onImportUrl}
-              className="h-9 shrink-0 px-4 text-xs font-medium">
-              Importar
-            </Button>
-          </div>
-        </div>
-
         {/* Import from file buttons */}
         <div className="space-y-3">
           <div className="flex items-center gap-1.5">
@@ -110,6 +99,114 @@ export function SourceInstallSettingsCard(props: Props) {
               Múltiples JSONs
             </Button>
           </div>
+        </div>
+
+        {/* Remote sources */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-1.5">
+            <RefreshCw size={13} className="text-default-500" />
+            <span className="text-xs font-medium text-default-600">Fuentes remotas registradas</span>
+            {props.remoteSources.length > 0 && (
+              <Chip size="sm" variant="flat" color="secondary" className="h-5 text-[10px]">
+                {props.remoteSources.length}
+              </Chip>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              size="sm"
+              placeholder="https://example.com/catalog.json"
+              value={props.remoteSourceUrl}
+              onValueChange={props.onRemoteSourceUrlChange}
+              isDisabled={props.sourcesBusy}
+              startContent={<Plus size={13} className="shrink-0 text-default-400" />}
+              classNames={{
+                input: "text-xs",
+                inputWrapper: "h-9",
+              }}
+            />
+            <Button
+              size="sm"
+              variant="flat"
+              color="secondary"
+              isLoading={props.sourcesBusy}
+              isDisabled={!props.remoteSourceUrl.trim()}
+              onPress={props.onRegisterRemoteSource}
+              className="h-9 shrink-0 px-4 text-xs font-medium">
+              Agregar
+            </Button>
+            <Button
+              size="sm"
+              color="primary"
+              variant="flat"
+              isLoading={props.sourcesBusy}
+              onPress={props.onSyncRemoteSources}
+              startContent={<RefreshCw size={13} />}
+              className="h-9 shrink-0 px-4 text-xs font-medium">
+              Sincronizar todo
+            </Button>
+          </div>
+
+          {props.remoteSources.length > 0 ? (
+            <div className="overflow-hidden rounded-xl border border-default-200 bg-default-50">
+              <div className="max-h-56 divide-y divide-default-100 overflow-y-auto">
+                {props.remoteSources.map((source) => {
+                  const isDeleting = props.deletingRemoteSourceIds.has(source.id);
+                  const hasError = !!source.sync.syncError;
+
+                  return (
+                    <div key={source.id} className="flex items-center gap-3 px-3 py-2.5">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-default-200 text-default-500">
+                        <Globe size={13} />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-default-800">{source.url}</p>
+                        <p
+                          className={`mt-0.5 truncate text-[10px] ${hasError ? "text-danger-500" : "text-default-400"}`}>
+                          {hasError ? source.sync.syncError : source.enabled ? "Activa" : "Pausada"}
+                        </p>
+                      </div>
+
+                      <Button
+                        isIconOnly
+                        size="sm"
+                        variant="light"
+                        color={source.enabled ? "success" : "default"}
+                        isDisabled={props.sourcesBusy || isDeleting}
+                        onPress={() => props.onToggleRemoteSourceEnabled(source.id, !source.enabled)}
+                        className="h-7 w-7 min-w-0 shrink-0"
+                        aria-label={source.enabled ? "Pausar fuente remota" : "Activar fuente remota"}>
+                        <Power size={13} />
+                      </Button>
+
+                      <Tooltip
+                        content={isDeleting ? "Eliminando..." : "Eliminar fuente remota"}
+                        placement="left"
+                        delay={300}>
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="light"
+                          color="danger"
+                          isLoading={isDeleting}
+                          isDisabled={props.sourcesBusy || isDeleting}
+                          onPress={() => props.onDeleteRemoteSource(source.id)}
+                          className="h-7 w-7 min-w-0 shrink-0"
+                          aria-label="Eliminar fuente remota">
+                          {!isDeleting && <Trash2 size={13} />}
+                        </Button>
+                      </Tooltip>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-default-200 px-3 py-4 text-center text-[11px] text-default-400">
+              No hay URLs remotas registradas todavía.
+            </div>
+          )}
         </div>
 
         {/* Sources List */}

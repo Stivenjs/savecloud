@@ -5,6 +5,18 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// Metadatos de sincronización remota de una fuente.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceSyncMetadata {
+    pub etag: Option<String>,
+    pub last_modified: Option<String>,
+    pub content_hash: Option<String>,
+    pub last_checked_at: Option<String>,
+    pub last_synced_at: Option<String>,
+    pub sync_error: Option<String>,
+}
+
 /// Catálogo importado desde JSON o URL remota.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +31,33 @@ pub struct SourceCatalog {
     pub imported_at: String,
     /// Entradas de descarga normalizadas.
     pub downloads: Vec<SourceItem>,
+    /// Información de sincronización remota, si aplica.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sync: Option<SourceSyncMetadata>,
+}
+
+/// Configuración de una fuente remota registrada para sincronización manual.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteSourceConfig {
+    pub id: String,
+    pub url: String,
+    pub enabled: bool,
+    #[serde(default)]
+    pub sync: SourceSyncMetadata,
+}
+
+impl Default for SourceSyncMetadata {
+    fn default() -> Self {
+        Self {
+            etag: None,
+            last_modified: None,
+            content_hash: None,
+            last_checked_at: None,
+            last_synced_at: None,
+            sync_error: None,
+        }
+    }
 }
 
 /// Entrada individual normalizada de un catálogo.
@@ -160,4 +199,28 @@ pub struct BatchImportResult {
     pub succeeded: usize,
     pub failed: usize,
     pub items: Vec<BatchImportItemResult>,
+}
+
+/// Resultado por fuente al sincronizar URLs remotas.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteSyncItemResult {
+    pub source_id: String,
+    pub url: String,
+    pub success: bool,
+    pub updated: bool,
+    pub catalog_id: Option<String>,
+    pub catalog_name: Option<String>,
+    pub error: Option<String>,
+}
+
+/// Resultado agregado de sincronización manual de fuentes remotas.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteSyncResult {
+    pub total: usize,
+    pub updated: usize,
+    pub unchanged: usize,
+    pub failed: usize,
+    pub items: Vec<RemoteSyncItemResult>,
 }

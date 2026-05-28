@@ -409,6 +409,8 @@ export function useFriendsPage() {
       dispatch({ type: "SET_INVITE_TOKEN_INPUT", payload: "" });
       toastInfo("Invitación aceptada", "Ahora puedes usar la nube del anfitrión.");
       await queryClient.invalidateQueries({ queryKey: ["config"] });
+      await queryClient.invalidateQueries({ queryKey: ["cloud-presence"] });
+      await queryClient.invalidateQueries({ queryKey: ["cloud-memberships"] });
       await refreshInvitesState();
     } catch (e) {
       toastError("No se pudo aceptar", getUnknownErrorMessage(e));
@@ -421,6 +423,11 @@ export function useFriendsPage() {
     dispatch({ type: "SET_INVITE_BUSY", payload: true });
     try {
       await respondCloudInvite(inviteId, action);
+      if (action === "accept") {
+        await queryClient.invalidateQueries({ queryKey: ["config"] });
+        await queryClient.invalidateQueries({ queryKey: ["cloud-presence"] });
+        await queryClient.invalidateQueries({ queryKey: ["cloud-memberships"] });
+      }
       await refreshInvitesState();
       toastInfo("Invitación actualizada", action === "accept" ? "Invitación aceptada." : "Invitación rechazada.");
     } catch (e) {

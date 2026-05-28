@@ -134,16 +134,24 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
     setPullFriendUserId,
     sourcesBusy,
     sourceUrl,
+    remoteSourceUrl,
     defaultSourceDownloadDir,
     sourcesSummary,
+    remoteSources,
     setSourceUrl,
+    setRemoteSourceUrl,
     setDefaultSourceDownloadDir,
     handleImportSourceByUrl,
     handleImportSourceByFile,
     handleImportSourcesBatch,
+    handleRegisterRemoteSource,
+    handleToggleRemoteSourceEnabled,
+    handleDeleteRemoteSource,
+    handleSyncRemoteSources,
     handleSelectDefaultSourceDownloadDir,
     handleSaveDefaultSourceDownloadDir,
     deletingSourceIds,
+    deletingRemoteSourceIds,
     handleDeleteSource,
   } = useSettingsPage();
 
@@ -251,15 +259,23 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
             <VoiceCommandsCard />
             <SourceInstallSettingsCard
               sourceUrl={sourceUrl}
+              remoteSourceUrl={remoteSourceUrl}
               defaultDownloadDir={defaultSourceDownloadDir}
               sourcesBusy={sourcesBusy}
               sources={sourcesSummary}
+              remoteSources={remoteSources}
               deletingSourceIds={deletingSourceIds}
+              deletingRemoteSourceIds={deletingRemoteSourceIds}
               onSourceUrlChange={setSourceUrl}
+              onRemoteSourceUrlChange={setRemoteSourceUrl}
               onDefaultDownloadDirChange={setDefaultSourceDownloadDir}
               onImportUrl={() => handleImportSourceByUrl("merge")}
               onImportFile={() => handleImportSourceByFile("merge")}
               onImportBatch={() => handleImportSourcesBatch("updateorcreate")}
+              onRegisterRemoteSource={handleRegisterRemoteSource}
+              onToggleRemoteSourceEnabled={handleToggleRemoteSourceEnabled}
+              onDeleteRemoteSource={handleDeleteRemoteSource}
+              onSyncRemoteSources={handleSyncRemoteSources}
               onPickFolder={handleSelectDefaultSourceDownloadDir}
               onSaveDefaultDir={handleSaveDefaultSourceDownloadDir}
               onDeleteSource={handleDeleteSource}
