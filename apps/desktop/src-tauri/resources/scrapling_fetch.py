@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 
+CREATE_NO_WINDOW = 0x08000000 if os.name == 'nt' else 0
 
 def ensure_fetchers_installed():
     try:
@@ -17,7 +18,7 @@ def ensure_fetchers_installed():
             raise
 
     cmd = [sys.executable, "-m", "pip", "install", "--user", "scrapling[fetchers]"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
     if result.returncode != 0:
         raise RuntimeError(
             "No se pudieron instalar los extras de Scrapling (scrapling[fetchers]).\n"
@@ -43,7 +44,7 @@ def ensure_browsers_installed():
 
     last_error = None
     for cmd in install_cmds:
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
         if result.returncode == 0:
             return
         last_error = (
