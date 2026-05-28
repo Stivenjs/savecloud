@@ -64,6 +64,9 @@ fn find_python_executable() -> Result<(String, Vec<String>), String> {
     Err("No se encontró Python en PATH. Instala Python 3.10+ para usar Scrapling.".to_string())
 }
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String> {
     let script_path = resolve_scrapling_script(app)?;
     let (python_bin, prefix_args) = find_python_executable()?;
@@ -71,12 +74,21 @@ pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String>
         .parent()
         .ok_or_else(|| "No se pudo resolver el directorio del script de Scrapling".to_string())?;
 
-    let output = std::process::Command::new(python_bin)
+    let mut command = std::process::Command::new(python_bin);
+    command
         .current_dir(script_dir)
         .args(prefix_args)
         .arg(script_path)
         .arg(url)
-        .env("PYTHONUNBUFFERED", "1")
+        .env("PYTHONUNBUFFERED", "1");
+
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = command
         .output()
         .map_err(|e| format!("No se pudo ejecutar Scrapling: {e}"))?;
 
