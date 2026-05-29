@@ -1,4 +1,5 @@
 import { sileo, type SileoOptions } from "sileo";
+import { formatGameDisplayName } from "@/utils/gameImage";
 import type { SyncResult } from "@services/tauri";
 
 export interface ToastOptions {
@@ -71,7 +72,7 @@ export function toastDownloadResult(result: SyncResult, gameName?: string): void
     toastSuccess(
       "Descarga completada",
       gameName
-        ? `${gameName}: ${result.okCount} archivo(s) descargado(s)`
+        ? `${formatGameDisplayName(gameName)}: ${result.okCount} archivo(s) descargado(s)`
         : `${result.okCount} archivo(s) descargado(s)`
     );
   } else if (result.errCount === 0 && result.okCount === 0) {
@@ -90,7 +91,9 @@ export function toastSyncResult(result: SyncResult, gameName?: string): void {
   if (result.errCount === 0 && result.okCount > 0) {
     toastSuccess(
       "Sincronización completada",
-      gameName ? `${gameName}: ${result.okCount} archivo(s) subido(s)` : `${result.okCount} archivo(s) subido(s)`
+      gameName
+        ? `${formatGameDisplayName(gameName)}: ${result.okCount} archivo(s) subido(s)`
+        : `${result.okCount} archivo(s) subido(s)`
     );
   } else if (result.errCount === 0 && result.okCount === 0) {
     toastInfo("Sin cambios en la sincronización", result.errors[0] ?? "No se encontraron archivos para sincronizar");
