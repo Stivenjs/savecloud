@@ -74,17 +74,13 @@ class AppVisibilityManager {
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    // El singleton vive toda la vida de la app → no es necesario guardar el unlisten.
     void getCurrentWebviewWindow()
       .onFocusChanged(({ payload: focused }) => {
         const prev = this.isVisible;
         this._isWindowFocused = focused;
         this._notify(prev);
       })
-      .catch(() => {
-        // Si falla (entorno no-Tauri o permiso ausente), continuamos solo
-        // con document.visibilityState, que cubre el 95% de los casos.
-      });
+      .catch(() => {});
   }
 }
 
@@ -111,7 +107,6 @@ export function useAppVisibility() {
   const [isVisible, setIsVisible] = useState(() => visibilityManager.isVisible);
 
   useEffect(() => {
-    // Sincronizar en caso de que el estado haya cambiado entre renders
     setIsVisible(visibilityManager.isVisible);
 
     const unsub = visibilityManager.subscribe(

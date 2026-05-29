@@ -21,9 +21,7 @@ export function useCloudPresenceRealtimeInvalidation(enabled = true) {
             queryClient.invalidateQueries({ queryKey: ["cloud-presence"] });
           }
         });
-      } catch {
-        // Fallback: polling de query.
-      }
+      } catch {}
     };
 
     void setupListener();

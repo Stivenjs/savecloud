@@ -86,14 +86,12 @@ export function useAppInitialization() {
 
     const unsubVisibility = visibilityManager.subscribe(
       () => {
-        // App en background → detener el timer por completo
         if (intervalId !== null) {
           clearInterval(intervalId);
           intervalId = null;
         }
       },
       () => {
-        // App vuelve a primer plano → sincronizar inmediatamente y reanudar timer
         void refresh();
         intervalId = setInterval(() => void refresh(), 120_000);
       }
@@ -143,12 +141,8 @@ export function useAppInitialization() {
    * Frecuencia: cada 5 minutos.
    */
   useEffect(() => {
-    // Eliminar el timer completamente en background y recrearlo al volver.
     const BACKUP_INTERVAL_MS = 5 * 60 * 1000;
-    const doBackup = () =>
-      backupConfigToCloud().catch(() => {
-        // Ignorar errores silenciosamente
-      });
+    const doBackup = () => backupConfigToCloud().catch(() => {});
 
     let intervalId: ReturnType<typeof setInterval> | null = setInterval(doBackup, BACKUP_INTERVAL_MS);
 
@@ -179,9 +173,7 @@ export function useAppInitialization() {
   useEffect(() => {
     if (!import.meta.env.DEV) {
       const timer = setTimeout(() => {
-        checkForUpdatesWithPrompt(true).catch(() => {
-          // Ignorar errores
-        });
+        checkForUpdatesWithPrompt(true).catch(() => {});
       }, 2000);
 
       return () => clearTimeout(timer);
