@@ -45,7 +45,10 @@ function sortByReleaseDateDescending(left: GitHubReleaseApiItem, right: GitHubRe
   return rightTimestamp - leftTimestamp;
 }
 
-export async function fetchGitHubReleaseNotes(limit = DEFAULT_RELEASE_LIMIT): Promise<GitHubReleaseNote[]> {
+export async function fetchGitHubReleaseNotes(
+  limit = DEFAULT_RELEASE_LIMIT,
+  signal?: AbortSignal
+): Promise<GitHubReleaseNote[]> {
   const normalizedLimit = Math.max(1, Math.min(limit, DEFAULT_RELEASE_LIMIT));
   const response = await fetch(
     `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases?per_page=${normalizedLimit}`,
@@ -53,6 +56,7 @@ export async function fetchGitHubReleaseNotes(limit = DEFAULT_RELEASE_LIMIT): Pr
       headers: {
         Accept: "application/vnd.github+json",
       },
+      signal,
     }
   );
 

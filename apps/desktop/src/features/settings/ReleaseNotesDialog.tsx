@@ -1,11 +1,11 @@
 import { Modal, ModalBody, ModalContent, ModalHeader, Spinner } from "@heroui/react";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import {
   fetchGitHubReleaseNotes,
   linkifyReleaseMarkdown,
   getReleaseNotesFallbackMarkdown,
-  type GitHubReleaseNote,
 } from "@services/github/release-notes.service";
 
 interface ReleaseNotesDialogProps {
@@ -14,43 +14,20 @@ interface ReleaseNotesDialogProps {
 }
 
 export function ReleaseNotesDialog({ isOpen, onClose }: ReleaseNotesDialogProps) {
-  const [releases, setReleases] = useState<GitHubReleaseNote[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const releaseNotesQuery = useQuery({
+    queryKey: ["github-release-notes"],
+    queryFn: ({ signal }) => fetchGitHubReleaseNotes(10, signal),
+    enabled: isOpen,
+    staleTime: 24 * 60 * 60 * 1000,
+    gcTime: 7 * 24 * 60 * 60 * 1000,
+    retry: 1,
+  });
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
+  const releases = releaseNotesQuery.data ?? [];
+  const loading = releaseNotesQuery.isLoading;
+  const error = releaseNotesQuery.error instanceof Error ? releaseNotesQuery.error.message : null;
 
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-
-    void fetchGitHubReleaseNotes()
-      .then((nextReleases) => {
-        if (!controller.signal.aborted) {
-          setReleases(nextReleases);
-        }
-      })
-      .catch((fetchError) => {
-        if (!controller.signal.aborted) {
-          setReleases([]);
-          setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [isOpen]);
-
-  const fallbackMarkdown = getReleaseNotesFallbackMarkdown();
+  const fallbackMarkdown = useMemo(() => getReleaseNotesFallbackMarkdown(), []);
 
   return (
     <Modal
@@ -64,7 +41,7 @@ export function ReleaseNotesDialog({ isOpen, onClose }: ReleaseNotesDialogProps)
 
         <ModalBody className="max-h-[70vh] overflow-y-auto pb-6">
           {loading ? (
-            <div className="flex min-h-[18rem] items-center justify-center">
+            <div className="flex min-h-72 items-center justify-center">
               <div className="flex items-center gap-3 text-sm text-default-500">
                 <Spinner size="sm" />
                 <span>Cargando releases de GitHub...</span>
