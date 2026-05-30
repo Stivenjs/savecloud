@@ -1,6 +1,7 @@
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { ask } from "@tauri-apps/plugin-dialog";
+import { fetchGitHubReleaseNotes } from "@services/github/release-notes.service";
 import { toastError, toastInfo, toastSuccess } from "@utils/toast";
 
 export type UpdateCheckResult =
@@ -65,8 +66,19 @@ export async function checkForUpdatesWithPrompt(silentWhenUpToDate = false): Pro
       return;
     }
 
-    const notes = update.body?.trim() || "Mejoras y correcciones.";
-    const message = `Nueva versión ${update.version} disponible.\n\n${notes}\n\n¿Descargar e instalar ahora?`;
+    let notes = update.body?.trim();
+
+    if (!notes) {
+      try {
+        const [latestRelease] = await fetchGitHubReleaseNotes(1);
+        notes = latestRelease?.body.trim();
+      } catch {
+        notes = undefined;
+      }
+    }
+
+    const releaseNotes = notes || "Mejoras y correcciones.";
+    const message = `Nueva versión ${update.version} disponible.\n\n${releaseNotes}\n\n¿Descargar e instalar ahora?`;
 
     const shouldUpdate = await ask(message, {
       title: "Actualización disponible",
