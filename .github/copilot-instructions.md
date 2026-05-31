@@ -79,7 +79,7 @@ Mirrors backend architecture with CLI-specific concerns (config I/O, path scanni
 | Area               | Convention                                 | Example                                                  |
 | ------------------ | ------------------------------------------ | -------------------------------------------------------- |
 | **Backend**        | Use case with `execute()` method           | `class GetUploadUrlUseCase { async execute(gameId) {} }` |
-| **Imports**        | Path aliases only (no relative imports)    | `import { User } from "@domain/entities"`                |
+| **Imports**        | Prefer path aliases for cross-module imports; allow relative imports for same-directory files | `import { User } from "@domain/entities"`                |
 | **DI**             | Constructor injection of repositories      | `constructor(private saveRepo: SaveRepository)`          |
 | **Validation**     | TypeBox schemas in interfaces layer        | TypeScript strict mode enabled                           |
 | **Tauri Commands** | `#[tauri::command] pub async fn name() {}` | Must register in `ipc/handlers.rs`                       |
@@ -90,9 +90,10 @@ Mirrors backend architecture with CLI-specific concerns (config I/O, path scanni
 
 ### Import Rules
 
-- Use path aliases: `@domain`, `@application`, `@infrastructure`
-- Import from index files: `from "@domain"` or `from "@domain/entities"`
-- Never use relative paths beyond same directory: `import "./foo"` → `import from "foo.ts"`
+- Use path aliases for imports that cross module boundaries: `@domain`, `@application`, `@infrastructure` (preferred for clarity and tooling). Example: `import { User } from "@domain/entities";`
+- Use relative imports only for files that live in the same directory (sibling files). Example: `import { Component } from "./Component";`
+- Import from index files when convenient: `import { Thing } from "@domain";` or `import { Thing } from "./index";`
+- Avoid mixing alias and relative styles inside the same module; choose one convention per directory to keep imports consistent. When in doubt, prefer the alias for cross-module boundaries and the relative form for local (same-directory) references.
 
 ---
 
@@ -132,12 +133,12 @@ Mirrors backend architecture with CLI-specific concerns (config I/O, path scanni
 | Issue                                   | Impact                                   | Prevention                                                                |
 | --------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------- |
 | Unregistered Tauri commands             | Command fails silently                   | Always update `src-tauri/src/ipc/handlers.rs` `generate_handler![]` macro |
-| Missing capabilities.json               | Permission denied silently               | Add capability for any new Tauri feature                                  |
+| Missing capabilities.json               | Permission denied silently               | Add capability for any new Tauri feature. When implementing Rust features that touch the filesystem, network, or OS processes, prompt the user to ensure the required capability is added to `tauri.conf.json` or `capabilities.json` (if you cannot edit it directly). |
 | S3 presigned URL throttling             | 503 SlowDown at 500+ concurrent requests | Use concurrency limits (e.g., `PRESIGN_CONCURRENCY=50`)                   |
 | API Gateway auth cache                  | 401 leaked between requests              | Use Host as identity source, disable TTL cache                            |
 | Non-owned types in async Tauri commands | Won't compile                            | Always use `String`, `Vec<T>`, never `&str` or `&[T]`                     |
 | Token secret mismatch                   | Auth fails across Lambda invocations     | Store in AWS SSM Parameter Store or external vault                        |
-| Relative imports mixing                 | TypeScript confusion                     | Always use path aliases; never mix relative/absolute                      |
+| Relative imports mixing                 | TypeScript confusion                     | Prefer path aliases for inter-module imports; allow relative imports for same-directory files. Avoid mixing styles within the same module to reduce confusion.                      |
 
 ### Concurrency & AWS Limits
 
@@ -150,14 +151,28 @@ Mirrors backend architecture with CLI-specific concerns (config I/O, path scanni
 
 ## Testing
 
-**Important**: No test framework currently configured — Manual testing only.
+**Important**: No test framework is currently configured in this repository — testing is manual by default. If you (or a collaborator) choose to add automated tests later, you must update project configuration, add test scripts, and adjust CI before running them.
 
-When implementing tests:
+Recommended frameworks to use when adding tests (only apply these after configuring the runner):
 
-- Backend: **vitest** + **supertest** (Fastify) for use cases, Lambda handlers
+- Backend: **vitest** + **supertest** (Fastify) for use cases and Lambda handlers
 - Desktop: **vitest** + **React Testing Library** for components
-- Rust: Built-in `#[tokio::test]` with mocking
-- Focus on edge cases: S3 throttling, token expiry, WebSocket lifecycle, file sync race conditions
+- Rust: built-in `#[tokio::test]` with mocking
+
+- Focus on edge cases: S3 presign throttling, token expiry, WebSocket lifecycle, file sync race conditions
+
+If a user or automation requests to run tests but no test framework is configured, politely inform them that no test runner is present and suggest these options:
+
+- Configure a test runner (example commands to install a minimal Vitest setup):
+
+```bash
+# Install vitest and supertest for backend
+bun add -d vitest supertest
+
+# Add a test script to package.json: "test": "vitest"
+```
+
+- Or perform manual validation steps and list what to check (end-to-end flows, critical edge cases) until automated tests are added.
 
 ---
 
