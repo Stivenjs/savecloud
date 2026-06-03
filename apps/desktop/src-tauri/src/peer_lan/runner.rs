@@ -10,9 +10,9 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use crate::commands::sync::context::resolve_api_context;
 use crate::network::stream_download::{stream_url_to_file, GlobalDownloadProgress};
 use crate::network::{API_CLIENT, PEER_LAN_CLIENT};
-use crate::utils::transfer_metrics::TransferSpeedTracker;
 use crate::peer_inventory::{list_providers_from_api, InventoryFileDto};
 use crate::peer_lan::discovery::{probe_lan_devices, LanDeviceProbe};
+use crate::utils::transfer_metrics::TransferSpeedTracker;
 
 pub struct PeerDownloadParams {
     pub game_key: String,
@@ -121,7 +121,12 @@ pub async fn run_peer_download(
                         log::warn!(
                             "Reintento peer LAN {attempt}/{FILE_DOWNLOAD_ATTEMPTS} para {rel}: {last_err}"
                         );
-                        tokio::time::sleep(Duration::from_secs(2)).await;
+                        tokio::time::sleep(Duration::from_secs(if last_err.contains("404") {
+                            4
+                        } else {
+                            2
+                        }))
+                        .await;
                         continue;
                     }
                     return Err(format!("Falló {rel}: {last_err}"));
@@ -137,7 +142,6 @@ pub async fn run_peer_download(
     Ok(())
 }
 
-/// Espera a que el emisor levante el servidor de archivos (no solo presencia /health).
 async fn wait_for_transfer_peer(
     target_device_id: &str,
     session_token: &str,
@@ -200,12 +204,17 @@ fn encode_url_path(relative_path: &str) -> String {
 fn is_retryable_transfer_error(message: &str) -> bool {
     let lower = message.to_lowercase();
     lower.contains("error http")
+        || lower.contains("http 404")
+        || lower.contains("archivo no encontrado")
         || lower.contains("error leyendo stream")
         || lower.contains("connection")
         || lower.contains("timed out")
         || lower.contains("timeout")
         || lower.contains("broken pipe")
         || lower.contains("reset")
+        || lower.contains("503")
+        || lower.contains("502")
+        || lower.contains("401")
 }
 
 #[derive(Debug, serde::Deserialize)]

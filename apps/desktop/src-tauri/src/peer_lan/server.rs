@@ -123,22 +123,40 @@ pub async fn start_lan_server_for_session(token: &str, game_key: &str) -> Result
 
     let mut roots = HashMap::new();
     if game.payload_kind == "installedFolder" {
-        let library = crate::config::load_library();
-        for g in &library.games {
-            if crate::peer_inventory::game_key_for_configured_game(g).as_deref() == Some(game_key) {
-                if let Some(root) = resolve_install_root(g, game_key) {
-                    roots.insert(game_key.to_string(), root);
-                    break;
+        if let Some(ref root_str) = game.install_root {
+            let root = PathBuf::from(root_str);
+            if root.is_dir() {
+                roots.insert(game_key.to_string(), root);
+            }
+        }
+        if roots.is_empty() {
+            let library = crate::config::load_library();
+            for g in &library.games {
+                if crate::peer_inventory::game_key_for_configured_game(g).as_deref()
+                    == Some(game_key)
+                {
+                    if let Some(root) = resolve_install_root(g, game_key) {
+                        roots.insert(game_key.to_string(), root);
+                        break;
+                    }
                 }
             }
         }
     } else if game.payload_kind == "sourcesArchive" {
-        if let Some(ref archive) = game.sources_archive {
-            let jobs = crate::sources::store::load_jobs().unwrap_or_default();
-            if let Some(job) = jobs.iter().find(|j| j.job_id == archive.job_id) {
-                let root = PathBuf::from(&job.destination_dir);
-                if root.is_dir() {
-                    roots.insert(game_key.to_string(), root);
+        if let Some(ref root_str) = game.install_root {
+            let root = PathBuf::from(root_str);
+            if root.is_dir() {
+                roots.insert(game_key.to_string(), root);
+            }
+        }
+        if roots.is_empty() {
+            if let Some(ref archive) = game.sources_archive {
+                let jobs = crate::sources::store::load_jobs().unwrap_or_default();
+                if let Some(job) = jobs.iter().find(|j| j.job_id == archive.job_id) {
+                    let root = PathBuf::from(&job.destination_dir);
+                    if root.is_dir() {
+                        roots.insert(game_key.to_string(), root);
+                    }
                 }
             }
         }
@@ -223,7 +241,10 @@ async fn serve_file(
         inner.transfer.clone()
     };
 
-    let transfer = transfer.ok_or(StatusCode::NOT_FOUND)?;
+    let transfer = transfer.ok_or_else(|| {
+        log::warn!("LAN /files solicitado sin transferencia activa");
+        StatusCode::NOT_FOUND
+    })?;
 
     if transfer.cancel.load(Ordering::Relaxed) {
         return Err(StatusCode::SERVICE_UNAVAILABLE);
@@ -244,6 +265,11 @@ async fn serve_file(
 
     let full = root.join(&rel);
     if !full.is_file() {
+        log::warn!(
+            "LAN archivo no encontrado: rel={rel} root={} full={}",
+            root.display(),
+            full.display()
+        );
         return Err(StatusCode::NOT_FOUND);
     }
 

@@ -37,6 +37,9 @@ pub struct GameInventoryEntry {
     pub files: Vec<InventoryFileEntry>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sources_archive: Option<SourcesArchiveEntry>,
+    /// Ruta absoluta usada al escanear (solo manifiesto local, no se publica al cloud).
+    #[serde(default, skip_serializing)]
+    pub install_root: Option<String>,
 }
 
 /// Manifiesto completo del dispositivo (solo entradas `verified` en cloud).

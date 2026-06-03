@@ -58,6 +58,9 @@ pub async fn poll_and_serve_pending_sessions() -> Result<u32, String> {
     let body: PendingSessionsResponse = res.json().await.map_err(|e| e.to_string())?;
 
     if body.items.is_empty() {
+        if crate::peer_lan::session::any_valid_session() {
+            return Ok(0);
+        }
         stop_lan_server().await;
         return Ok(0);
     }
