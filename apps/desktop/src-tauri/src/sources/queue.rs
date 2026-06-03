@@ -184,6 +184,7 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
                     emit_progress(app, &done_job);
                     emit_terminal(app, &done_job);
                     state.remove_job(job_id)?;
+                    spawn_inventory_rescan_after_download();
                 }
                 Err(err) if err == "stopped_by_user" => {
                     let current = find_job(state, job_id)?;
@@ -240,6 +241,73 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
             emit_progress(app, &running);
             spawn_torrent_monitor(app.clone(), job_id.to_string(), start.info_hash);
         }
+        DownloadProtocol::PeerLan => {
+            let cancel_flag = state.create_cancel_flag(job_id);
+            let peer_meta: serde_json::Value =
+                serde_json::from_str(&job.selected_uri).map_err(|e| format!("Meta peer: {e}"))?;
+            let game_key = peer_meta["gameKey"]
+                .as_str()
+                .ok_or_else(|| "gameKey ausente".to_string())?
+                .to_string();
+            let target_user_id = peer_meta["targetUserId"]
+                .as_str()
+                .ok_or_else(|| "targetUserId ausente".to_string())?
+                .to_string();
+            let target_device_id = peer_meta["targetDeviceId"]
+                .as_str()
+                .ok_or_else(|| "targetDeviceId ausente".to_string())?
+                .to_string();
+            let manifest_hash = peer_meta["manifestHash"]
+                .as_str()
+                .ok_or_else(|| "manifestHash ausente".to_string())?
+                .to_string();
+
+            let params = crate::peer_lan::PeerDownloadParams {
+                game_key,
+                destination_dir: job.destination_dir.clone(),
+                target_user_id,
+                target_device_id,
+                manifest_hash,
+            };
+
+            let result = crate::peer_lan::run_peer_download(
+                params,
+                cancel_flag,
+                |loaded, total, download_speed_bytes, eta_seconds| {
+                    let mut current = find_job(state, job_id)?;
+                    current.loaded = loaded;
+                    current.total = total;
+                    current.download_speed_bytes = download_speed_bytes;
+                    current.eta_seconds = eta_seconds;
+                    current.updated_at = now_iso();
+                    state.upsert_job(current.clone())?;
+                    emit_progress(app, &current);
+                    Ok(())
+                },
+            )
+            .await;
+
+            match result {
+                Ok(()) => {
+                    let mut done_job = find_job(state, job_id)?;
+                    done_job.status = SourceJobStatus::Completed;
+                    done_job.updated_at = now_iso();
+                    state.upsert_job(done_job.clone())?;
+                    emit_progress(app, &done_job);
+                    emit_terminal(app, &done_job);
+                    state.remove_job(job_id)?;
+                    spawn_inventory_rescan_after_download();
+                }
+                Err(err) if err == "stopped_by_user" => {
+                    let current = find_job(state, job_id)?;
+                    if current.status == SourceJobStatus::Cancelled {
+                        emit_terminal(app, &current);
+                    }
+                    return Err(err);
+                }
+                Err(err) => return Err(err),
+            }
+        }
         DownloadProtocol::Unknown => return Err("Protocolo no soportado".to_string()),
     }
 
@@ -294,6 +362,12 @@ fn spawn_torrent_monitor(app: AppHandle, job_id: String, info_hash: String) {
 /// Cancela un job existente.
 pub fn cancel_job(state: &SourcesState, job_id: &str) {
     state.cancel(job_id);
+}
+
+fn spawn_inventory_rescan_after_download() {
+    tauri::async_runtime::spawn(async {
+        let _ = crate::peer_inventory::publish_local_inventory(true).await;
+    });
 }
 
 fn find_job(state: &SourcesState, job_id: &str) -> Result<SourceDownloadJob, String> {

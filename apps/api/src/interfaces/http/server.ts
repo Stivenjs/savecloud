@@ -3,6 +3,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { buildApp } from "@interfaces/http/app";
 import { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
 import { S3CloudInviteRepository } from "@infrastructure/persistence/S3CloudInviteRepository";
+import { S3GameInventoryRepository } from "@infrastructure/persistence/S3GameInventoryRepository";
 import { S3SaveRepository } from "@infrastructure/persistence/S3SaveRepository";
 import { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
 import { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
@@ -36,6 +37,7 @@ const steamSeedRepository = new S3SteamSeedRepository(s3, bucketName);
 const shareTokenStore = new ShareTokenS3(s3, bucketName);
 const notificationStore = new S3NotificationStore(s3, bucketName);
 const cloudInviteRepository = new S3CloudInviteRepository(s3, bucketName);
+const gameInventoryRepository = new S3GameInventoryRepository(s3, bucketName, cloudInviteRepository);
 const gameStatRepository = gameStatsTable ? new DynamoDbGameStatRepository(dynamoClient, gameStatsTable) : undefined;
 const saveFileIndexRepository = saveFilesIndexTable
   ? new DynamoDbSaveFileIndexRepository(dynamoClient, saveFilesIndexTable)
@@ -52,6 +54,7 @@ async function main() {
     shareTokenStore,
     notificationStore,
     cloudInviteRepository,
+    gameInventoryRepository,
     gameStatRepository,
     connectionRepository,
   });

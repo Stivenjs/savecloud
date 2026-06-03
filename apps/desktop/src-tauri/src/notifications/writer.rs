@@ -70,6 +70,7 @@ fn protocol_label(p: &DownloadProtocol) -> &'static str {
         DownloadProtocol::Http => "HTTP",
         DownloadProtocol::TorrentMagnet => "Magnet",
         DownloadProtocol::TorrentFile => "Torrent",
+        DownloadProtocol::PeerLan => "Transferencia LAN",
         DownloadProtocol::Unknown => "Desconocido",
     }
 }
@@ -114,9 +115,10 @@ pub fn try_record_source_download_terminal(app: &AppHandle, job: &SourceDownload
             "error",
             format!("Error al descargar: {}", job.title),
             job.error
-                    .as_deref()
-                    .filter(|s| !s.trim().is_empty())
-                    .unwrap_or("La descarga falló.").to_string(),
+                .as_deref()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or("La descarga falló.")
+                .to_string(),
         ),
         SourceJobStatus::Cancelled => (
             "warning",

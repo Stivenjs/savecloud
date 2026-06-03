@@ -252,6 +252,19 @@ pub fn resolve_steam_app_id_from_map(
     }
 }
 
+/// Busca la carpeta de instalación en `steamapps/common` para un App ID.
+pub fn resolve_steam_install_dir(app_id: &str) -> Option<PathBuf> {
+    let app_id = app_id.trim();
+    if app_id.is_empty() {
+        return None;
+    }
+
+    get_steam_path_to_appid_map()
+        .into_iter()
+        .find(|(_, id)| id == app_id)
+        .map(|(path, _)| path)
+}
+
 /// Resuelve el Steam AppID para un juego.
 pub fn resolve_app_id_for_game(
     game_paths: &[String],

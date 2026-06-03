@@ -102,6 +102,8 @@ pub enum DownloadProtocol {
     TorrentFile,
     /// Protocolo no identificado.
     Unknown,
+    /// Transferencia desde peer en LAN.
+    PeerLan,
 }
 
 /// Estado de ejecución de un job de descarga.

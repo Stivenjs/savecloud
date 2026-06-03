@@ -98,6 +98,7 @@ pub fn get_config() -> ConfigDto {
             .map(|_| config::MASKED_STEAM_WEB_API_KEY.to_string()),
         share_visual_profile_with_hosts: settings.share_visual_profile_with_hosts,
         share_visual_profile_with_members: settings.share_visual_profile_with_members,
+        share_game_inventory_with_cloud: settings.share_game_inventory_with_cloud,
         game_mode_enabled: settings.game_mode_enabled,
         game_mode_apply_power_profile: settings.game_mode_apply_power_profile,
         game_mode_reduce_capture_overhead: settings.game_mode_reduce_capture_overhead,

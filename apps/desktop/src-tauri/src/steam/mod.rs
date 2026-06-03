@@ -8,7 +8,9 @@ pub mod appdetails;
 mod path_resolver;
 pub mod steam_search;
 
-pub use path_resolver::{get_steam_path_to_appid_map, resolve_app_id_for_game};
+pub use path_resolver::{
+    get_steam_path_to_appid_map, resolve_app_id_for_game, resolve_steam_install_dir,
+};
 
 #[cfg(target_os = "windows")]
 pub use path_resolver::resolve_steam_app_id_from_map;

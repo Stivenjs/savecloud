@@ -6,7 +6,9 @@ import { GameCard } from "@features/games/GameCard";
 import { GamesListMotionContainer, GamesListMotionItem } from "@features/games/GamesListMotion";
 import { catalogListItemToConfiguredGame } from "@features/steam-catalog/model/catalogConfiguredGame";
 import { Button, Select, SelectItem } from "@heroui/react";
-import { startSourceDownload } from "@services/tauri";
+import { startPeerGameDownload, startSourceDownload } from "@services/tauri";
+import type { PeerInstallOffer } from "@services/tauri/inventory.service";
+import { usePeerInstallOffers } from "@hooks/usePeerInstallOffers";
 import { pickCandidate, sourceCandidateKey } from "@utils/sourceMatch";
 import { toastError, toastSuccess } from "@utils/toast";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -177,6 +179,8 @@ export function SteamCatalogGrid({
     chosen: SourceBestMatch;
   } | null>(null);
 
+  const peerOffersHook = usePeerInstallOffers(installingGame?.game.steamAppId, isOpen && !!installingGame);
+
   const matchByGameNameRef = useRef(matchByGameName);
   const pickByGameRef = useRef(pickByGame);
   useEffect(() => {
@@ -259,6 +263,29 @@ export function SteamCatalogGrid({
     [installingGame]
   );
 
+  const handleConfirmPeerInstall = useCallback(
+    async (selectedPath: string, offer: PeerInstallOffer) => {
+      if (!installingGame || !peerOffersHook.gameKey) return;
+      const { name } = installingGame;
+
+      try {
+        await startPeerGameDownload({
+          gameKey: peerOffersHook.gameKey,
+          title: name,
+          destinationDir: selectedPath.trim(),
+          targetUserId: offer.userId,
+          targetDeviceId: offer.deviceId,
+          manifestHash: offer.manifestHash,
+        });
+
+        toastSuccess("Transferencia iniciada", `Traiendo ${name} desde ${offer.deviceName}.`);
+      } catch (e) {
+        toastError("No se pudo transferir", e instanceof Error ? e.message : String(e));
+      }
+    },
+    [installingGame, peerOffersHook.gameKey]
+  );
+
   return (
     <>
       <GamesListMotionContainer
@@ -294,7 +321,11 @@ export function SteamCatalogGrid({
           protocols={installingGame.chosen.protocols}
           game={installingGame.game}
           mediaBySteamAppId={mediaBySteamAppId}
+          peerOffers={peerOffersHook.offers}
+          selectedPeerDeviceId={peerOffersHook.selectedDeviceId}
+          onSelectPeerDevice={peerOffersHook.setSelectedDeviceId}
           onConfirm={handleConfirmInstall}
+          onConfirmPeer={handleConfirmPeerInstall}
         />
       )}
     </>
