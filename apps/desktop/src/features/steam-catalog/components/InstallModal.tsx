@@ -184,7 +184,7 @@ export function InstallModal({
                   </div>
                 )}
 
-                <ScrollShadow className="max-h-[300px] space-y-2">
+                <ScrollShadow className="max-h-75 space-y-2">
                   {disks.map((disk) => {
                     const isSelected = selectedDisk === disk.mountPoint && !customPath;
                     const lowSpace = disk.availableSpace < gameSizeBytes;
