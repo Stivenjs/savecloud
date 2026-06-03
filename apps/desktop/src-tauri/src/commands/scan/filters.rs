@@ -229,3 +229,33 @@ pub(super) fn collect_files(dir_path: &Path) -> Vec<String> {
     collect_files_recursive(dir_path, 0, &mut names);
     names
 }
+
+/// Rutas absolutas y nombre de carpeta hoja (o padre emu) que indican guardados.
+pub fn path_suggests_save_location(dir_path: &Path) -> bool {
+    if !dir_path.exists() {
+        return true;
+    }
+
+    let lower = dir_path.to_string_lossy().to_lowercase();
+    if lower.contains("saved games")
+        || lower.contains("savegames")
+        || lower.contains("\\saves\\")
+        || lower.ends_with("\\saves")
+        || lower.contains("remote\\win64_save")
+        || lower.contains("remote/win64_save")
+    {
+        return true;
+    }
+
+    let folder_name = dir_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if folder_name_hints_save(folder_name) || folder_name_hints_steam_emu(folder_name) {
+        return true;
+    }
+
+    let parent_name = dir_path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+    folder_name_hints_steam_emu(parent_name)
+}

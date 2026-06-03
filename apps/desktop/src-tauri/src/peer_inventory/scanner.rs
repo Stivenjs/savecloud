@@ -9,9 +9,10 @@ use chrono::Utc;
 use walkdir::WalkDir;
 
 use crate::config::{self, ConfiguredGame};
+use crate::peer_inventory::game_key::game_key_for_configured_game;
 use crate::sources::store as sources_store;
 
-use super::game_key::game_key_for_configured_game;
+use super::install_paths::{job_matches_game_key, resolve_install_root};
 use super::models::{
     DeviceInventoryManifest, GameInventoryEntry, InventoryFileEntry, SourcesArchiveEntry,
 };
@@ -120,7 +121,7 @@ fn entry_content_hash(files: &[InventoryFileEntry]) -> String {
     format!("{HASH_PREFIX}{}", hasher.finalize().to_hex())
 }
 
-fn scan_sources_archives_for_game(game_key: &str) -> Result<Option<SourcesArchiveEntry>, String> {
+fn scan_sources_archives_for_game(game: &ConfiguredGame, game_key: &str) -> Result<Option<SourcesArchiveEntry>, String> {
     let jobs = sources_store::load_jobs().unwrap_or_default();
     let mut best: Option<SourcesArchiveEntry> = None;
 
@@ -128,18 +129,17 @@ fn scan_sources_archives_for_game(game_key: &str) -> Result<Option<SourcesArchiv
         if job.status != crate::sources::domain::SourceJobStatus::Completed {
             continue;
         }
+        if !job_matches_game_key(&job, game, game_key) {
+            continue;
+        }
         let Some(ref output_name) = job.output_file_name else {
             continue;
         };
-        let archive_path = PathBuf::from(&job.destination_dir).join(output_name);
-        if !archive_path.is_file() {
+        if job.protocol != crate::sources::domain::DownloadProtocol::Http {
             continue;
         }
-        let slug = crate::sources::parser::slugify(&job.title);
-        let steam_suffix = game_key.strip_prefix("steam:").unwrap_or("");
-        let matches = game_key == format!("savecloud:{}", slug)
-            || (!steam_suffix.is_empty() && job.title.contains(steam_suffix));
-        if !matches {
+        let archive_path = PathBuf::from(&job.destination_dir).join(output_name);
+        if !archive_path.is_file() {
             continue;
         }
         let size = fs::metadata(&archive_path).map_err(|e| e.to_string())?.len();
@@ -160,11 +160,19 @@ fn scan_sources_archives_for_game(game_key: &str) -> Result<Option<SourcesArchiv
     Ok(best)
 }
 
-fn pick_install_root(game: &ConfiguredGame) -> Option<PathBuf> {
-    game.paths
-        .iter()
-        .map(PathBuf::from)
-        .find(|p| p.is_dir())
+fn upsert_verified_entry(
+    games: &mut Vec<GameInventoryEntry>,
+    seen_keys: &mut std::collections::HashSet<String>,
+    entry: GameInventoryEntry,
+) {
+    if let Some(existing) = games.iter_mut().find(|g| g.game_key == entry.game_key) {
+        if entry.total_bytes > existing.total_bytes {
+            *existing = entry;
+        }
+        return;
+    }
+    seen_keys.insert(entry.game_key.clone());
+    games.push(entry);
 }
 
 /// Escanea biblioteca + jobs de fuentes y persiste manifiesto local verificado.
@@ -180,27 +188,26 @@ pub fn scan_full_inventory(user_id: &str, sharing_enabled: bool) -> Result<Devic
         let Some(game_key) = game_key_for_configured_game(game) else {
             continue;
         };
-        if let Some(root) = pick_install_root(game) {
+        if let Some(root) = resolve_install_root(game, &game_key) {
             if let Some(mut entry) = scan_installed_folder(game, &root)? {
-                if let Some(archive) = scan_sources_archives_for_game(&game_key)? {
+                if let Some(archive) = scan_sources_archives_for_game(game, &game_key)? {
                     entry.sources_archive = Some(archive);
                 }
-                seen_keys.insert(game_key.clone());
-                games.push(entry);
+                upsert_verified_entry(&mut games, &mut seen_keys, entry);
                 continue;
             }
         }
         if seen_keys.contains(&game_key) {
             continue;
         }
-        if let Some(archive) = scan_sources_archives_for_game(&game_key)? {
+        if let Some(archive) = scan_sources_archives_for_game(game, &game_key)? {
             let display_name = game
                 .edition_label
                 .clone()
                 .filter(|s| !s.trim().is_empty())
                 .unwrap_or_else(|| game.id.clone());
             let verified_at = Utc::now().to_rfc3339();
-            games.push(GameInventoryEntry {
+            upsert_verified_entry(&mut games, &mut seen_keys, GameInventoryEntry {
                 game_key: game_key.clone(),
                 display_name,
                 status: "verified".to_string(),
@@ -216,7 +223,6 @@ pub fn scan_full_inventory(user_id: &str, sharing_enabled: bool) -> Result<Devic
                 }],
                 sources_archive: Some(archive),
             });
-            seen_keys.insert(game_key);
         }
     }
 

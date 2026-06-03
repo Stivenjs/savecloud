@@ -13,6 +13,8 @@ mod extensions;
 mod filters;
 mod paths;
 
+pub use filters::path_suggests_save_location;
+
 use crate::config;
 #[cfg(target_os = "windows")]
 use crate::{manifest, steam};

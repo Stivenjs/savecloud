@@ -1,6 +1,6 @@
 //! Servidor HTTP LAN para servir archivos del inventario local.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -16,7 +16,7 @@ use tokio::fs::File;
 use tokio::io::AsyncSeekExt;
 use tokio_util::io::ReaderStream;
 
-use crate::peer_inventory::load_local_manifest;
+use crate::peer_inventory::{load_local_manifest, resolve_install_root};
 use crate::peer_lan::session::peek_valid_session;
 
 const CHUNK_SIZE: usize = 512 * 1024;
@@ -63,32 +63,20 @@ pub async fn start_lan_server_for_session(token: &str, game_key: &str) -> Result
         let library = crate::config::load_library();
         for g in &library.games {
             if crate::peer_inventory::game_key_for_configured_game(g).as_deref() == Some(game_key) {
-                if let Some(path) = g.paths.first() {
-                    let pb = PathBuf::from(path);
-                    if pb.is_dir() {
-                        roots.insert(game_key.to_string(), pb);
-                        break;
-                    }
+                if let Some(root) = resolve_install_root(g, game_key) {
+                    roots.insert(game_key.to_string(), root);
+                    break;
                 }
             }
         }
-    } else if let Some(ref archive) = game.sources_archive {
-        let library = crate::config::load_library();
-        for g in &library.games {
-            if crate::peer_inventory::game_key_for_configured_game(g).as_deref() == Some(game_key) {
-                let jobs = crate::sources::store::load_jobs().unwrap_or_default();
-                if let Some(job) = jobs.iter().find(|j| j.job_id == archive.job_id) {
-                    if let Some(ref name) = job.output_file_name {
-                        let path = PathBuf::from(&job.destination_dir).join(name);
-                        if path.is_file() {
-                            roots.insert(
-                                game_key.to_string(),
-                                path.parent().unwrap_or(Path::new(".")).to_path_buf(),
-                            );
-                        }
-                    }
+    } else if game.payload_kind == "sourcesArchive" {
+        if let Some(ref archive) = game.sources_archive {
+            let jobs = crate::sources::store::load_jobs().unwrap_or_default();
+            if let Some(job) = jobs.iter().find(|j| j.job_id == archive.job_id) {
+                let root = PathBuf::from(&job.destination_dir);
+                if root.is_dir() {
+                    roots.insert(game_key.to_string(), root);
                 }
-                break;
             }
         }
     }
