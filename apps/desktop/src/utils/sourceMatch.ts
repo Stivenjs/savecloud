@@ -4,7 +4,7 @@ import type { DownloadProtocol, SourceBestMatch } from "@services/tauri";
 const SEP = "|||";
 
 /** Método de descarga que usará `start_source_download` sin `preferredProtocol`. */
-export type EffectiveDownloadKind = "http" | "torrent" | "unknown";
+export type EffectiveDownloadKind = "http" | "torrent" | "peerLan" | "unknown";
 
 /** Replica la prioridad de `start_source_download` en Rust: torrent antes que HTTP. */
 export function resolveDefaultDownloadKind(
@@ -24,6 +24,8 @@ export function downloadKindLabel(kind: EffectiveDownloadKind): string {
       return "BitTorrent";
     case "http":
       return "HTTP";
+    case "peerLan":
+      return "Transferencia LAN";
     default:
       return "Desconocido";
   }
@@ -35,6 +37,8 @@ export function downloadKindDescription(kind: EffectiveDownloadKind): string {
       return "Descarga P2P con el motor integrado (magnet o .torrent).";
     case "http":
       return "Descarga directa desde el hoster del enlace.";
+    case "peerLan":
+      return "Copia desde otro miembro del cloud en tu red local.";
     default:
       return "No se pudo determinar el método de descarga.";
   }

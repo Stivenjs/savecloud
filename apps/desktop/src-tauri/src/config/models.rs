@@ -72,6 +72,9 @@ pub struct AppSettings {
     /// Si es true, los miembros activos de la nube de este usuario (anfitrión) pueden ver avatar/fondo/marco al cargar su perfil.
     #[serde(default)]
     pub share_visual_profile_with_members: bool,
+    /// Si es true, publica el inventario verificado de juegos instalados a los miembros del cloud (opt-out).
+    #[serde(default = "default_true")]
+    pub share_game_inventory_with_cloud: bool,
     /// Clave [Steam Web API](https://steamcommunity.com/dev/apikey) para `IStoreService/GetAppList` (catálogo local).
     ///
     /// No se serializa en JSON; se guarda en el almacén seguro del SO (Keyring), igual que `api_key`.
@@ -218,6 +221,8 @@ pub struct Config {
     pub share_visual_profile_with_hosts: bool,
     #[serde(default)]
     pub share_visual_profile_with_members: bool,
+    #[serde(default = "default_true")]
+    pub share_game_inventory_with_cloud: bool,
     pub games: Vec<ConfiguredGame>,
     #[serde(default)]
     pub operation_history: Vec<OperationLogEntry>,
@@ -279,6 +284,8 @@ pub struct ConfigDto {
     pub share_visual_profile_with_hosts: bool,
     #[serde(default)]
     pub share_visual_profile_with_members: bool,
+    #[serde(default = "default_true")]
+    pub share_game_inventory_with_cloud: bool,
     #[serde(default)]
     pub game_mode_enabled: bool,
     #[serde(default = "default_true")]

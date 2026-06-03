@@ -28,6 +28,7 @@ import { formatGameDisplayName } from "@utils/gameImage";
 import { formatLastSync, formatRelativeDate, formatSize } from "@utils/format";
 import type { ConfiguredGame } from "@app-types/config";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
+import { GameInventorySettingsCard } from "@features/settings/GameInventorySettingsCard";
 
 const MAIN_WEBVIEW_LABEL = "main";
 
@@ -145,6 +146,8 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
 
   return (
     <div className="flex min-h-0 flex-col gap-4">
+      <GameInventorySettingsCard />
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-default-500">Resumen de la nube y detalle por juego.</p>
         <Button

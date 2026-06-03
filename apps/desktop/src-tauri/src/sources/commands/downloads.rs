@@ -90,6 +90,53 @@ pub async fn start_source_download(
     Ok(job_id)
 }
 
+/// Encola descarga peer LAN (mismo panel de progreso que fuentes HTTP).
+pub async fn start_peer_game_download_inner(
+    app: AppHandle,
+    game_key: String,
+    title: String,
+    destination_dir: String,
+    target_user_id: String,
+    target_device_id: String,
+    manifest_hash: String,
+) -> Result<String, String> {
+    let state = app.state::<SourcesState>();
+    let job_id = new_job_id();
+    let now = now_iso();
+    let peer_uri = serde_json::json!({
+        "gameKey": game_key,
+        "targetUserId": target_user_id,
+        "targetDeviceId": target_device_id,
+        "manifestHash": manifest_hash,
+    })
+    .to_string();
+
+    let job = SourceDownloadJob {
+        job_id: job_id.clone(),
+        source_id: "peer-lan".to_string(),
+        item_id: game_key.clone(),
+        title,
+        destination_dir,
+        selected_uri: peer_uri,
+        protocol: DownloadProtocol::PeerLan,
+        status: SourceJobStatus::Queued,
+        loaded: 0,
+        total: 0,
+        download_speed_bytes: 0,
+        eta_seconds: None,
+        error: None,
+        external_id: Some(target_device_id),
+        output_file_name: None,
+        created_at: now.clone(),
+        updated_at: now,
+    };
+
+    state.upsert_job(job.clone())?;
+    events::emit_progress(&app, &job);
+    spawn_job(app, job_id.clone());
+    Ok(job_id)
+}
+
 /// Cancela un job de descarga en curso.
 #[tauri::command]
 pub async fn cancel_source_download(

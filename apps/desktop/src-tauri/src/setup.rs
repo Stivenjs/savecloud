@@ -224,5 +224,7 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     // 8. Controlador de gamepads (no necesita guard: es stateless)
     start_gamepad_loop(app.handle().clone());
 
+    crate::peer_lan::spawn_pending_session_poller();
+
     Ok(())
 }

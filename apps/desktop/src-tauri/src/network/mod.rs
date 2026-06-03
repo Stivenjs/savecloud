@@ -38,6 +38,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 pub mod hoster_download;
+pub mod stream_download;
 
 pub use hoster_download::{
     ensure_download_success, ensure_resolve_success, get, get_with_profile, head_no_redirect,

@@ -9,10 +9,8 @@ fn normalize_base_url(input: &str) -> String {
         return s;
     }
     if s.starts_with("http://") {
-        // API Gateway suele requerir HTTPS; upgrade automático para evitar fallos por puerto 80.
         return format!("https://{}", s.trim_start_matches("http://"));
     }
-    // Si el usuario pegó solo el host (sin esquema), asumimos HTTPS.
     format!("https://{}", s)
 }
 

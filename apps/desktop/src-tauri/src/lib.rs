@@ -9,6 +9,8 @@ mod ipc;
 #[cfg(target_os = "windows")]
 mod manifest;
 mod network;
+mod peer_inventory;
+mod peer_lan;
 mod notifications;
 mod observability;
 mod overlay;

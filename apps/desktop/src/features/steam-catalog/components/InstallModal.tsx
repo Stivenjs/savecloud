@@ -13,6 +13,7 @@ import { useDisks } from "@hooks/useDisks";
 import { formatBytes } from "@utils/format";
 import { open } from "@tauri-apps/plugin-dialog";
 import { parseSize } from "@utils/size";
+import type { PeerInstallOffer } from "@services/tauri/inventory.service";
 import { InstallModalGameCover } from "@features/steam-catalog/components/InstallModalGameCover";
 
 export interface InstallModalProps {
@@ -24,7 +25,11 @@ export interface InstallModalProps {
   mediaBySteamAppId?: Record<string, SteamAppdetailsMediaResult> | null;
   /** Protocolos disponibles del ítem; define el método mostrado (torrent vs HTTP). */
   protocols?: readonly string[] | null;
+  peerOffers?: PeerInstallOffer[];
+  selectedPeerDeviceId?: string | null;
+  onSelectPeerDevice?: (deviceId: string) => void;
   onConfirm: (path: string) => void;
+  onConfirmPeer?: (path: string, offer: PeerInstallOffer) => void;
 }
 
 const DEFAULT_DOWNLOAD_SUBFOLDER = "SaveCloudGames";
@@ -37,7 +42,11 @@ export function InstallModal({
   game,
   mediaBySteamAppId,
   protocols,
+  peerOffers = [],
+  selectedPeerDeviceId,
+  onSelectPeerDevice,
   onConfirm,
+  onConfirmPeer,
 }: InstallModalProps) {
   const { disks } = useDisks();
   const [selectedDisk, setSelectedDisk] = useState<string | null>(null);
@@ -99,11 +108,21 @@ export function InstallModal({
     return null;
   }, [customPath, selectedDisk, gameName]);
 
+  const selectedPeer = useMemo(
+    () => peerOffers.find((o) => o.deviceId === selectedPeerDeviceId) ?? peerOffers[0] ?? null,
+    [peerOffers, selectedPeerDeviceId]
+  );
+
+  const peerReachable = selectedPeer?.reachableOnLan === true;
+
   const handleInstall = () => {
-    if (effectivePath) {
+    if (!effectivePath) return;
+    if (peerReachable && selectedPeer && onConfirmPeer) {
+      onConfirmPeer(effectivePath, selectedPeer);
+    } else {
       onConfirm(effectivePath);
-      onOpenChange(false);
     }
+    onOpenChange(false);
   };
 
   return (
@@ -248,6 +267,32 @@ export function InstallModal({
                     );
                   })}
                 </ScrollShadow>
+
+                {peerOffers.length > 0 && selectedPeer ? (
+                  <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2.5 text-xs text-warning-700 dark:text-warning">
+                    <p className="font-semibold uppercase tracking-wide text-[10px] text-warning">Nota</p>
+                    <p className="mt-1 leading-relaxed">
+                      {peerReachable
+                        ? `Este juego se puede transferir en la red local desde el dispositivo ${selectedPeer.deviceName.toUpperCase()}.`
+                        : `Este juego se puede transferir en la red local (para ahorrar ancho de banda) si enciendes el dispositivo ${selectedPeer.deviceName.toUpperCase()}.`}
+                    </p>
+                    {peerOffers.length > 1 && onSelectPeerDevice ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {peerOffers.map((offer) => (
+                          <Button
+                            key={offer.deviceId}
+                            size="sm"
+                            variant={offer.deviceId === selectedPeer.deviceId ? "solid" : "flat"}
+                            color={offer.deviceId === selectedPeer.deviceId ? "warning" : "default"}
+                            onPress={() => onSelectPeerDevice(offer.deviceId)}>
+                            {offer.deviceName}
+                            {offer.reachableOnLan ? " (LAN)" : ""}
+                          </Button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </ModalBody>
             <ModalFooter>
@@ -257,10 +302,10 @@ export function InstallModal({
 
               <Button
                 color="primary"
-                isDisabled={!effectivePath || !hasEnoughSpace}
+                isDisabled={!effectivePath || !hasEnoughSpace || (peerReachable && !onConfirmPeer)}
                 onPress={handleInstall}
                 className="font-bold px-8 shadow-lg shadow-primary/20">
-                Instalar
+                {peerReachable && selectedPeer ? `Traer desde ${selectedPeer.deviceName}` : "Instalar"}
               </Button>
             </ModalFooter>
           </>

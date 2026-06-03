@@ -63,6 +63,8 @@ export interface Config {
   readonly shareVisualProfileWithHosts?: boolean;
   /** Si es true, los miembros de tu nube pueden ver tu perfil visual al cargar tu usuario. */
   readonly shareVisualProfileWithMembers?: boolean;
+  /** Si es true, compartes qué juegos tienes instalados con miembros del cloud (opt-out). */
+  readonly shareGameInventoryWithCloud?: boolean;
   /** Modo juego activo en SaveCloud (mitigaciones conservadoras). */
   readonly gameModeEnabled?: boolean;
   /** Aplicar perfil de alto rendimiento (Windows powercfg Alto rendimiento, Linux performance, macOS caffeinate cuando hay soporte). */

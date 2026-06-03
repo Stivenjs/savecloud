@@ -25,7 +25,9 @@ import {
   syncCheckDownloadConflicts,
 } from "@services/tauri";
 import type { DownloadConflict } from "@services/tauri";
-import { sourcesFindMatchForGame, startSourceDownload } from "@services/tauri";
+import { sourcesFindMatchForGame, startSourceDownload, startPeerGameDownload } from "@services/tauri";
+import type { PeerInstallOffer } from "@services/tauri/inventory.service";
+import { usePeerInstallOffers } from "@hooks/usePeerInstallOffers";
 import { createShareLink } from "@/services/tauri/share.service";
 import { toastError, toastSuccess } from "@utils/toast";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
@@ -98,6 +100,11 @@ export function GameDetailPage() {
     size?: string | null;
     protocols?: string[];
   } | null>(null);
+
+  const peerOffersHook = usePeerInstallOffers(
+    steamAppId ?? game?.steamAppId,
+    isInstallModalOpen && !!installingFromSource
+  );
 
   useLayoutEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -300,6 +307,27 @@ export function GameDetailPage() {
       }
     },
     [sourceCandidates, selectedSourceKey, displayName]
+  );
+
+  const handleConfirmPeerInstall = useCallback(
+    async (selectedPath: string, offer: PeerInstallOffer) => {
+      if (!peerOffersHook.gameKey) return;
+
+      try {
+        await startPeerGameDownload({
+          gameKey: peerOffersHook.gameKey,
+          title: displayName,
+          destinationDir: selectedPath.trim(),
+          targetUserId: offer.userId,
+          targetDeviceId: offer.deviceId,
+          manifestHash: offer.manifestHash,
+        });
+        toastSuccess("Transferencia iniciada", `Traiendo ${displayName} desde ${offer.deviceName}.`);
+      } catch (e) {
+        toastError("No se pudo transferir", e instanceof Error ? e.message : String(e));
+      }
+    },
+    [peerOffersHook.gameKey, displayName]
   );
 
   if (isLoading) {
@@ -560,7 +588,11 @@ export function GameDetailPage() {
           protocols={installingFromSource.protocols}
           game={game}
           mediaBySteamAppId={installModalMediaBySteamAppId}
+          peerOffers={peerOffersHook.offers}
+          selectedPeerDeviceId={peerOffersHook.selectedDeviceId}
+          onSelectPeerDevice={peerOffersHook.setSelectedDeviceId}
           onConfirm={handleConfirmInstall}
+          onConfirmPeer={handleConfirmPeerInstall}
         />
       ) : null}
     </div>

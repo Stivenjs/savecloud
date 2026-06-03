@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export type DownloadProtocol = "http" | "torrentMagnet" | "torrentFile" | "unknown";
+export type DownloadProtocol = "http" | "torrentMagnet" | "torrentFile" | "peerLan" | "unknown";
 export type SourceJobStatus = "queued" | "running" | "paused" | "cancelled" | "completed" | "failed";
 export type ImportMode = "merge" | "replace" | "updateorcreate";
 

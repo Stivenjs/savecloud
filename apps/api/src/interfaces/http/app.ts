@@ -36,6 +36,13 @@ import { registerSavesRoutes } from "@interfaces/http/routes/saves.routes";
 import { registerShareRoutes } from "@interfaces/http/routes/share.routes";
 import { registerNotificationRoutes } from "@interfaces/http/routes/notifications.routes";
 import { registerInviteRoutes } from "@interfaces/http/routes/invites.routes";
+import { registerInventoryRoutes } from "@interfaces/http/routes/inventory.routes";
+import { PublishDeviceInventoryUseCase } from "@application/use-cases/PublishDeviceInventoryUseCase";
+import { ListGameProvidersUseCase } from "@application/use-cases/ListGameProvidersUseCase";
+import { CreateTransferSessionUseCase } from "@application/use-cases/CreateTransferSessionUseCase";
+import { RecordInventoryHeartbeatUseCase } from "@application/use-cases/RecordInventoryHeartbeatUseCase";
+import { ListPendingTransferSessionsUseCase } from "@application/use-cases/ListPendingTransferSessionsUseCase";
+import type { GameInventoryRepository } from "@domain/ports/GameInventoryRepository";
 import { registerProfileRoutes } from "@interfaces/http/routes/users.routes";
 import { registerObservabilityRoutes } from "@interfaces/http/routes/observability.routes";
 import { verifyUserAccessToken } from "@shared/accessToken";
@@ -48,6 +55,7 @@ export interface AppDependencies {
   gameStatRepository?: GameStatRepository;
   steamSeedRepository?: S3SteamSeedRepository;
   cloudInviteRepository?: CloudInviteRepository;
+  gameInventoryRepository?: GameInventoryRepository;
   shareTokenStore?: ShareTokenS3;
   notificationStore?: S3NotificationStore;
   connectionRepository?: ConnectionRepository;
@@ -145,6 +153,20 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
         deps.cloudInviteRepository,
         savesUseCases.resolveCloudStorageScopeUseCase
       ),
+    });
+  }
+
+  if (deps.gameInventoryRepository && deps.cloudInviteRepository) {
+    await registerInventoryRoutes(app, {
+      publishDeviceInventoryUseCase: new PublishDeviceInventoryUseCase(deps.gameInventoryRepository),
+      listGameProvidersUseCase: new ListGameProvidersUseCase(deps.gameInventoryRepository, deps.cloudInviteRepository),
+      createTransferSessionUseCase: new CreateTransferSessionUseCase(
+        deps.gameInventoryRepository,
+        deps.cloudInviteRepository
+      ),
+      recordInventoryHeartbeatUseCase: new RecordInventoryHeartbeatUseCase(deps.gameInventoryRepository),
+      listPendingTransferSessionsUseCase: new ListPendingTransferSessionsUseCase(deps.gameInventoryRepository),
+      gameInventoryRepository: deps.gameInventoryRepository,
     });
   }
 
