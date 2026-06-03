@@ -154,6 +154,20 @@ pub static DATA_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         .expect("fallo critico al inicializar DATA_CLIENT")
 });
 
+/// Cliente HTTP para transferencias peer LAN (archivos grandes, timeouts largos).
+pub static PEER_LAN_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        .timeout(DATA_REQUEST_TIMEOUT)
+        .connect_timeout(DATA_CONNECT_TIMEOUT)
+        .tcp_keepalive(DATA_TCP_KEEPALIVE)
+        .tcp_nodelay(true)
+        .pool_max_idle_per_host(4)
+        .pool_idle_timeout(Duration::from_secs(60))
+        .build()
+        .expect("fallo critico al inicializar PEER_LAN_CLIENT")
+});
+
 /// Cliente especializado para el scraping de la API pública de Steam.
 ///
 /// Usa un User-Agent de navegador moderno para evitar bloqueos del WAF de Valve.

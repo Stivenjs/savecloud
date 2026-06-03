@@ -28,8 +28,10 @@ pub async fn publish_local_inventory(force_scan: bool) -> Result<DeviceInventory
     if sharing {
         put_cloud_manifest(&manifest).await?;
         let _ = post_cloud_heartbeat(&manifest.device_id).await;
+        crate::peer_lan::ensure_lan_presence().await;
     } else {
         delete_cloud_inventory(&manifest.device_id).await.ok();
+        crate::peer_lan::ensure_lan_presence().await;
     }
 
     Ok(manifest)

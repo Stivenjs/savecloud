@@ -29,19 +29,38 @@ struct LanServerState {
     cancel: Arc<AtomicBool>,
 }
 
-static ACTIVE_SERVER: once_cell::sync::Lazy<std::sync::Mutex<Option<tokio::task::JoinHandle<()>>>> =
+static ACTIVE_SERVER: once_cell::sync::Lazy<std::sync::Mutex<Option<ActiveLanServer>>> =
     once_cell::sync::Lazy::new(|| std::sync::Mutex::new(None));
 
-pub async fn stop_lan_server() {
-    let handle = ACTIVE_SERVER.lock().ok().and_then(|mut guard| guard.take());
-    if let Some(handle) = handle {
-        handle.abort();
-        republish_presence_after_transfer().await;
+struct ActiveLanServer {
+    token: String,
+    port: u16,
+    handle: tokio::task::JoinHandle<()>,
+}
+
+fn abort_transfer_server_only() {
+    if let Ok(mut guard) = ACTIVE_SERVER.lock() {
+        if let Some(active) = guard.take() {
+            active.handle.abort();
+        }
     }
 }
 
+pub async fn stop_lan_server() {
+    abort_transfer_server_only();
+    republish_presence_after_transfer().await;
+}
+
 pub async fn start_lan_server_for_session(token: &str, game_key: &str) -> Result<u16, String> {
-    stop_lan_server().await;
+    if let Ok(guard) = ACTIVE_SERVER.lock() {
+        if let Some(active) = guard.as_ref() {
+            if active.token == token {
+                return Ok(active.port);
+            }
+        }
+    }
+
+    abort_transfer_server_only();
 
     let session = peek_valid_session(token)
         .ok_or_else(|| "Sesión de transferencia inválida o expirada".to_string())?;
@@ -113,7 +132,11 @@ pub async fn start_lan_server_for_session(token: &str, game_key: &str) -> Result
     });
 
     if let Ok(mut guard) = ACTIVE_SERVER.lock() {
-        *guard = Some(handle);
+        *guard = Some(ActiveLanServer {
+            token: token.to_string(),
+            port,
+            handle,
+        });
     }
 
     Ok(port)
@@ -144,7 +167,9 @@ async fn serve_file(
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     }
 
-    let rel = file_path.replace('\\', "/");
+    let rel = urlencoding::decode(&file_path.replace('\\', "/"))
+        .map(|c| c.into_owned())
+        .unwrap_or_else(|_| file_path.replace('\\', "/"));
     if rel.contains("..") {
         return Err(StatusCode::BAD_REQUEST);
     }

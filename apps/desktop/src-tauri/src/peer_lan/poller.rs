@@ -6,8 +6,10 @@ use crate::commands::sync::context::resolve_api_context;
 use crate::config::load_settings;
 use crate::network::API_CLIENT;
 use crate::peer_inventory::resolve_device_id;
-use crate::peer_lan::server::start_lan_server_for_session;
-use crate::peer_lan::session::{register_transfer_session, session_ttl_from_iso, PendingTransferSession};
+use crate::peer_lan::server::{start_lan_server_for_session, stop_lan_server};
+use crate::peer_lan::session::{
+    register_transfer_session, session_ttl_from_iso, PendingTransferSession,
+};
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,6 +56,12 @@ pub async fn poll_and_serve_pending_sessions() -> Result<u32, String> {
     }
 
     let body: PendingSessionsResponse = res.json().await.map_err(|e| e.to_string())?;
+
+    if body.items.is_empty() {
+        stop_lan_server().await;
+        return Ok(0);
+    }
+
     let mut served = 0_u32;
 
     for item in body.items {
@@ -80,7 +88,7 @@ pub fn spawn_pending_session_poller() {
     tauri::async_runtime::spawn(async {
         loop {
             let _ = poll_and_serve_pending_sessions().await;
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            tokio::time::sleep(Duration::from_secs(2)).await;
         }
     });
 }

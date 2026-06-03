@@ -43,7 +43,7 @@ fn stop_presence_server() {
     }
 }
 
-async fn refresh_presence_advertisement() {
+pub async fn ensure_lan_presence() {
     let settings = load_settings();
     if !settings.share_game_inventory_with_cloud {
         stop_presence_server();
@@ -52,18 +52,16 @@ async fn refresh_presence_advertisement() {
     }
 
     let Ok(device_id) = resolve_device_id() else {
+        log::warn!("Presencia LAN: sin deviceId");
         return;
     };
     let Ok(ctx) = resolve_api_context() else {
+        log::warn!("Presencia LAN: API no configurada (no se anuncia mDNS)");
         return;
     };
 
     let port = {
-        let needs_start = PRESENCE
-            .lock()
-            .ok()
-            .map(|g| g.is_none())
-            .unwrap_or(true);
+        let needs_start = PRESENCE.lock().ok().map(|g| g.is_none()).unwrap_or(true);
         if needs_start {
             match start_presence_server().await {
                 Ok(p) => p,
@@ -90,16 +88,16 @@ async fn refresh_presence_advertisement() {
     }
 }
 
-/// Vuelve a anunciar el puerto de presencia tras cerrar el servidor de transferencia.
 pub async fn republish_presence_after_transfer() {
-    refresh_presence_advertisement().await;
+    ensure_lan_presence().await;
 }
 
 pub fn spawn_lan_presence_advertiser() {
     tauri::async_runtime::spawn(async {
+        ensure_lan_presence().await;
         loop {
-            refresh_presence_advertisement().await;
-            tokio::time::sleep(Duration::from_secs(10)).await;
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            ensure_lan_presence().await;
         }
     });
 }

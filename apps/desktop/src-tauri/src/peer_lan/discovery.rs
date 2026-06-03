@@ -1,9 +1,8 @@
 //! Descubrimiento mDNS de dispositivos SaveCloud en LAN.
 
 use std::collections::HashMap;
-use std::time::Duration;
-
 use std::net::IpAddr;
+use std::time::Duration;
 
 use serde::Serialize;
 
@@ -33,28 +32,19 @@ pub async fn probe_lan_devices(target_ids: Vec<String>) -> Result<Vec<LanDeviceP
         .browse(SERVICE_TYPE)
         .map_err(|e| format!("mDNS browse: {e}"))?;
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + Duration::from_secs(8);
+    let mut seen_services = 0_u32;
 
     while std::time::Instant::now() < deadline {
         match receiver.recv_timeout(Duration::from_millis(250)) {
             Ok(mdns_sd::ServiceEvent::ServiceResolved(info)) => {
-                let device_id = txt_get(&info, "deviceId");
-                let user_id = txt_get(&info, "userId");
-                if device_id.is_empty() || !wanted.contains(&device_id) {
-                    continue;
+                seen_services += 1;
+                if let Some(probe) = probe_from_service(&info, &wanted) {
+                    found.insert(probe.device_id.clone(), probe);
                 }
-                let host = resolve_lan_host(&info);
-                let port = info.get_port();
-                found.insert(
-                    device_id.clone(),
-                    LanDeviceProbe {
-                        device_id,
-                        user_id,
-                        lan_host: host,
-                        port,
-                        reachable: true,
-                    },
-                );
+            }
+            Ok(mdns_sd::ServiceEvent::ServiceFound(_, _)) => {
+                seen_services += 1;
             }
             Ok(_) => {}
             Err(_) => break,
@@ -62,6 +52,13 @@ pub async fn probe_lan_devices(target_ids: Vec<String>) -> Result<Vec<LanDeviceP
     }
 
     let _ = daemon.shutdown();
+
+    log::info!(
+        "mDNS probe: {} servicio(s) vistos, {} de {} dispositivo(s) alcanzables",
+        seen_services,
+        found.len(),
+        wanted.len()
+    );
 
     let out: Vec<LanDeviceProbe> = wanted
         .into_iter()
@@ -79,6 +76,31 @@ pub async fn probe_lan_devices(target_ids: Vec<String>) -> Result<Vec<LanDeviceP
     Ok(out)
 }
 
+fn probe_from_service(
+    info: &mdns_sd::ServiceInfo,
+    wanted: &std::collections::HashSet<String>,
+) -> Option<LanDeviceProbe> {
+    let device_id = txt_get(info, "deviceId");
+    if device_id.is_empty() || !wanted.contains(&device_id) {
+        return None;
+    }
+    let port = info.get_port();
+    if port == 0 {
+        return None;
+    }
+    let host = resolve_lan_host(info);
+    if host.is_empty() {
+        return None;
+    }
+    Some(LanDeviceProbe {
+        device_id,
+        user_id: txt_get(info, "userId"),
+        lan_host: host,
+        port,
+        reachable: true,
+    })
+}
+
 fn txt_get(info: &mdns_sd::ServiceInfo, key: &str) -> String {
     info.get_properties()
         .get(key)
@@ -90,7 +112,9 @@ fn txt_get(info: &mdns_sd::ServiceInfo, key: &str) -> String {
 fn resolve_lan_host(info: &mdns_sd::ServiceInfo) -> String {
     for ip in info.get_addresses() {
         if let IpAddr::V4(v4) = ip {
-            return v4.to_string();
+            if !v4.is_loopback() {
+                return v4.to_string();
+            }
         }
     }
     for ip in info.get_addresses() {
