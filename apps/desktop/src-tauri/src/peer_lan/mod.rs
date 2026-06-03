@@ -10,5 +10,5 @@ pub mod session;
 
 pub use discovery::{probe_lan_devices, LanDeviceProbe};
 pub use poller::{poll_and_serve_pending_sessions, spawn_pending_session_poller};
-pub use presence::spawn_lan_presence_advertiser;
+pub use presence::{ensure_lan_presence, spawn_lan_presence_advertiser};
 pub use runner::{run_peer_download, PeerDownloadParams};

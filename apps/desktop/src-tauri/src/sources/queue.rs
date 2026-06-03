@@ -159,15 +159,15 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
                     Ok(())
                 },
                 |loaded, total, download_speed_bytes, eta_seconds| {
-                    let mut current = find_job(state, job_id)?;
-                    current.loaded = loaded;
-                    current.total = total;
-                    current.download_speed_bytes = download_speed_bytes;
-                    current.eta_seconds = eta_seconds;
-                    current.updated_at = now_iso();
-                    state.upsert_job(current.clone())?;
-                    emit_progress(app, &current);
-                    Ok(())
+                    emit_job_download_progress(
+                        app,
+                        state,
+                        job_id,
+                        loaded,
+                        total,
+                        download_speed_bytes,
+                        eta_seconds,
+                    )
                 },
             )
             .await;
@@ -274,15 +274,15 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
                 params,
                 cancel_flag,
                 |loaded, total, download_speed_bytes, eta_seconds| {
-                    let mut current = find_job(state, job_id)?;
-                    current.loaded = loaded;
-                    current.total = total;
-                    current.download_speed_bytes = download_speed_bytes;
-                    current.eta_seconds = eta_seconds;
-                    current.updated_at = now_iso();
-                    state.upsert_job(current.clone())?;
-                    emit_progress(app, &current);
-                    Ok(())
+                    emit_job_download_progress(
+                        app,
+                        state,
+                        job_id,
+                        loaded,
+                        total,
+                        download_speed_bytes,
+                        eta_seconds,
+                    )
                 },
             )
             .await;
@@ -376,6 +376,40 @@ fn find_job(state: &SourcesState, job_id: &str) -> Result<SourceDownloadJob, Str
         .into_iter()
         .find(|j| j.job_id == job_id)
         .ok_or_else(|| format!("Job no encontrado: {job_id}"))
+}
+
+fn emit_job_download_progress(
+    app: &AppHandle,
+    state: &SourcesState,
+    job_id: &str,
+    loaded: u64,
+    total: u64,
+    download_speed_bytes: u64,
+    eta_seconds: Option<u64>,
+) -> Result<(), String> {
+    let mut current = find_job(state, job_id)?;
+    current.loaded = loaded;
+    current.total = total;
+    if download_speed_bytes > 0 {
+        current.download_speed_bytes = download_speed_bytes;
+    }
+    if let Some(eta) = eta_seconds {
+        current.eta_seconds = Some(eta);
+    } else if total > loaded {
+        let speed = if download_speed_bytes > 0 {
+            download_speed_bytes
+        } else {
+            current.download_speed_bytes
+        };
+        if speed > 0 {
+            current.eta_seconds =
+                crate::utils::transfer_metrics::compute_eta(total, loaded, speed);
+        }
+    }
+    current.updated_at = now_iso();
+    state.upsert_job(current.clone())?;
+    emit_progress(app, &current);
+    Ok(())
 }
 
 /// Crea un ID para job nuevo.

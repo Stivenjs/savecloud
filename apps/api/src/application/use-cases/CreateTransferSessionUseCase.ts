@@ -20,7 +20,7 @@ export interface TransferSessionResult {
   manifestHash: string;
 }
 
-const SESSION_TTL_MS = 5 * 60 * 1000;
+const SESSION_TTL_MS = 4 * 60 * 60 * 1000;
 
 export class CreateTransferSessionUseCase {
   constructor(

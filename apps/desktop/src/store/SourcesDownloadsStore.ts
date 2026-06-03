@@ -27,6 +27,35 @@ function isActive(job: SourceDownloadJob): boolean {
   return job.status === "queued" || job.status === "running" || job.status === "paused";
 }
 
+function resolveTransferMetrics(
+  payload: SourceProgressPayload,
+  current: SourceDownloadJob | undefined,
+  active: boolean
+): { downloadSpeedBytes: number; etaSeconds: number | null } {
+  const loaded = payload.loaded ?? 0;
+  const total = payload.total ?? 0;
+  const incomingSpeed = payload.downloadSpeedBytes ?? 0;
+  const incomingEta = payload.etaSeconds ?? null;
+  const prevSpeed = current?.downloadSpeedBytes ?? 0;
+  const prevEta = current?.etaSeconds ?? null;
+
+  let downloadSpeedBytes = incomingSpeed;
+  if (downloadSpeedBytes <= 0 && active && prevSpeed > 0) {
+    downloadSpeedBytes = prevSpeed;
+  }
+
+  let etaSeconds = incomingEta;
+  if (etaSeconds == null && active) {
+    if (downloadSpeedBytes > 0 && total > loaded) {
+      etaSeconds = Math.ceil((total - loaded) / downloadSpeedBytes);
+    } else if (prevEta != null) {
+      etaSeconds = prevEta;
+    }
+  }
+
+  return { downloadSpeedBytes, etaSeconds };
+}
+
 function buildAggregate(activeByJobId: Record<string, SourceDownloadJob>): SourcesAggregate {
   const rows = Object.values(activeByJobId).filter(isActive);
   const loaded = rows.reduce((acc, row) => acc + Math.max(0, row.loaded), 0);
@@ -57,9 +86,7 @@ export const useSourcesDownloadsStore = create<SourcesDownloadsStore>((set) => (
           aggregateProgress: buildAggregate(next),
         };
       });
-    } catch {
-      // Best effort: luego llegan eventos en vivo.
-    }
+    } catch {}
   },
   upsertFromPayload: (payload) => {
     set((state) => {
@@ -68,6 +95,9 @@ export const useSourcesDownloadsStore = create<SourcesDownloadsStore>((set) => (
       }
 
       const current = state.activeByJobId[payload.jobId];
+      const status = payload.status;
+      const active = status === "queued" || status === "running" || status === "paused";
+      const metrics = resolveTransferMetrics(payload, current, active);
       const nextJob: SourceDownloadJob = {
         jobId: payload.jobId,
         sourceId: current?.sourceId ?? "",
@@ -79,8 +109,8 @@ export const useSourcesDownloadsStore = create<SourcesDownloadsStore>((set) => (
         status: payload.status,
         loaded: payload.loaded,
         total: payload.total,
-        downloadSpeedBytes: payload.downloadSpeedBytes ?? 0,
-        etaSeconds: payload.etaSeconds ?? null,
+        downloadSpeedBytes: metrics.downloadSpeedBytes,
+        etaSeconds: metrics.etaSeconds,
         error: payload.error ?? current?.error ?? null,
         externalId: payload.externalId ?? current?.externalId ?? null,
         createdAt: current?.createdAt ?? new Date().toISOString(),

@@ -108,6 +108,7 @@ fn scan_installed_folder(
         verified_at,
         files,
         sources_archive: None,
+        install_root: Some(root.to_string_lossy().into_owned()),
     }))
 }
 
@@ -221,7 +222,15 @@ pub fn scan_full_inventory(user_id: &str, sharing_enabled: bool) -> Result<Devic
                     size: archive.size,
                     hash: archive.hash.clone(),
                 }],
-                sources_archive: Some(archive),
+                sources_archive: Some(archive.clone()),
+                install_root: sources_store::load_jobs()
+                    .ok()
+                    .and_then(|jobs| {
+                        jobs
+                            .iter()
+                            .find(|j| j.job_id == archive.job_id)
+                            .map(|j| j.destination_dir.clone())
+                    }),
             });
         }
     }

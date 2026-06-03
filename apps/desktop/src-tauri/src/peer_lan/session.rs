@@ -33,6 +33,14 @@ pub fn peek_valid_session(token: &str) -> Option<PendingTransferSession> {
     Some(entry)
 }
 
+pub fn any_valid_session() -> bool {
+    let Ok(mut guard) = SESSIONS.lock() else {
+        return false;
+    };
+    guard.retain(|_, s| s.expires_at > Instant::now());
+    !guard.is_empty()
+}
+
 pub fn session_ttl_from_iso(expires_at: &str) -> Duration {
     chrono::DateTime::parse_from_rfc3339(expires_at)
         .ok()

@@ -146,6 +146,10 @@ impl TransferSpeedTracker {
         self.last_publish_at = Some(now);
     }
 
+    pub fn published_sample(&self) -> TransferSample {
+        self.sample_published()
+    }
+
     fn sample_published(&self) -> TransferSample {
         TransferSample {
             download_speed_bytes: self.published_speed,
@@ -188,7 +192,8 @@ fn smooth_eta(prev: Option<u64>, next: Option<u64>) -> Option<u64> {
                 Some(p.saturating_sub((p - n).min(ETA_MAX_STEP_SECS)))
             }
         }
-        _ => next,
+        (Some(p), None) => Some(p),
+        (None, next) => next,
     }
 }
 
@@ -228,6 +233,7 @@ mod tests {
         assert_eq!(smooth_eta(Some(100), Some(10)), Some(85));
         assert_eq!(smooth_eta(Some(10), Some(100)), Some(25));
         assert_eq!(smooth_eta(None, Some(42)), Some(42));
+        assert_eq!(smooth_eta(Some(120), None), Some(120));
     }
 
     #[test]

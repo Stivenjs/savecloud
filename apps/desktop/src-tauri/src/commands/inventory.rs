@@ -83,8 +83,11 @@ pub async fn set_share_game_inventory_with_cloud(enabled: bool) -> Result<(), St
     crate::config::save_settings(&settings)?;
     if enabled {
         let _ = publish_local_inventory(true).await;
-    } else if let Some(m) = load_local_manifest()? {
-        let _ = crate::peer_inventory::delete_cloud_inventory(&m.device_id).await;
+    } else {
+        if let Some(m) = load_local_manifest()? {
+            let _ = crate::peer_inventory::delete_cloud_inventory(&m.device_id).await;
+        }
+        crate::peer_lan::ensure_lan_presence().await;
     }
     Ok(())
 }

@@ -21,7 +21,12 @@ pub struct StreamDownloadResult {
     pub loaded: u64,
 }
 
-/// Descarga una URL a un archivo destino con progreso y cancelación cooperativa.
+#[derive(Debug, Clone, Copy)]
+pub struct GlobalDownloadProgress {
+    pub loaded_offset: u64,
+    pub total_bytes: u64,
+}
+
 pub async fn stream_url_to_file(
     client: &reqwest::Client,
     uri: &str,
@@ -29,6 +34,8 @@ pub async fn stream_url_to_file(
     total_hint: u64,
     auth_bearer: Option<&str>,
     cancel_flag: Arc<AtomicBool>,
+    speed_tracker: &mut TransferSpeedTracker,
+    global: GlobalDownloadProgress,
     mut on_progress: impl FnMut(u64, u64, u64, Option<u64>) -> Result<(), String>,
 ) -> Result<StreamDownloadResult, String> {
     if let Some(parent) = output_path.parent() {
@@ -53,7 +60,7 @@ pub async fn stream_url_to_file(
     let response = req.send().await.map_err(|e| format!("Error HTTP: {e}"))?;
     let response = ensure_download_success(response).map_err(|e| e.user_message())?;
 
-    let total = if total_hint > 0 {
+    let file_total = if total_hint > 0 {
         total_hint
     } else {
         response.content_length().unwrap_or(0)
@@ -63,17 +70,23 @@ pub async fn stream_url_to_file(
         .await
         .map_err(|e| format!("No se pudo crear archivo: {e}"))?;
 
-    let mut speed_tracker = TransferSpeedTracker::new();
-    let mut emit_progress = |loaded: u64, final_emit: bool| -> Result<(), String> {
+    let global_total = if global.total_bytes > 0 {
+        global.total_bytes
+    } else {
+        file_total
+    };
+
+    let mut emit_progress = |file_loaded: u64, final_emit: bool| -> Result<(), String> {
+        let global_loaded = global.loaded_offset.saturating_add(file_loaded);
         let now = Instant::now();
         let sample = if final_emit {
-            speed_tracker.record_final(loaded, total, now)
+            speed_tracker.record_final(global_loaded, global_total, now)
         } else {
-            speed_tracker.record(loaded, total, now)
+            speed_tracker.record(global_loaded, global_total, now)
         };
         on_progress(
-            loaded,
-            total,
+            file_loaded,
+            file_total,
             sample.download_speed_bytes,
             sample.eta_seconds,
         )
@@ -99,7 +112,7 @@ pub async fn stream_url_to_file(
 
         let bytes_step = loaded.saturating_sub(last_emit_loaded) >= STREAM_PROGRESS_EMIT_BYTES;
         let time_step = last_emit_at.elapsed() >= STREAM_PROGRESS_EMIT_INTERVAL;
-        let reached_end = total > 0 && loaded >= total;
+        let reached_end = file_total > 0 && loaded >= file_total;
         if (bytes_step && time_step) || reached_end {
             emit_progress(loaded, false)?;
             last_emit_loaded = loaded;

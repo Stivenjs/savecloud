@@ -6,8 +6,10 @@ use crate::commands::sync::context::resolve_api_context;
 use crate::config::load_settings;
 use crate::network::API_CLIENT;
 use crate::peer_inventory::resolve_device_id;
-use crate::peer_lan::server::start_lan_server_for_session;
-use crate::peer_lan::session::{register_transfer_session, session_ttl_from_iso, PendingTransferSession};
+use crate::peer_lan::server::{start_lan_server_for_session, stop_lan_server};
+use crate::peer_lan::session::{
+    register_transfer_session, session_ttl_from_iso, PendingTransferSession,
+};
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,9 +56,16 @@ pub async fn poll_and_serve_pending_sessions() -> Result<u32, String> {
     }
 
     let body: PendingSessionsResponse = res.json().await.map_err(|e| e.to_string())?;
-    let mut served = 0_u32;
 
-    for item in body.items {
+    if body.items.is_empty() {
+        if crate::peer_lan::session::any_valid_session() {
+            return Ok(0);
+        }
+        stop_lan_server().await;
+        return Ok(0);
+    }
+
+    for item in &body.items {
         let ttl = session_ttl_from_iso(&item.expires_at);
         register_transfer_session(PendingTransferSession {
             token: item.token.clone(),
@@ -64,23 +73,25 @@ pub async fn poll_and_serve_pending_sessions() -> Result<u32, String> {
             manifest_hash: item.manifest_hash.clone(),
             expires_at: std::time::Instant::now() + ttl,
         });
-
-        if start_lan_server_for_session(&item.token, &item.game_key)
-            .await
-            .is_ok()
-        {
-            served += 1;
-        }
     }
 
-    Ok(served)
+    let latest = body.items.last().expect("items no vacío");
+    if start_lan_server_for_session(&latest.token, &latest.game_key)
+        .await
+        .is_ok()
+    {
+        crate::peer_lan::ensure_lan_presence().await;
+        return Ok(1);
+    }
+
+    Ok(0)
 }
 
 pub fn spawn_pending_session_poller() {
     tauri::async_runtime::spawn(async {
         loop {
             let _ = poll_and_serve_pending_sessions().await;
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            tokio::time::sleep(Duration::from_secs(2)).await;
         }
     });
 }
