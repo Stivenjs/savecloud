@@ -20,6 +20,8 @@ use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray::tray_state::TrayState;
 use crate::voice::VoiceState;
+use crate::peer_lan::spawn_lan_presence_advertiser;
+use crate::peer_lan::spawn_pending_session_poller;
 use std::sync::Arc;
 use tauri::{App, Manager};
 use tokio::sync::Mutex;
@@ -224,7 +226,8 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     // 8. Controlador de gamepads (no necesita guard: es stateless)
     start_gamepad_loop(app.handle().clone());
 
-    crate::peer_lan::spawn_pending_session_poller();
+    spawn_pending_session_poller();
+    spawn_lan_presence_advertiser();
 
     Ok(())
 }
