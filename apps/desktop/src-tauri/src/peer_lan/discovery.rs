@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use std::net::IpAddr;
+
 use serde::Serialize;
 
 const SERVICE_TYPE: &str = "_savecloud._tcp.local.";
@@ -31,7 +33,7 @@ pub async fn probe_lan_devices(target_ids: Vec<String>) -> Result<Vec<LanDeviceP
         .browse(SERVICE_TYPE)
         .map_err(|e| format!("mDNS browse: {e}"))?;
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
 
     while std::time::Instant::now() < deadline {
         match receiver.recv_timeout(Duration::from_millis(250)) {
@@ -41,7 +43,7 @@ pub async fn probe_lan_devices(target_ids: Vec<String>) -> Result<Vec<LanDeviceP
                 if device_id.is_empty() || !wanted.contains(&device_id) {
                     continue;
                 }
-                let host = info.get_hostname().trim_end_matches('.').to_string();
+                let host = resolve_lan_host(&info);
                 let port = info.get_port();
                 found.insert(
                     device_id.clone(),
@@ -83,4 +85,18 @@ fn txt_get(info: &mdns_sd::ServiceInfo, key: &str) -> String {
         .and_then(|v| v.val())
         .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
         .unwrap_or_default()
+}
+
+fn resolve_lan_host(info: &mdns_sd::ServiceInfo) -> String {
+    for ip in info.get_addresses() {
+        if let IpAddr::V4(v4) = ip {
+            return v4.to_string();
+        }
+    }
+    for ip in info.get_addresses() {
+        if let IpAddr::V6(v6) = ip {
+            return format!("[{v6}]");
+        }
+    }
+    info.get_hostname().trim_end_matches('.').to_string()
 }

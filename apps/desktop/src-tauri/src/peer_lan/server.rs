@@ -17,6 +17,8 @@ use tokio::io::AsyncSeekExt;
 use tokio_util::io::ReaderStream;
 
 use crate::peer_inventory::{load_local_manifest, resolve_install_root};
+use crate::peer_lan::mdns_registry::publish_lan_service;
+use crate::peer_lan::presence::republish_presence_after_transfer;
 use crate::peer_lan::session::peek_valid_session;
 
 const CHUNK_SIZE: usize = 512 * 1024;
@@ -31,10 +33,10 @@ static ACTIVE_SERVER: once_cell::sync::Lazy<std::sync::Mutex<Option<tokio::task:
     once_cell::sync::Lazy::new(|| std::sync::Mutex::new(None));
 
 pub async fn stop_lan_server() {
-    if let Ok(mut guard) = ACTIVE_SERVER.lock() {
-        if let Some(handle) = guard.take() {
-            handle.abort();
-        }
+    let handle = ACTIVE_SERVER.lock().ok().and_then(|mut guard| guard.take());
+    if let Some(handle) = handle {
+        handle.abort();
+        republish_presence_after_transfer().await;
     }
 }
 
@@ -102,7 +104,7 @@ pub async fn start_lan_server_for_session(token: &str, game_key: &str) -> Result
         .map_err(|e| format!("No se pudo abrir puerto LAN: {e}"))?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
 
-    register_mdns_service(&manifest.device_id, &manifest.user_id, port)?;
+    publish_lan_service(&manifest.device_id, &manifest.user_id, port)?;
 
     let handle = tokio::spawn(async move {
         if let Err(e) = axum::serve(listener, app).await {
@@ -115,30 +117,6 @@ pub async fn start_lan_server_for_session(token: &str, game_key: &str) -> Result
     }
 
     Ok(port)
-}
-
-fn register_mdns_service(device_id: &str, user_id: &str, port: u16) -> Result<(), String> {
-    let service = mdns_sd::ServiceDaemon::new().map_err(|e| format!("mDNS: {e}"))?;
-    let host = gethostname::gethostname().to_string_lossy().into_owned();
-    let instance = format!("savecloud-{device_id}");
-    let mut properties = std::collections::HashMap::new();
-    properties.insert("deviceId".to_string(), device_id.to_string());
-    properties.insert("userId".to_string(), user_id.to_string());
-
-    let info = mdns_sd::ServiceInfo::new(
-        "_savecloud._tcp.local.",
-        &instance,
-        &format!("{host}.local."),
-        "",
-        port,
-        properties,
-    )
-    .map_err(|e| format!("mDNS ServiceInfo: {e}"))?;
-
-    service
-        .register(info)
-        .map_err(|e| format!("mDNS register: {e}"))?;
-    Ok(())
 }
 
 async fn auth_middleware(request: Request, next: Next) -> Result<Response, StatusCode> {
