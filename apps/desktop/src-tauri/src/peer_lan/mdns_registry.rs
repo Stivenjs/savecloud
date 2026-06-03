@@ -8,6 +8,7 @@ use once_cell::sync::Lazy;
 const SERVICE_TYPE: &str = "_savecloud._tcp.local.";
 
 static MDNS_DAEMON: Lazy<Mutex<Option<mdns_sd::ServiceDaemon>>> = Lazy::new(|| Mutex::new(None));
+static LAST_PUBLISHED: Lazy<Mutex<Option<(String, u16)>>> = Lazy::new(|| Mutex::new(None));
 
 fn daemon() -> Result<std::sync::MutexGuard<'static, Option<mdns_sd::ServiceDaemon>>, String> {
     MDNS_DAEMON.lock().map_err(|e| format!("mDNS lock: {e}"))
@@ -23,6 +24,19 @@ fn primary_lan_ipv4() -> Option<Ipv4Addr> {
 }
 
 pub fn publish_lan_service(device_id: &str, user_id: &str, port: u16) -> Result<(), String> {
+    if port == 0 {
+        return Ok(());
+    }
+
+    if let Ok(guard) = LAST_PUBLISHED.lock() {
+        if guard
+            .as_ref()
+            .is_some_and(|(id, p)| id == device_id && *p == port)
+        {
+            return Ok(());
+        }
+    }
+
     let mut guard = daemon()?;
     if guard.is_none() {
         *guard = Some(mdns_sd::ServiceDaemon::new().map_err(|e| format!("mDNS daemon: {e}"))?);
@@ -53,11 +67,18 @@ pub fn publish_lan_service(device_id: &str, user_id: &str, port: u16) -> Result<
         .register(info)
         .map_err(|e| format!("mDNS register: {e}"))?;
 
+    if let Ok(mut last) = LAST_PUBLISHED.lock() {
+        *last = Some((device_id.to_string(), port));
+    }
+
     log::info!("mDNS publicado: {SERVICE_TYPE} device={device_id} ip={host_ip} port={port}");
     Ok(())
 }
 
 pub fn withdraw_lan_service() {
+    if let Ok(mut last) = LAST_PUBLISHED.lock() {
+        *last = None;
+    }
     if let Ok(mut guard) = daemon() {
         if let Some(daemon) = guard.take() {
             let _ = daemon.shutdown();

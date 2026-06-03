@@ -62,9 +62,7 @@ pub async fn poll_and_serve_pending_sessions() -> Result<u32, String> {
         return Ok(0);
     }
 
-    let mut served = 0_u32;
-
-    for item in body.items {
+    for item in &body.items {
         let ttl = session_ttl_from_iso(&item.expires_at);
         register_transfer_session(PendingTransferSession {
             token: item.token.clone(),
@@ -72,16 +70,18 @@ pub async fn poll_and_serve_pending_sessions() -> Result<u32, String> {
             manifest_hash: item.manifest_hash.clone(),
             expires_at: std::time::Instant::now() + ttl,
         });
-
-        if start_lan_server_for_session(&item.token, &item.game_key)
-            .await
-            .is_ok()
-        {
-            served += 1;
-        }
     }
 
-    Ok(served)
+    let latest = body.items.last().expect("items no vacío");
+    if start_lan_server_for_session(&latest.token, &latest.game_key)
+        .await
+        .is_ok()
+    {
+        crate::peer_lan::ensure_lan_presence().await;
+        return Ok(1);
+    }
+
+    Ok(0)
 }
 
 pub fn spawn_pending_session_poller() {

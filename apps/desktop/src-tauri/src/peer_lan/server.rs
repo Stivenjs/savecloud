@@ -1,8 +1,9 @@
-//! Servidor HTTP LAN para servir archivos del inventario local.
+//! Servidor HTTP LAN unificado: presencia (`/health`) + archivos (`/files/*`).
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, RwLock};
 
 use axum::{
     extract::{Path as AxumPath, Request, State},
@@ -12,55 +13,96 @@ use axum::{
     routing::get,
     Router,
 };
+use once_cell::sync::Lazy;
 use tokio::fs::File;
 use tokio::io::AsyncSeekExt;
 use tokio_util::io::ReaderStream;
 
 use crate::peer_inventory::{load_local_manifest, resolve_install_root};
-use crate::peer_lan::mdns_registry::publish_lan_service;
-use crate::peer_lan::presence::republish_presence_after_transfer;
 use crate::peer_lan::session::peek_valid_session;
 
 const CHUNK_SIZE: usize = 512 * 1024;
 
 #[derive(Clone)]
-struct LanServerState {
-    root_paths: Arc<std::collections::HashMap<String, PathBuf>>,
+struct TransferServeState {
+    token: String,
+    root_paths: Arc<HashMap<String, PathBuf>>,
     cancel: Arc<AtomicBool>,
 }
 
-static ACTIVE_SERVER: once_cell::sync::Lazy<std::sync::Mutex<Option<ActiveLanServer>>> =
-    once_cell::sync::Lazy::new(|| std::sync::Mutex::new(None));
+#[derive(Default)]
+struct LanServerInner {
+    transfer: Option<TransferServeState>,
+}
 
-struct ActiveLanServer {
-    token: String,
+#[derive(Clone)]
+struct LanHttpState {
+    inner: Arc<RwLock<LanServerInner>>,
+}
+
+struct LanRuntime {
     port: u16,
     handle: tokio::task::JoinHandle<()>,
+    state: LanHttpState,
 }
 
-fn abort_transfer_server_only() {
-    if let Ok(mut guard) = ACTIVE_SERVER.lock() {
-        if let Some(active) = guard.take() {
-            active.handle.abort();
-        }
-    }
-}
+static LAN_RUNTIME: Lazy<Mutex<Option<LanRuntime>>> = Lazy::new(|| Mutex::new(None));
 
-pub async fn stop_lan_server() {
-    abort_transfer_server_only();
-    republish_presence_after_transfer().await;
-}
-
-pub async fn start_lan_server_for_session(token: &str, game_key: &str) -> Result<u16, String> {
-    if let Ok(guard) = ACTIVE_SERVER.lock() {
-        if let Some(active) = guard.as_ref() {
-            if active.token == token {
-                return Ok(active.port);
+pub async fn ensure_lan_http_server() -> Result<u16, String> {
+    if let Ok(guard) = LAN_RUNTIME.lock() {
+        if let Some(runtime) = guard.as_ref() {
+            if !runtime.handle.is_finished() {
+                return Ok(runtime.port);
             }
         }
     }
 
-    abort_transfer_server_only();
+    let state = LanHttpState {
+        inner: Arc::new(RwLock::new(LanServerInner::default())),
+    };
+
+    let app = Router::new()
+        .route("/files/{*file_path}", get(serve_file))
+        .route("/health", get(|| async { "ok" }))
+        .layer(middleware::from_fn(auth_middleware))
+        .with_state(state.clone());
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:0")
+        .await
+        .map_err(|e| format!("No se pudo abrir puerto LAN: {e}"))?;
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+
+    let handle = tokio::spawn(async move {
+        if let Err(e) = axum::serve(listener, app).await {
+            log::warn!("Servidor LAN finalizado: {e}");
+        }
+    });
+
+    if let Ok(mut guard) = LAN_RUNTIME.lock() {
+        *guard = Some(LanRuntime {
+            port,
+            handle,
+            state,
+        });
+    }
+
+    log::info!("Servidor LAN escuchando en puerto {port}");
+    Ok(port)
+}
+
+/// Activa el modo transferencia sobre el servidor persistente (sin abrir puertos nuevos).
+pub async fn start_lan_server_for_session(token: &str, game_key: &str) -> Result<u16, String> {
+    let port = ensure_lan_http_server().await?;
+
+    if let Ok(guard) = LAN_RUNTIME.lock() {
+        if let Some(runtime) = guard.as_ref() {
+            if let Ok(inner) = runtime.state.inner.read() {
+                if inner.transfer.as_ref().is_some_and(|t| t.token == token) {
+                    return Ok(port);
+                }
+            }
+        }
+    }
 
     let session = peek_valid_session(token)
         .ok_or_else(|| "Sesión de transferencia inválida o expirada".to_string())?;
@@ -79,7 +121,7 @@ pub async fn start_lan_server_for_session(token: &str, game_key: &str) -> Result
         return Err("manifestHash no coincide".to_string());
     }
 
-    let mut roots = std::collections::HashMap::new();
+    let mut roots = HashMap::new();
     if game.payload_kind == "installedFolder" {
         let library = crate::config::load_library();
         for g in &library.games {
@@ -106,40 +148,50 @@ pub async fn start_lan_server_for_session(token: &str, game_key: &str) -> Result
         return Err("No se encontró ruta local para servir el juego".to_string());
     }
 
-    let cancel = Arc::new(AtomicBool::new(false));
-    let state = LanServerState {
+    let runtime = LAN_RUNTIME
+        .lock()
+        .map_err(|e| format!("LAN runtime lock: {e}"))?
+        .as_ref()
+        .ok_or_else(|| "Servidor LAN no iniciado".to_string())?
+        .state
+        .clone();
+
+    let mut inner = runtime
+        .inner
+        .write()
+        .map_err(|e| format!("LAN state lock: {e}"))?;
+    inner.transfer = Some(TransferServeState {
+        token: token.to_string(),
         root_paths: Arc::new(roots),
-        cancel: cancel.clone(),
-    };
-
-    let app = Router::new()
-        .route("/files/{*file_path}", get(serve_file))
-        .route("/health", get(|| async { "ok" }))
-        .layer(middleware::from_fn(auth_middleware))
-        .with_state(state);
-
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:0")
-        .await
-        .map_err(|e| format!("No se pudo abrir puerto LAN: {e}"))?;
-    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-
-    publish_lan_service(&manifest.device_id, &manifest.user_id, port)?;
-
-    let handle = tokio::spawn(async move {
-        if let Err(e) = axum::serve(listener, app).await {
-            log::warn!("Servidor LAN finalizado: {e}");
-        }
+        cancel: Arc::new(AtomicBool::new(false)),
     });
 
-    if let Ok(mut guard) = ACTIVE_SERVER.lock() {
-        *guard = Some(ActiveLanServer {
-            token: token.to_string(),
-            port,
-            handle,
-        });
-    }
-
+    log::info!("Transferencia LAN activa en puerto {port} (gameKey={game_key})");
     Ok(port)
+}
+
+pub async fn stop_lan_server() {
+    clear_transfer_state();
+}
+
+pub async fn shutdown_lan_http_server() {
+    clear_transfer_state();
+    if let Ok(mut guard) = LAN_RUNTIME.lock() {
+        if let Some(runtime) = guard.take() {
+            runtime.handle.abort();
+            log::info!("Servidor LAN detenido (puerto {})", runtime.port);
+        }
+    }
+}
+
+fn clear_transfer_state() {
+    if let Ok(guard) = LAN_RUNTIME.lock() {
+        if let Some(runtime) = guard.as_ref() {
+            if let Ok(mut inner) = runtime.state.inner.write() {
+                inner.transfer = None;
+            }
+        }
+    }
 }
 
 async fn auth_middleware(request: Request, next: Next) -> Result<Response, StatusCode> {
@@ -160,10 +212,20 @@ async fn auth_middleware(request: Request, next: Next) -> Result<Response, Statu
 }
 
 async fn serve_file(
-    State(state): State<LanServerState>,
+    State(state): State<LanHttpState>,
     AxumPath(file_path): AxumPath<String>,
 ) -> Result<Response, StatusCode> {
-    if state.cancel.load(Ordering::Relaxed) {
+    let transfer = {
+        let inner = state
+            .inner
+            .read()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        inner.transfer.clone()
+    };
+
+    let transfer = transfer.ok_or(StatusCode::NOT_FOUND)?;
+
+    if transfer.cancel.load(Ordering::Relaxed) {
         return Err(StatusCode::SERVICE_UNAVAILABLE);
     }
 
@@ -174,7 +236,7 @@ async fn serve_file(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let (_game_key, root) = state
+    let (_game_key, root) = transfer
         .root_paths
         .iter()
         .next()
