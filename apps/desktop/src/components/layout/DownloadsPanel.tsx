@@ -40,6 +40,42 @@ type DownloadRow = {
   };
 };
 
+function formatProtocol(protocol: string): string {
+  switch (protocol) {
+    case "http":
+      return "Descarga directa";
+    case "torrentMagnet":
+    case "torrentFile":
+    case "torrent":
+      return "Torrent";
+    case "peerLan":
+      return "Red local (LAN)";
+    default:
+      return "Descarga";
+  }
+}
+
+function formatStatus(status: string): string {
+  switch (status) {
+    case "queued":
+      return "En cola";
+    case "running":
+      return "Descargando";
+    case "pausing":
+    case "paused":
+      return "Pausado";
+    case "cancelling":
+    case "cancelled":
+      return "Cancelado";
+    case "completed":
+      return "Completado";
+    case "failed":
+      return "Error";
+    default:
+      return status;
+  }
+}
+
 export function DownloadsPanel() {
   const [collapsed, setCollapsed] = useState(false);
   const syncOperation = useSyncStore((s) => s.syncOperation);
@@ -224,8 +260,8 @@ export function DownloadsPanel() {
               : 0;
 
       const subtitle = isTorrentBacked
-        ? `${task.protocol} · ${torrent ? mapTorrentState(torrent.state) : "Preparando descarga..."}`
-        : `${task.protocol} · ${task.status}`;
+        ? `${formatProtocol(task.protocol)} · ${torrent ? mapTorrentState(torrent.state) : "Preparando descarga..."}`
+        : `${formatProtocol(task.protocol)} · ${formatStatus(task.status)}`;
 
       return {
         id: `sources-${task.jobId}`,

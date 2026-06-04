@@ -114,6 +114,10 @@ export function mapTorrentState(state: string) {
       return "Descargando";
     case "paused":
       return "Pausado";
+    case "completed":
+      return "Completado";
+    case "failed":
+      return "Error";
     default:
       return state;
   }
