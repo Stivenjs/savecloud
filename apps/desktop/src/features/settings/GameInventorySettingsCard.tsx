@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button, Card, CardBody, Input, Switch } from "@heroui/react";
 import { AnimatePresence, motion } from "framer-motion";
-import { FolderOpen, Gamepad2, Plus, RefreshCw, Search } from "lucide-react";
+import { FolderOpen, Gamepad2, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
 import { CONFIG_QUERY_KEY, useConfig } from "@hooks/useConfig";
@@ -10,6 +10,7 @@ import {
   inventoryGetLocal,
   inventoryRegisterInstallFolder,
   inventoryScanAndPublish,
+  inventoryUnregisterInstallFolder,
   setShareGameInventoryWithCloud,
 } from "@services/tauri/inventory.service";
 import { searchSteamGames, type ManifestSearchResult } from "@services/tauri/config.service";
@@ -93,6 +94,26 @@ export function GameInventorySettingsCard() {
     },
   });
 
+  const [selectedKeyToDelete, setSelectedKeyToDelete] = useState<string | null>(null);
+
+  const unregisterMutation = useMutation({
+    mutationFn: (gameKey: string) => inventoryUnregisterInstallFolder(gameKey),
+    onSuccess: (manifest) => {
+      queryClient.setQueryData(INVENTORY_LOCAL_QUERY_KEY, { manifest });
+      toastSuccess("Juego eliminado", "El juego ha sido eliminado del inventario.");
+      setSelectedKeyToDelete(null);
+    },
+    onError: (e) => {
+      toastError("No se pudo eliminar", e instanceof Error ? e.message : String(e));
+      setSelectedKeyToDelete(null);
+    },
+  });
+
+  const handleDelete = (gameKey: string, _displayName: string) => {
+    setSelectedKeyToDelete(gameKey);
+    unregisterMutation.mutate(gameKey);
+  };
+
   const pickFolder = async () => {
     try {
       const selected = await open({
@@ -137,6 +158,46 @@ export function GameInventorySettingsCard() {
             onValueChange={(enabled) => shareMutation.mutate(enabled)}
           />
         </div>
+
+        {verifiedGames > 0 && localInventory?.manifest?.games && localInventory.manifest.games.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold text-default-400 uppercase tracking-wider">Juegos en inventario</p>
+            <div className="divide-y divide-default-100 rounded-lg border border-default-200 bg-default-50/30 dark:divide-default-100/10 dark:border-default-100/10 overflow-hidden">
+              <AnimatePresence initial={false}>
+                {localInventory.manifest.games.map((game) => (
+                  <motion.div
+                    key={game.gameKey}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ type: "spring", stiffness: 160, damping: 22 }}
+                    style={{ overflow: "hidden" }}
+                    className="flex items-center justify-between gap-3 px-3 py-2 text-xs hover:bg-default-100/30 transition-colors">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-foreground truncate">{game.displayName}</p>
+                      <p className="text-[10px] text-default-400 truncate">
+                        {game.payloadKind === "installedFolder" ? "Añadido manualmente" : "Escaneo automático"} ·{" "}
+                        {(game.totalBytes / (1024 * 1024 * 1024)).toFixed(2)} GB
+                      </p>
+                    </div>
+                    {game.payloadKind === "installedFolder" ? (
+                      <Button
+                        size="sm"
+                        variant="light"
+                        color="danger"
+                        className="h-7 w-7 min-w-0 p-0"
+                        isIconOnly
+                        isLoading={unregisterMutation.isPending && selectedKeyToDelete === game.gameKey}
+                        onPress={() => handleDelete(game.gameKey, game.displayName)}>
+                        <Trash2 size={13} className="text-danger" />
+                      </Button>
+                    ) : null}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          </div>
+        ) : null}
 
         <div className="flex flex-col">
           <div className="flex flex-wrap items-center justify-between gap-2">

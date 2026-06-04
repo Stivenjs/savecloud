@@ -92,6 +92,12 @@ export function inventoryRegisterInstallFolder(
   });
 }
 
+export function inventoryUnregisterInstallFolder(gameKey: string): Promise<DeviceInventoryManifest> {
+  return invoke<DeviceInventoryManifest>("inventory_unregister_install_folder", {
+    gameKey,
+  });
+}
+
 export function inventoryGetLocal(): Promise<{ manifest: DeviceInventoryManifest | null }> {
   return invoke<{ manifest: DeviceInventoryManifest | null }>("inventory_get_local");
 }

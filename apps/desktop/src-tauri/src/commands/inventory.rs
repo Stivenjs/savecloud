@@ -109,6 +109,31 @@ pub async fn inventory_register_install_folder(
 }
 
 #[command]
+pub async fn inventory_unregister_install_folder(
+    game_key: String,
+) -> Result<crate::peer_inventory::DeviceInventoryManifest, String> {
+    let settings = crate::config::load_settings();
+    let user_id = settings
+        .user_id
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| "userId no configurado".to_string())?;
+
+    let manifest = crate::peer_inventory::unregister_manual_install_folder(
+        &user_id,
+        settings.share_game_inventory_with_cloud,
+        &game_key,
+    )?;
+
+    if settings.share_game_inventory_with_cloud {
+        publish_manifest_to_cloud(&manifest).await?;
+        let _ = crate::peer_inventory::publish::post_cloud_heartbeat(&manifest.device_id).await;
+        crate::peer_lan::ensure_lan_presence().await;
+    }
+
+    Ok(manifest)
+}
+
+#[command]
 pub async fn set_share_game_inventory_with_cloud(enabled: bool) -> Result<(), String> {
     let mut settings = crate::config::load_settings();
     settings.share_game_inventory_with_cloud = enabled;

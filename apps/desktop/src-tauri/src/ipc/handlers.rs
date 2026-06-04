@@ -131,6 +131,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::commands::share::invites::list_cloud_presence,
         crate::commands::inventory::inventory_scan_and_publish,
         crate::commands::inventory::inventory_register_install_folder,
+        crate::commands::inventory::inventory_unregister_install_folder,
         crate::commands::inventory::inventory_get_local,
         crate::commands::inventory::inventory_list_providers,
         crate::commands::inventory::inventory_probe_lan,

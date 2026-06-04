@@ -345,6 +345,47 @@ pub fn scan_full_inventory(
     Ok(manifest)
 }
 
+pub fn unregister_manual_install_folder(
+    user_id: &str,
+    sharing_enabled: bool,
+    game_key: &str,
+) -> Result<DeviceInventoryManifest, String> {
+    let key = game_key.trim();
+    if key.is_empty() {
+        return Err("gameKey vacío".to_string());
+    }
+
+    super::overrides::remove_manual_install_root(key)?;
+
+    let mut manifest = load_local_manifest()?.unwrap_or_else(|| DeviceInventoryManifest {
+        device_id: resolve_device_id().unwrap_or_default(),
+        device_name: resolve_device_name(),
+        user_id: user_id.to_string(),
+        manifest_version: MANIFEST_VERSION,
+        content_hash: String::new(),
+        updated_at: now_iso(),
+        sharing_enabled,
+        games: Vec::new(),
+    });
+
+    manifest.user_id = user_id.to_string();
+    manifest.sharing_enabled = sharing_enabled;
+    manifest.updated_at = now_iso();
+
+    let mut games: Vec<GameInventoryEntry> = manifest
+        .games
+        .into_iter()
+        .filter(|g| g.game_key != key)
+        .collect();
+
+    games.sort_by(|a, b| a.game_key.cmp(&b.game_key));
+    manifest.content_hash = manifest_content_hash(&games);
+    manifest.games = games;
+
+    save_local_manifest(&manifest)?;
+    Ok(manifest)
+}
+
 fn manifest_content_hash(games: &[GameInventoryEntry]) -> String {
     let mut hasher = Hasher::new();
     for g in games {

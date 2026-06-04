@@ -15,5 +15,5 @@ pub use publish::{
     delete_cloud_inventory, list_providers_from_api, publish_local_inventory,
     GameProvidersResponseDto, InventoryFileDto,
 };
-pub use scanner::register_manual_install_folder;
+pub use scanner::{register_manual_install_folder, unregister_manual_install_folder};
 pub use store::{load_local_manifest, resolve_device_id};
