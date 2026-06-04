@@ -112,65 +112,68 @@ export function GamepadTesterCard() {
         {rumbleErr ? <p className="text-sm text-danger">{rumbleErr}</p> : null}
         {gamepads.length === 0 ? (
           <p className="text-sm text-default-500">No detectamos ningún mando. Enchufa uno y pulsa «Buscar de nuevo».</p>
-        ) : (
+        ) : selectedGamepadName ? (
+          <p className="text-xs text-default-400">
+            Detección por nombre «{selectedGamepadName}»: el perfil automático es{" "}
+            {layoutKindDescription(selectedLayoutKind)}. Puedes fijar otro esquema abajo para la vista y las etiquetas.
+          </p>
+        ) : null}
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
+          {gamepads.length > 0 && (
+            <Select
+              label="¿Qué mando quieres mirar?"
+              selectedKeys={selectedKey ? new Set([selectedKey]) : new Set()}
+              onSelectionChange={(keys) => {
+                const k = Array.from(keys)[0];
+                if (k != null) setSelectedId(Number(k));
+              }}
+              className="max-w-md w-full"
+              size="sm"
+              variant="bordered"
+              aria-label="Elegir mando conectado">
+              {gamepads.map((g) => (
+                <SelectItem key={String(g.id)} textValue={g.name}>
+                  {g.name}
+                </SelectItem>
+              ))}
+            </Select>
+          )}
+          <Button
+            size="sm"
+            variant="flat"
+            isLoading={listRefreshing}
+            onPress={() => void refreshList({ showLoading: true })}
+            aria-label="Buscar mandos de nuevo">
+            Buscar de nuevo
+          </Button>
+          {gamepads.length > 0 && (
+            <Button
+              size="sm"
+              variant="flat"
+              color="primary"
+              isDisabled={selectedId == null || rumbleBusy}
+              onPress={() => void triggerRumble()}
+              aria-label="Probar vibración del mando">
+              Probar vibración
+            </Button>
+          )}
+          {isWindowsDesktop ? (
+            <Button
+              size="sm"
+              color="secondary"
+              variant="flat"
+              isLoading={driverInstallBusy}
+              isDisabled={driverInstallBusy}
+              onPress={() => void installGamepadDriver()}
+              aria-label="Instalar driver">
+              Instalar drivers
+            </Button>
+          ) : null}
+        </div>
+
+        {gamepads.length > 0 ? (
           <>
-            {selectedGamepadName ? (
-              <p className="text-xs text-default-400">
-                Detección por nombre «{selectedGamepadName}»: el perfil automático es{" "}
-                {layoutKindDescription(selectedLayoutKind)}. Puedes fijar otro esquema abajo para la vista y las
-                etiquetas.
-              </p>
-            ) : null}
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
-              <Select
-                label="¿Qué mando quieres mirar?"
-                selectedKeys={selectedKey ? new Set([selectedKey]) : new Set()}
-                onSelectionChange={(keys) => {
-                  const k = Array.from(keys)[0];
-                  if (k != null) setSelectedId(Number(k));
-                }}
-                className="max-w-md"
-                size="sm"
-                variant="bordered"
-                aria-label="Elegir mando conectado">
-                {gamepads.map((g) => (
-                  <SelectItem key={String(g.id)} textValue={g.name}>
-                    {g.name}
-                  </SelectItem>
-                ))}
-              </Select>
-              <Button
-                size="sm"
-                variant="light"
-                isLoading={listRefreshing}
-                onPress={() => void refreshList({ showLoading: true })}
-                aria-label="Buscar mandos de nuevo">
-                Buscar de nuevo
-              </Button>
-              <Button
-                size="sm"
-                color="primary"
-                variant="flat"
-                isDisabled={selectedId == null || rumbleBusy}
-                onPress={() => void triggerRumble()}
-                aria-label="Probar vibración del mando">
-                Probar vibración
-              </Button>
-              {isWindowsDesktop ? (
-                <Button
-                  size="sm"
-                  color="secondary"
-                  variant="flat"
-                  isLoading={driverInstallBusy}
-                  isDisabled={driverInstallBusy}
-                  onPress={() => void installGamepadDriver()}
-                  aria-label="Instalar driver">
-                  Instalar drivers
-                </Button>
-              ) : null}
-            </div>
-
             {selectedId != null ? (
               <div className="rounded-xl border border-default-200/70 bg-content1/40 p-4 dark:border-default-100/40">
                 <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -280,7 +283,7 @@ export function GamepadTesterCard() {
               </p>
             )}
           </>
-        )}
+        ) : null}
       </CardBody>
     </Card>
   );
