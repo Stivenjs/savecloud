@@ -1,41 +1,33 @@
-import { useCallback, useMemo } from "react";
-import { Button, Card, CardBody, Switch } from "@heroui/react";
-import { FolderOpen, Gamepad2, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { Button, Card, CardBody, Input, Switch } from "@heroui/react";
+import { FolderOpen, Gamepad2, Plus, RefreshCw, Search } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
 import { CONFIG_QUERY_KEY, useConfig } from "@hooks/useConfig";
+import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import {
   inventoryGetLocal,
   inventoryRegisterInstallFolder,
   inventoryScanAndPublish,
   setShareGameInventoryWithCloud,
 } from "@services/tauri/inventory.service";
-import type { ConfiguredGame } from "@app-types/config";
+import { searchSteamGames, type ManifestSearchResult } from "@services/tauri/config.service";
 import { toastError, toastSuccess } from "@utils/toast";
 import { formatRelativeDate } from "@utils/format";
 
 export const INVENTORY_LOCAL_QUERY_KEY = ["inventory-local"] as const;
 
-function gameKeyForLibraryGame(game: ConfiguredGame): string | null {
-  const steam = game.steamAppId?.trim();
-  if (steam) {
-    return `steam:${steam}`;
-  }
-  const id = game.id?.trim();
-  if (id) {
-    return `savecloud:${id}`;
-  }
-  return null;
-}
-
-function displayNameForGame(game: ConfiguredGame): string {
-  return game.editionLabel?.trim() || game.id;
-}
-
 export function GameInventorySettingsCard() {
   const queryClient = useQueryClient();
   const { config } = useConfig();
   const sharing = config?.shareGameInventoryWithCloud ?? true;
+
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [selectedSteam, setSelectedSteam] = useState<ManifestSearchResult | null>(null);
+  const [folderPath, setFolderPath] = useState<string | null>(null);
+
+  const debouncedSearch = useDebouncedValue(searchInput.trim(), 400);
 
   const { data: localInventory } = useQuery({
     queryKey: INVENTORY_LOCAL_QUERY_KEY,
@@ -44,27 +36,11 @@ export function GameInventorySettingsCard() {
     refetchOnWindowFocus: false,
   });
 
-  const verifiedKeys = useMemo(() => {
-    return new Set(localInventory?.manifest?.games?.map((g) => g.gameKey) ?? []);
-  }, [localInventory]);
-
-  const libraryCandidates = useMemo(() => {
-    const games = config?.games ?? [];
-    return games
-      .map((game) => {
-        const gameKey = gameKeyForLibraryGame(game);
-        if (!gameKey) return null;
-        return {
-          game,
-          gameKey,
-          displayName: displayNameForGame(game),
-          verified: verifiedKeys.has(gameKey),
-        };
-      })
-      .filter((row): row is NonNullable<typeof row> => row != null);
-  }, [config?.games, verifiedKeys]);
-
-  const missingGames = useMemo(() => libraryCandidates.filter((row) => !row.verified), [libraryCandidates]);
+  const { data: steamResults = [], isLoading: steamLoading } = useQuery({
+    queryKey: ["inventory-steam-search", debouncedSearch],
+    queryFn: () => searchSteamGames(debouncedSearch),
+    enabled: showAddForm && debouncedSearch.length >= 3,
+  });
 
   const shareMutation = useMutation({
     mutationFn: setShareGameInventoryWithCloud,
@@ -96,37 +72,43 @@ export function GameInventorySettingsCard() {
     },
   });
 
-  const registerFolderMutation = useMutation({
-    mutationFn: ({ gameKey, folderPath }: { gameKey: string; folderPath: string }) =>
-      inventoryRegisterInstallFolder(gameKey, folderPath),
+  const registerMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedSteam || !folderPath) {
+        return Promise.reject(new Error("Selecciona el juego y la carpeta"));
+      }
+      return inventoryRegisterInstallFolder(selectedSteam.steamAppId, selectedSteam.name, folderPath);
+    },
     onSuccess: (manifest) => {
       queryClient.setQueryData(INVENTORY_LOCAL_QUERY_KEY, { manifest });
-      toastSuccess("Carpeta registrada", "El juego quedó verificado en tu inventario.");
+      toastSuccess("Juego añadido", `${selectedSteam?.name ?? "Juego"} listo para compartir por LAN.`);
+      setShowAddForm(false);
+      setSearchInput("");
+      setSelectedSteam(null);
+      setFolderPath(null);
     },
     onError: (e) => {
-      toastError("No se pudo registrar la carpeta", e instanceof Error ? e.message : String(e));
+      toastError("No se pudo añadir", e instanceof Error ? e.message : String(e));
     },
   });
 
-  const pickInstallFolder = useCallback(
-    async (gameKey: string, title: string) => {
-      try {
-        const selected = await open({
-          directory: true,
-          multiple: false,
-          title: `Carpeta de instalación — ${title}`,
-        });
-        if (selected == null || Array.isArray(selected)) return;
-        registerFolderMutation.mutate({ gameKey, folderPath: selected });
-      } catch (e) {
-        toastError("No se pudo abrir el selector", e instanceof Error ? e.message : String(e));
-      }
-    },
-    [registerFolderMutation]
-  );
+  const pickFolder = async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Carpeta de instalación del juego",
+      });
+      if (selected == null || Array.isArray(selected)) return;
+      setFolderPath(selected);
+    } catch (e) {
+      toastError("No se pudo abrir el selector", e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const verifiedGames = localInventory?.manifest?.games?.length ?? 0;
   const lastPublishedAt = localInventory?.manifest?.updatedAt ?? null;
+  const canRegister = Boolean(selectedSteam && folderPath && sharing);
 
   return (
     <Card className="border border-default-200/80 bg-default-50/30 dark:bg-default-100/10">
@@ -138,8 +120,7 @@ export function GameInventorySettingsCard() {
           <div className="min-w-0 flex-1">
             <h3 className="text-sm font-semibold text-foreground">Inventario de juegos en el cloud</h3>
             <p className="mt-0.5 text-xs leading-relaxed text-default-500">
-              Comparte qué juegos tienes instalados y verificados para que otros miembros del cloud puedan transferirlos
-              en la red local (estilo Steam).
+              Comparte instalaciones verificadas para que otros en tu cloud puedan traer juegos por LAN.
             </p>
           </div>
         </div>
@@ -147,9 +128,7 @@ export function GameInventorySettingsCard() {
         <div className="flex items-center justify-between gap-4 rounded-lg border border-default-200 bg-default-100/50 px-3 py-2.5 dark:border-default-100/15">
           <div className="min-w-0">
             <p className="text-sm font-medium text-default-700">Compartir inventario con el cloud</p>
-            <p className="mt-0.5 text-xs text-default-500">
-              Activado por defecto. Desactívalo si no quieres que otros vean tus juegos.
-            </p>
+            <p className="mt-0.5 text-xs text-default-500">Desactívalo si no quieres que otros vean tus juegos.</p>
           </div>
           <Switch
             isSelected={sharing}
@@ -158,51 +137,121 @@ export function GameInventorySettingsCard() {
           />
         </div>
 
-        {missingGames.length > 0 ? (
-          <div className="rounded-lg border border-warning-200/60 bg-warning-50/40 px-3 py-2.5 dark:border-warning-500/20 dark:bg-warning-500/5">
-            <p className="text-xs font-medium text-warning-800 dark:text-warning-200">
-              {missingGames.length} juego(s) en tu biblioteca sin detectar automáticamente
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs text-default-500">
+            {verifiedGames > 0
+              ? `${verifiedGames} juego(s)${lastPublishedAt ? ` · ${formatRelativeDate(lastPublishedAt)}` : ""}`
+              : "Sin juegos en inventario"}
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {!showAddForm ? (
+              <Button
+                size="sm"
+                variant="flat"
+                color="primary"
+                startContent={<Plus size={14} />}
+                isDisabled={!sharing}
+                onPress={() => setShowAddForm(true)}>
+                Añadir juego
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              variant="bordered"
+              className="border-default-300/70"
+              startContent={<RefreshCw size={14} className={scanMutation.isPending ? "animate-spin" : ""} />}
+              isDisabled={scanMutation.isPending || !sharing}
+              onPress={() => scanMutation.mutate()}>
+              Reescanear
+            </Button>
+          </div>
+        </div>
+
+        {showAddForm ? (
+          <div className="space-y-3 rounded-lg border border-default-200 bg-content1/60 px-3 py-3 dark:border-default-100/15">
+            <p className="text-xs text-default-500">
+              Busca el juego en Steam (como al añadirlo a la biblioteca) y elige la carpeta donde está instalado.
             </p>
-            <p className="mt-1 text-xs text-default-500">
-              Elige la carpeta de instalación para que otros puedan traerlos por LAN.
-            </p>
-            <ul className="mt-2 flex flex-col gap-1.5">
-              {missingGames.map((row) => (
-                <li
-                  key={row.gameKey}
-                  className="flex items-center justify-between gap-2 rounded-md bg-content1/80 px-2 py-1.5">
-                  <span className="truncate text-xs font-medium text-foreground">{row.displayName}</span>
-                  <Button
-                    size="sm"
-                    variant="flat"
-                    className="shrink-0"
-                    startContent={<FolderOpen size={14} />}
-                    isDisabled={!sharing || registerFolderMutation.isPending}
-                    onPress={() => void pickInstallFolder(row.gameKey, row.displayName)}>
-                    Elegir carpeta
-                  </Button>
-                </li>
-              ))}
-            </ul>
+
+            <Input
+              label="Buscar en Steam"
+              placeholder="Ej. Sons Of The Forest"
+              value={searchInput}
+              onValueChange={(value) => {
+                setSearchInput(value);
+                setSelectedSteam(null);
+              }}
+              variant="bordered"
+              size="sm"
+              startContent={<Search size={16} className="text-default-400" />}
+            />
+
+            {debouncedSearch.length >= 3 ? (
+              <div className="max-h-36 space-y-0.5 overflow-y-auto rounded-medium border border-default-200 bg-default-50 px-1 py-1 text-xs">
+                {steamLoading ? (
+                  <p className="px-2 py-1.5 text-default-500">Buscando en Steam...</p>
+                ) : steamResults.length === 0 ? (
+                  <p className="px-2 py-1.5 text-default-500">No se encontraron juegos.</p>
+                ) : (
+                  steamResults.map((r) => (
+                    <button
+                      key={r.steamAppId}
+                      type="button"
+                      onClick={() => {
+                        setSelectedSteam(r);
+                        setSearchInput(r.name);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left hover:bg-default-100 ${
+                        selectedSteam?.steamAppId === r.steamAppId
+                          ? "bg-primary-50 text-primary-600"
+                          : "text-default-600"
+                      }`}>
+                      <span className="truncate">{r.name}</span>
+                      <span className="ml-2 shrink-0 text-[10px] text-default-400">#{r.steamAppId}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="bordered"
+                startContent={<FolderOpen size={14} />}
+                onPress={() => void pickFolder()}>
+                {folderPath ? "Cambiar carpeta" : "Elegir carpeta"}
+              </Button>
+              {folderPath ? (
+                <span className="min-w-0 flex-1 truncate text-xs text-default-500" title={folderPath}>
+                  {folderPath}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="light"
+                onPress={() => {
+                  setShowAddForm(false);
+                  setSearchInput("");
+                  setSelectedSteam(null);
+                  setFolderPath(null);
+                }}>
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                color="primary"
+                isDisabled={!canRegister}
+                isLoading={registerMutation.isPending}
+                onPress={() => registerMutation.mutate()}>
+                Añadir al inventario
+              </Button>
+            </div>
           </div>
         ) : null}
-
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-default-500">
-          <span>
-            {verifiedGames > 0
-              ? `${verifiedGames} juego(s) verificado(s)${lastPublishedAt ? ` · ${formatRelativeDate(lastPublishedAt)}` : ""}`
-              : "Sin inventario local publicado todavía"}
-          </span>
-          <Button
-            size="sm"
-            variant="bordered"
-            className="border-default-300/70"
-            startContent={<RefreshCw size={14} className={scanMutation.isPending ? "animate-spin" : ""} />}
-            isDisabled={scanMutation.isPending || !sharing}
-            onPress={() => scanMutation.mutate()}>
-            Reescanear ahora
-          </Button>
-        </div>
       </CardBody>
     </Card>
   );

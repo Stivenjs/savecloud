@@ -61,21 +61,21 @@ fn normalize_relative(path: &Path, root: &Path) -> Result<String, String> {
     Ok(parts.join("/"))
 }
 
-fn scan_installed_folder(
-    game: &ConfiguredGame,
+fn scan_folder_at_root(
+    game_key: &str,
+    display_name: &str,
     root: &Path,
 ) -> Result<Option<GameInventoryEntry>, String> {
-    let game_key =
-        game_key_for_configured_game(game).ok_or_else(|| "gameKey no disponible".to_string())?;
     if !root.is_dir() {
         return Ok(None);
     }
 
-    let display_name = game
-        .edition_label
-        .clone()
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| game.id.clone());
+    let display_name = display_name.trim();
+    let display_name = if display_name.is_empty() {
+        game_key.to_string()
+    } else {
+        display_name.to_string()
+    };
 
     let mut files = Vec::new();
     let mut total_bytes = 0_u64;
@@ -107,7 +107,7 @@ fn scan_installed_folder(
     let manifest_hash = entry_content_hash(&files);
 
     Ok(Some(GameInventoryEntry {
-        game_key,
+        game_key: game_key.to_string(),
         display_name,
         status: "verified".to_string(),
         payload_kind: "installedFolder".to_string(),
@@ -119,6 +119,20 @@ fn scan_installed_folder(
         sources_archive: None,
         install_root: Some(root.to_string_lossy().into_owned()),
     }))
+}
+
+fn scan_installed_folder(
+    game: &ConfiguredGame,
+    root: &Path,
+) -> Result<Option<GameInventoryEntry>, String> {
+    let game_key =
+        game_key_for_configured_game(game).ok_or_else(|| "gameKey no disponible".to_string())?;
+    let display_name = game
+        .edition_label
+        .clone()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| game.id.clone());
+    scan_folder_at_root(&game_key, &display_name, root)
 }
 
 fn entry_content_hash(files: &[InventoryFileEntry]) -> String {
@@ -197,19 +211,21 @@ fn resolve_scan_root(game: &ConfiguredGame, game_key: &str) -> Option<PathBuf> {
 pub fn register_manual_install_folder(
     user_id: &str,
     sharing_enabled: bool,
-    game_key: &str,
+    steam_app_id: &str,
+    display_name: &str,
     folder: &Path,
 ) -> Result<DeviceInventoryManifest, String> {
-    set_manual_install_root(game_key, folder)?;
+    let app_id = steam_app_id.trim();
+    if app_id.is_empty() {
+        return Err("Selecciona un juego de Steam".to_string());
+    }
 
-    let library = config::load_library();
-    let game = library
-        .games
-        .iter()
-        .find(|g| game_key_for_configured_game(g).as_deref() == Some(game_key))
-        .ok_or_else(|| "Juego no encontrado en la biblioteca".to_string())?;
+    let game_key = crate::peer_inventory::game_key::game_key_for_catalog_steam(app_id)
+        .ok_or_else(|| "Steam App ID inválido".to_string())?;
 
-    let entry = scan_installed_folder(game, folder)?
+    set_manual_install_root(&game_key, folder)?;
+
+    let entry = scan_folder_at_root(&game_key, display_name, folder)?
         .ok_or_else(|| "La carpeta no contiene archivos de juego indexables".to_string())?;
 
     let mut manifest = load_local_manifest()?.unwrap_or_else(|| DeviceInventoryManifest {

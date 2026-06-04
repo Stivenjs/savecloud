@@ -81,7 +81,8 @@ pub async fn start_peer_game_download(
 
 #[command]
 pub async fn inventory_register_install_folder(
-    game_key: String,
+    steam_app_id: String,
+    display_name: String,
     folder_path: String,
 ) -> Result<crate::peer_inventory::DeviceInventoryManifest, String> {
     let settings = crate::config::load_settings();
@@ -93,7 +94,8 @@ pub async fn inventory_register_install_folder(
     let manifest = register_manual_install_folder(
         &user_id,
         settings.share_game_inventory_with_cloud,
-        &game_key,
+        &steam_app_id,
+        &display_name,
         Path::new(&folder_path),
     )?;
 

@@ -80,9 +80,14 @@ export function inventoryScanAndPublish(forceScan = true): Promise<DeviceInvento
   return invoke<DeviceInventoryManifest>("inventory_scan_and_publish", { forceScan });
 }
 
-export function inventoryRegisterInstallFolder(gameKey: string, folderPath: string): Promise<DeviceInventoryManifest> {
+export function inventoryRegisterInstallFolder(
+  steamAppId: string,
+  displayName: string,
+  folderPath: string
+): Promise<DeviceInventoryManifest> {
   return invoke<DeviceInventoryManifest>("inventory_register_install_folder", {
-    gameKey,
+    steamAppId,
+    displayName,
     folderPath,
   });
 }
