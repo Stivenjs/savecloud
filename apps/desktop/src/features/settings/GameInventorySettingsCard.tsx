@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button, Card, CardBody, Input, Switch } from "@heroui/react";
+import { AnimatePresence, motion } from "framer-motion";
 import { FolderOpen, Gamepad2, Plus, RefreshCw, Search } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -137,121 +138,132 @@ export function GameInventorySettingsCard() {
           />
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-xs text-default-500">
-            {verifiedGames > 0
-              ? `${verifiedGames} juego(s)${lastPublishedAt ? ` · ${formatRelativeDate(lastPublishedAt)}` : ""}`
-              : "Sin juegos en inventario"}
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {!showAddForm ? (
-              <Button
-                size="sm"
-                variant="flat"
-                color="primary"
-                startContent={<Plus size={14} />}
-                isDisabled={!sharing}
-                onPress={() => setShowAddForm(true)}>
-                Añadir juego
-              </Button>
-            ) : null}
-            <Button
-              size="sm"
-              variant="bordered"
-              className="border-default-300/70"
-              startContent={<RefreshCw size={14} className={scanMutation.isPending ? "animate-spin" : ""} />}
-              isDisabled={scanMutation.isPending || !sharing}
-              onPress={() => scanMutation.mutate()}>
-              Reescanear
-            </Button>
-          </div>
-        </div>
-
-        {showAddForm ? (
-          <div className="space-y-3 rounded-lg border border-default-200 bg-content1/60 px-3 py-3 dark:border-default-100/15">
-            <p className="text-xs text-default-500">
-              Busca el juego en Steam (como al añadirlo a la biblioteca) y elige la carpeta donde está instalado.
-            </p>
-
-            <Input
-              label="Buscar en Steam"
-              placeholder="Ej. Sons Of The Forest"
-              value={searchInput}
-              onValueChange={(value) => {
-                setSearchInput(value);
-                setSelectedSteam(null);
-              }}
-              variant="bordered"
-              size="sm"
-              startContent={<Search size={16} className="text-default-400" />}
-            />
-
-            {debouncedSearch.length >= 3 ? (
-              <div className="max-h-36 space-y-0.5 overflow-y-auto rounded-medium border border-default-200 bg-default-50 px-1 py-1 text-xs">
-                {steamLoading ? (
-                  <p className="px-2 py-1.5 text-default-500">Buscando en Steam...</p>
-                ) : steamResults.length === 0 ? (
-                  <p className="px-2 py-1.5 text-default-500">No se encontraron juegos.</p>
-                ) : (
-                  steamResults.map((r) => (
-                    <button
-                      key={r.steamAppId}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSteam(r);
-                        setSearchInput(r.name);
-                      }}
-                      className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left hover:bg-default-100 ${
-                        selectedSteam?.steamAppId === r.steamAppId
-                          ? "bg-primary-50 text-primary-600"
-                          : "text-default-600"
-                      }`}>
-                      <span className="truncate">{r.name}</span>
-                      <span className="ml-2 shrink-0 text-[10px] text-default-400">#{r.steamAppId}</span>
-                    </button>
-                  ))
-                )}
-              </div>
-            ) : null}
-
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-default-500">
+              {verifiedGames > 0
+                ? `${verifiedGames} juego(s)${lastPublishedAt ? ` · ${formatRelativeDate(lastPublishedAt)}` : ""}`
+                : "Sin juegos en inventario"}
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {!showAddForm ? (
+                <Button
+                  size="sm"
+                  variant="flat"
+                  color="primary"
+                  startContent={<Plus size={14} />}
+                  isDisabled={!sharing}
+                  onPress={() => setShowAddForm(true)}>
+                  Añadir juego
+                </Button>
+              ) : null}
               <Button
                 size="sm"
                 variant="bordered"
-                startContent={<FolderOpen size={14} />}
-                onPress={() => void pickFolder()}>
-                {folderPath ? "Cambiar carpeta" : "Elegir carpeta"}
-              </Button>
-              {folderPath ? (
-                <span className="min-w-0 flex-1 truncate text-xs text-default-500" title={folderPath}>
-                  {folderPath}
-                </span>
-              ) : null}
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button
-                size="sm"
-                variant="light"
-                onPress={() => {
-                  setShowAddForm(false);
-                  setSearchInput("");
-                  setSelectedSteam(null);
-                  setFolderPath(null);
-                }}>
-                Cancelar
-              </Button>
-              <Button
-                size="sm"
-                color="primary"
-                isDisabled={!canRegister}
-                isLoading={registerMutation.isPending}
-                onPress={() => registerMutation.mutate()}>
-                Añadir al inventario
+                className="border-default-300/70"
+                startContent={<RefreshCw size={14} className={scanMutation.isPending ? "animate-spin" : ""} />}
+                isDisabled={scanMutation.isPending || !sharing}
+                onPress={() => scanMutation.mutate()}>
+                Reescanear
               </Button>
             </div>
           </div>
-        ) : null}
+
+          <AnimatePresence initial={false}>
+            {showAddForm && (
+              <motion.div
+                initial={{ height: 0, opacity: 0, marginTop: 0 }}
+                animate={{ height: "auto", opacity: 1, marginTop: 12 }}
+                exit={{ height: 0, opacity: 0, marginTop: 0 }}
+                transition={{ type: "spring", stiffness: 160, damping: 22 }}
+                style={{ overflow: "hidden" }}>
+                <div className="space-y-3 rounded-lg border border-default-200 bg-content1/60 px-3 py-3 dark:border-default-100/15">
+                  <p className="text-xs text-default-500">
+                    Busca el juego en Steam (como al añadirlo a la biblioteca) y elige la carpeta donde está instalado.
+                  </p>
+
+                  <Input
+                    label="Buscar en Steam"
+                    placeholder="Ej. Sons Of The Forest"
+                    value={searchInput}
+                    onValueChange={(value) => {
+                      setSearchInput(value);
+                      setSelectedSteam(null);
+                    }}
+                    variant="bordered"
+                    size="sm"
+                    startContent={<Search size={16} className="text-default-400" />}
+                  />
+
+                  {debouncedSearch.length >= 3 ? (
+                    <div className="max-h-36 space-y-0.5 overflow-y-auto rounded-medium border border-default-200 bg-default-50 px-1 py-1 text-xs">
+                      {steamLoading ? (
+                        <p className="px-2 py-1.5 text-default-500">Buscando en Steam...</p>
+                      ) : steamResults.length === 0 ? (
+                        <p className="px-2 py-1.5 text-default-500">No se encontraron juegos.</p>
+                      ) : (
+                        steamResults.map((r) => (
+                          <button
+                            key={r.steamAppId}
+                            type="button"
+                            onClick={() => {
+                              setSelectedSteam(r);
+                              setSearchInput(r.name);
+                            }}
+                            className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left hover:bg-default-100 ${
+                              selectedSteam?.steamAppId === r.steamAppId
+                                ? "bg-primary-50 text-primary-600"
+                                : "text-default-600"
+                            }`}>
+                            <span className="truncate">{r.name}</span>
+                            <span className="ml-2 shrink-0 text-[10px] text-default-400">#{r.steamAppId}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="bordered"
+                      startContent={<FolderOpen size={14} />}
+                      onPress={() => void pickFolder()}>
+                      {folderPath ? "Cambiar carpeta" : "Elegir carpeta"}
+                    </Button>
+                    {folderPath ? (
+                      <span className="min-w-0 flex-1 truncate text-xs text-default-500" title={folderPath}>
+                        {folderPath}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      size="sm"
+                      variant="light"
+                      onPress={() => {
+                        setShowAddForm(false);
+                        setSearchInput("");
+                        setSelectedSteam(null);
+                        setFolderPath(null);
+                      }}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      size="sm"
+                      color="primary"
+                      isDisabled={!canRegister}
+                      isLoading={registerMutation.isPending}
+                      onPress={() => registerMutation.mutate()}>
+                      Añadir al inventario
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </CardBody>
     </Card>
   );
