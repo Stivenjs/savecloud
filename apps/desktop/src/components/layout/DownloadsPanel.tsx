@@ -235,8 +235,12 @@ export function DownloadsPanel() {
         value,
         source: "sources" as const,
         isPaused: task.status === "paused",
-        canPause: task.protocol !== "http" && (task.status === "running" || task.status === "queued"),
-        canResume: task.protocol !== "http" && task.status === "paused",
+        canPause:
+          (task.protocol === "peerLan" || task.protocol === "torrentMagnet" || task.protocol === "torrentFile") &&
+          (task.status === "running" || task.status === "queued"),
+        canResume:
+          (task.protocol === "peerLan" || task.protocol === "torrentMagnet" || task.protocol === "torrentFile") &&
+          task.status === "paused",
         canCancel: task.status === "queued" || task.status === "running" || task.status === "paused",
         loaded,
         total,

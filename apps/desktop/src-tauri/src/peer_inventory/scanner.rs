@@ -16,13 +16,17 @@ use super::install_paths::{job_matches_game_key, resolve_install_root};
 use super::models::{
     DeviceInventoryManifest, GameInventoryEntry, InventoryFileEntry, SourcesArchiveEntry,
 };
-use super::store::{now_iso, resolve_device_id, resolve_device_name, save_local_manifest};
+use super::overrides::{manual_install_root, set_manual_install_root};
+use super::store::{
+    load_local_manifest, now_iso, resolve_device_id, resolve_device_name, save_local_manifest,
+};
 
 const MANIFEST_VERSION: u32 = 1;
 const HASH_PREFIX: &str = "blake3:";
 
 fn hash_file(path: &Path) -> Result<String, String> {
-    let mut file = fs::File::open(path).map_err(|e| format!("No se pudo abrir {}: {e}", path.display()))?;
+    let mut file =
+        fs::File::open(path).map_err(|e| format!("No se pudo abrir {}: {e}", path.display()))?;
     let mut hasher = Hasher::new();
     let mut buf = [0u8; 1024 * 1024];
     loop {
@@ -46,7 +50,12 @@ fn normalize_relative(path: &Path, root: &Path) -> Result<String, String> {
         match comp {
             Component::Normal(p) => parts.push(p.to_string_lossy().replace('\\', "/")),
             Component::CurDir => {}
-            _ => return Err(format!("Componente de ruta no permitido: {}", path.display())),
+            _ => {
+                return Err(format!(
+                    "Componente de ruta no permitido: {}",
+                    path.display()
+                ))
+            }
         }
     }
     Ok(parts.join("/"))
@@ -56,8 +65,8 @@ fn scan_installed_folder(
     game: &ConfiguredGame,
     root: &Path,
 ) -> Result<Option<GameInventoryEntry>, String> {
-    let game_key = game_key_for_configured_game(game)
-        .ok_or_else(|| "gameKey no disponible".to_string())?;
+    let game_key =
+        game_key_for_configured_game(game).ok_or_else(|| "gameKey no disponible".to_string())?;
     if !root.is_dir() {
         return Ok(None);
     }
@@ -122,7 +131,10 @@ fn entry_content_hash(files: &[InventoryFileEntry]) -> String {
     format!("{HASH_PREFIX}{}", hasher.finalize().to_hex())
 }
 
-fn scan_sources_archives_for_game(game: &ConfiguredGame, game_key: &str) -> Result<Option<SourcesArchiveEntry>, String> {
+fn scan_sources_archives_for_game(
+    game: &ConfiguredGame,
+    game_key: &str,
+) -> Result<Option<SourcesArchiveEntry>, String> {
     let jobs = sources_store::load_jobs().unwrap_or_default();
     let mut best: Option<SourcesArchiveEntry> = None;
 
@@ -143,7 +155,9 @@ fn scan_sources_archives_for_game(game: &ConfiguredGame, game_key: &str) -> Resu
         if !archive_path.is_file() {
             continue;
         }
-        let size = fs::metadata(&archive_path).map_err(|e| e.to_string())?.len();
+        let size = fs::metadata(&archive_path)
+            .map_err(|e| e.to_string())?
+            .len();
         let hash = hash_file(&archive_path)?;
         let verified_at = Utc::now().to_rfc3339();
         let entry = SourcesArchiveEntry {
@@ -176,8 +190,69 @@ fn upsert_verified_entry(
     games.push(entry);
 }
 
-/// Escanea biblioteca + jobs de fuentes y persiste manifiesto local verificado.
-pub fn scan_full_inventory(user_id: &str, sharing_enabled: bool) -> Result<DeviceInventoryManifest, String> {
+fn resolve_scan_root(game: &ConfiguredGame, game_key: &str) -> Option<PathBuf> {
+    manual_install_root(game_key).or_else(|| resolve_install_root(game, game_key))
+}
+
+pub fn register_manual_install_folder(
+    user_id: &str,
+    sharing_enabled: bool,
+    game_key: &str,
+    folder: &Path,
+) -> Result<DeviceInventoryManifest, String> {
+    set_manual_install_root(game_key, folder)?;
+
+    let library = config::load_library();
+    let game = library
+        .games
+        .iter()
+        .find(|g| game_key_for_configured_game(g).as_deref() == Some(game_key))
+        .ok_or_else(|| "Juego no encontrado en la biblioteca".to_string())?;
+
+    let entry = scan_installed_folder(game, folder)?
+        .ok_or_else(|| "La carpeta no contiene archivos de juego indexables".to_string())?;
+
+    let mut manifest = load_local_manifest()?.unwrap_or_else(|| DeviceInventoryManifest {
+        device_id: resolve_device_id().unwrap_or_default(),
+        device_name: resolve_device_name(),
+        user_id: user_id.to_string(),
+        manifest_version: MANIFEST_VERSION,
+        content_hash: String::new(),
+        updated_at: now_iso(),
+        sharing_enabled,
+        games: Vec::new(),
+    });
+
+    manifest.user_id = user_id.to_string();
+    manifest.sharing_enabled = sharing_enabled;
+    manifest.updated_at = now_iso();
+
+    let mut seen_keys = std::collections::HashSet::new();
+    let mut games: Vec<GameInventoryEntry> = manifest
+        .games
+        .into_iter()
+        .filter(|g| {
+            if g.game_key == game_key {
+                false
+            } else {
+                seen_keys.insert(g.game_key.clone());
+                true
+            }
+        })
+        .collect();
+
+    upsert_verified_entry(&mut games, &mut seen_keys, entry);
+    games.sort_by(|a, b| a.game_key.cmp(&b.game_key));
+    manifest.content_hash = manifest_content_hash(&games);
+    manifest.games = games;
+    save_local_manifest(&manifest)?;
+    Ok(manifest)
+}
+
+pub fn scan_full_inventory(
+    user_id: &str,
+    sharing_enabled: bool,
+) -> Result<DeviceInventoryManifest, String> {
     let device_id = resolve_device_id()?;
     let device_name = resolve_device_name();
     let library = config::load_library();
@@ -189,7 +264,7 @@ pub fn scan_full_inventory(user_id: &str, sharing_enabled: bool) -> Result<Devic
         let Some(game_key) = game_key_for_configured_game(game) else {
             continue;
         };
-        if let Some(root) = resolve_install_root(game, &game_key) {
+        if let Some(root) = resolve_scan_root(game, &game_key) {
             if let Some(mut entry) = scan_installed_folder(game, &root)? {
                 if let Some(archive) = scan_sources_archives_for_game(game, &game_key)? {
                     entry.sources_archive = Some(archive);
@@ -208,30 +283,31 @@ pub fn scan_full_inventory(user_id: &str, sharing_enabled: bool) -> Result<Devic
                 .filter(|s| !s.trim().is_empty())
                 .unwrap_or_else(|| game.id.clone());
             let verified_at = Utc::now().to_rfc3339();
-            upsert_verified_entry(&mut games, &mut seen_keys, GameInventoryEntry {
-                game_key: game_key.clone(),
-                display_name,
-                status: "verified".to_string(),
-                payload_kind: "sourcesArchive".to_string(),
-                total_bytes: archive.size,
-                file_count: 1,
-                manifest_hash: archive.hash.clone(),
-                verified_at,
-                files: vec![InventoryFileEntry {
-                    relative_path: archive.relative_path.clone(),
-                    size: archive.size,
-                    hash: archive.hash.clone(),
-                }],
-                sources_archive: Some(archive.clone()),
-                install_root: sources_store::load_jobs()
-                    .ok()
-                    .and_then(|jobs| {
-                        jobs
-                            .iter()
+            upsert_verified_entry(
+                &mut games,
+                &mut seen_keys,
+                GameInventoryEntry {
+                    game_key: game_key.clone(),
+                    display_name,
+                    status: "verified".to_string(),
+                    payload_kind: "sourcesArchive".to_string(),
+                    total_bytes: archive.size,
+                    file_count: 1,
+                    manifest_hash: archive.hash.clone(),
+                    verified_at,
+                    files: vec![InventoryFileEntry {
+                        relative_path: archive.relative_path.clone(),
+                        size: archive.size,
+                        hash: archive.hash.clone(),
+                    }],
+                    sources_archive: Some(archive.clone()),
+                    install_root: sources_store::load_jobs().ok().and_then(|jobs| {
+                        jobs.iter()
                             .find(|j| j.job_id == archive.job_id)
                             .map(|j| j.destination_dir.clone())
                     }),
-            });
+                },
+            );
         }
     }
 

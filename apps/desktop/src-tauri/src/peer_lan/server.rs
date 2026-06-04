@@ -90,7 +90,6 @@ pub async fn ensure_lan_http_server() -> Result<u16, String> {
     Ok(port)
 }
 
-/// Activa el modo transferencia sobre el servidor persistente (sin abrir puertos nuevos).
 pub async fn start_lan_server_for_session(token: &str, game_key: &str) -> Result<u16, String> {
     let port = ensure_lan_http_server().await?;
 

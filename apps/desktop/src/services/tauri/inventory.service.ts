@@ -80,6 +80,13 @@ export function inventoryScanAndPublish(forceScan = true): Promise<DeviceInvento
   return invoke<DeviceInventoryManifest>("inventory_scan_and_publish", { forceScan });
 }
 
+export function inventoryRegisterInstallFolder(gameKey: string, folderPath: string): Promise<DeviceInventoryManifest> {
+  return invoke<DeviceInventoryManifest>("inventory_register_install_folder", {
+    gameKey,
+    folderPath,
+  });
+}
+
 export function inventoryGetLocal(): Promise<{ manifest: DeviceInventoryManifest | null }> {
   return invoke<{ manifest: DeviceInventoryManifest | null }>("inventory_get_local");
 }

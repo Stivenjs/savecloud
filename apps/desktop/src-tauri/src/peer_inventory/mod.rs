@@ -3,6 +3,7 @@
 mod game_key;
 mod install_paths;
 mod models;
+mod overrides;
 pub mod publish;
 mod scanner;
 pub mod store;
@@ -14,4 +15,5 @@ pub use publish::{
     delete_cloud_inventory, list_providers_from_api, publish_local_inventory,
     GameProvidersResponseDto, InventoryFileDto,
 };
+pub use scanner::register_manual_install_folder;
 pub use store::{load_local_manifest, resolve_device_id};

@@ -12,7 +12,6 @@ use crate::sources::store as sources_store;
 
 const MIN_INSTALL_BYTES: u64 = 100 * 1024 * 1024;
 
-/// Carpeta de instalación verificable para un juego de biblioteca.
 pub fn resolve_install_root(game: &ConfiguredGame, game_key: &str) -> Option<PathBuf> {
     if let Some(root) = install_root_from_launch_executable(game) {
         if root.is_dir() && looks_like_game_install_dir(&root, InstallRootTrust::LaunchExecutable) {
@@ -33,9 +32,7 @@ pub fn resolve_install_root(game: &ConfiguredGame, game_key: &str) -> Option<Pat
 }
 
 enum InstallRootTrust {
-    /// El usuario configuró el `.exe` de lanzamiento.
     LaunchExecutable,
-    /// Steam, torrent u otra heurística.
     Discovered,
 }
 
