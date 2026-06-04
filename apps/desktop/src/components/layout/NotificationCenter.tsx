@@ -10,6 +10,7 @@ import type { NotificationRecord } from "@services/tauri/notifications.service";
 import { formatRelativeDate } from "@utils/format";
 import { formatDayGroupHeading, getLocalDayKey } from "@utils/operationHistory";
 import { openPath } from "@tauri-apps/plugin-opener";
+import { formatGameDisplayName } from "@utils/gameImage";
 
 function severityColor(severity: string): "default" | "primary" | "success" | "warning" | "danger" {
   switch (severity) {
@@ -81,6 +82,14 @@ function NotificationRow({
   const iconBg = iconBgMap[color] ?? iconBgMap.default;
   const downloadDir = getDownloadDir(n);
 
+  let displayBody = n.body;
+  if (n.gameId) {
+    const formatted = formatGameDisplayName(n.gameId);
+    const escaped = n.gameId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`(?<![a-zA-Z0-9_-])${escaped}(?![a-zA-Z0-9_-])`, "g");
+    displayBody = n.body.replace(regex, formatted);
+  }
+
   return (
     <div
       className={`
@@ -111,7 +120,7 @@ function NotificationRow({
           </button>
         </div>
 
-        <p className="mt-0.5 text-xs text-default-500 leading-relaxed">{n.body}</p>
+        <p className="mt-0.5 text-xs text-default-500 leading-relaxed">{displayBody}</p>
 
         {/* Fila de acciones */}
         <div className="mt-2 flex items-center gap-2 flex-wrap">

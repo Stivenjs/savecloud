@@ -16,6 +16,7 @@ import {
 import { searchSteamGames, type ManifestSearchResult } from "@services/tauri/config.service";
 import { toastError, toastSuccess } from "@utils/toast";
 import { formatRelativeDate } from "@utils/format";
+import { formatGameDisplayName } from "@utils/gameImage";
 
 export const INVENTORY_LOCAL_QUERY_KEY = ["inventory-local"] as const;
 
@@ -174,7 +175,7 @@ export function GameInventorySettingsCard() {
                     style={{ overflow: "hidden" }}
                     className="flex items-center justify-between gap-3 px-3 py-2 text-xs hover:bg-default-100/30 transition-colors">
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium text-foreground truncate">{game.displayName}</p>
+                      <p className="font-medium text-foreground truncate">{formatGameDisplayName(game.displayName)}</p>
                       <p className="text-[10px] text-default-400 truncate">
                         {game.payloadKind === "installedFolder" ? "Añadido manualmente" : "Escaneo automático"} ·{" "}
                         {(game.totalBytes / (1024 * 1024 * 1024)).toFixed(2)} GB
