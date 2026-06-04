@@ -1,5 +1,6 @@
 //! Transferencia LAN entre peers (mDNS + servidor HTTP + descarga streaming).
 
+pub mod checkpoint;
 pub mod discovery;
 mod mdns_registry;
 mod poller;

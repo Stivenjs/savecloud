@@ -8,7 +8,6 @@ use super::models::DeviceInventoryManifest;
 use super::scanner::scan_full_inventory;
 use super::store::load_local_manifest;
 
-/// Escanea, guarda local y publica al cloud si sharing está habilitado.
 pub async fn publish_local_inventory(force_scan: bool) -> Result<DeviceInventoryManifest, String> {
     let settings = load_settings();
     let sharing = settings.share_game_inventory_with_cloud;
@@ -35,6 +34,10 @@ pub async fn publish_local_inventory(force_scan: bool) -> Result<DeviceInventory
     }
 
     Ok(manifest)
+}
+
+pub async fn publish_manifest_to_cloud(manifest: &DeviceInventoryManifest) -> Result<(), String> {
+    put_cloud_manifest(manifest).await
 }
 
 async fn put_cloud_manifest(manifest: &DeviceInventoryManifest) -> Result<(), String> {

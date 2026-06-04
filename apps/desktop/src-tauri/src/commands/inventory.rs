@@ -3,9 +3,12 @@
 use serde::Serialize;
 use tauri::command;
 
+use std::path::Path;
+
+use crate::peer_inventory::publish::publish_manifest_to_cloud;
 use crate::peer_inventory::{
     game_key_for_catalog_steam, list_providers_from_api, load_local_manifest,
-    publish_local_inventory, GameProvidersResponseDto,
+    publish_local_inventory, register_manual_install_folder, GameProvidersResponseDto,
 };
 use crate::peer_lan::{poll_and_serve_pending_sessions, probe_lan_devices, LanDeviceProbe};
 use crate::sources::commands::downloads::start_peer_game_download_inner;
@@ -74,6 +77,60 @@ pub async fn start_peer_game_download(
         manifest_hash,
     )
     .await
+}
+
+#[command]
+pub async fn inventory_register_install_folder(
+    steam_app_id: String,
+    display_name: String,
+    folder_path: String,
+) -> Result<crate::peer_inventory::DeviceInventoryManifest, String> {
+    let settings = crate::config::load_settings();
+    let user_id = settings
+        .user_id
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| "userId no configurado".to_string())?;
+
+    let manifest = register_manual_install_folder(
+        &user_id,
+        settings.share_game_inventory_with_cloud,
+        &steam_app_id,
+        &display_name,
+        Path::new(&folder_path),
+    )?;
+
+    if settings.share_game_inventory_with_cloud {
+        publish_manifest_to_cloud(&manifest).await?;
+        let _ = crate::peer_inventory::publish::post_cloud_heartbeat(&manifest.device_id).await;
+        crate::peer_lan::ensure_lan_presence().await;
+    }
+
+    Ok(manifest)
+}
+
+#[command]
+pub async fn inventory_unregister_install_folder(
+    game_key: String,
+) -> Result<crate::peer_inventory::DeviceInventoryManifest, String> {
+    let settings = crate::config::load_settings();
+    let user_id = settings
+        .user_id
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| "userId no configurado".to_string())?;
+
+    let manifest = crate::peer_inventory::unregister_manual_install_folder(
+        &user_id,
+        settings.share_game_inventory_with_cloud,
+        &game_key,
+    )?;
+
+    if settings.share_game_inventory_with_cloud {
+        publish_manifest_to_cloud(&manifest).await?;
+        let _ = crate::peer_inventory::publish::post_cloud_heartbeat(&manifest.device_id).await;
+        crate::peer_lan::ensure_lan_presence().await;
+    }
+
+    Ok(manifest)
 }
 
 #[command]

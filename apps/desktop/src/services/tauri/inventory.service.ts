@@ -80,6 +80,24 @@ export function inventoryScanAndPublish(forceScan = true): Promise<DeviceInvento
   return invoke<DeviceInventoryManifest>("inventory_scan_and_publish", { forceScan });
 }
 
+export function inventoryRegisterInstallFolder(
+  steamAppId: string,
+  displayName: string,
+  folderPath: string
+): Promise<DeviceInventoryManifest> {
+  return invoke<DeviceInventoryManifest>("inventory_register_install_folder", {
+    steamAppId,
+    displayName,
+    folderPath,
+  });
+}
+
+export function inventoryUnregisterInstallFolder(gameKey: string): Promise<DeviceInventoryManifest> {
+  return invoke<DeviceInventoryManifest>("inventory_unregister_install_folder", {
+    gameKey,
+  });
+}
+
 export function inventoryGetLocal(): Promise<{ manifest: DeviceInventoryManifest | null }> {
   return invoke<{ manifest: DeviceInventoryManifest | null }>("inventory_get_local");
 }

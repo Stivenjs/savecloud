@@ -8,7 +8,6 @@ use crate::peer_inventory::resolve_device_id;
 use crate::peer_lan::mdns_registry::{publish_lan_service, withdraw_lan_service};
 use crate::peer_lan::server::{ensure_lan_http_server, shutdown_lan_http_server};
 
-/// Anuncia o retira presencia según ajustes actuales.
 pub async fn ensure_lan_presence() {
     let settings = load_settings();
     if !settings.share_game_inventory_with_cloud {
@@ -39,7 +38,6 @@ pub async fn ensure_lan_presence() {
     }
 }
 
-/// Al arrancar la app y como respaldo periódico (reanuncia solo si cambió el puerto).
 pub fn spawn_lan_presence_advertiser() {
     tauri::async_runtime::spawn(async {
         ensure_lan_presence().await;

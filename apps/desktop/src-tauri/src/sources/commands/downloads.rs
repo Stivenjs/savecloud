@@ -182,6 +182,9 @@ pub async fn cancel_source_download(
                 let _ = tokio::fs::remove_file(path).await;
             }
         }
+        DownloadProtocol::PeerLan => {
+            cancel_job(&state, &job_id);
+        }
         _ => {}
     }
 
@@ -210,6 +213,10 @@ pub async fn pause_source_download(job_id: String, app: AppHandle) -> Result<(),
         return Err("Las descargas HTTP no se pueden pausar. Usa cancelar.".to_string());
     }
 
+    if job.status != SourceJobStatus::Running && job.status != SourceJobStatus::Queued {
+        return Err("La descarga no está en curso".to_string());
+    }
+
     match job.protocol {
         DownloadProtocol::TorrentMagnet | DownloadProtocol::TorrentFile => {
             if let Some(info_hash) = job.external_id.clone() {
@@ -225,6 +232,9 @@ pub async fn pause_source_download(job_id: String, app: AppHandle) -> Result<(),
                         crate::torrent::engine::pause_via_session(&session, &info_hash_clone).await;
                 });
             }
+        }
+        DownloadProtocol::PeerLan => {
+            sources.request_pause(&job_id);
         }
         _ => {}
     }
@@ -252,9 +262,19 @@ pub async fn resume_source_download(job_id: String, app: AppHandle) -> Result<()
         );
     }
 
+    if job.status != SourceJobStatus::Paused {
+        return Err("La descarga no está en pausa".to_string());
+    }
+
     job.status = SourceJobStatus::Queued;
     job.updated_at = now_iso();
     sources.upsert_job(job.clone())?;
+
+    if job.protocol == DownloadProtocol::PeerLan {
+        sources.reset_pause_flag(&job_id);
+        spawn_job(app, job_id);
+        return Ok(());
+    }
 
     let is_torrent = matches!(
         job.protocol,

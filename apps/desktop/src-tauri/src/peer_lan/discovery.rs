@@ -18,7 +18,6 @@ pub struct LanDeviceProbe {
     pub reachable: bool,
 }
 
-/// Sondea la LAN y devuelve dispositivos cuyo `deviceId` está en `target_ids`.
 pub async fn probe_lan_devices(target_ids: Vec<String>) -> Result<Vec<LanDeviceProbe>, String> {
     let wanted: std::collections::HashSet<String> = target_ids.into_iter().collect();
     if wanted.is_empty() {

@@ -18,6 +18,7 @@ use super::torrent_runner;
 pub struct SourcesState {
     jobs: Mutex<Vec<SourceDownloadJob>>,
     cancel_flags: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    pause_flags: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
 impl SourcesState {
@@ -27,6 +28,7 @@ impl SourcesState {
         Self {
             jobs: Mutex::new(jobs),
             cancel_flags: Mutex::new(HashMap::new()),
+            pause_flags: Mutex::new(HashMap::new()),
         }
     }
 
@@ -82,6 +84,36 @@ impl SourcesState {
             flags.remove(job_id);
         }
     }
+
+    pub fn request_pause(&self, job_id: &str) {
+        if let Ok(flags) = self.pause_flags.lock() {
+            if let Some(flag) = flags.get(job_id) {
+                flag.store(true, Ordering::Relaxed);
+            }
+        }
+    }
+
+    pub fn create_pause_flag(&self, job_id: &str) -> Arc<AtomicBool> {
+        let flag = Arc::new(AtomicBool::new(false));
+        if let Ok(mut flags) = self.pause_flags.lock() {
+            flags.insert(job_id.to_string(), flag.clone());
+        }
+        flag
+    }
+
+    pub fn reset_pause_flag(&self, job_id: &str) {
+        if let Ok(flags) = self.pause_flags.lock() {
+            if let Some(flag) = flags.get(job_id) {
+                flag.store(false, Ordering::Relaxed);
+            }
+        }
+    }
+
+    fn clear_pause_flag(&self, job_id: &str) {
+        if let Ok(mut flags) = self.pause_flags.lock() {
+            flags.remove(job_id);
+        }
+    }
 }
 
 /// Rehidrata y relanza trabajos que quedaron a medias al cerrar la app
@@ -131,11 +163,18 @@ pub fn spawn_job(app: AppHandle, job_id: String) {
             }
         }
         state.clear_cancel_flag(&job_id);
+        state.clear_pause_flag(&job_id);
     });
 }
 
 async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<(), String> {
     let mut job = find_job(state, job_id)?;
+    if matches!(
+        job.status,
+        SourceJobStatus::Paused | SourceJobStatus::Cancelled
+    ) {
+        return Ok(());
+    }
     job.status = SourceJobStatus::Running;
     job.updated_at = now_iso();
     job.error = None;
@@ -243,36 +282,22 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
         }
         DownloadProtocol::PeerLan => {
             let cancel_flag = state.create_cancel_flag(job_id);
-            let peer_meta: serde_json::Value =
-                serde_json::from_str(&job.selected_uri).map_err(|e| format!("Meta peer: {e}"))?;
-            let game_key = peer_meta["gameKey"]
-                .as_str()
-                .ok_or_else(|| "gameKey ausente".to_string())?
-                .to_string();
-            let target_user_id = peer_meta["targetUserId"]
-                .as_str()
-                .ok_or_else(|| "targetUserId ausente".to_string())?
-                .to_string();
-            let target_device_id = peer_meta["targetDeviceId"]
-                .as_str()
-                .ok_or_else(|| "targetDeviceId ausente".to_string())?
-                .to_string();
-            let manifest_hash = peer_meta["manifestHash"]
-                .as_str()
-                .ok_or_else(|| "manifestHash ausente".to_string())?
-                .to_string();
+            let pause_flag = state.create_pause_flag(job_id);
+            let meta = crate::peer_lan::runner::peer_meta_from_job_uri(&job.selected_uri)?;
 
             let params = crate::peer_lan::PeerDownloadParams {
-                game_key,
+                game_key: meta.game_key,
                 destination_dir: job.destination_dir.clone(),
-                target_user_id,
-                target_device_id,
-                manifest_hash,
+                target_user_id: meta.target_user_id,
+                target_device_id: meta.target_device_id,
+                manifest_hash: meta.manifest_hash,
+                checkpoint: meta.checkpoint,
             };
 
             let result = crate::peer_lan::run_peer_download(
                 params,
                 cancel_flag,
+                pause_flag,
                 |loaded, total, download_speed_bytes, eta_seconds| {
                     emit_job_download_progress(
                         app,
@@ -304,6 +329,29 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
                         emit_terminal(app, &current);
                     }
                     return Err(err);
+                }
+                Err(err) if err.starts_with(crate::peer_lan::checkpoint::PAUSED_BY_USER) => {
+                    if let Some(checkpoint) = crate::peer_lan::runner::parse_pause_checkpoint(&err)
+                    {
+                        let mut paused_job = find_job(state, job_id)?;
+                        let mut meta = crate::peer_lan::runner::peer_meta_from_job_uri(
+                            &paused_job.selected_uri,
+                        )?;
+                        paused_job.selected_uri =
+                            crate::peer_lan::runner::apply_checkpoint_to_meta(
+                                &mut meta, checkpoint,
+                            )?;
+                        paused_job.status = SourceJobStatus::Paused;
+                        paused_job.loaded = meta
+                            .checkpoint
+                            .as_ref()
+                            .map(|c| c.loaded_total)
+                            .unwrap_or(paused_job.loaded);
+                        paused_job.updated_at = now_iso();
+                        state.upsert_job(paused_job.clone())?;
+                        emit_progress(app, &paused_job);
+                    }
+                    return Ok(());
                 }
                 Err(err) => return Err(err),
             }
@@ -402,8 +450,7 @@ fn emit_job_download_progress(
             current.download_speed_bytes
         };
         if speed > 0 {
-            current.eta_seconds =
-                crate::utils::transfer_metrics::compute_eta(total, loaded, speed);
+            current.eta_seconds = crate::utils::transfer_metrics::compute_eta(total, loaded, speed);
         }
     }
     current.updated_at = now_iso();

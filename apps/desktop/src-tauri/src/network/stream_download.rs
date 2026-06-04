@@ -12,6 +12,9 @@ use tokio::io::AsyncWriteExt;
 use crate::network::ensure_download_success;
 use crate::utils::transfer_metrics::TransferSpeedTracker;
 
+/// Coincide con [`crate::peer_lan::checkpoint::PAUSED_BY_USER`].
+pub const STREAM_PAUSED_BY_USER: &str = "paused_by_user";
+
 /// Bytes entre emisiones de progreso.
 pub const STREAM_PROGRESS_EMIT_BYTES: u64 = 512 * 1024;
 /// Intervalo mínimo entre emisiones.
@@ -34,6 +37,7 @@ pub async fn stream_url_to_file(
     total_hint: u64,
     auth_bearer: Option<&str>,
     cancel_flag: Arc<AtomicBool>,
+    pause_flag: Option<Arc<AtomicBool>>,
     speed_tracker: &mut TransferSpeedTracker,
     global: GlobalDownloadProgress,
     mut on_progress: impl FnMut(u64, u64, u64, Option<u64>) -> Result<(), String>,
@@ -103,6 +107,12 @@ pub async fn stream_url_to_file(
         if cancel_flag.load(Ordering::Relaxed) {
             let _ = tokio::fs::remove_file(output_path).await;
             return Err("stopped_by_user".to_string());
+        }
+        if pause_flag
+            .as_ref()
+            .is_some_and(|f| f.load(Ordering::Relaxed))
+        {
+            return Err(STREAM_PAUSED_BY_USER.to_string());
         }
         let chunk = next.map_err(|e| format!("Error leyendo stream: {e}"))?;
         file.write_all(&chunk)
