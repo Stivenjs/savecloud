@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import type { GameInventoryRepository } from "@domain/ports/GameInventoryRepository";
+import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
+import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
 
 export interface CreateTransferSessionInput {
   requesterUserId: string;
@@ -25,7 +27,9 @@ const SESSION_TTL_MS = 4 * 60 * 60 * 1000;
 export class CreateTransferSessionUseCase {
   constructor(
     private readonly inventoryRepository: GameInventoryRepository,
-    private readonly cloudInviteRepository: CloudInviteRepository
+    private readonly cloudInviteRepository: CloudInviteRepository,
+    private readonly connectionRepository?: ConnectionRepository,
+    private readonly notifier?: WebSocketNotifier
   ) {}
 
   async execute(input: CreateTransferSessionInput): Promise<TransferSessionResult> {
@@ -65,6 +69,31 @@ export class CreateTransferSessionUseCase {
       manifestHash,
       expiresAt,
     });
+
+    if (this.connectionRepository && this.notifier) {
+      try {
+        const connectionIds = await this.connectionRepository.getConnectionsByUserAndDevice(
+          targetUserId,
+          targetDeviceId
+        );
+        const payload = {
+          type: "TRANSFER_SESSION_PENDING",
+          data: {
+            token,
+            gameKey,
+            manifestHash,
+            expiresAt,
+          },
+        };
+        for (const connId of connectionIds) {
+          this.notifier.sendToConnection(connId, payload).catch((err: any) => {
+            console.warn(`[WS] Failed to send TRANSFER_SESSION_PENDING to ${connId}:`, err.message);
+          });
+        }
+      } catch (err) {
+        console.error("[WS] Error notifying pending transfer session via WebSocket:", err);
+      }
+    }
 
     return {
       sessionId,

@@ -20,6 +20,7 @@ pub enum CloudIncomingMessage {
     PresenceUpdate { data: PresenceUpdateData },
     Error { data: ErrorData },
     StreamSignal { data: StreamSignalData },
+    TransferSessionPending { data: TransferSessionPendingData },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -54,6 +55,15 @@ pub struct StreamSignalData {
     pub stream_id: String,
     pub payload: Option<Value>,
     pub timestamp: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferSessionPendingData {
+    pub token: String,
+    pub game_key: String,
+    pub manifest_hash: String,
+    pub expires_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -234,12 +244,47 @@ pub async fn start_ws_loop(
                                                 }
                                             }
 
+                                            if let CloudIncomingMessage::TransferSessionPending { data } = &incoming {
+                                                log_cloud(
+                                                    &app_handle,
+                                                    &logs,
+                                                     "info",
+                                                     &format!(
+                                                         "Nueva sesión de transferencia LAN pendiente recibida por WebSocket: {}",
+                                                         data.game_key
+                                                     ),
+                                                 )
+                                                 .await;
+
+                                                 let token = data.token.clone();
+                                                 let game_key = data.game_key.clone();
+                                                 let manifest_hash = data.manifest_hash.clone();
+                                                 let expires_at = data.expires_at.clone();
+
+                                                 tauri::async_runtime::spawn(async move {
+                                                     if let Err(e) = crate::peer_lan::poller::register_and_serve_session(
+                                                         token,
+                                                         game_key,
+                                                         manifest_hash,
+                                                         expires_at,
+                                                     )
+                                                     .await {
+                                                         sync_logger::log_error(
+                                                             "ws_register_and_serve_session_failed",
+                                                             &e,
+                                                             &e,
+                                                         );
+                                                     }
+                                                 });
+                                            }
+
                                             let msg_kind = match &incoming {
-                                                CloudIncomingMessage::FriendPlaying { .. } => "FRIEND_PLAYING",
-                                                CloudIncomingMessage::PresenceUpdate { .. } => "PRESENCE_UPDATE",
-                                                CloudIncomingMessage::Error { .. } => "ERROR",
-                                                CloudIncomingMessage::StreamSignal { .. } => "STREAM_SIGNAL",
-                                            };
+                                                 CloudIncomingMessage::FriendPlaying { .. } => "FRIEND_PLAYING",
+                                                 CloudIncomingMessage::PresenceUpdate { .. } => "PRESENCE_UPDATE",
+                                                 CloudIncomingMessage::Error { .. } => "ERROR",
+                                                 CloudIncomingMessage::StreamSignal { .. } => "STREAM_SIGNAL",
+                                                 CloudIncomingMessage::TransferSessionPending { .. } => "TRANSFER_SESSION_PENDING",
+                                             };
 
                                             sync_logger::log_operation(
                                                 "cloud_ws_message_parsed",

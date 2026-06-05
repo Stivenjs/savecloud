@@ -31,6 +31,7 @@ import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import type { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
 import type { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
+import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
 import { recordHttpMetric } from "@infrastructure/observability/httpMetricsStore";
 import { registerSavesRoutes } from "@interfaces/http/routes/saves.routes";
 import { registerShareRoutes } from "@interfaces/http/routes/share.routes";
@@ -59,6 +60,7 @@ export interface AppDependencies {
   shareTokenStore?: ShareTokenS3;
   notificationStore?: S3NotificationStore;
   connectionRepository?: ConnectionRepository;
+  webSocketNotifier?: WebSocketNotifier;
 }
 
 interface SavesRouteUseCases {
@@ -162,7 +164,9 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       listGameProvidersUseCase: new ListGameProvidersUseCase(deps.gameInventoryRepository, deps.cloudInviteRepository),
       createTransferSessionUseCase: new CreateTransferSessionUseCase(
         deps.gameInventoryRepository,
-        deps.cloudInviteRepository
+        deps.cloudInviteRepository,
+        deps.connectionRepository,
+        deps.webSocketNotifier
       ),
       recordInventoryHeartbeatUseCase: new RecordInventoryHeartbeatUseCase(deps.gameInventoryRepository),
       listPendingTransferSessionsUseCase: new ListPendingTransferSessionsUseCase(deps.gameInventoryRepository),

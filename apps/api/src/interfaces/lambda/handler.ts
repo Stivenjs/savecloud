@@ -14,6 +14,7 @@ import { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
 import { DynamoDbGameStatRepository } from "@infrastructure/persistence/DynamoDbGameStatRepository";
 import { DynamoDbSaveFileIndexRepository } from "@infrastructure/persistence/DynamoDbSaveFileIndexRepository";
 import { DynamoDbConnectionRepository } from "@infrastructure/persistence/DynamoDbConnectionRepository";
+import { ApiGatewayNotifier } from "@infrastructure/websocket/ApiGatewayNotifier";
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -64,6 +65,10 @@ const connectionRepository = connectionsTable
   ? new DynamoDbConnectionRepository(dynamoClient, connectionsTable)
   : undefined;
 
+const wsEndpoint = optionalEnv("WS_ENDPOINT");
+const webSocketNotifier =
+  connectionRepository && wsEndpoint ? new ApiGatewayNotifier(wsEndpoint, connectionRepository) : undefined;
+
 type Proxy = (event: APIGatewayProxyEvent, context: Context) => Promise<APIGatewayProxyResult>;
 
 let proxyPromise: Promise<Proxy> | null = null;
@@ -83,6 +88,7 @@ function initProxy(): Promise<Proxy> {
       gameInventoryRepository,
       gameStatRepository,
       connectionRepository,
+      webSocketNotifier,
     });
 
     const proxy = awsLambdaFastify<APIGatewayProxyEvent>(app, {
