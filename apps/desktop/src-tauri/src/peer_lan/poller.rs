@@ -87,11 +87,36 @@ pub async fn poll_and_serve_pending_sessions() -> Result<u32, String> {
     Ok(0)
 }
 
+pub async fn register_and_serve_session(
+    token: String,
+    game_key: String,
+    manifest_hash: String,
+    expires_at_iso: String,
+) -> Result<(), String> {
+    let ttl = session_ttl_from_iso(&expires_at_iso);
+    register_transfer_session(PendingTransferSession {
+        token: token.clone(),
+        game_key: game_key.clone(),
+        manifest_hash: manifest_hash.clone(),
+        expires_at: std::time::Instant::now() + ttl,
+    });
+
+    if start_lan_server_for_session(&token, &game_key)
+        .await
+        .is_ok()
+    {
+        crate::peer_lan::ensure_lan_presence().await;
+        Ok(())
+    } else {
+        Err("Failed to start LAN server for session".to_string())
+    }
+}
+
 pub fn spawn_pending_session_poller() {
     tauri::async_runtime::spawn(async {
         loop {
             let _ = poll_and_serve_pending_sessions().await;
-            tokio::time::sleep(Duration::from_secs(2)).await;
+            tokio::time::sleep(Duration::from_secs(60)).await;
         }
     });
 }

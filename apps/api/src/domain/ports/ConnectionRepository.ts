@@ -9,7 +9,7 @@ export interface ConnectionRepository {
    * @param {string} userId - ID del usuario.
    * @param {number} ttl - Timestamp Unix de expiración (24h).
    */
-  saveConnection(connectionId: string, userId: string, ttl: number): Promise<void>;
+  saveConnection(connectionId: string, userId: string, ttl: number, deviceId?: string): Promise<void>;
 
   /**
    * Elimina una conexión cuando el usuario cierra la app.
@@ -23,6 +23,14 @@ export interface ConnectionRepository {
    * @returns {Promise<string[]>} Lista de IDs de conexión.
    */
   getConnectionsByUser(userId: string): Promise<string[]>;
+
+  /**
+   * Obtiene las conexiones activas de un usuario en un dispositivo específico.
+   * @param {string} userId - ID del usuario.
+   * @param {string} deviceId - ID del dispositivo.
+   * @returns {Promise<string[]>} Lista de IDs de conexión.
+   */
+  getConnectionsByUserAndDevice(userId: string, deviceId: string): Promise<string[]>;
 
   /**
    * Obtiene los metadatos de actividad para cada conexión activa de un usuario.

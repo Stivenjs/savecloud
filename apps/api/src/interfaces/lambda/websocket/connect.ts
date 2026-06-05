@@ -109,10 +109,11 @@ export const handler = async (event: APIGatewayWebsocketConnectEvent): Promise<L
     return { statusCode: 401, body: "Unauthorized" };
   }
 
+  const deviceId = event.queryStringParameters?.deviceId?.trim();
   const ttl = Math.floor(Date.now() / 1000) + CONNECTION_TTL_SECONDS;
   try {
-    await connectionRepo.saveConnection(connectionId, verifiedUserId, ttl);
-    console.info("[ws:connect] Connection saved", { connectionId, userId: verifiedUserId });
+    await connectionRepo.saveConnection(connectionId, verifiedUserId, ttl, deviceId);
+    console.info("[ws:connect] Connection saved", { connectionId, userId: verifiedUserId, deviceId });
   } catch (error) {
     console.error("[ws:connect] Failed to save connection", { connectionId, error });
     return { statusCode: 500, body: "Internal Server Error" };

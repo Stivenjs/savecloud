@@ -23,7 +23,7 @@ export class DynamoDbConnectionRepository implements ConnectionRepository {
     this.docClient = DynamoDBDocumentClient.from(client);
   }
 
-  async saveConnection(connectionId: string, userId: string, ttl: number): Promise<void> {
+  async saveConnection(connectionId: string, userId: string, ttl: number, deviceId?: string): Promise<void> {
     const now = Date.now();
     await this.docClient.send(
       new PutCommand({
@@ -35,6 +35,7 @@ export class DynamoDbConnectionRepository implements ConnectionRepository {
           lastActivityAt: now,
           activityGameId: null,
           activityGameName: null,
+          deviceId: deviceId || null,
         },
       })
     );
@@ -59,6 +60,18 @@ export class DynamoDbConnectionRepository implements ConnectionRepository {
       })
     );
     return (response.Items || []).map((item) => item.connectionId);
+  }
+
+  async getConnectionsByUserAndDevice(userId: string, deviceId: string): Promise<string[]> {
+    const response = await this.docClient.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        IndexName: "UserIdIndex",
+        KeyConditionExpression: "userId = :userId",
+        ExpressionAttributeValues: { ":userId": userId },
+      })
+    );
+    return (response.Items || []).filter((item) => item.deviceId === deviceId).map((item) => item.connectionId);
   }
 
   async getConnectionPresenceByUser(userId: string): Promise<

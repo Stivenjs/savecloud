@@ -3,7 +3,7 @@
 pub mod checkpoint;
 pub mod discovery;
 mod mdns_registry;
-mod poller;
+pub mod poller;
 mod presence;
 pub mod runner;
 pub mod server;

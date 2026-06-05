@@ -42,6 +42,9 @@ pub async fn start_cloud_ws(
         .filter(|s| !s.is_empty())
         .map(str::to_string);
 
+    // 2.5 Obtener el deviceID local.
+    let device_id = crate::peer_inventory::resolve_device_id()?;
+
     let final_url = if let Some(host) = active_host {
         let ws_base = settings
             .cloud_host_ws_base_urls
@@ -54,10 +57,11 @@ pub async fn start_cloud_ws(
             .ok_or("No tienes credenciales (token) para este host.")?;
 
         format!(
-            "{}?userId={}&token={}",
+            "{}?userId={}&token={}&deviceId={}",
             ws_base.trim_end_matches('/'),
             urlencoding::encode(&user_id),
-            urlencoding::encode(&token)
+            urlencoding::encode(&token),
+            urlencoding::encode(&device_id)
         )
     } else {
         let ws_base = settings
@@ -75,10 +79,11 @@ pub async fn start_cloud_ws(
             .ok_or("API Key no configurada en ajustes.")?;
 
         format!(
-            "{}?userId={}&apiKey={}",
+            "{}?userId={}&apiKey={}&deviceId={}",
             ws_base.trim_end_matches('/'),
             urlencoding::encode(&user_id),
-            urlencoding::encode(api_key)
+            urlencoding::encode(api_key),
+            urlencoding::encode(&device_id)
         )
     };
 
