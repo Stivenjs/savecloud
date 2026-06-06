@@ -316,6 +316,7 @@ pub fn get_combined_config() -> Config {
         game_mode_throttle_savecloud_background: settings.game_mode_throttle_savecloud_background,
         game_mode_boost_detected_game_cpu: settings.game_mode_boost_detected_game_cpu,
         developer_mode: settings.developer_mode,
+        proxy_url: settings.proxy_url,
     }
 }
 
@@ -377,6 +378,7 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
     current_settings.game_mode_boost_detected_game_cpu = cfg.game_mode_boost_detected_game_cpu;
 
     current_settings.developer_mode = cfg.developer_mode;
+    current_settings.proxy_url = cfg.proxy_url.clone();
 
     save_settings(&current_settings)?;
     save_library(&GameLibrary {

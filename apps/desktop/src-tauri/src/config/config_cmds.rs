@@ -105,6 +105,7 @@ pub fn get_config() -> ConfigDto {
         game_mode_throttle_savecloud_background: settings.game_mode_throttle_savecloud_background,
         game_mode_boost_detected_game_cpu: settings.game_mode_boost_detected_game_cpu,
         developer_mode: settings.developer_mode,
+        proxy_url: settings.proxy_url.clone(),
         games: library
             .games
             .into_iter()
@@ -279,6 +280,18 @@ pub fn set_full_backup_packaged_compression_level(level: Option<i32>) -> Result<
 pub fn set_developer_mode(enabled: bool) -> Result<(), String> {
     let mut settings = config::load_settings();
     settings.developer_mode = enabled;
+    config::save_settings(&settings)
+}
+
+/// Guarda la URL del proxy HTTP/HTTPS/SOCKS5 para descargas de fuentes.
+#[tauri::command]
+pub fn set_proxy_url(proxy_url: Option<String>) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.proxy_url = proxy_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
     config::save_settings(&settings)
 }
 

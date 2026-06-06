@@ -61,7 +61,8 @@ fn is_retryable_status(status: u16) -> bool {
 }
 
 fn is_auth_error(err: &HosterError) -> bool {
-    err.to_string().contains("401")
+    let s = err.to_string();
+    s.contains("401") || s.contains("expiró") || s.contains("wrongToken") || s.contains("notAuthenticated")
 }
 
 fn is_rate_limit_error(err: &HosterError) -> bool {

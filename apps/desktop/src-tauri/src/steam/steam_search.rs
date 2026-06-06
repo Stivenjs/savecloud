@@ -12,7 +12,7 @@
 use rusqlite::Connection;
 use tauri::State;
 
-use crate::network::STEAM_CLIENT;
+use crate::network::get_steam_client;
 use crate::sqlite::error::SqliteError;
 use crate::sqlite::AppDb;
 use crate::steam::appdetails::fetch_steam_app_details_from_store;
@@ -461,7 +461,7 @@ async fn search_steam_app_id_impl(query: String) -> Option<String> {
         urlencoding::encode(&term)
     );
 
-    let body = STEAM_CLIENT
+    let body = get_steam_client()
         .get(&url)
         .send()
         .await
@@ -526,7 +526,7 @@ pub async fn search_steam_games(query: String) -> Vec<SteamSearchResult> {
         urlencoding::encode(&term)
     );
 
-    let body = match STEAM_CLIENT.get(&url).send().await {
+    let body = match get_steam_client().get(&url).send().await {
         Ok(resp) => resp.text().await.unwrap_or_default(),
         Err(_) => return Vec::new(),
     };

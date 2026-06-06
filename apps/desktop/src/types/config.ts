@@ -80,4 +80,6 @@ export interface Config {
   readonly gameModeBoostDetectedGameCpu?: boolean;
   /** Por perfil: DevTools del webview y herramientas de plugins en la UI de producción. */
   readonly developerMode?: boolean;
+  /** Dirección del proxy HTTP/HTTPS/SOCKS5 para enrutar descargas de hosters. */
+  readonly proxyUrl?: string | null;
 }

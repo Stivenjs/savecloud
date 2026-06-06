@@ -15,7 +15,7 @@ use std::borrow::Cow;
 
 use reqwest::Client;
 
-use crate::network::{DownloadProfile, ProfilePreset, HOSTER_DOWNLOAD_CLIENT};
+use crate::network::{DownloadProfile, ProfilePreset, get_hoster_download_client};
 
 pub use error::HosterError;
 
@@ -44,7 +44,8 @@ fn normalized_host(url: &reqwest::Url) -> String {
 /// Resuelve la URL directa y el perfil de descarga usando el cliente compartido con cookie jar.
 #[allow(dead_code)]
 pub async fn resolve_download_url<'a>(uri: &'a str) -> Result<ResolvedDownload<'a>, HosterError> {
-    resolve_download_url_with_client(&HOSTER_DOWNLOAD_CLIENT, uri).await
+    let client = get_hoster_download_client();
+    resolve_download_url_with_client(&client, uri).await
 }
 
 /// Igual que [`resolve_download_url`] pero con un cliente explícito (misma sesión resolve + download).

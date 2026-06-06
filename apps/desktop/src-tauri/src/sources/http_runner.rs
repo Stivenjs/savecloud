@@ -9,7 +9,7 @@ use futures_util::StreamExt;
 use reqwest::header::HeaderMap;
 use tokio::io::AsyncWriteExt;
 
-use crate::network::{ensure_download_success, get_with_profile, HOSTER_DOWNLOAD_CLIENT};
+use crate::network::{ensure_download_success, get_with_profile, get_hoster_download_client};
 use crate::utils::transfer_metrics::TransferSpeedTracker;
 
 use super::hosters::{self, HosterError};
@@ -62,7 +62,7 @@ pub async fn run_http_download(
 
     emit_progress(0, 0, false)?;
 
-    let client = HOSTER_DOWNLOAD_CLIENT.clone();
+    let client = get_hoster_download_client();
     let resolved = hosters::resolve_download_url_with_client(&client, uri)
         .await
         .map_err(|e: HosterError| e.to_user_string_for_uri(uri))?;

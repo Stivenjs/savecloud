@@ -4,7 +4,6 @@
 //! Los módulos en `sources/hosters/` solo contienen lógica de negocio (parseo, API, regex).
 
 use std::borrow::Cow;
-use std::sync::LazyLock;
 use std::time::Duration;
 
 use reqwest::header::{HeaderName, HeaderValue};
@@ -265,31 +264,118 @@ impl ProfilePreset {
     }
 }
 
-pub static HOSTER_DOWNLOAD_CLIENT: LazyLock<Client> = LazyLock::new(|| {
-    Client::builder()
+struct CachedClient {
+    client: Client,
+    proxy_url: Option<String>,
+}
+
+static HOSTER_DOWNLOAD_CLIENT_CACHE: std::sync::RwLock<Option<CachedClient>> =
+    std::sync::RwLock::new(None);
+static HOSTER_NO_REDIRECT_CLIENT_CACHE: std::sync::RwLock<Option<CachedClient>> =
+    std::sync::RwLock::new(None);
+
+pub(crate) fn build_client_with_proxy(
+    mut builder: reqwest::ClientBuilder,
+    proxy_url: &Option<String>,
+) -> Client {
+    if let Some(ref url) = proxy_url {
+        if !url.trim().is_empty() {
+            match reqwest::Proxy::all(url.trim()) {
+                Ok(p) => {
+                    builder = builder.proxy(p);
+                }
+                Err(e) => {
+                    log::error!("Error configuring proxy '{}': {}", url, e);
+                }
+            }
+        }
+    }
+    builder
+        .build()
+        .expect("Fallo crítico al crear reqwest::Client")
+}
+
+pub fn get_hoster_download_client() -> Client {
+    let current_proxy = crate::config::load_settings().proxy_url;
+
+    {
+        if let Ok(guard) = HOSTER_DOWNLOAD_CLIENT_CACHE.read() {
+            if let Some(ref cached) = *guard {
+                if cached.proxy_url == current_proxy {
+                    return cached.client.clone();
+                }
+            }
+        }
+    }
+
+    let mut guard = HOSTER_DOWNLOAD_CLIENT_CACHE
+        .write()
+        .expect("Fallo al obtener write lock en HOSTER_DOWNLOAD_CLIENT_CACHE");
+
+    if let Some(ref cached) = *guard {
+        if cached.proxy_url == current_proxy {
+            return cached.client.clone();
+        }
+    }
+
+    let builder = Client::builder()
         .user_agent(HOSTER_BROWSER_USER_AGENT)
         .cookie_store(true)
         .connect_timeout(CONNECT_TIMEOUT)
         .read_timeout(DOWNLOAD_READ_TIMEOUT)
-        .tcp_nodelay(true)
-        .build()
-        .expect("fallo critico al inicializar HOSTER_DOWNLOAD_CLIENT")
-});
+        .tcp_nodelay(true);
 
-fn apply_resolve_timeout(builder: RequestBuilder) -> RequestBuilder {
-    builder.timeout(REQUEST_TIMEOUT)
+    let client = build_client_with_proxy(builder, &current_proxy);
+    *guard = Some(CachedClient {
+        client: client.clone(),
+        proxy_url: current_proxy,
+    });
+
+    client
 }
 
-pub static HOSTER_NO_REDIRECT_CLIENT: LazyLock<Client> = LazyLock::new(|| {
-    Client::builder()
+fn get_hoster_no_redirect_client() -> Client {
+    let current_proxy = crate::config::load_settings().proxy_url;
+
+    {
+        if let Ok(guard) = HOSTER_NO_REDIRECT_CLIENT_CACHE.read() {
+            if let Some(ref cached) = *guard {
+                if cached.proxy_url == current_proxy {
+                    return cached.client.clone();
+                }
+            }
+        }
+    }
+
+    let mut guard = HOSTER_NO_REDIRECT_CLIENT_CACHE
+        .write()
+        .expect("Fallo al obtener write lock en HOSTER_NO_REDIRECT_CLIENT_CACHE");
+
+    if let Some(ref cached) = *guard {
+        if cached.proxy_url == current_proxy {
+            return cached.client.clone();
+        }
+    }
+
+    let builder = Client::builder()
         .user_agent(HOSTER_DOWNLOADER_USER_AGENT)
         .redirect(Policy::none())
         .timeout(SHORT_TIMEOUT)
         .connect_timeout(CONNECT_TIMEOUT)
-        .tcp_nodelay(true)
-        .build()
-        .expect("fallo critico al inicializar HOSTER_NO_REDIRECT_CLIENT")
-});
+        .tcp_nodelay(true);
+
+    let client = build_client_with_proxy(builder, &current_proxy);
+    *guard = Some(CachedClient {
+        client: client.clone(),
+        proxy_url: current_proxy,
+    });
+
+    client
+}
+
+fn apply_resolve_timeout(builder: RequestBuilder) -> RequestBuilder {
+    builder.timeout(REQUEST_TIMEOUT)
+}
 
 fn insert_header(builder: RequestBuilder, name: &'static str, value: &str) -> RequestBuilder {
     if let (Ok(n), Ok(v)) = (
@@ -392,9 +478,8 @@ pub async fn head_no_redirect(
     preset: ProfilePreset,
 ) -> Result<Response, reqwest::Error> {
     let profile = preset.build();
-    apply_profile(HOSTER_NO_REDIRECT_CLIENT.head(url), &profile)
-        .send()
-        .await
+    let client = get_hoster_no_redirect_client();
+    apply_profile(client.head(url), &profile).send().await
 }
 
 /// HEAD con el cliente compartido (cookie jar). Sigue redirecciones por defecto.
