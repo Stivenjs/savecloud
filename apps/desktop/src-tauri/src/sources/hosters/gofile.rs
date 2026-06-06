@@ -19,9 +19,80 @@ use super::error::{
 
 static GOFILE_ACCOUNT_TOKEN: Mutex<Option<String>> = Mutex::new(None);
 static GOFILE_CREATE_LOCK: LazyLock<AsyncMutex<()>> = LazyLock::new(|| AsyncMutex::new(()));
+static GOFILE_WT_SUFFIX_CACHE: Mutex<Option<String>> = Mutex::new(None);
+
+fn load_token_from_file() -> Option<String> {
+    let path = crate::config::paths::cache_dir()?.join("gofile_token.txt");
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+fn save_token_to_file(token: &str) {
+    if let Some(dir) = crate::config::paths::cache_dir() {
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("gofile_token.txt");
+        let _ = std::fs::write(path, token);
+    }
+}
+
+fn delete_token_file() {
+    if let Some(dir) = crate::config::paths::cache_dir() {
+        let path = dir.join("gofile_token.txt");
+        if path.exists() {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+async fn get_dynamic_wt_suffix(client: &Client) -> String {
+    {
+        if let Ok(guard) = GOFILE_WT_SUFFIX_CACHE.lock() {
+            if let Some(ref s) = *guard {
+                return s.clone();
+            }
+        }
+    }
+
+    let url = "https://gofile.io/dist/js/wt.obf.js";
+    match get(client, url, ProfilePreset::Passthrough).await {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                if let Ok(text) = resp.text().await {
+                    let re = regex::Regex::new(r"(\\x[0-9a-fA-F]{2}){10,20}").unwrap();
+                    if let Some(mat) = re.find(&text) {
+                        let matched_str = mat.as_str();
+                        let decoded: String = matched_str
+                            .split(r"\x")
+                            .filter(|s| !s.is_empty())
+                            .filter_map(|s| u8::from_str_radix(s, 16).ok().map(|b| b as char))
+                            .collect();
+
+                        if !decoded.is_empty() {
+                            log::info!("Gofile dynamic token detected: {}", decoded);
+                            if let Ok(mut guard) = GOFILE_WT_SUFFIX_CACHE.lock() {
+                                *guard = Some(decoded.clone());
+                            }
+                            return decoded;
+                        }
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to fetch wt.obf.js for Gofile dynamic suffix: {}", e);
+        }
+    }
+
+    "g4f8fd9f12h14g".to_string()
+}
+
+async fn ensure_wt_suffix(client: &Client) -> String {
+    get_dynamic_wt_suffix(client).await
+}
 
 const GOFILE_LANGUAGE: &str = "en-US";
-const GOFILE_WT_SUFFIX: &str = "5d4f7g8sd45fsd";
 const GOFILE_TIME_SLOT_SECS: u64 = 14_400;
 const GOFILE_MAX_RETRIES: u32 = 3;
 const GOFILE_RESOLVE_TIMEOUT: Duration = Duration::from_secs(90);
@@ -40,11 +111,16 @@ fn clear_account_token() {
     if let Ok(mut guard) = GOFILE_ACCOUNT_TOKEN.lock() {
         *guard = None;
     }
+    delete_token_file();
 }
 
-pub(crate) fn generate_website_token_at(account_token: &str, time_slot: u64) -> String {
+pub(crate) fn generate_website_token_at(
+    account_token: &str,
+    time_slot: u64,
+    suffix: &str,
+) -> String {
     let raw = format!(
-        "{HOSTER_BROWSER_USER_AGENT}::{GOFILE_LANGUAGE}::{account_token}::{time_slot}::{GOFILE_WT_SUFFIX}"
+        "{HOSTER_BROWSER_USER_AGENT}::{GOFILE_LANGUAGE}::{account_token}::{time_slot}::{suffix}"
     );
     let mut hasher = Sha256::new();
     hasher.update(raw.as_bytes());
@@ -62,7 +138,10 @@ fn is_retryable_status(status: u16) -> bool {
 
 fn is_auth_error(err: &HosterError) -> bool {
     let s = err.to_string();
-    s.contains("401") || s.contains("expiró") || s.contains("wrongToken") || s.contains("notAuthenticated")
+    s.contains("401")
+        || s.contains("expiró")
+        || s.contains("wrongToken")
+        || s.contains("notAuthenticated")
 }
 
 fn is_rate_limit_error(err: &HosterError) -> bool {
@@ -184,6 +263,13 @@ async fn ensure_account_token(client: &Client) -> Result<String, HosterError> {
         }
     }
 
+    if let Some(token) = load_token_from_file() {
+        if let Ok(mut guard) = GOFILE_ACCOUNT_TOKEN.lock() {
+            *guard = Some(token.clone());
+            return Ok(token);
+        }
+    }
+
     let _create_guard = GOFILE_CREATE_LOCK.lock().await;
 
     {
@@ -196,6 +282,7 @@ async fn ensure_account_token(client: &Client) -> Result<String, HosterError> {
     }
 
     let token = create_guest_account(client).await?;
+    save_token_to_file(&token);
     if let Ok(mut guard) = GOFILE_ACCOUNT_TOKEN.lock() {
         *guard = Some(token.clone());
     }
@@ -206,6 +293,7 @@ async fn refresh_account_token(client: &Client) -> Result<String, HosterError> {
     clear_account_token();
     let _create_guard = GOFILE_CREATE_LOCK.lock().await;
     let token = create_guest_account(client).await?;
+    save_token_to_file(&token);
     if let Ok(mut guard) = GOFILE_ACCOUNT_TOKEN.lock() {
         *guard = Some(token.clone());
     }
@@ -218,7 +306,8 @@ async fn fetch_contents(
     account_token: &str,
     password: Option<&str>,
 ) -> Result<GofileContentsBody, HosterError> {
-    let dynamic = generate_website_token_at(account_token, time_slot_now());
+    let suffix = ensure_wt_suffix(client).await;
+    let dynamic = generate_website_token_at(account_token, time_slot_now(), &suffix);
     let mut q =
         String::from("cache=true&page=1&pageSize=1000&sortField=createTime&sortDirection=1");
     if let Some(p) = password {
@@ -383,7 +472,7 @@ mod tests {
 
     #[test]
     fn website_token_matches_gallery_dl_vector() {
-        let token = generate_website_token_at("tok", 5);
+        let token = generate_website_token_at("tok", 5, "5d4f7g8sd45fsd");
         let raw = format!(
             "{}::en-US::tok::5::5d4f7g8sd45fsd",
             crate::network::HOSTER_BROWSER_USER_AGENT

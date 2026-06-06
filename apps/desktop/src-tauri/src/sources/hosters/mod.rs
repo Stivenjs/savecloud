@@ -146,10 +146,10 @@ mod tests {
 
     #[test]
     fn gofile_token_slotted() {
-        let a = generate_website_token_at("tok", 5);
-        let b = generate_website_token_at("tok", 5);
+        let a = generate_website_token_at("tok", 5, "5d4f7g8sd45fsd");
+        let b = generate_website_token_at("tok", 5, "5d4f7g8sd45fsd");
         assert_eq!(a, b);
-        let c = generate_website_token_at("tok", 6);
+        let c = generate_website_token_at("tok", 6, "5d4f7g8sd45fsd");
         assert_ne!(a, c);
     }
 }
