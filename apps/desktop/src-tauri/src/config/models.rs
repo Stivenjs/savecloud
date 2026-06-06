@@ -98,6 +98,9 @@ pub struct AppSettings {
     /// Por perfil (`settings.json` del perfil activo): DevTools del webview, atajos y herramientas de plugins en UI.
     #[serde(default)]
     pub developer_mode: bool,
+    /// URL del proxy HTTP/HTTPS/SOCKS5 para enrutar las descargas de hosters.
+    #[serde(default)]
+    pub proxy_url: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -241,6 +244,8 @@ pub struct Config {
     pub game_mode_boost_detected_game_cpu: bool,
     #[serde(default)]
     pub developer_mode: bool,
+    #[serde(default)]
+    pub proxy_url: Option<String>,
 }
 
 /// Objeto de transferencia de datos (DTO) de la configuración principal,
@@ -298,6 +303,8 @@ pub struct ConfigDto {
     pub game_mode_boost_detected_game_cpu: bool,
     #[serde(default)]
     pub developer_mode: bool,
+    #[serde(default)]
+    pub proxy_url: Option<String>,
 }
 
 /// DTO representativo de un juego para el frontend.

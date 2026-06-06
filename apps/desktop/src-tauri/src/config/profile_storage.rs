@@ -392,6 +392,7 @@ pub fn initialize_profile_storage(profile: &super::profiles::Profile) -> Result<
         game_mode_throttle_savecloud_background: true,
         game_mode_boost_detected_game_cpu: false,
         developer_mode: false,
+        proxy_url: None,
     };
 
     save_settings_for_profile(&profile.id, &settings)?;

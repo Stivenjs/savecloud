@@ -23,6 +23,7 @@ import { useNavigationStore } from "@features/input/store";
 import { DevSdk } from "@features/settings/DevSdk";
 import { DeveloperModeCard } from "@features/settings/DeveloperModeCard";
 import { SourceInstallSettingsCard } from "@features/settings/SourceInstallSettingsCard";
+import { ProxySettingsCard } from "@features/settings/ProxySettingsCard";
 import { GamepadTesterCard } from "@features/settings/GamepadTesterCard";
 import { VoiceCommandsCard } from "@features/voice-commands";
 import { GameModeCard } from "@features/settings/GameModeCard";
@@ -133,6 +134,9 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
     setPullFriendConfigModalOpen,
     setPullFriendUserId,
     sourcesBusy,
+    proxyUrl,
+    setProxyUrl,
+    handleSaveProxyUrl,
     sourceUrl,
     remoteSourceUrl,
     defaultSourceDownloadDir,
@@ -254,32 +258,43 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
         );
       case "integrations":
         return (
-          <div className="space-y-3">
-            <NotificationsCard testingNotification={testingNotification} onTestNotification={handleTestNotification} />
-            <VoiceCommandsCard />
-            <SourceInstallSettingsCard
-              sourceUrl={sourceUrl}
-              remoteSourceUrl={remoteSourceUrl}
-              defaultDownloadDir={defaultSourceDownloadDir}
-              sourcesBusy={sourcesBusy}
-              sources={sourcesSummary}
-              remoteSources={remoteSources}
-              deletingSourceIds={deletingSourceIds}
-              deletingRemoteSourceIds={deletingRemoteSourceIds}
-              onSourceUrlChange={setSourceUrl}
-              onRemoteSourceUrlChange={setRemoteSourceUrl}
-              onDefaultDownloadDirChange={setDefaultSourceDownloadDir}
-              onImportUrl={() => handleImportSourceByUrl("merge")}
-              onImportFile={() => handleImportSourceByFile("merge")}
-              onImportBatch={() => handleImportSourcesBatch("updateorcreate")}
-              onRegisterRemoteSource={handleRegisterRemoteSource}
-              onToggleRemoteSourceEnabled={handleToggleRemoteSourceEnabled}
-              onDeleteRemoteSource={handleDeleteRemoteSource}
-              onSyncRemoteSources={handleSyncRemoteSources}
-              onPickFolder={handleSelectDefaultSourceDownloadDir}
-              onSaveDefaultDir={handleSaveDefaultSourceDownloadDir}
-              onDeleteSource={handleDeleteSource}
-            />
+          <div className="grid gap-4 xl:grid-cols-2 items-start">
+            {/* Columna 1: Red y Descarga de Fuentes */}
+            <div className="space-y-4">
+              <ProxySettingsCard proxyUrl={proxyUrl} onProxyUrlChange={setProxyUrl} onSave={handleSaveProxyUrl} />
+              <SourceInstallSettingsCard
+                sourceUrl={sourceUrl}
+                remoteSourceUrl={remoteSourceUrl}
+                defaultDownloadDir={defaultSourceDownloadDir}
+                sourcesBusy={sourcesBusy}
+                sources={sourcesSummary}
+                remoteSources={remoteSources}
+                deletingSourceIds={deletingSourceIds}
+                deletingRemoteSourceIds={deletingRemoteSourceIds}
+                onSourceUrlChange={setSourceUrl}
+                onRemoteSourceUrlChange={setRemoteSourceUrl}
+                onDefaultDownloadDirChange={setDefaultSourceDownloadDir}
+                onImportUrl={() => handleImportSourceByUrl("merge")}
+                onImportFile={() => handleImportSourceByFile("merge")}
+                onImportBatch={() => handleImportSourcesBatch("updateorcreate")}
+                onRegisterRemoteSource={handleRegisterRemoteSource}
+                onToggleRemoteSourceEnabled={handleToggleRemoteSourceEnabled}
+                onDeleteRemoteSource={handleDeleteRemoteSource}
+                onSyncRemoteSources={handleSyncRemoteSources}
+                onPickFolder={handleSelectDefaultSourceDownloadDir}
+                onSaveDefaultDir={handleSaveDefaultSourceDownloadDir}
+                onDeleteSource={handleDeleteSource}
+              />
+            </div>
+
+            {/* Columna 2: Dispositivo e Integraciones de Sistema */}
+            <div className="space-y-4">
+              <NotificationsCard
+                testingNotification={testingNotification}
+                onTestNotification={handleTestNotification}
+              />
+              <VoiceCommandsCard />
+            </div>
           </div>
         );
       case "gamepad":

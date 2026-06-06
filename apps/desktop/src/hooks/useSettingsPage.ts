@@ -23,9 +23,10 @@ import {
   importCloudSeedRunUntilDone,
   type SteamCatalogSyncProgressPayload,
   type SteamSeedImportProgressPayload,
-  getDefaultSourceDownloadDir,
   setDefaultSourceDownloadDir,
   setDeveloperMode,
+  setProxyUrl,
+  getDefaultSourceDownloadDir,
 } from "@services/tauri";
 import {
   importSourceFromFile,
@@ -75,6 +76,7 @@ type SettingsPageState = {
   sourceUrl: string;
   remoteSourceUrl: string;
   defaultSourceDownloadDir: string;
+  proxyUrl: string;
 };
 
 type SettingsPageAction =
@@ -118,7 +120,8 @@ type SettingsPageAction =
   | { type: "SET_SOURCES_BUSY"; payload: boolean }
   | { type: "SET_SOURCE_URL"; payload: string }
   | { type: "SET_REMOTE_SOURCE_URL"; payload: string }
-  | { type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR"; payload: string };
+  | { type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR"; payload: string }
+  | { type: "SET_PROXY_URL"; payload: string };
 
 const initialState: SettingsPageState = {
   testingNotification: false,
@@ -146,6 +149,7 @@ const initialState: SettingsPageState = {
   sourceUrl: "",
   remoteSourceUrl: "",
   defaultSourceDownloadDir: "",
+  proxyUrl: "",
 };
 
 function settingsPageReducer(state: SettingsPageState, action: SettingsPageAction): SettingsPageState {
@@ -222,6 +226,8 @@ function settingsPageReducer(state: SettingsPageState, action: SettingsPageActio
       return { ...state, remoteSourceUrl: action.payload };
     case "SET_DEFAULT_SOURCE_DOWNLOAD_DIR":
       return { ...state, defaultSourceDownloadDir: action.payload };
+    case "SET_PROXY_URL":
+      return { ...state, proxyUrl: action.payload };
     default:
       return state;
   }
@@ -284,6 +290,15 @@ export function useSettingsPage() {
       payload: defaultSourceDownloadDirFromConfig,
     });
   }, [defaultSourceDownloadDirFromConfig]);
+
+  useEffect(() => {
+    if (config?.proxyUrl !== undefined) {
+      dispatch({
+        type: "SET_PROXY_URL",
+        payload: config.proxyUrl ?? "",
+      });
+    }
+  }, [config?.proxyUrl]);
 
   const { data: s3TransferEndpointType = null, isLoading: loadingS3 } = useQuery({
     queryKey: ["s3TransferEndpointType", activeApiBaseUrl, activeUserId],
@@ -787,6 +802,17 @@ export function useSettingsPage() {
     }
   };
 
+  const handleSaveProxyUrl = async () => {
+    try {
+      const next = state.proxyUrl.trim() || null;
+      await setProxyUrl(next);
+      queryClient.invalidateQueries({ queryKey: ["config"] });
+      toastSuccess("Proxy guardado", next ? "Configuración de proxy actualizada." : "Proxy desactivado.");
+    } catch (e) {
+      toastError("Error al guardar proxy", e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const handleDeleteSource = async (sourceId: string) => {
     setDeletingSourceIds((prev) => new Set(prev).add(sourceId));
     try {
@@ -915,6 +941,7 @@ export function useSettingsPage() {
     setSourceUrl: (v: string) => dispatch({ type: "SET_SOURCE_URL", payload: v }),
     setRemoteSourceUrl: (v: string) => dispatch({ type: "SET_REMOTE_SOURCE_URL", payload: v }),
     setDefaultSourceDownloadDir: (v: string) => dispatch({ type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR", payload: v }),
+    setProxyUrl: (v: string) => dispatch({ type: "SET_PROXY_URL", payload: v }),
     handleImportSourceByUrl,
     handleImportSourceByFile,
     handleImportSourcesBatch,
@@ -924,6 +951,7 @@ export function useSettingsPage() {
     handleSyncRemoteSources,
     handleSelectDefaultSourceDownloadDir,
     handleSaveDefaultSourceDownloadDir,
+    handleSaveProxyUrl,
     deletingSourceIds,
     deletingRemoteSourceIds,
     handleDeleteSource,

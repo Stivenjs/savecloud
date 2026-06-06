@@ -12,3 +12,4 @@ export { RestoreConfigModal } from "./RestoreConfigModal";
 export { PullFriendConfigModal } from "./PullFriendConfigModal";
 export { UpdatesCard } from "./UpdatesCard";
 export { useSettingsPage } from "../../hooks/useSettingsPage";
+export { ProxySettingsCard } from "./ProxySettingsCard";

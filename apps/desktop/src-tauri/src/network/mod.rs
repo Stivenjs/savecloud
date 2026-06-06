@@ -41,10 +41,10 @@ pub mod hoster_download;
 pub mod stream_download;
 
 pub use hoster_download::{
-    ensure_download_success, ensure_resolve_success, get, get_with_profile, head_no_redirect,
-    head_short, head_with_client, post_form_urlencoded, post_json, post_multipart, DownloadProfile,
-    HttpStatusError, ProfilePreset, RequestPhase, HOSTER_BROWSER_USER_AGENT,
-    HOSTER_DOWNLOAD_CLIENT,
+    ensure_download_success, ensure_resolve_success, get, get_hoster_download_client,
+    get_with_profile, head_no_redirect, head_short, head_with_client, post_form_urlencoded,
+    post_json, post_multipart, DownloadProfile, HttpStatusError, ProfilePreset, RequestPhase,
+    HOSTER_BROWSER_USER_AGENT,
 };
 
 /// Identificador de agente de usuario para todas las peticiones de la aplicación.
@@ -168,16 +168,52 @@ pub static PEER_LAN_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         .expect("fallo critico al inicializar PEER_LAN_CLIENT")
 });
 
+struct CachedSteamClient {
+    client: reqwest::Client,
+    proxy_url: Option<String>,
+}
+
+static STEAM_CLIENT_CACHE: std::sync::RwLock<Option<CachedSteamClient>> =
+    std::sync::RwLock::new(None);
+
 /// Cliente especializado para el scraping de la API pública de Steam.
 ///
 /// Usa un User-Agent de navegador moderno para evitar bloqueos del WAF de Valve.
 /// No comparte pool con los otros clientes porque el host de destino es distinto
 /// y el patrón de uso (ráfagas cortas, luego silencio) no se beneficia de
 /// mantener conexiones idle por períodos largos.
-pub static STEAM_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-    reqwest::Client::builder()
+pub fn get_steam_client() -> reqwest::Client {
+    let current_proxy = crate::config::load_settings().proxy_url;
+
+    {
+        if let Ok(guard) = STEAM_CLIENT_CACHE.read() {
+            if let Some(ref cached) = *guard {
+                if cached.proxy_url == current_proxy {
+                    return cached.client.clone();
+                }
+            }
+        }
+    }
+
+    let mut guard = STEAM_CLIENT_CACHE
+        .write()
+        .expect("Fallo al obtener write lock en STEAM_CLIENT_CACHE");
+
+    if let Some(ref cached) = *guard {
+        if cached.proxy_url == current_proxy {
+            return cached.client.clone();
+        }
+    }
+
+    let builder = reqwest::Client::builder()
         .user_agent(HOSTER_BROWSER_USER_AGENT)
-        .timeout(Duration::from_secs(15))
-        .build()
-        .expect("fallo critico al inicializar STEAM_CLIENT")
-});
+        .timeout(Duration::from_secs(15));
+
+    let client = hoster_download::build_client_with_proxy(builder, &current_proxy);
+    *guard = Some(CachedSteamClient {
+        client: client.clone(),
+        proxy_url: current_proxy,
+    });
+
+    client
+}

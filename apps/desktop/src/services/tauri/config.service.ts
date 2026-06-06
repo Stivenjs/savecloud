@@ -933,6 +933,11 @@ export async function setDeveloperMode(enabled: boolean): Promise<void> {
   await invoke("set_developer_mode", { enabled });
 }
 
+/** Guarda la URL del proxy HTTP/HTTPS/SOCKS5 en la configuración. */
+export async function setProxyUrl(proxyUrl: string | null): Promise<void> {
+  await invoke("set_proxy_url", { proxyUrl });
+}
+
 /** Elimina todos los backups locales (carpeta SaveCloud/backups completa). */
 export async function deleteAllLocalBackups(): Promise<void> {
   await invoke("delete_all_local_backups");

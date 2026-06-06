@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use crate::network::STEAM_CLIENT;
+use crate::network::get_steam_client;
 use crate::steam_cache::{
     normalize_steam_app_details, normalize_steam_appdetails_media, steam_api_cache,
     SteamAppDetails, SteamAppdetailsMedia,
@@ -33,7 +33,7 @@ pub async fn fetch_appdetails_data(
 
     let mut attempt: u32 = 0;
     let body_text = loop {
-        let res = STEAM_CLIENT
+        let res = get_steam_client()
             .get(&url)
             .send()
             .await
