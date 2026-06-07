@@ -27,6 +27,7 @@ pub fn build_default_profile() -> Profile {
         profile_frame: settings.profile_frame,
         share_visual_profile_with_hosts: settings.share_visual_profile_with_hosts,
         share_visual_profile_with_members: settings.share_visual_profile_with_members,
+        auto_extract_downloads: settings.auto_extract_downloads,
     }
 }
 

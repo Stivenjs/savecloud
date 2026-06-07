@@ -393,6 +393,12 @@ pub async fn process_post_download_extraction(
         return;
     };
 
+    let settings = crate::config::load_settings();
+    if !settings.auto_extract_downloads {
+        finalize(&app, &state, &job_id);
+        return;
+    }
+
     let dest_path = PathBuf::from(&destination_dir);
 
     if let Err(err) = extract_archive(&app, &job_id, &path, &dest_path) {

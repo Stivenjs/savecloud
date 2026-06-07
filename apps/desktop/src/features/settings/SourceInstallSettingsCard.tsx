@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, CardBody, Input, Tooltip, Chip } from "@heroui/react";
+import { Button, Card, CardBody, Input, Tooltip, Chip, Switch } from "@heroui/react";
 import {
   FileJson,
   FolderOpen,
@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Plus,
   Power,
+  Archive,
 } from "lucide-react";
 import type { RemoteSourceConfig, SourceCatalogSummary } from "@services/tauri/sources.service";
 import { getSourceDisplayName } from "@utils/format";
@@ -38,6 +39,8 @@ type Props = {
   onPickFolder: () => void;
   onSaveDefaultDir: () => void;
   onDeleteSource: (sourceId: string) => void;
+  autoExtractDownloads: boolean;
+  onAutoExtractDownloadsChange: (value: boolean) => void;
 };
 
 export function SourceInstallSettingsCard(props: Props) {
@@ -337,6 +340,32 @@ export function SourceInstallSettingsCard(props: Props) {
               className="h-8 text-xs">
               Guardar ruta
             </Button>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="h-px bg-default-100" />
+
+        {/* Auto Extraction */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-1.5">
+            <Archive size={13} className="text-default-500" />
+            <span className="text-xs font-medium text-default-600">Extracción automática</span>
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-default-200 bg-default-50 p-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-default-800">Extraer juegos automáticamente</p>
+              <p className="mt-0.5 text-[10px] leading-relaxed text-default-550">
+                Descomprime automáticamente los archivos comprimidos al finalizar la descarga (ZIP, RAR, 7Z, TAR, etc.).
+                Si está desactivado, el archivo descargado se conservará sin extraer.
+              </p>
+            </div>
+            <Switch
+              size="sm"
+              isSelected={props.autoExtractDownloads}
+              onValueChange={props.onAutoExtractDownloadsChange}
+              aria-label="Extraer automáticamente juegos descargados"
+            />
           </div>
         </div>
       </CardBody>

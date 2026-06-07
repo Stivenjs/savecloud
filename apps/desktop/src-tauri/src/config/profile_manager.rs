@@ -132,6 +132,7 @@ impl ProfileManager {
             profile_frame: None,
             share_visual_profile_with_hosts: false,
             share_visual_profile_with_members: false,
+            auto_extract_downloads: true,
         };
 
         // Crear respaldo antes de un cambio persistente.
@@ -282,6 +283,7 @@ mod tests {
             profile_frame: None,
             share_visual_profile_with_hosts: false,
             share_visual_profile_with_members: false,
+            auto_extract_downloads: true,
         };
 
         index.add_profile(profile);

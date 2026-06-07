@@ -157,6 +157,7 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
     deletingSourceIds,
     deletingRemoteSourceIds,
     handleDeleteSource,
+    handleAutoExtractDownloadsChange,
   } = useSettingsPage();
 
   const settingsSidebarPanelDirection = useSettingsSidebarPanelDirection(settingsTab);
@@ -284,6 +285,8 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
                 onPickFolder={handleSelectDefaultSourceDownloadDir}
                 onSaveDefaultDir={handleSaveDefaultSourceDownloadDir}
                 onDeleteSource={handleDeleteSource}
+                autoExtractDownloads={config?.autoExtractDownloads ?? true}
+                onAutoExtractDownloadsChange={handleAutoExtractDownloadsChange}
               />
             </div>
 

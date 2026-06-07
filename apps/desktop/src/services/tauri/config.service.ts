@@ -1074,3 +1074,7 @@ export async function setGameModeThrottleSavecloudBackground(enabled: boolean): 
 export async function setGameModeBoostDetectedGameCpu(enabled: boolean): Promise<void> {
   await invoke("set_game_mode_boost_detected_game_cpu", { enabled });
 }
+
+export async function setAutoExtractDownloads(enabled: boolean): Promise<void> {
+  await invoke("set_auto_extract_downloads", { enabled });
+}

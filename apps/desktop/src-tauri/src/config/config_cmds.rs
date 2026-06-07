@@ -99,6 +99,7 @@ pub fn get_config() -> ConfigDto {
         share_visual_profile_with_hosts: settings.share_visual_profile_with_hosts,
         share_visual_profile_with_members: settings.share_visual_profile_with_members,
         share_game_inventory_with_cloud: settings.share_game_inventory_with_cloud,
+        auto_extract_downloads: settings.auto_extract_downloads,
         game_mode_enabled: settings.game_mode_enabled,
         game_mode_apply_power_profile: settings.game_mode_apply_power_profile,
         game_mode_reduce_capture_overhead: settings.game_mode_reduce_capture_overhead,
@@ -292,6 +293,14 @@ pub fn set_proxy_url(proxy_url: Option<String>) -> Result<(), String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
+    config::save_settings(&settings)
+}
+
+/// Activa o desactiva la extracción automática de juegos descargados.
+#[tauri::command]
+pub fn set_auto_extract_downloads(enabled: bool) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.auto_extract_downloads = enabled;
     config::save_settings(&settings)
 }
 
