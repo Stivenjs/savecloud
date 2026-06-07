@@ -93,6 +93,14 @@ pub struct Profile {
     /// Si es true, los miembros activos pueden ver avatar/fondo/marco.
     #[serde(default)]
     pub share_visual_profile_with_members: bool,
+
+    /// Si es true, extrae automáticamente los juegos descargados al finalizar (ZIP, RAR, 7Z, TAR, etc.).
+    #[serde(default = "default_true")]
+    pub auto_extract_downloads: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Índice global de perfiles con metadatos de selección.
@@ -229,6 +237,7 @@ mod tests {
             profile_frame: None,
             share_visual_profile_with_hosts: false,
             share_visual_profile_with_members: false,
+            auto_extract_downloads: true,
         };
         index.add_profile(profile.clone());
 
@@ -259,6 +268,7 @@ mod tests {
             profile_frame: None,
             share_visual_profile_with_hosts: false,
             share_visual_profile_with_members: false,
+            auto_extract_downloads: true,
         };
 
         let dto = ProfileDTO::from(&profile);

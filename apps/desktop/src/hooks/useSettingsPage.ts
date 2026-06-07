@@ -27,6 +27,7 @@ import {
   setDeveloperMode,
   setProxyUrl,
   getDefaultSourceDownloadDir,
+  setAutoExtractDownloads,
 } from "@services/tauri";
 import {
   importSourceFromFile,
@@ -572,6 +573,20 @@ export function useSettingsPage() {
     }
   };
 
+  const handleAutoExtractDownloadsChange = async (enabled: boolean) => {
+    try {
+      await setAutoExtractDownloads(enabled);
+      scheduleConfigBackupToCloud();
+      queryClient.invalidateQueries({ queryKey: ["config"] });
+      toastSuccess(
+        "Configuración guardada",
+        enabled ? "Extracción automática activada." : "Extracción automática desactivada."
+      );
+    } catch (e) {
+      toastError("Error al guardar", e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const openCreateConfigModal = () => {
     dispatch({ type: "SET_CREATE_CONFIG_ERROR", payload: null });
     dispatch({ type: "SET_CREATE_MODAL", open: true });
@@ -955,5 +970,6 @@ export function useSettingsPage() {
     deletingSourceIds,
     deletingRemoteSourceIds,
     handleDeleteSource,
+    handleAutoExtractDownloadsChange,
   };
 }

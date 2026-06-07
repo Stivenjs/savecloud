@@ -101,6 +101,9 @@ pub struct AppSettings {
     /// URL del proxy HTTP/HTTPS/SOCKS5 para enrutar las descargas de hosters.
     #[serde(default)]
     pub proxy_url: Option<String>,
+    /// Si es true, extrae automáticamente los juegos descargados al finalizar (ZIP, RAR, 7Z, TAR, etc.).
+    #[serde(default = "default_true")]
+    pub auto_extract_downloads: bool,
 }
 
 fn default_true() -> bool {
@@ -246,6 +249,8 @@ pub struct Config {
     pub developer_mode: bool,
     #[serde(default)]
     pub proxy_url: Option<String>,
+    #[serde(default = "default_true")]
+    pub auto_extract_downloads: bool,
 }
 
 /// Objeto de transferencia de datos (DTO) de la configuración principal,
@@ -305,6 +310,8 @@ pub struct ConfigDto {
     pub developer_mode: bool,
     #[serde(default)]
     pub proxy_url: Option<String>,
+    #[serde(default = "default_true")]
+    pub auto_extract_downloads: bool,
 }
 
 /// DTO representativo de un juego para el frontend.

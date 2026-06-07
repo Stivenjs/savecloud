@@ -82,4 +82,6 @@ export interface Config {
   readonly developerMode?: boolean;
   /** Dirección del proxy HTTP/HTTPS/SOCKS5 para enrutar descargas de hosters. */
   readonly proxyUrl?: string | null;
+  /** Si es true, extrae automáticamente los juegos descargados al finalizar (ZIP, RAR, 7Z, TAR, etc.). */
+  readonly autoExtractDownloads?: boolean;
 }

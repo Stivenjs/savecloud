@@ -3,6 +3,7 @@
 pub mod commands;
 pub mod domain;
 pub mod events;
+pub mod extractor;
 pub mod hosters;
 pub mod http_runner;
 pub mod matcher;

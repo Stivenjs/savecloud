@@ -58,6 +58,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 sha2 = "0.10"
 blake3 = "1"
 hex = "0.4"
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
 axum = "0.8"
 tower-http = { version = "0.6", features = ["cors"] }
 mdns-sd = "0.13"

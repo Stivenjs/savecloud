@@ -10,6 +10,7 @@ use crate::torrent::state::TorrentState;
 
 use super::domain::{DownloadProtocol, SourceDownloadJob, SourceJobStatus};
 use super::events::{emit_progress, emit_terminal};
+use super::extractor::process_post_download_extraction;
 use super::http_runner;
 use super::store;
 use super::torrent_runner;
@@ -214,16 +215,26 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
             match result {
                 Ok(done) => {
                     let mut done_job = find_job(state, job_id)?;
-                    done_job.status = SourceJobStatus::Completed;
                     done_job.loaded = done.loaded;
                     done_job.total = done.total;
-                    done_job.output_file_name = Some(done.output_file_name);
+                    done_job.output_file_name = Some(done.output_file_name.clone());
                     done_job.updated_at = now_iso();
                     state.upsert_job(done_job.clone())?;
-                    emit_progress(app, &done_job);
-                    emit_terminal(app, &done_job);
-                    state.remove_job(job_id)?;
-                    spawn_inventory_rescan_after_download();
+
+                    let app_clone = app.clone();
+                    let job_id_clone = job_id.to_string();
+                    let dest_dir = done_job.destination_dir.clone();
+                    let file_name = Some(done.output_file_name);
+
+                    tauri::async_runtime::spawn(async move {
+                        process_post_download_extraction(
+                            app_clone,
+                            job_id_clone,
+                            dest_dir,
+                            file_name,
+                        )
+                        .await;
+                    });
                 }
                 Err(err) if err == "stopped_by_user" => {
                     let current = find_job(state, job_id)?;
@@ -314,14 +325,15 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
 
             match result {
                 Ok(()) => {
-                    let mut done_job = find_job(state, job_id)?;
-                    done_job.status = SourceJobStatus::Completed;
-                    done_job.updated_at = now_iso();
-                    state.upsert_job(done_job.clone())?;
-                    emit_progress(app, &done_job);
-                    emit_terminal(app, &done_job);
-                    state.remove_job(job_id)?;
-                    spawn_inventory_rescan_after_download();
+                    let done_job = find_job(state, job_id)?;
+                    let app_clone = app.clone();
+                    let job_id_clone = job_id.to_string();
+                    let dest_dir = done_job.destination_dir.clone();
+
+                    tauri::async_runtime::spawn(async move {
+                        process_post_download_extraction(app_clone, job_id_clone, dest_dir, None)
+                            .await;
+                    });
                 }
                 Err(err) if err == "stopped_by_user" => {
                     let current = find_job(state, job_id)?;
@@ -392,16 +404,14 @@ fn spawn_torrent_monitor(app: AppHandle, job_id: String, info_hash: String) {
                 job.total = stats.total_bytes;
             }
             if stats.finished {
-                job.status = SourceJobStatus::Completed;
-            }
-            job.updated_at = now_iso();
-            if state.upsert_job(job.clone()).is_ok() {
-                emit_progress(&app, &job);
-                if job.status == SourceJobStatus::Completed {
-                    emit_terminal(&app, &job);
-                    let _ = state.remove_job(&job_id);
-                    break;
-                }
+                let app_clone = app.clone();
+                let job_id_clone = job_id.to_string();
+                let dest_dir = job.destination_dir.clone();
+
+                tauri::async_runtime::spawn(async move {
+                    process_post_download_extraction(app_clone, job_id_clone, dest_dir, None).await;
+                });
+                break;
             }
         }
     });
@@ -412,13 +422,13 @@ pub fn cancel_job(state: &SourcesState, job_id: &str) {
     state.cancel(job_id);
 }
 
-fn spawn_inventory_rescan_after_download() {
+pub(crate) fn spawn_inventory_rescan_after_download() {
     tauri::async_runtime::spawn(async {
         let _ = crate::peer_inventory::publish_local_inventory(true).await;
     });
 }
 
-fn find_job(state: &SourcesState, job_id: &str) -> Result<SourceDownloadJob, String> {
+pub(crate) fn find_job(state: &SourcesState, job_id: &str) -> Result<SourceDownloadJob, String> {
     state
         .list_jobs()
         .into_iter()

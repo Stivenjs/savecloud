@@ -32,6 +32,7 @@ type DownloadRow = {
   total?: number;
   speedBps?: number | null;
   etaSeconds?: number | null;
+  status?: string;
   /** Solo para filas de tipo torrent */
   torrentExtra?: {
     uploadSpeedBytes: number;
@@ -61,6 +62,8 @@ function formatStatus(status: string): string {
       return "En cola";
     case "running":
       return "Descargando";
+    case "extracting":
+      return "Extrayendo";
     case "pausing":
     case "paused":
       return "Pausado";
@@ -283,6 +286,7 @@ export function DownloadsPanel() {
         speedBps: torrent ? torrent.downloadSpeedBytes : (task.downloadSpeedBytes ?? null),
         etaSeconds: torrent ? torrent.etaSeconds : (task.etaSeconds ?? null),
         infoHash: torrent?.infoHash,
+        status: task.status,
         // Las filas de sources con torrent también exponen peers y upload
         // para que el panel muestre la misma riqueza de información.
         torrentExtra: torrent
@@ -419,14 +423,18 @@ export function DownloadsPanel() {
                     {formatBytes(row.loaded ?? 0)}
                     {(row.total ?? 0) > 0 ? ` / ${formatBytes(row.total ?? 0)}` : ""}
                   </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Zap size={12} className="text-primary/70" />
-                    <span className="tabular-nums">{formatSpeed(row.speedBps ?? null)}</span>
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Clock size={12} className="text-default-400" />
-                    <span className="tabular-nums">{formatEta(row.etaSeconds ?? null)}</span>
-                  </span>
+                  {row.status === "extracting" ? null : (
+                    <>
+                      <span className="inline-flex items-center gap-1">
+                        <Zap size={12} className="text-primary/70" />
+                        <span className="tabular-nums">{formatSpeed(row.speedBps ?? null)}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Clock size={12} className="text-default-400" />
+                        <span className="tabular-nums">{formatEta(row.etaSeconds ?? null)}</span>
+                      </span>
+                    </>
+                  )}
                 </div>
 
                 {/* Stats extra exclusivos de torrents: subida y peers */}

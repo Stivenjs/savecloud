@@ -324,7 +324,7 @@ pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
             profile.default_source_download_dir = settings.default_source_download_dir.clone();
             profile.share_visual_profile_with_hosts = settings.share_visual_profile_with_hosts;
             profile.share_visual_profile_with_members = settings.share_visual_profile_with_members;
-
+            profile.auto_extract_downloads = settings.auto_extract_downloads;
             profile_io::save_profiles_index(&index)?;
         }
     }
@@ -385,6 +385,7 @@ pub fn initialize_profile_storage(profile: &super::profiles::Profile) -> Result<
         share_visual_profile_with_hosts: profile.share_visual_profile_with_hosts,
         share_visual_profile_with_members: profile.share_visual_profile_with_members,
         share_game_inventory_with_cloud: true,
+        auto_extract_downloads: profile.auto_extract_downloads,
         steam_web_api_key: None,
         game_mode_enabled: false,
         game_mode_apply_power_profile: true,

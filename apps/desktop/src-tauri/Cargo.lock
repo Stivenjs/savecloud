@@ -6087,6 +6087,7 @@ dependencies = [
  "windows-sys 0.59.0",
  "winreg 0.52.0",
  "wmi",
+ "zip 0.6.6",
  "zstd",
 ]
 
@@ -9576,6 +9577,7 @@ dependencies = [
  "byteorder",
  "crc32fast",
  "crossbeam-utils",
+ "flate2",
 ]
 
 [[package]]
