@@ -1,11 +1,11 @@
 //! Escaneo BLAKE3 full_verify de carpetas instaladas y archivos de fuentes.
 
 use std::fs;
-use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 use blake3::Hasher;
 use chrono::Utc;
+use rayon::prelude::*;
 use walkdir::WalkDir;
 
 use crate::config::{self, ConfiguredGame};
@@ -28,16 +28,9 @@ fn hash_file(path: &Path) -> Result<String, String> {
     let mut file =
         fs::File::open(path).map_err(|e| format!("No se pudo abrir {}: {e}", path.display()))?;
     let mut hasher = Hasher::new();
-    let mut buf = [0u8; 1024 * 1024];
-    loop {
-        let n = file
-            .read(&mut buf)
-            .map_err(|e| format!("Error leyendo {}: {e}", path.display()))?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
+    hasher
+        .update_reader(&mut file)
+        .map_err(|e| format!("Error leyendo {}: {e}", path.display()))?;
     Ok(format!("{HASH_PREFIX}{}", hasher.finalize().to_hex()))
 }
 
@@ -77,30 +70,41 @@ fn scan_folder_at_root(
         display_name.to_string()
     };
 
-    let mut files = Vec::new();
-    let mut total_bytes = 0_u64;
+    let paths: Vec<PathBuf> = WalkDir::new(root)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .map(|e| e.into_path())
+        .collect();
 
-    for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
-        if !entry.file_type().is_file() {
-            continue;
-        }
-        let path = entry.path();
-        let meta = fs::metadata(path).map_err(|e| e.to_string())?;
-        let size = meta.len();
-        let hash = hash_file(path)?;
-        let relative_path = normalize_relative(path, root)?;
-        total_bytes = total_bytes.saturating_add(size);
-        files.push(InventoryFileEntry {
-            relative_path,
-            size,
-            hash,
-        });
-    }
+    let files: Result<Vec<InventoryFileEntry>, String> = paths
+        .par_iter()
+        .map(|path| {
+            let meta = fs::metadata(path)
+                .map_err(|e| format!("No se pudo obtener metadata de {}: {e}", path.display()))?;
+            let size = meta.len();
+            let hash = hash_file(path)?;
+            let relative_path = normalize_relative(path, root)?;
+            Ok(InventoryFileEntry {
+                relative_path,
+                size,
+                hash,
+            })
+        })
+        .collect();
+
+    let files = files?;
 
     if files.is_empty() {
         return Ok(None);
     }
 
+    let total_bytes = files
+        .iter()
+        .map(|f| f.size)
+        .fold(0_u64, |acc, size| acc.saturating_add(size));
+
+    let mut files = files;
     files.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
 
     let verified_at = Utc::now().to_rfc3339();
