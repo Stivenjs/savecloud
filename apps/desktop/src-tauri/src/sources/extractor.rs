@@ -1,115 +1,59 @@
 use super::domain::SourceJobStatus;
 use super::events::{emit_progress, emit_terminal};
 use super::queue::{find_job, now_iso, spawn_inventory_rescan_after_download, SourcesState};
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 use tauri::{AppHandle, Manager};
+
+const COPY_BUF_SIZE: usize = 512 * 1024;
+
+struct SystemTools {
+    has_7z: bool,
+    has_unrar: bool,
+    has_tar: bool,
+}
+
+static SYSTEM_TOOLS: OnceLock<SystemTools> = OnceLock::new();
+
+fn system_tools() -> &'static SystemTools {
+    SYSTEM_TOOLS.get_or_init(|| SystemTools {
+        has_7z: Command::new("7z")
+            .arg("i")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok(),
+        has_unrar: Command::new("unrar")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok(),
+        has_tar: Command::new("tar")
+            .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok(),
+    })
+}
 
 pub fn is_archive(filename: &str) -> bool {
     let lower = filename.to_lowercase();
-    lower.ends_with(".zip")
-        || lower.ends_with(".rar")
-        || lower.ends_with(".7z")
-        || lower.ends_with(".tar")
-        || lower.ends_with(".tar.gz")
-        || lower.ends_with(".tgz")
+    matches!(
+        lower.rsplit_once('.').map(|(_, ext)| ext),
+        Some("zip" | "rar" | "7z" | "tar" | "tgz" | "gz" | "zst")
+    ) || lower.ends_with(".tar.gz")
         || lower.ends_with(".tar.zst")
 }
 
-pub fn extract_zip(
-    app: &AppHandle,
-    job_id: &str,
-    archive_path: &Path,
-    destination_dir: &Path,
-) -> Result<(), String> {
-    let file = std::fs::File::open(archive_path)
-        .map_err(|e| format!("No se pudo abrir el archivo ZIP: {e}"))?;
-    let mut archive =
-        zip::ZipArchive::new(file).map_err(|e| format!("Formato ZIP inválido: {e}"))?;
-
-    let total_files = archive.len();
-    if total_files == 0 {
-        return Ok(());
-    }
-
-    let archive_size = archive_path.metadata().map(|m| m.len()).unwrap_or(0);
-
-    let mut total_uncompressed_bytes = 0_u64;
-    for i in 0..total_files {
-        if let Ok(file) = archive.by_index(i) {
-            total_uncompressed_bytes += file.size();
-        }
-    }
-    let total_uncompressed_bytes = total_uncompressed_bytes.max(1);
-
-    std::fs::create_dir_all(destination_dir)
-        .map_err(|e| format!("No se pudo crear el directorio de destino: {e}"))?;
-
-    let state = app.state::<SourcesState>();
-    let mut extracted_uncompressed_bytes = 0_u64;
-    let mut last_update = std::time::Instant::now();
-
-    for i in 0..total_files {
-        let mut file = archive
-            .by_index(i)
-            .map_err(|e| format!("Error al leer archivo {i} en ZIP: {e}"))?;
-
-        let outpath = match file.enclosed_name() {
-            Some(path) => destination_dir.join(path),
-            None => continue,
-        };
-
-        let file_size = file.size();
-
-        if file.name().ends_with('/') {
-            std::fs::create_dir_all(&outpath)
-                .map_err(|e| format!("No se pudo crear subdirectorio: {e}"))?;
-        } else {
-            if let Some(p) = outpath.parent() {
-                if !p.exists() {
-                    std::fs::create_dir_all(p)
-                        .map_err(|e| format!("No se pudo crear subdirectorio padre: {e}"))?;
-                }
-            }
-            let outfile = std::fs::File::create(&outpath)
-                .map_err(|e| format!("No se pudo crear archivo {}: {e}", outpath.display()))?;
-
-            let mut writer = BufWriter::with_capacity(128 * 1024, outfile);
-            std::io::copy(&mut file, &mut writer)
-                .map_err(|e| format!("Error escribiendo archivo {}: {e}", outpath.display()))?;
-            writer
-                .flush()
-                .map_err(|e| format!("Error al flush archivo {}: {e}", outpath.display()))?;
-        }
-
-        extracted_uncompressed_bytes += file_size;
-
-        let now = std::time::Instant::now();
-        if i == total_files - 1
-            || now.duration_since(last_update) >= std::time::Duration::from_millis(250)
-        {
-            let loaded_bytes =
-                (extracted_uncompressed_bytes * archive_size) / total_uncompressed_bytes;
-            update_progress(app, &state, job_id, loaded_bytes, archive_size);
-            last_update = now;
-        }
-    }
-
-    Ok(())
-}
-
-fn update_progress(
-    app: &AppHandle,
-    state: &SourcesState,
-    job_id: &str,
-    loaded_bytes: u64,
-    total_bytes: u64,
-) {
+#[inline]
+fn push_progress(app: &AppHandle, state: &SourcesState, job_id: &str, loaded: u64, total: u64) {
     if let Ok(mut job) = find_job(state, job_id) {
         job.status = SourceJobStatus::Extracting;
-        job.loaded = loaded_bytes;
-        job.total = total_bytes;
+        job.loaded = loaded;
+        job.total = total;
         job.download_speed_bytes = 0;
         job.eta_seconds = None;
         job.updated_at = now_iso();
@@ -118,41 +62,109 @@ fn update_progress(
     }
 }
 
+pub fn extract_zip(
+    app: &AppHandle,
+    job_id: &str,
+    archive_path: &Path,
+    destination_dir: &Path,
+) -> Result<(), String> {
+    let file =
+        std::fs::File::open(archive_path).map_err(|e| format!("No se pudo abrir ZIP: {e}"))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("Formato ZIP inválido: {e}"))?;
+
+    let total_files = archive.len();
+    if total_files == 0 {
+        return Ok(());
+    }
+
+    let mut total_uncompressed: u64 = 0;
+    for i in 0..total_files {
+        if let Ok(f) = archive.by_index_raw(i) {
+            total_uncompressed += f.size();
+        }
+    }
+    let total_uncompressed = total_uncompressed.max(1);
+    let archive_size = archive_path.metadata().map(|m| m.len()).unwrap_or(1);
+
+    std::fs::create_dir_all(destination_dir)
+        .map_err(|e| format!("No se pudo crear directorio destino: {e}"))?;
+
+    let state = app.state::<SourcesState>();
+    let mut extracted_bytes: u64 = 0;
+    let mut last_update = std::time::Instant::now();
+    let throttle = std::time::Duration::from_millis(250);
+    let mut copy_buf = vec![0u8; COPY_BUF_SIZE];
+
+    for i in 0..total_files {
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|e| format!("Error leyendo entrada {i}: {e}"))?;
+
+        let outpath = match entry.enclosed_name() {
+            Some(p) => destination_dir.join(p),
+            None => continue,
+        };
+
+        let entry_size = entry.size();
+
+        if entry.is_dir() {
+            std::fs::create_dir_all(&outpath)
+                .map_err(|e| format!("No se pudo crear directorio: {e}"))?;
+        } else {
+            if let Some(parent) = outpath.parent() {
+                if !parent.exists() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| format!("No se pudo crear padre: {e}"))?;
+                }
+            }
+
+            let outfile = std::fs::File::create(&outpath)
+                .map_err(|e| format!("No se pudo crear {}: {e}", outpath.display()))?;
+
+            let mut writer = BufWriter::with_capacity(COPY_BUF_SIZE, outfile);
+            loop {
+                let n = entry
+                    .read(&mut copy_buf)
+                    .map_err(|e| format!("Error leyendo ZIP entrada: {e}"))?;
+                if n == 0 {
+                    break;
+                }
+                writer
+                    .write_all(&copy_buf[..n])
+                    .map_err(|e| format!("Error escribiendo {}: {e}", outpath.display()))?;
+            }
+            writer
+                .flush()
+                .map_err(|e| format!("Error en flush {}: {e}", outpath.display()))?;
+        }
+
+        extracted_bytes += entry_size;
+
+        let now = std::time::Instant::now();
+        if i == total_files - 1 || now.duration_since(last_update) >= throttle {
+            let loaded = (extracted_bytes * archive_size) / total_uncompressed;
+            push_progress(app, &state, job_id, loaded, archive_size);
+            last_update = now;
+        }
+    }
+
+    Ok(())
+}
+
 fn extract_7z(
     app: &AppHandle,
     job_id: &str,
     archive_path: &Path,
     destination_dir: &Path,
 ) -> Result<(), String> {
-    let archive_size = archive_path.metadata().map(|m| m.len()).unwrap_or(0);
-
-    let list_output = Command::new("7z")
-        .args(["l", archive_path.to_string_lossy().as_ref()])
-        .output()
-        .map_err(|e| format!("Error listando con 7z: {e}"))?;
-
-    let list_str = String::from_utf8_lossy(&list_output.stdout);
-    let mut total_files = 1;
-    for line in list_str.lines().rev().take(10) {
-        if line.contains("files") {
-            if let Some(idx) = line.find("files") {
-                let parts: Vec<&str> = line[..idx].split_whitespace().collect();
-                if let Some(last) = parts.last() {
-                    if let Ok(num) = last.parse::<usize>() {
-                        total_files = num.max(1);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    std::fs::create_dir_all(destination_dir)
-        .map_err(|e| format!("No se pudo crear directorio destino: {e}"))?;
+    let archive_size = archive_path.metadata().map(|m| m.len()).unwrap_or(1);
 
     let mut child = Command::new("7z")
         .args([
             "x",
+            "-bsp1",
+            "-bso0",
             archive_path.to_string_lossy().as_ref(),
             &format!("-o{}", destination_dir.to_string_lossy()),
             "-y",
@@ -162,22 +174,20 @@ fn extract_7z(
         .spawn()
         .map_err(|e| format!("No se pudo iniciar 7z: {e}"))?;
 
-    let stdout = child.stdout.take().ok_or("No se pudo leer salida de 7z")?;
+    let stdout = child.stdout.take().ok_or("No stdout de 7z")?;
     let reader = BufReader::new(stdout);
     let state = app.state::<SourcesState>();
-    let mut extracted = 0;
     let mut last_update = std::time::Instant::now();
+    let throttle = std::time::Duration::from_millis(250);
 
-    for line in reader.lines() {
-        if let Ok(l) = line {
-            if l.trim_start().starts_with("Extracting") {
-                extracted += 1;
-
+    for line in reader.lines().flatten() {
+        let trimmed = line.trim_start();
+        if let Some(pct_str) = trimmed.split('%').next() {
+            if let Ok(pct) = pct_str.trim().parse::<u64>() {
                 let now = std::time::Instant::now();
-                if now.duration_since(last_update) >= std::time::Duration::from_millis(250) {
-                    let loaded_bytes =
-                        (extracted.min(total_files) as u64 * archive_size) / total_files as u64;
-                    update_progress(app, &state, job_id, loaded_bytes, archive_size);
+                if now.duration_since(last_update) >= throttle {
+                    let loaded = (pct.min(100) * archive_size) / 100;
+                    push_progress(app, &state, job_id, loaded, archive_size);
                     last_update = now;
                 }
             }
@@ -188,10 +198,10 @@ fn extract_7z(
         .wait()
         .map_err(|e| format!("Error esperando 7z: {e}"))?;
     if !status.success() {
-        return Err("7z falló durante la extracción".to_string());
+        return Err("7z falló durante la extracción".into());
     }
 
-    update_progress(app, &state, job_id, archive_size, archive_size);
+    push_progress(app, &state, job_id, archive_size, archive_size);
     Ok(())
 }
 
@@ -201,65 +211,41 @@ fn extract_unrar(
     archive_path: &Path,
     destination_dir: &Path,
 ) -> Result<(), String> {
-    let archive_size = archive_path.metadata().map(|m| m.len()).unwrap_or(0);
-
-    let list_output = Command::new("unrar")
-        .args(["l", archive_path.to_string_lossy().as_ref()])
-        .output()
-        .map_err(|e| format!("Error listando con unrar: {e}"))?;
-
-    let list_str = String::from_utf8_lossy(&list_output.stdout);
-    let mut total_files = 1;
-    for line in list_str.lines().rev().take(10) {
-        if line.contains("files") {
-            if let Some(idx) = line.find("files") {
-                let parts: Vec<&str> = line[..idx].split_whitespace().collect();
-                if let Some(last) = parts.last() {
-                    if let Ok(num) = last.parse::<usize>() {
-                        total_files = num.max(1);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    std::fs::create_dir_all(destination_dir)
-        .map_err(|e| format!("No se pudo crear directorio destino: {e}"))?;
+    let archive_size = archive_path.metadata().map(|m| m.len()).unwrap_or(1);
 
     let mut child = Command::new("unrar")
         .args([
             "x",
+            "-p-",
+            "-y",
             archive_path.to_string_lossy().as_ref(),
             destination_dir.to_string_lossy().as_ref(),
-            "-y",
         ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("No se pudo iniciar unrar: {e}"))?;
 
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or("No se pudo leer salida de unrar")?;
-    let reader = BufReader::new(stdout);
+    let stderr = child.stderr.take().ok_or("No stderr de unrar")?;
+    let reader = BufReader::new(stderr);
     let state = app.state::<SourcesState>();
-    let mut extracted = 0;
+    let mut extracted: u64 = 0;
     let mut last_update = std::time::Instant::now();
+    let throttle = std::time::Duration::from_millis(250);
 
-    for line in reader.lines() {
-        if let Ok(l) = line {
-            if l.trim_start().starts_with("Extracting") {
-                extracted += 1;
-
-                let now = std::time::Instant::now();
-                if now.duration_since(last_update) >= std::time::Duration::from_millis(250) {
-                    let loaded_bytes =
-                        (extracted.min(total_files) as u64 * archive_size) / total_files as u64;
-                    update_progress(app, &state, job_id, loaded_bytes, archive_size);
-                    last_update = now;
-                }
+    for line in reader.lines().flatten() {
+        if line.trim_start().starts_with("Extracting") {
+            extracted += 1;
+            let now = std::time::Instant::now();
+            if now.duration_since(last_update) >= throttle {
+                push_progress(
+                    app,
+                    &state,
+                    job_id,
+                    extracted * 1024,
+                    archive_size.max(extracted * 1024),
+                );
+                last_update = now;
             }
         }
     }
@@ -268,10 +254,10 @@ fn extract_unrar(
         .wait()
         .map_err(|e| format!("Error esperando unrar: {e}"))?;
     if !status.success() {
-        return Err("unrar falló durante la extracción".to_string());
+        return Err("unrar falló durante la extracción".into());
     }
 
-    update_progress(app, &state, job_id, archive_size, archive_size);
+    push_progress(app, &state, job_id, archive_size, archive_size);
     Ok(())
 }
 
@@ -281,29 +267,18 @@ fn extract_tar(
     archive_path: &Path,
     destination_dir: &Path,
 ) -> Result<(), String> {
-    let archive_size = archive_path.metadata().map(|m| m.len()).unwrap_or(0);
+    let archive_size = archive_path.metadata().map(|m| m.len()).unwrap_or(1);
 
-    let count_output = Command::new("tar")
-        .args(["-tf", archive_path.to_string_lossy().as_ref()])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output()
-        .map_err(|e| format!("Error listando con tar: {e}"))?;
-
-    let total_files = BufReader::new(&count_output.stdout[..])
-        .lines()
-        .filter_map(|l| l.ok())
-        .filter(|l| !l.trim().is_empty())
-        .count();
-
-    let total_files = if total_files == 0 { 1 } else { total_files };
+    let checkpoint_bytes: u64 = 512 * 512;
 
     std::fs::create_dir_all(destination_dir)
         .map_err(|e| format!("No se pudo crear directorio destino: {e}"))?;
 
     let mut child = Command::new("tar")
         .args([
-            "-xvf",
+            "--checkpoint=512",
+            "--checkpoint-action=echo=#%u",
+            "-xf",
             archive_path.to_string_lossy().as_ref(),
             "-C",
             destination_dir.to_string_lossy().as_ref(),
@@ -313,25 +288,21 @@ fn extract_tar(
         .spawn()
         .map_err(|e| format!("No se pudo iniciar tar: {e}"))?;
 
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or("No se pudo leer salida de errores de tar")?;
+    let stderr = child.stderr.take().ok_or("No stderr de tar")?;
     let reader = BufReader::new(stderr);
     let state = app.state::<SourcesState>();
-    let mut extracted = 0;
     let mut last_update = std::time::Instant::now();
+    let throttle = std::time::Duration::from_millis(250);
 
-    for line in reader.lines() {
-        if let Ok(_) = line {
-            extracted += 1;
-
-            let now = std::time::Instant::now();
-            if now.duration_since(last_update) >= std::time::Duration::from_millis(250) {
-                let loaded_bytes =
-                    (extracted.min(total_files) as u64 * archive_size) / total_files as u64;
-                update_progress(app, &state, job_id, loaded_bytes, archive_size);
-                last_update = now;
+    for line in reader.lines().flatten() {
+        if let Some(num_str) = line.strip_prefix('#') {
+            if let Ok(checkpoint) = num_str.trim().parse::<u64>() {
+                let now = std::time::Instant::now();
+                if now.duration_since(last_update) >= throttle {
+                    let loaded = (checkpoint * checkpoint_bytes).min(archive_size);
+                    push_progress(app, &state, job_id, loaded, archive_size);
+                    last_update = now;
+                }
             }
         }
     }
@@ -340,10 +311,10 @@ fn extract_tar(
         .wait()
         .map_err(|e| format!("Error esperando tar: {e}"))?;
     if !status.success() {
-        return Err("tar falló durante la extracción".to_string());
+        return Err("tar falló durante la extracción".into());
     }
 
-    update_progress(app, &state, job_id, archive_size, archive_size);
+    push_progress(app, &state, job_id, archive_size, archive_size);
     Ok(())
 }
 
@@ -353,66 +324,27 @@ pub fn extract_archive(
     archive_path: &Path,
     destination_dir: &Path,
 ) -> Result<(), String> {
-    let extension = archive_path
+    let ext = archive_path
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_lowercase();
 
-    if extension == "zip" {
-        extract_zip(app, job_id, archive_path, destination_dir)
-    } else {
-        extract_via_system_tool(app, job_id, archive_path, destination_dir)
+    if ext == "zip" {
+        return extract_zip(app, job_id, archive_path, destination_dir);
     }
-}
 
-fn extract_via_system_tool(
-    app: &AppHandle,
-    job_id: &str,
-    archive_path: &Path,
-    destination_dir: &Path,
-) -> Result<(), String> {
-    let extension = archive_path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
+    let tools = system_tools();
 
-    let has_7z = Command::new("7z")
-        .arg("--help")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok();
-
-    let has_unrar = if extension == "rar" {
-        Command::new("unrar")
-            .arg("--help")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok()
-    } else {
-        false
-    };
-
-    let has_tar = Command::new("tar")
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok();
-
-    if has_7z {
+    if tools.has_7z {
         extract_7z(app, job_id, archive_path, destination_dir)
-    } else if has_unrar && extension == "rar" {
+    } else if tools.has_unrar && ext == "rar" {
         extract_unrar(app, job_id, archive_path, destination_dir)
-    } else if has_tar {
+    } else if tools.has_tar {
         extract_tar(app, job_id, archive_path, destination_dir)
     } else {
         Err(format!(
-            "No se encontró ninguna herramienta de extracción compatible (7z, unrar o tar) para descomprimir el archivo .{}",
-            extension
+            "No se encontró herramienta de extracción (7z, unrar, tar) para .{ext}"
         ))
     }
 }
@@ -424,71 +356,49 @@ pub async fn process_post_download_extraction(
     output_file_name: Option<String>,
 ) {
     let state = app.state::<SourcesState>();
-    let mut archive_path: Option<PathBuf> = None;
 
-    if let Some(ref file) = output_file_name {
-        if is_archive(file) {
-            let path = Path::new(&destination_dir).join(file);
-            if path.is_file() {
-                archive_path = Some(path);
-            }
-        }
-    }
-
-    if archive_path.is_none() {
-        if let Ok(entries) = std::fs::read_dir(&destination_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_file() {
-                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                        if is_archive(name) {
-                            archive_path = Some(path);
-                            break;
-                        }
+    let archive_path: Option<PathBuf> = output_file_name
+        .as_deref()
+        .filter(|f| is_archive(f))
+        .map(|f| Path::new(&destination_dir).join(f))
+        .filter(|p| p.is_file())
+        .or_else(|| {
+            std::fs::read_dir(&destination_dir)
+                .ok()?
+                .flatten()
+                .find_map(|e| {
+                    let p = e.path();
+                    if p.is_file() && p.file_name()?.to_str().map(is_archive).unwrap_or(false) {
+                        Some(p)
+                    } else {
+                        None
                     }
-                }
-            }
-        }
-    }
+                })
+        });
 
-    let Some(path) = archive_path else {
-        if let Ok(mut job) = find_job(&state, &job_id) {
+    let finalize = |app: &AppHandle, state: &SourcesState, job_id: &str| {
+        if let Ok(mut job) = find_job(state, job_id) {
             job.status = SourceJobStatus::Completed;
             job.updated_at = now_iso();
             let _ = state.upsert_job(job.clone());
-            emit_progress(&app, &job);
-            emit_terminal(&app, &job);
-            let _ = state.remove_job(&job_id);
+            emit_progress(app, &job);
+            emit_terminal(app, &job);
+            let _ = state.remove_job(job_id);
             spawn_inventory_rescan_after_download();
         }
+    };
+
+    let Some(path) = archive_path else {
+        finalize(&app, &state, &job_id);
         return;
     };
 
     let dest_path = PathBuf::from(&destination_dir);
-    match extract_archive(&app, &job_id, &path, &dest_path) {
-        Ok(()) => {
-            let _ = std::fs::remove_file(path);
-            if let Ok(mut job) = find_job(&state, &job_id) {
-                job.status = SourceJobStatus::Completed;
-                job.updated_at = now_iso();
-                let _ = state.upsert_job(job.clone());
-                emit_progress(&app, &job);
-                emit_terminal(&app, &job);
-                let _ = state.remove_job(&job_id);
-                spawn_inventory_rescan_after_download();
-            }
-        }
-        Err(err) => {
-            log::error!("Error de extracción en job {job_id}: {err}");
-            if let Ok(mut job) = find_job(&state, &job_id) {
-                job.status = SourceJobStatus::Completed;
-                job.updated_at = now_iso();
-                let _ = state.upsert_job(job.clone());
-                emit_progress(&app, &job);
-                emit_terminal(&app, &job);
-                let _ = state.remove_job(&job_id);
-                spawn_inventory_rescan_after_download();
-            }
-        }
+
+    if let Err(err) = extract_archive(&app, &job_id, &path, &dest_path) {
+        log::error!("Error de extracción en job {job_id}: {err}");
     }
+
+    let _ = std::fs::remove_file(&path);
+    finalize(&app, &state, &job_id);
 }
