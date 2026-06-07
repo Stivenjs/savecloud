@@ -116,6 +116,7 @@ pub enum SourceJobStatus {
     Cancelled,
     Completed,
     Failed,
+    Extracting,
 }
 
 /// Job persistido de descarga del módulo `sources`.

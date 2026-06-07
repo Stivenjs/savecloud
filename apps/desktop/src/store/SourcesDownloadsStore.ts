@@ -24,7 +24,7 @@ interface SourcesDownloadsStore {
 }
 
 function isActive(job: SourceDownloadJob): boolean {
-  return job.status === "queued" || job.status === "running" || job.status === "paused";
+  return job.status === "queued" || job.status === "running" || job.status === "paused" || job.status === "extracting";
 }
 
 function resolveTransferMetrics(
@@ -96,7 +96,7 @@ export const useSourcesDownloadsStore = create<SourcesDownloadsStore>((set) => (
 
       const current = state.activeByJobId[payload.jobId];
       const status = payload.status;
-      const active = status === "queued" || status === "running" || status === "paused";
+      const active = status === "queued" || status === "running" || status === "paused" || status === "extracting";
       const metrics = resolveTransferMetrics(payload, current, active);
       const nextJob: SourceDownloadJob = {
         jobId: payload.jobId,
