@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @config "../../tailwind.config.js";
 
+html {
+  background-color: #0a0a0a;
+}
+
 :root {
   font-family:
     "Plus Jakarta Sans",
@@ -18,7 +22,6 @@ body {
   overflow-x: hidden;
 }
 
-/* Scrollbar styling identical to the desktop app */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

@@ -21,7 +21,8 @@ export interface LatestRelease {
   error: string | null;
 }
 
-const RELEASES_PAGE = "https://github.com/Stivenjs/savecloud/releases";
+const REPO = "https://github.com/Stivenjs/savecloud";
+const RELEASES_PAGE = `${REPO}/releases`;
 
 export function useLatestRelease(): LatestRelease {
   const [data, setData] = useState<LatestRelease>({
