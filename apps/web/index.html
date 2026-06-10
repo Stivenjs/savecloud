@@ -24,6 +24,17 @@
   </head>
 
   <body>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("savecloud-web-theme");
+          var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          if (stored === "dark" || (!stored && prefersDark) || (stored === "system" && prefersDark)) {
+            document.documentElement.classList.add("dark");
+          }
+        } catch (e) {}
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
