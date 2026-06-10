@@ -1,0 +1,42 @@
+@import "tailwindcss";
+@config "../../tailwind.config.js";
+
+:root {
+  font-family:
+    "Plus Jakarta Sans",
+    "Inter",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background-color: #0a0a0a;
+  color: #ededed;
+  overflow-x: hidden;
+}
+
+/* Scrollbar styling identical to the desktop app */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.25);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.5);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
