@@ -25,3 +25,7 @@ dist-ssr
 *.db
 *.db-journal
 *.db-wal
+
+# Compiled Scrapling Resources
+src-tauri/resources/scrapling_fetch.exe
+src-tauri/resources/scrapling_fetch

@@ -2,11 +2,21 @@
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
+
+if "PLAYWRIGHT_BROWSERS_PATH" not in os.environ:
+    home = os.path.expanduser("~")
+    if sys.platform == "win32":
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(home, "AppData", "Local", "ms-playwright")
+    elif sys.platform == "darwin":
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(home, "Library", "Caches", "ms-playwright")
+    else:
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(home, ".cache", "ms-playwright")
+
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -89,8 +99,66 @@ JS_STREAM_FETCH = """async (targetUrl) => {
 }"""
 
 
+def clean_json_from_html(text: str) -> str:
+    if not text:
+        return ""
+    text_stripped = text.strip()
+    if text_stripped.startswith("{") or text_stripped.startswith("["):
+        return text_stripped
+
+    clean = re.sub(r'<[^>]+>', '', text_stripped)
+    clean_stripped = clean.strip()
+    if clean_stripped.startswith("{") or clean_stripped.startswith("["):
+        return clean_stripped
+
+    first_brace = text_stripped.find('{')
+    last_brace = text_stripped.rfind('}')
+    first_bracket = text_stripped.find('[')
+    last_bracket = text_stripped.rfind(']')
+
+    candidates = []
+    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+        candidates.append(text_stripped[first_brace:last_brace+1])
+    if first_bracket != -1 and last_bracket != -1 and last_bracket > first_bracket:
+        candidates.append(text_stripped[first_bracket:last_bracket+1])
+
+    for cand in candidates:
+        try:
+            json.loads(cand)
+            return cand
+        except Exception:
+            pass
+
+    return text_stripped
+
+
+def get_valid_content(text: str, expect_json: bool) -> str | None:
+    if not text or not text.strip():
+        return None
+    if expect_json:
+        cleaned = clean_json_from_html(text)
+        if cleaned.startswith("{") or cleaned.startswith("["):
+            try:
+                json.loads(cleaned)
+                return cleaned
+            except Exception:
+                pass
+        return None
+    return text
+
+
 def extract_body(page) -> str:
-    for attr in ("html_content", "content", "text"):
+    try:
+        if hasattr(page, "json"):
+            val = page.json()
+            if callable(val):
+                val = val()
+            if val:
+                return json.dumps(val)
+    except Exception:
+        pass
+
+    for attr in ("text", "html_content", "body", "content"):
         if not hasattr(page, attr):
             continue
         value = getattr(page, attr)
@@ -102,21 +170,19 @@ def extract_body(page) -> str:
         if value is None:
             continue
         if isinstance(value, bytes):
-            return value.decode("utf-8", "replace")
+            try:
+                return value.decode("utf-8", "replace")
+            except Exception:
+                pass
         return str(value)
+
     try:
-        return page.get_all_text()
+        if hasattr(page, "get_all_text"):
+            return page.get_all_text()
     except Exception:
-        return str(page)
+        pass
 
-
-def is_valid_content(text: str, expect_json: bool) -> bool:
-    if not text or not text.strip():
-        return False
-    if expect_json:
-        s = text.strip()
-        return s.startswith("{") or s.startswith("[")
-    return True
+    return str(page)
 
 
 def _strategy_browser_fetch(url: str, expect_json: bool) -> str | None:
@@ -139,7 +205,7 @@ def _strategy_browser_fetch(url: str, expect_json: bool) -> str | None:
         page_action=page_action,
     )
     text = result_holder["text"]
-    return text if is_valid_content(text, expect_json) else None
+    return get_valid_content(text, expect_json)
 
 
 def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> str | None:
@@ -215,8 +281,11 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
     try:
         with open(captured_path, "r", encoding="utf-8") as fh:
             captured = fh.read()
-        if is_valid_content(captured, expect_json):
-            return captured
+        valid = get_valid_content(captured, expect_json)
+        if valid:
+            return valid
+    except Exception:
+        pass
     finally:
         try:
             os.remove(captured_path)
@@ -224,7 +293,7 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
             pass
 
     body = extract_body(page)
-    return body if is_valid_content(body, expect_json) else None
+    return get_valid_content(body, expect_json)
 
 
 def fetch_with_capture(url: str) -> str:
@@ -232,18 +301,20 @@ def fetch_with_capture(url: str) -> str:
     expect_json = is_json_url(url)
 
     if solve_cf and expect_json:
-        with ThreadPoolExecutor(max_workers=2) as ex:
-            futures = {
-                ex.submit(_strategy_browser_fetch, url, expect_json): "browser_fetch",
-                ex.submit(_strategy_response_listener, url, True, expect_json): "listener",
-            }
-            for fut in as_completed(futures):
-                try:
-                    result = fut.result()
-                    if result:
-                        return result
-                except Exception:
-                    pass
+        try:
+            result = _strategy_response_listener(url, True, expect_json)
+            if result:
+                return result
+        except Exception as e:
+            sys.stderr.write(f"Listener strategy failed: {e}\n")
+
+        try:
+            result = _strategy_browser_fetch(url, expect_json)
+            if result:
+                return result
+        except Exception as e:
+            sys.stderr.write(f"Browser fetch strategy failed: {e}\n")
+
         raise RuntimeError(f"No se pudo obtener contenido JSON válido de: {url}")
 
     result = _strategy_response_listener(url, solve_cf, expect_json)

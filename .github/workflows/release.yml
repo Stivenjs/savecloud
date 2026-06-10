@@ -132,6 +132,11 @@ jobs:
         with:
           workspaces: "apps/desktop/src-tauri -> target"
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Sync version from tag
         run: bun run scripts/sync-version.ts
         env:
@@ -153,6 +158,10 @@ jobs:
       - name: NSIS branding (Windows)
         if: matrix.platform == 'windows-latest'
         run: bun run nsis-branding
+        working-directory: apps/desktop
+
+      - name: Build Scrapling Binary
+        run: bun run build-scrapling
         working-directory: apps/desktop
 
       - name: Build Tauri
