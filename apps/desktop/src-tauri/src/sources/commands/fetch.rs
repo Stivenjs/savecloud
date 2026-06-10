@@ -45,6 +45,17 @@ fn resolve_scrapling_script(app: &AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| format!("No se pudo resolver el script de Scrapling: {e}"))
 }
 
+fn resolve_scrapling_binary(app: &AppHandle) -> Result<PathBuf, String> {
+    let bin_name = if cfg!(target_os = "windows") {
+        "resources/scrapling_fetch.exe"
+    } else {
+        "resources/scrapling_fetch"
+    };
+    app.path()
+        .resolve(bin_name, BaseDirectory::Resource)
+        .map_err(|e| format!("No se pudo resolver el binario de Scrapling: {e}"))
+}
+
 fn find_python_executable() -> Result<(String, Vec<String>), String> {
     let candidates = [
         (std::env::var("PYTHON").ok(), Vec::<String>::new()),
@@ -68,19 +79,27 @@ fn find_python_executable() -> Result<(String, Vec<String>), String> {
 use std::os::windows::process::CommandExt;
 
 pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String> {
-    let script_path = resolve_scrapling_script(app)?;
-    let (python_bin, prefix_args) = find_python_executable()?;
-    let script_dir = script_path
-        .parent()
-        .ok_or_else(|| "No se pudo resolver el directorio del script de Scrapling".to_string())?;
+    let binary_path = resolve_scrapling_binary(app);
+    let mut command = if let Some(bin_path) = binary_path.as_ref().ok().filter(|p| p.is_file()) {
+        let mut cmd = std::process::Command::new(bin_path);
+        cmd.arg(url);
+        cmd
+    } else {
+        let script_path = resolve_scrapling_script(app)?;
+        let (python_bin, prefix_args) = find_python_executable()?;
+        let script_dir = script_path.parent().ok_or_else(|| {
+            "No se pudo resolver el directorio del script de Scrapling".to_string()
+        })?;
 
-    let mut command = std::process::Command::new(python_bin);
-    command
-        .current_dir(script_dir)
-        .args(prefix_args)
-        .arg(script_path)
-        .arg(url)
-        .env("PYTHONUNBUFFERED", "1");
+        let mut cmd = std::process::Command::new(python_bin);
+        cmd.current_dir(script_dir)
+            .args(prefix_args)
+            .arg(script_path)
+            .arg(url);
+        cmd
+    };
+
+    command.env("PYTHONUNBUFFERED", "1");
 
     #[cfg(target_os = "windows")]
     {
