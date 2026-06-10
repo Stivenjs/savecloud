@@ -19,6 +19,8 @@
     "desktop": "bun run --cwd apps/desktop tauri dev",
     "desktop:dev": "bun run --cwd apps/desktop dev",
     "desktop:build": "bun run --cwd apps/desktop tauri build",
+    "web:dev": "bun run --cwd apps/web dev",
+    "web:build": "bun run --cwd apps/web build",
     "cargo:check": "bun run --cwd apps/desktop/src-tauri cargo check",
     "cargo:clean": "bun run --cwd apps/desktop/src-tauri cargo clean",
     "cargo:build": "bun run --cwd apps/desktop/src-tauri cargo build",
