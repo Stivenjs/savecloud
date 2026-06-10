@@ -53,8 +53,8 @@ function rawToRgbTopDown(
   return out;
 }
 
-/** BMP 24 bits, DIB con altura negativa (orden top-down, compatible con NSIS/MUI). */
-function packBmp24TopDown(width: number, height: number, rgbTopDown: Buffer): Buffer {
+/** BMP 24 bits, DIB con altura positiva (orden bottom-up estándar). */
+function packBmp24BottomUp(width: number, height: number, rgbTopDown: Buffer): Buffer {
   if (rgbTopDown.length !== width * height * 3) {
     throw new Error(`RGB buffer size mismatch: expected ${width * height * 3}, got ${rgbTopDown.length}`);
   }
@@ -71,7 +71,7 @@ function packBmp24TopDown(width: number, height: number, rgbTopDown: Buffer): Bu
   const dib = Buffer.alloc(40);
   dib.writeUInt32LE(40, 0);
   dib.writeInt32LE(width, 4);
-  dib.writeInt32LE(-height, 8);
+  dib.writeInt32LE(height, 8); // Altura positiva -> Bottom-Up estándar
   dib.writeUInt16LE(1, 12);
   dib.writeUInt16LE(24, 14);
   dib.writeUInt32LE(0, 16);
@@ -79,12 +79,14 @@ function packBmp24TopDown(width: number, height: number, rgbTopDown: Buffer): Bu
 
   const pixels = Buffer.alloc(pixelDataSize);
   for (let y = 0; y < height; y++) {
+    // Fila origen invertida verticalmente (bottom-up)
+    const srcY = height - 1 - y;
     for (let x = 0; x < width; x++) {
-      const s = (y * width + x) * 3;
+      const s = (srcY * width + x) * 3;
       const d = y * rowSize + x * 3;
-      pixels[d] = rgbTopDown[s + 2];
-      pixels[d + 1] = rgbTopDown[s + 1];
-      pixels[d + 2] = rgbTopDown[s];
+      pixels[d] = rgbTopDown[s + 2]; // Blue
+      pixels[d + 1] = rgbTopDown[s + 1]; // Green
+      pixels[d + 2] = rgbTopDown[s]; // Red
     }
     for (let x = width * 3; x < rowSize; x++) {
       pixels[y * rowSize + x] = 0;
@@ -121,7 +123,7 @@ async function writeSidebarWithLogo(outPath: string, logoPath: string) {
   const w = info.width ?? W;
   const h = info.height ?? H;
   const rgb = rawToRgbTopDown(data, w, h, info.channels, bg);
-  await Bun.write(outPath, packBmp24TopDown(W, H, rgb));
+  await Bun.write(outPath, packBmp24BottomUp(W, H, rgb));
 }
 
 /** Franja superior de páginas internas: fondo + icono a la izquierda (150×57). */
@@ -152,13 +154,20 @@ async function writeHeaderStrip(outPath: string, logoPath: string, headerRgb: [n
   const w = info.width ?? W;
   const h = info.height ?? H;
   const rgb = rawToRgbTopDown(data, w, h, info.channels, bg);
-  await Bun.write(outPath, packBmp24TopDown(W, H, rgb));
+  await Bun.write(outPath, packBmp24BottomUp(W, H, rgb));
 }
 
-const logoPath = await resolveLogoPath();
+async function main() {
+  const logoPath = await resolveLogoPath();
 
-await writeHeaderStrip(join(OUT_DIR, "header.bmp"), logoPath, HEADER_RGB);
-await writeSidebarWithLogo(join(OUT_DIR, "sidebar.bmp"), logoPath);
-await writeHeaderStrip(join(OUT_DIR, "uninstaller-header.bmp"), logoPath, HEADER_RGB);
+  await writeHeaderStrip(join(OUT_DIR, "header.bmp"), logoPath, HEADER_RGB);
+  await writeSidebarWithLogo(join(OUT_DIR, "sidebar.bmp"), logoPath);
+  await writeHeaderStrip(join(OUT_DIR, "uninstaller-header.bmp"), logoPath, HEADER_RGB);
 
-console.log("NSIS branding BMPs escritos en:", OUT_DIR, "(logo:", logoPath, ")");
+  console.log("NSIS branding BMPs escritos en:", OUT_DIR, "(logo:", logoPath, ")");
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
