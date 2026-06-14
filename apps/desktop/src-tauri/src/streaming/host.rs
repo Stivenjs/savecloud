@@ -21,9 +21,9 @@ pub struct SunshineHost {
 
 impl SunshineHost {
     pub fn new(app_handle: AppHandle) -> Self {
-        let bin_dir = std::env::current_dir()
-            .unwrap_or_default()
-            .join(".sunshine_bin");
+        let data_dir =
+            dirs::data_dir().unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let bin_dir = data_dir.join("SaveCloud").join("sunshine_bin");
 
         Self {
             app_handle,
