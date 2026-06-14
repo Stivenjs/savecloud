@@ -242,15 +242,13 @@ impl SunshineHost {
         let conf_path = config_dir.join("sunshine.conf");
 
         // Configuraciones base optimizadas para SaveCloud
-        let config_content = format!(
-            r#"
+        let config_content = r#"
                 # SaveCloud Dynamic Sunshine Config
                 # Auto-generado - No modificar manualmente
 
                 port = 47989
                 fps = 60
-            "#
-        );
+            "#.to_string();
 
         std::fs::write(&conf_path, config_content)
             .map_err(|e| format!("Fallo al escribir sunshine.conf: {}", e))?;

@@ -8,6 +8,7 @@ use serde_json::Value;
 /// Metadatos de sincronización remota de una fuente.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct SourceSyncMetadata {
     pub etag: Option<String>,
     pub last_modified: Option<String>,
@@ -47,18 +48,6 @@ pub struct RemoteSourceConfig {
     pub sync: SourceSyncMetadata,
 }
 
-impl Default for SourceSyncMetadata {
-    fn default() -> Self {
-        Self {
-            etag: None,
-            last_modified: None,
-            content_hash: None,
-            last_checked_at: None,
-            last_synced_at: None,
-            sync_error: None,
-        }
-    }
-}
 
 /// Entrada individual normalizada de un catálogo.
 #[derive(Debug, Clone, Serialize, Deserialize)]
