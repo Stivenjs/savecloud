@@ -64,6 +64,7 @@ pub fn start_gamepad_loop(app_handle: AppHandle) {
                     _ if !focused => {}
                     evt => {
                         let player_id: usize = id.into();
+                        crate::streaming::input_relay::relay_event(player_id, &evt);
 
                         match evt {
                             EventType::ButtonPressed(button, _) => {
