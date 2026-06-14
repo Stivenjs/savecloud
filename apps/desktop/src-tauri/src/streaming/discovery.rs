@@ -35,6 +35,7 @@ pub struct DiscoveredStreamHost {
     pub user_id: String,
     pub ip: String,
     pub port: u16,
+    pub savecloud_port: u16,
     pub hostname: String,
 }
 
@@ -43,6 +44,7 @@ pub fn publish_stream_service(
     device_id: &str,
     user_id: &str,
     sunshine_port: u16,
+    savecloud_port: u16,
 ) -> Result<(), String> {
     if sunshine_port == 0 {
         return Ok(());
@@ -69,6 +71,7 @@ pub fn publish_stream_service(
     let mut properties = HashMap::new();
     properties.insert("deviceId".to_string(), device_id.to_string());
     properties.insert("userId".to_string(), user_id.to_string());
+    properties.insert("savecloudPort".to_string(), savecloud_port.to_string());
 
     let host_ip = primary_lan_ipv4()
         .map(|v4| v4.to_string())
@@ -93,10 +96,11 @@ pub fn publish_stream_service(
     }
 
     log::info!(
-        "Host de streaming publicado: device={} ip={} port={}",
+        "Host de streaming publicado: device={} ip={} port={} savecloud_port={}",
         device_id,
         host_ip,
-        sunshine_port
+        sunshine_port,
+        savecloud_port
     );
     Ok(())
 }
@@ -142,6 +146,11 @@ pub async fn discover_stream_hosts(timeout_secs: u64) -> Result<Vec<DiscoveredSt
                     .map(|v| v.val_str().to_string())
                     .unwrap_or_default();
 
+                let savecloud_port = properties
+                    .get("savecloudPort")
+                    .and_then(|v| v.val_str().parse::<u16>().ok())
+                    .unwrap_or(0);
+
                 let ip = info
                     .get_addresses()
                     .iter()
@@ -155,6 +164,7 @@ pub async fn discover_stream_hosts(timeout_secs: u64) -> Result<Vec<DiscoveredSt
                         user_id,
                         ip,
                         port: info.get_port(),
+                        savecloud_port,
                         hostname: info.get_hostname().to_string(),
                     });
                 }

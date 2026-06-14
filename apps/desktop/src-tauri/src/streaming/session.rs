@@ -39,10 +39,16 @@ pub struct StreamingState {
 
 impl StreamingState {
     pub fn new(app_handle: AppHandle) -> Self {
+        use tauri::Manager;
+        let app_data_dir = app_handle
+            .path()
+            .app_data_dir()
+            .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
         let host = SunshineHost::new(app_handle.clone());
         Self {
             host: Arc::new(host),
-            client: Arc::new(MoonlightClient::new()),
+            client: Arc::new(MoonlightClient::new(&app_data_dir)),
             session: Arc::new(Mutex::new(HostState::Idle)),
         }
     }

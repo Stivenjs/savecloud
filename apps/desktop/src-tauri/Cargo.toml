@@ -59,6 +59,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 aes = "0.8"
 cbc = "0.1"
 rand = "0.8"
+rcgen = "0.12"
 sha2 = "0.10"
 blake3 = "1"
 hex = "0.4"

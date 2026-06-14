@@ -132,11 +132,80 @@ impl SunshineHost {
 
         let child = Command::new(&bin_path)
             .current_dir(self.bin_dir.join("Sunshine"))
+            .arg("-0")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| format!("Fallo al ejecutar Sunshine: {}", e))?;
 
         *process_guard = Some(child);
         Ok(())
+    }
+
+    /// Inyecta un cliente de SaveCloud directamente en los dispositivos de confianza
+    /// de Sunshine, saltándose por completo el protocolo de emparejamiento con PIN.
+    pub fn inject_trusted_client(&self, client_cert: &str, unique_id: &str) -> Result<(), String> {
+        let state_path = self
+            .bin_dir
+            .join("Sunshine")
+            .join("config")
+            .join("sunshine_state.json");
+
+        let mut state: serde_json::Value = if state_path.exists() {
+            let data = std::fs::read_to_string(&state_path).unwrap_or_default();
+            serde_json::from_str(&data).unwrap_or_else(|_| serde_json::json!({}))
+        } else {
+            serde_json::json!({})
+        };
+
+        let paired_clients = state.get_mut("paired_clients");
+        let clients_array = if let Some(arr) = paired_clients.and_then(|v| v.as_array_mut()) {
+            arr
+        } else {
+            state["paired_clients"] = serde_json::json!([]);
+            state
+                .get_mut("paired_clients")
+                .unwrap()
+                .as_array_mut()
+                .unwrap()
+        };
+
+        if !clients_array.iter().any(|c| c["uniqueid"] == unique_id) {
+            clients_array.push(serde_json::json!({
+                "app_version": "SaveCloud 1.0",
+                "client_cert": client_cert,
+                "devices": "SaveCloud Client",
+                "mac_address": "00:00:00:00:00:00",
+                "salt": "SaveCloudZeroConfigSalt",
+                "uniqueid": unique_id
+            }));
+
+            let new_json = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
+            std::fs::write(&state_path, new_json)
+                .map_err(|e| format!("Fallo al guardar state: {}", e))?;
+            log::info!("Cliente {} inyectado en sunshine_state.json", unique_id);
+        }
+
+        Ok(())
+    }
+
+    /// Provee un PIN a Sunshine vía stdin cuando el cliente solicita emparejamiento.
+    pub async fn provide_pin(&self, pin: &str) -> Result<(), String> {
+        use std::io::Write;
+
+        let mut process_guard = self.process.lock().await;
+        if let Some(child) = process_guard.as_mut() {
+            if let Some(mut stdin) = child.stdin.take() {
+                let pin_str = format!("{}\n", pin);
+                if let Err(e) = stdin.write_all(pin_str.as_bytes()) {
+                    return Err(format!("Fallo al escribir PIN en stdin: {}", e));
+                }
+                child.stdin = Some(stdin);
+                return Ok(());
+            }
+        }
+        Err("Sunshine no está corriendo o no tiene stdin disponible".into())
     }
 
     /// Detiene el servidor Sunshine de forma segura.

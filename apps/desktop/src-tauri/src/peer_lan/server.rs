@@ -64,6 +64,10 @@ pub async fn ensure_lan_http_server() -> Result<u16, String> {
     let app = Router::new()
         .route("/files/{*file_path}", get(serve_file))
         .route("/health", get(|| async { "ok" }))
+        .route(
+            "/streaming/pair",
+            axum::routing::post(handle_streaming_pair),
+        )
         .layer(middleware::from_fn(auth_middleware))
         .with_state(state.clone());
 
@@ -294,4 +298,64 @@ async fn serve_file(
         body,
     )
         .into_response())
+}
+#[derive(serde::Deserialize)]
+struct StreamingPairRequest {
+    client_cert: String,
+    unique_id: String,
+}
+
+async fn handle_streaming_pair(
+    axum::extract::Json(payload): axum::extract::Json<StreamingPairRequest>,
+) -> Result<Response, StatusCode> {
+    let data_dir = dirs::data_dir().unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let state_path = data_dir
+        .join("SaveCloud")
+        .join("sunshine_bin")
+        .join("Sunshine")
+        .join("config")
+        .join("sunshine_state.json");
+
+    let mut state: serde_json::Value = if state_path.exists() {
+        let data = std::fs::read_to_string(&state_path).unwrap_or_default();
+        serde_json::from_str(&data).unwrap_or_else(|_| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+
+    let paired_clients = state.get_mut("paired_clients");
+    let clients_array = if let Some(arr) = paired_clients.and_then(|v| v.as_array_mut()) {
+        arr
+    } else {
+        state["paired_clients"] = serde_json::json!([]);
+        state
+            .get_mut("paired_clients")
+            .unwrap()
+            .as_array_mut()
+            .unwrap()
+    };
+
+    if !clients_array
+        .iter()
+        .any(|c| c["uniqueid"] == payload.unique_id)
+    {
+        clients_array.push(serde_json::json!({
+            "app_version": "SaveCloud 1.0",
+            "client_cert": payload.client_cert,
+            "devices": "SaveCloud Client",
+            "mac_address": "00:00:00:00:00:00",
+            "salt": "SaveCloudZeroConfigSalt",
+            "uniqueid": payload.unique_id
+        }));
+
+        let new_json =
+            serde_json::to_string_pretty(&state).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        std::fs::write(&state_path, new_json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        log::info!(
+            "Cliente {} autorizado dinámicamente en sunshine_state.json",
+            payload.unique_id
+        );
+    }
+
+    Ok((StatusCode::OK, "Paired").into_response())
 }

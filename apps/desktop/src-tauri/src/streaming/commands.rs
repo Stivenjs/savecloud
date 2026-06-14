@@ -3,9 +3,7 @@
 //! Estos comandos son llamados desde el frontend de React para iniciar
 //! sesiones de host, buscar otros jugadores en la red local y conectarse.
 
-use super::discovery::{
-    discover_stream_hosts, publish_stream_service, withdraw_stream_service, DiscoveredStreamHost,
-};
+use super::discovery::{discover_stream_hosts, withdraw_stream_service, DiscoveredStreamHost};
 use super::session::{HostState, StreamingState};
 use tauri::{command, AppHandle, State};
 
@@ -31,13 +29,25 @@ pub async fn streaming_start_host(
 ) -> Result<String, String> {
     log::info!("Comando: Iniciando sesión de Host de streaming");
 
+    let savecloud_port = crate::peer_lan::server::ensure_lan_http_server().await?;
+
     state.host.start().await?;
 
-    publish_stream_service(&device_id, &user_id, 47989)?;
+    // 2. Publicar en mDNS que somos un Host, pasando también el puerto de nuestra API LAN
+    super::discovery::publish_stream_service(&device_id, &user_id, 47989, savecloud_port)?;
 
-    // 3. TODO: Obtener el PIN de la API de Sunshine (/api/pin)
-    // Por ahora simulamos un PIN generado aleatoriamente
-    let simulated_pin = "1234".to_string();
+    // 3. Generar un PIN aleatorio de 4 dígitos para el Host
+    let simulated_pin = {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        format!("{:04}", rng.gen_range(0..10000))
+    };
+
+    // 4. Escribir el PIN en el stdin de Sunshine para que lo valide automáticamente
+    // cuando el cliente haga la petición de emparejamiento con este mismo PIN.
+    if let Err(e) = state.host.provide_pin(&simulated_pin).await {
+        log::warn!("No se pudo proveer PIN al stdin de Sunshine: {}", e);
+    }
 
     *state.session.lock().unwrap() = HostState::Hosting {
         pin: simulated_pin.clone(),
@@ -50,27 +60,18 @@ pub async fn streaming_start_host(
 /// Conecta este cliente a un Host descubierto en la LAN usando su IP y PIN.
 #[command]
 pub async fn streaming_connect_lan(
-    state: State<'_, StreamingState>,
     ip_address: String,
-    pin: String,
+    savecloud_port: u16,
+    state: tauri::State<'_, StreamingState>,
 ) -> Result<(), String> {
-    log::info!(
-        "Comando: Conectando a LAN Host {} con PIN {}",
-        ip_address,
-        pin
-    );
-
-    // TODO: Usar moonlight-common-c para hacer el pairing usando el PIN
-
-    // Conectar el cliente
+    log::info!("Comando: Conectando a LAN host {}", ip_address);
     state
         .client
-        .connect_lan(&ip_address, 1920, 1080, 60)
+        .connect_lan(&ip_address, savecloud_port, 1920, 1080, 60)
         .await?;
 
-    // Actualizar estado
     *state.session.lock().unwrap() = HostState::Playing {
-        host_ip: ip_address,
+        host_ip: ip_address.clone(),
     };
 
     Ok(())

@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Spinner } from "@heroui/react";
-import { ClientConnectModal } from "./ClientConnectModal";
+import { ClientConnectModal } from "@components/streaming/ClientConnectModal";
 
 interface DiscoveredStreamHost {
   device_id: string;
   user_id: string;
   ip: string;
   port: number;
+  savecloud_port: number;
   hostname: string;
 }
 

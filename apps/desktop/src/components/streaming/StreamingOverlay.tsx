@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useQuery } from "@tanstack/react-query";
-import { StreamingState } from "./StreamingPanel";
+import { StreamingState } from "@components/streaming/StreamingPanel";
 import { Chip } from "@heroui/react";
 
 export const StreamingOverlay = () => {

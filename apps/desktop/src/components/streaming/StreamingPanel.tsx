@@ -2,8 +2,8 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, CardHeader, CardBody } from "@heroui/react";
-import { HostSetupModal } from "./HostSetupModal";
-import { LanHostList } from "./LanHostList";
+import { HostSetupModal } from "@components/streaming/HostSetupModal";
+import { LanHostList } from "@components/streaming/LanHostList";
 
 export type StreamingState =
   | "NotInstalled"
@@ -45,10 +45,8 @@ export const StreamingPanel = () => {
           <div className="p-4 bg-success-50 dark:bg-success-900/20 border border-success-500/50 rounded-xl">
             <h3 className="text-lg font-semibold text-success-600 dark:text-success-400">Hosting Session Active</h3>
             <p className="text-sm text-default-600 dark:text-default-300 mb-4">
-              Esperando clientes con el PIN:
-              <span className="font-mono bg-success-100 dark:bg-success-900 px-2 py-1 rounded ml-2 text-success-700 dark:text-success-300">
-                {(state as any).Hosting.pin}
-              </span>
+              Esperando conexiones en tu red local. Tus dispositivos se emparejarán automáticamente gracias a SaveCloud
+              Zero-Config.
             </p>
             <Button color="danger" variant="flat" onPress={handleStop}>
               Detener Host
