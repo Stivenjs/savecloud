@@ -10,7 +10,7 @@ export type StreamingState =
   | "Stopped"
   | "Running"
   | { Hosting: { pin: string; clients: string[] } }
-  | { Playing: { host_ip: string } }
+  | { Playing: { host_ip: string; ws_port: number } }
   | { Error: string }
   | "Idle";
 

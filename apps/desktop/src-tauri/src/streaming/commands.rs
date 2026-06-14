@@ -63,18 +63,21 @@ pub async fn streaming_connect_lan(
     ip_address: String,
     savecloud_port: u16,
     state: tauri::State<'_, StreamingState>,
-) -> Result<(), String> {
+) -> Result<u16, String> {
     log::info!("Comando: Conectando a LAN host {}", ip_address);
-    state
+    let ws_port = state
         .client
         .connect_lan(&ip_address, savecloud_port, 1920, 1080, 60)
         .await?;
 
+    state.client.start_stream(&ip_address)?;
+
     *state.session.lock().unwrap() = HostState::Playing {
         host_ip: ip_address.clone(),
+        ws_port,
     };
 
-    Ok(())
+    Ok(ws_port)
 }
 
 /// Detiene cualquier sesión activa de streaming (como Host o Cliente).

@@ -216,7 +216,7 @@ fn clear_transfer_state() {
 }
 
 async fn auth_middleware(request: Request, next: Next) -> Result<Response, StatusCode> {
-    if request.uri().path() == "/health" {
+    if request.uri().path() == "/health" || request.uri().path() == "/streaming/pair" {
         return Ok(next.run(request).await);
     }
     let auth = request

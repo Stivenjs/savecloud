@@ -147,7 +147,7 @@ pub extern "C" fn PltEncryptMessage(
         if (flags & CIPHER_FLAG_PAD_TO_BLOCK_SIZE) != 0 {
             let block_size = 16;
             let pad_len = block_size - (data.len() % block_size);
-            data.extend(std::iter::repeat(pad_len as u8).take(pad_len));
+            data.extend(std::iter::repeat_n(pad_len as u8, pad_len));
         }
 
         let cipher = match Aes128CbcEnc::new_from_slices(&ctx.key, &ctx.iv) {
@@ -156,10 +156,10 @@ pub extern "C" fn PltEncryptMessage(
         };
 
         let mut out_blocks = data.clone();
-        if let Err(_) = cipher.encrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(
+        if cipher.encrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(
             &mut out_blocks,
             data.len(),
-        ) {
+        ).is_err() {
             return false;
         }
 
@@ -250,8 +250,7 @@ pub extern "C" fn PltDecryptMessage(
         };
 
         let mut out_blocks = input.to_vec();
-        if let Err(_) =
-            cipher.decrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(&mut out_blocks)
+        if cipher.decrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(&mut out_blocks).is_err()
         {
             return false;
         }

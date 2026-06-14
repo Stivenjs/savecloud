@@ -8,6 +8,8 @@ interface ClientConnectModalProps {
   onClose: () => void;
 }
 
+import { openOrFocusStreamingWindow } from "@/windows/streamingWindow";
+
 export const ClientConnectModal = ({ host, isOpen, onClose }: ClientConnectModalProps) => {
   const [error, setError] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -16,10 +18,11 @@ export const ClientConnectModal = ({ host, isOpen, onClose }: ClientConnectModal
     setIsConnecting(true);
     setError(null);
     try {
-      await invoke("streaming_connect_lan", {
+      const wsPort = await invoke<number>("streaming_connect_lan", {
         ipAddress: host.ip,
         savecloudPort: host.savecloud_port,
       });
+      await openOrFocusStreamingWindow(wsPort);
       onClose();
     } catch (err: any) {
       setError(err.toString());

@@ -26,6 +26,7 @@ type RenderMode =
   | "friendsWindow"
   | "settingsWindow"
   | "bigPictureWindow"
+  | "streamingWindow"
   | "shutdownWindow"
   | "main";
 
@@ -74,6 +75,7 @@ function detectRenderMode(): RenderMode {
   if (params.get("friendsWindow") === "true") return "friendsWindow";
   if (params.get("settingsWindow") === "true") return "settingsWindow";
   if (params.get("bigPictureWindow") === "true") return "bigPictureWindow";
+  if (params.get("streamingWindow") === "true") return "streamingWindow";
   if (params.get("shutdownWindow") === "true") return "shutdownWindow";
   return "main";
 }
@@ -143,6 +145,11 @@ async function renderBigPictureWindowApp(): Promise<void> {
   await renderMainWrapped(<BigPictureWindowPage />);
 }
 
+async function renderStreamingWindowApp(): Promise<void> {
+  const { StreamingWindowPage } = await import("@features/streaming/StreamingWindowPage");
+  await renderMainWrapped(<StreamingWindowPage />);
+}
+
 async function renderShutdownWindowApp(): Promise<void> {
   const { ShutdownWindowPage } = await import("@features/shutdown/ShutdownWindowPage");
   await renderMainWrapped(<ShutdownWindowPage />);
@@ -181,6 +188,7 @@ async function bootstrap(): Promise<void> {
       friendsWindow: renderFriendsWindowApp,
       settingsWindow: renderSettingsWindowApp,
       bigPictureWindow: renderBigPictureWindowApp,
+      streamingWindow: renderStreamingWindowApp,
       shutdownWindow: renderShutdownWindowApp,
       main: renderMainApp,
     };
