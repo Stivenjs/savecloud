@@ -39,11 +39,9 @@ pub struct StreamingState {
 
 impl StreamingState {
     pub fn new(app_handle: AppHandle) -> Self {
-        use tauri::Manager;
-        let app_data_dir = app_handle
-            .path()
-            .app_data_dir()
-            .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+        let app_data_dir = dirs::data_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
+            .join("SaveCloud");
 
         let host = SunshineHost::new(app_handle.clone());
         Self {
