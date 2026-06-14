@@ -61,20 +61,26 @@ pub async fn streaming_start_host(
 /// Conecta este cliente a un Host descubierto en la LAN usando su IP y PIN.
 #[tauri::command]
 pub async fn streaming_connect_lan(
-    state: tauri::State<'_, StreamingState>,
-    host_ip: String,
+    ip_address: String,
     savecloud_port: u16,
+    state: tauri::State<'_, StreamingState>,
 ) -> Result<u16, String> {
     log::info!(
         "Comando: Conectando a host en {} (SaveCloud: {})",
-        host_ip,
+        ip_address,
         savecloud_port
     );
     let ws_port = state
         .client
-        .connect_lan(&host_ip, savecloud_port, 1920, 1080, 60)
+        .connect_lan(&ip_address, savecloud_port, 1920, 1080, 60)
         .await?;
-    state.client.start_stream(&host_ip).await?;
+    state.client.start_stream(&ip_address).await?;
+
+    *state.session.lock().unwrap() = HostState::Playing {
+        host_ip: ip_address.clone(),
+        ws_port,
+    };
+
     Ok(ws_port)
 }
 
