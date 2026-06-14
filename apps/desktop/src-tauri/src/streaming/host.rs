@@ -130,12 +130,22 @@ impl SunshineHost {
         #[cfg(not(target_os = "windows"))]
         let bin_path = self.bin_dir.join("Sunshine").join("sunshine");
 
-        let child = Command::new(&bin_path)
+        let mut command = Command::new(&bin_path);
+        command
             .current_dir(self.bin_dir.join("Sunshine"))
             .arg("-0")
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        let child = command
             .spawn()
             .map_err(|e| format!("Fallo al ejecutar Sunshine: {}", e))?;
 
