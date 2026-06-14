@@ -20,3 +20,4 @@ pub mod discovery;
 pub mod session;
 pub mod client;
 pub mod input_relay;
+pub mod commands;

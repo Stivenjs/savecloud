@@ -29,7 +29,7 @@ fn primary_lan_ipv4() -> Option<Ipv4Addr> {
 }
 
 /// Estructura que representa un host de streaming descubierto en la LAN.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct DiscoveredStreamHost {
     pub device_id: String,
     pub user_id: String,

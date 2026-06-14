@@ -8,6 +8,9 @@ use super::host::SunshineHost;
 use std::sync::Arc;
 use tauri::AppHandle;
 
+use super::client::MoonlightClient;
+use std::sync::Mutex;
+
 /// Representa el estado actual del host de streaming en este dispositivo.
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum HostState {
@@ -15,8 +18,14 @@ pub enum HostState {
     NotInstalled,
     /// Sunshine está instalado pero apagado.
     Stopped,
-    /// Sunshine está ejecutándose en segundo plano.
+    /// Sunshine está ejecutándose en segundo plano sin sesión activa.
     Running,
+    /// Estamos emitiendo y esperando clientes con este PIN
+    Hosting { pin: String, clients: Vec<String> },
+    /// Estamos jugando conectados a un host
+    Playing { host_ip: String },
+    /// Sin actividad de streaming local o remota
+    Idle,
     /// Ha ocurrido un error (e.g. falla al descargar).
     Error(String),
 }
@@ -24,8 +33,8 @@ pub enum HostState {
 /// Estructura compartida (State) que Tauri inyecta en los comandos.
 pub struct StreamingState {
     pub host: Arc<SunshineHost>,
-    // Podríamos añadir mutexes adicionales aquí si necesitamos
-    // mantener un registro de clientes conectados u otra data.
+    pub client: Arc<MoonlightClient>,
+    pub session: Arc<Mutex<HostState>>,
 }
 
 impl StreamingState {
@@ -33,6 +42,8 @@ impl StreamingState {
         let host = SunshineHost::new(app_handle.clone());
         Self {
             host: Arc::new(host),
+            client: Arc::new(MoonlightClient::new()),
+            session: Arc::new(Mutex::new(HostState::Idle)),
         }
     }
 }
