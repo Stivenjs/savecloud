@@ -29,7 +29,7 @@ pub async fn streaming_start_host(
 ) -> Result<String, String> {
     log::info!("Comando: Iniciando sesión de Host de streaming");
 
-    let savecloud_port = crate::peer_lan::server::ensure_lan_http_server().await?;
+    let savecloud_port = crate::peer_lan::server::ensure_lan_http_server(Some(state.host.clone())).await?;
 
     state.host.start().await?;
 

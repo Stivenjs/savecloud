@@ -14,6 +14,7 @@ use tokio::sync::mpsc;
 /// Cliente para conectarse a un host de Sunshine y recibir un stream.
 pub struct MoonlightClient {
     is_connected: Arc<AtomicBool>,
+    is_connecting: Arc<AtomicBool>,
     cert_path: PathBuf,
     key_path: PathBuf,
     video_server: Arc<VideoServer>,
@@ -26,6 +27,7 @@ impl MoonlightClient {
 
         Self {
             is_connected: Arc::new(AtomicBool::new(false)),
+            is_connecting: Arc::new(AtomicBool::new(false)),
             cert_path,
             key_path,
             video_server: Arc::new(VideoServer::new()),
@@ -74,6 +76,14 @@ impl MoonlightClient {
             return Err("Ya hay una conexión de streaming activa".into());
         }
 
+        if self
+            .is_connecting
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return Err("La conexión ya está en proceso".into());
+        }
+
         // 1. Obtener certificado del cliente
         let (cert_pem, _) = self.get_or_create_certificate()?;
         let unique_id = "0123456789ABCDEF"; // TODO: Generar/Guardar un UniqueID real
@@ -86,14 +96,18 @@ impl MoonlightClient {
         });
 
         let client = reqwest::Client::new();
-        let res = client
-            .post(&url)
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| format!("Error conectando a SaveCloud Host: {}", e))?;
+        let res = client.post(&url).json(&payload).send().await;
+
+        let res = match res {
+            Ok(r) => r,
+            Err(e) => {
+                self.is_connecting.store(false, Ordering::SeqCst);
+                return Err(format!("Error conectando a SaveCloud Host: {}", e));
+            }
+        };
 
         if !res.status().is_success() {
+            self.is_connecting.store(false, Ordering::SeqCst);
             return Err(format!("Host rechazó emparejamiento: {}", res.status()));
         }
 
@@ -103,10 +117,18 @@ impl MoonlightClient {
         let (tx, rx) = mpsc::channel(120);
         set_video_channel(tx);
 
-        let ws_port = self.video_server.start(rx).await?;
+        let ws_port = match self.video_server.start(rx).await {
+            Ok(p) => p,
+            Err(e) => {
+                self.is_connecting.store(false, Ordering::SeqCst);
+                return Err(e);
+            }
+        };
+
         log::info!("Video WebSocket Server listo en puerto {}", ws_port);
 
         self.is_connected.store(true, Ordering::SeqCst);
+        self.is_connecting.store(false, Ordering::SeqCst);
 
         log::info!(
             "MoonlightClient: Conectado a host {} ({}x{}@{}fps)",
@@ -128,9 +150,15 @@ impl MoonlightClient {
         let ip_cstr = std::ffi::CString::new(host_ip).unwrap();
 
         std::thread::spawn(move || {
+            let app_version = std::ffi::CString::new("7.1.431.0").unwrap();
+            let gfe_version = std::ffi::CString::new("3.23.0.74").unwrap();
+
             let mut server_info: SERVER_INFORMATION = unsafe { std::mem::zeroed() };
             initialize_server_information(&mut server_info);
             server_info.address = ip_cstr.as_ptr();
+            server_info.serverInfoAppVersion = app_version.as_ptr();
+            server_info.serverInfoGfeVersion = gfe_version.as_ptr();
+            server_info.serverCodecModeSupport = 0x0101;
 
             let mut stream_config = default_lan_stream_config(1920, 1080, 60);
 

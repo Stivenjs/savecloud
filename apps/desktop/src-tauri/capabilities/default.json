@@ -8,7 +8,8 @@
     "settings-window",
     "big-picture-window",
     "stream-viewer",
-    "shutdown-window"
+    "shutdown-window",
+    "streaming-window"
   ],
   "permissions": [
     "core:default",
@@ -33,6 +34,7 @@
     "core:window:allow-center",
     "core:window:allow-set-focus",
     "core:window:allow-set-fullscreen",
+    "core:window:allow-set-title",
     "core:webview:allow-create-webview-window",
     {
       "identifier": "opener:allow-open-url",
