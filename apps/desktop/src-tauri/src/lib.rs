@@ -9,11 +9,11 @@ mod ipc;
 #[cfg(target_os = "windows")]
 mod manifest;
 mod network;
-mod peer_inventory;
-mod peer_lan;
 mod notifications;
 mod observability;
 mod overlay;
+mod peer_inventory;
+mod peer_lan;
 mod plugins;
 mod setup;
 mod shutdown;
@@ -22,13 +22,13 @@ mod sqlite;
 mod steam;
 mod steam_cache;
 mod steam_catalog;
+mod streaming;
 mod system;
 mod time;
 mod torrent;
 mod tray;
 mod utils;
 mod voice;
-mod streaming;
 use tauri::Manager;
 
 fn load_dotenv() {
@@ -51,12 +51,15 @@ pub fn run() {
 
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
-        }));
+        #[cfg(not(debug_assertions))]
+        {
+            builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }));
+        }
     }
 
     builder = ipc::handlers::register_all_commands(builder);
