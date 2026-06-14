@@ -28,6 +28,7 @@ mod torrent;
 mod tray;
 mod utils;
 mod voice;
+mod streaming;
 use tauri::Manager;
 
 fn load_dotenv() {

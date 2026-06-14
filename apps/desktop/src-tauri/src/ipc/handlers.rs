@@ -211,5 +211,10 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::config::config_cmds::set_game_mode_boost_detected_game_cpu,
         crate::config::config_cmds::set_proxy_url,
         crate::config::config_cmds::set_auto_extract_downloads,
+        crate::streaming::commands::streaming_discover_lan,
+        crate::streaming::commands::streaming_start_host,
+        crate::streaming::commands::streaming_connect_lan,
+        crate::streaming::commands::streaming_stop,
+        crate::streaming::commands::streaming_get_state,
     ])
 }

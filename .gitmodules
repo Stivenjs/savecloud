@@ -1,0 +1,3 @@
+[submodule "apps/desktop/src-tauri/third_party/moonlight-common-c"]
+	path = apps/desktop/src-tauri/third_party/moonlight-common-c
+	url = https://github.com/moonlight-stream/moonlight-common-c.git

@@ -10,18 +10,19 @@ use crate::system::game_exit_sync;
 use crate::cloud;
 use crate::config::storage_layout::ensure_storage_layout;
 use crate::controller::start_gamepad_loop;
+use crate::peer_lan::spawn_lan_presence_advertiser;
+use crate::peer_lan::spawn_pending_session_poller;
 use crate::plugins::{log_buffer::new_log_buffer, manager::PluginManager, AppPluginManager};
 use crate::shutdown::coordinator::ShutdownPhase;
 use crate::shutdown::{ShutdownBus, ShutdownCoordinator, ShutdownGuard};
 use crate::sources::commands;
 use crate::sources::queue;
 use crate::sqlite::AppDb;
+use crate::streaming::session::{StreamingState, SunshineShutdownGuard};
 use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray::tray_state::TrayState;
 use crate::voice::VoiceState;
-use crate::peer_lan::spawn_lan_presence_advertiser;
-use crate::peer_lan::spawn_pending_session_poller;
 use std::sync::Arc;
 use tauri::{App, Manager};
 use tokio::sync::Mutex;
@@ -219,6 +220,26 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
 
         app.manage(TorrentShutdownGuard(std::sync::Mutex::new(Some(guard))));
     }
+
+    // 9. Estado de Streaming (Sunshine/Moonlight)
+    let streaming_state = StreamingState::new(app.handle().clone());
+
+    {
+        let (guard, handle) = ShutdownGuard::new("sunshine_host", &shutdown_bus.token());
+        let coord = coordinator.clone();
+        tauri::async_runtime::block_on(async move {
+            coord.register(ShutdownPhase::BackgroundTasks, handle).await;
+        });
+
+        let sunshine_guard = SunshineShutdownGuard::new(streaming_state.host.clone());
+        let token = guard.token();
+        tauri::async_runtime::spawn(async move {
+            let _sg = sunshine_guard;
+            token.cancelled().await;
+            guard.complete();
+        });
+    }
+    app.manage(streaming_state);
 
     app.manage(shutdown_bus);
     app.manage(coordinator);

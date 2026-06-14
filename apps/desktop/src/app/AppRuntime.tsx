@@ -76,6 +76,8 @@ interface AppRuntimeProps {
   hideTitleBar?: boolean;
 }
 
+import { StreamingOverlay } from "@components/streaming/StreamingOverlay";
+
 export function AppRuntime({ hideTitleBar = false }: AppRuntimeProps) {
   useProfileSessionHydration();
   useAppInitialization();
@@ -84,6 +86,7 @@ export function AppRuntime({ hideTitleBar = false }: AppRuntimeProps) {
     <>
       <TrayActionsListener />
       <UnsyncedSavesModalWithProgress />
+      <StreamingOverlay />
 
       <HashRouter>
         <AppContent hideTitleBar={hideTitleBar} />
