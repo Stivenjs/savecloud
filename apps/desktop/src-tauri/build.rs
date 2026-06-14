@@ -65,7 +65,7 @@ fn build_moonlight(base_dir: &Path) {
         .include(&src_dir)
         .include(base_dir.join("enet").join("include"))
         .include(&nanors_dir)
-        .include(nanors_dir.join("deps").join("simde"))
+        .include(nanors_dir.join("deps"))
         .include(&obl_dir)
         .flag_if_supported("-w")
         .define("LC_STATIC", None);
