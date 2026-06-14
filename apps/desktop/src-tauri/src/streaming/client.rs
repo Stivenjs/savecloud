@@ -47,6 +47,13 @@ impl MoonlightClient {
         let cert_pem = cert.serialize_pem().map_err(|e| e.to_string())?;
         let key_pem = cert.serialize_private_key_pem();
 
+        if let Some(parent) = self.cert_path.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Fallo al crear directorio de certs: {}", e))?;
+            }
+        }
+
         std::fs::write(&self.cert_path, &cert_pem).map_err(|e| e.to_string())?;
         std::fs::write(&self.key_path, &key_pem).map_err(|e| e.to_string())?;
 
