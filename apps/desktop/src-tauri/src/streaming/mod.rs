@@ -14,6 +14,8 @@
 //! - `renderer` — Decodificación + renderizado de video (Fase 4)
 //! - `input_relay` — Inyección de inputs del gamepad (Fase 3)
 
+#[cfg(test)]
+mod test_launch;
 pub mod bindings;
 pub mod host;
 pub mod discovery;

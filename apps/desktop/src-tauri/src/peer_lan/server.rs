@@ -33,6 +33,7 @@ struct TransferServeState {
 #[derive(Default)]
 struct LanServerInner {
     transfer: Option<TransferServeState>,
+    host: Option<Arc<crate::streaming::host::SunshineHost>>,
 }
 
 #[derive(Clone)]
@@ -48,17 +49,25 @@ struct LanRuntime {
 
 static LAN_RUNTIME: Lazy<Mutex<Option<LanRuntime>>> = Lazy::new(|| Mutex::new(None));
 
-pub async fn ensure_lan_http_server() -> Result<u16, String> {
+pub async fn ensure_lan_http_server(
+    host: Option<Arc<crate::streaming::host::SunshineHost>>,
+) -> Result<u16, String> {
     if let Ok(guard) = LAN_RUNTIME.lock() {
         if let Some(runtime) = guard.as_ref() {
             if !runtime.handle.is_finished() {
+                if let Ok(mut inner) = runtime.state.inner.write() {
+                    inner.host = host;
+                }
                 return Ok(runtime.port);
             }
         }
     }
 
     let state = LanHttpState {
-        inner: Arc::new(RwLock::new(LanServerInner::default())),
+        inner: Arc::new(RwLock::new(LanServerInner {
+            transfer: None,
+            host,
+        })),
     };
 
     let app = Router::new()
@@ -95,7 +104,7 @@ pub async fn ensure_lan_http_server() -> Result<u16, String> {
 }
 
 pub async fn start_lan_server_for_session(token: &str, game_key: &str) -> Result<u16, String> {
-    let port = ensure_lan_http_server().await?;
+    let port = ensure_lan_http_server(None).await?;
 
     if let Ok(guard) = LAN_RUNTIME.lock() {
         if let Some(runtime) = guard.as_ref() {
@@ -306,6 +315,7 @@ struct StreamingPairRequest {
 }
 
 async fn handle_streaming_pair(
+    State(http_state): State<LanHttpState>,
     axum::extract::Json(payload): axum::extract::Json<StreamingPairRequest>,
 ) -> Result<Response, StatusCode> {
     let data_dir = dirs::data_dir().unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
@@ -347,10 +357,25 @@ async fn handle_streaming_pair(
             "salt": "SaveCloudZeroConfigSalt",
             "uniqueid": payload.unique_id
         }));
-
         let new_json =
             serde_json::to_string_pretty(&state).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         std::fs::write(&state_path, new_json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        let host_to_restart = {
+            if let Ok(inner) = http_state.inner.read() {
+                inner.host.clone()
+            } else {
+                None
+            }
+        };
+
+        if let Some(host) = host_to_restart {
+            log::info!("Reiniciando Sunshine para aplicar el nuevo cliente emparejado...");
+            let _ = host.stop().await;
+            let _ = host.start().await;
+            tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        }
+
         log::info!(
             "Cliente {} autorizado dinámicamente en sunshine_state.json",
             payload.unique_id

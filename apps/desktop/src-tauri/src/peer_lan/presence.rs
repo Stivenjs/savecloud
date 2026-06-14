@@ -25,7 +25,7 @@ pub async fn ensure_lan_presence() {
         return;
     };
 
-    let port = match ensure_lan_http_server().await {
+    let port = match ensure_lan_http_server(None).await {
         Ok(p) => p,
         Err(e) => {
             log::warn!("No se pudo iniciar servidor LAN: {e}");

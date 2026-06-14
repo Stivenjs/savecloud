@@ -29,7 +29,8 @@ pub async fn streaming_start_host(
 ) -> Result<String, String> {
     log::info!("Comando: Iniciando sesión de Host de streaming");
 
-    let savecloud_port = crate::peer_lan::server::ensure_lan_http_server().await?;
+    let savecloud_port =
+        crate::peer_lan::server::ensure_lan_http_server(Some(state.host.clone())).await?;
 
     state.host.start().await?;
 
@@ -58,25 +59,22 @@ pub async fn streaming_start_host(
 }
 
 /// Conecta este cliente a un Host descubierto en la LAN usando su IP y PIN.
-#[command]
+#[tauri::command]
 pub async fn streaming_connect_lan(
-    ip_address: String,
-    savecloud_port: u16,
     state: tauri::State<'_, StreamingState>,
+    host_ip: String,
+    savecloud_port: u16,
 ) -> Result<u16, String> {
-    log::info!("Comando: Conectando a LAN host {}", ip_address);
+    log::info!(
+        "Comando: Conectando a host en {} (SaveCloud: {})",
+        host_ip,
+        savecloud_port
+    );
     let ws_port = state
         .client
-        .connect_lan(&ip_address, savecloud_port, 1920, 1080, 60)
+        .connect_lan(&host_ip, savecloud_port, 1920, 1080, 60)
         .await?;
-
-    state.client.start_stream(&ip_address)?;
-
-    *state.session.lock().unwrap() = HostState::Playing {
-        host_ip: ip_address.clone(),
-        ws_port,
-    };
-
+    state.client.start_stream(&host_ip).await?;
     Ok(ws_port)
 }
 

@@ -28,35 +28,43 @@ impl VideoServer {
         let cancel = self.cancel.clone();
 
         tokio::spawn(async move {
-            if let Ok((stream, _addr)) = listener.accept().await {
-                if let Ok(mut ws_stream) = accept_async(stream).await {
-                    log::info!("Video WS Client connected");
+            loop {
+                if cancel.load(Ordering::Relaxed) {
+                    break;
+                }
+                if let Ok((stream, _addr)) = listener.accept().await {
+                    if let Ok(mut ws_stream) = accept_async(stream).await {
+                        log::info!("Video WS Client connected");
 
-                    loop {
-                        tokio::select! {
-                            _ = async {
-                                while cancel.load(Ordering::Relaxed) {
-                                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                                }
-                            } => break,
-                            frame = rx.recv() => {
-                                match frame {
-                                    Some(data) => {
-                                        if let Err(e) = ws_stream.send(Message::Binary(data.into())).await {
-                                            log::error!("WS send error: {}", e);
-                                            break;
+                        loop {
+                            tokio::select! {
+                                _ = async {
+                                    while cancel.load(Ordering::Relaxed) {
+                                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                                    }
+                                } => break,
+                                frame = rx.recv() => {
+                                    match frame {
+                                        Some(data) => {
+                                            if let Err(e) = ws_stream.send(Message::Binary(data.into())).await {
+                                                log::error!("WS send error: {}", e);
+                                                break;
+                                            }
+                                        }
+                                        None => {
+                                            log::info!("Video channel closed");
+                                            return; 
                                         }
                                     }
-                                    None => {
-                                        log::info!("Video channel closed");
+                                }
+                                msg = ws_stream.next() => {
+                                    if let Some(Ok(Message::Close(_))) = msg {
+                                        log::info!("Video WS Client closed");
+                                        break;
+                                    } else if msg.is_none() {
+                                        log::info!("Video WS connection dropped");
                                         break;
                                     }
-                                }
-                            }
-                            msg = ws_stream.next() => {
-                                if let Some(Ok(Message::Close(_))) = msg {
-                                    log::info!("Video WS Client closed");
-                                    break;
                                 }
                             }
                         }
