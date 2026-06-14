@@ -23,7 +23,7 @@ pub enum HostState {
     /// Estamos emitiendo y esperando clientes con este PIN
     Hosting { pin: String, clients: Vec<String> },
     /// Estamos jugando conectados a un host
-    Playing { host_ip: String },
+    Playing { host_ip: String, ws_port: u16 },
     /// Sin actividad de streaming local o remota
     Idle,
     /// Ha ocurrido un error (e.g. falla al descargar).

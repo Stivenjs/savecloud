@@ -101,11 +101,53 @@ pub struct DECODER_RENDERER_CALLBACKS {
     pub capabilities: c_int,
 }
 
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct SERVER_INFORMATION {
+    pub address: *const c_char,
+    pub serverInfoAppVersion: *const c_char,
+    pub serverInfoGfeVersion: *const c_char,
+    pub rtspSessionUrl: *const c_char,
+    pub serverCodecModeSupport: c_int,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct CONNECTION_LISTENER_CALLBACKS {
+    pub stageStarting: *mut c_void,
+    pub stageComplete: *mut c_void,
+    pub stageFailed: *mut c_void,
+    pub connectionStarted: *mut c_void,
+    pub connectionTerminated: *mut c_void,
+    pub logMessage: *mut c_void,
+    pub rumble: *mut c_void,
+    pub connectionStatusUpdate: *mut c_void,
+    pub setHdrMode: *mut c_void,
+    pub rumbleTriggers: *mut c_void,
+    pub setMotionEventState: *mut c_void,
+    pub setControllerLED: *mut c_void,
+    pub setAdaptiveTriggers: *mut c_void,
+}
+
 // 3. Declaraciones de funciones C (Importadas de Limelight)
 
 extern "C" {
     pub fn LiInitializeStreamConfiguration(streamConfig: *mut STREAM_CONFIGURATION);
     pub fn LiInitializeVideoCallbacks(drCallbacks: *mut DECODER_RENDERER_CALLBACKS);
+    pub fn LiInitializeServerInformation(serverInfo: *mut SERVER_INFORMATION);
+    pub fn LiInitializeConnectionCallbacks(clCallbacks: *mut CONNECTION_LISTENER_CALLBACKS);
+    pub fn LiStartConnection(
+        serverInfo: *mut SERVER_INFORMATION,
+        streamConfig: *mut STREAM_CONFIGURATION,
+        clCallbacks: *mut CONNECTION_LISTENER_CALLBACKS,
+        drCallbacks: *mut DECODER_RENDERER_CALLBACKS,
+        arCallbacks: *mut c_void, // Audio callbacks (null por ahora)
+        renderContext: *mut c_void,
+        drFlags: c_int,
+        audioContext: *mut c_void,
+        arFlags: c_int,
+    ) -> c_int;
+    pub fn LiStopConnection();
     pub fn LiGetConnectState() -> i32;
     pub fn LiSendMultiControllerEvent(
         controllerNumber: i16,
@@ -134,6 +176,18 @@ pub fn initialize_stream_config(config: &mut STREAM_CONFIGURATION) {
 pub fn initialize_video_callbacks(callbacks: &mut DECODER_RENDERER_CALLBACKS) {
     unsafe {
         LiInitializeVideoCallbacks(callbacks as *mut _);
+    }
+}
+
+pub fn initialize_server_information(server_info: &mut SERVER_INFORMATION) {
+    unsafe {
+        LiInitializeServerInformation(server_info as *mut _);
+    }
+}
+
+pub fn initialize_connection_callbacks(callbacks: &mut CONNECTION_LISTENER_CALLBACKS) {
+    unsafe {
+        LiInitializeConnectionCallbacks(callbacks as *mut _);
     }
 }
 
@@ -167,6 +221,76 @@ pub fn default_lan_stream_config(width: i32, height: i32, fps: i32) -> STREAM_CO
     config.clientRefreshRateX100 = (fps * 100) as c_int;
 
     config
+}
+
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
+use tokio::sync::mpsc;
+
+pub static VIDEO_CHANNEL: Lazy<Mutex<Option<mpsc::Sender<Vec<u8>>>>> =
+    Lazy::new(|| Mutex::new(None));
+
+pub fn set_video_channel(sender: mpsc::Sender<Vec<u8>>) {
+    if let Ok(mut guard) = VIDEO_CHANNEL.lock() {
+        *guard = Some(sender);
+    }
+}
+
+pub unsafe extern "C" fn dr_setup(
+    videoFormat: c_int,
+    width: c_int,
+    height: c_int,
+    redrawRate: c_int,
+    _context: *mut c_void,
+    _drFlags: c_int,
+) -> c_int {
+    log::info!(
+        "Video Decoder Setup: format={} {}x{}@{}fps",
+        videoFormat,
+        width,
+        height,
+        redrawRate
+    );
+    DR_OK
+}
+
+pub unsafe extern "C" fn dr_start() {
+    log::info!("Video Decoder Start");
+}
+
+pub unsafe extern "C" fn dr_stop() {
+    log::info!("Video Decoder Stop");
+}
+
+pub unsafe extern "C" fn dr_cleanup() {
+    log::info!("Video Decoder Cleanup");
+}
+
+pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> c_int {
+    if decodeUnit.is_null() {
+        return DR_OK;
+    }
+
+    let du = &*decodeUnit;
+
+    let mut payload = Vec::with_capacity(du.fullLength as usize);
+    let mut current = du.bufferList;
+    while !current.is_null() {
+        let entry = &*current;
+        if !entry.data.is_null() && entry.length > 0 {
+            let slice = std::slice::from_raw_parts(entry.data as *const u8, entry.length as usize);
+            payload.extend_from_slice(slice);
+        }
+        current = entry.next;
+    }
+
+    if let Ok(guard) = VIDEO_CHANNEL.lock() {
+        if let Some(sender) = guard.as_ref() {
+            let _ = sender.try_send(payload);
+        }
+    }
+
+    DR_OK
 }
 
 #[cfg(test)]
