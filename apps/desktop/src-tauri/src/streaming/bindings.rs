@@ -4,6 +4,12 @@
 
 use std::os::raw::{c_char, c_int, c_void};
 
+// Polyfill para __builtin_cpu_supports en macOS x86_64
+// Apple Clang no siempre enlaza compiler-rt, que contiene __cpu_model
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+#[no_mangle]
+pub static mut __cpu_model: [u32; 4] = [0, 0, 0, 0];
+
 // 1. Constantes FFI
 
 pub const VIDEO_FORMAT_H264: i32 = 0x0001;
