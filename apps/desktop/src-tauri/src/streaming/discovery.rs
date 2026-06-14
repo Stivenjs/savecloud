@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 use std::sync::Mutex;
 
-const STREAM_SERVICE_TYPE: &str = "_savecloud-stream._tcp.local.";
+const STREAM_SERVICE_TYPE: &str = "_sc-stream._tcp.local.";
 
 static MDNS_DAEMON: Lazy<Mutex<Option<ServiceDaemon>>> = Lazy::new(|| Mutex::new(None));
 static LAST_PUBLISHED: Lazy<Mutex<Option<(String, u16)>>> = Lazy::new(|| Mutex::new(None));
@@ -73,10 +73,10 @@ pub fn publish_stream_service(
         .unwrap_or_default();
 
     let mut properties = HashMap::new();
-    properties.insert("deviceid".to_string(), device_id.to_string());
-    properties.insert("userid".to_string(), user_id.to_string());
-    properties.insert("savecloudport".to_string(), savecloud_port.to_string());
-    properties.insert("ipaddress".to_string(), host_ip.clone());
+    properties.insert("deviceId".to_string(), device_id.to_string());
+    properties.insert("userId".to_string(), user_id.to_string());
+    properties.insert("savecloudPort".to_string(), savecloud_port.to_string());
+    properties.insert("ipAddress".to_string(), host_ip.clone());
 
     let info = ServiceInfo::new(
         STREAM_SERVICE_TYPE,
@@ -139,17 +139,17 @@ pub async fn discover_stream_hosts(timeout_secs: u64) -> Result<Vec<DiscoveredSt
                 let properties = info.get_properties();
 
                 let device_id = properties
-                    .get("deviceid")
+                    .get("deviceId")
                     .map(|v| v.val_str().to_string())
                     .unwrap_or_default();
 
                 let user_id = properties
-                    .get("userid")
+                    .get("userId")
                     .map(|v| v.val_str().to_string())
                     .unwrap_or_default();
 
                 let savecloud_port = properties
-                    .get("savecloudport")
+                    .get("savecloudPort")
                     .and_then(|v| v.val_str().parse::<u16>().ok())
                     .unwrap_or(0);
 
@@ -162,7 +162,7 @@ pub async fn discover_stream_hosts(timeout_secs: u64) -> Result<Vec<DiscoveredSt
 
                 if ip.is_empty() {
                     ip = properties
-                        .get("ipaddress")
+                        .get("ipAddress")
                         .map(|v| v.val_str().to_string())
                         .unwrap_or_default();
                 }
