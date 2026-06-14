@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 use std::sync::Mutex;
 
-const STREAM_SERVICE_TYPE: &str = "_savecloud-stream._tcp.local.";
+const STREAM_SERVICE_TYPE: &str = "_sc-stream._tcp.local.";
 
 static MDNS_DAEMON: Lazy<Mutex<Option<ServiceDaemon>>> = Lazy::new(|| Mutex::new(None));
 static LAST_PUBLISHED: Lazy<Mutex<Option<(String, u16)>>> = Lazy::new(|| Mutex::new(None));
@@ -68,14 +68,15 @@ pub fn publish_stream_service(
     let host = gethostname::gethostname().to_string_lossy().into_owned();
     let instance = format!("stream-{device_id}");
 
+    let host_ip = primary_lan_ipv4()
+        .map(|v4| v4.to_string())
+        .unwrap_or_default();
+
     let mut properties = HashMap::new();
     properties.insert("deviceId".to_string(), device_id.to_string());
     properties.insert("userId".to_string(), user_id.to_string());
     properties.insert("savecloudPort".to_string(), savecloud_port.to_string());
-
-    let host_ip = primary_lan_ipv4()
-        .map(|v4| v4.to_string())
-        .unwrap_or_default();
+    properties.insert("ipAddress".to_string(), host_ip.clone());
 
     let info = ServiceInfo::new(
         STREAM_SERVICE_TYPE,
@@ -133,6 +134,7 @@ pub async fn discover_stream_hosts(timeout_secs: u64) -> Result<Vec<DiscoveredSt
 
     while start.elapsed() < timeout {
         if let Ok(event) = receiver.recv_timeout(std::time::Duration::from_millis(500)) {
+            log::info!("mDNS Event: {:?}", event);
             if let ServiceEvent::ServiceResolved(info) = event {
                 let properties = info.get_properties();
 
@@ -151,12 +153,21 @@ pub async fn discover_stream_hosts(timeout_secs: u64) -> Result<Vec<DiscoveredSt
                     .and_then(|v| v.val_str().parse::<u16>().ok())
                     .unwrap_or(0);
 
-                let ip = info
+                let mut ip = info
                     .get_addresses()
                     .iter()
                     .next()
                     .map(|ip| ip.to_string())
                     .unwrap_or_default();
+
+                if ip.is_empty() {
+                    ip = properties
+                        .get("ipAddress")
+                        .map(|v| v.val_str().to_string())
+                        .unwrap_or_default();
+                }
+
+                log::info!("mDNS Host resuelto: hostname={}, ip={}, device_id={}", info.get_hostname(), ip, device_id);
 
                 if !device_id.is_empty() && !ip.is_empty() {
                     hosts.push(DiscoveredStreamHost {
