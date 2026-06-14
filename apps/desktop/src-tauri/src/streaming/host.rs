@@ -12,8 +12,6 @@ use tauri::AppHandle;
 use tokio::sync::Mutex;
 
 const SUNSHINE_VERSION: &str = "v0.23.1";
-#[cfg(target_os = "windows")]
-const SUNSHINE_URL: &str = "https://github.com/LizardByte/Sunshine/releases/download/v0.23.1/sunshine-windows-portable.zip";
 
 pub struct SunshineHost {
     app_handle: AppHandle,
@@ -23,8 +21,6 @@ pub struct SunshineHost {
 
 impl SunshineHost {
     pub fn new(app_handle: AppHandle) -> Self {
-        // En un entorno real, usaríamos app_handle.path().app_data_dir()
-        // Para desarrollo usaremos una ruta relativa
         let bin_dir = std::env::current_dir()
             .unwrap_or_default()
             .join(".sunshine_bin");
@@ -36,17 +32,15 @@ impl SunshineHost {
         }
     }
 
-    /// Comprueba si Sunshine ya está descargado y extraído.
     pub fn is_installed(&self) -> bool {
         #[cfg(target_os = "windows")]
-        let bin_path = self.bin_dir.join("sunshine.exe");
+        let bin_path = self.bin_dir.join("Sunshine").join("sunshine.exe");
         #[cfg(not(target_os = "windows"))]
-        let bin_path = self.bin_dir.join("sunshine");
+        let bin_path = self.bin_dir.join("Sunshine").join("sunshine");
 
         bin_path.exists()
     }
 
-    /// Descarga y extrae Sunshine de forma asíncrona.
     pub async fn download_and_extract(&self) -> Result<(), String> {
         if self.is_installed() {
             return Ok(());
@@ -63,14 +57,13 @@ impl SunshineHost {
         {
             let zip_path = self.bin_dir.join("sunshine.zip");
 
-            // Crear directorio si no existe
             if !self.bin_dir.exists() {
                 std::fs::create_dir_all(&self.bin_dir)
                     .map_err(|e| format!("Fallo al crear directorio bin: {}", e))?;
             }
 
-            // Descargar el zip
-            let response = reqwest::get(SUNSHINE_URL)
+            let url = format!("https://github.com/LizardByte/Sunshine/releases/download/{}/sunshine-windows-portable.zip", SUNSHINE_VERSION);
+            let response = reqwest::get(&url)
                 .await
                 .map_err(|e| format!("Fallo al descargar Sunshine: {}", e))?;
 
@@ -82,7 +75,6 @@ impl SunshineHost {
             std::fs::write(&zip_path, bytes)
                 .map_err(|e| format!("Fallo al guardar el zip: {}", e))?;
 
-            // Extraer usando la librería zip ya integrada en el proyecto
             let file = std::fs::File::open(&zip_path)
                 .map_err(|e| format!("No se pudo abrir ZIP: {}", e))?;
 
@@ -113,7 +105,6 @@ impl SunshineHost {
                 }
             }
 
-            // Limpiar zip
             let _ = std::fs::remove_file(zip_path);
 
             Ok(())
@@ -125,7 +116,7 @@ impl SunshineHost {
         let mut process_guard = self.process.lock().await;
 
         if process_guard.is_some() {
-            return Ok(()); // Ya está corriendo
+            return Ok(());
         }
 
         if !self.is_installed() {
@@ -135,15 +126,12 @@ impl SunshineHost {
         self.generate_config()?;
 
         #[cfg(target_os = "windows")]
-        let bin_path = self.bin_dir.join("sunshine.exe");
+        let bin_path = self.bin_dir.join("Sunshine").join("sunshine.exe");
         #[cfg(not(target_os = "windows"))]
-        let bin_path = self.bin_dir.join("sunshine");
+        let bin_path = self.bin_dir.join("Sunshine").join("sunshine");
 
         let child = Command::new(&bin_path)
-            .current_dir(&self.bin_dir)
-            // .arg("--creds") // Sunshine portable no requiere servicio de admin
-            // En un entorno de producción, suprimiríamos la consola en Windows
-            // con std::os::windows::process::CommandExt CREATE_NO_WINDOW
+            .current_dir(self.bin_dir.join("Sunshine"))
             .spawn()
             .map_err(|e| format!("Fallo al ejecutar Sunshine: {}", e))?;
 
@@ -166,7 +154,7 @@ impl SunshineHost {
 
     /// Genera el archivo de configuración base de Sunshine
     fn generate_config(&self) -> Result<(), String> {
-        let config_dir = self.bin_dir.join("config");
+        let config_dir = self.bin_dir.join("Sunshine").join("config");
         if !config_dir.exists() {
             std::fs::create_dir_all(&config_dir)
                 .map_err(|e| format!("Fallo al crear config dir: {}", e))?;
@@ -180,16 +168,8 @@ impl SunshineHost {
                 # SaveCloud Dynamic Sunshine Config
                 # Auto-generado - No modificar manualmente
 
-                # Deshabilitar UI web por seguridad en LAN
-                web_ui = disable
                 port = 47989
-
-                # Forzar resolución del host a coincidir con el cliente
-                resolution = host
-                fps = 60    
-
-                # Configurar logs
-                file_magic = disable
+                fps = 60
             "#
         );
 

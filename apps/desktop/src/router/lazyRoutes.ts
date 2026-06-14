@@ -42,3 +42,5 @@ export const PlaceholderPage = lazy(() =>
     default: m.PlaceholderPage,
   }))
 );
+
+export const RemotePlayPage = lazy(() => import("@/pages/RemotePlayPage").then((m) => ({ default: m.default })));

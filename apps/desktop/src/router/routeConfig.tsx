@@ -9,6 +9,7 @@ import {
   HistoryPage,
   AboutPage,
   PlaceholderPage,
+  RemotePlayPage,
 } from "@router/lazyRoutes";
 
 export interface RouteConfig {
@@ -24,6 +25,7 @@ export const routeConfig: RouteConfig[] = [
   { path: "/catalog", element: <SteamCatalogPage /> },
   { path: "/friends", element: <FriendsPage /> },
   { path: "/stream-viewer", element: <StreamViewerPage /> },
+  { path: "/remote-play", element: <RemotePlayPage /> },
   { path: "/history", element: <HistoryPage /> },
   { path: "/about", element: <AboutPage /> },
   { path: "*", element: <PlaceholderPage /> },
