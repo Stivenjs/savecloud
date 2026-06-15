@@ -9,7 +9,11 @@ use crate::streaming::video_server::VideoServer;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+
 use tokio::sync::mpsc;
+
+#[path = "tls_override.rs"]
+mod tls_override;
 
 /// Cliente para conectarse a un host de Sunshine y recibir un stream.
 pub struct MoonlightClient {
@@ -37,8 +41,12 @@ impl MoonlightClient {
     /// Genera y retorna el certificado PEM del cliente. Si no existe, lo crea.
     pub fn get_or_create_certificate(&self) -> Result<(String, String), String> {
         if self.cert_path.exists() && self.key_path.exists() {
-            let cert = std::fs::read_to_string(&self.cert_path).unwrap_or_default();
-            let key = std::fs::read_to_string(&self.key_path).unwrap_or_default();
+            let mut cert = std::fs::read_to_string(&self.cert_path).unwrap_or_default();
+            let mut key = std::fs::read_to_string(&self.key_path).unwrap_or_default();
+
+            cert = cert.replace("\r\n", "\n");
+            key = key.replace("\r\n", "\n");
+
             if !cert.is_empty() && !key.is_empty() {
                 return Ok((cert, key));
             }
@@ -48,8 +56,11 @@ impl MoonlightClient {
         let cert = rcgen::generate_simple_self_signed(subject_alt_names)
             .map_err(|e| format!("Fallo al generar cert: {}", e))?;
 
-        let cert_pem = cert.serialize_pem().map_err(|e| e.to_string())?;
-        let key_pem = cert.serialize_private_key_pem();
+        let mut cert_pem = cert.serialize_pem().map_err(|e| e.to_string())?;
+        let mut key_pem = cert.serialize_private_key_pem();
+
+        cert_pem = cert_pem.replace("\r\n", "\n");
+        key_pem = key_pem.replace("\r\n", "\n");
 
         if let Some(parent) = self.cert_path.parent() {
             if !parent.exists() {
@@ -181,14 +192,35 @@ impl MoonlightClient {
         let (cert_pem, key_pem) = self.get_or_create_certificate()?;
         let unique_id = self.get_or_create_unique_id()?;
 
-        let combined_pem = format!("{}\n{}", key_pem, cert_pem);
-        let identity = reqwest::Identity::from_pem(combined_pem.as_bytes())
-            .map_err(|e| format!("Error TLS identity: {}", e))?;
+        let mut cert_reader = std::io::BufReader::new(cert_pem.as_bytes());
+        let certs = rustls_pemfile::certs(&mut cert_reader)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Error leyendo cert: {}", e))?;
+
+        let mut key_reader = std::io::BufReader::new(key_pem.as_bytes());
+        let key = rustls_pemfile::private_key(&mut key_reader)
+            .map_err(|e| format!("Error leyendo key: {}", e))?
+            .ok_or("No se encontró private key")?;
+
+        let private_key = rustls::crypto::aws_lc_rs::sign::any_supported_type(&key)
+            .map_err(|e| format!("Key no soportada: {}", e))?;
+
+        let certified_key = Arc::new(rustls::sign::CertifiedKey::new(certs, private_key));
+
+        let client_cert_resolver =
+            Arc::new(tls_override::AlwaysResolvesClientCert { certified_key });
+
+        let provider = rustls::crypto::aws_lc_rs::default_provider();
+        let config = rustls::ClientConfig::builder_with_provider(provider.into())
+            .with_safe_default_protocol_versions()
+            .map_err(|e| format!("Error TLS protocol: {}", e))?
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(tls_override::NoCertificateVerification))
+            .with_client_cert_resolver(client_cert_resolver);
 
         let client = reqwest::Client::builder()
-            .use_rustls_tls()
-            .danger_accept_invalid_certs(true)
-            .identity(identity)
+            .use_preconfigured_tls(config)
+            .http1_only()
             .build()
             .map_err(|e| {
                 let mut msg = format!("Error creando cliente HTTP TLS: {}", e);

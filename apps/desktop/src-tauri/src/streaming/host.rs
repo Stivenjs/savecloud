@@ -130,6 +130,23 @@ impl SunshineHost {
         #[cfg(not(target_os = "windows"))]
         let bin_path = self.bin_dir.join("Sunshine").join("sunshine");
 
+        // Inicializar credenciales para evitar que Sunshine bloquee clientes
+        let mut creds_cmd = Command::new(&bin_path);
+        creds_cmd
+            .current_dir(self.bin_dir.join("Sunshine"))
+            .arg("--creds")
+            .arg("savecloud")
+            .arg("savecloud");
+        
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            creds_cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        
+        let _ = creds_cmd.output();
+
         let mut command = Command::new(&bin_path);
         command
             .current_dir(self.bin_dir.join("Sunshine"))
@@ -248,7 +265,11 @@ impl SunshineHost {
 
                 port = 47989
                 fps = 60
-                gamepad = none
+                gamepad = disabled
+                controller = disabled
+                min_log_level = debug
+                file_log_level = debug
+                file_state = sunshine_state.json
             "#.to_string();
 
         std::fs::write(&conf_path, config_content)

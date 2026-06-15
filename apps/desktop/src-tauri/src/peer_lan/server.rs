@@ -345,18 +345,44 @@ async fn handle_streaming_pair(
             .unwrap()
     };
 
+    let mut updated = false;
+    for c in clients_array.iter_mut() {
+        if c["uniqueid"] == payload.unique_id {
+            if c["client_cert"] != payload.client_cert {
+                c["client_cert"] = serde_json::json!(payload.client_cert);
+                c["cert"] = serde_json::json!(payload.client_cert);
+                updated = true;
+            }
+            if c["app_version"] != "Moonlight PC 5.0.1" {
+                c["app_version"] = serde_json::json!("Moonlight PC 5.0.1");
+                updated = true;
+            }
+            if c["salt"] != "0123456789ABCDEF0123456789ABCDEF" {
+                c["salt"] = serde_json::json!("0123456789ABCDEF0123456789ABCDEF");
+                updated = true;
+            }
+            break;
+        }
+    }
+
+    let mut added = false;
     if !clients_array
         .iter()
         .any(|c| c["uniqueid"] == payload.unique_id)
     {
         clients_array.push(serde_json::json!({
-            "app_version": "SaveCloud 1.0",
+            "app_version": "Moonlight PC 5.0.1",
             "client_cert": payload.client_cert,
+            "cert": payload.client_cert,
             "devices": "SaveCloud Client",
-            "mac_address": "00:00:00:00:00:00",
-            "salt": "SaveCloudZeroConfigSalt",
+            "mac_address": "01:23:45:67:89:AB",
+            "salt": "0123456789ABCDEF0123456789ABCDEF",
             "uniqueid": payload.unique_id
         }));
+        added = true;
+    }
+
+    if added || updated {
         let new_json =
             serde_json::to_string_pretty(&state).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         std::fs::write(&state_path, new_json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

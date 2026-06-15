@@ -68,7 +68,10 @@ pub async fn streaming_connect_lan(
     app: tauri::AppHandle,
 ) -> Result<u16, String> {
     if ip_address == "127.0.0.1" && savecloud_port == 0 {
-        savecloud_port = crate::peer_lan::server::ensure_lan_http_server(None).await?;
+        savecloud_port =
+            crate::peer_lan::server::ensure_lan_http_server(Some(state.host.clone())).await?;
+        state.host.start().await?;
+        tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
     }
 
     log::info!(

@@ -83,6 +83,9 @@ cpal = "0.15"
 ringbuf = "0.4"
 half = "=2.3.1"
 aes-gcm = "0.10.3"
+rustls = "0.23"
+rustls-pemfile = "2.2.0"
+rustls-pki-types = "1.14.1"
 
 
 [dev-dependencies]
