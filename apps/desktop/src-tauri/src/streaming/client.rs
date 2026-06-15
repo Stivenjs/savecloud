@@ -109,6 +109,22 @@ impl MoonlightClient {
             return Err("La conexión ya está en proceso".into());
         }
 
+        struct ConnectingGuard<'a> {
+            flag: &'a AtomicBool,
+            success: bool,
+        }
+        impl<'a> Drop for ConnectingGuard<'a> {
+            fn drop(&mut self) {
+                if !self.success {
+                    self.flag.store(false, Ordering::SeqCst);
+                }
+            }
+        }
+        let mut guard = ConnectingGuard {
+            flag: &self.is_connecting,
+            success: false,
+        };
+
         // 1. Obtener certificado del cliente
         let (cert_pem, _) = self.get_or_create_certificate()?;
         let unique_id = self.get_or_create_unique_id()?;
@@ -121,18 +137,14 @@ impl MoonlightClient {
         });
 
         let client = reqwest::Client::new();
-        let res = client.post(&url).json(&payload).send().await;
-
-        let res = match res {
-            Ok(r) => r,
-            Err(e) => {
-                self.is_connecting.store(false, Ordering::SeqCst);
-                return Err(format!("Error conectando a SaveCloud Host: {}", e));
-            }
-        };
+        let res = client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| format!("Error conectando a SaveCloud Host: {}", e))?;
 
         if !res.status().is_success() {
-            self.is_connecting.store(false, Ordering::SeqCst);
             return Err(format!("Host rechazó emparejamiento: {}", res.status()));
         }
 
@@ -142,17 +154,12 @@ impl MoonlightClient {
         let (tx, rx) = mpsc::channel(120);
         set_video_channel(tx);
 
-        let ws_port = match self.video_server.start(rx).await {
-            Ok(p) => p,
-            Err(e) => {
-                self.is_connecting.store(false, Ordering::SeqCst);
-                return Err(e);
-            }
-        };
+        let ws_port = self.video_server.start(rx).await?;
 
         log::info!("Video WebSocket Server listo en puerto {}", ws_port);
 
         self.is_connected.store(true, Ordering::SeqCst);
+        guard.success = true;
         self.is_connecting.store(false, Ordering::SeqCst);
 
         log::info!(
@@ -196,9 +203,13 @@ impl MoonlightClient {
         let rikey_id: u32 = rand::random();
         let uuid = uuid::Uuid::new_v4().simple().to_string().to_uppercase();
 
+        let mut target_ip = host_ip.to_string();
+        if target_ip == "127.0.0.1" {
+            target_ip = "localhost".to_string();
+        }
         let url = format!(
-            "https://{}:47989/launch?uniqueid={}&uuid={}&appversion=7.1.431.0&appid=0&appname=Desktop&mode=1920x1080x60&rikey={}&rikeyid={}&localAudioPlayMode=0",
-            host_ip, unique_id, uuid, rikey_hex, rikey_id
+            "https://{}:47984/launch?uniqueid={}&uuid={}&appversion=7.1.431.0&appid=0&appname=Desktop&mode=1920x1080x60&rikey={}&rikeyid={}&localAudioPlayMode=0",
+            target_ip, unique_id, uuid, rikey_hex, rikey_id
         );
 
         let mut retries = 10;

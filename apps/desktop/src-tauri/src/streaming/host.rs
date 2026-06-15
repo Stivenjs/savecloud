@@ -248,6 +248,7 @@ impl SunshineHost {
 
                 port = 47989
                 fps = 60
+                gamepad = none
             "#.to_string();
 
         std::fs::write(&conf_path, config_content)

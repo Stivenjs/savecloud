@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, CardHeader, CardBody } from "@heroui/react";
@@ -22,8 +22,18 @@ export const StreamingPanel = () => {
   const { data: state } = useQuery<StreamingState>({
     queryKey: ["streaming_get_state"],
     queryFn: () => invoke("streaming_get_state"),
-    refetchInterval: 2000,
   });
+
+  useEffect(() => {
+    import("@tauri-apps/api/event").then(({ listen }) => {
+      const unlisten = listen("streaming-state-changed", () => {
+        queryClient.invalidateQueries({ queryKey: ["streaming_get_state"] });
+      });
+      return () => {
+        unlisten.then((fn) => fn());
+      };
+    });
+  }, [queryClient]);
 
   const isHosting = typeof state === "object" && state !== null && "Hosting" in state;
   const isPlaying = typeof state === "object" && state !== null && "Playing" in state;
