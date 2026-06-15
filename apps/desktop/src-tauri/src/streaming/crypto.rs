@@ -4,7 +4,10 @@
 
 use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyInit, KeyIvInit};
 use aes_gcm::{
-    aead::{Aead, Payload},
+    aead::{
+        generic_array::typenum::consts::{U12, U16},
+        Aead, Payload,
+    },
     Aes128Gcm, Nonce,
 };
 use cbc::{Decryptor, Encryptor};
@@ -109,37 +112,58 @@ pub extern "C" fn PltEncryptMessage(
         if key_length != 16 {
             return false;
         } // Sólo AES-128
-        let cipher = match Aes128Gcm::new_from_slice(&ctx.key) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
-        let nonce = Nonce::from_slice(&ctx.iv);
-
-        match cipher.encrypt(
-            nonce,
-            Payload {
-                msg: input,
-                aad: &[],
-            },
-        ) {
-            Ok(ciphertext) => {
-                // ciphertext = [datos encriptados] + [tag de 16 bytes]
-                let tag_len = tag_length as usize;
-                if ciphertext.len() < tag_len {
-                    return false;
-                }
-                let enc_len = ciphertext.len() - tag_len;
-
-                output[..enc_len].copy_from_slice(&ciphertext[..enc_len]);
-                if !tag_ptr.is_null() {
-                    let tag = unsafe { slice::from_raw_parts_mut(tag_ptr, tag_len) };
-                    tag.copy_from_slice(&ciphertext[enc_len..]);
-                }
-                *out_len_ptr = enc_len as i32;
-                return true;
+        let iv_len = ctx.iv.len();
+        let ciphertext = if iv_len == 12 {
+            let cipher = match Aes128Gcm::new_from_slice(&ctx.key) {
+                Ok(c) => c,
+                Err(_) => return false,
+            };
+            let nonce = Nonce::<U12>::from_slice(&ctx.iv);
+            match cipher.encrypt(
+                nonce,
+                Payload {
+                    msg: input,
+                    aad: &[],
+                },
+            ) {
+                Ok(ct) => ct,
+                Err(_) => return false,
             }
-            Err(_) => return false,
+        } else if iv_len == 16 {
+            type Aes128Gcm16 = aes_gcm::AesGcm<aes::Aes128, U16>;
+            let cipher = match Aes128Gcm16::new_from_slice(&ctx.key) {
+                Ok(c) => c,
+                Err(_) => return false,
+            };
+            let nonce = Nonce::<U16>::from_slice(&ctx.iv);
+            match cipher.encrypt(
+                nonce,
+                Payload {
+                    msg: input,
+                    aad: &[],
+                },
+            ) {
+                Ok(ct) => ct,
+                Err(_) => return false,
+            }
+        } else {
+            return false;
+        };
+
+        // ciphertext = [datos encriptados] + [tag de 16 bytes]
+        let tag_len = tag_length as usize;
+        if ciphertext.len() < tag_len {
+            return false;
         }
+        let enc_len = ciphertext.len() - tag_len;
+
+        output[..enc_len].copy_from_slice(&ciphertext[..enc_len]);
+        if !tag_ptr.is_null() {
+            let tag = unsafe { slice::from_raw_parts_mut(tag_ptr, tag_len) };
+            tag.copy_from_slice(&ciphertext[enc_len..]);
+        }
+        *out_len_ptr = enc_len as i32;
+        return true;
     } else if algorithm == ALGORITHM_AES_CBC {
         // En AES-CBC moonlight provee el buffer input modificado o requiere PKCS7
         let mut data = input.to_vec();
@@ -156,10 +180,13 @@ pub extern "C" fn PltEncryptMessage(
         };
 
         let mut out_blocks = data.clone();
-        if cipher.encrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(
-            &mut out_blocks,
-            data.len(),
-        ).is_err() {
+        if cipher
+            .encrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(
+                &mut out_blocks,
+                data.len(),
+            )
+            .is_err()
+        {
             return false;
         }
 
@@ -215,34 +242,55 @@ pub extern "C" fn PltDecryptMessage(
     }
 
     if algorithm == ALGORITHM_AES_GCM {
-        let cipher = match Aes128Gcm::new_from_slice(&ctx.key) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
-        let nonce = Nonce::from_slice(&ctx.iv);
+        let iv_len = ctx.iv.len();
+        let mut payload_data = input.to_vec();
         let tag = if !tag_ptr.is_null() && tag_length > 0 {
             unsafe { slice::from_raw_parts(tag_ptr, tag_length as usize) }
         } else {
             &[]
         };
-
-        let mut payload_data = input.to_vec();
         payload_data.extend_from_slice(tag);
 
-        match cipher.decrypt(
-            nonce,
-            Payload {
-                msg: &payload_data,
-                aad: &[],
-            },
-        ) {
-            Ok(plaintext) => {
-                output[..plaintext.len()].copy_from_slice(&plaintext);
-                *out_len_ptr = plaintext.len() as i32;
-                return true;
+        let plaintext = if iv_len == 12 {
+            let cipher = match Aes128Gcm::new_from_slice(&ctx.key) {
+                Ok(c) => c,
+                Err(_) => return false,
+            };
+            let nonce = Nonce::<U12>::from_slice(&ctx.iv);
+            match cipher.decrypt(
+                nonce,
+                Payload {
+                    msg: &payload_data,
+                    aad: &[],
+                },
+            ) {
+                Ok(pt) => pt,
+                Err(_) => return false,
             }
-            Err(_) => return false,
-        }
+        } else if iv_len == 16 {
+            type Aes128Gcm16 = aes_gcm::AesGcm<aes::Aes128, U16>;
+            let cipher = match Aes128Gcm16::new_from_slice(&ctx.key) {
+                Ok(c) => c,
+                Err(_) => return false,
+            };
+            let nonce = Nonce::<U16>::from_slice(&ctx.iv);
+            match cipher.decrypt(
+                nonce,
+                Payload {
+                    msg: &payload_data,
+                    aad: &[],
+                },
+            ) {
+                Ok(pt) => pt,
+                Err(_) => return false,
+            }
+        } else {
+            return false;
+        };
+
+        output[..plaintext.len()].copy_from_slice(&plaintext);
+        *out_len_ptr = plaintext.len() as i32;
+        return true;
     } else if algorithm == ALGORITHM_AES_CBC {
         let cipher = match Aes128CbcDec::new_from_slices(&ctx.key, &ctx.iv) {
             Ok(c) => c,
@@ -250,7 +298,9 @@ pub extern "C" fn PltDecryptMessage(
         };
 
         let mut out_blocks = input.to_vec();
-        if cipher.decrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(&mut out_blocks).is_err()
+        if cipher
+            .decrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(&mut out_blocks)
+            .is_err()
         {
             return false;
         }

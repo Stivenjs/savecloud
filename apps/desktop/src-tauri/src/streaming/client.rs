@@ -275,7 +275,7 @@ impl MoonlightClient {
                     );
                 }
             }
-            tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
             retries -= 1;
         }
 

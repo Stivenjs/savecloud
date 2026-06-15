@@ -333,32 +333,40 @@ async fn handle_streaming_pair(
         serde_json::json!({})
     };
 
-    let paired_clients = state.get_mut("paired_clients");
-    let clients_array = if let Some(arr) = paired_clients.and_then(|v| v.as_array_mut()) {
-        arr
-    } else {
-        state["paired_clients"] = serde_json::json!([]);
-        state
-            .get_mut("paired_clients")
-            .unwrap()
-            .as_array_mut()
-            .unwrap()
-    };
+    if state.pointer("/root/uniqueid").is_none() {
+        let server_id = uuid::Uuid::new_v4().to_string();
+        if state.get("root").is_none() {
+            state["root"] = serde_json::json!({});
+        }
+        state["root"]["uniqueid"] = serde_json::json!(server_id);
+    }
 
+    if state.pointer("/root/devices").is_none() {
+        state["root"]["devices"] = serde_json::json!([]);
+    }
+
+    let devices = state
+        .pointer_mut("/root/devices")
+        .and_then(|v| v.as_array_mut())
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut found = false;
     let mut updated = false;
-    for c in clients_array.iter_mut() {
-        if c["uniqueid"] == payload.unique_id {
-            if c["client_cert"] != payload.client_cert {
-                c["client_cert"] = serde_json::json!(payload.client_cert);
-                c["cert"] = serde_json::json!(payload.client_cert);
-                updated = true;
-            }
-            if c["app_version"] != "Moonlight PC 5.0.1" {
-                c["app_version"] = serde_json::json!("Moonlight PC 5.0.1");
-                updated = true;
-            }
-            if c["salt"] != "0123456789ABCDEF0123456789ABCDEF" {
-                c["salt"] = serde_json::json!("0123456789ABCDEF0123456789ABCDEF");
+    for device in devices.iter_mut() {
+        if device.get("uniqueid").and_then(|v| v.as_str()) == Some(&payload.unique_id) {
+            found = true;
+            let certs = device
+                .get("certs")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+
+            let cert_exists = certs
+                .iter()
+                .any(|c| c.as_str() == Some(&payload.client_cert));
+
+            if !cert_exists {
+                device["certs"] = serde_json::json!([payload.client_cert]);
                 updated = true;
             }
             break;
@@ -366,26 +374,34 @@ async fn handle_streaming_pair(
     }
 
     let mut added = false;
-    if !clients_array
-        .iter()
-        .any(|c| c["uniqueid"] == payload.unique_id)
-    {
-        clients_array.push(serde_json::json!({
-            "app_version": "Moonlight PC 5.0.1",
-            "client_cert": payload.client_cert,
-            "cert": payload.client_cert,
-            "devices": "SaveCloud Client",
-            "mac_address": "01:23:45:67:89:AB",
-            "salt": "0123456789ABCDEF0123456789ABCDEF",
-            "uniqueid": payload.unique_id
+    if !found {
+        let devices = state
+            .pointer_mut("/root/devices")
+            .and_then(|v| v.as_array_mut())
+            .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        devices.push(serde_json::json!({
+            "uniqueid": payload.unique_id,
+            "certs": [payload.client_cert]
         }));
         added = true;
     }
 
     if added || updated {
+        if let Some(parent) = state_path.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            }
+        }
+
         let new_json =
             serde_json::to_string_pretty(&state).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        std::fs::write(&state_path, new_json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        std::fs::write(&state_path, &new_json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        log::info!(
+            "sunshine_state.json actualizado con formato root.devices[].certs[] para client {}",
+            payload.unique_id
+        );
 
         let host_to_restart = {
             if let Ok(inner) = http_state.inner.read() {
@@ -399,7 +415,7 @@ async fn handle_streaming_pair(
             log::info!("Reiniciando Sunshine para aplicar el nuevo cliente emparejado...");
             let _ = host.stop().await;
             let _ = host.start().await;
-            tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(3000)).await;
         }
 
         log::info!(

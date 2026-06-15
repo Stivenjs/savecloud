@@ -222,7 +222,7 @@ pub fn default_lan_stream_config(width: i32, height: i32, fps: i32) -> STREAM_CO
     config.packetSize = 1392;
     config.streamingRemotely = STREAM_CFG_LOCAL;
     config.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
-    config.supportedVideoFormats = VIDEO_FORMAT_H264 | VIDEO_FORMAT_H265;
+    config.supportedVideoFormats = VIDEO_FORMAT_H264;
     config.encryptionFlags = ENCFLG_ALL;
     config.clientRefreshRateX100 = (fps * 100) as c_int;
 
@@ -278,8 +278,9 @@ pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> 
     }
 
     let du = &*decodeUnit;
+    let mut payload = Vec::with_capacity(du.fullLength as usize + 1);
+    payload.push(if du.frameType == FRAME_TYPE_IDR { 1 } else { 0 });
 
-    let mut payload = Vec::with_capacity(du.fullLength as usize);
     let mut current = du.bufferList;
     while !current.is_null() {
         let entry = &*current;
