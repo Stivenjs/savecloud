@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Cliente de streaming (Moonlight).
 //!
 //! Envoltorio seguro sobre los bindings FFI de moonlight-common-c para
@@ -314,6 +313,11 @@ impl MoonlightClient {
 
             let mut cl_callbacks: CONNECTION_LISTENER_CALLBACKS = unsafe { std::mem::zeroed() };
             initialize_connection_callbacks(&mut cl_callbacks);
+            cl_callbacks.stageStarting = cl_stage_starting as *mut std::ffi::c_void;
+            cl_callbacks.stageComplete = cl_stage_complete as *mut std::ffi::c_void;
+            cl_callbacks.stageFailed = cl_stage_failed as *mut std::ffi::c_void;
+            cl_callbacks.connectionStarted = cl_connection_started as *mut std::ffi::c_void;
+            cl_callbacks.connectionTerminated = cl_connection_terminated as *mut std::ffi::c_void;
 
             let dr_callbacks = DECODER_RENDERER_CALLBACKS {
                 setup: Some(dr_setup),

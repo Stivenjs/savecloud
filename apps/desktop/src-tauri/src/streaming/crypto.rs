@@ -19,7 +19,7 @@ use std::slice;
 const ALGORITHM_AES_CBC: i32 = 1;
 const ALGORITHM_AES_GCM: i32 = 2;
 
-const CIPHER_FLAG_RESET_IV: i32 = 0x01;
+const _CIPHER_FLAG_RESET_IV: i32 = 0x01;
 #[allow(dead_code)]
 const CIPHER_FLAG_FINISH: i32 = 0x02;
 const CIPHER_FLAG_PAD_TO_BLOCK_SIZE: i32 = 0x04;
@@ -101,10 +101,10 @@ pub extern "C" fn PltEncryptMessage(
     if !ctx.initialized {
         ctx.algorithm = algorithm;
         ctx.key = key.to_vec();
-        ctx.iv = iv.to_vec();
         ctx.initialized = true;
         ctx.is_encrypt = true;
-    } else if (flags & CIPHER_FLAG_RESET_IV) != 0 {
+    }
+    if !iv.is_empty() {
         ctx.iv = iv.to_vec();
     }
 
@@ -202,7 +202,7 @@ pub extern "C" fn PltEncryptMessage(
 pub extern "C" fn PltDecryptMessage(
     ctx_ptr: *mut c_void,
     algorithm: i32,
-    flags: i32,
+    _flags: i32,
     key_ptr: *const u8,
     key_length: i32,
     iv_ptr: *const u8,
@@ -234,10 +234,10 @@ pub extern "C" fn PltDecryptMessage(
     if !ctx.initialized {
         ctx.algorithm = algorithm;
         ctx.key = key.to_vec();
-        ctx.iv = iv.to_vec();
         ctx.initialized = true;
         ctx.is_encrypt = false;
-    } else if (flags & CIPHER_FLAG_RESET_IV) != 0 {
+    }
+    if !iv.is_empty() {
         ctx.iv = iv.to_vec();
     }
 

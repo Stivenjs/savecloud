@@ -124,6 +124,17 @@ impl SunshineHost {
         self.generate_config()?;
 
         #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            let _ = Command::new("taskkill")
+                .args(["/F", "/IM", "sunshine.exe"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+
+        #[cfg(target_os = "windows")]
         let bin_path = self.bin_dir.join("Sunshine").join("sunshine.exe");
         #[cfg(not(target_os = "windows"))]
         let bin_path = self.bin_dir.join("Sunshine").join("sunshine");
@@ -264,8 +275,18 @@ impl SunshineHost {
 
         let conf_path = config_dir.join("sunshine.conf");
 
+        let sunshine_bin_dir = self.bin_dir.join("Sunshine");
+        let audio_sink = crate::streaming::audio::detect_best_active_sink(&sunshine_bin_dir);
+
+        let audio_sink_line = if let Some(sink) = audio_sink {
+            format!("audio_sink = {}\nvirtual_sink = ", sink)
+        } else {
+            "virtual_sink = ".to_string()
+        };
+
         // Configuraciones base optimizadas para SaveCloud
-        let config_content = r#"
+        let config_content = format!(
+            r#"
                 # SaveCloud Dynamic Sunshine Config
                 # Auto-generado - No modificar manualmente
 
@@ -276,8 +297,10 @@ impl SunshineHost {
                 min_log_level = debug
                 file_log_level = debug
                 file_state = sunshine_state.json
-            "#
-        .to_string();
+                {}
+            "#,
+            audio_sink_line
+        );
 
         std::fs::write(&conf_path, config_content)
             .map_err(|e| format!("Fallo al escribir sunshine.conf: {}", e))?;

@@ -242,6 +242,26 @@ pub fn set_video_channel(sender: mpsc::Sender<Vec<u8>>) {
     }
 }
 
+pub unsafe extern "C" fn cl_stage_starting(stage: c_int) {
+    log::info!("Moonlight Stage Starting: {}", stage);
+}
+
+pub unsafe extern "C" fn cl_stage_complete(stage: c_int) {
+    log::info!("Moonlight Stage Complete: {}", stage);
+}
+
+pub unsafe extern "C" fn cl_stage_failed(stage: c_int, error_code: c_int) {
+    log::error!("Moonlight Stage Failed: stage={}, error_code={}", stage, error_code);
+}
+
+pub unsafe extern "C" fn cl_connection_started() {
+    log::info!("Moonlight Connection Started successfully");
+}
+
+pub unsafe extern "C" fn cl_connection_terminated(error_code: c_int) {
+    log::warn!("Moonlight Connection Terminated: error_code={}", error_code);
+}
+
 pub unsafe extern "C" fn dr_setup(
     videoFormat: c_int,
     width: c_int,
