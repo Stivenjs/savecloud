@@ -25,12 +25,40 @@ if (!fs.existsSync(pythonScriptPath)) {
   process.exit(1);
 }
 
+function findPythonPath(): string {
+  const check = spawnSync("python", ["--version"], { shell: true });
+  if (check.status === 0) return "python";
+
+  const localAppData = process.env.LOCALAPPDATA;
+  if (localAppData) {
+    const pythonDir = path.join(localAppData, "Programs", "Python");
+    if (fs.existsSync(pythonDir)) {
+      try {
+        const versions = fs.readdirSync(pythonDir);
+        for (const ver of versions) {
+          const pyPath = path.join(pythonDir, ver, "python.exe");
+          if (fs.existsSync(pyPath)) {
+            console.log(`Found python at: ${pyPath}`);
+            return pyPath;
+          }
+        }
+      } catch (e) {}
+    }
+  }
+  return "python";
+}
+
+const pythonBin = findPythonPath();
+
 console.log("Checking if pyinstaller is installed...");
-const checkPyInstaller = spawnSync("pyinstaller", ["--version"], { shell: true, encoding: "utf8" });
+const checkPyInstaller = spawnSync(pythonBin, ["-m", "PyInstaller", "--version"], { shell: true, encoding: "utf8" });
 
 if (checkPyInstaller.status !== 0) {
   console.log("pyinstaller not found. Attempting to install it via pip...");
-  const installPip = spawnSync("pip", ["install", "pyinstaller", "scrapling"], { shell: true, stdio: "inherit" });
+  const installPip = spawnSync(pythonBin, ["-m", "pip", "install", "pyinstaller", "scrapling"], {
+    shell: true,
+    stdio: "inherit",
+  });
   if (installPip.status !== 0) {
     console.error("Failed to install pyinstaller and scrapling via pip. Please install them manually.");
     process.exit(1);
@@ -39,8 +67,10 @@ if (checkPyInstaller.status !== 0) {
 
 console.log("Running PyInstaller to compile scrapling_fetch.py...");
 const pyinstallerCmd = spawnSync(
-  "pyinstaller",
+  pythonBin,
   [
+    "-m",
+    "PyInstaller",
     "--clean",
     "--onefile",
     "--name",
