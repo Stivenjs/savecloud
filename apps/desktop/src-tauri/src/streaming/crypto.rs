@@ -254,7 +254,10 @@ pub extern "C" fn PltDecryptMessage(
         let plaintext = if iv_len == 12 {
             let cipher = match Aes128Gcm::new_from_slice(&ctx.key) {
                 Ok(c) => c,
-                Err(_) => return false,
+                Err(e) => {
+                    log::error!("PltDecryptMessage GCM-12: failed to create cipher: {:?}", e);
+                    return false;
+                }
             };
             let nonce = Nonce::<U12>::from_slice(&ctx.iv);
             match cipher.decrypt(
@@ -265,13 +268,26 @@ pub extern "C" fn PltDecryptMessage(
                 },
             ) {
                 Ok(pt) => pt,
-                Err(_) => return false,
+                Err(e) => {
+                    log::error!(
+                        "PltDecryptMessage GCM-12: decryption failed. key_len={}, iv_len={}, input_len={}, tag_len={}, err={:?}",
+                        ctx.key.len(),
+                        ctx.iv.len(),
+                        input.len(),
+                        tag.len(),
+                        e
+                    );
+                    return false;
+                }
             }
         } else if iv_len == 16 {
             type Aes128Gcm16 = aes_gcm::AesGcm<aes::Aes128, U16>;
             let cipher = match Aes128Gcm16::new_from_slice(&ctx.key) {
                 Ok(c) => c,
-                Err(_) => return false,
+                Err(e) => {
+                    log::error!("PltDecryptMessage GCM-16: failed to create cipher: {:?}", e);
+                    return false;
+                }
             };
             let nonce = Nonce::<U16>::from_slice(&ctx.iv);
             match cipher.decrypt(
@@ -282,9 +298,20 @@ pub extern "C" fn PltDecryptMessage(
                 },
             ) {
                 Ok(pt) => pt,
-                Err(_) => return false,
+                Err(e) => {
+                    log::error!(
+                        "PltDecryptMessage GCM-16: decryption failed. key_len={}, iv_len={}, input_len={}, tag_len={}, err={:?}",
+                        ctx.key.len(),
+                        ctx.iv.len(),
+                        input.len(),
+                        tag.len(),
+                        e
+                    );
+                    return false;
+                }
             }
         } else {
+            log::error!("PltDecryptMessage GCM: invalid IV length: {}", iv_len);
             return false;
         };
 
@@ -294,7 +321,10 @@ pub extern "C" fn PltDecryptMessage(
     } else if algorithm == ALGORITHM_AES_CBC {
         let cipher = match Aes128CbcDec::new_from_slices(&ctx.key, &ctx.iv) {
             Ok(c) => c,
-            Err(_) => return false,
+            Err(e) => {
+                log::error!("PltDecryptMessage CBC: failed to create cipher: {:?}", e);
+                return false;
+            }
         };
 
         let mut out_blocks = input.to_vec();
@@ -302,6 +332,12 @@ pub extern "C" fn PltDecryptMessage(
             .decrypt_padded_mut::<aes::cipher::block_padding::NoPadding>(&mut out_blocks)
             .is_err()
         {
+            log::error!(
+                "PltDecryptMessage CBC: decryption failed. key_len={}, iv_len={}, input_len={}",
+                ctx.key.len(),
+                ctx.iv.len(),
+                input.len()
+            );
             return false;
         }
 
@@ -310,5 +346,6 @@ pub extern "C" fn PltDecryptMessage(
         return true;
     }
 
+    log::error!("PltDecryptMessage: unknown algorithm: {}", algorithm);
     false
 }
