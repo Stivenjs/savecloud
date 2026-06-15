@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Orquestación del servidor Sunshine.
 //!
 //! Se encarga de descargar Sunshine (versión portable), configurar el entorno,
@@ -14,7 +13,7 @@ use tokio::sync::Mutex;
 const SUNSHINE_VERSION: &str = "v0.23.1";
 
 pub struct SunshineHost {
-    app_handle: AppHandle,
+    _app_handle: AppHandle,
     process: Arc<Mutex<Option<Child>>>,
     bin_dir: PathBuf,
 }
@@ -26,7 +25,7 @@ impl SunshineHost {
         let bin_dir = data_dir.join("SaveCloud").join("sunshine_bin");
 
         Self {
-            app_handle,
+            _app_handle: app_handle,
             process: Arc::new(Mutex::new(None)),
             bin_dir,
         }
@@ -111,7 +110,6 @@ impl SunshineHost {
         }
     }
 
-    /// Inicia el servidor Sunshine en segundo plano.
     pub async fn start(&self) -> Result<(), String> {
         let mut process_guard = self.process.lock().await;
 
@@ -126,17 +124,44 @@ impl SunshineHost {
         self.generate_config()?;
 
         #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            let _ = Command::new("taskkill")
+                .args(["/F", "/IM", "sunshine.exe"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+
+        #[cfg(target_os = "windows")]
         let bin_path = self.bin_dir.join("Sunshine").join("sunshine.exe");
         #[cfg(not(target_os = "windows"))]
         let bin_path = self.bin_dir.join("Sunshine").join("sunshine");
+
+        let mut creds_cmd = Command::new(&bin_path);
+        creds_cmd
+            .current_dir(self.bin_dir.join("Sunshine"))
+            .arg("--creds")
+            .arg("savecloud")
+            .arg("savecloud");
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            creds_cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        let _ = creds_cmd.output();
 
         let mut command = Command::new(&bin_path);
         command
             .current_dir(self.bin_dir.join("Sunshine"))
             .arg("-0")
             .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
 
         #[cfg(target_os = "windows")]
         {
@@ -153,14 +178,20 @@ impl SunshineHost {
         Ok(())
     }
 
-    /// Inyecta un cliente de SaveCloud directamente en los dispositivos de confianza
-    /// de Sunshine, saltándose por completo el protocolo de emparejamiento con PIN.
+    #[allow(dead_code)]
     pub fn inject_trusted_client(&self, client_cert: &str, unique_id: &str) -> Result<(), String> {
         let state_path = self
             .bin_dir
             .join("Sunshine")
             .join("config")
             .join("sunshine_state.json");
+
+        if let Some(parent) = state_path.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Fallo al crear config dir: {}", e))?;
+            }
+        }
 
         let mut state: serde_json::Value = if state_path.exists() {
             let data = std::fs::read_to_string(&state_path).unwrap_or_default();
@@ -169,38 +200,44 @@ impl SunshineHost {
             serde_json::json!({})
         };
 
-        let paired_clients = state.get_mut("paired_clients");
-        let clients_array = if let Some(arr) = paired_clients.and_then(|v| v.as_array_mut()) {
-            arr
-        } else {
-            state["paired_clients"] = serde_json::json!([]);
-            state
-                .get_mut("paired_clients")
-                .unwrap()
-                .as_array_mut()
-                .unwrap()
-        };
+        if state.pointer("/root/uniqueid").is_none() {
+            let server_id = uuid::Uuid::new_v4().to_string();
+            if state.get("root").is_none() {
+                state["root"] = serde_json::json!({});
+            }
+            state["root"]["uniqueid"] = serde_json::json!(server_id);
+        }
 
-        if !clients_array.iter().any(|c| c["uniqueid"] == unique_id) {
-            clients_array.push(serde_json::json!({
-                "app_version": "SaveCloud 1.0",
-                "client_cert": client_cert,
-                "devices": "SaveCloud Client",
-                "mac_address": "00:00:00:00:00:00",
-                "salt": "SaveCloudZeroConfigSalt",
-                "uniqueid": unique_id
+        if state.pointer("/root/devices").is_none() {
+            state["root"]["devices"] = serde_json::json!([]);
+        }
+
+        let devices = state
+            .pointer_mut("/root/devices")
+            .and_then(|v| v.as_array_mut())
+            .ok_or("No se pudo acceder a root.devices")?;
+
+        if !devices
+            .iter()
+            .any(|d| d.get("uniqueid").and_then(|v| v.as_str()) == Some(unique_id))
+        {
+            devices.push(serde_json::json!({
+                "uniqueid": unique_id,
+                "certs": [client_cert]
             }));
 
             let new_json = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
             std::fs::write(&state_path, new_json)
                 .map_err(|e| format!("Fallo al guardar state: {}", e))?;
-            log::info!("Cliente {} inyectado en sunshine_state.json", unique_id);
+            log::info!(
+                "Cliente {} inyectado en sunshine_state.json (formato root.devices[].certs[])",
+                unique_id
+            );
         }
 
         Ok(())
     }
 
-    /// Provee un PIN a Sunshine vía stdin cuando el cliente solicita emparejamiento.
     pub async fn provide_pin(&self, pin: &str) -> Result<(), String> {
         use std::io::Write;
 
@@ -218,12 +255,10 @@ impl SunshineHost {
         Err("Sunshine no está corriendo o no tiene stdin disponible".into())
     }
 
-    /// Detiene el servidor Sunshine de forma segura.
     pub async fn stop(&self) -> Result<(), String> {
         let mut process_guard = self.process.lock().await;
 
         if let Some(mut child) = process_guard.take() {
-            // Intentar matar el proceso
             let _ = child.kill();
             let _ = child.wait();
         }
@@ -231,7 +266,6 @@ impl SunshineHost {
         Ok(())
     }
 
-    /// Genera el archivo de configuración base de Sunshine
     fn generate_config(&self) -> Result<(), String> {
         let config_dir = self.bin_dir.join("Sunshine").join("config");
         if !config_dir.exists() {
@@ -241,14 +275,32 @@ impl SunshineHost {
 
         let conf_path = config_dir.join("sunshine.conf");
 
+        let sunshine_bin_dir = self.bin_dir.join("Sunshine");
+        let audio_sink = crate::streaming::audio::detect_best_active_sink(&sunshine_bin_dir);
+
+        let audio_sink_line = if let Some(sink) = audio_sink {
+            format!("audio_sink = {}\nvirtual_sink = ", sink)
+        } else {
+            "virtual_sink = ".to_string()
+        };
+
         // Configuraciones base optimizadas para SaveCloud
-        let config_content = r#"
+        let config_content = format!(
+            r#"
                 # SaveCloud Dynamic Sunshine Config
                 # Auto-generado - No modificar manualmente
 
                 port = 47989
                 fps = 60
-            "#.to_string();
+                gamepad = disabled
+                controller = disabled
+                min_log_level = debug
+                file_log_level = debug
+                file_state = sunshine_state.json
+                {}
+            "#,
+            audio_sink_line
+        );
 
         std::fs::write(&conf_path, config_content)
             .map_err(|e| format!("Fallo al escribir sunshine.conf: {}", e))?;

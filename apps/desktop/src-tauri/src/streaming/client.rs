@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Cliente de streaming (Moonlight).
 //!
 //! Envoltorio seguro sobre los bindings FFI de moonlight-common-c para
@@ -9,7 +8,11 @@ use crate::streaming::video_server::VideoServer;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+
 use tokio::sync::mpsc;
+
+#[path = "tls_override.rs"]
+mod tls_override;
 
 /// Cliente para conectarse a un host de Sunshine y recibir un stream.
 pub struct MoonlightClient {
@@ -37,8 +40,12 @@ impl MoonlightClient {
     /// Genera y retorna el certificado PEM del cliente. Si no existe, lo crea.
     pub fn get_or_create_certificate(&self) -> Result<(String, String), String> {
         if self.cert_path.exists() && self.key_path.exists() {
-            let cert = std::fs::read_to_string(&self.cert_path).unwrap_or_default();
-            let key = std::fs::read_to_string(&self.key_path).unwrap_or_default();
+            let mut cert = std::fs::read_to_string(&self.cert_path).unwrap_or_default();
+            let mut key = std::fs::read_to_string(&self.key_path).unwrap_or_default();
+
+            cert = cert.replace("\r\n", "\n");
+            key = key.replace("\r\n", "\n");
+
             if !cert.is_empty() && !key.is_empty() {
                 return Ok((cert, key));
             }
@@ -48,8 +55,11 @@ impl MoonlightClient {
         let cert = rcgen::generate_simple_self_signed(subject_alt_names)
             .map_err(|e| format!("Fallo al generar cert: {}", e))?;
 
-        let cert_pem = cert.serialize_pem().map_err(|e| e.to_string())?;
-        let key_pem = cert.serialize_private_key_pem();
+        let mut cert_pem = cert.serialize_pem().map_err(|e| e.to_string())?;
+        let mut key_pem = cert.serialize_private_key_pem();
+
+        cert_pem = cert_pem.replace("\r\n", "\n");
+        key_pem = key_pem.replace("\r\n", "\n");
 
         if let Some(parent) = self.cert_path.parent() {
             if !parent.exists() {
@@ -109,6 +119,22 @@ impl MoonlightClient {
             return Err("La conexión ya está en proceso".into());
         }
 
+        struct ConnectingGuard<'a> {
+            flag: &'a AtomicBool,
+            success: bool,
+        }
+        impl<'a> Drop for ConnectingGuard<'a> {
+            fn drop(&mut self) {
+                if !self.success {
+                    self.flag.store(false, Ordering::SeqCst);
+                }
+            }
+        }
+        let mut guard = ConnectingGuard {
+            flag: &self.is_connecting,
+            success: false,
+        };
+
         // 1. Obtener certificado del cliente
         let (cert_pem, _) = self.get_or_create_certificate()?;
         let unique_id = self.get_or_create_unique_id()?;
@@ -121,18 +147,14 @@ impl MoonlightClient {
         });
 
         let client = reqwest::Client::new();
-        let res = client.post(&url).json(&payload).send().await;
-
-        let res = match res {
-            Ok(r) => r,
-            Err(e) => {
-                self.is_connecting.store(false, Ordering::SeqCst);
-                return Err(format!("Error conectando a SaveCloud Host: {}", e));
-            }
-        };
+        let res = client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| format!("Error conectando a SaveCloud Host: {}", e))?;
 
         if !res.status().is_success() {
-            self.is_connecting.store(false, Ordering::SeqCst);
             return Err(format!("Host rechazó emparejamiento: {}", res.status()));
         }
 
@@ -142,17 +164,12 @@ impl MoonlightClient {
         let (tx, rx) = mpsc::channel(120);
         set_video_channel(tx);
 
-        let ws_port = match self.video_server.start(rx).await {
-            Ok(p) => p,
-            Err(e) => {
-                self.is_connecting.store(false, Ordering::SeqCst);
-                return Err(e);
-            }
-        };
+        let ws_port = self.video_server.start(rx).await?;
 
         log::info!("Video WebSocket Server listo en puerto {}", ws_port);
 
         self.is_connected.store(true, Ordering::SeqCst);
+        guard.success = true;
         self.is_connecting.store(false, Ordering::SeqCst);
 
         log::info!(
@@ -174,42 +191,99 @@ impl MoonlightClient {
         let (cert_pem, key_pem) = self.get_or_create_certificate()?;
         let unique_id = self.get_or_create_unique_id()?;
 
-        let combined_pem = format!("{}\n{}", key_pem, cert_pem);
-        let identity = reqwest::Identity::from_pem(combined_pem.as_bytes())
-            .map_err(|e| format!("Error TLS identity: {}", e))?;
+        let mut cert_reader = std::io::BufReader::new(cert_pem.as_bytes());
+        let certs = rustls_pemfile::certs(&mut cert_reader)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Error leyendo cert: {}", e))?;
+
+        let mut key_reader = std::io::BufReader::new(key_pem.as_bytes());
+        let key = rustls_pemfile::private_key(&mut key_reader)
+            .map_err(|e| format!("Error leyendo key: {}", e))?
+            .ok_or("No se encontró private key")?;
+
+        let private_key = rustls::crypto::aws_lc_rs::sign::any_supported_type(&key)
+            .map_err(|e| format!("Key no soportada: {}", e))?;
+
+        let certified_key = Arc::new(rustls::sign::CertifiedKey::new(certs, private_key));
+
+        let client_cert_resolver =
+            Arc::new(tls_override::AlwaysResolvesClientCert { certified_key });
+
+        let provider = rustls::crypto::aws_lc_rs::default_provider();
+        let config = rustls::ClientConfig::builder_with_provider(provider.into())
+            .with_safe_default_protocol_versions()
+            .map_err(|e| format!("Error TLS protocol: {}", e))?
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(tls_override::NoCertificateVerification))
+            .with_client_cert_resolver(client_cert_resolver);
 
         let client = reqwest::Client::builder()
-            .danger_accept_invalid_certs(true)
-            .identity(identity)
+            .use_preconfigured_tls(config)
+            .http1_only()
             .build()
-            .map_err(|e| format!("Error creando cliente HTTP TLS: {}", e))?;
+            .map_err(|e| {
+                let mut msg = format!("Error creando cliente HTTP TLS: {}", e);
+                if let Some(source) = std::error::Error::source(&e) {
+                    msg.push_str(&format!(" (Causa raíz: {})", source));
+                }
+                msg
+            })?;
 
         let rikey_bytes: [u8; 16] = rand::random();
         let rikey_hex = hex::encode_upper(rikey_bytes);
         let rikey_id: u32 = rand::random();
         let uuid = uuid::Uuid::new_v4().simple().to_string().to_uppercase();
 
+        let mut target_ip = host_ip.to_string();
+        if target_ip == "127.0.0.1" {
+            target_ip = "localhost".to_string();
+        }
         let url = format!(
-            "https://{}:47989/launch?uniqueid={}&uuid={}&appversion=7.1.431.0&appid=0&appname=Desktop&mode=1920x1080x60&rikey={}&rikeyid={}&localAudioPlayMode=0",
-            host_ip, unique_id, uuid, rikey_hex, rikey_id
+            "https://{}:47984/launch?uniqueid={}&uuid={}&appversion=7.1.431.0&appid=0&appname=Desktop&mode=1920x1080x60&rikey={}&rikeyid={}&localAudioPlayMode=0",
+            target_ip, unique_id, uuid, rikey_hex, rikey_id
         );
 
-        let res = client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| format!("Error en /launch: {}", e))?;
-        let xml = res
-            .text()
-            .await
-            .map_err(|e| format!("Error leyendo XML: {}", e))?;
+        let mut retries = 10;
+        let mut last_error = String::new();
+        let mut session_url = String::new();
 
-        let session_url_regex = regex::Regex::new(r"<sessionUrl0>(.*?)</sessionUrl0>").unwrap();
-        let session_url = session_url_regex
-            .captures(&xml)
-            .and_then(|cap| cap.get(1))
-            .map(|m| m.as_str().to_string())
-            .ok_or_else(|| format!("No sessionUrl0 en /launch: {}", xml))?;
+        while retries > 0 {
+            match client.get(&url).send().await {
+                Ok(res) => match res.text().await {
+                    Ok(xml) => {
+                        let session_url_regex =
+                            regex::Regex::new(r"<sessionUrl0>(.*?)</sessionUrl0>").unwrap();
+                        if let Some(caps) = session_url_regex.captures(&xml) {
+                            session_url = caps[1].to_string();
+                            break;
+                        } else {
+                            last_error = format!("Respuesta /launch sin sessionUrl0. XML: {}", xml);
+                            log::warn!("Reintentando /launch: {}", last_error);
+                        }
+                    }
+                    Err(e) => {
+                        last_error = format!("Error leyendo respuesta XML: {}", e);
+                    }
+                },
+                Err(e) => {
+                    last_error = format!("Error de red: {}", e);
+                    log::info!(
+                        "Esperando a que Sunshine inicie (intento restante {})... {}",
+                        retries,
+                        last_error
+                    );
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+            retries -= 1;
+        }
+
+        if session_url.is_empty() {
+            return Err(format!(
+                "Error en /launch tras múltiples intentos: {}",
+                last_error
+            ));
+        }
 
         log::info!("RTSP Session URL obtenido: {}", session_url);
 
@@ -239,6 +313,11 @@ impl MoonlightClient {
 
             let mut cl_callbacks: CONNECTION_LISTENER_CALLBACKS = unsafe { std::mem::zeroed() };
             initialize_connection_callbacks(&mut cl_callbacks);
+            cl_callbacks.stageStarting = cl_stage_starting as *mut std::ffi::c_void;
+            cl_callbacks.stageComplete = cl_stage_complete as *mut std::ffi::c_void;
+            cl_callbacks.stageFailed = cl_stage_failed as *mut std::ffi::c_void;
+            cl_callbacks.connectionStarted = cl_connection_started as *mut std::ffi::c_void;
+            cl_callbacks.connectionTerminated = cl_connection_terminated as *mut std::ffi::c_void;
 
             let dr_callbacks = DECODER_RENDERER_CALLBACKS {
                 setup: Some(dr_setup),

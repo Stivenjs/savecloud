@@ -66,6 +66,41 @@ export const LanHostList = ({ isOpen, onClose }: LanHostListProps) => {
                     </div>
                   ) : null}
 
+                  {/* Entrada manual para pruebas locales (efecto espejo) */}
+                  <div
+                    className="p-4 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-xl flex justify-between items-center transition-colors cursor-pointer"
+                    onClick={() =>
+                      setSelectedHost({
+                        device_id: "localhost-test",
+                        user_id: "local",
+                        ip: "127.0.0.1",
+                        port: 47989,
+                        savecloud_port: 0,
+                        hostname: "Este Equipo (Espejo)",
+                      })
+                    }>
+                    <div>
+                      <p className="font-bold text-primary-600 text-lg">Este Equipo (Prueba Espejo)</p>
+                      <p className="text-primary-400 text-sm">127.0.0.1:47989</p>
+                    </div>
+                    <Button
+                      color="primary"
+                      variant="flat"
+                      size="sm"
+                      onPress={() =>
+                        setSelectedHost({
+                          device_id: "localhost-test",
+                          user_id: "local",
+                          ip: "127.0.0.1",
+                          port: 47989,
+                          savecloud_port: 0,
+                          hostname: "Este Equipo (Espejo)",
+                        })
+                      }>
+                      Conectar
+                    </Button>
+                  </div>
+
                   {hosts.map((host) => (
                     <div
                       key={host.device_id}

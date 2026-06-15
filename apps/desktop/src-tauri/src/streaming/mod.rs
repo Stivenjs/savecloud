@@ -25,3 +25,5 @@ pub mod input_relay;
 pub mod commands;
 pub mod crypto;
 pub mod video_server;
+pub mod audio;
+

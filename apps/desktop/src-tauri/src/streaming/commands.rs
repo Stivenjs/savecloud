@@ -5,7 +5,7 @@
 
 use super::discovery::{discover_stream_hosts, withdraw_stream_service, DiscoveredStreamHost};
 use super::session::{HostState, StreamingState};
-use tauri::{command, AppHandle, State};
+use tauri::{command, AppHandle, Emitter, State};
 
 /// Busca otros hosts de SaveCloud en la red local que estén emitiendo un juego.
 #[command]
@@ -23,7 +23,7 @@ pub async fn streaming_discover_lan(
 #[command]
 pub async fn streaming_start_host(
     state: State<'_, StreamingState>,
-    _app: AppHandle,
+    app: AppHandle,
     device_id: String,
     user_id: String,
 ) -> Result<String, String> {
@@ -54,6 +54,7 @@ pub async fn streaming_start_host(
         pin: simulated_pin.clone(),
         clients: vec![],
     };
+    let _ = app.emit("streaming-state-changed", ());
 
     Ok(simulated_pin)
 }
@@ -62,9 +63,17 @@ pub async fn streaming_start_host(
 #[tauri::command]
 pub async fn streaming_connect_lan(
     ip_address: String,
-    savecloud_port: u16,
+    mut savecloud_port: u16,
     state: tauri::State<'_, StreamingState>,
+    app: tauri::AppHandle,
 ) -> Result<u16, String> {
+    if ip_address == "127.0.0.1" && savecloud_port == 0 {
+        savecloud_port =
+            crate::peer_lan::server::ensure_lan_http_server(Some(state.host.clone())).await?;
+        state.host.start().await?;
+        tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+    }
+
     log::info!(
         "Comando: Conectando a host en {} (SaveCloud: {})",
         ip_address,
@@ -74,19 +83,27 @@ pub async fn streaming_connect_lan(
         .client
         .connect_lan(&ip_address, savecloud_port, 1920, 1080, 60)
         .await?;
-    state.client.start_stream(&ip_address).await?;
+
+    if let Err(e) = state.client.start_stream(&ip_address).await {
+        state.client.disconnect();
+        return Err(e);
+    }
 
     *state.session.lock().unwrap() = HostState::Playing {
         host_ip: ip_address.clone(),
         ws_port,
     };
+    let _ = app.emit("streaming-state-changed", ());
 
     Ok(ws_port)
 }
 
 /// Detiene cualquier sesión activa de streaming (como Host o Cliente).
 #[command]
-pub async fn streaming_stop(state: State<'_, StreamingState>) -> Result<(), String> {
+pub async fn streaming_stop(
+    state: State<'_, StreamingState>,
+    app: AppHandle,
+) -> Result<(), String> {
     log::info!("Comando: Deteniendo servicios de streaming");
 
     state.client.disconnect();
@@ -95,6 +112,7 @@ pub async fn streaming_stop(state: State<'_, StreamingState>) -> Result<(), Stri
     withdraw_stream_service();
 
     *state.session.lock().unwrap() = HostState::Idle;
+    let _ = app.emit("streaming-state-changed", ());
 
     Ok(())
 }

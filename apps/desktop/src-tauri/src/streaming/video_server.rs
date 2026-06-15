@@ -39,7 +39,7 @@ impl VideoServer {
                         loop {
                             tokio::select! {
                                 _ = async {
-                                    while cancel.load(Ordering::Relaxed) {
+                                    while !cancel.load(Ordering::Relaxed) {
                                         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                                     }
                                 } => break,

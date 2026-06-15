@@ -19,6 +19,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
       return;
     }
 
+    let isUnmounted = false;
     let ws: WebSocket | null = null;
     let decoder: VideoDecoder | null = null;
     let frameCount = 0;
@@ -26,6 +27,10 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
     const initDecoder = () => {
       decoder = new VideoDecoder({
         output: (frame: VideoFrame) => {
+          if (isUnmounted) {
+            frame.close();
+            return;
+          }
           if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
             canvas.width = frame.displayWidth;
             canvas.height = frame.displayHeight;
@@ -35,6 +40,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
           frame.close();
         },
         error: (e) => {
+          if (isUnmounted) return;
           console.error("VideoDecoder error:", e);
           setError(`Decoder Error: ${e.message}`);
         },
@@ -52,16 +58,21 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
       ws.binaryType = "arraybuffer";
 
       ws.onopen = () => {
+        if (isUnmounted) return;
         console.log("Video WS Connected");
+        setError(null);
       };
 
       ws.onmessage = (event) => {
+        if (isUnmounted) return;
         if (!decoder || decoder.state !== "configured") return;
 
-        const data = new Uint8Array(event.data);
-        if (data.length === 0) return;
+        const buffer = event.data;
+        if (buffer.byteLength <= 1) return;
 
-        const isKeyFrame = frameCount === 0 || (data.length > 4 && (data[4] & 0x1f) === 5);
+        const view = new DataView(buffer);
+        const isKeyFrame = view.getUint8(0) === 1;
+        const data = new Uint8Array(buffer, 1);
 
         try {
           const chunk = new EncodedVideoChunk({
@@ -78,10 +89,12 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
       };
 
       ws.onclose = () => {
+        if (isUnmounted) return;
         console.log("Video WS Closed");
       };
 
       ws.onerror = (e) => {
+        if (isUnmounted) return;
         console.error("Video WS Error:", e);
         setError("Error en la conexión WebSocket de video");
       };
@@ -91,10 +104,13 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
       initDecoder();
       connectWs();
     } catch (e: any) {
-      setError(`Init error: ${e.message}`);
+      if (!isUnmounted) {
+        setError(`Init error: ${e.message}`);
+      }
     }
 
     return () => {
+      isUnmounted = true;
       if (ws) {
         ws.close();
       }
