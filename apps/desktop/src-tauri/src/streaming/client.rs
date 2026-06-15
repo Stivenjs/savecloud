@@ -179,10 +179,17 @@ impl MoonlightClient {
             .map_err(|e| format!("Error TLS identity: {}", e))?;
 
         let client = reqwest::Client::builder()
+            .use_rustls_tls()
             .danger_accept_invalid_certs(true)
             .identity(identity)
             .build()
-            .map_err(|e| format!("Error creando cliente HTTP TLS: {}", e))?;
+            .map_err(|e| {
+                let mut msg = format!("Error creando cliente HTTP TLS: {}", e);
+                if let Some(source) = std::error::Error::source(&e) {
+                    msg.push_str(&format!(" (Causa raíz: {})", source));
+                }
+                msg
+            })?;
 
         let rikey_bytes: [u8; 16] = rand::random();
         let rikey_hex = hex::encode_upper(rikey_bytes);
@@ -194,22 +201,47 @@ impl MoonlightClient {
             host_ip, unique_id, uuid, rikey_hex, rikey_id
         );
 
-        let res = client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| format!("Error en /launch: {}", e))?;
-        let xml = res
-            .text()
-            .await
-            .map_err(|e| format!("Error leyendo XML: {}", e))?;
+        let mut retries = 10;
+        let mut last_error = String::new();
+        let mut session_url = String::new();
 
-        let session_url_regex = regex::Regex::new(r"<sessionUrl0>(.*?)</sessionUrl0>").unwrap();
-        let session_url = session_url_regex
-            .captures(&xml)
-            .and_then(|cap| cap.get(1))
-            .map(|m| m.as_str().to_string())
-            .ok_or_else(|| format!("No sessionUrl0 en /launch: {}", xml))?;
+        while retries > 0 {
+            match client.get(&url).send().await {
+                Ok(res) => match res.text().await {
+                    Ok(xml) => {
+                        let session_url_regex =
+                            regex::Regex::new(r"<sessionUrl0>(.*?)</sessionUrl0>").unwrap();
+                        if let Some(caps) = session_url_regex.captures(&xml) {
+                            session_url = caps[1].to_string();
+                            break;
+                        } else {
+                            last_error = format!("Respuesta /launch sin sessionUrl0. XML: {}", xml);
+                            log::warn!("Reintentando /launch: {}", last_error);
+                        }
+                    }
+                    Err(e) => {
+                        last_error = format!("Error leyendo respuesta XML: {}", e);
+                    }
+                },
+                Err(e) => {
+                    last_error = format!("Error de red: {}", e);
+                    log::info!(
+                        "Esperando a que Sunshine inicie (intento restante {})... {}",
+                        retries,
+                        last_error
+                    );
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+            retries -= 1;
+        }
+
+        if session_url.is_empty() {
+            return Err(format!(
+                "Error en /launch tras múltiples intentos: {}",
+                last_error
+            ));
+        }
 
         log::info!("RTSP Session URL obtenido: {}", session_url);
 
