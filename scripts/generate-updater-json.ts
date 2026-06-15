@@ -50,6 +50,24 @@ if (!Object.keys(platforms).length) {
   process.exit(1);
 }
 
+function extractReleaseNotes(markdown: string, version: string): string {
+  const normalizedVersion = version.replace(/^v/, "");
+  const sections = markdown.split(/(?:^|\n)##\s+/);
+  const matchingSections: string[] = [];
+
+  for (const section of sections) {
+    if (!section.trim()) continue;
+    const lines = section.trim().split("\n");
+    const header = lines[0] || "";
+    const cleanHeader = header.replace(/^v/, "").trim();
+    if (cleanHeader.startsWith(normalizedVersion)) {
+      matchingSections.push(`## ${section.trim()}`);
+    }
+  }
+
+  return matchingSections.join("\n\n").trim();
+}
+
 let notes = process.env.RELEASE_NOTES?.trim() ?? "";
 
 if (!notes) {
@@ -67,7 +85,8 @@ if (!notes) {
   if (notesPath) {
     const notesFile = Bun.file(notesPath);
     if (await notesFile.exists()) {
-      notes = (await notesFile.text()).trim();
+      const fullText = (await notesFile.text()).trim();
+      notes = extractReleaseNotes(fullText, VERSION) || fullText;
     }
   } else {
     console.warn("No se encontró RELEASE_NOTES.md en el repositorio");

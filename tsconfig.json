@@ -21,6 +21,6 @@
       "@cli/*": ["./apps/cli/*"]
     }
   },
-  "include": ["apps/api/src/**/*", "apps/cli/**/*"],
+  "include": ["apps/api/src/**/*", "apps/cli/**/*", "scripts/**/*.ts", "apps/desktop/scripts/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

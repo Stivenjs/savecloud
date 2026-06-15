@@ -60,6 +60,34 @@ if (!Object.keys(platforms).length) {
   process.exit(1);
 }
 
+function extractReleaseNotes(markdown: string, version: string): string {
+  const normalizedVersion = version.replace(/^v/, "");
+  const sections = markdown.split(/(?:^|\n)##\s+/);
+  const matchingSections: string[] = [];
+
+  for (const section of sections) {
+    if (!section.trim()) continue;
+    const lines = section.trim().split("\n");
+    const header = lines[0] || "";
+    const cleanHeader = header.replace(/^v/, "").trim();
+    if (cleanHeader.startsWith(normalizedVersion)) {
+      matchingSections.push(`## ${section.trim()}`);
+    }
+  }
+
+  return matchingSections.join("\n\n").trim();
+}
+
+const notesPath = join(baseDir, "src/assets/RELEASE_NOTES.md");
+let notes = "";
+
+if (existsSync(notesPath)) {
+  const fullText = (await Bun.file(notesPath).text()).trim();
+  notes = extractReleaseNotes(fullText, VERSION) || fullText;
+} else {
+  console.warn("No se encontró RELEASE_NOTES.md en src/assets/");
+}
+
 const outputPath = join(baseDir, "latest.json");
 
 await Bun.write(
@@ -67,7 +95,7 @@ await Bun.write(
   JSON.stringify(
     {
       version: VERSION,
-      notes: "",
+      notes,
       pub_date: new Date().toISOString(),
       platforms,
     },
