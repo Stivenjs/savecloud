@@ -209,14 +209,11 @@ def _strategy_browser_fetch(url: str, expect_json: bool) -> str | None:
 
 
 def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> str | None:
-    captured_fd, captured_path = tempfile.mkstemp(prefix="scrapling_capture_", suffix=".txt")
-    os.close(captured_fd)
-    captured_event = {"done": False}
+    captured_responses = []
+    fetched_holder = {"text": None}
 
     def page_setup(page):
         def on_response(response):
-            if captured_event["done"]:
-                return
             try:
                 response_url = getattr(response, "url", "") or ""
                 response_status = getattr(response, "status", None)
@@ -228,27 +225,7 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
                     return
                 if response_status and int(response_status) not in (200, 307, 308):
                     return
-                body_method = getattr(response, "body", None)
-                if callable(body_method):
-                    try:
-                        body_bytes = body_method() or b""
-                        if body_bytes:
-                            with open(captured_path, "wb") as fh:
-                                fh.write(body_bytes)
-                            captured_event["done"] = True
-                            return
-                    except Exception:
-                        pass
-                text_method = getattr(response, "text", None)
-                if callable(text_method):
-                    try:
-                        body_text = text_method() or ""
-                        if body_text:
-                            with open(captured_path, "w", encoding="utf-8") as fh:
-                                fh.write(body_text)
-                            captured_event["done"] = True
-                    except Exception:
-                        pass
+                captured_responses.append(response)
             except Exception:
                 pass
         try:
@@ -257,14 +234,10 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
             pass
 
     def page_action(page):
-        if captured_event["done"]:
-            return
         try:
             fetched = page.evaluate(JS_STREAM_FETCH, url)
             if isinstance(fetched, str) and fetched.strip():
-                with open(captured_path, "w", encoding="utf-8") as fh:
-                    fh.write(fetched)
-                captured_event["done"] = True
+                fetched_holder["text"] = fetched
         except Exception:
             pass
 
@@ -278,19 +251,33 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
         page_action=page_action,
     )
 
-    try:
-        with open(captured_path, "r", encoding="utf-8") as fh:
-            captured = fh.read()
-        valid = get_valid_content(captured, expect_json)
+    for response in captured_responses:
+        body_method = getattr(response, "body", None)
+        if callable(body_method):
+            try:
+                body_bytes = body_method() or b""
+                if body_bytes:
+                    decoded = body_bytes.decode("utf-8", "replace")
+                    valid = get_valid_content(decoded, expect_json)
+                    if valid:
+                        return valid
+            except Exception:
+                pass
+        text_method = getattr(response, "text", None)
+        if callable(text_method):
+            try:
+                body_text = text_method() or ""
+                if body_text:
+                    valid = get_valid_content(body_text, expect_json)
+                    if valid:
+                        return valid
+            except Exception:
+                pass
+
+    if fetched_holder["text"]:
+        valid = get_valid_content(fetched_holder["text"], expect_json)
         if valid:
             return valid
-    except Exception:
-        pass
-    finally:
-        try:
-            os.remove(captured_path)
-        except OSError:
-            pass
 
     body = extract_body(page)
     return get_valid_content(body, expect_json)
