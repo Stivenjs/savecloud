@@ -101,6 +101,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::steam_catalog::seed::commands::sync_import_cloud_seed_run_until_done,
         crate::steam_catalog::seed::commands::sync_get_steam_seed_freshness,
         crate::config::config_cmds::get_friend_config,
+        crate::config::config_cmds::get_friends_configs,
         crate::config::config_cmds::add_games_from_friend,
         crate::commands::sync::api::copy_friend_saves,
         crate::commands::sync::api::copy_friend_saves_with_plan,

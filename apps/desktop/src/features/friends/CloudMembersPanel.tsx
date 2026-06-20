@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Avatar, Spinner, useDraggable } from "@heroui/react";
 import { motion } from "framer-motion";
 import { UserRound } from "lucide-react";
-import { getFriendConfig } from "@services/tauri";
+import { getFriendsConfigs } from "@services/tauri";
 import { listCloudMemberships, listCloudPresence } from "@services/tauri/invites.service";
 import { CloudMembersHeader } from "@features/friends/CloudMembersHeader";
 import {
@@ -123,21 +123,21 @@ export function CloudMembersPanel({
     queryKey: ["cloud-members-avatars", cloudPeerIds],
     enabled: isOpen && cloudPeerIds.length > 0,
     queryFn: async () => {
-      const avatars = await Promise.all(
-        cloudPeerIds.map(async (userId) => {
-          try {
-            const friendConfig = await getFriendConfig(userId);
-            const avatar = friendConfig.shareVisualProfileWithHosts
+      try {
+        const configsMap = await getFriendsConfigs(cloudPeerIds);
+        const avatars = cloudPeerIds.map((userId) => {
+          const friendConfig = configsMap[userId];
+          const avatar =
+            friendConfig && friendConfig.shareVisualProfileWithHosts
               ? (friendConfig.profileAvatar?.trim() ?? null)
               : null;
-            return [userId, avatar] as const;
-          } catch {
-            return [userId, null] as const;
-          }
-        })
-      );
+          return [userId, avatar] as const;
+        });
 
-      return new Map<string, string | null>(avatars);
+        return new Map<string, string | null>(avatars);
+      } catch {
+        return new Map<string, string | null>(cloudPeerIds.map((userId) => [userId, null]));
+      }
     },
   });
 
