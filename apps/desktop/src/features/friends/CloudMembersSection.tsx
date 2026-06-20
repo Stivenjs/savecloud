@@ -17,6 +17,7 @@ interface CloudMembersSectionProps {
   onRemoveMember?: (userId: string) => Promise<void>;
   onLeaveMembership?: (hostId: string) => Promise<void>;
   searchQuery?: string;
+  localUserId: string;
 }
 
 export function CloudMembersSection({
@@ -33,12 +34,13 @@ export function CloudMembersSection({
   onRemoveMember,
   onLeaveMembership,
   searchQuery = "",
+  localUserId,
 }: CloudMembersSectionProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
   // Filtrar miembros según búsqueda
   const filteredMemberships = memberships.filter((m) => {
-    const userId = isHost ? m.memberUserId : m.hostUserId;
+    const userId = isHost ? m.memberUserId : m.memberUserId === localUserId ? m.hostUserId : m.memberUserId;
     return userId.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
@@ -66,7 +68,11 @@ export function CloudMembersSection({
             <>
               {filteredMemberships.length > 0 ? (
                 filteredMemberships.map((membership) => {
-                  const userId = isHost ? membership.memberUserId : membership.hostUserId;
+                  const userId = isHost
+                    ? membership.memberUserId
+                    : membership.memberUserId === localUserId
+                      ? membership.hostUserId
+                      : membership.memberUserId;
                   const presence = presenceMap.get(userId);
 
                   return (

@@ -112,13 +112,10 @@ pub(crate) async fn api_request(
     }
 
     let start = Instant::now();
-    let res = req
-        .send()
-        .await
-        .map_err(|e| {
-            observability::record_error("sync_api_send", &e.to_string(), None);
-            e.to_string()
-        })?;
+    let res = req.send().await.map_err(|e| {
+        observability::record_error("sync_api_send", &e.to_string(), None);
+        e.to_string()
+    })?;
     let elapsed_ms = start.elapsed().as_millis() as u64;
     let ok = res.status().is_success();
     observability::record_saves_api_timing(elapsed_ms, ok, path);

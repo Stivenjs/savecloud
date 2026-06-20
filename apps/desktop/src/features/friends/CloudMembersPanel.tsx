@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Avatar, Spinner, useDraggable } from "@heroui/react";
 import { motion } from "framer-motion";
 import { UserRound } from "lucide-react";
-import { getFriendConfig } from "@services/tauri";
+import { getFriendsConfigs } from "@services/tauri";
 import { listCloudMemberships, listCloudPresence } from "@services/tauri/invites.service";
 import { CloudMembersHeader } from "@features/friends/CloudMembersHeader";
 import {
@@ -94,8 +94,11 @@ export function CloudMembersPanel({
   const localProfileAvatar = resolveProfileAsset(config?.profileAvatar ?? undefined);
   const localPresence = localUserId ? presenceByUser.get(localUserId) : undefined;
 
-  const hostMemberships = memberships?.hostMemberships ?? [];
-  const memberMemberships = memberships?.memberMemberships ?? [];
+  const hostMemberships = useMemo(() => (memberships?.hostMemberships ?? []).filter((m) => m.active), [memberships]);
+  const memberMemberships = useMemo(
+    () => (memberships?.memberMemberships ?? []).filter((m) => m.active),
+    [memberships]
+  );
   const hasAnyMembers = hostMemberships.length > 0 || memberMemberships.length > 0;
 
   const cloudPeerIds = useMemo(() => {
@@ -106,6 +109,7 @@ export function CloudMembersPanel({
     }
     for (const membership of memberMemberships) {
       uniqueIds.add(membership.hostUserId);
+      uniqueIds.add(membership.memberUserId);
     }
 
     if (localUserId) {
@@ -119,21 +123,21 @@ export function CloudMembersPanel({
     queryKey: ["cloud-members-avatars", cloudPeerIds],
     enabled: isOpen && cloudPeerIds.length > 0,
     queryFn: async () => {
-      const avatars = await Promise.all(
-        cloudPeerIds.map(async (userId) => {
-          try {
-            const friendConfig = await getFriendConfig(userId);
-            const avatar = friendConfig.shareVisualProfileWithHosts
+      try {
+        const configsMap = await getFriendsConfigs(cloudPeerIds);
+        const avatars = cloudPeerIds.map((userId) => {
+          const friendConfig = configsMap[userId];
+          const avatar =
+            friendConfig && friendConfig.shareVisualProfileWithHosts
               ? (friendConfig.profileAvatar?.trim() ?? null)
               : null;
-            return [userId, avatar] as const;
-          } catch {
-            return [userId, null] as const;
-          }
-        })
-      );
+          return [userId, avatar] as const;
+        });
 
-      return new Map<string, string | null>(avatars);
+        return new Map<string, string | null>(avatars);
+      } catch {
+        return new Map<string, string | null>(cloudPeerIds.map((userId) => [userId, null]));
+      }
     },
   });
 
@@ -265,6 +269,7 @@ export function CloudMembersPanel({
                 onRequestRemoveMember={(userId) => setPendingAction({ type: "remove-member", userId })}
                 onRemoveMember={onRemoveMember ? handleRemoveMember : undefined}
                 searchQuery={debouncedSearchQuery}
+                localUserId={localUserId}
               />
 
               <CloudMembersSection
@@ -279,6 +284,7 @@ export function CloudMembersPanel({
                 onRequestLeaveMembership={(hostId) => setPendingAction({ type: "leave-membership", userId: hostId })}
                 onLeaveMembership={onLeaveMembership ? handleLeaveMembership : undefined}
                 searchQuery={debouncedSearchQuery}
+                localUserId={localUserId}
               />
             </div>
           ) : null}

@@ -6,6 +6,7 @@ import { sendCloudStreamSignal } from "@services/tauri";
 import { useAppInitialization } from "@hooks/useAppInitialization";
 import { useProfileSession, useProfileSessionHydration } from "@hooks/useProfileSession";
 import { useConfig } from "@hooks/useConfig";
+import { TitleBar } from "@components/layout/TitleBar";
 
 // EXPERIMENTAL: Stream viewer window used for development/testing only.
 
@@ -298,7 +299,8 @@ export function StreamViewerPage() {
   }, [hostUserId, localUserId, streamId]);
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-background px-6 py-10">
+    <div className="flex min-h-dvh items-center justify-center bg-background px-6 pt-20 pb-10">
+      <TitleBar />
       <div className="w-full max-w-3xl rounded-2xl border border-default-200/80 bg-default-50/35 p-6 shadow-xl">
         <div className="mb-4 flex items-center gap-2 text-foreground">
           <MonitorPlay className="h-5 w-5" />

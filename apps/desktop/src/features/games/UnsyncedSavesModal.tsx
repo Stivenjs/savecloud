@@ -1,7 +1,7 @@
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, Tooltip, Skeleton } from "@heroui/react";
 import { Archive, CloudUpload } from "lucide-react";
-import { useQueries } from "@tanstack/react-query";
-import { previewUpload } from "@services/tauri";
+import { useQuery } from "@tanstack/react-query";
+import { previewUploadBatch } from "@services/tauri";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { isGameTooLargeForSync } from "@utils/packageRecommendation";
 import { useMemo } from "react";
@@ -26,33 +26,28 @@ export function UnsyncedSavesModal({
   isLoadingAll = false,
   loadingGameId = null,
 }: UnsyncedSavesModalProps) {
-  const previewQueries = useQueries({
-    queries: gameIds.map((gameId) => ({
-      queryKey: ["unsynced-preview", gameId],
-      queryFn: () => previewUpload(gameId),
-      enabled: isOpen,
-      staleTime: 5 * 60 * 1000,
-      retry: false,
-    })),
+  const { data: previewsMap = {}, isPending: isLoadingPreviews } = useQuery({
+    queryKey: ["unsynced-previews-batch", gameIds],
+    queryFn: () => previewUploadBatch(gameIds),
+    enabled: isOpen && gameIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 
   const largeGameIds = useMemo(() => {
-    const allSettled = previewQueries.every((q) => !q.isPending);
-    if (!allSettled) return new Set<string>();
+    if (isLoadingPreviews) return new Set<string>();
 
     return new Set(
-      gameIds.filter((_, i) => {
-        const data = previewQueries[i]?.data;
+      gameIds.filter((gameId) => {
+        const data = previewsMap[gameId];
         return data && isGameTooLargeForSync(data.fileCount, data.totalSizeBytes);
       })
     );
-  }, [gameIds, previewQueries]);
+  }, [gameIds, previewsMap, isLoadingPreviews]);
 
   if (gameIds.length === 0) return null;
 
   const hasPerGameActions = typeof onUploadGame === "function" && typeof onFullBackupGame === "function";
-
-  const isLoadingPreviews = previewQueries.some((q) => q.isPending);
 
   return (
     <Modal isOpen={isOpen} onOpenChange={(open) => !open && onClose()} size="lg" scrollBehavior="inside">
@@ -87,9 +82,9 @@ export function UnsyncedSavesModal({
             <div className="space-y-2">
               <p className="text-sm font-medium text-foreground">Por juego</p>
               <ul className="flex flex-col gap-1.5">
-                {gameIds.map((gameId, i) => {
+                {gameIds.map((gameId) => {
                   const busy = loadingGameId === gameId;
-                  const previewPending = previewQueries[i]?.isPending ?? true;
+                  const previewPending = isLoadingPreviews;
                   const isLarge = largeGameIds.has(gameId);
 
                   return (

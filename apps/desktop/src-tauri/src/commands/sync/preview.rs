@@ -45,6 +45,54 @@ pub async fn preview_upload(game_id: String) -> Result<PreviewUploadDto, String>
     Ok(result)
 }
 
+/// Previsualiza qué archivos se subirían para varios juegos en lote.
+#[tauri::command]
+pub async fn preview_upload_batch(
+    game_ids: Vec<String>,
+) -> Result<std::collections::HashMap<String, PreviewUploadDto>, String> {
+    let cfg = crate::config::load_config();
+    let mut resolved_games = Vec::new();
+    for game_id in game_ids {
+        if let Some(game) = cfg
+            .games
+            .iter()
+            .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+        {
+            resolved_games.push((game_id, game.clone()));
+        }
+    }
+
+    let result = tokio::task::spawn_blocking(move || {
+        let mut map = std::collections::HashMap::new();
+        for (game_id, game) in resolved_games {
+            let files = path_utils::list_all_files_with_mtime(&game.paths);
+            let total_size: u64 = files.iter().map(|(_, _, _, s)| s).sum();
+            let preview_files: Vec<PreviewFileDto> = files
+                .into_iter()
+                .map(|(_, rel, _, size)| PreviewFileDto {
+                    filename: rel,
+                    size,
+                    local_newer: None,
+                })
+                .collect();
+
+            map.insert(
+                game_id,
+                PreviewUploadDto {
+                    file_count: preview_files.len() as u32,
+                    total_size_bytes: total_size,
+                    files: preview_files,
+                },
+            );
+        }
+        map
+    })
+    .await
+    .map_err(|e| format!("Error en tarea de preview_upload_batch: {e}"))?;
+
+    Ok(result)
+}
+
 /// Previsualiza qué archivos se descargarían y cuáles conflictuarían con locales más recientes.
 #[tauri::command]
 pub async fn preview_download(game_id: String) -> Result<PreviewDownloadDto, String> {

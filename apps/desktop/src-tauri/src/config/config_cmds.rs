@@ -1045,6 +1045,66 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<FriendProfileDt
     Ok(profile)
 }
 
+/// Realiza solicitudes pasivas en lote para parsear los bloques públicos alojados por varios usuarios.
+#[tauri::command]
+pub async fn get_friends_configs(
+    friend_user_ids: Vec<String>,
+) -> Result<std::collections::HashMap<String, Option<FriendProfileDto>>, String> {
+    let ctx = resolve_api_context()?;
+
+    let futures = friend_user_ids.into_iter().map(|id| {
+        let friend_id = id.trim().to_string();
+        let ctx = ctx.clone();
+
+        async move {
+            if friend_id.is_empty() {
+                return (id, None);
+            }
+
+            let endpoint = format!(
+                "{}/users/{}/profile",
+                ctx.base_url.trim_end_matches('/'),
+                friend_id
+            );
+
+            let response = match crate::network::API_CLIENT
+                .get(&endpoint)
+                .header("x-api-key", &ctx.api_key)
+                .header("x-user-id", &ctx.user_id)
+                .send()
+                .await
+            {
+                Ok(resp) => resp,
+                Err(_) => return (id, None),
+            };
+
+            if response.status().as_u16() == 404 {
+                return (id, None);
+            }
+
+            if !response.status().is_success() {
+                return (id, None);
+            }
+
+            let profile = match response.json::<FriendProfileDto>().await {
+                Ok(p) => p,
+                Err(_) => return (id, None),
+            };
+
+            (id, Some(profile))
+        }
+    });
+
+    let results = futures_util::future::join_all(futures).await;
+
+    let mut map = std::collections::HashMap::new();
+    for (id, config) in results {
+        map.insert(id, config);
+    }
+
+    Ok(map)
+}
+
 /// Anexa en bucle una matriz serializada enviada por la interfaz correspondiente al perfil amigo.
 #[tauri::command]
 pub fn add_games_from_friend(friend_games: Vec<GameDto>) -> Result<usize, String> {

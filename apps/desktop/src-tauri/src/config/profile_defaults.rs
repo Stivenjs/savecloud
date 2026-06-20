@@ -1,9 +1,9 @@
-use super::profile_storage::load_settings_raw;
+use super::profile_storage::load_settings_for_profile;
 use super::profiles::{Profile, ProfilesIndex, DEFAULT_PROFILE_ID};
 use chrono::Utc;
 
 pub fn build_default_profile() -> Profile {
-    let settings = load_settings_raw();
+    let settings = load_settings_for_profile(DEFAULT_PROFILE_ID);
     let now = Utc::now().timestamp();
 
     Profile {
@@ -32,11 +32,30 @@ pub fn build_default_profile() -> Profile {
 }
 
 pub fn ensure_default_profile(index: &mut ProfilesIndex) -> bool {
-    if index.get_profile(DEFAULT_PROFILE_ID).is_some() {
+    if let Some(profile) = index.get_profile_mut(DEFAULT_PROFILE_ID) {
+        let settings = load_settings_for_profile(DEFAULT_PROFILE_ID);
+        profile.local_user_id = settings.user_id.unwrap_or_default();
+        profile.api_base_url = settings.api_base_url.unwrap_or_default();
+        profile.ws_base_url = settings.ws_base_url.unwrap_or_default();
+        profile.profile_avatar_url = settings.profile_avatar;
+        profile.profile_background = settings.profile_background;
+        profile.profile_frame = settings.profile_frame;
+        profile.cloud_host_api_base_urls = settings.cloud_host_api_base_urls;
+        profile.cloud_host_ws_base_urls = settings.cloud_host_ws_base_urls;
+        profile.custom_scan_paths = settings.custom_scan_paths;
+        profile.keep_backups_per_game = settings.keep_backups_per_game;
+        profile.full_backup_streaming = settings.full_backup_streaming;
+        profile.full_backup_streaming_dry_run = settings.full_backup_streaming_dry_run;
+        profile.full_backup_packaged_compression_level = settings.full_backup_packaged_compression_level;
+        profile.default_source_download_dir = settings.default_source_download_dir;
+        profile.share_visual_profile_with_hosts = settings.share_visual_profile_with_hosts;
+        profile.share_visual_profile_with_members = settings.share_visual_profile_with_members;
+        profile.auto_extract_downloads = settings.auto_extract_downloads;
+
         if index.active_profile_id.trim().is_empty() {
             index.active_profile_id = DEFAULT_PROFILE_ID.to_string();
         }
-        return false;
+        return true;
     }
 
     index.profiles.insert(0, build_default_profile());

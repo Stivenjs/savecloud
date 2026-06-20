@@ -260,6 +260,12 @@ export async function getFriendConfig(friendUserId: string): Promise<Config> {
   return invoke<Config>("get_friend_config", { friendUserId });
 }
 
+/** Obtiene las configuraciones de varios amigos desde la nube en un solo lote (batch) */
+export async function getFriendsConfigs(friendUserIds: string[]): Promise<Record<string, Config | null>> {
+  if (friendUserIds.length === 0) return {};
+  return invoke<Record<string, Config | null>>("get_friends_configs", { friendUserIds });
+}
+
 /** Añade a tu config solo los juegos del amigo que no tienes (por id). No modifica apiKey ni userId. */
 export async function addGamesFromFriend(
   friendGames: readonly {
@@ -968,6 +974,12 @@ export interface PreviewDownload {
 /** Previsualiza qué archivos se subirían */
 export async function previewUpload(gameId: string): Promise<PreviewUpload> {
   return invoke<PreviewUpload>("preview_upload", { gameId });
+}
+
+/** Previsualiza qué archivos se subirían para varios juegos en lote (batch) */
+export async function previewUploadBatch(gameIds: string[]): Promise<Record<string, PreviewUpload>> {
+  if (gameIds.length === 0) return {};
+  return invoke<Record<string, PreviewUpload>>("preview_upload_batch", { gameIds });
 }
 
 /** Previsualiza qué archivos se descargarían */

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Spinner } from "@heroui/react";
 import { LogOut } from "lucide-react";
+import { TitleBar } from "@components/layout/TitleBar";
 
 /**
  * Solo informativa. El tray programa el cierre en Rust; avisamos cuando React montó
@@ -14,6 +15,7 @@ export function ShutdownWindowPage() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background text-foreground">
+      <TitleBar />
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-linear-to-br from-background via-default-50/55 to-default-100/80 dark:from-default-200/10 dark:via-default-100/5 dark:to-background"

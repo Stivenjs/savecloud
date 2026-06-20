@@ -47,6 +47,8 @@ pub fn run() {
     load_dotenv();
     init_logging();
 
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let mut builder = tauri::Builder::default();
 
     #[cfg(desktop)]
