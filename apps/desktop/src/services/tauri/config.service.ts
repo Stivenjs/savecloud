@@ -976,6 +976,12 @@ export async function previewUpload(gameId: string): Promise<PreviewUpload> {
   return invoke<PreviewUpload>("preview_upload", { gameId });
 }
 
+/** Previsualiza qué archivos se subirían para varios juegos en lote (batch) */
+export async function previewUploadBatch(gameIds: string[]): Promise<Record<string, PreviewUpload>> {
+  if (gameIds.length === 0) return {};
+  return invoke<Record<string, PreviewUpload>>("preview_upload_batch", { gameIds });
+}
+
 /** Previsualiza qué archivos se descargarían */
 export async function previewDownload(gameId: string): Promise<PreviewDownload> {
   return invoke<PreviewDownload>("preview_download", { gameId });

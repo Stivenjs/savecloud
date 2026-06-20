@@ -82,6 +82,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::commands::sync::full_backup::delete_cloud_backup,
         crate::commands::sync::full_backup::rename_cloud_backup,
         crate::commands::sync::preview::preview_upload,
+        crate::commands::sync::preview::preview_upload_batch,
         crate::commands::sync::preview::preview_download,
         crate::commands::stats::game_stats::get_game_stats,
         crate::commands::stats::game_stats::get_game_save_graph,
