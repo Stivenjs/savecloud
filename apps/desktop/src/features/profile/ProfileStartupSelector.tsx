@@ -6,6 +6,7 @@ import Avatar from "react-nice-avatar";
 import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import type { ProfileSessionSource } from "@store/ProfileSessionStore";
 import { buildNiceAvatarConfig, generateNiceAvatarSeed, serializeNiceAvatarConfig } from "@features/profile/niceAvatar";
+import { TitleBar } from "@components/layout/TitleBar";
 
 export interface StartupProfileOption {
   readonly id: string;
@@ -65,13 +66,14 @@ export function ProfileStartupSelector({
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-background text-foreground">
+      <TitleBar />
       <div className="absolute inset-0 bg-linear-to-br from-background via-default-50/55 to-default-100/80 dark:from-default-200/10 dark:via-default-100/5 dark:to-background" />
       <div className="absolute inset-0 backdrop-blur-sm" />
 
       <motion.div
         layout="position"
         transition={{ type: "spring", stiffness: 140, damping: 22, mass: 0.95 }}
-        className="relative mx-auto flex min-h-dvh w-full max-w-5xl items-center justify-center px-6 py-10">
+        className="relative mx-auto flex min-h-dvh w-full max-w-5xl items-center justify-center px-6 pt-20 pb-10">
         <motion.section
           layout="position"
           transition={{ type: "spring", stiffness: 145, damping: 21, mass: 0.92 }}

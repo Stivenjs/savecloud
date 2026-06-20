@@ -11,8 +11,11 @@ function normalizeLocalPath(p: string): string {
  */
 export function resolveProfileAsset(src: string | undefined | null): string | null {
   if (!src?.trim()) return null;
-  const s = src.trim();
+  let s = src.trim();
   if (s.startsWith("http://") || s.startsWith("https://") || s.startsWith("data:") || s.startsWith("blob:")) {
+    if (s.startsWith("data:")) {
+      return s.replace(/[\r\n\s]+/g, "");
+    }
     return s;
   }
   if (!isTauri()) {
@@ -29,5 +32,6 @@ export function resolveProfileAsset(src: string | undefined | null): string | nu
 export function isProfileVideoSource(raw: string | undefined | null): boolean {
   if (!raw?.trim()) return false;
   const s = raw.trim().toLowerCase();
+  if (s.startsWith("data:image/")) return false;
   return /\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/.test(s);
 }

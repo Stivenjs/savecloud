@@ -290,6 +290,8 @@ export function useCloudStreamsModal({ isOpen, onClose, modalRef }: UseCloudStre
       height: 760,
       url,
       resizable: true,
+      decorations: false,
+      transparent: true,
     });
 
     viewerWindow.once("tauri://error", () => {

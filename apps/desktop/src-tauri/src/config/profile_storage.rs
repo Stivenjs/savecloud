@@ -203,6 +203,19 @@ pub fn load_settings_raw() -> AppSettings {
         .unwrap_or_default()
 }
 
+pub fn load_settings_for_profile(profile_id: &str) -> AppSettings {
+    if let Some(path) = profile_file_path(profile_id, paths::SETTINGS_FILE_NAME) {
+        if path.exists() {
+            if let Ok(content) = fs::read_to_string(path) {
+                if let Ok(settings) = serde_json::from_str::<AppSettings>(&content) {
+                    return settings;
+                }
+            }
+        }
+    }
+    load_settings_raw()
+}
+
 pub fn load_settings() -> AppSettings {
     let active_profile = active_profile();
     let active_profile_ref = active_profile.as_ref();
