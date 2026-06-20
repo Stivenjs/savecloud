@@ -5,6 +5,8 @@ import { Check, Cloud, Copy, LogOut, Mail, Plus, RefreshCcw, Trash2, UserRound, 
 import type { CloudInvite, CloudMembership } from "@services/tauri/invites.service";
 import { listCloudPresence } from "@services/tauri/invites.service";
 import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
+import { getFriendsConfigs } from "@services/tauri";
+import { resolveProfileAsset } from "@utils/profileMedia";
 import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
 import {
   CloudMembershipActionConfirmModal,
@@ -115,6 +117,59 @@ export function FriendsInvitesTab({
 
   const getPresence = (userId: string) => presenceByUser.get(userId);
 
+  const localUserId = (ourConfig?.userId || "").trim();
+
+  const ownMemberMemberships = useMemo(() => {
+    return memberMemberships.filter((m) => m.memberUserId === localUserId);
+  }, [memberMemberships, localUserId]);
+
+  const peerUserIds = useMemo(() => {
+    const uniqueIds = new Set<string>();
+
+    for (const m of memberMemberships) {
+      if (m.active) {
+        uniqueIds.add(m.hostUserId);
+        uniqueIds.add(m.memberUserId);
+      }
+    }
+    for (const m of hostMemberships) {
+      if (m.active) {
+        uniqueIds.add(m.memberUserId);
+      }
+    }
+    for (const invite of pendingInvites) {
+      uniqueIds.add(invite.hostUserId);
+    }
+
+    if (localUserId) {
+      uniqueIds.delete(localUserId);
+    }
+
+    return Array.from(uniqueIds).sort();
+  }, [hostMemberships, memberMemberships, pendingInvites, localUserId]);
+
+  const { data: memberAvatarByUser = new Map<string, string | null>() } = useQuery({
+    queryKey: ["cloud-members-avatars", peerUserIds],
+    enabled: peerUserIds.length > 0,
+    queryFn: async () => {
+      try {
+        const configsMap = await getFriendsConfigs(peerUserIds);
+        const avatars = peerUserIds.map((userId) => {
+          const friendConfig = configsMap[userId];
+          const avatar =
+            friendConfig && friendConfig.shareVisualProfileWithHosts
+              ? (friendConfig.profileAvatar?.trim() ?? null)
+              : null;
+          return [userId, avatar] as const;
+        });
+
+        return new Map<string, string | null>(avatars);
+      } catch {
+        return new Map<string, string | null>(peerUserIds.map((userId) => [userId, null]));
+      }
+    },
+  });
+
   const handleConfirmCloudAction = async () => {
     if (!pendingCloudAction) return;
 
@@ -147,7 +202,7 @@ export function FriendsInvitesTab({
               Pendientes: {pendingInvites.length}
             </Chip>
             <Chip size="sm" variant="flat" color="secondary">
-              Nubes compartidas: {memberMemberships.length}
+              Nubes compartidas: {ownMemberMemberships.length}
             </Chip>
             <Chip size="sm" variant="flat" color="warning">
               Miembros en tu nube: {hostMemberships.length}
@@ -283,7 +338,12 @@ export function FriendsInvitesTab({
                       key={invite.id}
                       className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-default-200 bg-default-50 p-3">
                       <div className="flex items-center gap-3">
-                        <Avatar name={invite.hostUserId} size="sm" className="shrink-0" color="primary" isBordered />
+                        <Avatar
+                          name={invite.hostUserId}
+                          size="sm"
+                          className="shrink-0"
+                          src={resolveProfileAsset(memberAvatarByUser.get(invite.hostUserId) ?? undefined) ?? undefined}
+                        />
                         <div>
                           <p className="text-sm font-medium">{invite.hostUserId}</p>
                           <p className="text-xs text-default-400">
@@ -338,7 +398,7 @@ export function FriendsInvitesTab({
                     onPress={() => void handleUseHostCloud(null)}>
                     Mi nube
                   </Button>
-                  {memberMemberships.map((m) => (
+                  {ownMemberMemberships.map((m) => (
                     <Button
                       key={`active-${m.hostUserId}`}
                       size="sm"
@@ -356,19 +416,24 @@ export function FriendsInvitesTab({
                   <p className="mb-2 text-xs font-medium uppercase tracking-wide text-default-500">
                     Nubes donde eres miembro
                   </p>
-                  {memberMemberships.length === 0 ? (
+                  {ownMemberMemberships.length === 0 ? (
                     <EmptyState
                       message="No perteneces a ninguna nube compartida."
                       icon={<Cloud className="h-5 w-5 text-default-400" />}
                     />
                   ) : (
                     <div className="space-y-2">
-                      {memberMemberships.map((m) => (
+                      {ownMemberMemberships.map((m) => (
                         <div
                           key={`${m.hostUserId}-${m.memberUserId}`}
                           className="flex flex-col gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex min-w-0 items-center gap-2">
-                            <Avatar name={m.hostUserId} size="sm" color="secondary" />
+                            <Avatar
+                              name={m.hostUserId}
+                              size="sm"
+                              className="shrink-0"
+                              src={resolveProfileAsset(memberAvatarByUser.get(m.hostUserId) ?? undefined) ?? undefined}
+                            />
                             <div className="min-w-0">
                               <p className="truncate text-xs font-medium">{m.hostUserId}</p>
                               <p className="text-[10px] text-default-400">
@@ -434,7 +499,12 @@ export function FriendsInvitesTab({
                         key={`${m.hostUserId}-${m.memberUserId}`}
                         className="flex flex-col gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex min-w-0 items-center gap-2">
-                          <Avatar name={m.memberUserId} size="sm" color="danger" />
+                          <Avatar
+                            name={m.memberUserId}
+                            size="sm"
+                            className="shrink-0"
+                            src={resolveProfileAsset(memberAvatarByUser.get(m.memberUserId) ?? undefined) ?? undefined}
+                          />
                           <div className="min-w-0">
                             <p className="truncate text-xs font-medium">{m.memberUserId}</p>
                             <p className="text-[10px] text-default-400">
