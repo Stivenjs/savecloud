@@ -128,11 +128,35 @@ export async function registerInviteRoutes(
   app.get("/invites/memberships", async (request, reply: FastifyReply) => {
     try {
       const userId = getUserId(request);
-      const [hostMemberships, memberMemberships] = await Promise.all([
+      const [hostMemberships, ownMemberMemberships] = await Promise.all([
         deps.cloudInviteRepository.listMembershipsForHost(userId),
         deps.cloudInviteRepository.listMembershipsForMember(userId),
       ]);
-      return reply.send({ hostMemberships, memberMemberships });
+
+      const activeOwnMemberships = ownMemberMemberships.filter((m) => m.active);
+      const hostIds = Array.from(new Set(activeOwnMemberships.map((m) => m.hostUserId)));
+
+      const coMembershipsList = await Promise.all(
+        hostIds.map((hostId) => deps.cloudInviteRepository.listMembershipsForHost(hostId))
+      );
+
+      const memberMembershipsMap = new Map<string, (typeof ownMemberMemberships)[number]>();
+
+      for (const m of ownMemberMemberships) {
+        memberMembershipsMap.set(`${m.hostUserId}-${m.memberUserId}`, m);
+      }
+
+      for (const list of coMembershipsList) {
+        for (const m of list) {
+          if (m.active) {
+            memberMembershipsMap.set(`${m.hostUserId}-${m.memberUserId}`, m);
+          }
+        }
+      }
+
+      const mergedMemberMemberships = Array.from(memberMembershipsMap.values());
+
+      return reply.send({ hostMemberships, memberMemberships: mergedMemberMemberships });
     } catch (err) {
       return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
     }

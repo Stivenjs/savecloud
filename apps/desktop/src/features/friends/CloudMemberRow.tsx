@@ -44,7 +44,9 @@ export function CloudMemberRow({
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium text-foreground">{userId}</p>
           <div className="flex items-center gap-1">
-            <p className="truncate text-[10px] text-default-500">{isHost ? "Miembro" : "Anfitrión"}</p>
+            <p className="truncate text-[10px] text-default-500">
+              {isHost ? "Miembro" : userId === membership.hostUserId ? "Anfitrión" : "Miembro"}
+            </p>
             {gameName && status === "playing" && <p className="truncate text-[10px] text-default-400">· {gameName}</p>}
           </div>
         </div>
@@ -53,6 +55,7 @@ export function CloudMemberRow({
       <div className="flex items-center gap-2 shrink-0">
         <PresenceStatusChip loading={loadingPresence} status={status} />
         <CloudMemberActions
+          userId={userId}
           membership={membership}
           isHost={isHost}
           isLoading={isActionLoading || loadingPresence}

@@ -4,6 +4,7 @@ import { Eye, LogOut, Trash2, MoreVertical } from "lucide-react";
 import type { CloudMembership } from "@services/tauri/invites.service";
 
 interface CloudMemberActionsProps {
+  userId: string;
   membership: CloudMembership;
   isHost: boolean;
   isLoading: boolean;
@@ -15,6 +16,7 @@ interface CloudMemberActionsProps {
 }
 
 export function CloudMemberActions({
+  userId,
   membership,
   isHost,
   isLoading,
@@ -25,7 +27,6 @@ export function CloudMemberActions({
   onLeaveMembership,
 }: CloudMemberActionsProps) {
   const [isActionLoading, setIsActionLoading] = useState(false);
-  const userId = isHost ? membership.memberUserId : membership.hostUserId;
 
   const actions = useMemo(() => {
     const items: Array<{ key: string; label: string; icon: React.ReactNode; color?: string; action: () => void }> = [
@@ -59,7 +60,7 @@ export function CloudMemberActions({
           })();
         },
       });
-    } else if (!isHost && onLeaveMembership) {
+    } else if (!isHost && onLeaveMembership && userId === membership.hostUserId) {
       items.push({
         key: "leave",
         label: "Dejar membresía",

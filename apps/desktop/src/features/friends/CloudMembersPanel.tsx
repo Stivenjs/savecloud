@@ -94,8 +94,11 @@ export function CloudMembersPanel({
   const localProfileAvatar = resolveProfileAsset(config?.profileAvatar ?? undefined);
   const localPresence = localUserId ? presenceByUser.get(localUserId) : undefined;
 
-  const hostMemberships = memberships?.hostMemberships ?? [];
-  const memberMemberships = memberships?.memberMemberships ?? [];
+  const hostMemberships = useMemo(() => (memberships?.hostMemberships ?? []).filter((m) => m.active), [memberships]);
+  const memberMemberships = useMemo(
+    () => (memberships?.memberMemberships ?? []).filter((m) => m.active),
+    [memberships]
+  );
   const hasAnyMembers = hostMemberships.length > 0 || memberMemberships.length > 0;
 
   const cloudPeerIds = useMemo(() => {
@@ -106,6 +109,7 @@ export function CloudMembersPanel({
     }
     for (const membership of memberMemberships) {
       uniqueIds.add(membership.hostUserId);
+      uniqueIds.add(membership.memberUserId);
     }
 
     if (localUserId) {
@@ -265,6 +269,7 @@ export function CloudMembersPanel({
                 onRequestRemoveMember={(userId) => setPendingAction({ type: "remove-member", userId })}
                 onRemoveMember={onRemoveMember ? handleRemoveMember : undefined}
                 searchQuery={debouncedSearchQuery}
+                localUserId={localUserId}
               />
 
               <CloudMembersSection
@@ -279,6 +284,7 @@ export function CloudMembersPanel({
                 onRequestLeaveMembership={(hostId) => setPendingAction({ type: "leave-membership", userId: hostId })}
                 onLeaveMembership={onLeaveMembership ? handleLeaveMembership : undefined}
                 searchQuery={debouncedSearchQuery}
+                localUserId={localUserId}
               />
             </div>
           ) : null}
