@@ -127,7 +127,7 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
 
   if (!hasSyncConfig) {
     return (
-      <Card className="border border-default-200/80 bg-default-50/40 dark:bg-default-100/10">
+      <Card className="border border-default-200/70 shadow-sm dark:border-default-100/15">
         <CardBody className="gap-3 p-5">
           <p className="text-sm text-default-600">
             No hay cuenta de nube configurada en este perfil. Configura la API en «Cuenta» para ver estadísticas y
@@ -162,8 +162,8 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
         </Button>
       </div>
 
-      <div className="w-full overflow-hidden rounded-xl bg-default-50">
-        <div className="grid grid-cols-1 divide-y divide-default-200/80 text-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+      <div className="w-full overflow-hidden rounded-xl border border-default-200/70 bg-content1 shadow-sm dark:border-default-100/15">
+        <div className="grid grid-cols-1 divide-y divide-default-200/80 text-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0 dark:divide-default-100/15">
           <div className="flex flex-col gap-1 px-4 py-3.5">
             <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-default-500">
               <Gamepad2 size={12} className="text-primary" />
@@ -225,7 +225,7 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
         </div>
       </div>
 
-      <Card className="border border-default-200/80 bg-default-50/30 dark:bg-default-100/10">
+      <Card className="border border-default-200/70 shadow-sm dark:border-default-100/15">
         <CardBody className="flex flex-col gap-3 p-0">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-default-200/70 px-4 py-3 dark:border-default-100/15">
             <div>

@@ -134,7 +134,7 @@ export function GameInventorySettingsCard() {
   const canRegister = Boolean(selectedSteam && folderPath && sharing);
 
   return (
-    <Card className="border border-default-200/80 bg-default-50/30 dark:bg-default-100/10">
+    <Card className="border border-default-200/70 shadow-sm dark:border-default-100/15">
       <CardBody className="gap-4 p-5">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary/10">
