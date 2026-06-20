@@ -427,10 +427,8 @@ export function GameDetailPage() {
                     if (next !== undefined) setSelectedSourceKey(String(next));
                   }}>
                   {sourceCandidates.map((c) => (
-                    <SelectItem
-                      key={sourceCandidateKey(c)}
-                      textValue={`${c.source_name} ${c.item_title} ${Math.round(c.score * 100)}`}>
-                      {c.source_name} — {c.item_title} ({Math.round(c.score * 100)}%)
+                    <SelectItem key={sourceCandidateKey(c)} textValue={`${c.source_name} — ${c.item_title}`}>
+                      {c.source_name} — {c.item_title}
                     </SelectItem>
                   ))}
                 </Select>

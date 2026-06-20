@@ -18,7 +18,7 @@ import { toastError, toastSuccess } from "@utils/toast";
 import { formatRelativeDate } from "@utils/format";
 import { formatGameDisplayName } from "@utils/gameImage";
 
-export const INVENTORY_LOCAL_QUERY_KEY = ["inventory-local"] as const;
+const INVENTORY_LOCAL_QUERY_KEY = ["inventory-local"] as const;
 
 export function GameInventorySettingsCard() {
   const queryClient = useQueryClient();
