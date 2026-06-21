@@ -775,6 +775,8 @@ pub async fn force_refresh_steam_app_details(
         return Err("App ID inválido".to_string());
     };
 
+    steam_api_cache().invalidate(&app_id);
+
     let result = fetch_steam_app_details_from_store(&app_id).await?;
 
     steam_api_cache().insert_details(app_id.clone(), result.clone());

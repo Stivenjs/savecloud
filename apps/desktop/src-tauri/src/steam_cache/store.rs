@@ -66,4 +66,10 @@ impl SteamApiCache {
         self.details
             .insert(app_id, normalize_steam_app_details(value));
     }
+
+    /// Descarta los metadatos y medios cacheados en memoria para un juego.
+    pub fn invalidate(&self, app_id: &str) {
+        self.media.invalidate(app_id);
+        self.details.invalidate(app_id);
+    }
 }
