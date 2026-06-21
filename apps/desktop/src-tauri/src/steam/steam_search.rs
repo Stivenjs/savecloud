@@ -766,6 +766,41 @@ pub async fn get_steam_app_details(
     Ok(result)
 }
 
+#[tauri::command]
+pub async fn force_refresh_steam_app_details(
+    db: State<'_, AppDb>,
+    app_id: String,
+) -> Result<SteamAppDetails, String> {
+    let Some(app_id) = normalize_steam_app_id(&app_id) else {
+        return Err("App ID inválido".to_string());
+    };
+
+    let result = fetch_steam_app_details_from_store(&app_id).await?;
+
+    steam_api_cache().insert_details(app_id.clone(), result.clone());
+    steam_api_cache().insert_media(app_id.clone(), result.media.clone());
+
+    let db_write = db.inner().clone();
+    let app_id_for_db = app_id.clone();
+    let details_for_db = result.clone();
+    let media_for_db = result.media.clone();
+
+    let db_task = tokio::task::spawn_blocking(move || {
+        db_write.with_conn(|c| {
+            upsert_catalog_details_from_store(c, &app_id_for_db, &details_for_db)?;
+            upsert_persistent_media_cache_batch(c, &[(app_id_for_db, media_for_db)])?;
+            Ok(())
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e: SqliteError| e.to_string());
+
+    let _ = db_task;
+
+    Ok(result)
+}
+
 #[cfg(test)]
 mod media_cache_tests {
     use super::*;

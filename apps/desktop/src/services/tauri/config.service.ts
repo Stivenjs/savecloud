@@ -137,6 +137,11 @@ export async function getSteamAppDetails(appId: string): Promise<SteamAppDetails
   return invoke<SteamAppDetailsResult>("get_steam_app_details", { appId });
 }
 
+/** Fuerza la actualización de la ficha de un juego de Steam desde la Store API y actualiza SQLite. */
+export async function forceRefreshSteamAppDetails(appId: string): Promise<SteamAppDetailsResult> {
+  return invoke<SteamAppDetailsResult>("force_refresh_steam_app_details", { appId });
+}
+
 /** Proceso visible en el selector manual (nombre como en el Administrador de tareas + icono del .exe en Windows). */
 export interface RunningProcessPickRow {
   name: string;

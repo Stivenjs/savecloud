@@ -18,6 +18,7 @@ import { Button, Select, SelectItem, Spinner, Tab, Tabs, Skeleton } from "@herou
 import { ArrowLeft, Cpu, Gamepad2, LayoutList, ScrollText } from "lucide-react";
 import { formatGameDisplayName } from "@utils/gameImage";
 import {
+  forceRefreshSteamAppDetails,
   launchGame,
   openSaveFolder,
   removeGame,
@@ -227,6 +228,25 @@ export function GameDetailPage() {
     [navigate, queryClient]
   );
 
+  const handleRefreshDetails = useCallback(
+    async (g: ConfiguredGame) => {
+      const appId = steamAppId || g.steamAppId;
+      if (!appId) return;
+      try {
+        await forceRefreshSteamAppDetails(appId);
+        toastSuccess("Ficha de Steam actualizada", "Los detalles se han actualizado correctamente.");
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["steam-app-details", appId] }),
+          queryClient.invalidateQueries({ queryKey: ["steam-appdetails-media", appId] }),
+          queryClient.invalidateQueries({ queryKey: ["steam-appdetails-media-batch"] }),
+        ]);
+      } catch (e) {
+        toastError("Error al actualizar", e instanceof Error ? e.message : "Error inesperado");
+      }
+    },
+    [steamAppId, queryClient]
+  );
+
   const showRequirementsTab = steamDetails ? hasSteamRequirements(steamDetails) : false;
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
   const nameForMatch = useMemo(() => {
@@ -392,6 +412,7 @@ export function GameDetailPage() {
         onRecoverFromCloud={isSteamCatalogOnly ? undefined : (g) => setGameToRestoreBackup(g)}
         onShare={!isSteamCatalogOnly && hasSyncConfig ? handleShare : undefined}
         onRemove={isSteamCatalogOnly ? undefined : handleRemove}
+        onRefreshDetails={handleRefreshDetails}
         onFullBackupUpload={!isSteamCatalogOnly && hasSyncConfig ? setGameToFullBackupConfirm : undefined}
       />
 

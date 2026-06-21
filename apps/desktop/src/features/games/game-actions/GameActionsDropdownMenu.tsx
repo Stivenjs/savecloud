@@ -9,6 +9,7 @@ import {
   Link2,
   Magnet,
   Pencil,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import type { GameActionsMenuModelProps } from "@features/games/game-actions/gameActionMenuModel";
@@ -110,6 +111,13 @@ export function GameActionsDropdownMenu(props: GameActionsMenuModelProps) {
         className={isGameActionItemHidden("share", props) ? "hidden" : ""}
         startContent={<Link2 size={16} />}>
         Compartir link
+      </DropdownItem>
+
+      <DropdownItem
+        key="refreshDetails"
+        className={isGameActionItemHidden("refreshDetails", props) ? "hidden" : ""}
+        startContent={<RefreshCw size={16} />}>
+        Actualizar datos de Steam
       </DropdownItem>
 
       <DropdownItem
