@@ -90,6 +90,18 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
             .map_err(|e| e.to_string())?
             .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
 
+    let cfg = crate::config::load_config();
+    let mut priority_ids = trending_ids;
+    for g in cfg.games {
+        if let Some(ref sa_id) = g.steam_app_id {
+            if let Ok(id) = sa_id.trim().parse::<u32>() {
+                if id > 0 && !priority_ids.contains(&id) {
+                    priority_ids.push(id);
+                }
+            }
+        }
+    }
+
     let priority_url_res = crate::commands::sync::api::api_request(
         &ctx.base_url,
         &ctx.user_id,
@@ -112,10 +124,10 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
     let priority_upload: SteamSeedUploadUrlResponse =
         priority_url_res.json().await.map_err(|e| e.to_string())?;
 
-    let priority_payload = if trending_ids.is_empty() {
+    let priority_payload = if priority_ids.is_empty() {
         String::new()
     } else {
-        let mut s = trending_ids
+        let mut s = priority_ids
             .iter()
             .map(|id| id.to_string())
             .collect::<Vec<_>>()
@@ -143,7 +155,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
     Ok(SteamSeedExportResultDto {
         app_ids_exported: app_ids.len() as u32,
         parts_uploaded,
-        priority_ids_uploaded: trending_ids.len() as u32,
+        priority_ids_uploaded: priority_ids.len() as u32,
     })
 }
 

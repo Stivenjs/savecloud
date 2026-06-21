@@ -40,7 +40,7 @@ export async function collectAppIds(
       while (cursor.priorityLine < priorityLines.length && appIds.length < batchSize) {
         const id = parseAppIdLine(priorityLines[cursor.priorityLine] ?? "");
         cursor.priorityLine += 1;
-        if (id !== null && !processedSet.has(id)) appIds.push(id);
+        if (id !== null) appIds.push(id);
       }
       if (cursor.priorityLine >= priorityLines.length) cursor.priorityDone = true;
       if (appIds.length >= batchSize) break;
