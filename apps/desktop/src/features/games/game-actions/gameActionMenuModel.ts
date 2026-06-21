@@ -21,6 +21,7 @@ export interface GameActionsMenuModelProps {
   onFullBackupUpload?: (game: ConfiguredGame) => void;
   onShare?: (game: ConfiguredGame) => void;
   onRemove?: (game: ConfiguredGame) => void;
+  onRefreshDetails?: (game: ConfiguredGame) => void;
 }
 
 export function getGameActionsDisabledKeys(p: GameActionsMenuModelProps): string[] {
@@ -57,6 +58,9 @@ export async function runGameAction(key: string, game: ConfiguredGame, p: GameAc
     case "remove":
       p.onRemove?.(game);
       break;
+    case "refreshDetails":
+      p.onRefreshDetails?.(game);
+      break;
     case "source":
       if (game.sourceUrl) await openUrl(game.sourceUrl);
       break;
@@ -69,7 +73,17 @@ export async function runGameAction(key: string, game: ConfiguredGame, p: GameAc
 }
 
 export function isGameActionItemHidden(
-  item: "edit" | "torrent" | "source" | "folder" | "recoverFromCloud" | "sync" | "fullBackup" | "share" | "remove",
+  item:
+    | "edit"
+    | "torrent"
+    | "source"
+    | "folder"
+    | "recoverFromCloud"
+    | "sync"
+    | "fullBackup"
+    | "share"
+    | "remove"
+    | "refreshDetails",
   p: GameActionsMenuModelProps
 ): boolean {
   const { game, isUploadTooLarge } = p;
@@ -92,6 +106,8 @@ export function isGameActionItemHidden(
       return !p.onShare;
     case "remove":
       return !p.onRemove;
+    case "refreshDetails":
+      return !game.steamAppId || !p.onRefreshDetails;
     default:
       return true;
   }

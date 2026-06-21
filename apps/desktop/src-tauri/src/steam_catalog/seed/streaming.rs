@@ -163,6 +163,10 @@ pub async fn stream_import_batch(
         total_updated = total_updated.saturating_add(n);
     }
 
+    for (app_id, _) in &all_updates {
+        crate::steam_cache::steam_api_cache().invalidate(&app_id.to_string());
+    }
+
     Ok(total_updated)
 }
 
