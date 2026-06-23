@@ -12,6 +12,7 @@ function normalizeLocalPath(p: string): string {
 export function resolveProfileAsset(src: string | undefined | null): string | null {
   if (!src?.trim()) return null;
   let s = src.trim();
+  if (s.startsWith("nice-avatar://")) return null;
   if (s.startsWith("http://") || s.startsWith("https://") || s.startsWith("data:") || s.startsWith("blob:")) {
     if (s.startsWith("data:")) {
       return s.replace(/[\r\n\s]+/g, "");

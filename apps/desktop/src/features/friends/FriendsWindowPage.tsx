@@ -5,8 +5,10 @@ import { TitleBar } from "@components/layout/TitleBar";
 import { CloudMembersPanel } from "@features/friends/CloudMembersPanel";
 import { focusMainWindow } from "@/windows/mainWindow";
 import { requestOpenFriendProfile } from "@features/friends/friendProfileNavigation";
+import { useProfileSessionHydration } from "@hooks/useProfileSession";
 
 export function FriendsWindowPage() {
+  useProfileSessionHydration();
   const { handleRemoveMember, handleLeaveMembership } = useCloudMembersActions();
 
   const handleHideWindow = () => {
