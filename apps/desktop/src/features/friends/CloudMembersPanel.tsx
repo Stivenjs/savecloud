@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Avatar, Spinner, useDraggable } from "@heroui/react";
+import { Spinner, useDraggable } from "@heroui/react";
 import { motion } from "framer-motion";
 import { UserRound } from "lucide-react";
 import { getFriendsConfigs } from "@services/tauri";
@@ -17,7 +17,7 @@ import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRea
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { useConfig } from "@hooks/useConfig";
-import { resolveProfileAsset } from "@utils/profileMedia";
+import { ProfileAvatar } from "@features/profile";
 
 interface CloudMembersPanelProps {
   isOpen: boolean;
@@ -91,7 +91,7 @@ export function CloudMembersPanel({
   const presenceByUser = useMemo(() => new Map(cloudPresence.map((item) => [item.userId, item])), [cloudPresence]);
 
   const localUserId = (activeProfile?.localUserId || config?.userId || "").trim();
-  const localProfileAvatar = resolveProfileAsset(config?.profileAvatar ?? undefined);
+  const localRawAvatar = config?.profileAvatar;
   const localPresence = localUserId ? presenceByUser.get(localUserId) : undefined;
 
   const hostMemberships = useMemo(() => (memberships?.hostMemberships ?? []).filter((m) => m.active), [memberships]);
@@ -242,7 +242,7 @@ export function CloudMembersPanel({
                 <section className="rounded-lg border border-default-200/70 bg-default-50/35 px-2.5 py-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
-                      <Avatar name={localUserId} src={localProfileAvatar ?? undefined} size="md" className="shrink-0" />
+                      <ProfileAvatar rawAvatar={localRawAvatar} userId={localUserId} size="md" />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium text-foreground">{localUserId}</p>
                         <p className="truncate text-[11px] text-default-500">

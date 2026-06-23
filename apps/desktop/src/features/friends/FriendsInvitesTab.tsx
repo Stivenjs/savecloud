@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Avatar, Button, Chip, Divider, Input, Skeleton, Tab, Tabs } from "@heroui/react";
+import { Button, Chip, Divider, Input, Skeleton, Tab, Tabs } from "@heroui/react";
 import { Check, Cloud, Copy, LogOut, Mail, Plus, RefreshCcw, Trash2, UserRound, Eye, X } from "lucide-react";
 import type { CloudInvite, CloudMembership } from "@services/tauri/invites.service";
 import { listCloudPresence } from "@services/tauri/invites.service";
 import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
 import { getFriendsConfigs } from "@services/tauri";
-import { resolveProfileAsset } from "@utils/profileMedia";
+import { ProfileAvatar } from "@features/profile";
 import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
 import {
   CloudMembershipActionConfirmModal,
@@ -338,11 +338,10 @@ export function FriendsInvitesTab({
                       key={invite.id}
                       className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-default-200 bg-default-50 p-3">
                       <div className="flex items-center gap-3">
-                        <Avatar
-                          name={invite.hostUserId}
+                        <ProfileAvatar
+                          rawAvatar={memberAvatarByUser.get(invite.hostUserId)}
+                          userId={invite.hostUserId}
                           size="sm"
-                          className="shrink-0"
-                          src={resolveProfileAsset(memberAvatarByUser.get(invite.hostUserId) ?? undefined) ?? undefined}
                         />
                         <div>
                           <p className="text-sm font-medium">{invite.hostUserId}</p>
@@ -428,11 +427,10 @@ export function FriendsInvitesTab({
                           key={`${m.hostUserId}-${m.memberUserId}`}
                           className="flex flex-col gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex min-w-0 items-center gap-2">
-                            <Avatar
-                              name={m.hostUserId}
+                            <ProfileAvatar
+                              rawAvatar={memberAvatarByUser.get(m.hostUserId)}
+                              userId={m.hostUserId}
                               size="sm"
-                              className="shrink-0"
-                              src={resolveProfileAsset(memberAvatarByUser.get(m.hostUserId) ?? undefined) ?? undefined}
                             />
                             <div className="min-w-0">
                               <p className="truncate text-xs font-medium">{m.hostUserId}</p>
@@ -499,11 +497,10 @@ export function FriendsInvitesTab({
                         key={`${m.hostUserId}-${m.memberUserId}`}
                         className="flex flex-col gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex min-w-0 items-center gap-2">
-                          <Avatar
-                            name={m.memberUserId}
+                          <ProfileAvatar
+                            rawAvatar={memberAvatarByUser.get(m.memberUserId)}
+                            userId={m.memberUserId}
                             size="sm"
-                            className="shrink-0"
-                            src={resolveProfileAsset(memberAvatarByUser.get(m.memberUserId) ?? undefined) ?? undefined}
                           />
                           <div className="min-w-0">
                             <p className="truncate text-xs font-medium">{m.memberUserId}</p>

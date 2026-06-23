@@ -48,7 +48,16 @@ export function CloudMembershipActionConfirmModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onOpenChange={(open) => !open && onClose()} placement="center" size="md" backdrop="opaque">
+    <Modal
+      isOpen={isOpen}
+      onOpenChange={(open) => !open && onClose()}
+      placement="center"
+      size="md"
+      backdrop="opaque"
+      isDismissable={false}
+      classNames={{
+        wrapper: "z-[10000]",
+      }}>
       <ModalContent>
         <>
           <ModalHeader className="flex items-center gap-2">
