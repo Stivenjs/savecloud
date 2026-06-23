@@ -70,6 +70,17 @@ export function useCloudWebSockets() {
   const activeUserId = activeProfile?.localUserId?.trim() ?? "";
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
 
+  const gamesRef = useRef(config?.games);
+  gamesRef.current = config?.games;
+
+  const lastActiveUserIdRef = useRef(activeUserId);
+  if (lastActiveUserIdRef.current !== activeUserId) {
+    lastActiveUserIdRef.current = activeUserId;
+    initialReplayDoneRef.current = false;
+    lastBroadcastedGameIdRef.current = null;
+    prevGameStatusRef.current = {};
+  }
+
   useEffect(() => {
     if (configLoading || profileLoading) {
       return;
@@ -144,7 +155,7 @@ export function useCloudWebSockets() {
     let unlistenStatus: (() => void) | undefined;
 
     function resolveGameName(gameId: string): string {
-      const gameNode = config?.games?.find((g) => g.id === gameId);
+      const gameNode = gamesRef.current?.find((g) => g.id === gameId);
       const baseDisplayName = formatGameDisplayName(gameId);
       const editionLabel = gameNode?.editionLabel?.trim();
       return editionLabel ? `${baseDisplayName} (${editionLabel})` : baseDisplayName;
@@ -249,6 +260,10 @@ export function useCloudWebSockets() {
           }
         })
         .catch(() => {});
+    } else {
+      if (lastBroadcastedGameIdRef.current !== null) {
+        startRefreshTimer(lastBroadcastedGameIdRef.current);
+      }
     }
 
     /**
@@ -302,5 +317,5 @@ export function useCloudWebSockets() {
       unlistenStatus?.();
       stopRefreshTimer();
     };
-  }, [activeUserId, config?.games, queryClient]);
+  }, [activeUserId, queryClient]);
 }
