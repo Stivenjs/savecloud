@@ -1,13 +1,81 @@
 import { Button } from "@heroui/react";
 import { ArrowRight, Flame } from "lucide-react";
 import type { CatalogListItem, SteamAppdetailsMediaResult } from "@services/tauri";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import type HlsType from "hls.js";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   getGalleryForCatalogItem,
   getImageForCatalogItem,
   getLibraryHeroUrl,
   getRecommendationCopyVariant,
 } from "@features/steam-catalog/components/steamCatalogTrendingHero.utils";
+
+const isHlsUrl = (url: string) => url.includes(".m3u8");
+
+function HeroVideoPlayer({ videoUrl, className = "" }: { videoUrl: string; className?: string }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const hlsRef = useRef<HlsType | null>(null);
+  const useHls = isHlsUrl(videoUrl);
+
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+
+    let isMounted = true;
+    let hlsInstance: HlsType | null = null;
+
+    const initVideo = async () => {
+      if (useHls) {
+        try {
+          const Hls = (await import("hls.js")).default;
+          if (!isMounted) return;
+
+          if (Hls.isSupported()) {
+            hlsInstance = new Hls({
+              maxBufferLength: 10,
+              maxMaxBufferLength: 20,
+            });
+            hlsRef.current = hlsInstance;
+            hlsInstance.loadSource(videoUrl);
+            hlsInstance.attachMedia(videoEl);
+
+            hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+              if (isMounted) {
+                videoEl.play().catch(() => {});
+              }
+            });
+
+            hlsInstance.on(Hls.Events.ERROR, (_, data) => {
+              if (data.fatal && isMounted) {
+                hlsInstance?.destroy();
+              }
+            });
+          } else if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
+            videoEl.src = videoUrl;
+            videoEl.play().catch(() => {});
+          }
+        } catch {
+          // ignore
+        }
+      } else {
+        videoEl.src = videoUrl;
+        videoEl.play().catch(() => {});
+      }
+    };
+
+    void initVideo();
+
+    return () => {
+      isMounted = false;
+      if (hlsInstance) {
+        hlsInstance.destroy();
+      }
+    };
+  }, [videoUrl, useHls]);
+
+  return <video ref={videoRef} className={className} muted loop playsInline preload="auto" />;
+}
 
 type TrendingHeroSlideProps = {
   featured: CatalogListItem;
@@ -23,11 +91,44 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
   const [failedHeroUrls, setFailedHeroUrls] = useState<Set<string>>(new Set());
   const recommendationCopy = useMemo(() => getRecommendationCopyVariant(), [featured.steamAppId]);
 
+  const [isHovered, setIsHovered] = useState(false);
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const videoUrl = mediaBySteamAppId?.[featured.steamAppId]?.videoUrl ?? null;
+
   useEffect(() => {
     setActiveImageIndex(0);
     setHasManualImageSelection(false);
     setFailedHeroUrls(new Set());
+    setIsHovered(false);
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
   }, [featured.steamAppId]);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleMouseEnter = () => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsHovered(true);
+    }, 250);
+  };
+
+  const handleMouseLeave = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setIsHovered(false);
+  };
 
   const heroCandidates = useMemo(() => {
     if (hasManualImageSelection) {
@@ -54,7 +155,11 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
 
   return (
     <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
-      <article className="group relative h-full overflow-hidden">
+      <article
+        className="group relative h-full overflow-hidden cursor-pointer"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onClick={() => onOpenGame(featured)}>
         {featuredImage ? (
           <img
             src={featuredImage}
@@ -68,7 +173,20 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
           <div className="absolute inset-0 bg-linear-to-br from-default-900 via-default-800 to-default-700" />
         )}
 
-        <div className="relative z-10 flex h-full flex-col justify-between p-5 sm:p-6">
+        <AnimatePresence>
+          {isHovered && videoUrl ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="absolute inset-0 z-0 h-full w-full">
+              <HeroVideoPlayer videoUrl={videoUrl} className="h-full w-full object-cover object-center" />
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
+        <div className="relative z-10 flex h-full flex-col justify-between p-5 sm:p-6 bg-black/10 group-hover:bg-black/0 transition-colors duration-300">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/90">
             <Flame size={14} className="text-primary" />
             Trending
@@ -90,18 +208,20 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
         </div>
       </article>
 
-      <aside className="relative flex flex-col justify-center border-t border-default-200/80 bg-[radial-gradient(circle_at_top,#0f2a4b_0%,#0b1a2d_42%,#0a1422_100%)] p-4 text-white lg:border-l lg:border-t-0 lg:border-default-100/15">
-        <div className="space-y-3">
-          <p className="text-3xl font-semibold leading-none tracking-tight">{featured.name}</p>
-          <p className="text-3xl font-semibold leading-none tracking-tight text-primary">Recomendado</p>
-          <p className="text-sm text-white/90">{recommendationCopy}</p>
+      <aside className="relative flex flex-col border-t border-default-200/80 bg-[radial-gradient(circle_at_top,#0f2a4b_0%,#0b1a2d_42%,#0a1422_100%)] p-5 text-white lg:border-l lg:border-t-0 lg:border-default-100/15">
+        <div className="flex flex-col flex-1 justify-between gap-4">
+          <div className="space-y-1.5">
+            <p className="text-3xl font-semibold leading-none tracking-tight">{featured.name}</p>
+            <p className="text-3xl font-semibold leading-none tracking-tight text-primary">Recomendado</p>
+            <p className="text-sm text-white/90 mt-2">{recommendationCopy}</p>
+          </div>
 
           <div className="grid grid-cols-2 gap-2">
             {sideThumbs.map((url, index) => (
               <button
                 key={`${featured.steamAppId}-${url}`}
                 type="button"
-                className={`group/mini relative h-20 overflow-hidden rounded-sm border text-left transition-colors duration-200 ${
+                className={`group/mini relative h-24 overflow-hidden rounded-md border text-left transition-colors duration-200 ${
                   activeImageIndex === index
                     ? "border-primary/90 ring-1 ring-primary/70"
                     : "border-white/15 hover:border-white/45"
@@ -129,7 +249,7 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
                     <button
                       key={item.steamAppId}
                       type="button"
-                      className="group/mini relative h-20 overflow-hidden rounded-sm border border-white/15 text-left"
+                      className="group/mini relative h-24 overflow-hidden rounded-md border border-white/15 text-left"
                       onClick={() => onOpenGame(item)}>
                       {image ? (
                         <img
