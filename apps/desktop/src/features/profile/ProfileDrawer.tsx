@@ -266,6 +266,20 @@ export function ProfileDrawer({
             ) : (
               <div className="absolute inset-0 bg-[linear-gradient(125deg,#1b2838_0%,#0e1621_45%,#1b2838_100%)]" />
             )}
+            {/* Botón Cambiar de Perfil en la parte superior derecha de la cabecera */}
+            <div className="absolute right-4 top-4 z-30">
+              <Button
+                variant="flat"
+                color="danger"
+                size="sm"
+                radius="full"
+                className="backdrop-blur-md bg-black/40 border border-white/10 hover:bg-black/60 text-white font-medium shadow-sm transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                startContent={<LogOut size={14} className="text-danger-400" />}
+                onPress={handleLogout}>
+                Cambiar perfil
+              </Button>
+            </div>
+
             {/* Gradiente más oscuro y alto para máxima legibilidad */}
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-linear-to-t from-black/90 via-black/30 to-transparent z-10" />
 
@@ -701,17 +715,6 @@ export function ProfileDrawer({
               </p>
             </AccordionItem>
           </Accordion>
-
-          <div className="mt-4 mb-4">
-            <Button
-              variant="flat"
-              color="danger"
-              className={`w-full ${bp ? "min-h-12 text-base font-semibold" : "text-sm font-medium"}`}
-              startContent={<LogOut size={bp ? 20 : 16} />}
-              onPress={handleLogout}>
-              Cambiar de perfil
-            </Button>
-          </div>
 
           <div
             className={`mt-auto flex shrink-0 border-t pt-3 ${
