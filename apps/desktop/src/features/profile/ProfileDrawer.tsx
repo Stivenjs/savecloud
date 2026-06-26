@@ -30,7 +30,10 @@ import {
   Trophy,
   User,
   Zap,
+  LogOut,
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { useProfileSessionStore } from "@store/ProfileSessionStore";
 import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { ProfileHeroBackground } from "@features/profile/PublicProfileHero";
 import { buildNiceAvatarConfig, generateNiceAvatarSeed, serializeNiceAvatarConfig } from "@features/profile/niceAvatar";
@@ -177,6 +180,13 @@ export function ProfileDrawer({
       setSaving(false);
     }
   }, [avatar, bg, frame, onClose, queryClient, shareVisualWithHosts, shareVisualWithMembers]);
+
+  const handleLogout = useCallback(() => {
+    onClose();
+    invoke("stop_cloud_ws").catch(() => {});
+    queryClient.clear();
+    useProfileSessionStore.getState().clearSession();
+  }, [onClose, queryClient]);
 
   const pickFile = useCallback(async (kind: "background" | "avatar" | "frame") => {
     try {
@@ -691,6 +701,17 @@ export function ProfileDrawer({
               </p>
             </AccordionItem>
           </Accordion>
+
+          <div className="mt-4 mb-4">
+            <Button
+              variant="flat"
+              color="danger"
+              className={`w-full ${bp ? "min-h-12 text-base font-semibold" : "text-sm font-medium"}`}
+              startContent={<LogOut size={bp ? 20 : 16} />}
+              onPress={handleLogout}>
+              Cambiar de perfil
+            </Button>
+          </div>
 
           <div
             className={`mt-auto flex shrink-0 border-t pt-3 ${

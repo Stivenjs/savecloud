@@ -32,7 +32,7 @@ export interface StartupProfileGateState {
 }
 
 export function useStartupProfileGate(): StartupProfileGateState {
-  const { loading: sessionLoading } = useProfileSession();
+  const { activeProfile, loading: sessionLoading } = useProfileSession();
   const startupGateResolvedRef = useRef(false);
   const [screenLoading, setScreenLoading] = useState(true);
   const [screenVisible, setScreenVisible] = useState(false);
@@ -43,40 +43,48 @@ export function useStartupProfileGate(): StartupProfileGateState {
   const [creatingProfile, setCreatingProfile] = useState(false);
 
   useEffect(() => {
-    if (sessionLoading || startupGateResolvedRef.current) return;
+    if (sessionLoading) return;
 
     let cancelled = false;
 
-    const loadStartupGate = async () => {
-      setScreenLoading(true);
-      setScreenError(null);
+    const shouldShow = activeProfile === null || !startupGateResolvedRef.current;
 
-      let alwaysShowSelector = false;
-      let profileOptions: StartupProfileOption[] = [];
+    if (shouldShow) {
+      const loadStartupGate = async () => {
+        setScreenLoading(true);
+        setScreenError(null);
 
-      try {
-        const [profiles, alwaysShow] = await Promise.all([listProfilesCmd(), getAlwaysShowSelectorCmd()]);
-        profileOptions = profiles.filter((profile) => profile.id.trim().length > 0).map(profileDtoToOption);
-        alwaysShowSelector = alwaysShow;
-      } catch {
-        // Si el sistema de perfiles falla, la app continúa con el perfil default de config.json.
-      }
+        let alwaysShowSelector = false;
+        let profileOptions: StartupProfileOption[] = [];
 
-      if (cancelled) return;
+        try {
+          const [profiles, alwaysShow] = await Promise.all([listProfilesCmd(), getAlwaysShowSelectorCmd()]);
+          profileOptions = profiles.filter((profile) => profile.id.trim().length > 0).map(profileDtoToOption);
+          alwaysShowSelector = alwaysShow;
+        } catch {
+          // Si el sistema de perfiles falla, la app continúa con el perfil default de config.json.
+        }
 
-      setOptions(profileOptions);
-      const shouldShowSelector = profileOptions.length > 0 && alwaysShowSelector;
-      setScreenVisible(shouldShowSelector);
+        if (cancelled) return;
+
+        setOptions(profileOptions);
+        const mustShow = activeProfile === null || (profileOptions.length > 0 && alwaysShowSelector);
+
+        setScreenVisible(mustShow);
+        setScreenLoading(false);
+        startupGateResolvedRef.current = true;
+      };
+
+      void loadStartupGate();
+    } else {
+      setScreenVisible(false);
       setScreenLoading(false);
-      startupGateResolvedRef.current = true;
-    };
-
-    void loadStartupGate();
+    }
 
     return () => {
       cancelled = true;
     };
-  }, [sessionLoading]);
+  }, [sessionLoading, activeProfile]);
 
   const onSelectProfile = useCallback(
     async (profileId: string) => {
