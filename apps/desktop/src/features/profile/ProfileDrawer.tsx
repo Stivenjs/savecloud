@@ -270,13 +270,14 @@ export function ProfileDrawer({
             <div className="absolute right-4 top-4 z-30">
               <Button
                 variant="flat"
-                color="danger"
                 size="sm"
                 radius="full"
-                className="backdrop-blur-md bg-black/40 border border-white/10 hover:bg-black/60 text-white font-medium shadow-sm transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-                startContent={<LogOut size={14} className="text-danger-400" />}
+                className="group min-w-0 w-9 h-9 p-0 backdrop-blur-md bg-black/40 border border-white/10 hover:bg-danger-500/15 hover:border-danger-500/30 text-white font-medium shadow-sm transition-all duration-300 ease-in-out hover:w-[128px] hover:pr-3 flex items-center justify-start overflow-hidden pl-[10px] active:scale-[0.95]"
                 onPress={handleLogout}>
-                Cambiar perfil
+                <LogOut size={14} className="text-danger-400 shrink-0" />
+                <span className="opacity-0 max-w-0 overflow-hidden transition-all duration-300 ease-in-out group-hover:opacity-100 group-hover:max-w-24 group-hover:ml-2 whitespace-nowrap text-xs text-danger-200 font-semibold select-none">
+                  Cerrar sesión
+                </span>
               </Button>
             </div>
 
