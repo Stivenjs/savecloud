@@ -92,6 +92,7 @@ export function useStartupProfileGate(): StartupProfileGateState {
         }
 
         const updated = await setActiveProfileCmd(profileId);
+        queryClient.clear();
         useProfileSessionStore.getState().setActiveProfile(profileDtoToSession(updated), selected.source);
 
         await queryClient.refetchQueries({ queryKey: CONFIG_QUERY_KEY, type: "all" });

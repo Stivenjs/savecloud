@@ -54,14 +54,23 @@ impl CloudWsState {
         (m, pending)
     }
 
-    /// Inicia la conexión WebSocket en un hilo de fondo si no está ya activa.
+    /// Inicia la conexión WebSocket en un hilo de fondo. Si hay una conexión activa, la detiene primero.
     pub async fn start(&self, app_handle: AppHandle, url_str: String, logs: AppLogs) {
         let mut tx_guard = self.tx.lock().await;
         let mut handle_guard = self.handle.lock().await;
 
-        // Evitar múltiples hilos de conexión simultáneos.
-        if tx_guard.is_some() {
-            return;
+        if let Some(handle) = handle_guard.take() {
+            handle.abort();
+        }
+
+        *tx_guard = None;
+
+        self.pending_queue.lock().await.clear();
+
+        {
+            let mut met = self.ws_metrics.lock().await;
+            met.connected = false;
+            met.last_disconnected_at_ms = Some(chrono::Utc::now().timestamp_millis());
         }
 
         let (tx, rx) = mpsc::unbounded_channel::<CloudOutgoingMessage>();
