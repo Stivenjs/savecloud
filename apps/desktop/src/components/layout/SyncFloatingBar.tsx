@@ -113,14 +113,16 @@ export function SyncFloatingBar({
         <div className="relative mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-default-200">
           <motion.div
             className="h-full rounded-full bg-primary"
+            style={{ transformOrigin: "left", width: "100%" }}
             initial={false}
-            animate={{ width: `${value}%` }}
+            animate={{ scaleX: value / 100 }}
             transition={{ type: "tween", duration: 0.25, ease: "easeOut" }}
           />
           {value > 0 && value < 100 && (
             <motion.div
               className="absolute inset-y-0 left-0 rounded-full bg-primary/40"
-              animate={{ width: [`${value}%`, `${Math.min(value + 4, 100)}%`, `${value}%`] }}
+              style={{ transformOrigin: "left", width: "100%" }}
+              animate={{ scaleX: [value / 100, Math.min(value + 4, 100) / 100, value / 100] }}
               transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
             />
           )}

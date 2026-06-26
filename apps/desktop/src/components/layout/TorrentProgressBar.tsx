@@ -127,8 +127,9 @@ export function TorrentProgressBar({ progress }: TorrentProgressBarProps) {
         <div className="relative mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-default-200">
           <motion.div
             className={`relative z-0 h-full origin-left rounded-full ${isCompleted ? "bg-success" : isPaused ? "bg-warning" : "bg-secondary"}`}
-            initial={{ width: "0%" }}
-            animate={{ width: `${value}%` }}
+            style={{ width: "100%" }}
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: value / 100 }}
             transition={{
               type: "tween",
               duration: value === 0 ? 0 : 0.38,
