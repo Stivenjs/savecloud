@@ -17,6 +17,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use tauri::Emitter;
 
 /// Resuelve interpolaciones del sistema y variables de entorno dentro de una ruta.
 ///
@@ -100,6 +101,7 @@ pub fn get_config() -> ConfigDto {
         share_visual_profile_with_members: settings.share_visual_profile_with_members,
         share_game_inventory_with_cloud: settings.share_game_inventory_with_cloud,
         auto_extract_downloads: settings.auto_extract_downloads,
+        low_performance_mode: settings.low_performance_mode,
         game_mode_enabled: settings.game_mode_enabled,
         game_mode_apply_power_profile: settings.game_mode_apply_power_profile,
         game_mode_reduce_capture_overhead: settings.game_mode_reduce_capture_overhead,
@@ -282,6 +284,16 @@ pub fn set_developer_mode(enabled: bool) -> Result<(), String> {
     let mut settings = config::load_settings();
     settings.developer_mode = enabled;
     config::save_settings(&settings)
+}
+
+/// Activa o desactiva el modo bajo rendimiento.
+#[tauri::command]
+pub fn set_low_performance_mode(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.low_performance_mode = enabled;
+    config::save_settings(&settings)?;
+    let _ = app.emit("config-changed", ());
+    Ok(())
 }
 
 /// Guarda la URL del proxy HTTP/HTTPS/SOCKS5 para descargas de fuentes.

@@ -1,6 +1,7 @@
 import React, { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { useShellUiStore } from "@store/ShellUiStore";
+import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 
 /** Ítem de navegación del menú. */
 export interface StaggeredMenuItem {
@@ -289,6 +290,8 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
   changeMenuColorOnOpen = true,
   bigPictureMode = false,
 }: StaggeredMenuProps) => {
+  const isLowPerf = useLowPerformanceMode();
+
   const [open, setOpen] = useState(false);
   const openRef = useRef(false);
 
@@ -464,11 +467,15 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
       tl.eventCallback("onComplete", () => {
         busyRef.current = false;
       });
-      tl.play(0);
+      if (isLowPerf) {
+        tl.progress(1);
+      } else {
+        tl.play(0);
+      }
     } else {
       busyRef.current = false;
     }
-  }, [buildOpenTimeline]);
+  }, [buildOpenTimeline, isLowPerf]);
 
   const playClose = useCallback(() => {
     openTlRef.current?.kill();
@@ -484,8 +491,7 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
 
     closeTweenRef.current = gsap.to([...layers, panel], {
       xPercent: offscreen,
-      duration: 0.32,
-      ease: "power3.in",
+      duration: isLowPerf ? 0 : 0.32,
       overwrite: "auto",
       onComplete: () => {
         const itemEls = Array.from(panel.querySelectorAll(".sm-panel-itemLabel")) as HTMLElement[];
@@ -504,30 +510,33 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
         busyRef.current = false;
       },
     });
-  }, [position]);
+  }, [position, isLowPerf]);
 
-  const animateIcon = useCallback((opening: boolean) => {
-    const icon = iconRef.current;
-    const h = plusHRef.current;
-    const v = plusVRef.current;
-    if (!icon || !h || !v) return;
+  const animateIcon = useCallback(
+    (opening: boolean) => {
+      const icon = iconRef.current;
+      const h = plusHRef.current;
+      const v = plusVRef.current;
+      if (!icon || !h || !v) return;
 
-    spinTweenRef.current?.kill();
+      spinTweenRef.current?.kill();
 
-    if (opening) {
-      gsap.set(icon, { rotate: 0, transformOrigin: "50% 50%" });
-      spinTweenRef.current = gsap
-        .timeline({ defaults: { ease: "power4.out" } })
-        .to(h, { rotate: 45, duration: 0.5 }, 0)
-        .to(v, { rotate: -45, duration: 0.5 }, 0);
-    } else {
-      spinTweenRef.current = gsap
-        .timeline({ defaults: { ease: "power3.inOut" } })
-        .to(h, { rotate: 0, duration: 0.35 }, 0)
-        .to(v, { rotate: 90, duration: 0.35 }, 0)
-        .to(icon, { rotate: 0, duration: 0.001 }, 0);
-    }
-  }, []);
+      if (opening) {
+        gsap.set(icon, { rotate: 0, transformOrigin: "50% 50%" });
+        spinTweenRef.current = gsap
+          .timeline({ defaults: { ease: "power4.out" } })
+          .to(h, { rotate: 45, duration: isLowPerf ? 0 : 0.5 }, 0)
+          .to(v, { rotate: -45, duration: isLowPerf ? 0 : 0.5 }, 0);
+      } else {
+        spinTweenRef.current = gsap
+          .timeline({ defaults: { ease: "power3.inOut" } })
+          .to(h, { rotate: 0, duration: isLowPerf ? 0 : 0.35 }, 0)
+          .to(v, { rotate: 90, duration: isLowPerf ? 0 : 0.35 }, 0)
+          .to(icon, { rotate: 0, duration: 0.001 }, 0);
+      }
+    },
+    [isLowPerf]
+  );
 
   const animateColor = useCallback(
     (opening: boolean) => {
@@ -537,15 +546,15 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
       if (changeMenuColorOnOpen) {
         colorTweenRef.current = gsap.to(btn, {
           color: opening ? openMenuButtonColor : menuButtonColor,
-          delay: 0.18,
-          duration: 0.3,
+          delay: isLowPerf ? 0 : 0.18,
+          duration: isLowPerf ? 0 : 0.3,
           ease: "power2.out",
         });
       } else {
         gsap.set(btn, { color: menuButtonColor });
       }
     },
-    [openMenuButtonColor, menuButtonColor, changeMenuColorOnOpen]
+    [openMenuButtonColor, menuButtonColor, changeMenuColorOnOpen, isLowPerf]
   );
 
   React.useEffect(() => {
@@ -555,37 +564,44 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
     }
   }, [changeMenuColorOnOpen, menuButtonColor, openMenuButtonColor]);
 
-  const animateText = useCallback((opening: boolean) => {
-    const inner = textInnerRef.current;
-    if (!inner) return;
+  const animateText = useCallback(
+    (opening: boolean) => {
+      const inner = textInnerRef.current;
+      if (!inner) return;
 
-    textCycleAnimRef.current?.kill();
+      textCycleAnimRef.current?.kill();
 
-    const currentLabel = opening ? "Menu" : "Cerrar";
-    const targetLabel = opening ? "Cerrar" : "Menu";
-    const cycles = 3;
+      const currentLabel = opening ? "Menu" : "Cerrar";
+      const targetLabel = opening ? "Cerrar" : "Menu";
+      const cycles = 3;
 
-    const seq: string[] = [currentLabel];
-    let last = currentLabel;
-    for (let i = 0; i < cycles; i++) {
-      last = last === "Menu" ? "Cerrar" : "Menu";
-      seq.push(last);
-    }
-    if (last !== targetLabel) seq.push(targetLabel);
-    seq.push(targetLabel);
+      const seq: string[] = [currentLabel];
+      let last = currentLabel;
+      for (let i = 0; i < cycles; i++) {
+        last = last === "Menu" ? "Cerrar" : "Menu";
+        seq.push(last);
+      }
+      if (last !== targetLabel) seq.push(targetLabel);
+      seq.push(targetLabel);
 
-    setTextLines(seq);
-    gsap.set(inner, { yPercent: 0 });
+      setTextLines(seq);
+      gsap.set(inner, { yPercent: 0 });
 
-    const lineCount = seq.length;
-    const finalShift = ((lineCount - 1) / lineCount) * 100;
+      const lineCount = seq.length;
+      const finalShift = ((lineCount - 1) / lineCount) * 100;
 
-    textCycleAnimRef.current = gsap.to(inner, {
-      yPercent: -finalShift,
-      duration: 0.5 + lineCount * 0.07,
-      ease: "power4.out",
-    });
-  }, []);
+      if (isLowPerf) {
+        gsap.set(inner, { yPercent: -finalShift });
+      } else {
+        textCycleAnimRef.current = gsap.to(inner, {
+          yPercent: -finalShift,
+          duration: 0.5 + lineCount * 0.07,
+          ease: "power4.out",
+        });
+      }
+    },
+    [isLowPerf]
+  );
 
   const toggleMenu = useCallback(() => {
     const target = !openRef.current;

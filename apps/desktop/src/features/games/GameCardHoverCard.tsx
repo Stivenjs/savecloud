@@ -9,6 +9,7 @@ import { Swiper, SwiperSlide } from "swiper/react";
 import type { ConfiguredGame } from "@app-types/config";
 import type { GameStats } from "@services/tauri";
 import { GameVideoModal } from "@features/games/GameVideoModal";
+import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 
 import "swiper/css";
 import "swiper/css/effect-fade";
@@ -52,6 +53,8 @@ export interface GameCardHoverCardProps {
  * con más información e imágenes (estilo Steam).
  */
 export function GameCardHoverCard({ children, mediaUrls, videoUrl, genres = [], storeName }: GameCardHoverCardProps) {
+  const isLowPerf = useLowPerformanceMode();
+
   const [showHovercard, setShowHovercard] = useState(false);
   const [isVideoMode, setIsVideoMode] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
@@ -260,7 +263,7 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl, genres = [], 
                     allowTouchMove={hasCarousel}
                     className="h-full w-full [&_.swiper-slide]:h-44 [&_.swiper-wrapper]:h-full"
                     autoplay={
-                      hasCarousel
+                      hasCarousel && !isLowPerf
                         ? {
                             delay: CAROUSEL_INTERVAL_MS,
                             disableOnInteraction: false,

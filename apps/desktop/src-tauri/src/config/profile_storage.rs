@@ -407,6 +407,7 @@ pub fn initialize_profile_storage(profile: &super::profiles::Profile) -> Result<
         game_mode_boost_detected_game_cpu: false,
         developer_mode: false,
         proxy_url: None,
+        low_performance_mode: false,
     };
 
     save_settings_for_profile(&profile.id, &settings)?;

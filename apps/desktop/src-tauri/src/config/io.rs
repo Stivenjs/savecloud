@@ -308,6 +308,7 @@ pub fn get_combined_config() -> Config {
         share_visual_profile_with_members: settings.share_visual_profile_with_members,
         share_game_inventory_with_cloud: settings.share_game_inventory_with_cloud,
         auto_extract_downloads: settings.auto_extract_downloads,
+        low_performance_mode: settings.low_performance_mode,
         games: library.games,
         operation_history: history.entries,
         gamification: load_gamification(),
@@ -371,6 +372,7 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
     current_settings.share_visual_profile_with_members = cfg.share_visual_profile_with_members;
     current_settings.share_game_inventory_with_cloud = cfg.share_game_inventory_with_cloud;
     current_settings.auto_extract_downloads = cfg.auto_extract_downloads;
+    current_settings.low_performance_mode = cfg.low_performance_mode;
 
     current_settings.game_mode_enabled = cfg.game_mode_enabled;
     current_settings.game_mode_apply_power_profile = cfg.game_mode_apply_power_profile;

@@ -10,6 +10,7 @@ import { GameCardStatusBar } from "@features/games/GameCardStatusBar";
 import { GameCardSyncProgress } from "@features/games/GameCardSyncProgress";
 import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";
 import { GameCardActions } from "@features/games/GameCardActions";
+import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { useGameMedia } from "@hooks/useGameMedia";
 import { useSyncStore } from "@store/SyncStore";
 import { useGameDetailHoverPrefetch } from "@hooks/useGameDetailHoverPrefetch";
@@ -70,7 +71,27 @@ export interface GameCardProps {
   variant?: "library" | "catalog";
 }
 
+function MaybeViewTransition({
+  name,
+  share,
+  disabled,
+  children,
+}: {
+  name: string;
+  share?: string;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  if (disabled) return <>{children}</>;
+  return (
+    <ViewTransition name={name} share={share} default="none">
+      {children}
+    </ViewTransition>
+  );
+}
+
 export const GameCard = memo(function GameCard(props: GameCardProps) {
+  const isLowPerf = useLowPerformanceMode();
   const {
     game,
     stats,
@@ -127,13 +148,19 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
       onCardNavigate(game);
       return;
     }
+    if (isLowPerf) {
+      navigate(`/games/${game.id}`, {
+        state: { resolvedSteamAppId, from: `${location.pathname}${location.search}` },
+      });
+      return;
+    }
     startTransition(() => {
       addTransitionType("game-detail");
       navigate(`/games/${game.id}`, {
         state: { resolvedSteamAppId, from: `${location.pathname}${location.search}` },
       });
     });
-  }, [navigate, game, location.pathname, location.search, onCardNavigate, resolvedSteamAppId]);
+  }, [navigate, game, location.pathname, location.search, onCardNavigate, resolvedSteamAppId, isLowPerf]);
 
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
 
@@ -180,7 +207,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
 
           {!isCatalog && syncProgress && <GameCardSyncProgress progress={syncProgress} />}
 
-          <ViewTransition name={`game-hero-${game.id}`} share="hero-morph" default="none">
+          <MaybeViewTransition name={`game-hero-${game.id}`} share="hero-morph" disabled={isLowPerf}>
             <div className="relative aspect-460/215 w-full overflow-hidden rounded-t-large bg-default-100">
               {(isEffectivelyLoading || (displayImageUrl && !imgLoaded && !imgError)) && (
                 <Skeleton className="absolute inset-0 z-10 size-full" />
@@ -209,7 +236,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
                 )
               )}
             </div>
-          </ViewTransition>
+          </MaybeViewTransition>
 
           <CardFooter className="flex flex-col items-center justify-center gap-0.5 border-t border-default-200/80 bg-default-100 px-3 py-2 dark:bg-default-50/80">
             <p className="truncate w-full text-center text-xs font-bold uppercase tracking-wider text-foreground">

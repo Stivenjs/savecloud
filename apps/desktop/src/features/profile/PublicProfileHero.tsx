@@ -3,6 +3,7 @@ import { User } from "lucide-react";
 import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { formatPlaytime } from "@utils/format";
 import { isProfileVideoSource, resolveProfileAsset } from "@utils/profileMedia";
+import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 
 export const ProfileHeroBackground = memo(function ProfileHeroBackground({
   rawUrl,
@@ -13,10 +14,14 @@ export const ProfileHeroBackground = memo(function ProfileHeroBackground({
 }) {
   const resolved = useMemo(() => resolveProfileAsset(rawUrl), [rawUrl]);
   const isVideo = isProfileVideoSource(rawUrl);
+  const isLowPerf = useLowPerformanceMode();
 
   if (!resolved) return null;
 
   if (isVideo) {
+    if (isLowPerf) {
+      return null;
+    }
     return (
       <>
         {imageMode === "contain" && (
@@ -44,7 +49,7 @@ export const ProfileHeroBackground = memo(function ProfileHeroBackground({
   }
   return (
     <>
-      {imageMode === "contain" && (
+      {imageMode === "contain" && !isLowPerf && (
         <img
           src={resolved}
           alt=""

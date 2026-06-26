@@ -944,6 +944,11 @@ export async function setDeveloperMode(enabled: boolean): Promise<void> {
   await invoke("set_developer_mode", { enabled });
 }
 
+/** Modo bajo rendimiento para reducir animaciones y uso de CPU/GPU en PCs lentas. */
+export async function setLowPerformanceMode(enabled: boolean): Promise<void> {
+  await invoke("set_low_performance_mode", { enabled });
+}
+
 /** Guarda la URL del proxy HTTP/HTTPS/SOCKS5 en la configuración. */
 export async function setProxyUrl(proxyUrl: string | null): Promise<void> {
   await invoke("set_proxy_url", { proxyUrl });
