@@ -4,7 +4,7 @@
 
 ::view-transition-old(.page-slide),
 ::view-transition-new(.page-slide) {
-  animation-duration: 250ms;
+  animation-duration: 180ms;
   animation-fill-mode: both;
   will-change: transform, opacity;
 }
@@ -20,8 +20,9 @@
 }
 
 ::view-transition-group(.hero-morph) {
-  animation-duration: 350ms;
+  animation-duration: 260ms;
   animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
 }
 
 ::view-transition-old(.hero-morph),
@@ -31,6 +32,8 @@
   height: 100%;
   overflow: clip;
   object-fit: cover;
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }
 
 @keyframes fade-in {

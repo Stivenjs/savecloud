@@ -1,12 +1,26 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { getConfig } from "@services/tauri";
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { queryClient } from "@lib/queryClient";
 
 export const CONFIG_QUERY_KEY = ["config"] as const;
 
+let isConfigListenerRegistered = false;
+
+function registerConfigListener() {
+  if (isConfigListenerRegistered) return;
+  isConfigListenerRegistered = true;
+  void listen("config-changed", () => {
+    void queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+  });
+}
+
 export function useConfig() {
-  const qc = useQueryClient();
+  useEffect(() => {
+    registerConfigListener();
+  }, []);
+
   const {
     data: config,
     isLoading: loading,
@@ -21,19 +35,6 @@ export function useConfig() {
     refetchOnMount: false,
     retry: 1,
   });
-
-  useEffect(() => {
-    let unlisten: (() => void) | null = null;
-    void listen("config-changed", () => {
-      void qc.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
-      void refetch();
-    }).then((fn) => {
-      unlisten = fn;
-    });
-    return () => {
-      unlisten?.();
-    };
-  }, [qc, refetch]);
 
   return {
     config: config ?? null,

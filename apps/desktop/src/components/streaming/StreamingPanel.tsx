@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, CardHeader, CardBody } from "@heroui/react";
 import { HostSetupModal } from "@components/streaming/HostSetupModal";
@@ -25,14 +26,16 @@ export const StreamingPanel = () => {
   });
 
   useEffect(() => {
-    import("@tauri-apps/api/event").then(({ listen }) => {
-      const unlisten = listen("streaming-state-changed", () => {
-        queryClient.invalidateQueries({ queryKey: ["streaming_get_state"] });
-      });
-      return () => {
-        unlisten.then((fn) => fn());
-      };
+    let unlisten: (() => void) | null = null;
+    void listen("streaming-state-changed", () => {
+      void queryClient.invalidateQueries({ queryKey: ["streaming_get_state"] });
+    }).then((fn) => {
+      unlisten = fn;
     });
+
+    return () => {
+      unlisten?.();
+    };
   }, [queryClient]);
 
   const isHosting = typeof state === "object" && state !== null && "Hosting" in state;

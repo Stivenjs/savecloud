@@ -13,7 +13,10 @@ import App from "@/App";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { MotionConfig } from "framer-motion";
 import { useEffect } from "react";
+import { preloadHls } from "@utils/hls";
 import "@/styles/index.css";
+
+preloadHls();
 
 /** Configuración del tema */
 const THEME_CONFIG = {
