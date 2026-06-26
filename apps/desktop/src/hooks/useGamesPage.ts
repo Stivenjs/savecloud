@@ -1,4 +1,4 @@
-import { useReducer, useEffect, useCallback, useMemo, startTransition } from "react";
+import { useReducer, useEffect, useCallback, useMemo, startTransition, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
   addGame,
@@ -253,6 +253,11 @@ export function useGamesPage() {
     }
   }, [refetch, refetchLastSync, queryClient]);
 
+  const handleRefreshRef = useRef(handleRefresh);
+  useEffect(() => {
+    handleRefreshRef.current = handleRefresh;
+  }, [handleRefresh]);
+
   useEffect(() => {
     let unlistenUpload: (() => void) | undefined;
     let unlistenDownload: (() => void) | undefined;
@@ -260,7 +265,7 @@ export function useGamesPage() {
 
     const setupListeners = async () => {
       const onGlobalSyncEvent = () => {
-        handleRefresh();
+        handleRefreshRef.current();
       };
 
       unlistenUpload = await listen("sync-upload-done", onGlobalSyncEvent);
@@ -275,7 +280,7 @@ export function useGamesPage() {
       if (unlistenDownload) unlistenDownload();
       if (unlistenFullBackup) unlistenFullBackup();
     };
-  }, [handleRefresh]);
+  }, []);
 
   const handleDismissOperationError = () => {
     dispatch({ type: "SET_OPERATION_RESULT", value: null });
