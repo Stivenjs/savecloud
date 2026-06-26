@@ -14,6 +14,7 @@ import { toastError, toastSuccess } from "@utils/toast";
 import { useLocation, useNavigate } from "react-router-dom";
 import { addTransitionType, startTransition } from "react";
 import { useConfig } from "@hooks/useConfig";
+import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import type { ConfiguredGame } from "@app-types/config";
 import { useDisclosure } from "@heroui/react";
 import { InstallModal } from "@features/steam-catalog/components/InstallModal";
@@ -49,6 +50,7 @@ const CatalogGridItem = memo(function CatalogGridItem({
   onPickChange,
   onInstall,
 }: CatalogGridItemProps) {
+  const isLowPerf = useLowPerformanceMode();
   const game = libraryGame ?? catalogListItemToConfiguredGame(item);
   const navigate = useNavigate();
   const location = useLocation();
@@ -75,6 +77,16 @@ const CatalogGridItem = memo(function CatalogGridItem({
               if (libraryGame) {
                 navigate(`/games/${libraryGame.id}`, {
                   state: { catalogDisplayName: item.name, from },
+                });
+                return;
+              }
+              if (isLowPerf) {
+                navigate(`/games/${game.id}`, {
+                  state: {
+                    resolvedSteamAppId: item.steamAppId,
+                    catalogDisplayName: item.name,
+                    from,
+                  },
                 });
                 return;
               }

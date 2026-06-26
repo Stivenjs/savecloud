@@ -4,6 +4,7 @@ import type { CatalogListItem, SteamAppdetailsMediaResult } from "@services/taur
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import type HlsType from "hls.js";
 import { motion, AnimatePresence } from "framer-motion";
+import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import {
   getGalleryForCatalogItem,
   getImageForCatalogItem,
@@ -94,6 +95,8 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
   const [isHovered, setIsHovered] = useState(false);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const isLowPerf = useLowPerformanceMode();
+
   const videoUrl = mediaBySteamAppId?.[featured.steamAppId]?.videoUrl ?? null;
 
   useEffect(() => {
@@ -174,7 +177,7 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
         )}
 
         <AnimatePresence>
-          {isHovered && videoUrl ? (
+          {isHovered && videoUrl && !isLowPerf ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

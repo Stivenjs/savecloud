@@ -10,6 +10,9 @@ import { AppErrorBoundary } from "@components/error/AppErrorBoundary";
 import { queryClient } from "@lib/queryClient";
 import { useShellUiStore } from "@store/ShellUiStore";
 import App from "@/App";
+import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
+import { MotionConfig } from "framer-motion";
+import { useEffect } from "react";
 import "@/styles/index.css";
 
 /** Configuración del tema */
@@ -48,25 +51,48 @@ function getRootElement(): HTMLElement {
 /**
  * Componente wrapper para la aplicación en modo overlay
  */
-const OverlayWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <HeroUIProvider>{children}</HeroUIProvider>
-);
+function OverlayWrapper({ children }: { children: React.ReactNode }) {
+  return <HeroUIProvider>{children}</HeroUIProvider>;
+}
 
 /**
  * Componente wrapper para la aplicación principal
  */
-const MainAppWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <React.StrictMode>
-    <ThemeProvider {...THEME_CONFIG}>
-      <HeroUIProvider>
-        <SavecloudToaster />
+function AppConfigProvider({ children }: { children: React.ReactNode }) {
+  const lowPerf = useLowPerformanceMode();
+
+  useEffect(() => {
+    const el = document.documentElement;
+    if (lowPerf) {
+      el.classList.add("low-perf");
+    } else {
+      el.classList.remove("low-perf");
+    }
+  }, [lowPerf]);
+
+  return (
+    <HeroUIProvider disableAnimation={lowPerf}>
+      <MotionConfig reducedMotion={lowPerf ? "always" : "user"}>{children}</MotionConfig>
+    </HeroUIProvider>
+  );
+}
+
+function MainAppWrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <React.StrictMode>
+      <ThemeProvider {...THEME_CONFIG}>
         <QueryClientProvider client={queryClient}>
-          <AppErrorBoundary>{children}</AppErrorBoundary>
+          <AppErrorBoundary>
+            <AppConfigProvider>
+              <SavecloudToaster />
+              {children}
+            </AppConfigProvider>
+          </AppErrorBoundary>
         </QueryClientProvider>
-      </HeroUIProvider>
-    </ThemeProvider>
-  </React.StrictMode>
-);
+      </ThemeProvider>
+    </React.StrictMode>
+  );
+}
 
 function detectRenderMode(): RenderMode {
   const params = new URLSearchParams(window.location.search);

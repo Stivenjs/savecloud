@@ -30,7 +30,10 @@ import {
   Trophy,
   User,
   Zap,
+  LogOut,
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { useProfileSessionStore } from "@store/ProfileSessionStore";
 import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { ProfileHeroBackground } from "@features/profile/PublicProfileHero";
 import { buildNiceAvatarConfig, generateNiceAvatarSeed, serializeNiceAvatarConfig } from "@features/profile/niceAvatar";
@@ -178,6 +181,13 @@ export function ProfileDrawer({
     }
   }, [avatar, bg, frame, onClose, queryClient, shareVisualWithHosts, shareVisualWithMembers]);
 
+  const handleLogout = useCallback(() => {
+    onClose();
+    invoke("stop_cloud_ws").catch(() => {});
+    queryClient.clear();
+    useProfileSessionStore.getState().clearSession();
+  }, [onClose, queryClient]);
+
   const pickFile = useCallback(async (kind: "background" | "avatar" | "frame") => {
     try {
       if (kind === "background") {
@@ -256,6 +266,21 @@ export function ProfileDrawer({
             ) : (
               <div className="absolute inset-0 bg-[linear-gradient(125deg,#1b2838_0%,#0e1621_45%,#1b2838_100%)]" />
             )}
+            {/* Botón Cambiar de Perfil en la parte superior derecha de la cabecera */}
+            <div className="absolute right-4 top-4 z-30">
+              <Button
+                variant="flat"
+                size="sm"
+                radius="full"
+                className="group min-w-0 w-9 h-9 p-0 backdrop-blur-md bg-black/40 border border-white/10 hover:bg-danger-500/15 hover:border-danger-500/30 text-white font-medium shadow-sm transition-all duration-300 ease-in-out hover:w-[128px] hover:pr-3 flex items-center justify-start overflow-hidden pl-[10px] active:scale-[0.95]"
+                onPress={handleLogout}>
+                <LogOut size={14} className="text-danger-400 shrink-0" />
+                <span className="opacity-0 max-w-0 overflow-hidden transition-all duration-300 ease-in-out group-hover:opacity-100 group-hover:max-w-24 group-hover:ml-2 whitespace-nowrap text-xs text-danger-200 font-semibold select-none">
+                  Cerrar sesión
+                </span>
+              </Button>
+            </div>
+
             {/* Gradiente más oscuro y alto para máxima legibilidad */}
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-linear-to-t from-black/90 via-black/30 to-transparent z-10" />
 

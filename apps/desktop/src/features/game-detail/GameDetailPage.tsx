@@ -10,6 +10,7 @@ import {
 } from "react";
 import { pickCandidate, sourceCandidateKey } from "@utils/sourceMatch";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
+import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
@@ -59,6 +60,7 @@ import type { ConfiguredGame } from "@app-types/config";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
 
 export function GameDetailPage() {
+  const isLowPerf = useLowPerformanceMode();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { handleSync, handleDownload, handleFullBackupUpload, isSyncing, isDownloading, fullBackupUploadingGameId } =
@@ -120,11 +122,15 @@ export function GameDetailPage() {
   }, [navigate, backToPath]);
 
   const handleBackWithTransition = useCallback(() => {
+    if (isLowPerf) {
+      goBackFromDetail();
+      return;
+    }
     startTransition(() => {
       addTransitionType("game-detail");
       goBackFromDetail();
     });
-  }, [goBackFromDetail]);
+  }, [goBackFromDetail, isLowPerf]);
 
   const requestDownloadFromCloud = useCallback(async (target: ConfiguredGame) => {
     try {

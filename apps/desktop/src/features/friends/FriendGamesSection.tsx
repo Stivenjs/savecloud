@@ -1,5 +1,6 @@
 import { addTransitionType, startTransition, useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Card, CardBody } from "@heroui/react";
 import { Download, Settings2, UserPlus } from "lucide-react";
@@ -85,6 +86,7 @@ export function FriendGamesSection({
   onCopySaves,
   onUseAsTemplate,
 }: FriendGamesSectionProps) {
+  const isLowPerf = useLowPerformanceMode();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -110,6 +112,12 @@ export function FriendGamesSection({
     (game: ConfiguredGame) => {
       const targetId = game.steamAppId ? `${STEAM_CATALOG_GAME_ID_PREFIX}${game.steamAppId}` : game.id;
 
+      if (isLowPerf) {
+        navigate(`/games/${targetId}`, {
+          state: { resolvedSteamAppId: game.steamAppId, from: `${location.pathname}${location.search}` },
+        });
+        return;
+      }
       startTransition(() => {
         addTransitionType("game-detail");
         navigate(`/games/${targetId}`, {
@@ -117,7 +125,7 @@ export function FriendGamesSection({
         });
       });
     },
-    [navigate, location]
+    [navigate, location, isLowPerf]
   );
 
   const profileHeader =

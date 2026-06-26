@@ -15,6 +15,7 @@ import {
 } from "@features/steam-catalog/components/steamCatalogTrendingHero.utils";
 import { TrendingHeroSlide } from "@features/steam-catalog/components/TrendingHeroSlide";
 import { visibilityManager } from "@hooks/useAppVisibility";
+import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 
 type SteamCatalogTrendingHeroProps = {
   items: CatalogListItem[];
@@ -32,6 +33,7 @@ export function SteamCatalogTrendingHero({
   isError,
   errorMessage,
 }: SteamCatalogTrendingHeroProps) {
+  const isLowPerf = useLowPerformanceMode();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -62,6 +64,16 @@ export function SteamCatalogTrendingHero({
 
   const openGame = useCallback(
     (item: CatalogListItem) => {
+      if (isLowPerf) {
+        navigate(`/games/${toRouteGameId(item)}`, {
+          state: {
+            resolvedSteamAppId: item.steamAppId,
+            catalogDisplayName: item.name,
+            from: `${location.pathname}${location.search}`,
+          },
+        });
+        return;
+      }
       startTransition(() => {
         addTransitionType("game-detail");
         navigate(`/games/${toRouteGameId(item)}`, {
@@ -73,7 +85,7 @@ export function SteamCatalogTrendingHero({
         });
       });
     },
-    [navigate, location.pathname, location.search]
+    [navigate, location.pathname, location.search, isLowPerf]
   );
 
   if (isLoading) {

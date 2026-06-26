@@ -121,6 +121,20 @@ html.paused-bg * {
   will-change: auto !important;
 }
 
+html.low-perf *,
+html.low-perf *::before,
+html.low-perf *::after {
+  animation-delay: 0s !important;
+  animation-duration: 0s !important;
+  animation-play-state: paused !important;
+  animation-iteration-count: 1 !important;
+  transition-delay: 0s !important;
+  transition-duration: 0ms !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+  will-change: auto !important;
+}
+
 .sg-catalog-pagination,
 .sg-catalog-pagination__wrapper {
   cursor: default;

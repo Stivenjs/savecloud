@@ -4,6 +4,26 @@ import { ArrowLeft, Gamepad2 } from "lucide-react";
 import { GameMediaViewer, MediaThumbnailGallery, buildMediaItems } from "@/features/game-detail/media-viewer";
 import { useState, useCallback } from "react";
 import type { Swiper as SwiperType } from "swiper";
+import { useLowPerformanceMode } from "@/hooks/useLowPerformanceMode";
+
+function MaybeViewTransition({
+  name,
+  share,
+  disabled,
+  children,
+}: {
+  name: string;
+  share?: string;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  if (disabled) return <>{children}</>;
+  return (
+    <ViewTransition name={name} share={share} default="none">
+      {children}
+    </ViewTransition>
+  );
+}
 
 interface GameDetailHeroProps {
   mediaUrls: string[];
@@ -35,6 +55,7 @@ export function GameDetailHero({
   isLoading,
   onBack,
 }: GameDetailHeroProps) {
+  const isLowPerf = useLowPerformanceMode();
   const [swiper, setSwiper] = useState<SwiperType | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -66,17 +87,17 @@ export function GameDetailHero({
 
   if (isLoading) {
     return (
-      <ViewTransition name={`game-hero-${gameId}`} share="hero-morph" default="none">
+      <MaybeViewTransition name={`game-hero-${gameId}`} share="hero-morph" disabled={isLowPerf}>
         <div className="-mx-6 -mt-16">
           <Skeleton className="aspect-21/9 w-full" />
         </div>
-      </ViewTransition>
+      </MaybeViewTransition>
     );
   }
 
   if (!heroSlides.length && !videoUrl) {
     return (
-      <ViewTransition name={`game-hero-${gameId}`} share="hero-morph" default="none">
+      <MaybeViewTransition name={`game-hero-${gameId}`} share="hero-morph" disabled={isLowPerf}>
         <div className="group/hero relative -mx-6 -mt-16 w-[calc(100%+3rem)] overflow-hidden">
           <div className="flex aspect-21/9 w-full items-center justify-center bg-linear-to-br from-default-100 to-default-200 dark:from-default-50/30 dark:to-default-100/20">
             <Gamepad2 size={64} className="text-default-300" strokeWidth={1.2} />
@@ -85,12 +106,12 @@ export function GameDetailHero({
           <TitleOverlay editionLabel={editionLabel} gameName={gameName} />
           <BackButton onPress={onBack} />
         </div>
-      </ViewTransition>
+      </MaybeViewTransition>
     );
   }
 
   return (
-    <ViewTransition name={`game-hero-${gameId}`} share="hero-morph" default="none">
+    <MaybeViewTransition name={`game-hero-${gameId}`} share="hero-morph" disabled={isLowPerf}>
       <div className="relative -mx-6 -mt-16 w-[calc(100%+3rem)]">
         {/* Hero con media viewer (sin thumbnails internos) */}
         <div className="group/hero relative overflow-hidden">
@@ -117,7 +138,7 @@ export function GameDetailHero({
           </div>
         )}
       </div>
-    </ViewTransition>
+    </MaybeViewTransition>
   );
 }
 

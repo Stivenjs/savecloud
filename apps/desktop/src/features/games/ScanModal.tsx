@@ -24,6 +24,7 @@ import { extractAppIdFromFolderName, toGameId } from "@utils/gameImage";
 import { dedupePreserveGamePaths, mergeScanPathsWithConfigured, normPathKey } from "@utils/gameSavePaths";
 import { useNavigable } from "@features/input/useNavigable";
 import { getGamepadFocusClass } from "@features/input/styles";
+import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 
 const MagicRings = lazy(() => import("@components/external/MagicRings"));
 
@@ -156,6 +157,8 @@ function CandidateRow({
 }
 
 export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames = [] }: ScanModalProps) {
+  const isLowPerf = useLowPerformanceMode();
+
   const {
     data: candidates,
     isLoading,
@@ -251,40 +254,53 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames 
         <ModalBody>
           {isLoading ? (
             <div className="flex flex-col items-center justify-center gap-4 py-8">
-              <div style={{ width: "600px", height: "250px", position: "relative" }}>
-                <Suspense>
-                  <MagicRings
-                    color="#fc42ff"
-                    colorTwo="#42fcff"
-                    ringCount={6}
-                    speed={1.5}
-                    attenuation={10}
-                    lineThickness={2}
-                    baseRadius={0.35}
-                    radiusStep={0.1}
-                    scaleRate={0.1}
-                    opacity={1}
-                    blur={0}
-                    noiseAmount={0.1}
-                    rotation={0}
-                    ringGap={1.5}
-                    fadeIn={0.7}
-                    fadeOut={0.5}
-                    followMouse={true}
-                    mouseInfluence={0}
-                    hoverScale={1}
-                    parallax={0}
-                    clickBurst={false}
-                  />
-                </Suspense>
-              </div>
-              <p className="max-w-md animate-pulse text-center text-sm text-default-500">
-                Revisando tu PC para encontrar juegos y sus guardados...
-                <br />
-                <span className="text-xs text-default-400">
-                  Esto puede tardar unos segundos dependiendo de tu sistema
-                </span>
-              </p>
+              {isLowPerf ? (
+                <div className="flex flex-col items-center justify-center py-10 gap-3">
+                  <Spinner size="lg" color="secondary" />
+                  <p className="max-w-md text-center text-sm text-default-500">
+                    Revisando tu PC para encontrar juegos y sus guardados...
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div
+                    style={{ width: "600px", height: "250px", position: "relative" }}
+                    className="flex items-center justify-center">
+                    <Suspense>
+                      <MagicRings
+                        color="#fc42ff"
+                        colorTwo="#42fcff"
+                        ringCount={6}
+                        speed={1.5}
+                        attenuation={10}
+                        lineThickness={2}
+                        baseRadius={0.35}
+                        radiusStep={0.1}
+                        scaleRate={0.1}
+                        opacity={1}
+                        blur={0}
+                        noiseAmount={0.1}
+                        rotation={0}
+                        ringGap={1.5}
+                        fadeIn={0.7}
+                        fadeOut={0.5}
+                        followMouse={true}
+                        mouseInfluence={0}
+                        hoverScale={1}
+                        parallax={0}
+                        clickBurst={false}
+                      />
+                    </Suspense>
+                  </div>
+                  <p className="max-w-md animate-pulse text-center text-sm text-default-500">
+                    Revisando tu PC para encontrar juegos y sus guardados...
+                    <br />
+                    <span className="text-xs text-default-400">
+                      Esto puede tardar unos segundos dependiendo de tu sistema
+                    </span>
+                  </p>
+                </>
+              )}
             </div>
           ) : candidates && candidates.length > 0 ? (
             <div className="flex flex-col gap-3">

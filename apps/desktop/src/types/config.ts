@@ -84,4 +84,6 @@ export interface Config {
   readonly proxyUrl?: string | null;
   /** Si es true, extrae automáticamente los juegos descargados al finalizar (ZIP, RAR, 7Z, TAR, etc.). */
   readonly autoExtractDownloads?: boolean;
+  /** Modo bajo rendimiento para reducir animaciones y consumo de CPU/GPU en PCs lentas. */
+  readonly lowPerformanceMode?: boolean;
 }

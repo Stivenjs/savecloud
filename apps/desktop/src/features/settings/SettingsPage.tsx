@@ -27,6 +27,7 @@ import { ProxySettingsCard } from "@features/settings/ProxySettingsCard";
 import { GamepadTesterCard } from "@features/settings/GamepadTesterCard";
 import { VoiceCommandsCard } from "@features/voice-commands";
 import { GameModeCard } from "@features/settings/GameModeCard";
+import { LowPerformanceModeCard } from "@features/settings/LowPerformanceModeCard";
 import { HealthObservabilityCard } from "@features/settings/HealthObservabilityCard";
 import { CloudDashboardPanel } from "@features/settings/CloudDashboardPanel";
 import { SettingsSidebarAnimatedPanel } from "@features/settings/SettingsSidebarAnimatedPanel";
@@ -243,6 +244,7 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
         return (
           <div className="space-y-3">
             <GameModeCard />
+            <LowPerformanceModeCard />
             <AutostartCard autostart={autostart} loading={loading} onChange={handleAutostartChange} />
             <ProfileStartupBehaviorCard
               alwaysShowProfileSelector={alwaysShowProfileSelector}

@@ -26,6 +26,7 @@ interface ProfileSessionStore {
   hydrateSession: () => Promise<void>;
   setActiveProfile: (profile: ActiveProfileSession, source: ProfileSessionSource) => void;
   patchSession: (partial: Partial<Pick<ActiveProfileSession, "developerMode">>) => void;
+  clearSession: () => void;
   clearError: () => void;
 }
 
@@ -118,6 +119,8 @@ export const useProfileSessionStore = create<ProfileSessionStore>((set) => ({
     set((s) => ({
       activeProfile: s.activeProfile ? { ...s.activeProfile, ...partial } : null,
     })),
+
+  clearSession: () => set({ activeProfile: null, source: null, error: null }),
 
   clearError: () => set({ error: null }),
 }));
