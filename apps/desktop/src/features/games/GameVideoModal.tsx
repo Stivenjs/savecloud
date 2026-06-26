@@ -1,9 +1,8 @@
 import { useEffect, useRef } from "react";
-import type HlsType from "hls.js";
+import { initHls, isHlsUrl } from "@utils/hls";
+import type { HlsType } from "@utils/hls";
 import { Button, Modal, ModalContent } from "@heroui/react";
 import { X } from "lucide-react";
-
-const isHlsUrl = (url: string) => url.includes(".m3u8");
 
 export interface GameVideoModalProps {
   isOpen: boolean;
@@ -35,21 +34,28 @@ export function GameVideoModal({ isOpen, onClose, videoUrl }: GameVideoModalProp
     let isMounted = true;
 
     const initVideo = async () => {
-      const Hls = (await import("hls.js")).default;
+      const hlsInstance = await initHls({
+        videoEl,
+        videoUrl,
+        onManifestParsed: () => {
+          if (isMounted) {
+            videoEl.play().catch(() => {});
+          }
+        },
+        onError: (data) => {
+          if (data.fatal && isMounted) {
+            hlsRef.current = null;
+          }
+        },
+      });
 
-      if (!isMounted) return;
+      if (!isMounted) {
+        hlsInstance?.destroy();
+        return;
+      }
 
-      if (Hls.isSupported()) {
-        const hls = new Hls();
-        hlsRef.current = hls;
-        hls.loadSource(videoUrl);
-        hls.attachMedia(videoEl);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          videoEl.play().catch(() => {});
-        });
-        hls.on(Hls.Events.ERROR, (_, data) => {
-          if (data.fatal) hls.destroy();
-        });
+      if (hlsInstance) {
+        hlsRef.current = hlsInstance;
       } else if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
         videoEl.src = videoUrl;
         videoEl.play().catch(() => {});

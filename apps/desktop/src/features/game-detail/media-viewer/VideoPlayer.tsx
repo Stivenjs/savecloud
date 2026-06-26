@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback, useMemo } from "react";
-import type HlsType from "hls.js";
-
-const isHlsUrl = (url: string) => url.includes(".m3u8");
+import { initHls, isHlsUrl } from "@utils/hls";
+import type { HlsType } from "@utils/hls";
 
 export interface VideoPlayerProps {
   /** URL del vídeo (HLS .m3u8 o directa). */
@@ -46,7 +45,6 @@ export function VideoPlayer({
 
   const useHls = useMemo(() => videoUrl != null && isHlsUrl(videoUrl), [videoUrl]);
 
-  // Cleanup HLS on unmount or URL change
   useEffect(() => {
     return () => {
       hlsRef.current?.destroy();
@@ -55,7 +53,6 @@ export function VideoPlayer({
     };
   }, [videoUrl]);
 
-  // Initialize HLS when needed - solo corre una vez por URL
   useEffect(() => {
     if (!videoUrl || !useHls || isInitializedRef.current) {
       return;
@@ -69,36 +66,37 @@ export function VideoPlayer({
 
     const initVideo = async () => {
       try {
-        const Hls = (await import("hls.js")).default;
-
-        if (!isMounted) return;
-
-        if (Hls.isSupported()) {
-          // Destroy previous instance if exists
-          hlsRef.current?.destroy();
-
-          const hls = new Hls({
+        const hlsInstance = await initHls({
+          videoEl,
+          videoUrl,
+          config: {
             maxBufferLength: 30,
             maxMaxBufferLength: 60,
-          });
-          hlsRef.current = hls;
-          hls.loadSource(videoUrl);
-          hls.attachMedia(videoEl);
-
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            onReady?.();
-            if (autoPlay && videoEl.paused) {
-              videoEl.play().catch(() => {});
+          },
+          onManifestParsed: () => {
+            if (isMounted) {
+              onReady?.();
+              if (autoPlay && videoEl.paused) {
+                videoEl.play().catch(() => {});
+              }
             }
-          });
-
-          hls.on(Hls.Events.ERROR, (_, data) => {
-            if (data.fatal) {
-              hls.destroy();
+          },
+          onError: (data) => {
+            if (data.fatal && isMounted) {
               hlsRef.current = null;
               onError?.();
             }
-          });
+          },
+        });
+
+        if (!isMounted) {
+          hlsInstance?.destroy();
+          return;
+        }
+
+        if (hlsInstance) {
+          hlsRef.current?.destroy();
+          hlsRef.current = hlsInstance;
         } else if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
           // Native HLS support (Safari)
           videoEl.src = videoUrl;
@@ -114,10 +112,8 @@ export function VideoPlayer({
     return () => {
       isMounted = false;
     };
-    // Solo depende de videoUrl y useHls, NO de autoPlay
   }, [videoUrl, useHls]);
 
-  // Handle direct video playback (non-HLS) - solo corre una vez por URL
   useEffect(() => {
     if (!useHls && videoRef.current && videoUrl && !isInitializedRef.current) {
       isInitializedRef.current = true;
@@ -127,10 +123,8 @@ export function VideoPlayer({
         videoRef.current.play().catch(() => {});
       }
     }
-    // Solo depende de videoUrl y useHls, NO de autoPlay
   }, [videoUrl, useHls]);
 
-  // Controlar play/pause basado en autoPlay sin reinicializar
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl || !isInitializedRef.current) return;
@@ -142,7 +136,6 @@ export function VideoPlayer({
     }
   }, [autoPlay]);
 
-  // Track play state changes
   const handlePlay = useCallback(() => {
     onPlayStateChange?.(true);
   }, [onPlayStateChange]);

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import type HlsType from "hls.js";
+import { initHls, isHlsUrl } from "@utils/hls";
+import type { HlsType } from "@utils/hls";
 import { motion } from "framer-motion";
 import { Button, Chip, Popover, PopoverContent, PopoverTrigger } from "@heroui/react";
 import { ImageIcon, Maximize2, Video, Volume2, VolumeX } from "lucide-react";
@@ -13,8 +14,6 @@ import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 
 import "swiper/css";
 import "swiper/css/effect-fade";
-
-const isHlsUrl = (url: string) => url.includes(".m3u8");
 
 const HOVER_OPEN_DELAY_MS = 400;
 const HOVER_CLOSE_DELAY_MS = 150;
@@ -120,22 +119,24 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl, genres = [], 
     videoInitTimeoutRef.current = setTimeout(async () => {
       if (!isMounted) return;
 
-      const Hls = (await import("hls.js")).default;
+      const hlsInstance = await initHls({
+        videoEl,
+        videoUrl,
+        onError: (data) => {
+          if (data.fatal && isMounted) {
+            hlsRef.current = null;
+          }
+        },
+      });
 
-      if (!isMounted) return;
+      if (!isMounted) {
+        hlsInstance?.destroy();
+        return;
+      }
 
-      if (Hls.isSupported()) {
+      if (hlsInstance) {
         hlsRef.current?.destroy();
-
-        const hls = new Hls();
-        hlsRef.current = hls;
-
-        hls.loadSource(videoUrl);
-        hls.attachMedia(videoEl);
-
-        hls.on(Hls.Events.ERROR, (_, data) => {
-          if (data.fatal) hls.destroy();
-        });
+        hlsRef.current = hlsInstance;
       } else if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
         videoEl.src = videoUrl;
       }

@@ -2,7 +2,8 @@ import { Button } from "@heroui/react";
 import { ArrowRight, Flame } from "lucide-react";
 import type { CatalogListItem, SteamAppdetailsMediaResult } from "@services/tauri";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
-import type HlsType from "hls.js";
+import { initHls, isHlsUrl } from "@utils/hls";
+import type { HlsType } from "@utils/hls";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import {
@@ -11,8 +12,6 @@ import {
   getLibraryHeroUrl,
   getRecommendationCopyVariant,
 } from "@features/steam-catalog/components/steamCatalogTrendingHero.utils";
-
-const isHlsUrl = (url: string) => url.includes(".m3u8");
 
 function HeroVideoPlayer({ videoUrl, className = "" }: { videoUrl: string; className?: string }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -24,34 +23,36 @@ function HeroVideoPlayer({ videoUrl, className = "" }: { videoUrl: string; class
     if (!videoEl) return;
 
     let isMounted = true;
-    let hlsInstance: HlsType | null = null;
 
     const initVideo = async () => {
       if (useHls) {
         try {
-          const Hls = (await import("hls.js")).default;
-          if (!isMounted) return;
-
-          if (Hls.isSupported()) {
-            hlsInstance = new Hls({
+          const hlsInstance = await initHls({
+            videoEl,
+            videoUrl,
+            config: {
               maxBufferLength: 10,
               maxMaxBufferLength: 20,
-            });
-            hlsRef.current = hlsInstance;
-            hlsInstance.loadSource(videoUrl);
-            hlsInstance.attachMedia(videoEl);
-
-            hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+            },
+            onManifestParsed: () => {
               if (isMounted) {
                 videoEl.play().catch(() => {});
               }
-            });
-
-            hlsInstance.on(Hls.Events.ERROR, (_, data) => {
+            },
+            onError: (data) => {
               if (data.fatal && isMounted) {
-                hlsInstance?.destroy();
+                hlsRef.current = null;
               }
-            });
+            },
+          });
+
+          if (!isMounted) {
+            hlsInstance?.destroy();
+            return;
+          }
+
+          if (hlsInstance) {
+            hlsRef.current = hlsInstance;
           } else if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
             videoEl.src = videoUrl;
             videoEl.play().catch(() => {});
@@ -69,8 +70,9 @@ function HeroVideoPlayer({ videoUrl, className = "" }: { videoUrl: string; class
 
     return () => {
       isMounted = false;
-      if (hlsInstance) {
-        hlsInstance.destroy();
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
       }
     };
   }, [videoUrl, useHls]);
