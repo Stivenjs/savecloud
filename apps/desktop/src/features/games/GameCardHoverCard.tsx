@@ -11,6 +11,7 @@ import type { ConfiguredGame } from "@app-types/config";
 import type { GameStats } from "@services/tauri";
 import { GameVideoModal } from "@features/games/GameVideoModal";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
+import { formatGameDisplayName } from "@utils/gameImage";
 
 import "swiper/css";
 import "swiper/css/effect-fade";
@@ -45,13 +46,23 @@ export interface GameCardHoverCardProps {
   storeName?: string | null;
   /** Estadísticas para mostrar en el hovercard. Opcional. */
   stats?: GameStats | null;
+  /** Tipo de tarjeta: biblioteca o catálogo */
+  variant?: "library" | "catalog";
 }
 
 /**
  * Envuelve la tarjeta de juego y muestra un popover al hacer hover
  * con más información e imágenes (estilo Steam).
  */
-export function GameCardHoverCard({ children, mediaUrls, videoUrl, genres = [], storeName }: GameCardHoverCardProps) {
+export function GameCardHoverCard({
+  game,
+  children,
+  mediaUrls,
+  videoUrl,
+  genres = [],
+  storeName,
+  variant = "library",
+}: GameCardHoverCardProps) {
   const isLowPerf = useLowPerformanceMode();
 
   const [showHovercard, setShowHovercard] = useState(false);
@@ -344,26 +355,24 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl, genres = [], 
             )}
           </motion.div>
 
-          {(storeName?.trim() || genres.length > 0) && (
-            <div className="relative z-10 w-full border-t border-zinc-800/50 bg-[#13151b]/98 px-4 py-3 rounded-b-2xl">
-              {storeName?.trim() ? (
-                <p className="line-clamp-2 text-xs font-semibold leading-snug text-white/90 tracking-tight">
-                  {storeName.trim()}
-                </p>
-              ) : null}
-              {genres.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {genres.slice(0, 5).map((g, i) => (
-                    <span
-                      key={`${g}-${i}`}
-                      className="text-[9px] font-medium px-2 py-0.5 rounded-md bg-zinc-800/40 border border-zinc-700/20 text-zinc-400 truncate tracking-wide">
-                      {g}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          )}
+          <div className="relative z-10 w-full border-t border-zinc-800/50 bg-[#13151b]/98 px-4 py-3 rounded-b-2xl">
+            <p className="line-clamp-2 text-xs font-bold text-white tracking-tight leading-snug mb-1.5">
+              {variant === "catalog"
+                ? storeName?.trim() || formatGameDisplayName(game.id)
+                : formatGameDisplayName(game.id)}
+            </p>
+            {genres.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {genres.slice(0, 5).map((g, i) => (
+                  <span
+                    key={`${g}-${i}`}
+                    className="text-[9px] font-medium px-2 py-0.5 rounded-md bg-zinc-800/40 border border-zinc-700/20 text-zinc-400 truncate tracking-wide">
+                    {g}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </PopoverContent>
       </Popover>
 

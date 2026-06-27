@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, startTransition, addTransitionType, ViewTransition } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Skeleton, Tooltip } from "@heroui/react";
+import { Skeleton } from "@heroui/react";
 import { GameCardHoverMotion } from "@features/games/GameCardHoverMotion";
 import { Gamepad2 } from "lucide-react";
 import { formatGameDisplayName, getSteamAppId } from "@utils/gameImage";
@@ -174,10 +174,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
   if (externalLoading) {
     return (
       <div className="border border-zinc-800/80 shadow-md overflow-hidden bg-[#0e0f14] rounded-xl">
-        <Skeleton className="aspect-460/215 w-full bg-zinc-800 rounded-t-xl" />
-        <div className="p-3 bg-[#13151b]/40 flex items-center justify-center border-t border-zinc-800/50">
-          <Skeleton className="h-4 w-3/4 bg-zinc-800 rounded-lg" />
-        </div>
+        <Skeleton className="aspect-460/215 w-full bg-zinc-800 rounded-xl" />
       </div>
     );
   }
@@ -185,7 +182,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
   const cardContent = (
     <GameCardHoverMotion disableMotion={isCatalog}>
       <div
-        className="cursor-pointer relative bg-[#0e0f14] border border-zinc-800/80 hover:border-primary/50 shadow-md transition-all duration-300 overflow-hidden rounded-xl flex flex-col h-full group/card"
+        className="cursor-pointer relative bg-[#0e0f14] border border-zinc-800/80 hover:border-primary/50 shadow-md transition-all duration-300 overflow-hidden rounded-xl aspect-460/215 w-full group/card"
         onClick={handleCardClick}
         onMouseEnter={onHoverStart}
         onMouseLeave={onHoverEnd}
@@ -205,9 +202,9 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
         {!isCatalog && syncProgress && <GameCardSyncProgress progress={syncProgress} />}
 
         <MaybeViewTransition name={`game-hero-${game.id}`} share="hero-morph" disabled={isLowPerf}>
-          <div className="relative aspect-460/215 w-full overflow-hidden bg-zinc-950 rounded-t-xl">
+          <div className="relative size-full overflow-hidden bg-zinc-950 rounded-xl">
             {(isEffectivelyLoading || (displayImageUrl && !imgLoaded && !imgError)) && (
-              <Skeleton className="absolute inset-0 z-10 size-full rounded-t-xl" />
+              <Skeleton className="absolute inset-0 z-10 size-full rounded-xl" />
             )}
 
             {displayImageUrl && !imgError ? (
@@ -219,7 +216,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
                 fetchPriority="auto"
                 draggable={false}
                 alt={game.id}
-                className={`size-full object-cover object-center transition-all duration-500 ease-out group-hover:scale-105 subpixel-antialiased transform-gpu rounded-t-xl ${
+                className={`size-full object-cover object-center transition-all duration-500 ease-out group-hover:scale-105 subpixel-antialiased transform-gpu rounded-xl ${
                   imgLoaded ? "opacity-100" : "opacity-0"
                 }`}
                 onLoad={handleImgLoad}
@@ -227,8 +224,11 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
               />
             ) : (
               !isEffectivelyLoading && (
-                <div className="flex size-full items-center justify-center rounded-t-xl">
-                  <Gamepad2 size={48} className="text-zinc-600" strokeWidth={1.5} />
+                <div className="flex size-full flex-col items-center justify-center p-4 bg-[#0e0f14] text-center gap-1.5 rounded-xl border border-zinc-800/20">
+                  <Gamepad2 size={32} className="text-zinc-600" strokeWidth={1.5} />
+                  <span className="text-[10px] font-bold text-zinc-400 select-none line-clamp-2 px-1">
+                    {cardTitle ?? formatGameDisplayName(game.id)}
+                  </span>
                 </div>
               )
             )}
@@ -243,33 +243,8 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
           </div>
         </MaybeViewTransition>
 
-        <div className="relative overflow-hidden flex flex-col p-3.5 gap-2 z-10 grow bg-[#13151b]/40 min-h-[68px] rounded-b-xl subpixel-antialiased">
-          <p className="truncate w-full text-left text-xs font-semibold tracking-tight text-white/95 group-hover:text-white transition-colors duration-300">
-            {cardTitle ?? formatGameDisplayName(game.id)}
-          </p>
-          {genres.length > 0 && (
-            <div className="flex max-w-full flex-wrap gap-1">
-              {genres.slice(0, 3).map((g, i) => (
-                <span
-                  key={`${g}-${i}`}
-                  className="h-4.5 text-[9px] font-medium px-2 py-0.5 rounded-md bg-zinc-800/40 border border-zinc-700/20 text-zinc-400 truncate tracking-wide">
-                  {g}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {!isCatalog && isUploadTooLarge && cardRest.onFullBackupUpload && (
-            <Tooltip content="Demasiado grande: usa Empaquetar." placement="top">
-              <span className="mt-0.5 w-max inline-flex items-center rounded-md border border-warning/30 bg-warning/10 px-2 py-0.5 text-[9px] font-medium text-warning">
-                Requiere empaquetar
-              </span>
-            </Tooltip>
-          )}
-
-          {/* Sliding detailed stats panel */}
-          {!isCatalog && stats && <GameCardStatsPanel stats={stats} editionLabel={game.editionLabel} />}
-        </div>
+        {/* Sliding detailed stats panel */}
+        {!isCatalog && stats && <GameCardStatsPanel stats={stats} editionLabel={game.editionLabel} />}
       </div>
     </GameCardHoverMotion>
   );
@@ -277,6 +252,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
   return (
     <GameCardHoverCard
       game={game}
+      variant={variant}
       mediaUrls={mediaUrls}
       videoUrl={videoUrl}
       genres={genres}
