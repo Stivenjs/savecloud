@@ -40,7 +40,7 @@ function getGridClass(layout: "grid-lg" | "grid-md" | "list"): string {
       return "grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5";
 
     case "grid-md":
-      return "grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5";
+      return "grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5";
 
     case "list":
       return "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4";

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { initHls, isHlsUrl } from "@utils/hls";
 import type { HlsType } from "@utils/hls";
 import { motion } from "framer-motion";
-import { Button, Chip, Popover, PopoverContent, PopoverTrigger } from "@heroui/react";
+import { Button, Popover, PopoverContent, PopoverTrigger } from "@heroui/react";
 import { ImageIcon, Maximize2, Video, Volume2, VolumeX } from "lucide-react";
 import type { Swiper as SwiperType } from "swiper";
 import { Autoplay, EffectFade } from "swiper/modules";
@@ -11,6 +11,7 @@ import type { ConfiguredGame } from "@app-types/config";
 import type { GameStats } from "@services/tauri";
 import { GameVideoModal } from "@features/games/GameVideoModal";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
+import { formatGameDisplayName } from "@utils/gameImage";
 
 import "swiper/css";
 import "swiper/css/effect-fade";
@@ -45,13 +46,23 @@ export interface GameCardHoverCardProps {
   storeName?: string | null;
   /** Estadísticas para mostrar en el hovercard. Opcional. */
   stats?: GameStats | null;
+  /** Tipo de tarjeta: biblioteca o catálogo */
+  variant?: "library" | "catalog";
 }
 
 /**
  * Envuelve la tarjeta de juego y muestra un popover al hacer hover
  * con más información e imágenes (estilo Steam).
  */
-export function GameCardHoverCard({ children, mediaUrls, videoUrl, genres = [], storeName }: GameCardHoverCardProps) {
+export function GameCardHoverCard({
+  game,
+  children,
+  mediaUrls,
+  videoUrl,
+  genres = [],
+  storeName,
+  variant = "library",
+}: GameCardHoverCardProps) {
   const isLowPerf = useLowPerformanceMode();
 
   const [showHovercard, setShowHovercard] = useState(false);
@@ -222,9 +233,10 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl, genres = [], 
         isOpen={showHovercard}
         placement="right"
         showArrow
-        offset={8}
+        offset={12}
         classNames={{
-          content: "max-w-[20rem] w-[20rem] p-0 overflow-hidden rounded-xl shadow-lg border border-default-200/80",
+          content:
+            "max-w-[20rem] w-[20rem] p-0 overflow-hidden rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-zinc-800/80 bg-[#0e0f14]/98 backdrop-blur-md",
         }}>
         <PopoverTrigger>
           <div className="outline-none" onMouseEnter={openHovercard} onMouseLeave={closeHovercard}>
@@ -235,13 +247,13 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl, genres = [], 
         <PopoverContent
           onMouseEnter={openHovercard}
           onMouseLeave={closeHovercard}
-          className="p-0 overflow-hidden rounded-xl border-0 shadow-lg bg-transparent">
+          className="p-0 overflow-hidden rounded-2xl border-0 shadow-none bg-transparent">
           <motion.div
-            className="relative w-full overflow-hidden bg-default-200"
+            className="relative w-full overflow-hidden bg-zinc-950/45 rounded-t-2xl"
             variants={contentVariants}
             initial="hidden"
             animate="visible">
-            <div className="relative h-44 w-full">
+            <div className="relative h-44 w-full overflow-hidden rounded-t-2xl">
               {validUrls.length > 0 ? (
                 <div
                   className={
@@ -273,7 +285,7 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl, genres = [], 
                         : false
                     }>
                     {validUrls.map((url) => (
-                      <SwiperSlide key={url} className="flex! h-44 items-stretch justify-center bg-default-200">
+                      <SwiperSlide key={url} className="flex! h-44 items-stretch justify-center bg-zinc-950">
                         <img
                           src={url}
                           alt="Game image"
@@ -288,14 +300,14 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl, genres = [], 
               ) : null}
 
               {validUrls.length === 0 && !(isVideoMode && hasVideo) ? (
-                <div className="h-44 w-full bg-default-200" />
+                <div className="h-44 w-full bg-zinc-950" />
               ) : null}
 
               {isVideoMode && hasVideo ? (
                 <video
                   ref={videoRef}
                   src={useHls ? undefined : videoUrl!}
-                  className="absolute inset-0 z-5 h-full w-full object-cover object-center"
+                  className="absolute inset-0 z-5 h-full w-full object-cover object-center bg-zinc-950"
                   muted
                   loop
                   playsInline
@@ -305,27 +317,27 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl, genres = [], 
             </div>
 
             {hasVideo && (
-              <div className="absolute right-1.5 top-1.5 z-20 flex gap-1">
+              <div className="absolute right-2 top-2 z-20 flex gap-1.5">
                 {isVideoMode && (
                   <>
                     <Button
                       isIconOnly
                       size="sm"
                       variant="flat"
-                      className="min-w-8 w-8 h-8 rounded-lg bg-black/50 text-white backdrop-blur-sm hover:bg-black/70"
+                      className="min-w-8 w-8 h-8 rounded-full bg-zinc-950/70 text-white border border-white/5 backdrop-blur-md hover:bg-zinc-900/90"
                       aria-label="Ver vídeo en grande"
                       onPress={() => setShowVideoModal(true)}>
-                      <Maximize2 size={16} strokeWidth={2} />
+                      <Maximize2 size={14} strokeWidth={2} />
                     </Button>
 
                     <Button
                       isIconOnly
                       size="sm"
                       variant="flat"
-                      className="min-w-8 w-8 h-8 rounded-lg bg-black/50 text-white backdrop-blur-sm hover:bg-black/70"
+                      className="min-w-8 w-8 h-8 rounded-full bg-zinc-950/70 text-white border border-white/5 backdrop-blur-md hover:bg-zinc-900/90"
                       aria-label={isMuted ? "Activar sonido" : "Silenciar"}
                       onPress={() => setIsMuted((m) => !m)}>
-                      {isMuted ? <VolumeX size={16} strokeWidth={2} /> : <Volume2 size={16} strokeWidth={2} />}
+                      {isMuted ? <VolumeX size={14} strokeWidth={2} /> : <Volume2 size={14} strokeWidth={2} />}
                     </Button>
                   </>
                 )}
@@ -334,36 +346,33 @@ export function GameCardHoverCard({ children, mediaUrls, videoUrl, genres = [], 
                   isIconOnly
                   size="sm"
                   variant="flat"
-                  className="min-w-8 w-8 h-8 rounded-lg bg-black/50 text-white backdrop-blur-sm hover:bg-black/70"
+                  className="min-w-8 w-8 h-8 rounded-full bg-zinc-950/70 text-white border border-white/5 backdrop-blur-md hover:bg-zinc-900/90"
                   aria-label={isVideoMode ? "Ver imágenes" : "Reproducir vídeo"}
                   onPress={toggleVideoMode}>
-                  {isVideoMode ? <ImageIcon size={16} strokeWidth={2} /> : <Video size={16} strokeWidth={2} />}
+                  {isVideoMode ? <ImageIcon size={14} strokeWidth={2} /> : <Video size={14} strokeWidth={2} />}
                 </Button>
               </div>
             )}
           </motion.div>
 
-          {(storeName?.trim() || genres.length > 0) && (
-            <div className="relative z-10 w-full border-t border-default-200/80 bg-default-100 px-2.5 py-2 dark:bg-default-50">
-              {storeName?.trim() ? (
-                <p className="line-clamp-2 text-xs font-semibold leading-tight text-foreground">{storeName.trim()}</p>
-              ) : null}
-              {genres.length > 0 ? (
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {genres.slice(0, 5).map((g, i) => (
-                    <Chip
-                      key={`${g}-${i}`}
-                      size="sm"
-                      variant="flat"
-                      color="default"
-                      className="h-5 max-w-36 truncate text-[10px]">
-                      {g}
-                    </Chip>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          )}
+          <div className="relative z-10 w-full border-t border-zinc-800/50 bg-[#13151b]/98 px-4 py-3 rounded-b-2xl">
+            <p className="line-clamp-2 text-xs font-bold text-white tracking-tight leading-snug mb-1.5">
+              {variant === "catalog"
+                ? storeName?.trim() || formatGameDisplayName(game.id)
+                : formatGameDisplayName(game.id)}
+            </p>
+            {genres.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {genres.slice(0, 5).map((g, i) => (
+                  <span
+                    key={`${g}-${i}`}
+                    className="text-[9px] font-medium px-2 py-0.5 rounded-md bg-zinc-800/40 border border-zinc-700/20 text-zinc-400 truncate tracking-wide">
+                    {g}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </PopoverContent>
       </Popover>
 

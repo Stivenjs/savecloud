@@ -52,9 +52,9 @@ export function GameCardActions({
             isIconOnly
             size="sm"
             variant="flat"
-            className="min-w-unit-9 h-9 rounded-lg bg-black/60 text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 focus:opacity-100"
+            className="min-w-8 w-8 h-8 rounded-lg bg-zinc-950/65 hover:bg-zinc-900 border border-zinc-800 hover:border-primary/50 text-white/90 shadow-md backdrop-blur-md transition-all duration-300 scale-90 opacity-0 group-hover:opacity-100 group-hover:scale-100 focus:opacity-100 focus:scale-100"
             aria-label="Acciones">
-            <MoreVertical size={18} />
+            <MoreVertical size={16} />
           </Button>
         </DropdownTrigger>
         <GameActionsDropdownMenu
