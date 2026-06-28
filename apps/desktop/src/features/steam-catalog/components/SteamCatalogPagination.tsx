@@ -6,6 +6,7 @@ type SteamCatalogPaginationProps = {
   page: number;
   onChange: (page: number) => void;
   isDisabled?: boolean;
+  consoleMode?: boolean;
 };
 
 export const SteamCatalogPagination = memo(function SteamCatalogPagination({
@@ -13,6 +14,7 @@ export const SteamCatalogPagination = memo(function SteamCatalogPagination({
   page,
   onChange,
   isDisabled,
+  consoleMode = false,
 }: SteamCatalogPaginationProps) {
   if (totalPages <= 1) {
     return null;
@@ -28,8 +30,8 @@ export const SteamCatalogPagination = memo(function SteamCatalogPagination({
         showControls
         color="primary"
         variant="bordered"
-        radius="md"
-        size="sm"
+        radius={consoleMode ? "lg" : "md"}
+        size={consoleMode ? "lg" : "sm"}
         isDisabled={isDisabled}
         boundaries={1}
         siblings={1}

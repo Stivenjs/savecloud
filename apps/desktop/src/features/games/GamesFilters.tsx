@@ -31,6 +31,7 @@ export function DebouncedGamesSearchInput({
   isClearable = true,
   classNames: inputClassNames,
   startContent: startSlot,
+  placeholder,
 }: {
   searchTerm: string;
   onSearchChange: (value: string) => void;
@@ -43,6 +44,7 @@ export function DebouncedGamesSearchInput({
   classNames?: InputProps["classNames"];
   /** Sustituye el icono de lupa inicial (ej. rail consola). */
   startContent?: ReactNode;
+  placeholder?: string;
 }) {
   const [localSearch, setLocalSearch] = useState(searchTerm);
   const debouncedSearch = useDebouncedValue(localSearch, 300);
@@ -66,7 +68,7 @@ export function DebouncedGamesSearchInput({
     <Input
       type="text"
       aria-label="Buscar en la biblioteca"
-      placeholder={compact ? "Buscar…" : "Buscar juegos..."}
+      placeholder={placeholder ?? (compact ? "Buscar…" : "Buscar juegos...")}
       value={localSearch}
       autoFocus={autoFocus}
       onValueChange={setLocalSearch}
