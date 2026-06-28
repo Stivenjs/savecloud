@@ -33,6 +33,19 @@ type CatalogGridItemProps = {
   consoleMode?: boolean;
 };
 
+const CONSOLE_SOURCE_LISTBOX_PROPS = {
+  itemClasses: {
+    base: "min-h-14 rounded-lg px-4 py-2 data-[hover=true]:bg-default-200/55 dark:data-[hover=true]:bg-default-100/25",
+    title: "text-base font-semibold leading-snug text-foreground sm:text-lg",
+    wrapper: "py-1",
+    selectedIcon: "text-primary [&_svg]:size-5",
+  },
+  classNames: {
+    list: "gap-1 px-1 py-2",
+    base: "p-0",
+  },
+};
+
 /**
  * Extraído y memoizado para que cambios en filtros/búsqueda/paginación del padre
  * no re-renderizen las cards que no cambiaron. Solo se re-renderiza si alguna de
@@ -142,11 +155,15 @@ const CatalogGridItem = memo(function CatalogGridItem({
                     const next = [...keys][0];
                     onPickChange(item.name, next !== undefined ? String(next) : sourceCandidateKey(best));
                   }}
+                  maxListboxHeight={consoleMode ? 520 : undefined}
+                  listboxProps={consoleMode ? CONSOLE_SOURCE_LISTBOX_PROPS : undefined}
                   classNames={
                     consoleMode
                       ? {
                           trigger: "h-12 min-h-12 rounded-xl text-base",
                           value: "text-base font-semibold",
+                          listbox: "gap-0 p-0 text-base",
+                          popoverContent: "min-w-[var(--trigger-width)] p-2 text-base",
                         }
                       : undefined
                   }>
@@ -359,6 +376,7 @@ export function SteamCatalogGrid({
           onSelectPeerDevice={peerOffersHook.setSelectedDeviceId}
           onConfirm={handleConfirmInstall}
           onConfirmPeer={handleConfirmPeerInstall}
+          consoleMode={consoleMode}
         />
       )}
     </>

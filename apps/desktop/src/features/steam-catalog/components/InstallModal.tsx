@@ -30,6 +30,7 @@ export interface InstallModalProps {
   onSelectPeerDevice?: (deviceId: string) => void;
   onConfirm: (path: string) => void;
   onConfirmPeer?: (path: string, offer: PeerInstallOffer) => void;
+  consoleMode?: boolean;
 }
 
 const DEFAULT_DOWNLOAD_SUBFOLDER = "SaveCloudGames";
@@ -47,6 +48,7 @@ export function InstallModal({
   onSelectPeerDevice,
   onConfirm,
   onConfirmPeer,
+  consoleMode = false,
 }: InstallModalProps) {
   const { disks } = useDisks();
   const [selectedDisk, setSelectedDisk] = useState<string | null>(null);
@@ -129,28 +131,40 @@ export function InstallModal({
     <Modal
       isOpen={isOpen}
       onOpenChange={onOpenChange}
-      size="2xl"
+      size={consoleMode ? "4xl" : "2xl"}
       classNames={{
-        base: "bg-content1 text-foreground border border-divider",
-        header: "border-b border-divider pb-4",
-        footer: "border-t border-divider pt-4",
+        base: cn("bg-content1 text-foreground border border-divider", consoleMode ? "p-4 rounded-2xl" : ""),
+        header: cn("border-b border-divider pb-4", consoleMode ? "px-6 pt-6" : ""),
+        footer: cn("border-t border-divider pt-4", consoleMode ? "px-6 pb-6" : ""),
       }}
       backdrop="blur">
       <ModalContent>
         {(onClose) => (
           <>
             <ModalHeader className="flex flex-col gap-1">
-              <h2 className="text-xl font-bold tracking-tight">Instalar</h2>
+              <h2 className={cn("font-bold tracking-tight text-foreground", consoleMode ? "text-2xl" : "text-xl")}>
+                Instalar
+              </h2>
             </ModalHeader>
             <ModalBody className="py-6">
               {/* Game Info Header */}
-              <div className="flex gap-4 items-center bg-content2 p-4 rounded-xl border border-divider mb-6">
-                <div className="aspect-video w-32 shrink-0 overflow-hidden rounded-lg bg-default-100">
+              <div
+                className={cn(
+                  "flex items-center border border-divider rounded-xl",
+                  consoleMode ? "gap-6 p-6 mb-8 bg-content2/80" : "gap-4 p-4 mb-6 bg-content2"
+                )}>
+                <div
+                  className={cn(
+                    "aspect-video shrink-0 overflow-hidden rounded-lg bg-default-100",
+                    consoleMode ? "w-48" : "w-32"
+                  )}>
                   <InstallModalGameCover game={game} alt={gameName} mediaBySteamAppId={mediaBySteamAppId} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-bold truncate">{gameName}</h3>
-                  <p className="text-default-500 text-sm font-medium">
+                  <h3 className={cn("font-bold truncate text-foreground", consoleMode ? "text-2xl" : "text-lg")}>
+                    {gameName}
+                  </h3>
+                  <p className={cn("text-default-500 font-medium", consoleMode ? "text-base mt-1" : "text-sm")}>
                     Tamaño necesario: <span className="text-foreground">{gameSizeStr || "Desconocido"}</span>
                   </p>
                   {downloadKind !== "unknown" ? (
@@ -179,31 +193,54 @@ export function InstallModal({
 
               <div className="space-y-4">
                 <div className="flex items-center justify-between px-1">
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-default-400">Instalar en:</h4>
+                  <h4
+                    className={cn(
+                      "font-bold uppercase tracking-widest text-default-400",
+                      consoleMode ? "text-sm" : "text-xs"
+                    )}>
+                    Instalar en:
+                  </h4>
                   <Button
-                    size="sm"
+                    size={consoleMode ? "md" : "sm"}
                     variant="light"
-                    startContent={<FolderOpen size={14} />}
-                    className="text-primary h-7 min-w-unit-0 px-2"
+                    startContent={<FolderOpen size={consoleMode ? 16 : 14} />}
+                    className={cn(
+                      "text-primary px-2",
+                      consoleMode ? "h-9 text-sm font-semibold rounded-xl" : "h-7 min-w-unit-0 text-xs"
+                    )}
                     onPress={handleCustomFolder}>
                     Elegir otra carpeta
                   </Button>
                 </div>
 
                 {customPath && (
-                  <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 flex items-center gap-3">
-                    <div className="p-2 bg-primary/20 rounded-md text-primary">
-                      <FolderOpen size={18} />
+                  <div
+                    className={cn(
+                      "rounded-lg bg-primary/10 border border-primary/20 flex items-center",
+                      consoleMode ? "p-4 gap-4" : "p-3 gap-3"
+                    )}>
+                    <div className={cn("bg-primary/20 rounded-md text-primary", consoleMode ? "p-3" : "p-2")}>
+                      <FolderOpen size={consoleMode ? 22 : 18} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-primary uppercase">Carpeta personalizada</p>
-                      <p className="text-sm truncate text-foreground/90">{customPath}</p>
+                      <p className={cn("font-bold text-primary uppercase", consoleMode ? "text-xs" : "text-[10px]")}>
+                        Carpeta personalizada
+                      </p>
+                      <p
+                        className={cn(
+                          "truncate text-foreground/90 font-medium",
+                          consoleMode ? "text-base" : "text-sm"
+                        )}>
+                        {customPath}
+                      </p>
                     </div>
-                    {!hasEnoughSpace && <AlertCircle size={18} className="text-warning animate-pulse" />}
+                    {!hasEnoughSpace && (
+                      <AlertCircle size={consoleMode ? 22 : 18} className="text-warning animate-pulse" />
+                    )}
                   </div>
                 )}
 
-                <ScrollShadow className="max-h-75 space-y-2">
+                <ScrollShadow className={cn("space-y-2", consoleMode ? "max-h-96" : "max-h-75")}>
                   {disks.map((disk) => {
                     const isSelected = selectedDisk === disk.mountPoint && !customPath;
                     const lowSpace = disk.availableSpace < gameSizeBytes;
@@ -216,7 +253,8 @@ export function InstallModal({
                           setCustomPath(null);
                         }}
                         className={cn(
-                          "group cursor-pointer p-4 rounded-xl border transition-all duration-200",
+                          "group cursor-pointer rounded-xl border transition-all duration-200",
+                          consoleMode ? "p-5" : "p-4",
                           isSelected
                             ? "bg-primary border-primary shadow-lg shadow-primary/20"
                             : "bg-content2 border-divider hover:bg-content3 hover:border-default-300"
@@ -224,16 +262,22 @@ export function InstallModal({
                         <div className="flex items-center gap-4">
                           <div
                             className={cn(
-                              "p-2 rounded-lg transition-colors",
+                              "rounded-lg transition-colors",
+                              consoleMode ? "p-3" : "p-2",
                               isSelected
                                 ? "bg-white/20 text-white"
                                 : "bg-default-100 text-default-600 group-hover:text-foreground"
                             )}>
-                            <HardDrive size={20} />
+                            <HardDrive size={consoleMode ? 24 : 20} />
                           </div>
                           <div className="flex-1">
                             <div className="flex justify-between items-center mb-1">
-                              <span className={cn("font-bold text-sm", isSelected ? "text-white" : "text-foreground")}>
+                              <span
+                                className={cn(
+                                  "font-bold",
+                                  consoleMode ? "text-base" : "text-sm",
+                                  isSelected ? "text-white" : "text-foreground"
+                                )}>
                                 {disk.name || "Unidad local"} ({disk.mountPoint.replace(/\\/g, "/")})
                                 {isSelected && (
                                   <span className="ml-1 opacity-70 font-normal">
@@ -243,7 +287,8 @@ export function InstallModal({
                               </span>
                               <span
                                 className={cn(
-                                  "text-[10px] font-bold uppercase tracking-wider",
+                                  "font-bold uppercase tracking-wider",
+                                  consoleMode ? "text-xs" : "text-[10px]",
                                   isSelected ? "text-white/80" : "text-default-400"
                                 )}>
                                 Espacio Libre: {formatBytes(disk.availableSpace)}
@@ -255,10 +300,11 @@ export function InstallModal({
                               <div
                                 className={cn(
                                   "flex items-center gap-1.5 mt-1",
-                                  isSelected ? "text-white" : "text-warning"
+                                  isSelected ? "text-white" : "text-warning",
+                                  consoleMode ? "text-xs" : "text-[10px]"
                                 )}>
-                                <AlertCircle size={12} />
-                                <span className="text-[10px] font-bold">ESPACIO INSUFICIENTE</span>
+                                <AlertCircle size={consoleMode ? 14 : 12} />
+                                <span className="font-bold">ESPACIO INSUFICIENTE</span>
                               </div>
                             )}
                           </div>
@@ -269,7 +315,11 @@ export function InstallModal({
                 </ScrollShadow>
 
                 {peerOffers.length > 0 && selectedPeer ? (
-                  <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2.5 text-xs text-warning-700 dark:text-warning">
+                  <div
+                    className={cn(
+                      "rounded-lg border border-warning/40 bg-warning/10 px-3 py-2.5 text-warning-700 dark:text-warning",
+                      consoleMode ? "text-sm p-4" : "text-xs"
+                    )}>
                     <p className="font-semibold uppercase tracking-wide text-[10px] text-warning">Nota</p>
                     <p className="mt-1 leading-relaxed">
                       {peerReachable
@@ -281,10 +331,11 @@ export function InstallModal({
                         {peerOffers.map((offer) => (
                           <Button
                             key={offer.deviceId}
-                            size="sm"
+                            size={consoleMode ? "md" : "sm"}
                             variant={offer.deviceId === selectedPeer.deviceId ? "solid" : "flat"}
                             color={offer.deviceId === selectedPeer.deviceId ? "warning" : "default"}
-                            onPress={() => onSelectPeerDevice(offer.deviceId)}>
+                            onPress={() => onSelectPeerDevice(offer.deviceId)}
+                            className={consoleMode ? "h-10 text-sm font-semibold rounded-xl px-4" : ""}>
                             {offer.deviceName}
                             {offer.reachableOnLan ? " (LAN)" : ""}
                           </Button>
@@ -296,7 +347,13 @@ export function InstallModal({
               </div>
             </ModalBody>
             <ModalFooter>
-              <Button variant="flat" onPress={onClose} className="bg-default-100 hover:bg-default-200 text-default-700">
+              <Button
+                variant="flat"
+                onPress={onClose}
+                className={cn(
+                  "bg-default-100 hover:bg-default-200 text-default-700 font-semibold",
+                  consoleMode ? "h-12 text-base rounded-xl px-6" : ""
+                )}>
                 Cancelar
               </Button>
 
@@ -304,7 +361,10 @@ export function InstallModal({
                 color="primary"
                 isDisabled={!effectivePath || !hasEnoughSpace || (peerReachable && !onConfirmPeer)}
                 onPress={handleInstall}
-                className="font-bold px-8 shadow-lg shadow-primary/20">
+                className={cn(
+                  "font-bold shadow-lg shadow-primary/20",
+                  consoleMode ? "h-12 text-base rounded-xl px-8" : "px-8"
+                )}>
                 {peerReachable && selectedPeer ? `Traer desde ${selectedPeer.deviceName}` : "Instalar"}
               </Button>
             </ModalFooter>

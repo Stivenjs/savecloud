@@ -1,5 +1,6 @@
 import { memo } from "react";
-import { Pagination } from "@heroui/react";
+import { Pagination, Button } from "@heroui/react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 type SteamCatalogPaginationProps = {
   totalPages: number;
@@ -18,6 +19,34 @@ export const SteamCatalogPagination = memo(function SteamCatalogPagination({
 }: SteamCatalogPaginationProps) {
   if (totalPages <= 1) {
     return null;
+  }
+
+  if (consoleMode) {
+    return (
+      <nav className="flex items-center justify-center gap-6 pt-8 pb-4" aria-label="Páginas del catálogo">
+        <Button
+          size="lg"
+          variant="flat"
+          isDisabled={page <= 1 || isDisabled}
+          className="h-12 px-6 text-base font-semibold rounded-xl bg-default-100/30 text-white hover:bg-default-100/50"
+          startContent={<ChevronLeft size={20} />}
+          onPress={() => onChange(page - 1)}>
+          Anterior
+        </Button>
+        <span className="text-lg font-bold text-default-400 min-w-36 text-center tabular-nums">
+          Página {page} de {totalPages}
+        </span>
+        <Button
+          size="lg"
+          variant="flat"
+          isDisabled={page >= totalPages || isDisabled}
+          className="h-12 px-6 text-base font-semibold rounded-xl bg-default-100/30 text-white hover:bg-default-100/50"
+          endContent={<ChevronRight size={20} />}
+          onPress={() => onChange(page + 1)}>
+          Siguiente
+        </Button>
+      </nav>
+    );
   }
 
   return (
