@@ -25,14 +25,14 @@ export function GameCardHoverMotion({
         className="relative group/motion"
         initial={false}
         whileHover={{
-          y: -8,
-          scale: 1.03,
+          y: -4,
+          scale: 1.01,
           boxShadow: SHADOW_HOVER,
-          transition: { type: "spring", stiffness: 350, damping: 25 },
+          transition: { type: "spring", stiffness: 120, damping: 22 },
         }}
         whileTap={{
-          scale: 0.98,
-          transition: { type: "spring", stiffness: 500, damping: 30 },
+          scale: 0.99,
+          transition: { type: "spring", stiffness: 250, damping: 25 },
         }}
         style={{
           boxShadow: SHADOW_REST,
