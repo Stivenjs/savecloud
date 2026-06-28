@@ -234,6 +234,7 @@ export function GameCardHoverCard({
         placement="right"
         showArrow
         offset={12}
+        isNonModal={true}
         classNames={{
           content:
             "max-w-[20rem] w-[20rem] p-0 overflow-hidden rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-zinc-800/80 bg-[#0e0f14]/98 backdrop-blur-md",

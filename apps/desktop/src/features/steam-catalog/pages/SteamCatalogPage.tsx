@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { Spinner } from "@heroui/react";
-import { Library } from "lucide-react";
+import { Spinner, Drawer, DrawerBody, DrawerContent, DrawerHeader, Button, cn } from "@heroui/react";
+import { Library, SlidersHorizontal } from "lucide-react";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { SteamCatalogFilters } from "@features/steam-catalog/components/SteamCatalogFilters";
 import { SteamCatalogGrid } from "@features/steam-catalog/components/SteamCatalogGrid";
@@ -9,8 +9,9 @@ import { SteamCatalogTrendingHero } from "@features/steam-catalog/components/Ste
 import { SteamCatalogToolbar } from "@features/steam-catalog/components/SteamCatalogToolbar";
 import { useSteamCatalogQueries } from "@features/steam-catalog/hooks/useSteamCatalogQueries";
 import { useSteamCatalogTrendingHero } from "@features/steam-catalog/hooks/useSteamCatalogTrendingHero";
+import { useSteamCatalogGamepadPagination } from "@features/steam-catalog/hooks/useSteamCatalogGamepadPagination";
 import { useShellUiStore } from "@store/ShellUiStore";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
 
 export function SteamCatalogPage() {
   const navigate = useNavigate();
@@ -19,6 +20,12 @@ export function SteamCatalogPage() {
   const setCatalogScrollPosition = useShellUiStore((state) => state.setCatalogScrollPosition);
 
   const hasRestored = useRef(false);
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+
+  const bigPictureConsole = useMemo(
+    () => typeof document !== "undefined" && document.documentElement.classList.contains("savecloud-big-picture"),
+    []
+  );
 
   const {
     searchTerm,
@@ -55,6 +62,28 @@ export function SteamCatalogPage() {
   useRegisterGlobalBack(() => {
     navigate("/");
     return true;
+  });
+
+  useEffect(() => {
+    if (!bigPictureConsole) return;
+    const reg = useShellUiStore.getState().registerCatalogBpSearchValueSetter;
+    const put = useShellUiStore.getState().setCatalogBpSearchTerm;
+    reg(setSearchTerm);
+    put(searchTerm);
+    return () => {
+      reg(null);
+      put("");
+    };
+  }, [bigPictureConsole, setSearchTerm, searchTerm]);
+
+  useEffect(() => {
+    if (bigPictureConsole) useShellUiStore.getState().setCatalogBpSearchTerm(searchTerm);
+  }, [bigPictureConsole, searchTerm]);
+
+  const { triggerLabels, triggerUrls } = useSteamCatalogGamepadPagination({
+    bigPictureConsole,
+    totalPages,
+    setPage,
   });
 
   const isReady = !isLoading && items.length > 0;
@@ -98,20 +127,49 @@ export function SteamCatalogPage() {
     };
   }, [isReady, setCatalogScrollPosition]);
 
+  const totalSelectedFilters = selectedGenres.length + selectedTags.length;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div
-          className="flex size-9 items-center justify-center rounded-xl 
-                  bg-primary/10 dark:bg-primary/15">
-          <Library size={20} className="text-primary" />
+    <div className={cn("space-y-6", bigPictureConsole ? "pb-32" : "")}>
+      <div className={cn("flex flex-wrap items-center justify-between gap-4", bigPictureConsole ? "mt-4 sm:mt-6" : "")}>
+        <div className="flex items-center gap-3">
+          {!bigPictureConsole && (
+            <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 dark:bg-primary/15">
+              <Library size={20} className="text-primary" />
+            </div>
+          )}
+          <div>
+            <h1
+              className={cn(
+                "font-bold tracking-tight text-foreground",
+                bigPictureConsole ? "text-2xl md:text-[1.875rem]" : "text-2xl"
+              )}>
+              Catálogo Steam
+            </h1>
+            <p className="text-xs text-default-400 mt-0.5">
+              {totalBrowse > 0 ? `${totalBrowse.toLocaleString()} juegos indexados` : ""}
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Catálogo Steam</h1>
-          <p className="text-xs text-default-400 mt-0.5">
-            {totalBrowse > 0 ? `${totalBrowse.toLocaleString()} juegos indexados` : ""}
-          </p>
-        </div>
+
+        {bigPictureConsole && (
+          <div className="flex items-center gap-3">
+            <Button
+              size="lg"
+              variant="flat"
+              color="default"
+              className="font-semibold px-5 h-12 rounded-xl text-base bg-default-100/30 hover:bg-default-100/50"
+              startContent={<SlidersHorizontal size={19} />}
+              onPress={() => setIsFilterDrawerOpen(true)}>
+              Filtrar
+              {totalSelectedFilters > 0 && (
+                <span className="ml-1 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                  {totalSelectedFilters}
+                </span>
+              )}
+            </Button>
+          </div>
+        )}
       </div>
 
       {showTrendingHero ? (
@@ -126,21 +184,23 @@ export function SteamCatalogPage() {
       ) : null}
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <aside className="w-full shrink-0 lg:sticky lg:top-26 lg:max-h-[calc(100vh-8rem)] lg:w-80 lg:overflow-y-auto lg:pr-1">
-          <SteamCatalogFilters
-            genres={facets?.genres ?? []}
-            tags={facets?.tags ?? []}
-            selectedGenres={selectedGenres}
-            selectedTags={selectedTags}
-            onToggleGenre={toggleGenre}
-            onToggleTag={toggleTag}
-            onClearAll={clearFilters}
-            isLoading={facetsLoading}
-          />
-        </aside>
+        {!bigPictureConsole && (
+          <aside className="w-full shrink-0 lg:sticky lg:top-26 lg:max-h-[calc(100vh-8rem)] lg:w-80 lg:overflow-y-auto lg:pr-1">
+            <SteamCatalogFilters
+              genres={facets?.genres ?? []}
+              tags={facets?.tags ?? []}
+              selectedGenres={selectedGenres}
+              selectedTags={selectedTags}
+              onToggleGenre={toggleGenre}
+              onToggleTag={toggleTag}
+              onClearAll={clearFilters}
+              isLoading={facetsLoading}
+            />
+          </aside>
+        )}
 
         <div className="min-w-0 flex-1 space-y-4">
-          <SteamCatalogToolbar searchTerm={searchTerm} onSearchTermChange={setSearchTerm} />
+          {!bigPictureConsole && <SteamCatalogToolbar searchTerm={searchTerm} onSearchTermChange={setSearchTerm} />}
 
           {isLoading ? (
             <div className="flex min-h-[40vh] items-center justify-center">
@@ -199,21 +259,96 @@ export function SteamCatalogPage() {
                       mediaBySteamAppId={mediaBySteamAppId}
                       matchByGameName={matchByGameName}
                       isMatchingPending={isMatchingPending}
+                      consoleMode={bigPictureConsole}
                     />
                   </div>
 
-                  <SteamCatalogPagination
-                    totalPages={totalPages}
-                    page={page}
-                    onChange={setPage}
-                    isDisabled={isPageTransition}
-                  />
+                  {bigPictureConsole ? (
+                    <div className="flex items-center justify-center gap-10 pt-10 pb-4 text-white/80 font-bold text-xl md:text-2xl select-none">
+                      <span className="flex items-center gap-3">
+                        {triggerUrls.left ? (
+                          <img
+                            src={triggerUrls.left}
+                            alt={triggerLabels.left}
+                            className="size-11 object-contain brightness-100 filter invert dark:invert-0 transition-transform active:scale-90"
+                          />
+                        ) : (
+                          <span className="text-sm bg-default-100/50 px-3 py-1 rounded font-bold text-default-600 border border-default-200/60">
+                            {triggerLabels.left}
+                          </span>
+                        )}
+                      </span>
+                      <span className="tracking-wide">
+                        Página {page} de {totalPages}
+                      </span>
+                      <span className="flex items-center gap-3">
+                        {triggerUrls.right ? (
+                          <img
+                            src={triggerUrls.right}
+                            alt={triggerLabels.right}
+                            className="size-11 object-contain brightness-100 filter invert dark:invert-0 transition-transform active:scale-90"
+                          />
+                        ) : (
+                          <span className="text-sm bg-default-100/50 px-3 py-1 rounded font-bold text-default-600 border border-default-200/60">
+                            {triggerLabels.right}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  ) : (
+                    <SteamCatalogPagination
+                      totalPages={totalPages}
+                      page={page}
+                      onChange={setPage}
+                      isDisabled={isPageTransition}
+                      consoleMode={bigPictureConsole}
+                    />
+                  )}
                 </>
               )}
             </>
           )}
         </div>
       </div>
+
+      {bigPictureConsole && (
+        <Drawer
+          isOpen={isFilterDrawerOpen}
+          onOpenChange={setIsFilterDrawerOpen}
+          placement="left"
+          size="md"
+          classNames={{
+            base: "bg-[#0e0f14]/95 backdrop-blur-2xl border-l border-white/[0.09] shadow-2xl text-foreground",
+            header: "border-b border-white/[0.06] pb-4 px-6 pt-6",
+            body: "py-6 px-6 overflow-y-auto",
+          }}>
+          <DrawerContent>
+            {() => (
+              <>
+                <DrawerHeader className="flex flex-col gap-1">
+                  <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+                    <SlidersHorizontal size={20} className="text-primary" />
+                    Filtrar catálogo
+                  </h2>
+                </DrawerHeader>
+                <DrawerBody>
+                  <SteamCatalogFilters
+                    genres={facets?.genres ?? []}
+                    tags={facets?.tags ?? []}
+                    selectedGenres={selectedGenres}
+                    selectedTags={selectedTags}
+                    onToggleGenre={toggleGenre}
+                    onToggleTag={toggleTag}
+                    onClearAll={clearFilters}
+                    isLoading={facetsLoading}
+                    consoleMode={true}
+                  />
+                </DrawerBody>
+              </>
+            )}
+          </DrawerContent>
+        </Drawer>
+      )}
     </div>
   );
 }

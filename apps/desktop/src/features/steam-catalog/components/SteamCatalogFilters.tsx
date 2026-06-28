@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useState } from "react";
-import { Accordion, AccordionItem, Button, Checkbox, Chip, Input, Skeleton } from "@heroui/react";
+import { Accordion, AccordionItem, Button, Checkbox, Chip, Input, Skeleton, cn } from "@heroui/react";
 import type { CatalogFilterFacet } from "@services/tauri";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { Search, TagsIcon, Swords } from "lucide-react";
@@ -13,6 +13,7 @@ type SteamCatalogFiltersProps = {
   onToggleTag: (label: string) => void;
   onClearAll: () => void;
   isLoading?: boolean;
+  consoleMode?: boolean;
 };
 
 function normalizeFilter(s: string): string {
@@ -26,11 +27,13 @@ const FacetFilterPanel = memo(function FacetFilterPanel({
   selected,
   onToggle,
   filterPlaceholder,
+  consoleMode = false,
 }: {
   items: CatalogFilterFacet[];
   selected: Set<string>;
   onToggle: (label: string) => void;
   filterPlaceholder: string;
+  consoleMode?: boolean;
 }) {
   const [filterText, setFilterText] = useState("");
   const debouncedFilterText = useDebouncedValue(filterText, 300);
@@ -71,29 +74,31 @@ const FacetFilterPanel = memo(function FacetFilterPanel({
       : `${items.length} disponible${items.length === 1 ? "" : "s"}`;
 
   return (
-    <div className="flex flex-col gap-3 pt-1">
+    <div className={cn("flex flex-col gap-3 pt-1", consoleMode && "gap-4")}>
       <div className="flex flex-col gap-2">
-        <p className="text-xs text-default-500">{subtitle}</p>
+        <p className={cn("text-default-500", consoleMode ? "text-sm font-medium" : "text-xs")}>{subtitle}</p>
         <Input
-          size="sm"
+          size={consoleMode ? "lg" : "sm"}
           placeholder={filterPlaceholder}
           value={filterText}
-          startContent={<Search size={18} className="text-default-400" />}
+          startContent={<Search size={consoleMode ? 22 : 18} className="text-default-400" />}
           onValueChange={setFilterText}
-          variant="bordered"
+          variant={consoleMode ? "flat" : "bordered"}
           classNames={{
-            input: "text-xs",
-            inputWrapper: "h-8 min-h-8",
+            input: consoleMode ? "text-base font-medium" : "text-xs",
+            inputWrapper: consoleMode ? "h-12 min-h-12 rounded-xl" : "h-8 min-h-8",
           }}
           aria-label="Filtrar lista"
         />
       </div>
 
-      <div className="max-h-64 overflow-y-auto pr-2">
+      <div className={cn("overflow-y-auto pr-2", consoleMode ? "max-h-[calc(100dvh-320px)]" : "max-h-64")}>
         {filtered.length === 0 ? (
-          <p className="py-4 text-center text-xs text-default-400">Sin coincidencias</p>
+          <p className={cn("text-center text-default-400", consoleMode ? "py-6 text-sm" : "py-4 text-xs")}>
+            Sin coincidencias
+          </p>
         ) : (
-          <ul className="flex flex-col gap-1.5">
+          <ul className={cn("flex flex-col gap-1.5", consoleMode && "gap-3")}>
             {filtered.map((f) => {
               const isSelected = optimisticPending.has(f.label)
                 ? optimisticPending.get(f.label)!
@@ -102,16 +107,27 @@ const FacetFilterPanel = memo(function FacetFilterPanel({
               return (
                 <li key={f.label}>
                   <Checkbox
-                    size="sm"
+                    size={consoleMode ? "lg" : "sm"}
                     classNames={{
-                      base: "max-w-full w-full p-1 -m-1 rounded-md hover:bg-default-100/50 transition-colors",
-                      label: "w-full text-xs",
+                      base: cn(
+                        "max-w-full w-full p-1 -m-1 rounded-md hover:bg-default-100/50 transition-colors",
+                        consoleMode
+                          ? "p-3 rounded-xl min-h-12 bg-default-100/10 hover:bg-default-100/30"
+                          : "p-1 -m-1 rounded-md"
+                      ),
+                      label: cn("w-full", consoleMode ? "text-base font-semibold" : "text-xs"),
                     }}
                     isSelected={isSelected}
                     onValueChange={() => handleToggle(f.label)}>
                     <span className="flex w-full min-w-0 items-center justify-between gap-2">
                       <span className="truncate">{f.label}</span>
-                      <span className="shrink-0 tabular-nums text-default-400/80 text-[10px]">{f.count}</span>
+                      <span
+                        className={cn(
+                          "shrink-0 tabular-nums text-default-400/80",
+                          consoleMode ? "text-sm" : "text-[10px]"
+                        )}>
+                        {f.count}
+                      </span>
                     </span>
                   </Checkbox>
                 </li>
@@ -133,6 +149,7 @@ export function SteamCatalogFilters({
   onToggleTag,
   onClearAll,
   isLoading,
+  consoleMode = false,
 }: SteamCatalogFiltersProps) {
   const genreSet = useMemo(() => new Set(selectedGenres), [selectedGenres]);
   const tagSet = useMemo(() => new Set(selectedTags), [selectedTags]);
@@ -149,7 +166,11 @@ export function SteamCatalogFilters({
 
   if (isLoading) {
     return (
-      <div className="space-y-3 rounded-xl border border-default-200/80 bg-content1 p-4 dark:border-default-100/15">
+      <div
+        className={cn(
+          "space-y-3 rounded-xl border border-default-200/80 bg-content1 p-4 dark:border-default-100/15",
+          consoleMode && "border-none bg-transparent p-1 shadow-none"
+        )}>
         <Skeleton className="h-4 w-32 rounded-lg" />
         <Skeleton className="h-9 w-full rounded-lg" />
         <Skeleton className="h-40 w-full rounded-lg" />
@@ -161,17 +182,29 @@ export function SteamCatalogFilters({
   }
 
   return (
-    <div className="space-y-3 rounded-xl border border-default-200/80 bg-content1 p-3 shadow-sm dark:border-default-100/15">
+    <div
+      className={cn(
+        "space-y-3 rounded-xl border border-default-200/80 bg-content1 p-3 shadow-sm dark:border-default-100/15",
+        consoleMode && "border-none bg-transparent p-1 shadow-none space-y-4"
+      )}>
       <div
-        className="flex items-center justify-between gap-2 pb-1 
-                border-b border-default-200/60 dark:border-default-100/10">
-        <p className="text-[11px] font-bold uppercase tracking-widest text-default-400">Filtros</p>
+        className={cn(
+          "flex items-center justify-between gap-2 pb-1 border-b border-default-200/60 dark:border-default-100/10",
+          consoleMode && "pb-2"
+        )}>
+        <p
+          className={cn(
+            "font-bold uppercase tracking-widest text-default-400",
+            consoleMode ? "text-xs" : "text-[11px]"
+          )}>
+          Filtros
+        </p>
         {hasSelection ? (
           <Button
-            size="sm"
+            size={consoleMode ? "md" : "sm"}
             variant="light"
             color="warning"
-            className="h-7 min-w-0 px-2 text-xs"
+            className={cn("h-7 min-w-0 px-2 text-xs", consoleMode && "h-9 px-3 text-sm font-semibold rounded-xl")}
             onPress={handleClearAll}>
             <span className="flex items-center gap-1.5">
               <span
@@ -184,11 +217,11 @@ export function SteamCatalogFilters({
           </Button>
         ) : null}
       </div>
-      <p className="text-xs text-default-500">
+      <p className={cn("text-default-500", consoleMode ? "text-sm font-medium" : "text-xs")}>
         Solo afectan a juegos con ficha descargada (géneros y etiquetas de la tienda Steam).
       </p>
       {!genres.length && !tags.length ? (
-        <p className="text-xs text-default-400">
+        <p className={cn("text-default-400", consoleMode ? "text-sm" : "text-xs")}>
           Aún no hay datos para filtrar. Sincroniza el catálogo y abre algunas fichas para rellenar géneros y etiquetas.
         </p>
       ) : (
@@ -198,9 +231,9 @@ export function SteamCatalogFilters({
           className="px-0"
           itemClasses={{
             base: "px-0",
-            title: "text-sm",
-            trigger: "py-2",
-            content: "pb-2 pt-0",
+            title: cn("font-medium", consoleMode ? "text-base" : "text-sm"),
+            trigger: consoleMode ? "py-4" : "py-2",
+            content: consoleMode ? "pb-3 pt-0" : "pb-2 pt-0",
           }}>
           {genres.length > 0 ? (
             <AccordionItem
@@ -208,9 +241,15 @@ export function SteamCatalogFilters({
               aria-label="Géneros"
               title={
                 <span className="flex w-full min-w-0 items-center gap-2 pr-1">
-                  <Swords className="size-4 shrink-0 text-secondary" />
-                  <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">Géneros</span>
-                  <Chip size="sm" variant="flat" className="shrink-0">
+                  <Swords className={cn("shrink-0 text-secondary", consoleMode ? "size-5" : "size-4")} />
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-left font-semibold",
+                      consoleMode ? "text-base" : "text-sm"
+                    )}>
+                    Géneros
+                  </span>
+                  <Chip size={consoleMode ? "md" : "sm"} variant="flat" className="shrink-0">
                     {genres.length}
                   </Chip>
                 </span>
@@ -220,6 +259,7 @@ export function SteamCatalogFilters({
                 selected={genreSet}
                 onToggle={handleToggleGenre}
                 filterPlaceholder="Filtrar…"
+                consoleMode={consoleMode}
               />
             </AccordionItem>
           ) : null}
@@ -229,9 +269,15 @@ export function SteamCatalogFilters({
               aria-label="Etiquetas"
               title={
                 <span className="flex w-full min-w-0 items-center gap-2 pr-1">
-                  <TagsIcon className="size-4 shrink-0 text-success" />
-                  <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">Etiquetas</span>
-                  <Chip size="sm" variant="flat" className="shrink-0">
+                  <TagsIcon className={cn("shrink-0 text-success", consoleMode ? "size-5" : "size-4")} />
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-left font-semibold",
+                      consoleMode ? "text-base" : "text-sm"
+                    )}>
+                    Etiquetas
+                  </span>
+                  <Chip size={consoleMode ? "md" : "sm"} variant="flat" className="shrink-0">
                     {tags.length}
                   </Chip>
                 </span>
@@ -241,6 +287,7 @@ export function SteamCatalogFilters({
                 selected={tagSet}
                 onToggle={handleToggleTag}
                 filterPlaceholder="Filtrar…"
+                consoleMode={consoleMode}
               />
             </AccordionItem>
           ) : null}

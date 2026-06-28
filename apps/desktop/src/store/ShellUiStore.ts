@@ -10,6 +10,11 @@ interface ShellUiStore {
   setGamesBpSearchTerm: (term: string) => void;
   registerGamesBpSearchValueSetter: (setter: ((value: string) => void) | null) => void;
 
+  catalogBpSearchTerm: string;
+  catalogBpSearchSetValue: ((value: string) => void) | null;
+  setCatalogBpSearchTerm: (term: string) => void;
+  registerCatalogBpSearchValueSetter: (setter: ((value: string) => void) | null) => void;
+
   /** Contador: cada incremento dispara un toggle del menú lateral (StaggeredMenu). */
   staggeredMenuToggleRequest: number;
   /** Contador: cada incremento pide abrir el drawer de perfil (GamesPage). */
@@ -54,6 +59,11 @@ export const useShellUiStore = create<ShellUiStore>((set, get) => ({
   gamesBpSearchSetValue: null,
   setGamesBpSearchTerm: (term) => set({ gamesBpSearchTerm: term }),
   registerGamesBpSearchValueSetter: (setter) => set({ gamesBpSearchSetValue: setter }),
+
+  catalogBpSearchTerm: "",
+  catalogBpSearchSetValue: null,
+  setCatalogBpSearchTerm: (term) => set({ catalogBpSearchTerm: term }),
+  registerCatalogBpSearchValueSetter: (setter) => set({ catalogBpSearchSetValue: setter }),
 
   staggeredMenuToggleRequest: 0,
   profileOpenRequest: 0,

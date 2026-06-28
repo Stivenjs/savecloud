@@ -216,7 +216,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
                 fetchPriority="auto"
                 draggable={false}
                 alt={game.id}
-                className={`size-full object-cover object-center transition-all duration-500 ease-out group-hover:scale-105 subpixel-antialiased transform-gpu rounded-xl ${
+                className={`size-full object-cover object-center transition-all duration-500 ease-out group-hover:scale-[1.02] subpixel-antialiased transform-gpu rounded-xl ${
                   imgLoaded ? "opacity-100" : "opacity-0"
                 }`}
                 onLoad={handleImgLoad}

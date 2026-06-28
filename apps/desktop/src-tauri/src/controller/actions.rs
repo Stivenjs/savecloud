@@ -14,6 +14,8 @@ pub enum SemanticAction {
     Options,
     /// Perfil / cuenta (p. ej. View en Xbox, Share en PlayStation).
     Profile,
+    PageLeft,
+    PageRight,
 }
 
 #[derive(Debug, Clone, Serialize)]

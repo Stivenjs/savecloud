@@ -5,7 +5,7 @@ import type { SourceBestMatch } from "@services/tauri";
 import { GameCard } from "@features/games/GameCard";
 import { GamesListMotionContainer, GamesListMotionItem } from "@features/games/GamesListMotion";
 import { catalogListItemToConfiguredGame } from "@features/steam-catalog/model/catalogConfiguredGame";
-import { Button, Select, SelectItem } from "@heroui/react";
+import { Button, Select, SelectItem, cn } from "@heroui/react";
 import { startPeerGameDownload, startSourceDownload } from "@services/tauri";
 import type { PeerInstallOffer } from "@services/tauri/inventory.service";
 import { usePeerInstallOffers } from "@hooks/usePeerInstallOffers";
@@ -30,6 +30,20 @@ type CatalogGridItemProps = {
   isMatchingPending: boolean;
   onPickChange: (gameName: string, key: string) => void;
   onInstall: (gameName: string) => void;
+  consoleMode?: boolean;
+};
+
+const CONSOLE_SOURCE_LISTBOX_PROPS = {
+  itemClasses: {
+    base: "min-h-14 rounded-lg px-4 py-2 data-[hover=true]:bg-default-200/55 dark:data-[hover=true]:bg-default-100/25",
+    title: "text-base font-semibold leading-snug text-foreground sm:text-lg",
+    wrapper: "py-1",
+    selectedIcon: "text-primary [&_svg]:size-5",
+  },
+  classNames: {
+    list: "gap-1 px-1 py-2",
+    base: "p-0",
+  },
 };
 
 /**
@@ -49,6 +63,7 @@ const CatalogGridItem = memo(function CatalogGridItem({
   isMatchingPending,
   onPickChange,
   onInstall,
+  consoleMode = false,
 }: CatalogGridItemProps) {
   const isLowPerf = useLowPerformanceMode();
   const game = libraryGame ?? catalogListItemToConfiguredGame(item);
@@ -106,18 +121,20 @@ const CatalogGridItem = memo(function CatalogGridItem({
         <div className="min-h-8 space-y-2">
           {isMatchingPending ? (
             <div
-              className="h-8 w-full rounded-medium 
-                    bg-linear-to-r from-default-200/70 via-default-100/50 to-default-200/70 
-                    bg-size-[200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]"
+              className={cn(
+                "w-full rounded-medium bg-linear-to-r from-default-200/70 via-default-100/50 to-default-200/70 bg-size-[200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]",
+                consoleMode ? "h-11 rounded-xl" : "h-8"
+              )}
             />
           ) : libraryGame ? (
             <Button
-              size="sm"
+              size={consoleMode ? "md" : "sm"}
               color="success"
               variant="flat"
-              className="h-8 w-full font-medium 
-                 border-success-300/60 dark:border-success-500/30
-                 transition-colors duration-150">
+              className={cn(
+                "w-full font-semibold border-success-300/60 dark:border-success-500/30 transition-colors duration-150",
+                consoleMode ? "h-11 text-base rounded-xl" : "h-8 text-xs rounded-medium"
+              )}>
               <span className="flex items-center gap-1.5">
                 <span className="size-1.5 rounded-full bg-success-500 animate-pulse" />
                 En Biblioteca
@@ -127,7 +144,7 @@ const CatalogGridItem = memo(function CatalogGridItem({
             <>
               {candidates.length > 1 ? (
                 <Select
-                  size="sm"
+                  size={consoleMode ? "lg" : "sm"}
                   variant="bordered"
                   className="w-full"
                   placeholder={best ? `${best.source_name} — ${best.item_title}` : "Fuente"}
@@ -137,7 +154,19 @@ const CatalogGridItem = memo(function CatalogGridItem({
                   onSelectionChange={(keys) => {
                     const next = [...keys][0];
                     onPickChange(item.name, next !== undefined ? String(next) : sourceCandidateKey(best));
-                  }}>
+                  }}
+                  maxListboxHeight={consoleMode ? 520 : undefined}
+                  listboxProps={consoleMode ? CONSOLE_SOURCE_LISTBOX_PROPS : undefined}
+                  classNames={
+                    consoleMode
+                      ? {
+                          trigger: "h-12 min-h-12 rounded-xl text-base",
+                          value: "text-base font-semibold",
+                          listbox: "gap-0 p-0 text-base",
+                          popoverContent: "min-w-[var(--trigger-width)] p-2 text-base",
+                        }
+                      : undefined
+                  }>
                   {candidates.map((c) => (
                     <SelectItem key={sourceCandidateKey(c)} textValue={`${c.source_name} ${c.item_title}`}>
                       {c.source_name} — {c.item_title}
@@ -146,19 +175,20 @@ const CatalogGridItem = memo(function CatalogGridItem({
                 </Select>
               ) : null}
               <Button
-                size="sm"
+                size={consoleMode ? "md" : "sm"}
                 color="primary"
-                className="h-8 w-full font-semibold tracking-wide 
-                 shadow-sm shadow-primary/20 
-                 transition-all duration-150
-                 hover:shadow-md hover:shadow-primary/30 
-                 hover:brightness-110 active:scale-[0.98]"
+                className={cn(
+                  "w-full font-semibold tracking-wide shadow-sm shadow-primary/20 transition-all duration-150 hover:shadow-md hover:shadow-primary/30 hover:brightness-110 active:scale-[0.98]",
+                  consoleMode ? "h-11 text-base rounded-xl" : "h-8 text-xs rounded-medium"
+                )}
                 onPress={() => onInstall(item.name)}>
                 Instalar
               </Button>
             </>
           ) : (
-            <p className="pt-2 text-center text-xs text-default-400">No disponible en tus fuentes</p>
+            <p className={cn("pt-2 text-center text-default-400 font-medium", consoleMode ? "text-sm" : "text-xs")}>
+              No disponible en tus fuentes
+            </p>
           )}
         </div>
       </div>
@@ -172,6 +202,7 @@ type SteamCatalogGridProps = {
   mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null;
   matchByGameName: Record<string, SourceBestMatch[]>;
   isMatchingPending: boolean;
+  consoleMode?: boolean;
 };
 
 export function SteamCatalogGrid({
@@ -180,6 +211,7 @@ export function SteamCatalogGrid({
   mediaBySteamAppId,
   matchByGameName,
   isMatchingPending,
+  consoleMode = false,
 }: SteamCatalogGridProps) {
   const { config } = useConfig();
   const [pickByGame, setPickByGame] = useState<PickByGame>({});
@@ -301,7 +333,12 @@ export function SteamCatalogGrid({
   return (
     <>
       <GamesListMotionContainer
-        className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5"
+        className={cn(
+          "grid gap-5",
+          consoleMode
+            ? "grid-cols-[repeat(auto-fill,minmax(320px,1fr))]"
+            : "grid-cols-[repeat(auto-fill,minmax(280px,1fr))]"
+        )}
         listKey={listKey}>
         {items.map((item) => {
           const libraryGame = config?.games?.find(
@@ -319,6 +356,7 @@ export function SteamCatalogGrid({
               isMatchingPending={isMatchingPending}
               onPickChange={handlePickChange}
               onInstall={handleInstall}
+              consoleMode={consoleMode}
             />
           );
         })}
@@ -338,6 +376,7 @@ export function SteamCatalogGrid({
           onSelectPeerDevice={peerOffersHook.setSelectedDeviceId}
           onConfirm={handleConfirmInstall}
           onConfirmPeer={handleConfirmPeerInstall}
+          consoleMode={consoleMode}
         />
       )}
     </>

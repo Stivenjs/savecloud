@@ -80,6 +80,13 @@ export function useSteamCatalogQueries() {
   const [searchParams, setSearchParams] = useSearchParams();
   const skipSearchInputSyncFromDebouncedUrl = useRef(false);
 
+  const bigPictureConsole = useMemo(
+    () => typeof document !== "undefined" && document.documentElement.classList.contains("savecloud-big-picture"),
+    []
+  );
+
+  const pageSize = bigPictureConsole ? 25 : STEAM_CATALOG_PAGE_SIZE;
+
   const page = useMemo(() => {
     const raw = searchParams.get(STEAM_CATALOG_URL_PAGE);
     const n = raw ? parseInt(raw, 10) : 1;
@@ -148,7 +155,7 @@ export function useSteamCatalogQueries() {
   const browseCountCache = useRef<{ key: string; total: number } | null>(null);
 
   const browseQuery = useQuery({
-    queryKey: ["steamCatalog", "browse", page, genresKey, tagsKey],
+    queryKey: ["steamCatalog", "browse", page, genresKey, tagsKey, pageSize],
     queryFn: () => {
       // Si los filtros cambiaron, invalidar el caché del total
       const filterKey = `${genresKey}|${tagsKey}`;
@@ -156,8 +163,8 @@ export function useSteamCatalogQueries() {
       const cachedTotal = cached && cached.key === filterKey ? cached.total : null;
 
       return listSteamCatalogPage(
-        (page - 1) * STEAM_CATALOG_PAGE_SIZE,
-        STEAM_CATALOG_PAGE_SIZE,
+        (page - 1) * pageSize,
+        pageSize,
         selectedGenres.length ? selectedGenres : null,
         selectedTags.length ? selectedTags : null,
         cachedTotal
@@ -198,8 +205,8 @@ export function useSteamCatalogQueries() {
   const totalSearch = searchResultsAll.length;
 
   const totalPages = searchMode
-    ? Math.max(1, Math.ceil(totalSearch / STEAM_CATALOG_PAGE_SIZE))
-    : Math.max(1, Math.ceil(totalBrowse / STEAM_CATALOG_PAGE_SIZE));
+    ? Math.max(1, Math.ceil(totalSearch / pageSize))
+    : Math.max(1, Math.ceil(totalBrowse / pageSize));
 
   useEffect(() => {
     if (page > totalPages) {
@@ -216,11 +223,11 @@ export function useSteamCatalogQueries() {
 
   const items: CatalogListItem[] = useMemo(() => {
     if (searchMode) {
-      const start = (page - 1) * STEAM_CATALOG_PAGE_SIZE;
-      return searchResultsAll.slice(start, start + STEAM_CATALOG_PAGE_SIZE);
+      const start = (page - 1) * pageSize;
+      return searchResultsAll.slice(start, start + pageSize);
     }
     return browseQuery.data?.items ?? [];
-  }, [searchMode, searchResultsAll, browseQuery.data?.items, page]);
+  }, [searchMode, searchResultsAll, browseQuery.data?.items, page, pageSize]);
 
   const steamAppIdsForBatch = useMemo(() => {
     const ids = items.map((i) => i.steamAppId).filter(Boolean);
@@ -233,10 +240,11 @@ export function useSteamCatalogQueries() {
     enabled: steamAppIdsForBatch.length > 0,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
   });
 
   /** Hasta que el batch de portadas termine (1.ª vez por clave), las cards quedaban sin media y parecían rotas. */
-  const isMediaBatchPending = steamAppIdsForBatch.length > 0 && !mediaQuery.isFetched;
+  const isMediaBatchPending = steamAppIdsForBatch.length > 0 && !mediaQuery.isFetched && items.length <= pageSize;
 
   const visibleNames = useMemo(() => items.map((i) => i.name), [items]);
   const visibleNamesKey = useMemo(() => {
@@ -262,8 +270,8 @@ export function useSteamCatalogQueries() {
     : browseQuery.isPending && browseQuery.data === undefined;
 
   const browseQueryKey = useMemo(
-    () => ["steamCatalog", "browse", page, genresKey, tagsKey] as const,
-    [page, genresKey, tagsKey]
+    () => ["steamCatalog", "browse", page, genresKey, tagsKey, pageSize] as const,
+    [page, genresKey, tagsKey, pageSize]
   );
   const searchQueryKey = useMemo(
     () => ["steamCatalog", "search", debounced, genresKey, tagsKey] as const,
@@ -352,10 +360,8 @@ export function useSteamCatalogQueries() {
 
   const filterSignature = `${genresKey}|${tagsKey}`;
 
-  const rangeStart = items.length > 0 ? (page - 1) * STEAM_CATALOG_PAGE_SIZE + 1 : 0;
-  const rangeEnd = searchMode
-    ? Math.min(page * STEAM_CATALOG_PAGE_SIZE, totalSearch)
-    : Math.min(page * STEAM_CATALOG_PAGE_SIZE, totalBrowse);
+  const rangeStart = items.length > 0 ? (page - 1) * pageSize + 1 : 0;
+  const rangeEnd = searchMode ? Math.min(page * pageSize, totalSearch) : Math.min(page * pageSize, totalBrowse);
   const totalForRange = searchMode ? totalSearch : totalBrowse;
 
   return {

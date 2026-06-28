@@ -17,6 +17,8 @@ pub fn map_button(button: Button) -> Option<SemanticAction> {
         Button::DPadDown => Some(SemanticAction::NavigateDown),
         Button::DPadLeft => Some(SemanticAction::NavigateLeft),
         Button::DPadRight => Some(SemanticAction::NavigateRight),
+        Button::LeftTrigger | Button::LeftTrigger2 => Some(SemanticAction::PageLeft),
+        Button::RightTrigger | Button::RightTrigger2 => Some(SemanticAction::PageRight),
         _ => None,
     }
 }

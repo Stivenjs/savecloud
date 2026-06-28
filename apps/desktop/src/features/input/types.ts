@@ -8,7 +8,9 @@ export type SemanticAction =
   | "back"
   | "menu"
   | "options"
-  | "profile";
+  | "profile"
+  | "page_left"
+  | "page_right";
 
 export interface FocusNode {
   id: string;

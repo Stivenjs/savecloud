@@ -63,19 +63,27 @@ export function BigPictureConsoleTopRail({
   const librarySearchTerm = useShellUiStore((s) => s.gamesBpSearchTerm);
   const librarySetSearch = useShellUiStore((s) => s.gamesBpSearchSetValue);
 
-  const prefersReducedMotion = useReducedMotion();
-  const searchExpandMaxPx = useBpSearchRailMaxPx();
-  const [searchRailOpen, setSearchRailOpen] = useState(() => librarySearchTerm.trim().length > 0);
+  const catalogSearchTerm = useShellUiStore((s) => s.catalogBpSearchTerm);
+  const catalogSetSearch = useShellUiStore((s) => s.catalogBpSearchSetValue);
 
   const libraryMode = pathname === "/" && librarySetSearch != null;
+  const catalogMode = pathname === "/catalog" && catalogSetSearch != null;
+  const searchEnabled = libraryMode || catalogMode;
+
+  const currentSearchTerm = libraryMode ? librarySearchTerm : catalogSearchTerm;
+  const currentSetSearch = libraryMode ? librarySetSearch : catalogSetSearch;
+
+  const prefersReducedMotion = useReducedMotion();
+  const searchExpandMaxPx = useBpSearchRailMaxPx();
+  const [searchRailOpen, setSearchRailOpen] = useState(() => currentSearchTerm.trim().length > 0);
 
   useEffect(() => {
-    if (librarySearchTerm.trim().length > 0) setSearchRailOpen(true);
-  }, [librarySearchTerm]);
+    if (currentSearchTerm.trim().length > 0) setSearchRailOpen(true);
+  }, [currentSearchTerm]);
 
   const closeRail = () => {
     setSearchRailOpen(false);
-    librarySetSearch?.("");
+    currentSetSearch?.("");
   };
 
   const motionEase = prefersReducedMotion ? ([0.4, 0, 0.2, 1] as const) : ([0.16, 1, 0.3, 1] as const);
@@ -91,7 +99,7 @@ export function BigPictureConsoleTopRail({
         <div className="relative z-1 flex w-full justify-end" aria-label="Barra de consola">
           <div
             className={`pointer-events-auto inline-flex max-w-full min-h-12 items-center gap-4 rounded-2xl px-4 py-2 sm:min-h-13.5 sm:gap-7 md:gap-10 sm:px-5 md:px-6 ${BP_TOP_GLASS}`}>
-            {libraryMode ? (
+            {searchEnabled ? (
               <>
                 <AnimatePresence initial={false}>
                   {searchRailOpen ? (
@@ -109,13 +117,14 @@ export function BigPictureConsoleTopRail({
                       className="min-w-0 overflow-hidden">
                       <div style={{ width: searchExpandMaxPx }} className="flex min-w-0 flex-row items-center">
                         <DebouncedGamesSearchInput
-                          searchTerm={librarySearchTerm}
-                          onSearchChange={(v) => librarySetSearch?.(v)}
+                          searchTerm={currentSearchTerm}
+                          onSearchChange={(v) => currentSetSearch?.(v)}
                           compact
                           variant="flat"
                           autoFocus
                           isClearable
                           className="min-h-0 min-w-0 flex-1"
+                          placeholder={libraryMode ? "Buscar en biblioteca…" : "Buscar en catálogo…"}
                           startContent={
                             <Search
                               size={18}
@@ -132,14 +141,17 @@ export function BigPictureConsoleTopRail({
                 </AnimatePresence>
 
                 {!searchRailOpen ? (
-                  <Tooltip content="Buscar en biblioteca" placement="bottom" delay={300}>
+                  <Tooltip
+                    content={libraryMode ? "Buscar en biblioteca" : "Buscar en catálogo"}
+                    placement="bottom"
+                    delay={300}>
                     <Button
                       isIconOnly
                       size="md"
                       radius="full"
                       variant="light"
                       aria-expanded={false}
-                      aria-label="Abrir búsqueda en biblioteca"
+                      aria-label={libraryMode ? "Abrir búsqueda en biblioteca" : "Abrir búsqueda en catálogo"}
                       className={`${GLASS_BTN} shrink-0 hover:bg-white/11`}
                       onPress={() => setSearchRailOpen(true)}>
                       <Search size={21} aria-hidden strokeWidth={2} className="text-white drop-shadow-sm" />

@@ -97,6 +97,51 @@ html.savecloud-big-picture *::-webkit-scrollbar-corner {
   background: transparent;
 }
 
+.sm-bp-console-scope {
+  font-size: 1rem;
+}
+
+.sm-bp-console-scope [data-slot="input-wrapper"] {
+  min-height: 2.75rem !important;
+}
+
+.sm-bp-console-scope [data-slot="input"] {
+  font-size: 0.9375rem !important;
+}
+
+.sm-bp-console-scope [data-slot="label"] {
+  font-size: 0.9375rem !important;
+}
+
+.sm-bp-console-scope button {
+  min-height: 2.5rem;
+  font-size: 0.9375rem;
+}
+
+.sm-bp-console-scope [data-slot="base"] {
+  padding: 1.125rem;
+}
+
+.sm-bp-console-scope [data-slot="chip"] {
+  font-size: 0.8125rem;
+  min-height: 1.625rem;
+}
+
+.sm-bp-console-scope p,
+.sm-bp-console-scope span {
+  line-height: 1.6;
+}
+
+.sm-bp-console-scope .rounded-2xl {
+  padding: 1.25rem;
+}
+
+.sm-bp-console-scope hr,
+.sm-bp-console-scope [data-slot="separator"] {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
 video::-webkit-media-controls-fullscreen-button {
   display: none;
 }
