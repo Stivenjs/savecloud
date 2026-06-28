@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { useBigPictureConsole } from "@hooks/useBigPictureConsole";
-import { BigPictureFriendsPage } from "@features/friends/big-picture/BigPictureFriendsPage";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Chip, Spinner, Tab, Tabs } from "@heroui/react";
+import { Spinner, Tab, Tabs } from "@heroui/react";
 import { Link2, UserRound } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import { useFriendsPage } from "@/hooks/useFriendsPage";
 import { AddFriendGamesModal } from "@features/friends/AddFriendGamesModal";
 import { FriendGameTemplateModal } from "@features/friends/FriendGameTemplateModal";
 import { FriendGamesSection } from "@features/friends/FriendGamesSection";
-import { FriendProfileCard } from "@features/friends/FriendProfileCard";
-import { ShareLinkCard } from "@features/friends/ShareLinkCard";
 import { ShareLinkImportConfirmModal } from "@features/friends/ShareLinkImportConfirmModal";
 import { CopyFriendSavesConfirmModal } from "@features/friends/CopyFriendSavesConfirmModal";
 import { FriendsInvitesTab, InvitesTabTitle } from "@features/friends/FriendsInvitesTab";
@@ -18,19 +15,25 @@ import {
   consumePendingFriendProfileUserId,
   onRequestOpenFriendProfile,
 } from "@features/friends/friendProfileNavigation";
-import { useNavigationStore } from "@features/input/store";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
 import { listCloudPresence } from "@services/tauri/invites.service";
 import { visibilityManager } from "@hooks/useAppVisibility";
+import { BigPictureFriendsHeader } from "./BigPictureFriendsHeader";
+import { BigPictureShareLinkSection } from "./BigPictureShareLinkSection";
+import { BigPictureFriendSearchSection } from "./BigPictureFriendSearchSection";
 
 type FriendsTabKey = "link" | "user" | "invites";
 
-export function FriendsPage() {
-  const bigPictureConsole = useBigPictureConsole();
-
-  if (bigPictureConsole) return <BigPictureFriendsPage />;
-
+/**
+ * Versión Big Picture (modo consola) de la página Social.
+ *
+ * Componentes específicos para consola en cada tab, CSS scope
+ * para escalar sub-componentes reutilizados, y navegación atrás
+ * que vuelve a la biblioteca (como en SteamCatalogPage BP).
+ */
+export function BigPictureFriendsPage() {
+  const navigate = useNavigate();
   const [friendsTab, setFriendsTab] = useState<FriendsTabKey>(() => {
     try {
       return (sessionStorage.getItem("friendsPageTab") as FriendsTabKey) || "link";
@@ -39,7 +42,6 @@ export function FriendsPage() {
     }
   });
 
-  const popLayer = useNavigationStore((s) => s.popLayer);
   const {
     friendIdInput,
     setFriendIdInput,
@@ -130,7 +132,6 @@ export function FriendsPage() {
 
     void refreshInvitesState();
     const id = window.setInterval(() => {
-      // Evitar polling de invitaciones cuando la app está en background.
       if (!visibilityManager.isVisible) return;
       void refreshInvitesState();
     }, 30000);
@@ -139,41 +140,31 @@ export function FriendsPage() {
   }, [friendsTab, refreshInvitesState]);
 
   useRegisterGlobalBack(() => {
-    switch (true) {
-      case !!copyConfirmPreview:
-        setCopyConfirmPreview(null);
-        return true;
-      case !!shareLinkPreview:
-        setShareLinkPreview(null);
-        return true;
-      case templateOpen:
-        setTemplateOpen(false);
-        setTemplateGame(null);
-        return true;
-      case addFriendGamesOpen:
-        setAddFriendGamesOpen(false);
-        return true;
-      default:
-        popLayer();
-        return true;
+    if (copyConfirmPreview) {
+      setCopyConfirmPreview(null);
+      return true;
     }
+    if (shareLinkPreview) {
+      setShareLinkPreview(null);
+      return true;
+    }
+    if (templateOpen) {
+      setTemplateOpen(false);
+      setTemplateGame(null);
+      return true;
+    }
+    if (addFriendGamesOpen) {
+      setAddFriendGamesOpen(false);
+      return true;
+    }
+
+    navigate("/");
+    return true;
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold">Amigos</h1>
-          <Chip size="sm" variant="flat" color="default" className="text-xs">
-            Importar desde enlace o ver perfil por usuario
-          </Chip>
-        </div>
-        <p className="max-w-3xl text-sm text-default-500">
-          Usa <strong className="text-foreground">Importar por link</strong> si te pasaron un enlace de compartir, o{" "}
-          <strong className="text-foreground">Buscar por usuario</strong> para cargar el perfil de un amigo de
-          confianza.
-        </p>
-      </div>
+    <div className="space-y-5 pb-32">
+      <BigPictureFriendsHeader pendingInvitesCount={pendingInvites.length} />
 
       <Tabs
         selectedKey={friendsTab}
@@ -188,16 +179,23 @@ export function FriendsPage() {
           }
         }}
         variant="underlined"
-        classNames={{ panel: "pt-4" }}>
+        size="lg"
+        classNames={{
+          panel: "pt-6",
+          tabList: "gap-6",
+          tab: "text-base md:text-lg font-semibold px-1 py-3",
+          cursor: "h-[3px]",
+        }}>
+        {/* ────── Tab: Importar por link ────── */}
         <Tab
           key="link"
           title={
-            <div className="flex items-center gap-2">
-              <Link2 className="h-4 w-4" />
+            <div className="flex items-center gap-2.5">
+              <Link2 className="h-5 w-5" />
               <span>Importar por link</span>
             </div>
           }>
-          <ShareLinkCard
+          <BigPictureShareLinkSection
             shareLinkInput={shareLinkInput}
             onShareLinkChange={setShareLinkInput}
             onImportPress={handleImportFromShareLink}
@@ -206,16 +204,17 @@ export function FriendsPage() {
           />
         </Tab>
 
+        {/* ────── Tab: Buscar por usuario ────── */}
         <Tab
           key="user"
           title={
-            <div className="flex items-center gap-2">
-              <UserRound className="h-4 w-4" />
+            <div className="flex items-center gap-2.5">
+              <UserRound className="h-5 w-5" />
               <span>Buscar por usuario</span>
             </div>
           }>
           <div className="space-y-6">
-            <FriendProfileCard
+            <BigPictureFriendSearchSection
               friendIdInput={friendIdInput}
               onFriendIdChange={setFriendIdInput}
               onLoadPress={handleLoadFriend}
@@ -223,9 +222,9 @@ export function FriendsPage() {
               error={error}
             />
             {loading ? (
-              <div className="flex min-h-[20vh] flex-col items-center justify-center gap-3">
+              <div className="flex min-h-[20vh] flex-col items-center justify-center gap-4">
                 <Spinner size="lg" color="primary" />
-                <p className="text-default-500">Cargando perfil del amigo...</p>
+                <p className="text-base text-default-500">Cargando perfil del amigo...</p>
               </div>
             ) : null}
             {friendConfig && !loading ? (
@@ -253,38 +252,42 @@ export function FriendsPage() {
           </div>
         </Tab>
 
+        {/* ────── Tab: Invitaciones (CSS scope para escalar componentes) ────── */}
         <Tab
           key="invites"
           title={<InvitesTabTitle pendingCount={pendingInvites.length} statsLoading={invitesStatsLoading} />}>
-          <FriendsInvitesTab
-            inviteeUserIdInput={inviteeUserIdInput}
-            setInviteeUserIdInput={setInviteeUserIdInput}
-            inviteTokenInput={inviteTokenInput}
-            setInviteTokenInput={setInviteTokenInput}
-            inviteBusy={inviteBusy}
-            pendingInvites={pendingInvites}
-            hostMemberships={hostMemberships}
-            memberMemberships={memberMemberships}
-            refreshInvitesState={refreshInvitesState}
-            handleCreateInvite={handleCreateInvite}
-            handleAcceptInviteByToken={handleAcceptInviteByToken}
-            handleRespondInvite={handleRespondInvite}
-            handleLeaveMembership={handleLeaveMembership}
-            handleRemoveMember={handleRemoveMember}
-            handleUseHostCloud={handleUseHostCloud}
-            activeCloudHostUserId={activeCloudHostUserId}
-            lastCreatedInviteToken={lastCreatedInviteToken}
-            handleCopyLastToken={handleCopyLastToken}
-            invitesStatsLoading={invitesStatsLoading}
-            onViewCloudPeerProfile={(userId) => {
-              setFriendsTab("user");
-              void loadFriendProfileById(userId);
-            }}
-            ourConfig={ourConfig}
-          />
+          <div className="sm-bp-console-scope">
+            <FriendsInvitesTab
+              inviteeUserIdInput={inviteeUserIdInput}
+              setInviteeUserIdInput={setInviteeUserIdInput}
+              inviteTokenInput={inviteTokenInput}
+              setInviteTokenInput={setInviteTokenInput}
+              inviteBusy={inviteBusy}
+              pendingInvites={pendingInvites}
+              hostMemberships={hostMemberships}
+              memberMemberships={memberMemberships}
+              refreshInvitesState={refreshInvitesState}
+              handleCreateInvite={handleCreateInvite}
+              handleAcceptInviteByToken={handleAcceptInviteByToken}
+              handleRespondInvite={handleRespondInvite}
+              handleLeaveMembership={handleLeaveMembership}
+              handleRemoveMember={handleRemoveMember}
+              handleUseHostCloud={handleUseHostCloud}
+              activeCloudHostUserId={activeCloudHostUserId}
+              lastCreatedInviteToken={lastCreatedInviteToken}
+              handleCopyLastToken={handleCopyLastToken}
+              invitesStatsLoading={invitesStatsLoading}
+              onViewCloudPeerProfile={(userId) => {
+                setFriendsTab("user");
+                void loadFriendProfileById(userId);
+              }}
+              ourConfig={ourConfig}
+            />
+          </div>
         </Tab>
       </Tabs>
 
+      {/* ── Modales (reutilizados tal cual) ── */}
       <AddFriendGamesModal
         isOpen={addFriendGamesOpen}
         onClose={() => setAddFriendGamesOpen(false)}

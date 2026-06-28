@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { useBigPictureConsole } from "@hooks/useBigPictureConsole";
+import { BigPictureHistoryPage } from "@features/history/big-picture/BigPictureHistoryPage";
 import { Card, CardBody, Chip, Spinner, Tab, Tabs } from "@heroui/react";
 import { History } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -96,6 +98,10 @@ function HistorySummary({ total, byKind, lastTimestamp }: HistorySummaryProps) {
 }
 
 export function HistoryPage() {
+  const bigPictureConsole = useBigPictureConsole();
+
+  if (bigPictureConsole) return <BigPictureHistoryPage />;
+
   const [filter, setFilter] = useState<HistoryFilter>("all");
   const popLayer = useNavigationStore((s) => s.popLayer);
   useRegisterGlobalBack(() => {
