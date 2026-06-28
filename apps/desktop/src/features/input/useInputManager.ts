@@ -119,9 +119,15 @@ export function useInputManager() {
           dispatchBackAction();
           break;
         case "PageUp":
+        case "[":
+          e.preventDefault();
+          e.stopPropagation();
           window.dispatchEvent(new CustomEvent("gamepad_page_left"));
           break;
         case "PageDown":
+        case "]":
+          e.preventDefault();
+          e.stopPropagation();
           window.dispatchEvent(new CustomEvent("gamepad_page_right"));
           break;
       }
