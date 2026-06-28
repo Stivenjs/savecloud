@@ -118,6 +118,12 @@ export function useInputManager() {
           e.preventDefault();
           dispatchBackAction();
           break;
+        case "PageUp":
+          window.dispatchEvent(new CustomEvent("gamepad_page_left"));
+          break;
+        case "PageDown":
+          window.dispatchEvent(new CustomEvent("gamepad_page_right"));
+          break;
       }
     };
 
@@ -143,6 +149,14 @@ export function useInputManager() {
         case "back":
           ensureGamepadShellMode(setInputMode);
           dispatchBackAction();
+          return;
+        case "page_left":
+          ensureGamepadShellMode(setInputMode);
+          window.dispatchEvent(new CustomEvent("gamepad_page_left"));
+          return;
+        case "page_right":
+          ensureGamepadShellMode(setInputMode);
+          window.dispatchEvent(new CustomEvent("gamepad_page_right"));
           return;
         default:
           break;

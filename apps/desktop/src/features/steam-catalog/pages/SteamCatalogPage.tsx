@@ -9,6 +9,7 @@ import { SteamCatalogTrendingHero } from "@features/steam-catalog/components/Ste
 import { SteamCatalogToolbar } from "@features/steam-catalog/components/SteamCatalogToolbar";
 import { useSteamCatalogQueries } from "@features/steam-catalog/hooks/useSteamCatalogQueries";
 import { useSteamCatalogTrendingHero } from "@features/steam-catalog/hooks/useSteamCatalogTrendingHero";
+import { useSteamCatalogGamepadPagination } from "@features/steam-catalog/hooks/useSteamCatalogGamepadPagination";
 import { useShellUiStore } from "@store/ShellUiStore";
 import { useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
 
@@ -79,6 +80,12 @@ export function SteamCatalogPage() {
     if (bigPictureConsole) useShellUiStore.getState().setCatalogBpSearchTerm(searchTerm);
   }, [bigPictureConsole, searchTerm]);
 
+  const { triggerLabels, triggerUrls } = useSteamCatalogGamepadPagination({
+    bigPictureConsole,
+    totalPages,
+    setPage,
+  });
+
   const isReady = !isLoading && items.length > 0;
   const showTrendingHero = true;
 
@@ -123,7 +130,7 @@ export function SteamCatalogPage() {
   const totalSelectedFilters = selectedGenres.length + selectedTags.length;
 
   return (
-    <div className="space-y-6">
+    <div className={cn("space-y-6", bigPictureConsole ? "pb-32" : "")}>
       <div className={cn("flex flex-wrap items-center justify-between gap-4", bigPictureConsole ? "mt-4 sm:mt-6" : "")}>
         <div className="flex items-center gap-3">
           {!bigPictureConsole && (
@@ -256,13 +263,47 @@ export function SteamCatalogPage() {
                     />
                   </div>
 
-                  <SteamCatalogPagination
-                    totalPages={totalPages}
-                    page={page}
-                    onChange={setPage}
-                    isDisabled={isPageTransition}
-                    consoleMode={bigPictureConsole}
-                  />
+                  {bigPictureConsole ? (
+                    <div className="flex items-center justify-center gap-10 pt-10 pb-4 text-white/80 font-bold text-xl md:text-2xl select-none">
+                      <span className="flex items-center gap-3">
+                        {triggerUrls.left ? (
+                          <img
+                            src={triggerUrls.left}
+                            alt={triggerLabels.left}
+                            className="size-11 object-contain brightness-100 filter invert dark:invert-0 transition-transform active:scale-90"
+                          />
+                        ) : (
+                          <span className="text-sm bg-default-100/50 px-3 py-1 rounded font-bold text-default-600 border border-default-200/60">
+                            {triggerLabels.left}
+                          </span>
+                        )}
+                      </span>
+                      <span className="tracking-wide">
+                        Página {page} de {totalPages}
+                      </span>
+                      <span className="flex items-center gap-3">
+                        {triggerUrls.right ? (
+                          <img
+                            src={triggerUrls.right}
+                            alt={triggerLabels.right}
+                            className="size-11 object-contain brightness-100 filter invert dark:invert-0 transition-transform active:scale-90"
+                          />
+                        ) : (
+                          <span className="text-sm bg-default-100/50 px-3 py-1 rounded font-bold text-default-600 border border-default-200/60">
+                            {triggerLabels.right}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  ) : (
+                    <SteamCatalogPagination
+                      totalPages={totalPages}
+                      page={page}
+                      onChange={setPage}
+                      isDisabled={isPageTransition}
+                      consoleMode={bigPictureConsole}
+                    />
+                  )}
                 </>
               )}
             </>
