@@ -162,6 +162,7 @@ pub static PEER_LAN_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         .connect_timeout(DATA_CONNECT_TIMEOUT)
         .tcp_keepalive(DATA_TCP_KEEPALIVE)
         .tcp_nodelay(true)
+        .danger_accept_invalid_certs(true)
         .pool_max_idle_per_host(4)
         .pool_idle_timeout(Duration::from_secs(60))
         .build()

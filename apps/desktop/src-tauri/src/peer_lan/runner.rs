@@ -24,6 +24,8 @@ pub struct PeerDownloadParams {
     pub checkpoint: Option<PeerDownloadCheckpoint>,
 }
 
+
+
 const FILE_DOWNLOAD_ATTEMPTS: u32 = 3;
 const SESSION_READY_MAX_WAIT: Duration = Duration::from_secs(45);
 
@@ -82,7 +84,7 @@ pub async fn run_peer_download(
 
     let mut speed_tracker = TransferSpeedTracker::new();
     let client = PEER_LAN_CLIENT.clone();
-    let base = format!("http://{}:{}", peer.lan_host, peer.port);
+    let base = format!("https://{}:{}", peer.lan_host, peer.port);
 
     for (index, file) in files.iter().enumerate().skip(start_index) {
         if cancel_flag.load(Ordering::Relaxed) {
@@ -241,10 +243,10 @@ async fn wait_for_transfer_peer(
         if let Some(peer) = probes.into_iter().find(|p| {
             p.device_id == target_device_id && p.reachable && !p.lan_host.is_empty() && p.port > 0
         }) {
-            let base = format!("http://{}:{}", peer.lan_host, peer.port);
+            let base = format!("https://{}:{}", peer.lan_host, peer.port);
             if peer_serves_file(&base, session_token, sample_relative_path).await {
                 log::info!(
-                    "Peer LAN listo en {}:{} para transferencia",
+                    "Peer LAN listo en {}:{} para transferencia HTTPS",
                     peer.lan_host,
                     peer.port
                 );
