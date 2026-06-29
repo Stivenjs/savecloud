@@ -65,6 +65,8 @@ blake3 = "1"
 hex = "0.4"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
 axum = "0.8"
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+
 tower-http = { version = "0.6", features = ["cors"] }
 mdns-sd = "0.13"
 gethostname = "0.5"
@@ -86,6 +88,8 @@ aes-gcm = "0.10.3"
 rustls = { version = "0.23", features = ["ring"] }
 rustls-pemfile = "2.2.0"
 rustls-pki-types = "1.14.1"
+tokio-rustls = "0.26"
+
 
 
 [dev-dependencies]

@@ -49,6 +49,17 @@ struct LanRuntime {
 
 static LAN_RUNTIME: Lazy<Mutex<Option<LanRuntime>>> = Lazy::new(|| Mutex::new(None));
 
+pub fn generate_self_signed_cert() -> Result<(String, String), String> {
+    let subject_alt_names = vec!["localhost".to_string(), "127.0.0.1".to_string()];
+    let cert = rcgen::generate_simple_self_signed(subject_alt_names)
+        .map_err(|e| format!("Fallo al generar cert: {e}"))?;
+
+    let cert_pem = cert.serialize_pem().map_err(|e| e.to_string())?;
+    let key_pem = cert.serialize_private_key_pem();
+
+    Ok((cert_pem, key_pem))
+}
+
 pub async fn ensure_lan_http_server(
     host: Option<Arc<crate::streaming::host::SunshineHost>>,
 ) -> Result<u16, String> {
@@ -80,14 +91,24 @@ pub async fn ensure_lan_http_server(
         .layer(middleware::from_fn(auth_middleware))
         .with_state(state.clone());
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:0")
-        .await
+    let (cert_pem, key_pem) = generate_self_signed_cert()?;
+    let config = axum_server::tls_rustls::RustlsConfig::from_pem(
+        cert_pem.into_bytes(),
+        key_pem.into_bytes(),
+    )
+    .await
+    .map_err(|e| format!("Error en config TLS: {e}"))?;
+
+    let listener = std::net::TcpListener::bind("0.0.0.0:0")
         .map_err(|e| format!("No se pudo abrir puerto LAN: {e}"))?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
 
     let handle = tokio::spawn(async move {
-        if let Err(e) = axum::serve(listener, app).await {
-            log::warn!("Servidor LAN finalizado: {e}");
+        if let Err(e) = axum_server::from_tcp_rustls(listener, config)
+            .serve(app.into_make_service())
+            .await
+        {
+            log::warn!("Servidor LAN HTTPS finalizado: {e}");
         }
     });
 
@@ -99,7 +120,7 @@ pub async fn ensure_lan_http_server(
         });
     }
 
-    log::info!("Servidor LAN escuchando en puerto {port}");
+    log::info!("Servidor LAN HTTPS escuchando en puerto {port}");
     Ok(port)
 }
 
