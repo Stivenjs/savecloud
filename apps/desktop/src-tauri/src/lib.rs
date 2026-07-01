@@ -47,6 +47,13 @@ pub fn run() {
     load_dotenv();
     init_logging();
 
+    let settings = config::load_settings();
+    if settings.disable_hardware_acceleration {
+        log::info!("Disabling hardware acceleration (GPU) by user preference");
+        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu --disable-gpu-rasterization");
+        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+    }
+
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     let mut builder = tauri::Builder::default();

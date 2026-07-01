@@ -107,6 +107,9 @@ pub struct AppSettings {
     /// Modo bajo rendimiento para reducir animaciones y consumo de CPU/GPU en PCs lentas.
     #[serde(default)]
     pub low_performance_mode: bool,
+    /// Desactivar aceleración por hardware (GPU) en el webview.
+    #[serde(default)]
+    pub disable_hardware_acceleration: bool,
 }
 
 fn default_true() -> bool {
@@ -256,6 +259,8 @@ pub struct Config {
     pub auto_extract_downloads: bool,
     #[serde(default)]
     pub low_performance_mode: bool,
+    #[serde(default)]
+    pub disable_hardware_acceleration: bool,
 }
 
 /// Objeto de transferencia de datos (DTO) de la configuración principal,
@@ -318,6 +323,7 @@ pub struct ConfigDto {
     #[serde(default = "default_true")]
     pub auto_extract_downloads: bool,
     pub low_performance_mode: bool,
+    pub disable_hardware_acceleration: bool,
 }
 
 /// DTO representativo de un juego para el frontend.
