@@ -102,6 +102,7 @@ pub fn get_config() -> ConfigDto {
         share_game_inventory_with_cloud: settings.share_game_inventory_with_cloud,
         auto_extract_downloads: settings.auto_extract_downloads,
         low_performance_mode: settings.low_performance_mode,
+        disable_hardware_acceleration: settings.disable_hardware_acceleration,
         game_mode_enabled: settings.game_mode_enabled,
         game_mode_apply_power_profile: settings.game_mode_apply_power_profile,
         game_mode_reduce_capture_overhead: settings.game_mode_reduce_capture_overhead,
@@ -291,6 +292,16 @@ pub fn set_developer_mode(enabled: bool) -> Result<(), String> {
 pub fn set_low_performance_mode(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
     let mut settings = config::load_settings();
     settings.low_performance_mode = enabled;
+    config::save_settings(&settings)?;
+    let _ = app.emit("config-changed", ());
+    Ok(())
+}
+
+/// Activa o desactiva la desactivación de aceleración por hardware.
+#[tauri::command]
+pub fn set_disable_hardware_acceleration(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.disable_hardware_acceleration = enabled;
     config::save_settings(&settings)?;
     let _ = app.emit("config-changed", ());
     Ok(())

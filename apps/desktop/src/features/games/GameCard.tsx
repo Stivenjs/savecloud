@@ -182,7 +182,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
   const cardContent = (
     <GameCardHoverMotion disableMotion={isCatalog}>
       <div
-        className="cursor-pointer relative bg-[#0e0f14] border border-zinc-800/80 hover:border-primary/50 shadow-md transition-all duration-300 overflow-hidden rounded-xl aspect-460/215 w-full group/card"
+        className="cursor-pointer relative bg-[#0e0f14] border border-zinc-800/80 hover:border-zinc-700 shadow-md transition-colors duration-300 overflow-hidden rounded-xl aspect-460/215 w-full group/card"
         onClick={handleCardClick}
         onMouseEnter={onHoverStart}
         onMouseLeave={onHoverEnd}
@@ -216,7 +216,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
                 fetchPriority="auto"
                 draggable={false}
                 alt={game.id}
-                className={`size-full object-cover object-center transition-all duration-500 ease-out group-hover:scale-[1.02] subpixel-antialiased transform-gpu rounded-xl ${
+                className={`size-full object-cover object-center transition-[transform,opacity] duration-500 ease-out group-hover:scale-[1.02] subpixel-antialiased transform-gpu rounded-xl ${
                   imgLoaded ? "opacity-100" : "opacity-0"
                 }`}
                 onLoad={handleImgLoad}

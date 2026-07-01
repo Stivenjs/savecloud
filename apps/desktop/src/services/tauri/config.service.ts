@@ -949,6 +949,11 @@ export async function setLowPerformanceMode(enabled: boolean): Promise<void> {
   await invoke("set_low_performance_mode", { enabled });
 }
 
+/** Desactivar la aceleración por hardware (GPU) del webview. */
+export async function setDisableHardwareAcceleration(enabled: boolean): Promise<void> {
+  await invoke("set_disable_hardware_acceleration", { enabled });
+}
+
 /** Guarda la URL del proxy HTTP/HTTPS/SOCKS5 en la configuración. */
 export async function setProxyUrl(proxyUrl: string | null): Promise<void> {
   await invoke("set_proxy_url", { proxyUrl });

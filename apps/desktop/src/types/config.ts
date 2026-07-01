@@ -86,4 +86,6 @@ export interface Config {
   readonly autoExtractDownloads?: boolean;
   /** Modo bajo rendimiento para reducir animaciones y consumo de CPU/GPU en PCs lentas. */
   readonly lowPerformanceMode?: boolean;
+  /** Desactivar aceleración por hardware (GPU) en el webview (requiere reiniciar). */
+  readonly disableHardwareAcceleration?: boolean;
 }
