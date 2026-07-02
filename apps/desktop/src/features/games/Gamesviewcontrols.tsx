@@ -6,24 +6,26 @@
 
 import { Select, SelectItem } from "@heroui/react";
 import { LayoutGrid, Grid2X2, AlignJustify } from "lucide-react";
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { GamesLayout, GamesSortDir, GamesSortField } from "@hooks/useGamesViewPreferences";
 
 interface SortOption {
   key: string;
   field: GamesSortField;
   dir: GamesSortDir;
-  label: string;
+  labelKey: string;
 }
 
-const SORT_OPTIONS: SortOption[] = [
-  { key: "title_asc", field: "title", dir: "asc", label: "Título (A-Z)" },
-  { key: "title_desc", field: "title", dir: "desc", label: "Título (Z-A)" },
-  { key: "lastModified_desc", field: "lastModified", dir: "desc", label: "Modificado (reciente)" },
-  { key: "lastModified_asc", field: "lastModified", dir: "asc", label: "Modificado (antiguo)" },
-  { key: "playtime_desc", field: "playtime", dir: "desc", label: "Tiempo jugado (mayor)" },
-  { key: "playtime_asc", field: "playtime", dir: "asc", label: "Tiempo jugado (menor)" },
-  { key: "size_desc", field: "size", dir: "desc", label: "Tamaño (mayor)" },
-  { key: "size_asc", field: "size", dir: "asc", label: "Tamaño (menor)" },
+const SORT_OPTION_DEFS: SortOption[] = [
+  { key: "title_asc", field: "title", dir: "asc", labelKey: "library.viewControls.sort.titleAsc" },
+  { key: "title_desc", field: "title", dir: "desc", labelKey: "library.viewControls.sort.titleDesc" },
+  { key: "lastModified_desc", field: "lastModified", dir: "desc", labelKey: "library.viewControls.sort.modifiedDesc" },
+  { key: "lastModified_asc", field: "lastModified", dir: "asc", labelKey: "library.viewControls.sort.modifiedAsc" },
+  { key: "playtime_desc", field: "playtime", dir: "desc", labelKey: "library.viewControls.sort.playtimeDesc" },
+  { key: "playtime_asc", field: "playtime", dir: "asc", labelKey: "library.viewControls.sort.playtimeAsc" },
+  { key: "size_desc", field: "size", dir: "desc", labelKey: "library.viewControls.sort.sizeDesc" },
+  { key: "size_asc", field: "size", dir: "asc", labelKey: "library.viewControls.sort.sizeAsc" },
 ];
 
 /** Estilos del listbox del Select en Big Picture (tipografía y altura de fila). */
@@ -87,13 +89,14 @@ export function GamesViewControls({
   onLayoutChange,
   consoleMode = false,
 }: GamesViewControlsProps) {
-  // Construimos la clave activa del select
+  const { t } = useTranslation();
+  const sortOptions = useMemo(() => SORT_OPTION_DEFS.map((opt) => ({ ...opt, label: t(opt.labelKey) })), [t]);
+
   const selectedKey = `${sortBy}_${sortDir}`;
 
   const handleSortSelect = (keys: unknown) => {
-    // HeroUI devuelve un Set
     const key = typeof keys === "string" ? keys : Array.from(keys as Set<string>)[0];
-    const option = SORT_OPTIONS.find((o) => o.key === key);
+    const option = sortOptions.find((o) => o.key === key);
     if (option) {
       onSortChange(option.field, option.dir);
     }
@@ -107,14 +110,13 @@ export function GamesViewControls({
         "flex flex-wrap items-center gap-3",
         consoleMode ? "w-full gap-4 sm:gap-5 sm:flex-nowrap sm:justify-end" : "sm:flex-nowrap",
       ].join(" ")}>
-      {/* Sort selector */}
       <div className={`flex items-center gap-2 ${consoleMode ? "min-w-0 w-full sm:w-auto sm:flex-1 sm:max-w-md" : ""}`}>
         <span
           className={[
             "whitespace-nowrap text-default-500",
             consoleMode ? "inline text-lg font-semibold" : "hidden text-sm sm:inline",
           ].join(" ")}>
-          Ordenar por
+          {t("library.viewControls.sortBy")}
         </span>
         <Select
           selectedKeys={new Set([selectedKey])}
@@ -122,7 +124,7 @@ export function GamesViewControls({
           className={consoleMode ? "min-w-0 flex-1 sm:min-w-72" : "w-52"}
           size={consoleMode ? "lg" : "sm"}
           variant="bordered"
-          aria-label="Ordenar juegos por"
+          aria-label={t("library.viewControls.sortAriaLabel")}
           maxListboxHeight={consoleMode ? 520 : undefined}
           listboxProps={consoleMode ? { ...CONSOLE_SORT_LISTBOX_PROPS } : undefined}
           classNames={{
@@ -138,7 +140,7 @@ export function GamesViewControls({
             listbox: consoleMode ? "gap-0 p-0 text-lg" : undefined,
             popoverContent: consoleMode ? "min-w-[var(--trigger-width)] p-2 text-lg" : undefined,
           }}>
-          {SORT_OPTIONS.map((opt) => (
+          {sortOptions.map((opt) => (
             <SelectItem key={opt.key} textValue={opt.label}>
               {opt.label}
             </SelectItem>
@@ -146,7 +148,6 @@ export function GamesViewControls({
         </Select>
       </div>
 
-      {/* Divider */}
       <div
         className={[
           "w-px shrink-0 bg-default-200",
@@ -155,7 +156,6 @@ export function GamesViewControls({
         aria-hidden
       />
 
-      {/* Layout toggle */}
       <div
         className={[
           "flex items-center rounded-xl border border-default-200 bg-default-50 dark:border-default-100 dark:bg-default-100/30",
@@ -165,7 +165,7 @@ export function GamesViewControls({
           value="grid-lg"
           current={layout}
           onClick={onLayoutChange}
-          label="Tarjetas grandes"
+          label={t("library.viewControls.layoutLarge")}
           consoleMode={consoleMode}>
           <LayoutGrid size={iconSize} />
         </LayoutButton>
@@ -173,7 +173,7 @@ export function GamesViewControls({
           value="grid-md"
           current={layout}
           onClick={onLayoutChange}
-          label="Tarjetas medianas"
+          label={t("library.viewControls.layoutMedium")}
           consoleMode={consoleMode}>
           <Grid2X2 size={iconSize} />
         </LayoutButton>
@@ -181,7 +181,7 @@ export function GamesViewControls({
           value="list"
           current={layout}
           onClick={onLayoutChange}
-          label="Vista lista"
+          label={t("library.viewControls.layoutList")}
           consoleMode={consoleMode}>
           <AlignJustify size={iconSize} />
         </LayoutButton>

@@ -12,6 +12,7 @@ import {
 } from "@heroui/react";
 import { Archive, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { cleanupOldBackups, setKeepBackupsPerGame, deleteAllLocalBackups } from "@services/tauri/config.service";
 import { toastError, toastSuccess } from "@utils/toast";
 import { useConfig } from "@hooks/useConfig";
@@ -20,6 +21,7 @@ const KEEP_OPTIONS = [3, 5, 10, 20] as const;
 const DEFAULT_KEEP = 10;
 
 export function LocalBackupInfoCard() {
+  const { t } = useTranslation();
   const { config, refetch } = useConfig();
   const [keepLastN, setKeepLastN] = useState(DEFAULT_KEEP);
   const [cleaning, setCleaning] = useState(false);
@@ -36,17 +38,21 @@ export function LocalBackupInfoCard() {
       const result = await cleanupOldBackups(keepLastN);
       if (result.backupsDeleted > 0) {
         toastSuccess(
-          "Espacio liberado",
-          `Se eliminaron ${result.backupsDeleted} backup(s) en ${result.gamesAffected} juego(s). Se mantienen los últimos ${keepLastN} por juego.`
+          t("settings.localBackup.toastSpaceFreed"),
+          t("settings.localBackup.toastSpaceFreedDesc", {
+            count: result.backupsDeleted,
+            games: result.gamesAffected,
+            keep: keepLastN,
+          })
         );
       } else {
         toastSuccess(
-          "Sin cambios",
-          "No había backups antiguos que eliminar. Se mantienen los últimos " + keepLastN + " por juego."
+          t("settings.localBackup.toastNoChanges"),
+          t("settings.localBackup.toastNoChangesDesc", { keep: keepLastN })
         );
       }
     } catch (e) {
-      toastError("Error al liberar espacio", e instanceof Error ? e.message : String(e));
+      toastError(t("settings.localBackup.toastCleanupError"), e instanceof Error ? e.message : String(e));
     } finally {
       setCleaning(false);
     }
@@ -56,10 +62,10 @@ export function LocalBackupInfoCard() {
     setCleaning(true);
     try {
       await deleteAllLocalBackups();
-      toastSuccess("Backups locales eliminados", "Se borraron todas las copias locales en SaveCloud/backups.");
+      toastSuccess(t("settings.localBackup.toastDeletedAll"), t("settings.localBackup.toastDeletedAllDesc"));
       setIsDeleteAllModalOpen(false);
     } catch (e) {
-      toastError("Error al borrar backups", e instanceof Error ? e.message : String(e));
+      toastError(t("settings.localBackup.toastDeleteError"), e instanceof Error ? e.message : String(e));
     } finally {
       setCleaning(false);
     }
@@ -70,18 +76,17 @@ export function LocalBackupInfoCard() {
       <CardBody className="gap-4">
         <div className="flex items-center gap-2">
           <Archive size={20} className="text-default-500" />
-          <h2 className="text-base font-semibold text-foreground">Respaldo local automático</h2>
+          <h2 className="text-base font-semibold text-foreground">{t("settings.localBackup.title")}</h2>
         </div>
 
         <p className="text-sm text-default-600">
-          Antes de descargar guardados desde la nube, la app crea una copia de seguridad en tu PC para no sobrescribir
-          nada sin respaldo. Las copias se guardan en la carpeta de configuración:{" "}
+          {t("settings.localBackup.desc")}{" "}
           <code className="rounded bg-default-200 px-1 font-mono text-xs">SaveCloud/backups/[juego]/[fecha]</code>
         </p>
 
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm text-default-600">
-            Mantener últimos
+            {t("settings.localBackup.keepLast")}
             <Select
               selectedKeys={[String(keepLastN)]}
               onSelectionChange={async (keys) => {
@@ -91,7 +96,7 @@ export function LocalBackupInfoCard() {
                   await setKeepBackupsPerGame(value);
                   await refetch();
                 } catch (e) {
-                  toastError("Error al guardar", e instanceof Error ? e.message : String(e));
+                  toastError(t("settings.localBackup.toastSaveError"), e instanceof Error ? e.message : String(e));
                 }
               }}
               className="min-w-22.5"
@@ -102,7 +107,7 @@ export function LocalBackupInfoCard() {
                 </SelectItem>
               ))}
             </Select>
-            backups por juego
+            {t("settings.localBackup.backupsPerGame")}
           </label>
 
           <Button
@@ -112,11 +117,11 @@ export function LocalBackupInfoCard() {
             onPress={handleCleanup}
             isLoading={cleaning}
             startContent={<Trash2 size={16} />}>
-            Liberar espacio ahora
+            {t("settings.localBackup.freeSpaceNow")}
           </Button>
 
           <Button size="sm" variant="flat" color="danger" onPress={() => setIsDeleteAllModalOpen(true)}>
-            Borrar todos los backups locales
+            {t("settings.localBackup.deleteAll")}
           </Button>
         </div>
 
@@ -126,20 +131,18 @@ export function LocalBackupInfoCard() {
           isDismissable={!cleaning}
           isKeyboardDismissDisabled={cleaning}>
           <ModalContent>
-            <ModalHeader className="text-danger">Confirmar borrado total</ModalHeader>
+            <ModalHeader className="text-danger">{t("settings.localBackup.deleteAllTitle")}</ModalHeader>
             <ModalBody>
               <p className="text-sm text-default-700">
-                <span className="font-medium">
-                  ¿Borrar TODOS los backups locales? Esta acción no se puede deshacer.
-                </span>
+                <span className="font-medium">{t("settings.localBackup.deleteAllWarning")}</span>
               </p>
             </ModalBody>
             <ModalFooter>
               <Button variant="light" onPress={() => setIsDeleteAllModalOpen(false)} isDisabled={cleaning}>
-                Cancelar
+                {t("common.cancel")}
               </Button>
               <Button color="danger" isLoading={cleaning} onPress={handleDeleteAllBackups}>
-                Confirmar borrado
+                {t("settings.localBackup.confirmDelete")}
               </Button>
             </ModalFooter>
           </ModalContent>

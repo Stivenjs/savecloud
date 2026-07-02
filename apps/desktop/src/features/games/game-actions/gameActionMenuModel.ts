@@ -1,4 +1,5 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
+import i18n from "@lib/i18n";
 import type { ConfiguredGame } from "@app-types/config";
 
 export type GameActionsMenuSurface = "list" | "detail";
@@ -115,5 +116,7 @@ export function isGameActionItemHidden(
 
 /** Etiqueta de carpeta según superficie (misma acción, distinto copy). */
 export function getFolderMenuLabel(surface: GameActionsMenuSurface): string {
-  return surface === "list" ? "Abrir carpeta de guardados" : "Abrir carpeta";
+  return surface === "list"
+    ? i18n.t("library.actionsMenu.openSaveFolderList")
+    : i18n.t("library.actionsMenu.openSaveFolderDetail");
 }

@@ -132,7 +132,7 @@ function ConsoleOriginSegments({
   return (
     <div
       role="radiogroup"
-      aria-label={t("library.filter.title", "Filtros de origen")}
+      aria-label={t("library.filter.title")}
       className="inline-flex w-fit max-w-full flex-wrap items-center gap-1 self-start rounded-xl border border-default-200/70 bg-default-100/30 p-1 dark:border-default-100/25 dark:bg-default-50/15">
       {segments.map(({ key, label }) => {
         const selected = originFilter === key;
@@ -191,7 +191,7 @@ export function GamesFilters({
           variant="solid"
           color="primary"
           size="sm"
-          aria-label={t("library.filter.title", "Filtros de origen")}>
+          aria-label={t("library.filter.title")}>
           <Tab key="all" title={t("library.filter.all")} />
           <Tab key="steam" title={t("library.filter.steam")} />
           <Tab key="other" title={t("library.filter.other")} />

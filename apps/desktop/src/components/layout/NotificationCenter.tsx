@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { Badge, Button, Popover, PopoverContent, PopoverTrigger, ScrollShadow, Spinner } from "@heroui/react";
 import { AlertTriangle, Bell, CheckCheck, Download, FolderOpen, Info, Trash2, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   useNotificationsQuery,
   useUnreadCountQuery,
@@ -77,6 +78,7 @@ function NotificationRow({
   onRead: (id: string) => void;
   onDismiss: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const unread = !n.readAt || !n.readAt.trim();
   const color = severityColor(n.severity);
   const iconBg = iconBgMap[color] ?? iconBgMap.default;
@@ -115,7 +117,7 @@ function NotificationRow({
           <button
             onClick={() => onDismiss(n.id)}
             className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-default-400 hover:text-danger-400 mt-0.5"
-            aria-label="Descartar notificación">
+            aria-label={t("notifications.dismiss")}>
             <X size={14} />
           </button>
         </div>
@@ -136,7 +138,7 @@ function NotificationRow({
                 className="h-6 px-2 text-[11px] gap-1 min-w-0"
                 startContent={<FolderOpen size={12} />}
                 onPress={() => void openFolder(downloadDir)}>
-                Abrir carpeta
+                {t("notifications.openFolder")}
               </Button>
             )}
 
@@ -147,7 +149,7 @@ function NotificationRow({
                 color="success"
                 className="h-6 px-2 text-[11px] min-w-0"
                 onPress={() => onRead(n.id)}>
-                Leída
+                {t("notifications.markRead")}
               </Button>
             )}
           </div>
@@ -160,6 +162,7 @@ function NotificationRow({
 /** Centro de notificaciones */
 
 export function NotificationCenter() {
+  const { t } = useTranslation();
   const { data: items = [], isLoading: loading } = useNotificationsQuery();
   const { data: unreadCount = 0 } = useUnreadCountQuery();
   const { markRead, markAllRead, dismiss, dismissAll, syncWithCloud } = useNotificationActions();
@@ -206,7 +209,7 @@ export function NotificationCenter() {
           radius="sm"
           variant="light"
           className="bg-transparent border-transparent shadow-none"
-          aria-label="Centro de notificaciones">
+          aria-label={t("notifications.center")}>
           <Badge
             content={unreadCount > 0 ? (unreadCount > 9 ? "9+" : unreadCount) : undefined}
             color="danger"
@@ -224,7 +227,7 @@ export function NotificationCenter() {
         <div className="flex w-full items-center justify-between gap-2 px-4 py-3 border-b border-default-100 bg-default-50/80 backdrop-blur-sm">
           <div className="flex items-center gap-2">
             <Bell size={15} className="text-default-500" />
-            <span className="text-sm font-semibold tracking-tight">Notificaciones</span>
+            <span className="text-sm font-semibold tracking-tight">{t("notifications.title")}</span>
             {unreadCount > 0 && (
               <span className="inline-flex items-center justify-center rounded-full bg-primary-500 text-white text-[10px] font-bold h-4 min-w-4 px-1">
                 {unreadCount > 9 ? "9+" : unreadCount}
@@ -241,7 +244,7 @@ export function NotificationCenter() {
               className="h-7 px-2 text-xs gap-1"
               startContent={<CheckCheck size={13} />}
               onPress={() => void markAllRead()}>
-              Marcar leídas
+              {t("notifications.markAllRead")}
             </Button>
             <Button
               size="sm"
@@ -251,7 +254,7 @@ export function NotificationCenter() {
               className="h-7 px-2 text-xs gap-1"
               startContent={<Trash2 size={13} />}
               onPress={() => void dismissAll()}>
-              Limpiar
+              {t("notifications.clearAll")}
             </Button>
           </div>
         </div>
@@ -265,7 +268,7 @@ export function NotificationCenter() {
           ) : items.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 py-14 text-default-400">
               <Bell size={32} strokeWidth={1.2} />
-              <p className="text-sm">Sin notificaciones</p>
+              <p className="text-sm">{t("notifications.empty")}</p>
             </div>
           ) : (
             <div className="px-2 py-2 flex flex-col gap-1">

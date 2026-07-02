@@ -1,5 +1,6 @@
 import { Button, Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader, Tab, Tabs } from "@heroui/react";
 import { Gamepad2, Image, Play } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ConfiguredGame } from "@app-types/config";
 import { toGameId } from "@utils/gameImage";
 import { dedupePreserveGamePaths } from "@utils/gameSavePaths";
@@ -36,6 +37,7 @@ export function GameDrawer({
   initialPaths = STABLE_EMPTY_GAME_PATHS,
   suggestedId = "",
 }: GameDrawerProps) {
+  const { t } = useTranslation();
   const { form, setField, resetForm, error, setError, loading, setLoading, isDirty } = useGameForm({
     isOpen,
     mode,
@@ -54,7 +56,7 @@ export function GameDrawer({
     const paths = dedupePreserveGamePaths(form.paths);
 
     if (!rawName) {
-      setError("El nombre del juego es obligatorio.");
+      setError(t("library.gameDrawer.nameRequired"));
       return;
     }
 
@@ -103,8 +105,8 @@ export function GameDrawer({
     }
   };
 
-  const title = mode === "add" ? "Añadir juego" : "Editar juego";
-  const submitLabel = mode === "add" ? "Añadir" : "Guardar cambios";
+  const title = mode === "add" ? t("library.gameDrawer.addTitle") : t("library.gameDrawer.editTitle");
+  const submitLabel = mode === "add" ? t("library.gameDrawer.addButton") : t("library.gameDrawer.saveChanges");
   const canSubmit = !!form.gameId.trim() && isDirty;
 
   return (
@@ -112,12 +114,14 @@ export function GameDrawer({
       <DrawerContent>
         <DrawerHeader className="flex flex-col gap-1">
           <h2 className="text-lg font-semibold">{title}</h2>
-          {mode === "edit" && game && <p className="text-xs text-default-400 truncate">Editando: {game.id}</p>}
+          {mode === "edit" && game && (
+            <p className="text-xs text-default-400 truncate">{t("library.gameDrawer.editing", { gameId: game.id })}</p>
+          )}
         </DrawerHeader>
 
         <DrawerBody className="px-4">
           <Tabs
-            aria-label="Secciones del juego"
+            aria-label={t("library.gameDrawer.tabsAriaLabel")}
             variant="underlined"
             color="primary"
             fullWidth
@@ -127,7 +131,7 @@ export function GameDrawer({
               title={
                 <div className="flex items-center gap-1.5">
                   <Gamepad2 size={14} />
-                  <span>General</span>
+                  <span>{t("library.gameDrawer.tabGeneral")}</span>
                 </div>
               }>
               <GameDrawerGeneralTab form={form} setField={setField} setError={setError} error={error} mode={mode} />
@@ -138,7 +142,7 @@ export function GameDrawer({
               title={
                 <div className="flex items-center gap-1.5">
                   <Image size={14} />
-                  <span>Media</span>
+                  <span>{t("library.gameDrawer.tabMedia")}</span>
                 </div>
               }>
               <GameDrawerMediaTab form={form} setField={setField} setError={setError} isOpen={isOpen} />
@@ -149,7 +153,7 @@ export function GameDrawer({
               title={
                 <div className="flex items-center gap-1.5">
                   <Play size={14} />
-                  <span>Ejecución</span>
+                  <span>{t("library.gameDrawer.tabLaunch")}</span>
                 </div>
               }>
               <GameDrawerLaunchTab form={form} setField={setField} setError={setError} isOpen={isOpen} />
@@ -165,7 +169,7 @@ export function GameDrawer({
 
         <DrawerFooter>
           <Button variant="flat" onPress={handleClose}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button color="primary" onPress={handleSubmit} isLoading={loading} isDisabled={!canSubmit}>
             {submitLabel}

@@ -193,9 +193,12 @@ export function GamesPage() {
     try {
       const { shareUrl } = await createShareLink(game.id);
       await navigator.clipboard.writeText(shareUrl);
-      toastSuccess("Link copiado", "El link para compartir este juego está en el portapapeles. Válido 7 días.");
+      toastSuccess(t("library.shareLink.copiedTitle"), t("library.shareLink.copiedDesc"));
     } catch (e) {
-      toastError("No se pudo crear el link", e instanceof Error ? e.message : "Error inesperado");
+      toastError(
+        t("library.shareLink.errorTitle"),
+        e instanceof Error ? e.message : t("library.shareLink.unexpectedError")
+      );
     }
   };
 
@@ -213,7 +216,7 @@ export function GamesPage() {
       <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4">
         <p className="text-danger">{error}</p>
         <Button color="primary" startContent={<RefreshCw size={18} />} onPress={() => refetch?.()}>
-          {t("common.retry", "Reintentar")}
+          {t("common.retry")}
         </Button>
       </div>
     );
@@ -425,7 +428,9 @@ export function GamesPage() {
           <section className={bigPictureConsole ? "flex flex-wrap items-center gap-x-4 gap-y-2" : "space-y-2"}>
             <h2
               className={`font-medium text-default-500 ${bigPictureConsole ? "shrink-0 text-base md:text-lg" : "text-sm"}`}>
-              {bigPictureConsole ? "Filtrar por origen" : "Buscar y filtrar"}
+              {bigPictureConsole
+                ? t("library.filtersSection.filterByOrigin")
+                : t("library.filtersSection.searchAndFilter")}
             </h2>
             <GamesFilters
               searchTerm={searchTerm}

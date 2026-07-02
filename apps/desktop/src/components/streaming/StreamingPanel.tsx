@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, CardHeader, CardBody } from "@heroui/react";
+import { useTranslation } from "react-i18next";
 import { HostSetupModal } from "@components/streaming/HostSetupModal";
 import { LanHostList } from "@components/streaming/LanHostList";
 
@@ -16,6 +17,7 @@ export type StreamingState =
   | "Idle";
 
 export const StreamingPanel = () => {
+  const { t } = useTranslation();
   const [isHostModalOpen, setIsHostModalOpen] = useState(false);
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -47,34 +49,38 @@ export const StreamingPanel = () => {
     await queryClient.invalidateQueries({ queryKey: ["streaming_get_state"] });
   };
 
+  const playingHostIp =
+    isPlaying && typeof state === "object" && state !== null && "Playing" in state ? state.Playing.host_ip : "";
+
   return (
     <Card className="w-full max-w-2xl bg-content1 border-default-200">
       <CardHeader className="flex flex-col items-start px-6 pt-6 pb-2">
-        <h2 className="text-2xl font-bold text-foreground">Remote Play (LAN)</h2>
-        <p className="text-sm text-default-500">Transmite o juega en red local</p>
+        <h2 className="text-2xl font-bold text-foreground">{t("remotePlay.title")}</h2>
+        <p className="text-sm text-default-500">{t("remotePlay.panelSubtitle")}</p>
       </CardHeader>
       <CardBody className="px-6 pb-6 gap-4">
         {isHosting ? (
           <div className="p-4 bg-success-50 dark:bg-success-900/20 border border-success-500/50 rounded-xl">
-            <h3 className="text-lg font-semibold text-success-600 dark:text-success-400">Hosting Session Active</h3>
-            <p className="text-sm text-default-600 dark:text-default-300 mb-4">
-              Esperando conexiones en tu red local. Tus dispositivos se emparejarán automáticamente gracias a SaveCloud
-              Zero-Config.
-            </p>
+            <h3 className="text-lg font-semibold text-success-600 dark:text-success-400">
+              {t("remotePlay.hostingActive")}
+            </h3>
+            <p className="text-sm text-default-600 dark:text-default-300 mb-4">{t("remotePlay.hostingDesc")}</p>
             <Button color="danger" variant="flat" onPress={handleStop}>
-              Detener Host
+              {t("remotePlay.stopHost")}
             </Button>
           </div>
         ) : null}
 
         {isPlaying ? (
           <div className="p-4 bg-primary-50 dark:bg-primary-900/20 border border-primary-500/50 rounded-xl">
-            <h3 className="text-lg font-semibold text-primary-600 dark:text-primary-400">Conectado al Host</h3>
+            <h3 className="text-lg font-semibold text-primary-600 dark:text-primary-400">
+              {t("remotePlay.connectedToHost")}
+            </h3>
             <p className="text-sm text-default-600 dark:text-default-300 mb-4">
-              Recibiendo transmisión desde {(state as any).Playing.host_ip}
+              {t("remotePlay.connectedDesc", { hostIp: playingHostIp })}
             </p>
             <Button color="danger" variant="flat" onPress={handleStop}>
-              Desconectar
+              {t("remotePlay.disconnect")}
             </Button>
           </div>
         ) : null}
@@ -86,8 +92,8 @@ export const StreamingPanel = () => {
               variant="flat"
               className="h-24 flex flex-col gap-1"
               onPress={() => setIsHostModalOpen(true)}>
-              <span className="text-lg font-medium">Ser Anfitrión</span>
-              <span className="text-xs opacity-80">Comparte tu pantalla</span>
+              <span className="text-lg font-medium">{t("remotePlay.host")}</span>
+              <span className="text-xs opacity-80">{t("remotePlay.hostSubtitle")}</span>
             </Button>
 
             <Button
@@ -95,8 +101,8 @@ export const StreamingPanel = () => {
               variant="bordered"
               className="h-24 flex flex-col gap-1"
               onPress={() => setIsBrowserOpen(true)}>
-              <span className="text-lg font-medium">Unirse a Juego</span>
-              <span className="text-xs opacity-80">Busca hosts en LAN</span>
+              <span className="text-lg font-medium">{t("remotePlay.join")}</span>
+              <span className="text-xs opacity-80">{t("remotePlay.joinSubtitle")}</span>
             </Button>
           </div>
         ) : null}

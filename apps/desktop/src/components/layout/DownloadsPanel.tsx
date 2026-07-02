@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Progress, ScrollShadow } from "@heroui/react";
 import { ChevronDown, ChevronUp, Clock, Download, Pause, Play, Upload, Users, X, Zap } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   cancelSourceDownload,
   cancelTorrent,
@@ -41,45 +42,46 @@ type DownloadRow = {
   };
 };
 
-function formatProtocol(protocol: string): string {
+function formatProtocol(protocol: string, t: (key: string) => string): string {
   switch (protocol) {
     case "http":
-      return "Descarga directa";
+      return t("downloads.protocol.http");
     case "torrentMagnet":
     case "torrentFile":
     case "torrent":
-      return "Torrent";
+      return t("downloads.protocol.torrent");
     case "peerLan":
-      return "Red local (LAN)";
+      return t("downloads.protocol.peerLan");
     default:
-      return "Descarga";
+      return t("downloads.protocol.default");
   }
 }
 
-function formatStatus(status: string): string {
+function formatStatus(status: string, t: (key: string) => string): string {
   switch (status) {
     case "queued":
-      return "En cola";
+      return t("downloads.status.queued");
     case "running":
-      return "Descargando";
+      return t("downloads.status.running");
     case "extracting":
-      return "Extrayendo";
+      return t("downloads.status.extracting");
     case "pausing":
     case "paused":
-      return "Pausado";
+      return t("downloads.status.paused");
     case "cancelling":
     case "cancelled":
-      return "Cancelado";
+      return t("downloads.status.cancelled");
     case "completed":
-      return "Completado";
+      return t("downloads.status.completed");
     case "failed":
-      return "Error";
+      return t("downloads.status.failed");
     default:
       return status;
   }
 }
 
 export function DownloadsPanel() {
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
   const syncOperation = useSyncStore((s) => s.syncOperation);
   const syncTasks = useSyncStore((s) => s.activeTasksById);
@@ -186,7 +188,7 @@ export function DownloadsPanel() {
   const rows = useMemo<DownloadRow[]>(() => {
     const syncRows = Object.entries(syncTasks).map(([id, task]) => {
       const value = task.total > 0 ? Math.min(100, Math.round((task.loaded / task.total) * 100)) : 0;
-      const gameName = task.gameId ? formatGameDisplayName(task.gameId) : "Descarga";
+      const gameName = task.gameId ? formatGameDisplayName(task.gameId) : t("downloads.defaultLabel");
       return {
         id,
         label: gameName,
@@ -219,7 +221,7 @@ export function DownloadsPanel() {
       .map((task) => ({
         id: `torrent-${task.infoHash}`,
         infoHash: task.infoHash,
-        label: task.name || "Torrent",
+        label: task.name || t("downloads.torrentLabel"),
         subtitle: mapTorrentState(task.state),
         value: Math.max(0, Math.min(100, Math.round(task.progressPercent))),
         source: "torrent" as const,
@@ -263,13 +265,13 @@ export function DownloadsPanel() {
               : 0;
 
       const subtitle = isTorrentBacked
-        ? `${formatProtocol(task.protocol)} · ${torrent ? mapTorrentState(torrent.state) : "Preparando descarga..."}`
-        : `${formatProtocol(task.protocol)} · ${formatStatus(task.status)}`;
+        ? `${formatProtocol(task.protocol, t)} · ${torrent ? mapTorrentState(torrent.state) : t("downloads.preparingDownload")}`
+        : `${formatProtocol(task.protocol, t)} · ${formatStatus(task.status, t)}`;
 
       return {
         id: `sources-${task.jobId}`,
         jobId: task.jobId,
-        label: task.title || "Descarga",
+        label: task.title || t("downloads.defaultLabel"),
         subtitle,
         value,
         source: "sources" as const,
@@ -300,7 +302,7 @@ export function DownloadsPanel() {
     });
 
     return [...syncRows, ...sourceRows, ...torrentRows];
-  }, [syncTasks, syncMetrics, sourcesTasks, torrentTasks]);
+  }, [syncTasks, syncMetrics, sourcesTasks, torrentTasks, t]);
 
   const totalActive = rows.length;
   const keepPanelVisibleForBatch = syncOperation?.mode === "batch";
@@ -323,10 +325,8 @@ export function DownloadsPanel() {
               <Download size={16} className="text-primary" />
             </div>
             <div>
-              <p className="text-sm font-semibold leading-tight">Descargas</p>
-              <p className="text-xs text-default-400">
-                {totalActive} {totalActive === 1 ? "activa" : "activas"}
-              </p>
+              <p className="text-sm font-semibold leading-tight">{t("downloads.title")}</p>
+              <p className="text-xs text-default-400">{t("downloads.active", { count: totalActive })}</p>
             </div>
           </div>
           <Button
@@ -334,7 +334,7 @@ export function DownloadsPanel() {
             size="sm"
             variant="flat"
             radius="lg"
-            aria-label={collapsed ? "Expandir descargas" : "Colapsar descargas"}
+            aria-label={collapsed ? t("downloads.expand") : t("downloads.collapse")}
             onPress={() => setCollapsed((v) => !v)}>
             {collapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </Button>
@@ -343,7 +343,7 @@ export function DownloadsPanel() {
         {/* Barra de progreso global */}
         <div className="mb-3 rounded-lg bg-default-100/50 p-2.5">
           <div className="mb-1.5 flex items-center justify-between text-xs">
-            <span className="text-default-500">Progreso total</span>
+            <span className="text-default-500">{t("downloads.totalProgress")}</span>
             <span className="font-medium tabular-nums">
               {aggregate.total + sourcesAggregate.total > 0
                 ? Math.min(
@@ -368,7 +368,7 @@ export function DownloadsPanel() {
                   )
                 : aggregate.percent
             }
-            aria-label="Progreso agregado de descargas"
+            aria-label={t("downloads.aggregateProgressAria")}
             classNames={{
               track: "bg-default-200",
               indicator: "bg-gradient-to-r from-primary to-primary-400",
@@ -386,8 +386,8 @@ export function DownloadsPanel() {
                   <Download size={18} className="animate-pulse text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Preparando siguiente juego…</p>
-                  <p className="mt-0.5 text-xs text-default-400">La subida por lotes sigue activa</p>
+                  <p className="text-sm font-medium">{t("downloads.preparingNext")}</p>
+                  <p className="mt-0.5 text-xs text-default-400">{t("downloads.batchUploadActive")}</p>
                 </div>
               </div>
             ) : null}
@@ -447,7 +447,7 @@ export function DownloadsPanel() {
                     <span className="inline-flex items-center gap-1">
                       <Users size={11} className="shrink-0 text-default-400" aria-hidden />
                       <span className="tabular-nums">
-                        {row.torrentExtra.peersConnected} {row.torrentExtra.peersConnected === 1 ? "compi" : "compis"}
+                        {t("downloads.peer", { count: row.torrentExtra.peersConnected })}
                       </span>
                     </span>
                   </div>
@@ -459,13 +459,13 @@ export function DownloadsPanel() {
                     {row.canPause ? (
                       <button className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-default-100 px-2.5 py-1.5 text-xs font-medium text-default-600 transition-colors hover:bg-default-200">
                         <Pause size={12} />
-                        Pausar
+                        {t("downloads.pause")}
                       </button>
                     ) : null}
                     {row.canCancel ? (
                       <button className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-danger-50 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger-100">
                         <X size={12} />
-                        Cancelar
+                        {t("downloads.cancel")}
                       </button>
                     ) : null}
                   </div>
@@ -479,7 +479,7 @@ export function DownloadsPanel() {
                         className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-default-100 px-2.5 py-1.5 text-xs font-medium text-default-600 transition-colors hover:bg-default-200"
                         onClick={() => void pauseSourceDownload(row.jobId!)}>
                         <Pause size={12} />
-                        Pausar
+                        {t("downloads.pause")}
                       </button>
                     ) : null}
                     {row.canResume ? (
@@ -487,7 +487,7 @@ export function DownloadsPanel() {
                         className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-success-50 px-2.5 py-1.5 text-xs font-medium text-success transition-colors hover:bg-success-100"
                         onClick={() => void resumeSourceDownload(row.jobId!)}>
                         <Zap size={12} />
-                        Reanudar
+                        {t("downloads.resume")}
                       </button>
                     ) : null}
                     {row.canCancel ? (
@@ -495,7 +495,7 @@ export function DownloadsPanel() {
                         className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-danger-50 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger-100"
                         onClick={() => onCancelSource(row.jobId!, row.infoHash)}>
                         <X size={12} />
-                        Cancelar
+                        {t("downloads.cancel")}
                       </button>
                     ) : null}
                   </div>
@@ -510,7 +510,7 @@ export function DownloadsPanel() {
                         className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-default-100 px-2.5 py-1.5 text-xs font-medium text-default-600 transition-colors hover:bg-default-200 disabled:opacity-50"
                         onClick={() => void onToggleTorrentPause(row.infoHash!, !!row.isPaused)}>
                         {row.isPaused ? <Play size={12} /> : <Pause size={12} />}
-                        {row.isPaused ? "Reanudar" : "Pausar"}
+                        {row.isPaused ? t("downloads.resume") : t("downloads.pause")}
                       </button>
                     ) : null}
                     {row.canCancel ? (
@@ -518,7 +518,7 @@ export function DownloadsPanel() {
                         className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-danger-50 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger-100"
                         onClick={() => onCancelTorrent(row.infoHash!)}>
                         <X size={12} />
-                        Cancelar
+                        {t("downloads.cancel")}
                       </button>
                     ) : null}
                   </div>

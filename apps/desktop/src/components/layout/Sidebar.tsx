@@ -61,9 +61,7 @@ export function Sidebar({ items, activeId, onSelect }: SidebarProps) {
             radius="md"
             color="primary"
             size="sm"
-            aria-label={
-              isDark ? t("common.theme.light", "Cambiar a modo claro") : t("common.theme.dark", "Cambiar a modo oscuro")
-            }
+            aria-label={isDark ? t("common.theme.light") : t("common.theme.dark")}
             onPress={() => setTheme(isDark ? "light" : "dark")}>
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </Button>

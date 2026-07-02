@@ -2,6 +2,7 @@ import { Tooltip } from "@heroui/react";
 import { motion } from "framer-motion";
 import { HardDrive, Pause, Upload, X } from "lucide-react";
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { SyncProgressState } from "@components/layout";
 import { requestUploadCancel, requestUploadPause } from "@services/tauri";
 import { formatBytes } from "@utils/format";
@@ -22,6 +23,7 @@ const CIRCUMFERENCE = 2 * Math.PI * R;
  * Círculo de progreso en esquina de la card. Al pasar el cursor se muestra el detalle (archivo, %, Pausar/Cancelar).
  */
 export function GameCardSyncProgress({ progress }: GameCardSyncProgressProps) {
+  const { t } = useTranslation();
   const [hover, setHover] = useState(false);
   const onCancelUpload = useCallback(() => {
     requestUploadCancel().catch(() => {});
@@ -53,7 +55,7 @@ export function GameCardSyncProgress({ progress }: GameCardSyncProgressProps) {
       onMouseLeave={() => setHover(false)}>
       <div
         className="flex cursor-default items-center justify-center rounded-full bg-default-100/90 shadow-sm ring-1 ring-default-200/80"
-        title={progress.type === "upload" ? "Subiendo…" : "Descargando…"}>
+        title={progress.type === "upload" ? t("sync.uploading") : t("sync.downloading")}>
         {isIndeterminate ? (
           <motion.div
             animate={{ rotate: 360 }}
@@ -122,7 +124,7 @@ export function GameCardSyncProgress({ progress }: GameCardSyncProgressProps) {
       {hover && (
         <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-lg border border-default-200 bg-default-100 px-2 py-1.5 shadow-lg">
           <p className="truncate text-[10px] font-medium text-foreground">
-            {progress.type === "upload" ? "Subiendo" : "Descargando"}:{" "}
+            {progress.type === "upload" ? t("sync.uploading") : t("sync.downloading")}:{" "}
             <span className="truncate text-default-600">{progress.filename}</span>
           </p>
           <p className="mt-0.5 text-[10px] tabular-nums text-default-500">{isIndeterminate ? "—" : `${percent}%`}</p>
@@ -133,27 +135,27 @@ export function GameCardSyncProgress({ progress }: GameCardSyncProgressProps) {
               <HardDrive size={10} className="shrink-0 text-primary" aria-hidden />
             )}
             <span>
-              {progress.type === "upload" ? "Enviados" : "En disco"}: {formatBytes(progress.loaded)}
+              {progress.type === "upload" ? t("sync.sent") : t("sync.onDisk")}: {formatBytes(progress.loaded)}
               {progress.total > 0 ? ` / ${formatBytes(progress.total)}` : ""}
             </span>
           </p>
           {progress.type === "upload" && !isIndeterminate && (
             <div className="mt-1.5 flex shrink-0 gap-1">
-              <Tooltip content="Pausar subida" placement="top">
+              <Tooltip content={t("library.gameCardSync.pauseUpload")} placement="top">
                 <button
                   type="button"
                   onClick={onPauseUpload}
                   className="inline-flex h-6 w-6 items-center justify-center rounded-full text-foreground hover:bg-default-200"
-                  aria-label="Pausar subida">
+                  aria-label={t("library.gameCardSync.pauseUpload")}>
                   <Pause size={12} />
                 </button>
               </Tooltip>
-              <Tooltip content="Cancelar subida" placement="top">
+              <Tooltip content={t("library.gameCardSync.cancelUpload")} placement="top">
                 <button
                   type="button"
                   onClick={onCancelUpload}
                   className="inline-flex h-6 w-6 items-center justify-center rounded-full text-danger hover:bg-danger/10"
-                  aria-label="Cancelar subida">
+                  aria-label={t("library.gameCardSync.cancelUpload")}>
                   <X size={12} />
                 </button>
               </Tooltip>

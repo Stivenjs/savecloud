@@ -3,6 +3,7 @@ import { Button, Tooltip } from "@heroui/react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Search, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { useLocation } from "react-router-dom";
 import { DebouncedGamesSearchInput } from "@features/games/GamesFilters";
@@ -59,6 +60,7 @@ export function BigPictureConsoleTopRail({
   onIntentOpenProfile,
   hidden = false,
 }: BigPictureConsoleTopRailProps) {
+  const { t } = useTranslation();
   const { pathname } = useLocation();
   const librarySearchTerm = useShellUiStore((s) => s.gamesBpSearchTerm);
   const librarySetSearch = useShellUiStore((s) => s.gamesBpSearchSetValue);
@@ -96,7 +98,7 @@ export function BigPictureConsoleTopRail({
       className="pointer-events-none fixed inset-x-0 top-0 z-110 w-full border-none bg-transparent shadow-none"
       data-shell-bp-console-top-rail="">
       <div className="pointer-events-auto relative px-4 pb-2 pt-[max(0px,env(safe-area-inset-top))] sm:px-6 md:px-7">
-        <div className="relative z-1 flex w-full justify-end" aria-label="Barra de consola">
+        <div className="relative z-1 flex w-full justify-end" aria-label={t("bigPictureUi.consoleRailAria")}>
           <div
             className={`pointer-events-auto inline-flex max-w-full min-h-12 items-center gap-4 rounded-2xl px-4 py-2 sm:min-h-13.5 sm:gap-7 md:gap-10 sm:px-5 md:px-6 ${BP_TOP_GLASS}`}>
             {searchEnabled ? (
@@ -124,7 +126,11 @@ export function BigPictureConsoleTopRail({
                           autoFocus
                           isClearable
                           className="min-h-0 min-w-0 flex-1"
-                          placeholder={libraryMode ? "Buscar en biblioteca…" : "Buscar en catálogo…"}
+                          placeholder={
+                            libraryMode
+                              ? t("bigPictureUi.searchLibraryPlaceholder")
+                              : t("bigPictureUi.searchCatalogPlaceholder")
+                          }
                           startContent={
                             <Search
                               size={18}
@@ -142,7 +148,9 @@ export function BigPictureConsoleTopRail({
 
                 {!searchRailOpen ? (
                   <Tooltip
-                    content={libraryMode ? "Buscar en biblioteca" : "Buscar en catálogo"}
+                    content={
+                      libraryMode ? t("bigPictureUi.searchLibraryTooltip") : t("bigPictureUi.searchCatalogTooltip")
+                    }
                     placement="bottom"
                     delay={300}>
                     <Button
@@ -151,14 +159,16 @@ export function BigPictureConsoleTopRail({
                       radius="full"
                       variant="light"
                       aria-expanded={false}
-                      aria-label={libraryMode ? "Abrir búsqueda en biblioteca" : "Abrir búsqueda en catálogo"}
+                      aria-label={
+                        libraryMode ? t("bigPictureUi.openLibrarySearch") : t("bigPictureUi.openCatalogSearch")
+                      }
                       className={`${GLASS_BTN} shrink-0 hover:bg-white/11`}
                       onPress={() => setSearchRailOpen(true)}>
                       <Search size={21} aria-hidden strokeWidth={2} className="text-white drop-shadow-sm" />
                     </Button>
                   </Tooltip>
                 ) : (
-                  <Tooltip content="Cerrar búsqueda" placement="bottom" delay={260}>
+                  <Tooltip content={t("bigPictureUi.closeSearch")} placement="bottom" delay={260}>
                     <Button
                       isIconOnly
                       size="md"
@@ -166,7 +176,7 @@ export function BigPictureConsoleTopRail({
                       variant="light"
                       aria-expanded
                       aria-controls="games-library-search-rail"
-                      aria-label="Cerrar barra de búsqueda"
+                      aria-label={t("bigPictureUi.closeSearchAria")}
                       className={`${GLASS_BTN} shrink-0 hover:bg-white/11`}
                       onPress={closeRail}>
                       <X size={21} aria-hidden strokeWidth={2} className="text-white drop-shadow-sm" />

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { DropdownItem, DropdownMenu } from "@heroui/react";
+import { useTranslation } from "react-i18next";
 import {
   Archive,
   CloudDownload,
@@ -21,6 +22,7 @@ import {
 } from "@features/games/game-actions/gameActionMenuModel";
 
 export function GameActionsDropdownMenu(props: GameActionsMenuModelProps) {
+  const { t } = useTranslation();
   const { game } = props;
   const propsRef = useRef(props);
   useEffect(() => {
@@ -42,26 +44,29 @@ export function GameActionsDropdownMenu(props: GameActionsMenuModelProps) {
   const folderLabel = getFolderMenuLabel(props.surface);
 
   return (
-    <DropdownMenu aria-label={`Acciones para ${game.id}`} onAction={handleAction} disabledKeys={disabledKeys}>
+    <DropdownMenu
+      aria-label={t("library.actionsMenu.ariaLabel", { gameId: game.id })}
+      onAction={handleAction}
+      disabledKeys={disabledKeys}>
       <DropdownItem
         key="edit"
         className={isGameActionItemHidden("edit", props) ? "hidden" : ""}
         startContent={<Pencil size={16} />}>
-        Editar juego
+        {t("library.actionsMenu.edit")}
       </DropdownItem>
 
       <DropdownItem
         key="torrent"
         className={isGameActionItemHidden("torrent", props) ? "hidden" : ""}
         startContent={<Magnet size={16} />}>
-        Torrent
+        {t("library.actionsMenu.torrent")}
       </DropdownItem>
 
       <DropdownItem
         key="source"
         className={!game.sourceUrl ? "hidden" : "text-primary"}
         startContent={<ExternalLink size={16} />}>
-        Ir a la web del juego
+        {t("library.actionsMenu.openSourceUrl")}
       </DropdownItem>
 
       <DropdownItem
@@ -81,14 +86,14 @@ export function GameActionsDropdownMenu(props: GameActionsMenuModelProps) {
             <CloudDownload size={16} />
           )
         }>
-        Traer guardados
+        {t("library.actionsMenu.recoverSaves")}
       </DropdownItem>
 
       <DropdownItem
         key="sync"
         className={isGameActionItemHidden("sync", props) ? "hidden" : ""}
         startContent={<CloudUpload size={16} />}>
-        Subir a la nube
+        {t("library.actionsMenu.uploadToCloud")}
       </DropdownItem>
 
       <DropdownItem
@@ -103,21 +108,23 @@ export function GameActionsDropdownMenu(props: GameActionsMenuModelProps) {
             <Archive size={16} />
           )
         }>
-        {props.isUploadTooLarge ? "Empaquetar y subir (obligatorio)" : "Empaquetar y subir"}
+        {props.isUploadTooLarge
+          ? t("library.actionsMenu.packageUploadRequired")
+          : t("library.actionsMenu.packageUpload")}
       </DropdownItem>
 
       <DropdownItem
         key="share"
         className={isGameActionItemHidden("share", props) ? "hidden" : ""}
         startContent={<Link2 size={16} />}>
-        Compartir link
+        {t("library.actionsMenu.shareLink")}
       </DropdownItem>
 
       <DropdownItem
         key="refreshDetails"
         className={isGameActionItemHidden("refreshDetails", props) ? "hidden" : ""}
         startContent={<RefreshCw size={16} />}>
-        Actualizar datos de Steam
+        {t("library.actionsMenu.refreshSteam")}
       </DropdownItem>
 
       <DropdownItem
@@ -125,7 +132,7 @@ export function GameActionsDropdownMenu(props: GameActionsMenuModelProps) {
         className={isGameActionItemHidden("remove", props) ? "hidden" : "text-danger"}
         color="danger"
         startContent={<Trash2 size={16} />}>
-        Eliminar juego
+        {t("library.actionsMenu.remove")}
       </DropdownItem>
     </DropdownMenu>
   );

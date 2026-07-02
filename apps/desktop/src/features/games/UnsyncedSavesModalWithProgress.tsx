@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useSyncStore } from "@store/SyncStore";
 import { useUnsyncedSaves } from "@hooks/useUnsyncedSaves";
 import { UnsyncedSavesModal } from "@features/games/UnsyncedSavesModal";
@@ -8,6 +9,7 @@ import { notifyUploadError, notifyFullBackupError } from "@utils/notification";
 import { formatGameDisplayName } from "@utils/gameImage";
 
 export function UnsyncedSavesModalWithProgress() {
+  const { t } = useTranslation();
   const setSyncOperation = useSyncStore((state) => state.setSyncOperation);
   const { unsyncedGameIds, showUnsyncedModal, closeModal, uploadAll, isUploading, refetchUnsynced } =
     useUnsyncedSaves();
@@ -48,18 +50,21 @@ export function UnsyncedSavesModalWithProgress() {
       setSyncOperation({ type: "upload", mode: "single", gameId, operationId: `sync-upload-${gameId}` });
       try {
         await createAndUploadFullBackup(gameId);
-        toastSuccess("Backup completo subido", `${formatGameDisplayName(gameId)}: empaquetado subido a la nube.`);
+        toastSuccess(
+          t("library.fullBackup.toastSuccessTitle"),
+          t("library.fullBackup.toastSuccessDesc", { gameName: formatGameDisplayName(gameId) })
+        );
         await refetchUnsynced();
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        toastError("Error al empaquetar y subir", msg);
+        toastError(t("library.fullBackup.toastErrorTitle"), msg);
         notifyFullBackupError(formatGameDisplayName(gameId), msg).catch(() => {});
       } finally {
         setLoadingGameId(null);
         setSyncOperation(null);
       }
     },
-    [refetchUnsynced, setSyncOperation]
+    [refetchUnsynced, setSyncOperation, t]
   );
 
   return (

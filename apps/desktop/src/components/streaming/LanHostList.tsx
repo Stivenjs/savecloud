@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Spinner } from "@heroui/react";
+import { useTranslation } from "react-i18next";
 import { ClientConnectModal } from "@components/streaming/ClientConnectModal";
 
 interface DiscoveredStreamHost {
@@ -18,9 +19,12 @@ interface LanHostListProps {
 }
 
 export const LanHostList = ({ isOpen, onClose }: LanHostListProps) => {
+  const { t } = useTranslation();
   const [hosts, setHosts] = useState<DiscoveredStreamHost[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedHost, setSelectedHost] = useState<DiscoveredStreamHost | null>(null);
+
+  const mirrorHostLabel = t("remotePlay.lanHosts.mirrorHost");
 
   const searchHosts = async () => {
     setIsSearching(true);
@@ -40,6 +44,16 @@ export const LanHostList = ({ isOpen, onClose }: LanHostListProps) => {
     }
   }, [isOpen]);
 
+  const selectMirrorHost = () =>
+    setSelectedHost({
+      device_id: "localhost-test",
+      user_id: "local",
+      ip: "127.0.0.1",
+      port: 47989,
+      savecloud_port: 0,
+      hostname: mirrorHostLabel,
+    });
+
   return (
     <>
       <Modal isOpen={isOpen && !selectedHost} onClose={onClose} backdrop="blur" scrollBehavior="inside">
@@ -47,57 +61,34 @@ export const LanHostList = ({ isOpen, onClose }: LanHostListProps) => {
           {(onClose) => (
             <>
               <ModalHeader className="flex justify-between items-center pr-12">
-                <span>Partidas en Red Local</span>
+                <span>{t("remotePlay.lanHosts.title")}</span>
                 <Button size="sm" color="primary" variant="flat" onPress={searchHosts} isLoading={isSearching}>
-                  Actualizar
+                  {t("remotePlay.lanHosts.refresh")}
                 </Button>
               </ModalHeader>
               <ModalBody>
                 <div className="space-y-3 min-h-[200px]">
                   {hosts.length === 0 && !isSearching ? (
                     <div className="text-default-400 text-center flex flex-col items-center justify-center h-full py-10">
-                      No se encontraron anfitriones en tu red local.
+                      {t("remotePlay.lanHosts.empty")}
                     </div>
                   ) : null}
 
                   {isSearching && hosts.length === 0 ? (
                     <div className="flex justify-center items-center h-full py-10">
-                      <Spinner color="primary" label="Buscando en la red..." />
+                      <Spinner color="primary" label={t("remotePlay.lanHosts.searching")} />
                     </div>
                   ) : null}
 
-                  {/* Entrada manual para pruebas locales (efecto espejo) */}
                   <div
                     className="p-4 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-xl flex justify-between items-center transition-colors cursor-pointer"
-                    onClick={() =>
-                      setSelectedHost({
-                        device_id: "localhost-test",
-                        user_id: "local",
-                        ip: "127.0.0.1",
-                        port: 47989,
-                        savecloud_port: 0,
-                        hostname: "Este Equipo (Espejo)",
-                      })
-                    }>
+                    onClick={selectMirrorHost}>
                     <div>
-                      <p className="font-bold text-primary-600 text-lg">Este Equipo (Prueba Espejo)</p>
+                      <p className="font-bold text-primary-600 text-lg">{mirrorHostLabel}</p>
                       <p className="text-primary-400 text-sm">127.0.0.1:47989</p>
                     </div>
-                    <Button
-                      color="primary"
-                      variant="flat"
-                      size="sm"
-                      onPress={() =>
-                        setSelectedHost({
-                          device_id: "localhost-test",
-                          user_id: "local",
-                          ip: "127.0.0.1",
-                          port: 47989,
-                          savecloud_port: 0,
-                          hostname: "Este Equipo (Espejo)",
-                        })
-                      }>
-                      Conectar
+                    <Button color="primary" variant="flat" size="sm" onPress={selectMirrorHost}>
+                      {t("remotePlay.lanHosts.connect")}
                     </Button>
                   </div>
 
@@ -113,7 +104,7 @@ export const LanHostList = ({ isOpen, onClose }: LanHostListProps) => {
                         </p>
                       </div>
                       <Button color="primary" size="sm" onPress={() => setSelectedHost(host)}>
-                        Conectar
+                        {t("remotePlay.lanHosts.connect")}
                       </Button>
                     </div>
                   ))}
@@ -121,7 +112,7 @@ export const LanHostList = ({ isOpen, onClose }: LanHostListProps) => {
               </ModalBody>
               <ModalFooter>
                 <Button variant="light" onPress={onClose}>
-                  Cerrar
+                  {t("remotePlay.lanHosts.close")}
                 </Button>
               </ModalFooter>
             </>

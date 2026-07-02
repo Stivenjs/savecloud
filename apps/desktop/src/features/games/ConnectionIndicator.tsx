@@ -1,5 +1,6 @@
 import { Spinner } from "@heroui/react";
 import { RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ConnectionStatus } from "@hooks/useLastSyncInfo";
 
 interface ConnectionIndicatorProps {
@@ -9,27 +10,29 @@ interface ConnectionIndicatorProps {
 }
 
 export function ConnectionIndicator({ status, error, onRetry }: ConnectionIndicatorProps) {
+  const { t } = useTranslation();
+
   if (status === "idle") return null;
 
   const config = {
     connecting: {
       icon: <Spinner size="sm" color="primary" />,
-      label: "Conectando…",
+      label: t("library.connection.connecting"),
       className: "text-default-500",
     },
     connected: {
       icon: <Wifi size={14} className="text-success" />,
-      label: "En línea",
+      label: t("library.connection.online"),
       className: "text-success",
     },
     error: {
       icon: <WifiOff size={14} className="text-danger" />,
-      label: "Sin conexión",
+      label: t("library.connection.offline"),
       className: "text-danger",
     },
     retrying: {
       icon: <RefreshCw size={14} className="animate-spin text-warning" />,
-      label: "Reintentando…",
+      label: t("library.connection.retrying"),
       className: "text-warning",
     },
   };
@@ -47,7 +50,7 @@ export function ConnectionIndicator({ status, error, onRetry }: ConnectionIndica
           type="button"
           onClick={onRetry}
           className="ml-1 rounded p-0.5 hover:bg-default-200"
-          aria-label="Reintentar conexión">
+          aria-label={t("library.connection.retryAriaLabel")}>
           <RefreshCw size={12} />
         </button>
       )}

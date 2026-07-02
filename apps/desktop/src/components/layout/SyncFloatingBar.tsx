@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Spinner, Tooltip } from "@heroui/react";
 import type { RefObject } from "react";
+import { useTranslation } from "react-i18next";
 import type { SyncProgressState } from "@store/SyncStore";
 import { formatBytes } from "@utils/format";
 import { formatGameDisplayName } from "@utils/gameImage";
@@ -32,6 +33,9 @@ export function SyncFloatingBar({
   onCancel,
   onPause,
 }: SyncFloatingBarProps) {
+  const { t } = useTranslation();
+  const isUpload = progress.type === "upload";
+
   return (
     <motion.div
       key="sync-progress"
@@ -44,7 +48,7 @@ export function SyncFloatingBar({
       exit={{ y: 48, opacity: 0 }}
       transition={{ duration: 0.2 }}
       className="fixed bottom-4 left-6 right-6 z-50 cursor-grab rounded-xl border border-default-200 bg-default-50/95 px-4 py-3.5 shadow-lg backdrop-blur active:cursor-grabbing sm:left-1/2 sm:right-auto sm:w-96 sm:-translate-x-1/2"
-      aria-label={progress.type === "upload" ? "Progreso de subida" : "Progreso de descarga"}
+      aria-label={isUpload ? t("sync.uploadProgress") : t("sync.downloadProgress")}
       role="status"
       aria-valuenow={value}
       aria-valuemin={0}
@@ -53,10 +57,10 @@ export function SyncFloatingBar({
         <div className="flex items-center gap-2 min-w-0">
           <span
             className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-              progress.type === "upload" ? "bg-primary/10 text-primary" : "bg-success/10 text-success"
+              isUpload ? "bg-primary/10 text-primary" : "bg-success/10 text-success"
             }`}>
-            {progress.type === "upload" ? <Upload size={10} aria-hidden /> : <HardDrive size={10} aria-hidden />}
-            {progress.type === "upload" ? "Subiendo" : "Descargando"}
+            {isUpload ? <Upload size={10} aria-hidden /> : <HardDrive size={10} aria-hidden />}
+            {isUpload ? t("sync.uploading") : t("sync.downloading")}
           </span>
           <span className="truncate text-sm font-medium text-foreground">{formatGameDisplayName(progress.gameId)}</span>
         </div>
@@ -67,31 +71,31 @@ export function SyncFloatingBar({
 
       <div className="mt-1 flex items-center gap-2">
         <p className="min-w-0 flex-1 truncate text-xs text-default-400">{progress.filename}</p>
-        {progress.type === "upload" && (canPause || canCancel) && (
+        {isUpload && (canPause || canCancel) && (
           <>
             <span className="shrink-0 text-default-200 select-none" aria-hidden>
               |
             </span>
             <span className="flex shrink-0 gap-1 pointer-events-auto">
               {canPause ? (
-                <Tooltip content="Pausar subida" placement="top">
+                <Tooltip content={t("sync.pauseUpload")} placement="top">
                   <button
                     type="button"
                     onClick={onPause}
                     className="inline-flex h-6 w-6 items-center justify-center rounded-full text-foreground hover:bg-default-200 transition-colors"
-                    aria-label="Pausar subida"
+                    aria-label={t("sync.pauseUpload")}
                     onPointerDownCapture={(e) => e.stopPropagation()}>
                     <Pause size={14} />
                   </button>
                 </Tooltip>
               ) : null}
               {canCancel ? (
-                <Tooltip content="Cancelar subida" placement="top">
+                <Tooltip content={t("sync.cancelUpload")} placement="top">
                   <button
                     type="button"
                     onClick={onCancel}
                     className="inline-flex h-6 w-6 items-center justify-center rounded-full text-danger hover:bg-danger/10 transition-colors"
-                    aria-label="Cancelar subida"
+                    aria-label={t("sync.cancelUpload")}
                     onPointerDownCapture={(e) => e.stopPropagation()}>
                     <X size={14} />
                   </button>
@@ -104,10 +108,8 @@ export function SyncFloatingBar({
 
       {isIndeterminate ? (
         <div className="mt-2.5 flex items-center gap-2">
-          <Spinner size="sm" color="primary" aria-label="Preparando datos" />
-          <p className="text-xs text-default-500">
-            Preparando datos… esto puede tardar unos minutos en juegos grandes.
-          </p>
+          <Spinner size="sm" color="primary" aria-label={t("sync.preparingData")} />
+          <p className="text-xs text-default-500">{t("sync.preparingDataDesc")}</p>
         </div>
       ) : (
         <div className="relative mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-default-200">
@@ -131,13 +133,13 @@ export function SyncFloatingBar({
 
       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px] text-default-400">
         <span className="inline-flex items-center gap-1.5">
-          {progress.type === "upload" ? (
+          {isUpload ? (
             <Upload size={11} className="shrink-0 text-primary" aria-hidden />
           ) : (
             <HardDrive size={11} className="shrink-0 text-primary" aria-hidden />
           )}
           <span>
-            {progress.type === "upload" ? "Enviados" : "En disco"}:{" "}
+            {isUpload ? t("sync.sent") : t("sync.onDisk")}:{" "}
             <span className="tabular-nums font-medium text-default-500">
               {formatBytes(progress.loaded)}
               {progress.total > 0 ? ` / ${formatBytes(progress.total)}` : ""}
@@ -147,7 +149,8 @@ export function SyncFloatingBar({
         <span className="inline-flex items-center gap-1.5">
           <Zap size={11} className="shrink-0 text-default-400" aria-hidden />
           <span>
-            Velocidad: <span className="tabular-nums font-medium text-default-500">{formatSpeed(speedBps)}</span>
+            {t("sync.speed")}:{" "}
+            <span className="tabular-nums font-medium text-default-500">{formatSpeed(speedBps)}</span>
           </span>
         </span>
         <span className="inline-flex items-center gap-1.5">
