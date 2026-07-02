@@ -2,12 +2,14 @@ import { useCallback, useTransition } from "react";
 import { Card, CardBody, Switch } from "@heroui/react";
 import { ZapOff } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 
 import { CONFIG_QUERY_KEY, useConfig } from "@hooks/useConfig";
 import { setDisableHardwareAcceleration } from "@services/tauri";
 import { toastError } from "@utils/toast";
 
 export function DisableHardwareAccelerationCard() {
+  const { t } = useTranslation();
   const { config, loading, refetch } = useConfig();
   const qc = useQueryClient();
   const [pending, startTransition] = useTransition();
@@ -36,12 +38,11 @@ export function DisableHardwareAccelerationCard() {
           <div className="flex items-start gap-3">
             <ZapOff size={20} className="mt-0.5 shrink-0 text-default-500" />
             <div>
-              <h2 className="text-base font-semibold text-foreground">Desactivar aceleración por hardware</h2>
+              <h2 className="text-base font-semibold text-foreground">{t("settings.gpuAcceleration.title")}</h2>
               <p className="mt-0.5 text-sm text-default-500">
-                Desactiva el uso de la GPU para renderizar la interfaz. Puede solucionar problemas de parpadeos,
-                pantalla negra o incompatibilidad del controlador de gráficos.
+                {t("settings.gpuAcceleration.subtitle")}
                 <span className="block mt-1 font-semibold text-warning text-xs uppercase tracking-wider">
-                  * Requiere reiniciar la aplicación para aplicar los cambios.
+                  {t("settings.gpuAcceleration.warning")}
                 </span>
               </p>
             </div>
@@ -50,7 +51,7 @@ export function DisableHardwareAccelerationCard() {
             isSelected={isEnabled}
             onValueChange={onToggle}
             isDisabled={loading || pending}
-            aria-label="Desactivar aceleración por hardware"
+            aria-label={t("settings.gpuAcceleration.ariaLabel")}
           />
         </div>
       </CardBody>

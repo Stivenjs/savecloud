@@ -110,6 +110,7 @@ pub fn get_config() -> ConfigDto {
         game_mode_boost_detected_game_cpu: settings.game_mode_boost_detected_game_cpu,
         developer_mode: settings.developer_mode,
         proxy_url: settings.proxy_url.clone(),
+        language: settings.language.clone(),
         games: library
             .games
             .into_iter()
@@ -355,6 +356,20 @@ pub fn set_startup_window_mode(mode: String) -> Result<(), String> {
     let mut settings = config::load_settings();
     settings.startup_window_mode = Some(m);
     config::save_settings(&settings)
+}
+
+/// Guarda el idioma preferido de la aplicación ("es", "en" o None para automático).
+#[tauri::command]
+pub fn set_language(app: tauri::AppHandle, language: Option<String>) -> Result<(), String> {
+    let mut settings = config::load_settings();
+    settings.language = language
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_lowercase());
+    config::save_settings(&settings)?;
+    let _ = app.emit("config-changed", ());
+    Ok(())
 }
 
 /// Lee la carpeta destino por defecto para descargas desde fuentes.

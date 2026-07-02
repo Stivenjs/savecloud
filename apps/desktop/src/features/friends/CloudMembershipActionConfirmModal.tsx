@@ -1,5 +1,6 @@
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from "@heroui/react";
 import { LogOut, TriangleAlert, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export type CloudMembershipActionType = "remove-member" | "leave-membership";
 
@@ -12,26 +13,6 @@ interface CloudMembershipActionConfirmModalProps {
   isLoading?: boolean;
 }
 
-const ACTION_COPY: Record<
-  CloudMembershipActionType,
-  { title: string; body: string; confirmLabel: string; color: "danger" | "warning"; icon: React.ReactNode }
-> = {
-  "remove-member": {
-    title: "Eliminar miembro de tu nube",
-    body: "Este usuario perderá acceso a tu nube compartida y dejará de ver sus guardados sincronizados ahí.",
-    confirmLabel: "Eliminar miembro",
-    color: "danger",
-    icon: <Trash2 className="h-5 w-5" />,
-  },
-  "leave-membership": {
-    title: "Salir de la nube",
-    body: "Vas a salir de esta nube compartida y dejarás de tener acceso a los guardados asociados a ella.",
-    confirmLabel: "Salir de la nube",
-    color: "warning",
-    icon: <LogOut className="h-5 w-5" />,
-  },
-};
-
 export function CloudMembershipActionConfirmModal({
   isOpen,
   actionType,
@@ -40,6 +21,28 @@ export function CloudMembershipActionConfirmModal({
   onConfirm,
   isLoading = false,
 }: CloudMembershipActionConfirmModalProps) {
+  const { t } = useTranslation();
+
+  const ACTION_COPY: Record<
+    CloudMembershipActionType,
+    { title: string; body: string; confirmLabel: string; color: "danger" | "warning"; icon: React.ReactNode }
+  > = {
+    "remove-member": {
+      title: t("friends.cloudMembershipAction.removeMember.title"),
+      body: t("friends.cloudMembershipAction.removeMember.body"),
+      confirmLabel: t("friends.cloudMembershipAction.removeMember.confirmLabel"),
+      color: "danger",
+      icon: <Trash2 className="h-5 w-5" />,
+    },
+    "leave-membership": {
+      title: t("friends.cloudMembershipAction.leaveMembership.title"),
+      body: t("friends.cloudMembershipAction.leaveMembership.body"),
+      confirmLabel: t("friends.cloudMembershipAction.leaveMembership.confirmLabel"),
+      color: "warning",
+      icon: <LogOut className="h-5 w-5" />,
+    },
+  };
+
   const copy = ACTION_COPY[actionType];
 
   const handleConfirm = async () => {
@@ -66,7 +69,7 @@ export function CloudMembershipActionConfirmModal({
             </span>
             <div>
               <p className="text-base font-semibold text-foreground">{copy.title}</p>
-              <p className="text-[11px] text-default-500">Acción irreversible</p>
+              <p className="text-[11px] text-default-500">{t("friends.cloudMembershipAction.irreversible")}</p>
             </div>
           </ModalHeader>
 
@@ -74,18 +77,20 @@ export function CloudMembershipActionConfirmModal({
             <div className="rounded-xl border border-default-200 bg-default-50/70 px-3 py-3 text-sm text-default-600">
               <div className="mb-2 flex items-center gap-2 text-warning-600">
                 <TriangleAlert className="h-4 w-4" />
-                <span className="text-xs font-semibold uppercase tracking-wide">Confirmación requerida</span>
+                <span className="text-xs font-semibold uppercase tracking-wide">
+                  {t("friends.cloudMembershipAction.confirmationRequired")}
+                </span>
               </div>
               <p>{copy.body}</p>
               <p className="mt-3 text-xs text-default-500">
-                Usuario afectado: <span className="font-mono text-default-700">{userId}</span>
+                {t("friends.cloudMembershipAction.userAffected", { userId })}
               </p>
             </div>
           </ModalBody>
 
           <ModalFooter>
             <Button variant="flat" onPress={onClose} isDisabled={isLoading}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
             <Button color={copy.color} onPress={handleConfirm} isLoading={isLoading}>
               {copy.confirmLabel}

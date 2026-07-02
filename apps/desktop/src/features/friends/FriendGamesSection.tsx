@@ -4,6 +4,7 @@ import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Card, CardBody } from "@heroui/react";
 import { Download, Settings2, UserPlus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ConfiguredGame } from "@app-types/config";
 import { getSteamAppdetailsMediaBatch } from "@services/tauri";
 import { GameCard } from "@features/games/GameCard";
@@ -29,26 +30,28 @@ function FriendProfileBanner({
   presenceStatus,
   presenceGameName,
 }: FriendProfileBannerProps) {
+  const { t } = useTranslation();
+
   return (
     <Card className="border border-primary-200/50 bg-primary-50/30 dark:border-primary-500/20 dark:bg-primary-500/10">
       <CardBody className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-400">
-            Perfil cargado
+            {t("friends.gamesSection.profileLoaded")}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-mono text-sm text-foreground">{userIdDisplay}</p>
             <PresenceStatusChip status={presenceStatus} />
           </div>
-          <p className="text-xs text-default-500">
-            {gameCount} juego{gameCount !== 1 ? "s" : ""} en este perfil
-          </p>
+          <p className="text-xs text-default-500">{t("friends.gamesSection.gamesInProfile", { count: gameCount })}</p>
           {presenceStatus === "playing" && presenceGameName ? (
-            <p className="text-xs text-default-500">Jugando: {presenceGameName}</p>
+            <p className="text-xs text-default-500">
+              {t("friends.gamesSection.playing", { gameName: presenceGameName })}
+            </p>
           ) : null}
         </div>
         <Button variant="bordered" color="primary" startContent={<UserPlus size={18} />} onPress={onAddGamesPress}>
-          Añadir juegos de este perfil
+          {t("friends.gamesSection.actions.addGames")}
         </Button>
       </CardBody>
     </Card>
@@ -86,6 +89,7 @@ export function FriendGamesSection({
   onCopySaves,
   onUseAsTemplate,
 }: FriendGamesSectionProps) {
+  const { t } = useTranslation();
   const isLowPerf = useLowPerformanceMode();
   const navigate = useNavigate();
   const location = useLocation();
@@ -142,14 +146,16 @@ export function FriendGamesSection({
             <div className="flex flex-wrap items-center justify-end gap-2">
               <PresenceStatusChip status={presenceStatus} />
               {presenceStatus === "playing" && presenceGameName ? (
-                <span className="text-xs text-default-500">Jugando: {presenceGameName}</span>
+                <span className="text-xs text-default-500">
+                  {t("friends.gamesSection.playing", { gameName: presenceGameName })}
+                </span>
               ) : null}
             </div>
           }
         />
         <div className="flex justify-end">
           <Button variant="bordered" color="primary" startContent={<UserPlus size={18} />} onPress={onAddGamesPress}>
-            Añadir juegos de este perfil
+            {t("friends.gamesSection.actions.addGames")}
           </Button>
         </div>
       </div>
@@ -169,7 +175,7 @@ export function FriendGamesSection({
         {profileHeader}
         <Card>
           <CardBody className="flex flex-col items-center gap-3 py-10 text-center">
-            <p className="text-default-500">Este amigo no tiene juegos configurados en su config.</p>
+            <p className="text-default-500">{t("friends.gamesSection.noGames")}</p>
           </CardBody>
         </Card>
       </div>
@@ -198,10 +204,10 @@ export function FriendGamesSection({
               <div className="space-y-1">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs text-default-500">
-                    En la nube (amigo):{" "}
+                    {t("friends.gamesSection.inCloudFriend")}{" "}
                     {hasSaves
-                      ? `${fileCount} archivo${fileCount !== 1 ? "s" : ""} · ${formatSize(totalSize)}`
-                      : "sin guardados"}
+                      ? t("friends.gamesSection.filesStats", { count: fileCount, size: formatSize(totalSize) })
+                      : t("friends.gamesSection.noSaves")}
                   </p>
                   <Button
                     size="sm"
@@ -211,7 +217,7 @@ export function FriendGamesSection({
                     isDisabled={!hasSaves || !!copyingGameId}
                     isLoading={isCopying}
                     onPress={() => onCopySaves(game.id)}>
-                    Copiar saves
+                    {t("friends.gamesSection.actions.copySaves")}
                   </Button>
                 </div>
                 <div className="flex items-center justify-end gap-2">
@@ -220,7 +226,7 @@ export function FriendGamesSection({
                     variant="light"
                     startContent={<Settings2 size={14} />}
                     onPress={() => onUseAsTemplate(game)}>
-                    Usar config como plantilla
+                    {t("friends.gamesSection.actions.useTemplate")}
                   </Button>
                 </div>
               </div>

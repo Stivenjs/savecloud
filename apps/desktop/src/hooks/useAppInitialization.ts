@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useLanguageInitialization } from "@hooks/useLanguageInitialization";
 import { visibilityManager } from "@hooks/useAppVisibility";
 import { listen } from "@tauri-apps/api/event";
 import { NOTIFICATIONS_CHANGED_EVENT } from "@services/tauri/notifications.service";
@@ -42,6 +43,8 @@ import { useProfileSessionStore } from "@store/ProfileSessionStore";
  */
 export function useAppInitialization() {
   const developerMode = useProfileSessionStore((s) => s.activeProfile?.developerMode ?? false);
+  useLanguageInitialization();
+
   useInputManager();
   initSyncListeners();
   initSourcesListeners();

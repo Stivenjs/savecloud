@@ -1,0 +1,521 @@
+{
+  "nav": {
+    "library": "Library",
+    "remotePlay": "Remote Play",
+    "catalog": "Catalog",
+    "social": "Social",
+    "activity": "Activity",
+    "settings": "Settings",
+    "about": "About"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "search": "Search",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "back": "Back",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "close": "Close",
+    "apply": "Apply",
+    "warning": "Warning",
+    "info": "Info",
+    "actions": "Actions"
+  },
+  "library": {
+    "title": "Games Library",
+    "configuredGames": "Configured Games",
+    "unsyncedChanges": "{{count}} with unsynced changes",
+    "subtitle": "Manage and sync your game saves in the cloud",
+    "header": {
+      "management": "Library Management",
+      "scan": "Scan games",
+      "scanTooltip": "Scan games on this computer",
+      "map": "Global map",
+      "mapTooltip": "Global save map",
+      "add": "Add to your library",
+      "addTooltip": "Add to your library...",
+      "downloadAllLabel": "Download saves (cloud → PC)",
+      "downloadAllDesc": "All configured games",
+      "syncAllLabel": "Upload saves (PC → cloud)",
+      "syncAllDesc": "All configured games",
+      "updating": "Updating…",
+      "refresh": "Refresh list"
+    },
+    "searchPlaceholder": "Search game...",
+    "searchPlaceholderCompact": "Search...",
+    "noGames": "No games found",
+    "localSize": "Local size",
+    "playtime": "Playtime",
+    "modified": "Modified",
+    "cloud": "Cloud",
+    "running": "Running",
+    "filter": {
+      "all": "All",
+      "steam": "Steam",
+      "other": "Others"
+    },
+    "addGame": "Add Game",
+    "scanGames": "Scan Games",
+    "syncAll": "Sync All",
+    "downloadAll": "Download All",
+    "launch": "Play",
+    "stop": "Stop",
+    "lastSync": "Last synced",
+    "neverSync": "Never synced",
+    "cloudStatus": "Cloud status",
+    "backups": "Backups",
+    "actions": {
+      "sync": "Sync",
+      "download": "Download",
+      "backup": "Create Backup",
+      "restore": "Restore Backup",
+      "openFolder": "Open Folder",
+      "deleteCloud": "Delete from Cloud"
+    },
+    "detail": {
+      "loading": "Loading game details...",
+      "notFound": "Game not found",
+      "notConfigured": "The game {{gameId}} is not configured.",
+      "availability": "Availability in your sources",
+      "chooseSource": "Choose source",
+      "selectMatch": "Select a match",
+      "install": "Install",
+      "notAvailable": "Not available in your sources.",
+      "ariaLabelTabs": "Game sections",
+      "tabSummary": "Summary",
+      "tabDetails": "Details",
+      "tabRequirements": "Requirements"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Account, cloud, app, gamepads, and integrations",
+    "sections": {
+      "account": "Account & Data",
+      "app": "Application",
+      "integrations": "Devices & Integrations",
+      "system": "System"
+    },
+    "tabs": {
+      "account": "Account",
+      "cloud": "Cloud",
+      "app": "Startup & App",
+      "bigPicture": "Big Picture",
+      "integrations": "Integrations",
+      "gamepad": "Gamepad",
+      "updates": "Updates",
+      "advanced": "Advanced"
+    },
+    "language": {
+      "title": "App Language",
+      "subtitle": "Select the interface language for SaveCloud",
+      "auto": "System Language (Auto)",
+      "es": "Spanish (Español)",
+      "en": "English"
+    },
+    "autostart": {
+      "title": "Start with Windows",
+      "subtitle": "Launch the app automatically when logging in, so your saves are synced in the background."
+    },
+    "bigPicture": {
+      "title": "Big Picture Mode",
+      "subtitle": "Start in full screen console-like mode",
+      "desc": "Opens a dedicated Big Picture window and hides the main window in the tray while active.",
+      "helpText": "You can return to normal mode from the button below or with Escape inside the Big Picture window.",
+      "label": "When starting Savecloud",
+      "normalWindow": "Normal window",
+      "consoleWindow": "Big Picture (full screen)",
+      "backToNormal": "Return to normal mode",
+      "enterNow": "Enter Big Picture now"
+    },
+    "gameMode": {
+      "title": "Game Mode",
+      "subtitle": "Reduces contention with your games: less network and disk usage by SaveCloud, and a more favorable energy profile if supported. Does not replace GPU drivers or guarantee higher FPS on corporate or restricted systems.",
+      "ariaLabel": "Enable game mode",
+      "pauseTraffic": "Pause SaveCloud traffic",
+      "pauseTrafficDesc": "Pauses active multipart uploads (if any), ongoing SaveCloud torrents, and downloads from sources with Running status until exiting the mode.",
+      "powerProfile": "High performance / no suspend profile",
+      "powerProfileWin": "Activates the Windows «High performance» power plan with powercfg (if supported by system).",
+      "powerProfileOther": "On macOS it can use caffeinate if available. On some Linux desktops it attempts «powerprofilesctl set performance» (must be in PATH).",
+      "gameBar": "Reduce Xbox Game DVR overhead (Windows only)",
+      "gameBarDesc": "Optional: adjusts AppCaptureEnabled under HKCU to reduce recording/background related to Game Bar. Reverted when game mode is disabled.",
+      "cpuPriority": "CPU priority on game detection",
+      "cpuPriorityDesc": "After a few seconds (~process monitor interval), only if the game's executable name (.exe) matches what is configured for it in the library — for example re9.exe. If it does not match, SaveCloud will not touch the process. On Windows, logs will show «[CpuBoost] Elevated priority…» or a warning if access was denied. Independent of the «Game Mode» switch."
+    },
+    "gamepad": {
+      "title": "Gamepad Layout",
+      "subtitle": "Select preferred controller button icons",
+      "auto": "Automatic",
+      "xbox": "Xbox",
+      "playstation": "PlayStation",
+      "nintendo": "Nintendo",
+      "generic": "Generic"
+    },
+    "performance": {
+      "title": "Low performance mode",
+      "subtitle": "Disables interface transitions, blur visual effects, automatic videos in catalog/profiles, and interactive WebGL components. Recommended for integrated GPUs, laptops on battery, or legacy PCs.",
+      "ariaLabel": "Enable low performance mode"
+    },
+    "gpuAcceleration": {
+      "title": "Disable hardware acceleration",
+      "subtitle": "Disables GPU usage for rendering the interface. Can solve flickering, black screen issues, or graphics driver incompatibility.",
+      "warning": "* Requires restarting the application to apply changes.",
+      "ariaLabel": "Disable hardware acceleration"
+    },
+    "developer": {
+      "title": "Developer mode",
+      "desc": "Saved in the active profile. In the installed app, it unlocks the webview inspector (DevTools), shortcuts like F12 / Ctrl+Shift+I, and the context menu; it also displays plugin tools (Lua SDK, logs).",
+      "viteInfo": "In vite, the inspector is usually already available; the switch mostly affects production builds and the settings saved in the profile.",
+      "openDevTools": "Open DevTools (this window)",
+      "closeDevTools": "Close DevTools",
+      "lockedInfo": "Enable developer mode above to use DevTools in production.",
+      "errorOpen": "Failed to open DevTools",
+      "errorClose": "Failed to close DevTools"
+    },
+    "notifications": {
+      "title": "Notifications",
+      "subtitle": "If the app is not visible (minimized or behind another window), a notification will be shown when an upload, download, or full backup completes, or if an error occurs. Use the button to check permissions.",
+      "testButton": "Test notification"
+    },
+    "proxy": {
+      "title": "Proxy Server (HTTP/SOCKS5)",
+      "desc": "Routes downloads from hosters (like Gofile or Pixeldrain) and requests to third-party APIs through a proxy to avoid IP limitations or temporary blocks.",
+      "label": "Proxy address",
+      "placeholder": "e.g., socks5://127.0.0.1:1080 or http://127.0.0.1:8080",
+      "helpText": "Supported schemes: http://, https://, socks5://, socks5h:// (local/remote SOCKS5 DNS). Leave blank to disable.",
+      "saveButton": "Save proxy",
+      "clearButton": "Clear field"
+    },
+    "releaseNotes": {
+      "title": "Release notes",
+      "subtitle": "View up to 10 recent versions from GitHub. If there is no connection, you will see the local version.",
+      "viewButton": "View release notes"
+    },
+    "updatesCard": {
+      "title": "Updates",
+      "subtitle": "Check if there is a new version of the app. If it exists, you will be offered to download and install it.",
+      "checkButton": "Check for updates"
+    },
+    "sourceInstall": {
+      "title": "Installation from Sources",
+      "subtitle": "Import JSON catalogs (by URL or file) and configure the destination folder for downloads.",
+      "sourcesStats_one": "1 source",
+      "sourcesStats_other": "{{count}} sources",
+      "gamesStats_one": "1 game",
+      "gamesStats_other": "{{count}} games",
+      "importFilesTitle": "Import from Files",
+      "importFileButton": "JSON File",
+      "importBatchButton": "Multiple JSONs",
+      "remoteSourcesTitle": "Registered Remote Sources",
+      "addButton": "Add",
+      "syncAllButton": "Sync All",
+      "active": "Active",
+      "paused": "Paused",
+      "pauseRemoteAria": "Pause remote source",
+      "activateRemoteAria": "Activate remote source",
+      "deleting": "Deleting...",
+      "deleteRemoteTooltip": "Delete remote source",
+      "noRemoteSources": "No remote URLs registered yet.",
+      "importedCatalogsTitle": "Imported Catalogs",
+      "deleteSourceTooltip": "Delete source",
+      "noImportedCatalogs": "No imported catalogs",
+      "importJsonHelp": "Import a source JSON to view your catalogs here.",
+      "defaultDestTitle": "Default Destination Folder",
+      "pickFolderButton": "Choose folder",
+      "savePathButton": "Save path",
+      "autoExtractTitle": "Auto Extraction",
+      "autoExtractLabel": "Extract games automatically",
+      "autoExtractHelp": "Automatically decompress archive files upon completion of the download (ZIP, RAR, 7Z, TAR, etc.). If disabled, the downloaded archive will be kept without extraction."
+    },
+    "gamepadTester": {
+      "title": "Your Controller",
+      "desktopOnlyDesc": "This test is only available in the Savecloud desktop app.",
+      "mainDesc": "Connect the controller via cable or its wireless adapter. With Savecloud or the Settings window in focus, you will see how sticks and buttons respond. The vibration button sends a small pulse if supported by the system (vibration is not available on some Macs).",
+      "navDesc": "You can also use the controller to navigate the app (navigation, confirm, and back).",
+      "noGamepadFound": "No controller detected. Plug one in and click 'Search again'.",
+      "detectionInfo": "Detected as '{{name}}': the automatic profile is {{profile}}. You can set another layout below for the diagram and labels.",
+      "selectLabel": "Which controller would you like to inspect?",
+      "searchButton": "Search again",
+      "rumbleButton": "Test vibration",
+      "installDriversButton": "Install drivers",
+      "diagramViewTitle": "Controller Diagram",
+      "visualLayoutLabel": "Visual layout",
+      "showingLayout": "Showing {{layout}}",
+      "autoChoice": " (automatic).",
+      "manualChoice": " (manual choice saved).",
+      "numericDetailTitle": "Numeric Detail",
+      "buttonsDetectedTitle": "Buttons currently detected",
+      "noButtonsPressed": "None pressed. Try the D-pad or face buttons.",
+      "telemetryHelp": "Press something on your controller: with the Savecloud or Settings window active, clear numbers and names should appear above.",
+      "layoutOptions": {
+        "auto": "Automatic (based on controller name)",
+        "generic": "Generic (Xbox-style labels)"
+      }
+    }
+  },
+  "friends": {
+    "title": "Friends",
+    "subtitle": "Import from link or view profile by user",
+    "descPlain": "Use Import by link if you were sent a share link, or Search by user to load the profile of a trusted friend.",
+    "tabs": {
+      "members": "Cloud Members",
+      "invites": "Invites",
+      "import": "Import Friend",
+      "importLink": "Import by link",
+      "searchUser": "Search by user"
+    },
+    "presence": {
+      "online": "Online",
+      "offline": "Offline",
+      "playing": "Playing"
+    },
+    "actions": {
+      "copySaves": "Copy Saves",
+      "useTemplate": "Use as Template",
+      "invite": "Invite"
+    },
+    "loadingProfile": "Loading friend's profile...",
+    "noUserConfig": "(no user in config)",
+    "profileCard": {
+      "desc": "Search friends by entering their identifier (e.g., \"username\"). If a friend gives you theirs, type it here to view their games, copy saves to your cloud, or use templates.",
+      "label": "Friend's username",
+      "placeholder": "e.g., gabi21",
+      "loadButton": "Load profile",
+      "searching": "Searching..."
+    },
+    "gamesSection": {
+      "profileLoaded": "Profile loaded",
+      "gamesInProfile_one": "1 game in this profile",
+      "gamesInProfile_other": "{{count}} games in this profile",
+      "playing": "Playing: {{gameName}}",
+      "noGames": "This friend has no games configured in their settings.",
+      "inCloudFriend": "In cloud (friend):",
+      "noSaves": "no saves",
+      "filesStats_one": "1 file · {{size}}",
+      "filesStats_other": "{{count}} files · {{size}}",
+      "actions": {
+        "install": "Install",
+        "copySaves": "Copy saves",
+        "useTemplate": "Use config as template",
+        "addGames": "Add games from this profile"
+      }
+    },
+    "invitesTab": {
+      "title": "Share Cloud / Links",
+      "subtitle": "Share a link so your friend can access the host's cloud (no manual setup required).",
+      "statsPending": "Pending: {{count}}",
+      "statsShared": "Shared clouds: {{count}}",
+      "statsMembers": "Members in your cloud: {{count}}",
+      "requestsTab": "Requests",
+      "sendInviteTitle": "Send Invitation",
+      "inviteeInputLabel": "Invitee username (optional)",
+      "inviteeInputHelp": "If left blank, you generate a link with a code (token) for anyone who receives it.",
+      "createInviteButton": "Create invitation",
+      "inviteTokenLabel": "Invitation link",
+      "inviteTokenHelp": "Give this to your friend: they can paste it here to accept (no setup required).",
+      "copyLinkButton": "Copy link",
+      "acceptInviteTitle": "Accept Invitation",
+      "tokenInputLabel": "Invitation link or code",
+      "tokenInputPlaceholder": "Paste the full link or code",
+      "tokenInputHelp": "If you paste a link (recommended), the app automatically discovers the server URL.",
+      "acceptButton": "Accept invitation",
+      "pendingInvitesTitle": "Pending Invitations",
+      "refreshButton": "Refresh now",
+      "refreshHelp": "Updates automatically while this tab is open.",
+      "noPendingInvites": "You have no pending invitations.",
+      "expiresAt": "Expires {{date}}",
+      "acceptBtn": "Accept",
+      "rejectBtn": "Reject",
+      "sharedCloudTab": "Shared Cloud",
+      "activeCloudTitle": "Active cloud for sync",
+      "activeCloudHelp": "Select which cloud to use to sync your saves.",
+      "myCloud": "My cloud",
+      "cloudsAsMember": "Clouds where you are a member",
+      "noSharedClouds": "You do not belong to any shared cloud.",
+      "host": "Host",
+      "syncConnection": "Sync connection",
+      "viewProfile": "View profile",
+      "leave": "Leave",
+      "membersInCloudTitle": "Members in your cloud",
+      "membersInCloudHelp": "Users who have access to your cloud as members.",
+      "noMembersActive": "You have no active members in your cloud.",
+      "member": "Member",
+      "delete": "Delete"
+    },
+    "templateModal": {
+      "title": "Use friend's configuration as template",
+      "desc": "Create a game in your settings by copying your friend's game metadata. You only need to adjust the local path where your saves are located.",
+      "gameIdLabel": "Game identifier in your config",
+      "placeholder": "e.g., re4-friend",
+      "pathLabel": "Local path of your saves",
+      "editionLabel": "Source / edition",
+      "sourceUrlLabel": "Download URL (optional)",
+      "steamAppIdLabel": "Steam App ID (optional)",
+      "summaryLabel": "Template summary",
+      "friendGamePrefix": "Friend's game",
+      "friendPathsPrefix": "Original paths",
+      "noGameSelected": "No game selected.",
+      "createButton": "Create game in my config",
+      "browseTitle": "Select your saves folder",
+      "errorMissing": "Missing data",
+      "errorMissingDesc": "You need to specify at least the identifier and a local path.",
+      "successTitle": "Game created from template",
+      "successDesc": "Added {{id}} using the friend's configuration.",
+      "errorCreate": "Could not create game",
+      "errorCreateDesc": "An unexpected error occurred"
+    },
+    "copyConfirm": {
+      "title": "Copy saves from friend to your cloud",
+      "desc": "The saves of the game {{name}} will be copied from your friend's cloud to your cloud. The files will be associated with this game in your account.",
+      "conflictWarning_one": "1 file already exists in your cloud and will be copied with a different name (e.g., file (friend 1).sav) to prevent overwriting.",
+      "conflictWarning_other": "{{count}} files already exist in your cloud and will be copied with a different name (e.g., file (friend 1).sav) to prevent overwriting.",
+      "filesTotal_one": "1 file in total",
+      "filesTotal_other": "{{count}} files in total",
+      "statsNewAndConflicts": " · {{newCount}} new, {{conflictCount}} with new name",
+      "statsOnlyConflicts": " · {{conflictCount}} with new name",
+      "confirmButton": "Copy to my cloud"
+    },
+    "addGamesModal": {
+      "desc": "Only games you do not already have will be added. Your API key and username will not be changed. Review paths in Settings afterwards.",
+      "noNewGames": "No new games to add; you already have all the games from this profile.",
+      "selectAll": "Select All",
+      "selectNone": "Deselect All",
+      "addButton": "Add selected ({{count}})",
+      "toastNoneSelectedTitle": "None selected",
+      "toastNoneSelectedDesc": "Select at least one game to add.",
+      "toastSuccessTitle": "Games added",
+      "toastSuccessDesc_one": "1 game was added to your configuration. Review paths in Settings if necessary.",
+      "toastSuccessDesc_other": "{{count}} games were added to your configuration. Review paths in Settings if necessary.",
+      "toastErrorTitle": "Could not add games"
+    },
+    "cloudMembershipAction": {
+      "irreversible": "Irreversible action",
+      "confirmationRequired": "Confirmation required",
+      "userAffected": "Affected user: {{userId}}",
+      "removeMember": {
+        "title": "Remove member from your cloud",
+        "body": "This user will lose access to your shared cloud and will no longer see their synced saves there.",
+        "confirmLabel": "Remove member"
+      },
+      "leaveMembership": {
+        "title": "Leave cloud",
+        "body": "You are leaving this shared cloud and will no longer have access to the saves associated with it.",
+        "confirmLabel": "Leave cloud"
+      }
+    },
+    "shareLinkImport": {
+      "title": "Import saves from link",
+      "descWithFiles": "The following files for the game {{name}} will be copied to your cloud. If you do not have this game in your list, an entry will be added so you can configure your local path later.",
+      "descNoFiles": "There are no save files in this link for {{name}}. You can still import it to add the game to your list and configure your local path later.",
+      "noFiles": "No files",
+      "filesStats_one": "1 file · {{size}} total",
+      "filesStats_other": "{{count}} files · {{size}} total",
+      "gameAddedOnly": "The game will be added to your settings without copying any files.",
+      "importButton": "Import to my cloud"
+    },
+    "bigPictureHeader": {
+      "desc": "Import saves, search friends, and cloud invitations"
+    },
+    "bigPictureSearch": {
+      "title": "Search profile by username",
+      "desc": "Type your friend's username to view their games, copy saves, or add games to your list."
+    }
+  },
+  "remotePlay": {
+    "title": "Remote Play (LAN)",
+    "subtitle": "Stream your games or join sessions on your local network",
+    "host": "Be Host",
+    "join": "Join Game",
+    "hostSubtitle": "Share your screen and controllers",
+    "joinSubtitle": "Search active hosts on your LAN network",
+    "status": {
+      "active": "Session Active",
+      "waiting": "Waiting for connections...",
+      "connected": "Connected to Host"
+    }
+  },
+  "steamCatalog": {
+    "title": "Steam Catalog",
+    "indexedGames": "{{count}} indexed games",
+    "filterButton": "Filter",
+    "filterDrawerTitle": "Filter catalog",
+    "loadingCatalog": "Loading catalog…",
+    "errorLoading": "Could not load the catalog.",
+    "noSearchResults": "No results for that search.",
+    "noGamesListed": "No games listed yet. Go to Settings, check your Steam key and click 'Sync catalog now'.",
+    "noFilterResults": "No games match these filters. Try removing some or combine with a name search.",
+    "noResults": "No results.",
+    "rangeOf": "of",
+    "result_one": "result",
+    "result_other": "results",
+    "loadingCovers": "Loading covers and store data…",
+    "validatingSources": "Validating availability in your sources...",
+    "updatingList": "Updating list",
+    "pageXofY": "Page {{page}} of {{total}}",
+    "searchPlaceholder": "Multiple words; min. {{min}} characters…",
+    "searchAriaLabel": "Search catalog",
+    "filters": {
+      "title": "Filters",
+      "clearButton": "Clear filters",
+      "onlyAffects": "Only affects games with downloaded details (genres and tags from the Steam store).",
+      "noDataYet": "No filter data yet. Sync the catalog and open some game cards to populate genres and tags.",
+      "filterList": "Filter list",
+      "filterPlaceholder": "Filter…",
+      "noMatches": "No matches",
+      "visibleOf": "{{filtered}} of {{total}} visible",
+      "available_one": "{{count}} available",
+      "available_other": "{{count}} available",
+      "genres": "Genres",
+      "tags": "Tags"
+    },
+    "grid": {
+      "inLibrary": "In Library",
+      "source": "Source",
+      "chooseSource": "Choose source for {{name}}",
+      "install": "Install",
+      "notAvailable": "Not available in your sources",
+      "downloadStarted": "Download started",
+      "downloadStartedDesc": "Installation started for {{name}}.",
+      "downloadFailed": "Could not start download",
+      "transferStarted": "Transfer started",
+      "transferStartedDesc": "Getting {{name}} from {{device}}.",
+      "transferFailed": "Could not transfer"
+    },
+    "pagination": {
+      "ariaLabel": "Catalog pages",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "trending": {
+      "label": "Trending",
+      "viewCard": "View card",
+      "recommended": "Recommended",
+      "featured": "Featured and recommended",
+      "errorLoading": "Could not load the featured section.",
+      "previousSlide": "Previous",
+      "nextSlide": "Next",
+      "screenshot": "screenshot",
+      "recommendationVariants": [
+        "selected by tag matches within the catalog.",
+        "highlighted for its affinity with similar genres and tags.",
+        "suggested by thematic similarity within the current catalog.",
+        "chosen by category and gameplay style relationship.",
+        "proposed by tag patterns in related games."
+      ]
+    },
+    "freshness": {
+      "upToDate": "Your local catalog is up to date with the cloud worker data.",
+      "stale": "New data is available in the cloud. Click 'Download detailed info' in Settings to update.",
+      "noLocalImport": "You haven't downloaded the detailed info from the cloud yet. Do it from Settings with 'Download detailed info'.",
+      "noCloudBatches": "No enriched data batches in the cloud yet (the worker hasn't written batches or there is no manifest).",
+      "unknown": "Could not check the status (no connection, session, or service unavailable).",
+      "retry": "Retry"
+    }
+  }
+}

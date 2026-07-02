@@ -1,0 +1,521 @@
+{
+  "nav": {
+    "library": "Biblioteca",
+    "remotePlay": "Remote Play",
+    "catalog": "Catálogo",
+    "social": "Social",
+    "activity": "Actividad",
+    "settings": "Ajustes",
+    "about": "Información"
+  },
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "confirm": "Confirmar",
+    "search": "Buscar",
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "back": "Volver",
+    "enabled": "Activado",
+    "disabled": "Desactivado",
+    "close": "Cerrar",
+    "apply": "Aplicar",
+    "warning": "Advertencia",
+    "info": "Información",
+    "actions": "Acciones"
+  },
+  "library": {
+    "title": "Biblioteca de Juegos",
+    "configuredGames": "Juegos configurados",
+    "unsyncedChanges": "{{count}} con cambios sin subir",
+    "subtitle": "Gestiona y sincroniza tus partidas guardadas en la nube",
+    "header": {
+      "management": "Gestión de biblioteca",
+      "scan": "Buscar juegos",
+      "scanTooltip": "Buscar juegos en el equipo",
+      "map": "Mapa general",
+      "mapTooltip": "Mapa de guardado general",
+      "add": "Añadir a tu biblioteca",
+      "addTooltip": "Añadir a tu biblioteca...",
+      "downloadAllLabel": "Descargar guardados (nube → PC)",
+      "downloadAllDesc": "Todos los juegos configurados",
+      "syncAllLabel": "Subir guardados (PC → nube)",
+      "syncAllDesc": "Todos los juegos configurados",
+      "updating": "Actualizando…",
+      "refresh": "Actualizar lista"
+    },
+    "searchPlaceholder": "Buscar juego...",
+    "searchPlaceholderCompact": "Buscar...",
+    "noGames": "No se encontraron juegos",
+    "localSize": "Tamaño local",
+    "playtime": "Tiempo jugado",
+    "modified": "Modificado",
+    "cloud": "Nube",
+    "running": "En ejecución",
+    "filter": {
+      "all": "Todos",
+      "steam": "Steam",
+      "other": "Otros"
+    },
+    "addGame": "Añadir Juego",
+    "scanGames": "Escanear Juegos",
+    "syncAll": "Sincronizar Todo",
+    "downloadAll": "Descargar Todo",
+    "launch": "Jugar",
+    "stop": "Detener",
+    "lastSync": "Última sincronización",
+    "neverSync": "Nunca sincronizado",
+    "cloudStatus": "Estado en la nube",
+    "backups": "Backups",
+    "actions": {
+      "sync": "Sincronizar",
+      "download": "Descargar",
+      "backup": "Crear Backup",
+      "restore": "Restaurar Backup",
+      "openFolder": "Abrir Carpeta",
+      "deleteCloud": "Borrar de la Nube"
+    },
+    "detail": {
+      "loading": "Cargando detalles del juego...",
+      "notFound": "Juego no encontrado",
+      "notConfigured": "El juego {{gameId}} no está configurado.",
+      "availability": "Disponibilidad en tus fuentes",
+      "chooseSource": "Elegir fuente",
+      "selectMatch": "Selecciona una coincidencia",
+      "install": "Instalar",
+      "notAvailable": "No disponible en tus fuentes.",
+      "ariaLabelTabs": "Secciones del juego",
+      "tabSummary": "Resumen",
+      "tabDetails": "Detalles",
+      "tabRequirements": "Requisitos"
+    }
+  },
+  "settings": {
+    "title": "Configuración",
+    "subtitle": "Cuenta, nube, app, mandos e integraciones",
+    "sections": {
+      "account": "Cuenta y datos",
+      "app": "Aplicación",
+      "integrations": "Dispositivos e integraciones",
+      "system": "Sistema"
+    },
+    "tabs": {
+      "account": "Cuenta",
+      "cloud": "Nube",
+      "app": "Inicio y app",
+      "bigPicture": "Big Picture",
+      "integrations": "Integraciones",
+      "gamepad": "Mando",
+      "updates": "Versiones",
+      "advanced": "Avanzado"
+    },
+    "language": {
+      "title": "Idioma de la aplicación",
+      "subtitle": "Selecciona el idioma de la interfaz de SaveCloud",
+      "auto": "Idioma del Sistema (Auto)",
+      "es": "Español",
+      "en": "English"
+    },
+    "autostart": {
+      "title": "Iniciar con Windows",
+      "subtitle": "Abre la app automáticamente al iniciar sesión en el equipo, para que los guardados se sincronicen en segundo plano."
+    },
+    "bigPicture": {
+      "title": "Modo Big Picture",
+      "subtitle": "Iniciar en modo consola a pantalla completa",
+      "desc": "Abre una ventana dedicada Big Picture y oculta la ventana principal en el tray mientras esté activo.",
+      "helpText": "Puedes volver al modo normal desde el botón de abajo o con Escape dentro de la ventana Big Picture.",
+      "label": "Al iniciar Savecloud",
+      "normalWindow": "Ventana normal",
+      "consoleWindow": "Big Picture (pantalla completa)",
+      "backToNormal": "Volver a modo normal",
+      "enterNow": "Entrar en Big Picture ahora"
+    },
+    "gameMode": {
+      "title": "Modo juego",
+      "subtitle": "Reduce la contención con tus partidas: menos red y disco ocupados por SaveCloud y, si el sistema lo permite, un perfil de energía más favorable. No sustituye a controladores de GPU ni garantiza más FPS en todos los equipos corporativos o con políticas restringidas.",
+      "ariaLabel": "Activar modo juego",
+      "pauseTraffic": "Pausar tráfico de SaveCloud",
+      "pauseTrafficDesc": "Pausa subidas multipart activas (si las hay), torrents de SaveCloud en curso y descargas desde fuentes con estado Running hasta salir del modo.",
+      "powerProfile": "Perfil alto rendimiento / sin suspensión",
+      "powerProfileWin": "Activa el plan de energía «Alto rendimiento» de Windows con powercfg (si el sistema lo permite).",
+      "powerProfileOther": "En macOS puede usar caffeinate si está disponible. En algunos escritorios Linux se intenta «powerprofilesctl set performance» (debe estar en PATH).",
+      "gameBar": "Menos sobrecoste de Xbox Game DVR (solo Windows)",
+      "gameBarDesc": "Opcional: ajusta AppCaptureEnabled bajo HKCU para reducir grabación/fondo relacionado con Game Bar. Se revierte al desactivar modo juego.",
+      "cpuPriority": "Prioridad de CPU al detectar partida",
+      "cpuPriorityDesc": "Tras unos segundos (~intervalo del monitor de procesos), solo si el nombre del .exe del juego en ejecución coincide con lo configurado para ese juego en la biblioteca — por ejemplo re9.exe. Si no coincide, SaveCloud no toca ese proceso. En Windows, en los logs aparece «[CpuBoost] Prioridad elevada…» cuando funciona o un aviso si el proceso denegó acceso (antivirus o título muy protegido). Independiente del interruptor «Modo juego»."
+    },
+    "gamepad": {
+      "title": "Layout del Mando",
+      "subtitle": "Selecciona los iconos de botones preferidos",
+      "auto": "Automático",
+      "xbox": "Xbox",
+      "playstation": "PlayStation",
+      "nintendo": "Nintendo",
+      "generic": "Genérico"
+    },
+    "performance": {
+      "title": "Modo bajo rendimiento",
+      "subtitle": "Desactiva transiciones de interfaz, efectos visuales de desenfoque (blur), vídeos automáticos en el catálogo/perfiles y componentes WebGL interactivos. Recomendado para equipos con GPU integrada, portátiles con batería o PCs antiguas.",
+      "ariaLabel": "Activar modo bajo rendimiento"
+    },
+    "gpuAcceleration": {
+      "title": "Desactivar aceleración por hardware",
+      "subtitle": "Desactiva el uso de la GPU para renderizar la interfaz. Puede solucionar problemas de parpadeos, pantalla negra o incompatibilidad del controlador de gráficos.",
+      "warning": "* Requiere reiniciar la aplicación para aplicar los cambios.",
+      "ariaLabel": "Desactivar aceleración por hardware"
+    },
+    "developer": {
+      "title": "Modo desarrollador",
+      "desc": "Se guarda en el perfil activo. En la app instalada desbloquea el inspector del webview (DevTools), atajos como F12 / Ctrl+Shift+I y el menú contextual; también muestra las herramientas para plugins (SDK Lua, logs).",
+      "viteInfo": "En vite el inspector suele estar ya disponible; el interruptor afecta sobre todo a builds de producción y a lo que queda guardado en el perfil.",
+      "openDevTools": "Abrir DevTools (esta ventana)",
+      "closeDevTools": "Cerrar DevTools",
+      "lockedInfo": "Activa el modo arriba para usar DevTools en producción.",
+      "errorOpen": "No se pudo abrir DevTools",
+      "errorClose": "No se pudo cerrar DevTools"
+    },
+    "notifications": {
+      "title": "Notificaciones",
+      "subtitle": "Si la app no está visible (minimizada u otra ventana delante), se mostrará una notificación al terminar una subida, descarga o backup completo, o si ocurre un error. Usa el botón para comprobar permisos.",
+      "testButton": "Probar notificación"
+    },
+    "proxy": {
+      "title": "Servidor Proxy (HTTP/SOCKS5)",
+      "desc": "Enruta las descargas de hosters (como Gofile o Pixeldrain) y las peticiones a APIs de terceros a través de un proxy para evitar limitaciones de IP o bloqueos temporales.",
+      "label": "Dirección del proxy",
+      "placeholder": "Ej. socks5://127.0.0.1:1080 o http://127.0.0.1:8080",
+      "helpText": "Esquemas soportados: http://, https://, socks5://, socks5h:// (SOCKS5 DNS local/remoto). Dejar vacío para desactivar.",
+      "saveButton": "Guardar proxy",
+      "clearButton": "Limpiar campo"
+    },
+    "releaseNotes": {
+      "title": "Notas de versión",
+      "subtitle": "Consulta hasta 10 versiones recientes de GitHub. Si no hay conexión, verás la versión local.",
+      "viewButton": "Ver notas de versión"
+    },
+    "updatesCard": {
+      "title": "Actualizaciones",
+      "subtitle": "Comprueba si hay una nueva versión de la app. Si existe, se te ofrecerá descargarla e instalarla.",
+      "checkButton": "Buscar actualizaciones"
+    },
+    "sourceInstall": {
+      "title": "Instalación desde fuentes",
+      "subtitle": "Importa catálogos JSON (por URL o archivo) y configura la carpeta destino para las descargas.",
+      "sourcesStats_one": "1 fuente",
+      "sourcesStats_other": "{{count}} fuentes",
+      "gamesStats_one": "1 juego",
+      "gamesStats_other": "{{count}} juegos",
+      "importFilesTitle": "Importar desde archivos",
+      "importFileButton": "Archivo JSON",
+      "importBatchButton": "Múltiples JSONs",
+      "remoteSourcesTitle": "Fuentes remotas registradas",
+      "addButton": "Agregar",
+      "syncAllButton": "Sincronizar todo",
+      "active": "Activa",
+      "paused": "Pausada",
+      "pauseRemoteAria": "Pausar fuente remota",
+      "activateRemoteAria": "Activar fuente remota",
+      "deleting": "Eliminando...",
+      "deleteRemoteTooltip": "Eliminar fuente remota",
+      "noRemoteSources": "No hay URLs remotas registradas todavía.",
+      "importedCatalogsTitle": "Catálogos importados",
+      "deleteSourceTooltip": "Eliminar fuente",
+      "noImportedCatalogs": "Sin catálogos importados",
+      "importJsonHelp": "Importa un JSON de fuente para ver tus catálogos aquí.",
+      "defaultDestTitle": "Carpeta destino por defecto",
+      "pickFolderButton": "Elegir carpeta",
+      "savePathButton": "Guardar ruta",
+      "autoExtractTitle": "Extracción automática",
+      "autoExtractLabel": "Extraer juegos automáticamente",
+      "autoExtractHelp": "Descomprime automáticamente los archivos comprimidos al finalizar la descarga (ZIP, RAR, 7Z, TAR, etc.). Si está desactivado, el archivo descargado se conservará sin extraer."
+    },
+    "gamepadTester": {
+      "title": "Tu mando",
+      "desktopOnlyDesc": "Esta prueba solo está disponible en la app de escritorio de Savecloud.",
+      "mainDesc": "Conecta el mando por cable o su adaptador inalámbrico. Con Savecloud o la ventana de Ajustes al frente verás cómo responden sticks y botones. El botón de vibración envía un pequeño pulso si el sistema lo permite (en algunos Mac no hay vibración).",
+      "navDesc": "Puedes usar el mando también para moverte por la app (navegación, confirmar y atrás).",
+      "noGamepadFound": "No detectamos ningún mando. Enchufa uno y pulsa «Buscar de nuevo».",
+      "detectionInfo": "Detección por nombre «{{name}}»: el perfil automático es {{profile}}. Puedes fijar otro esquema abajo para la vista y las etiquetas.",
+      "selectLabel": "¿Qué mando quieres mirar?",
+      "searchButton": "Buscar de nuevo",
+      "rumbleButton": "Probar vibración",
+      "installDriversButton": "Instalar drivers",
+      "diagramViewTitle": "Vista del mando",
+      "visualLayoutLabel": "Esquema visual",
+      "showingLayout": "Mostrando {{layout}}",
+      "autoChoice": " (automático).",
+      "manualChoice": " (elección manual guardada).",
+      "numericDetailTitle": "Detalle numérico",
+      "buttonsDetectedTitle": "Botones que detectamos ahora mismo",
+      "noButtonsPressed": "Ninguno pulsado. Prueba la cruceta o la cara de botones.",
+      "telemetryHelp": "Toca algo del mando: con la ventana de Savecloud o Ajustes activa deberían aparecer números y nombres claros arriba.",
+      "layoutOptions": {
+        "auto": "Automático (según nombre del mando)",
+        "generic": "Genérico (leyendas tipo Xbox)"
+      }
+    }
+  },
+  "friends": {
+    "title": "Amigos",
+    "subtitle": "Importar desde enlace o ver perfil por usuario",
+    "descPlain": "Usa Importar por link si te pasaron un enlace de compartir, o Buscar por usuario para cargar el perfil de un amigo de confianza.",
+    "tabs": {
+      "members": "Miembros de Nube",
+      "invites": "Invitaciones",
+      "import": "Importar Amigo",
+      "importLink": "Importar por link",
+      "searchUser": "Buscar por usuario"
+    },
+    "presence": {
+      "online": "Conectado",
+      "offline": "Desconecta",
+      "playing": "Jugando a"
+    },
+    "actions": {
+      "copySaves": "Copiar Guardados",
+      "useTemplate": "Usar como Plantilla",
+      "invite": "Invitar"
+    },
+    "loadingProfile": "Cargando perfil del amigo...",
+    "noUserConfig": "(sin usuario en config)",
+    "profileCard": {
+      "desc": "Busca amigos ingresando su identificador (ej. \"usuario\"). Si un amigo te pasa el suyo, escríbelo aquí para ver sus juegos, copiar guardados a tu nube o plantillas.",
+      "label": "Usuario del amigo",
+      "placeholder": "Ej: gabi21",
+      "loadButton": "Cargar perfil",
+      "searching": "Buscando..."
+    },
+    "gamesSection": {
+      "profileLoaded": "Perfil cargado",
+      "gamesInProfile_one": "1 juego en este perfil",
+      "gamesInProfile_other": "{{count}} juegos en este perfil",
+      "playing": "Jugando: {{gameName}}",
+      "noGames": "Este amigo no tiene juegos configurados en su config.",
+      "inCloudFriend": "En la nube (amigo):",
+      "noSaves": "sin guardados",
+      "filesStats_one": "1 archivo · {{size}}",
+      "filesStats_other": "{{count}} archivos · {{size}}",
+      "actions": {
+        "install": "Instalar",
+        "copySaves": "Copiar saves",
+        "useTemplate": "Usar config como plantilla",
+        "addGames": "Añadir juegos de este perfil"
+      }
+    },
+    "invitesTab": {
+      "title": "Compartir Nube / Enlaces",
+      "subtitle": "Comparte un enlace para que tu amigo pueda acceder a la nube del anfitrión (sin configuración manual).",
+      "statsPending": "Pendientes: {{count}}",
+      "statsShared": "Nubes compartidas: {{count}}",
+      "statsMembers": "Miembros en tu nube: {{count}}",
+      "requestsTab": "Solicitudes",
+      "sendInviteTitle": "Enviar invitación",
+      "inviteeInputLabel": "Usuario del invitado (opcional)",
+      "inviteeInputHelp": "Si lo dejas vacío, generas un enlace con código (token) para cualquiera que lo reciba.",
+      "createInviteButton": "Crear invitación",
+      "inviteTokenLabel": "Enlace de invitación",
+      "inviteTokenHelp": "Pásaselo a tu amigo: puede pegarlo aquí para aceptar (sin configurar nada).",
+      "copyLinkButton": "Copiar enlace",
+      "acceptInviteTitle": "Aceptar invitación",
+      "tokenInputLabel": "Enlace o código de invitación",
+      "tokenInputPlaceholder": "Pega el enlace completo o el código",
+      "tokenInputHelp": "Si pegas un enlace (recomendado), la app descubre automáticamente la URL del servidor.",
+      "acceptButton": "Aceptar invitación",
+      "pendingInvitesTitle": "Invitaciones pendientes",
+      "refreshButton": "Actualizar ahora",
+      "refreshHelp": "Se actualiza sola mientras tengas abierta esta pestaña.",
+      "noPendingInvites": "No tienes invitaciones pendientes.",
+      "expiresAt": "Expira {{date}}",
+      "acceptBtn": "Aceptar",
+      "rejectBtn": "Rechazar",
+      "sharedCloudTab": "Nube compartida",
+      "activeCloudTitle": "Nube activa para sincronización",
+      "activeCloudHelp": "Selecciona qué nube usar para sincronizar tus saves.",
+      "myCloud": "Mi nube",
+      "cloudsAsMember": "Nubes donde eres miembro",
+      "noSharedClouds": "No perteneces a ninguna nube compartida.",
+      "host": "Anfitrión",
+      "syncConnection": "Sincronizar conexión",
+      "viewProfile": "Ver perfil",
+      "leave": "Salir",
+      "membersInCloudTitle": "Miembros en tu nube",
+      "membersInCloudHelp": "Usuarios que tienen acceso a tu nube como miembros.",
+      "noMembersActive": "No tienes miembros activos en tu nube.",
+      "member": "Miembro",
+      "delete": "Eliminar"
+    },
+    "templateModal": {
+      "title": "Usar configuración de amigo como plantilla",
+      "desc": "Crea un juego en tu configuración copiando los metadatos del juego de tu amigo. Solo necesitas ajustar la ruta local donde están tus guardados.",
+      "gameIdLabel": "Identificador del juego en tu config",
+      "placeholder": "ej. re4-amigo",
+      "pathLabel": "Ruta local de tus guardados",
+      "editionLabel": "Origen / edición",
+      "sourceUrlLabel": "URL de descarga (opcional)",
+      "steamAppIdLabel": "Steam App ID (opcional)",
+      "summaryLabel": "Resumen de la plantilla",
+      "friendGamePrefix": "Juego del amigo",
+      "friendPathsPrefix": "Rutas originales",
+      "noGameSelected": "No hay juego seleccionado.",
+      "createButton": "Crear juego en mi config",
+      "browseTitle": "Selecciona la carpeta de tus guardados",
+      "errorMissing": "Faltan datos",
+      "errorMissingDesc": "Necesitas indicar al menos el identificador y una ruta local.",
+      "successTitle": "Juego creado desde plantilla",
+      "successDesc": "Se añadió {{id}} usando la configuración del amigo.",
+      "errorCreate": "No se pudo crear el juego",
+      "errorCreateDesc": "Ocurrió un error inesperado"
+    },
+    "copyConfirm": {
+      "title": "Copiar guardados del amigo a tu nube",
+      "desc": "Se copiarán los guardados del juego {{name}} desde la nube de tu amigo a tu nube. Los archivos quedarán asociados a este juego en tu cuenta.",
+      "conflictWarning_one": "1 archivo ya existe en tu nube y se copiará con un nombre distinto (ej. archivo (amigo 1).sav) para no sobrescribir.",
+      "conflictWarning_other": "{{count}} archivos ya existen en tu nube y se copiarán con un nombre distinto (ej. archivo (amigo 1).sav) para no sobrescribir.",
+      "filesTotal_one": "1 archivo en total",
+      "filesTotal_other": "{{count}} archivos en total",
+      "statsNewAndConflicts": " · {{newCount}} nuevo(s), {{conflictCount}} con nuevo nombre",
+      "statsOnlyConflicts": " · {{conflictCount}} con nuevo nombre",
+      "confirmButton": "Copiar a mi nube"
+    },
+    "addGamesModal": {
+      "desc": "Se añadirán solo los juegos que aún no tienes. No se modifica tu API key ni tu usuario. Revisa las rutas en Configuración después.",
+      "noNewGames": "No hay juegos nuevos que añadir; ya tienes todos los de este perfil.",
+      "selectAll": "Marcar todos",
+      "selectNone": "Desmarcar todos",
+      "addButton": "Añadir seleccionados ({{count}})",
+      "toastNoneSelectedTitle": "Ninguno seleccionado",
+      "toastNoneSelectedDesc": "Marca al menos un juego para añadir.",
+      "toastSuccessTitle": "Juegos añadidos",
+      "toastSuccessDesc_one": "Se añadió 1 juego a tu configuración. Revisa las rutas en Configuración si es necesario.",
+      "toastSuccessDesc_other": "Se añadieron {{count}} juegos a tu configuración. Revisa las rutas en Configuración si es necesario.",
+      "toastErrorTitle": "No se pudieron añadir"
+    },
+    "cloudMembershipAction": {
+      "irreversible": "Acción irreversible",
+      "confirmationRequired": "Confirmación requerida",
+      "userAffected": "Usuario afectado: {{userId}}",
+      "removeMember": {
+        "title": "Eliminar miembro de tu nube",
+        "body": "Este usuario perderá acceso a tu nube compartida y dejará de ver sus guardados sincronizados ahí.",
+        "confirmLabel": "Eliminar miembro"
+      },
+      "leaveMembership": {
+        "title": "Salir de la nube",
+        "body": "Vas a salir de esta nube compartida y dejarás de tener acceso a los guardados asociados a ella.",
+        "confirmLabel": "Salir de la nube"
+      }
+    },
+    "shareLinkImport": {
+      "title": "Importar guardados desde link",
+      "descWithFiles": "Se copiarán a tu nube los siguientes archivos del juego {{name}}. Si no tienes este juego en tu lista, se añadirá una entrada para que configures tu ruta local después.",
+      "descNoFiles": "No hay archivos de guardado en este link para {{name}}. Puedes importar igualmente para añadir el juego a tu lista y configurar tu ruta local después.",
+      "noFiles": "Ningún archivo",
+      "filesStats_one": "1 archivo · {{size}} total",
+      "filesStats_other": "{{count}} archivos · {{size}} total",
+      "gameAddedOnly": "El juego se añadirá a tu configuración sin copiar archivos.",
+      "importButton": "Importar a mi nube"
+    },
+    "bigPictureHeader": {
+      "desc": "Importar guardados, buscar amigos e invitaciones de nube"
+    },
+    "bigPictureSearch": {
+      "title": "Buscar perfil por usuario",
+      "desc": "Escribe el identificador de tu amigo para ver sus juegos, copiar guardados o añadir juegos a tu lista."
+    }
+  },
+  "remotePlay": {
+    "title": "Remote Play (LAN)",
+    "subtitle": "Transmite tus juegos o únete a sesiones en red local",
+    "host": "Ser Anfitrión",
+    "join": "Unirse a Juego",
+    "hostSubtitle": "Comparte tu pantalla y mandos",
+    "joinSubtitle": "Busca hosts activos en tu red LAN",
+    "status": {
+      "active": "Sesión Activa",
+      "waiting": "Esperando conexiones...",
+      "connected": "Conectado al Host"
+    }
+  },
+  "steamCatalog": {
+    "title": "Catálogo Steam",
+    "indexedGames": "{{count}} juegos indexados",
+    "filterButton": "Filtrar",
+    "filterDrawerTitle": "Filtrar catálogo",
+    "loadingCatalog": "Cargando catálogo…",
+    "errorLoading": "No se pudo cargar el catálogo.",
+    "noSearchResults": "Sin resultados para esa búsqueda.",
+    "noGamesListed": "Aún no hay juegos listados. Ve a Configuración, revisa la clave de Steam y pulsa «Sincronizar catálogo ahora».",
+    "noFilterResults": "Ningún juego cumple estos filtros. Prueba a quitar algunos o combinar con la búsqueda por nombre.",
+    "noResults": "Sin resultados.",
+    "rangeOf": "de",
+    "result_one": "resultado",
+    "result_other": "resultados",
+    "loadingCovers": "Cargando portadas y datos de la tienda…",
+    "validatingSources": "Validando disponibilidad en tus fuentes...",
+    "updatingList": "Actualizando listado",
+    "pageXofY": "Página {{page}} de {{total}}",
+    "searchPlaceholder": "Varias palabras; mín. {{min}} caracteres…",
+    "searchAriaLabel": "Buscar en catálogo",
+    "filters": {
+      "title": "Filtros",
+      "clearButton": "Quitar filtros",
+      "onlyAffects": "Solo afectan a juegos con ficha descargada (géneros y etiquetas de la tienda Steam).",
+      "noDataYet": "Aún no hay datos para filtrar. Sincroniza el catálogo y abre algunas fichas para rellenar géneros y etiquetas.",
+      "filterList": "Filtrar lista",
+      "filterPlaceholder": "Filtrar…",
+      "noMatches": "Sin coincidencias",
+      "visibleOf": "{{filtered}} de {{total}} visibles",
+      "available_one": "{{count}} disponible",
+      "available_other": "{{count}} disponibles",
+      "genres": "Géneros",
+      "tags": "Etiquetas"
+    },
+    "grid": {
+      "inLibrary": "En Biblioteca",
+      "source": "Fuente",
+      "chooseSource": "Elegir fuente para {{name}}",
+      "install": "Instalar",
+      "notAvailable": "No disponible en tus fuentes",
+      "downloadStarted": "Descarga iniciada",
+      "downloadStartedDesc": "Instalación iniciada para {{name}}.",
+      "downloadFailed": "No se pudo iniciar",
+      "transferStarted": "Transferencia iniciada",
+      "transferStartedDesc": "Trayendo {{name}} desde {{device}}.",
+      "transferFailed": "No se pudo transferir"
+    },
+    "pagination": {
+      "ariaLabel": "Páginas del catálogo",
+      "previous": "Anterior",
+      "next": "Siguiente"
+    },
+    "trending": {
+      "label": "Trending",
+      "viewCard": "Ver ficha",
+      "recommended": "Recomendado",
+      "featured": "Destacados y recomendados",
+      "errorLoading": "No se pudo cargar el bloque de destacados.",
+      "previousSlide": "Anterior",
+      "nextSlide": "Siguiente",
+      "screenshot": "captura",
+      "recommendationVariants": [
+        "seleccionado por coincidencias de etiquetas dentro del catálogo.",
+        "destacado por su afinidad con géneros y etiquetas similares.",
+        "sugerido por similitud temática dentro del catálogo actual.",
+        "elegido por relación de categorías y estilo de juego.",
+        "propuesto por patrones de etiquetas en juegos relacionados."
+      ]
+    },
+    "freshness": {
+      "upToDate": "Tu catálogo local está al día con los datos que genera el worker en la nube.",
+      "stale": "Hay datos nuevos en la nube. Pulsa «Descargar información detallada» en Configuración para actualizar.",
+      "noLocalImport": "Aún no has descargado la información detallada desde la nube. Hazlo desde Configuración con «Descargar información detallada».",
+      "noCloudBatches": "En la nube no hay lotes de datos enriquecidos aún (el worker no ha escrito batches o no hay manifest).",
+      "unknown": "No se pudo comprobar el estado (sin conexión, sesión o servicio no disponible).",
+      "retry": "Reintentar"
+    }
+  }
+}

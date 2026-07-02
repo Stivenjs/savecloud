@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Spinner, Tab, Tabs } from "@heroui/react";
 import { Link2, UserRound } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ConfiguredGame } from "@app-types/config";
 import { useFriendsPage } from "@/hooks/useFriendsPage";
 import { AddFriendGamesModal } from "@features/friends/AddFriendGamesModal";
@@ -33,6 +34,7 @@ type FriendsTabKey = "link" | "user" | "invites";
  * que vuelve a la biblioteca (como en SteamCatalogPage BP).
  */
 export function BigPictureFriendsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [friendsTab, setFriendsTab] = useState<FriendsTabKey>(() => {
     try {
@@ -192,7 +194,7 @@ export function BigPictureFriendsPage() {
           title={
             <div className="flex items-center gap-2.5">
               <Link2 className="h-5 w-5" />
-              <span>Importar por link</span>
+              <span>{t("friends.tabs.importLink")}</span>
             </div>
           }>
           <BigPictureShareLinkSection
@@ -210,7 +212,7 @@ export function BigPictureFriendsPage() {
           title={
             <div className="flex items-center gap-2.5">
               <UserRound className="h-5 w-5" />
-              <span>Buscar por usuario</span>
+              <span>{t("friends.tabs.searchUser")}</span>
             </div>
           }>
           <div className="space-y-6">
@@ -224,12 +226,12 @@ export function BigPictureFriendsPage() {
             {loading ? (
               <div className="flex min-h-[20vh] flex-col items-center justify-center gap-4">
                 <Spinner size="lg" color="primary" />
-                <p className="text-base text-default-500">Cargando perfil del amigo...</p>
+                <p className="text-base text-default-500">{t("friends.loadingProfile")}</p>
               </div>
             ) : null}
             {friendConfig && !loading ? (
               <FriendGamesSection
-                userIdDisplay={friendConfig.userId ?? "(sin usuario en config)"}
+                userIdDisplay={friendConfig.userId ?? t("friends.noUserConfig")}
                 friendVisualProfile={
                   friendConfig.shareVisualProfileWithHosts
                     ? {

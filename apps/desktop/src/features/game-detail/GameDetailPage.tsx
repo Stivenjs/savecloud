@@ -12,8 +12,8 @@ import { pickCandidate, sourceCandidateKey } from "@utils/sourceMatch";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 
 import { Button, Select, SelectItem, Spinner, Tab, Tabs, Skeleton } from "@heroui/react";
 import { ArrowLeft, Cpu, Gamepad2, LayoutList, ScrollText } from "lucide-react";
@@ -60,6 +60,7 @@ import type { ConfiguredGame } from "@app-types/config";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
 
 export function GameDetailPage() {
+  const { t } = useTranslation();
   const isLowPerf = useLowPerformanceMode();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -360,7 +361,7 @@ export function GameDetailPage() {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
         <Spinner size="lg" color="primary" />
-        <p className="text-default-500">Cargando detalles del juego...</p>
+        <p className="text-default-500">{t("library.detail.loading")}</p>
       </div>
     );
   }
@@ -369,16 +370,14 @@ export function GameDetailPage() {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
         <Gamepad2 size={56} className="text-default-400" strokeWidth={1.2} />
-        <p className="text-lg font-medium text-default-600">Juego no encontrado</p>
-        <p className="text-sm text-default-400">
-          El juego <span className="font-mono text-default-500">{gameId}</span> no está configurado.
-        </p>
+        <p className="text-lg font-medium text-default-600">{t("library.detail.notFound")}</p>
+        <p className="text-sm text-default-400">{t("library.detail.notConfigured", { gameId })}</p>
         <Button
           color="primary"
           variant="bordered"
           startContent={<ArrowLeft size={18} />}
           onPress={handleBackWithTransition}>
-          Volver
+          {t("common.back")}
         </Button>
       </div>
     );
@@ -439,11 +438,11 @@ export function GameDetailPage() {
         <section className="rounded-xl border border-primary/30 bg-primary/5 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
             <div className="min-w-0 flex-1 space-y-2">
-              <p className="text-sm font-semibold">Disponibilidad en tus fuentes</p>
+              <p className="text-sm font-semibold">{t("library.detail.availability")}</p>
               {sourceCandidates.length > 1 ? (
                 <Select
-                  label="Elegir fuente"
-                  placeholder="Selecciona una coincidencia"
+                  label={t("library.detail.chooseSource")}
+                  placeholder={t("library.detail.selectMatch")}
                   size="sm"
                   variant="bordered"
                   className="mt-1 max-w-md"
@@ -461,18 +460,18 @@ export function GameDetailPage() {
                 </Select>
               ) : (
                 <p className="text-xs text-default-500">
-                  Coincidencia: {bestSourceMatch.item_title} ({bestSourceMatch.source_name})
+                  {t("library.detail.selectMatch")}: {bestSourceMatch.item_title} ({bestSourceMatch.source_name})
                 </p>
               )}
             </div>
             <Button color="primary" onPress={() => void handleInstallFromSources()}>
-              Instalar
+              {t("library.detail.install")}
             </Button>
           </div>
         </section>
       ) : (
         <section className="rounded-xl border border-default-200/70 bg-default-100/80 p-4">
-          <p className="text-sm text-default-500">No disponible en tus fuentes.</p>
+          <p className="text-sm text-default-500">{t("library.detail.notAvailable")}</p>
         </section>
       )}
 
@@ -563,13 +562,13 @@ export function GameDetailPage() {
               cursor: "bg-primary",
               panel: "min-h-[16rem] px-0 pb-2 pt-8 sm:min-h-[18rem] sm:pt-10",
             }}
-            aria-label="Secciones del juego">
+            aria-label={t("library.detail.ariaLabelTabs")}>
             <Tab
               key="summary"
               title={
                 <span className="flex items-center gap-2">
                   <LayoutList size={18} className="text-default-400 group-data-[selected=true]:text-primary" />
-                  <span>Resumen</span>
+                  <span>{t("library.detail.tabSummary")}</span>
                 </span>
               }>
               <GameDetailSummaryPanel details={steamDetails} />
@@ -579,7 +578,7 @@ export function GameDetailPage() {
               title={
                 <span className="flex items-center gap-2">
                   <ScrollText size={18} className="text-default-400 group-data-[selected=true]:text-primary" />
-                  <span>Detalles</span>
+                  <span>{t("library.detail.tabDetails")}</span>
                 </span>
               }>
               <GameDetailSteamDetailsPanel details={steamDetails} />
@@ -590,7 +589,7 @@ export function GameDetailPage() {
                 title={
                   <span className="flex items-center gap-2">
                     <Cpu size={18} className="text-default-400 group-data-[selected=true]:text-primary" />
-                    <span>Requisitos</span>
+                    <span>{t("library.detail.tabRequirements")}</span>
                   </span>
                 }>
                 <GameDetailRequirementsPanel details={steamDetails} />
@@ -600,7 +599,9 @@ export function GameDetailPage() {
         </div>
       ) : (
         <section className="rounded-2xl border border-default-200/60 bg-content1 px-5 py-6 shadow-sm dark:border-default-100/20 dark:bg-content1/80 sm:px-7 sm:py-8">
-          <h2 className="mb-6 text-lg font-semibold tracking-tight text-foreground">Resumen</h2>
+          <h2 className="mb-6 text-lg font-semibold tracking-tight text-foreground">
+            {t("library.detail.tabSummary")}
+          </h2>
           <GameDetailLocalSummary game={game} />
         </section>
       )}

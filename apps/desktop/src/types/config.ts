@@ -88,4 +88,5 @@ export interface Config {
   readonly lowPerformanceMode?: boolean;
   /** Desactivar aceleración por hardware (GPU) en el webview (requiere reiniciar). */
   readonly disableHardwareAcceleration?: boolean;
+  readonly language?: string;
 }

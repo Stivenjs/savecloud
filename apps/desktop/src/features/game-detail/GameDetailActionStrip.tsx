@@ -3,6 +3,7 @@ import { AlertTriangle, Calendar, CloudCheck } from "lucide-react";
 import { formatBytes, formatPlaytime, formatRelativeDate } from "@utils/format";
 import type { GameStats } from "@services/tauri";
 import { GameDetailActions, type GameDetailActionsProps } from "./GameDetailActions";
+import { useTranslation } from "react-i18next";
 
 function StatBlock({ label, value }: { label: string; value: string }) {
   return (
@@ -18,6 +19,7 @@ export interface GameDetailActionStripProps extends GameDetailActionsProps {
 }
 
 export function GameDetailActionStrip({ stats, isGameRunning, ...actionsProps }: GameDetailActionStripProps) {
+  const { t } = useTranslation();
   const hasMeta = isGameRunning || !!stats;
   const hasActions = Boolean(
     actionsProps.onPlay || actionsProps.onOpenGraph || actionsProps.onEdit || actionsProps.onRemove
@@ -37,20 +39,20 @@ export function GameDetailActionStrip({ stats, isGameRunning, ...actionsProps }:
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-default-200/60 pt-3 lg:border-t-0 lg:pt-0 dark:border-default-100/15">
           {isGameRunning && (
             <Chip startContent={<AlertTriangle size={14} />} color="success" variant="flat" size="sm">
-              En ejecución
+              {t("library.running")}
             </Chip>
           )}
 
           {stats && (
             <>
-              <StatBlock label="Tamaño local" value={formatBytes(stats.localSizeBytes)} />
-              <StatBlock label="Tiempo jugado" value={formatPlaytime(stats.playtimeSeconds)} />
+              <StatBlock label={t("library.localSize")} value={formatBytes(stats.localSizeBytes)} />
+              <StatBlock label={t("library.playtime")} value={formatPlaytime(stats.playtimeSeconds)} />
               {stats.localLastModified && (
                 <div className="flex min-w-30 items-start gap-2 text-sm text-default-600">
                   <Calendar size={16} className="mt-0.5 shrink-0 text-secondary" />
                   <div className="flex min-w-0 flex-col gap-0.5">
                     <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-default-400">
-                      Modificado
+                      {t("library.modified")}
                     </span>
                     <span className="font-medium tabular-nums">{formatRelativeDate(stats.localLastModified)}</span>
                   </div>
@@ -60,7 +62,9 @@ export function GameDetailActionStrip({ stats, isGameRunning, ...actionsProps }:
                 <div className="flex min-w-30 items-start gap-2 text-sm text-default-600">
                   <CloudCheck size={16} className="mt-0.5 shrink-0 text-success" />
                   <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-default-400">Nube</span>
+                    <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-default-400">
+                      {t("library.cloud")}
+                    </span>
                     <span className="font-medium tabular-nums">{formatRelativeDate(stats.cloudLastModified)}</span>
                   </div>
                 </div>

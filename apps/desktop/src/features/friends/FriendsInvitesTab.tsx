@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Chip, Divider, Input, Skeleton, Tab, Tabs } from "@heroui/react";
+import { useTranslation } from "react-i18next";
 import { Check, Cloud, Copy, LogOut, Mail, Plus, RefreshCcw, Trash2, UserRound, Eye, X } from "lucide-react";
 import type { CloudInvite, CloudMembership } from "@services/tauri/invites.service";
 import { listCloudPresence } from "@services/tauri/invites.service";
@@ -100,6 +101,7 @@ export function FriendsInvitesTab({
   onViewCloudPeerProfile,
   ourConfig,
 }: FriendsInvitesTabProps) {
+  const { t } = useTranslation();
   const [view, setView] = useState<"requests" | "cloud">("requests");
   const [pendingCloudAction, setPendingCloudAction] = useState<{
     type: CloudMembershipActionType;
@@ -185,9 +187,7 @@ export function FriendsInvitesTab({
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <p className="text-sm text-default-500">
-          Comparte un enlace para que tu amigo pueda acceder a la nube del anfitrión (sin configuración manual).
-        </p>
+        <p className="text-sm text-default-500">{t("friends.invitesTab.subtitle")}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {invitesStatsLoading ? (
@@ -199,13 +199,13 @@ export function FriendsInvitesTab({
         ) : (
           <>
             <Chip size="sm" variant="flat" color="primary">
-              Pendientes: {pendingInvites.length}
+              {t("friends.invitesTab.statsPending", { count: pendingInvites.length })}
             </Chip>
             <Chip size="sm" variant="flat" color="secondary">
-              Nubes compartidas: {ownMemberMemberships.length}
+              {t("friends.invitesTab.statsShared", { count: ownMemberMemberships.length })}
             </Chip>
             <Chip size="sm" variant="flat" color="warning">
-              Miembros en tu nube: {hostMemberships.length}
+              {t("friends.invitesTab.statsMembers", { count: hostMemberships.length })}
             </Chip>
           </>
         )}
@@ -221,26 +221,24 @@ export function FriendsInvitesTab({
           title={
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4" />
-              <span>Solicitudes</span>
+              <span>{t("friends.invitesTab.requestsTab")}</span>
             </div>
           }>
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
-              <SectionCard title="Enviar invitación" icon={<Plus className="h-4 w-4" />}>
+              <SectionCard title={t("friends.invitesTab.sendInviteTitle")} icon={<Plus className="h-4 w-4" />}>
                 <div className="space-y-3 md:max-w-md">
                   <Input
-                    label="Usuario del invitado (opcional)"
+                    label={t("friends.invitesTab.inviteeInputLabel")}
                     labelPlacement="outside"
-                    placeholder="Ej: gabi21"
+                    placeholder={t("friends.profileCard.placeholder")}
                     value={inviteeUserIdInput}
                     onValueChange={setInviteeUserIdInput}
                     variant="bordered"
                     size="sm"
                     startContent={<UserRound className="h-3.5 w-3.5 text-default-400 shrink-0" />}
                   />
-                  <p className="text-xs text-default-500">
-                    Si lo dejas vacío, generas un enlace con código (token) para cualquiera que lo reciba.
-                  </p>
+                  <p className="text-xs text-default-500">{t("friends.invitesTab.inviteeInputHelp")}</p>
                   <Button
                     color="primary"
                     variant="solid"
@@ -248,7 +246,7 @@ export function FriendsInvitesTab({
                     onPress={handleCreateInvite}
                     className="w-full"
                     size="sm">
-                    Crear invitación
+                    {t("friends.invitesTab.createInviteButton")}
                   </Button>
 
                   {lastCreatedInviteToken && (
@@ -256,16 +254,14 @@ export function FriendsInvitesTab({
                       <Divider />
                       <div className="space-y-1.5">
                         <p className="text-xs font-medium text-default-500 uppercase tracking-wide">
-                          Enlace de invitación
+                          {t("friends.invitesTab.inviteTokenLabel")}
                         </p>
                         <div className="rounded-xl bg-default-100 border border-default-200 p-3">
                           <p className="font-mono text-xs break-all text-foreground leading-relaxed">
                             {lastCreatedInviteToken}
                           </p>
                         </div>
-                        <p className="text-xs text-default-500">
-                          Pásaselo a tu amigo: puede pegarlo aquí para aceptar (sin configurar nada).
-                        </p>
+                        <p className="text-xs text-default-500">{t("friends.invitesTab.inviteTokenHelp")}</p>
                         <Button
                           size="sm"
                           variant="flat"
@@ -273,7 +269,7 @@ export function FriendsInvitesTab({
                           className="w-full"
                           startContent={<Copy className="h-3.5 w-3.5" />}
                           onPress={() => void handleCopyLastToken()}>
-                          Copiar enlace
+                          {t("friends.invitesTab.copyLinkButton")}
                         </Button>
                       </div>
                     </>
@@ -281,21 +277,19 @@ export function FriendsInvitesTab({
                 </div>
               </SectionCard>
 
-              <SectionCard title="Aceptar invitación" icon={<Check className="h-4 w-4" />}>
+              <SectionCard title={t("friends.invitesTab.acceptInviteTitle")} icon={<Check className="h-4 w-4" />}>
                 <div className="space-y-3 md:max-w-md">
                   <Input
-                    label="Enlace o código de invitación"
+                    label={t("friends.invitesTab.tokenInputLabel")}
                     labelPlacement="outside"
-                    placeholder="Pega el enlace completo o el código"
+                    placeholder={t("friends.invitesTab.tokenInputPlaceholder")}
                     value={inviteTokenInput}
                     onValueChange={setInviteTokenInput}
                     variant="bordered"
                     size="sm"
                     startContent={<Mail className="h-3.5 w-3.5 text-default-400 shrink-0" />}
                   />
-                  <p className="text-xs text-default-500">
-                    Si pegas un enlace (recomendado), la app descubre automáticamente la URL del servidor.
-                  </p>
+                  <p className="text-xs text-default-500">{t("friends.invitesTab.tokenInputHelp")}</p>
                   <Button
                     color="primary"
                     variant="solid"
@@ -305,14 +299,14 @@ export function FriendsInvitesTab({
                     className="w-full"
                     size="sm"
                     startContent={!inviteBusy && <Check className="h-3.5 w-3.5" />}>
-                    Aceptar invitación
+                    {t("friends.invitesTab.acceptButton")}
                   </Button>
                 </div>
               </SectionCard>
             </div>
 
             <SectionCard
-              title="Invitaciones pendientes"
+              title={t("friends.invitesTab.pendingInvitesTitle")}
               icon={<Mail className="h-4 w-4" />}
               action={
                 <div className="flex items-center gap-2">
@@ -321,14 +315,14 @@ export function FriendsInvitesTab({
                     variant="light"
                     startContent={<RefreshCcw className="h-3.5 w-3.5" />}
                     onPress={() => void refreshInvitesState()}>
-                    Actualizar ahora
+                    {t("friends.invitesTab.refreshButton")}
                   </Button>
                 </div>
               }>
-              <p className="mb-3 text-xs text-default-500">Se actualiza sola mientras tengas abierta esta pestaña.</p>
+              <p className="mb-3 text-xs text-default-500">{t("friends.invitesTab.refreshHelp")}</p>
               {pendingInvites.length === 0 ? (
                 <EmptyState
-                  message="No tienes invitaciones pendientes."
+                  message={t("friends.invitesTab.noPendingInvites")}
                   icon={<Mail className="h-5 w-5 text-default-400" />}
                 />
               ) : (
@@ -346,7 +340,7 @@ export function FriendsInvitesTab({
                         <div>
                           <p className="text-sm font-medium">{invite.hostUserId}</p>
                           <p className="text-xs text-default-400">
-                            Expira {new Date(invite.expiresAt).toLocaleString()}
+                            {t("friends.invitesTab.expiresAt", { date: new Date(invite.expiresAt).toLocaleString() })}
                           </p>
                         </div>
                       </div>
@@ -357,7 +351,7 @@ export function FriendsInvitesTab({
                           variant="flat"
                           startContent={<Check className="h-3.5 w-3.5" />}
                           onPress={() => void handleRespondInvite(invite.id, "accept")}>
-                          Aceptar
+                          {t("friends.invitesTab.acceptBtn")}
                         </Button>
                         <Button
                           size="sm"
@@ -365,7 +359,7 @@ export function FriendsInvitesTab({
                           variant="light"
                           startContent={<X className="h-3.5 w-3.5" />}
                           onPress={() => void handleRespondInvite(invite.id, "reject")}>
-                          Rechazar
+                          {t("friends.invitesTab.rejectBtn")}
                         </Button>
                       </div>
                     </div>
@@ -381,13 +375,13 @@ export function FriendsInvitesTab({
           title={
             <div className="flex items-center gap-2">
               <Cloud className="h-4 w-4" />
-              <span>Nube compartida</span>
+              <span>{t("friends.invitesTab.sharedCloudTab")}</span>
             </div>
           }>
           <div className="grid gap-4 md:grid-cols-2">
-            <SectionCard title="Nube activa para sincronización" icon={<Cloud className="h-4 w-4" />}>
+            <SectionCard title={t("friends.invitesTab.activeCloudTitle")} icon={<Cloud className="h-4 w-4" />}>
               <div className="space-y-3">
-                <p className="text-xs text-default-500">Selecciona qué nube usar para sincronizar tus saves.</p>
+                <p className="text-xs text-default-500">{t("friends.invitesTab.activeCloudHelp")}</p>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
@@ -395,7 +389,7 @@ export function FriendsInvitesTab({
                     color={activeCloudHostUserId ? "default" : "primary"}
                     startContent={<Cloud className="h-3.5 w-3.5" />}
                     onPress={() => void handleUseHostCloud(null)}>
-                    Mi nube
+                    {t("friends.invitesTab.myCloud")}
                   </Button>
                   {ownMemberMemberships.map((m) => (
                     <Button
@@ -413,11 +407,11 @@ export function FriendsInvitesTab({
 
                 <div>
                   <p className="mb-2 text-xs font-medium uppercase tracking-wide text-default-500">
-                    Nubes donde eres miembro
+                    {t("friends.invitesTab.cloudsAsMember")}
                   </p>
                   {ownMemberMemberships.length === 0 ? (
                     <EmptyState
-                      message="No perteneces a ninguna nube compartida."
+                      message={t("friends.invitesTab.noSharedClouds")}
                       icon={<Cloud className="h-5 w-5 text-default-400" />}
                     />
                   ) : (
@@ -435,7 +429,7 @@ export function FriendsInvitesTab({
                             <div className="min-w-0">
                               <p className="truncate text-xs font-medium">{m.hostUserId}</p>
                               <p className="text-[10px] text-default-400">
-                                Anfitrión
+                                {t("friends.invitesTab.host")}
                                 {getPresence(m.hostUserId)?.status === "playing" && getPresence(m.hostUserId)?.gameName
                                   ? ` · ${getPresence(m.hostUserId)?.gameName}`
                                   : ""}
@@ -454,7 +448,7 @@ export function FriendsInvitesTab({
                                 color="warning"
                                 startContent={<RefreshCcw className="h-3.5 w-3.5" />}
                                 onPress={() => void handleUseHostCloud(m.hostUserId)}>
-                                Sincronizar conexión
+                                {t("friends.invitesTab.syncConnection")}
                               </Button>
                             ) : null}
                             <Button
@@ -463,7 +457,7 @@ export function FriendsInvitesTab({
                               color="primary"
                               startContent={<Eye className="h-3.5 w-3.5" />}
                               onPress={() => onViewCloudPeerProfile(m.hostUserId)}>
-                              Ver perfil
+                              {t("friends.invitesTab.viewProfile")}
                             </Button>
                             <Button
                               size="sm"
@@ -471,7 +465,7 @@ export function FriendsInvitesTab({
                               color="warning"
                               startContent={<LogOut className="h-3.5 w-3.5" />}
                               onPress={() => setPendingCloudAction({ type: "leave-membership", userId: m.hostUserId })}>
-                              Salir
+                              {t("friends.invitesTab.leave")}
                             </Button>
                           </div>
                         </div>
@@ -482,12 +476,12 @@ export function FriendsInvitesTab({
               </div>
             </SectionCard>
 
-            <SectionCard title="Miembros en tu nube" icon={<UserRound className="h-4 w-4" />}>
+            <SectionCard title={t("friends.invitesTab.membersInCloudTitle")} icon={<UserRound className="h-4 w-4" />}>
               <div className="space-y-3">
-                <p className="text-xs text-default-500">Usuarios que tienen acceso a tu nube como miembros.</p>
+                <p className="text-xs text-default-500">{t("friends.invitesTab.membersInCloudHelp")}</p>
                 {hostMemberships.length === 0 ? (
                   <EmptyState
-                    message="No tienes miembros activos en tu nube."
+                    message={t("friends.invitesTab.noMembersActive")}
                     icon={<UserRound className="h-5 w-5 text-default-400" />}
                   />
                 ) : (
@@ -505,7 +499,7 @@ export function FriendsInvitesTab({
                           <div className="min-w-0">
                             <p className="truncate text-xs font-medium">{m.memberUserId}</p>
                             <p className="text-[10px] text-default-400">
-                              Miembro
+                              {t("friends.invitesTab.member")}
                               {getPresence(m.memberUserId)?.status === "playing" &&
                               getPresence(m.memberUserId)?.gameName
                                 ? ` · ${getPresence(m.memberUserId)?.gameName}`
@@ -524,7 +518,7 @@ export function FriendsInvitesTab({
                             color="primary"
                             startContent={<Eye className="h-3.5 w-3.5" />}
                             onPress={() => onViewCloudPeerProfile(m.memberUserId)}>
-                            Ver perfil
+                            {t("friends.invitesTab.viewProfile")}
                           </Button>
                           <Button
                             size="sm"
@@ -532,7 +526,7 @@ export function FriendsInvitesTab({
                             color="danger"
                             startContent={<Trash2 className="h-3.5 w-3.5" />}
                             onPress={() => setPendingCloudAction({ type: "remove-member", userId: m.memberUserId })}>
-                            Eliminar
+                            {t("friends.invitesTab.delete")}
                           </Button>
                         </div>
                       </div>
@@ -558,10 +552,11 @@ export function FriendsInvitesTab({
 }
 
 export function InvitesTabTitle({ pendingCount, statsLoading }: { pendingCount: number; statsLoading?: boolean }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2">
       <Mail className="h-4 w-4" />
-      <span>Invitaciones</span>
+      <span>{t("friends.invitesTab.requestsTab")}</span>
       {statsLoading ? (
         <Skeleton className="h-5 w-6 rounded-md" />
       ) : pendingCount > 0 ? (

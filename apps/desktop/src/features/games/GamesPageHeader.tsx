@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Button, Dropdown, DropdownItem, DropdownMenu, DropdownTrigger, Spinner, Tooltip } from "@heroui/react";
+import { useTranslation } from "react-i18next";
 import {
   ChevronDown,
   CloudDownload,
@@ -51,6 +52,7 @@ export function GamesPageHeader({
   omitMapGraph = false,
   trailingSlot,
 }: GamesPageHeaderProps) {
+  const { t } = useTranslation();
   const isOperationRunning = !!syncing || !!downloading;
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -171,7 +173,7 @@ export function GamesPageHeader({
             <Button
               variant="flat"
               radius="lg"
-              aria-label="Abrir menú de gestión de la biblioteca"
+              aria-label={t("library.header.management")}
               aria-haspopup="menu"
               aria-expanded={isUnifiedMenuOpen}
               aria-busy={isRefreshing}
@@ -182,19 +184,18 @@ export function GamesPageHeader({
               startContent={<LibraryIcon className="text-default-600" size={19} aria-hidden />}
               endContent={
                 isRefreshing ? (
-                  <Spinner size="sm" color="current" aria-label="Actualizando lista" />
+                  <Spinner size="sm" color="current" aria-label={t("library.header.updating")} />
                 ) : (
                   <ChevronDown size={17} aria-hidden />
                 )
               }
               {...navUnifiedTrigger.navProps}>
-              <span>Gestión</span>
-              <span className="hidden font-semibold text-foreground sm:inline"> de biblioteca</span>
+              <span className="hidden font-semibold text-foreground sm:inline">{t("library.header.management")}</span>
             </Button>
           </DropdownTrigger>
 
           <DropdownMenu
-            aria-label="Gestión de la biblioteca de juegos"
+            aria-label={t("library.header.management")}
             variant="flat"
             classNames={{ base: "min-w-[16.5rem]" }}>
             <DropdownItem
@@ -208,7 +209,7 @@ export function GamesPageHeader({
                 navUnifiedScan.isFocused && navUnifiedScan.inputMode === "gamepad" ? "bg-default-100 text-primary" : ""
               }
               {...navUnifiedScan.navProps}>
-              Buscar juegos
+              {t("library.header.scan")}
             </DropdownItem>
 
             {!omitMapGraph ? (
@@ -225,7 +226,7 @@ export function GamesPageHeader({
                     : ""
                 }
                 {...navUnifiedGraph.navProps}>
-                Mapa general
+                {t("library.header.map")}
               </DropdownItem>
             ) : null}
 
@@ -240,7 +241,7 @@ export function GamesPageHeader({
               }}
               {...navUnifiedAdd.navProps}
               showDivider>
-              Añadir a tu biblioteca
+              {t("library.header.add")}
             </DropdownItem>
 
             {hasSyncConfig ? (
@@ -251,7 +252,7 @@ export function GamesPageHeader({
                     downloading === "all" ? <Spinner size="sm" color="current" /> : <CloudDownload size={16} />
                   }
                   isDisabled={syncDisabled}
-                  description="Todos los juegos configurados"
+                  description={t("library.header.downloadAllDesc")}
                   onPress={() => {
                     if (syncDisabled) return;
                     onDownloadAllPress();
@@ -263,13 +264,13 @@ export function GamesPageHeader({
                       : ""
                   }
                   {...navUnifiedDlAll.navProps}>
-                  Descargar guardados (nube → PC)
+                  {t("library.header.downloadAllLabel")}
                 </DropdownItem>
                 <DropdownItem
                   key="upload-all"
                   startContent={syncing === "all" ? <Spinner size="sm" color="current" /> : <CloudUpload size={16} />}
                   isDisabled={syncDisabled}
-                  description="Todos los juegos configurados"
+                  description={t("library.header.syncAllDesc")}
                   onPress={() => {
                     if (syncDisabled) return;
                     onSyncAllPress();
@@ -282,7 +283,7 @@ export function GamesPageHeader({
                   }
                   {...navUnifiedUpAll.navProps}
                   showDivider>
-                  Subir guardados (PC → nube)
+                  {t("library.header.syncAllLabel")}
                 </DropdownItem>
               </>
             ) : null}
@@ -301,7 +302,7 @@ export function GamesPageHeader({
                   : ""
               }
               {...navUnifiedRefresh.navProps}>
-              {isRefreshing ? "Actualizando…" : "Actualizar lista"}
+              {isRefreshing ? t("library.header.updating") : t("library.header.refresh")}
             </DropdownItem>
           </DropdownMenu>
         </Dropdown>
@@ -314,13 +315,13 @@ export function GamesPageHeader({
   if (density === "compact") {
     return (
       <div className="flex flex-nowrap items-center gap-1.5">
-        <Tooltip content="Buscar juegos en el equipo" placement="bottom" delay={400}>
+        <Tooltip content={t("library.header.scanTooltip")} placement="bottom" delay={400}>
           <Button
             isIconOnly
             size="sm"
             variant="flat"
             radius="md"
-            aria-label="Buscar juegos en el equipo"
+            aria-label={t("library.header.scanTooltip")}
             onPress={onScanPress}
             className={`h-10 min-w-10 shrink-0 ${getGamepadFocusClass(navScan.isFocused, navScan.inputMode)}`}
             {...navScan.navProps}>
@@ -329,13 +330,13 @@ export function GamesPageHeader({
         </Tooltip>
 
         {!omitMapGraph ? (
-          <Tooltip content="Mapa general de guardados" placement="bottom" delay={400}>
+          <Tooltip content={t("library.header.mapTooltip")} placement="bottom" delay={400}>
             <Button
               isIconOnly
               size="sm"
               variant="flat"
               radius="md"
-              aria-label="Mapa general de guardados"
+              aria-label={t("library.header.mapTooltip")}
               onPress={onSaveGraphPress}
               className={`h-10 min-w-10 shrink-0 ${getGamepadFocusClass(navGraph.isFocused, navGraph.inputMode)}`}
               {...navGraph.navProps}>
@@ -344,14 +345,14 @@ export function GamesPageHeader({
           </Tooltip>
         ) : null}
 
-        <Tooltip content="Añadir a tu biblioteca" placement="bottom" delay={400}>
+        <Tooltip content={t("library.header.add")} placement="bottom" delay={400}>
           <Button
             isIconOnly
             color="primary"
             size="sm"
             variant="solid"
             radius="md"
-            aria-label="Añadir juego"
+            aria-label={t("library.addGame")}
             onPress={onAddPress}
             className={`h-10 min-w-10 shrink-0 ${getGamepadFocusClass(navAdd.isFocused, navAdd.inputMode)}`}
             {...navAdd.navProps}>
@@ -368,8 +369,8 @@ export function GamesPageHeader({
                 size="sm"
                 variant="bordered"
                 radius="md"
-                aria-label="Sincronización con la nube"
-                title="Sincronización con la nube"
+                aria-label={t("library.syncAll")}
+                title={t("library.syncAll")}
                 isDisabled={!gamesCount || isOperationRunning}
                 className={`h-10 min-w-10 shrink-0 gap-0 border-default-400/65 ${getGamepadFocusClass(
                   navDropdownTrigger.isFocused,
@@ -379,7 +380,7 @@ export function GamesPageHeader({
                 <Zap size={18} className="text-yellow-400" aria-hidden />
               </Button>
             </DropdownTrigger>
-            <DropdownMenu aria-label="Acciones de sincronización">
+            <DropdownMenu aria-label={t("library.syncAll")}>
               <DropdownItem
                 key="download-all"
                 startContent={
@@ -392,7 +393,7 @@ export function GamesPageHeader({
                 }}
                 className={navDlAll.isFocused && navDlAll.inputMode === "gamepad" ? "bg-default-100 text-primary" : ""}
                 {...navDlAll.navProps}>
-                Descargar guardados (nube → PC)
+                {t("library.header.downloadAllLabel")}
               </DropdownItem>
               <DropdownItem
                 key="upload-all"
@@ -404,19 +405,22 @@ export function GamesPageHeader({
                 }}
                 className={navUpAll.isFocused && navUpAll.inputMode === "gamepad" ? "bg-default-100 text-primary" : ""}
                 {...navUpAll.navProps}>
-                Subir guardados (PC → nube)
+                {t("library.header.syncAllLabel")}
               </DropdownItem>
             </DropdownMenu>
           </Dropdown>
         ) : null}
 
-        <Tooltip content={isRefreshing ? "Actualizando…" : "Actualizar lista"} placement="bottom" delay={400}>
+        <Tooltip
+          content={isRefreshing ? t("library.header.updating") : t("library.header.refresh")}
+          placement="bottom"
+          delay={400}>
           <Button
             isIconOnly
             variant="light"
             size="sm"
             radius="md"
-            aria-label="Actualizar lista"
+            aria-label={t("library.header.refresh")}
             onPress={onRefreshPress}
             isLoading={isRefreshing}
             isDisabled={isRefreshing}
@@ -441,7 +445,7 @@ export function GamesPageHeader({
           onPress={onScanPress}
           className={`h-10 min-w-[150px] ${getGamepadFocusClass(navScan.isFocused, navScan.inputMode)}`}
           {...navScan.navProps}>
-          Buscar juegos
+          {t("library.header.scan")}
         </Button>
 
         {!omitMapGraph ? (
@@ -452,7 +456,7 @@ export function GamesPageHeader({
               onPress={onSaveGraphPress}
               className={`h-10 min-w-[150px] ${getGamepadFocusClass(navGraph.isFocused, navGraph.inputMode)}`}
               {...navGraph.navProps}>
-              Mapa general
+              {t("library.header.map")}
             </Button>
           </>
         ) : null}
@@ -462,7 +466,7 @@ export function GamesPageHeader({
           onPress={onAddPress}
           className={`h-10 min-w-[150px] font-semibold ${getGamepadFocusClass(navAdd.isFocused, navAdd.inputMode)}`}
           {...navAdd.navProps}>
-          Añadir a tu biblioteca
+          {t("library.header.add")}
         </Button>
 
         {/* Acciones rápidas */}
@@ -479,11 +483,11 @@ export function GamesPageHeader({
                 )}`}
                 {...navDropdownTrigger.navProps}>
                 <Zap size={18} className="mr-1 text-yellow-400" />
-                Sincronización
+                {t("library.syncAll")}
               </Button>
             </DropdownTrigger>
 
-            <DropdownMenu aria-label="Acciones de sincronización">
+            <DropdownMenu aria-label={t("library.syncAll")}>
               <DropdownItem
                 key="download-all"
                 startContent={
@@ -496,7 +500,7 @@ export function GamesPageHeader({
                 }}
                 className={navDlAll.isFocused && navDlAll.inputMode === "gamepad" ? "bg-default-100 text-primary" : ""}
                 {...navDlAll.navProps}>
-                Descargar guardados (nube → PC)
+                {t("library.header.downloadAllLabel")}
               </DropdownItem>
 
               <DropdownItem
@@ -509,7 +513,7 @@ export function GamesPageHeader({
                 }}
                 className={navUpAll.isFocused && navUpAll.inputMode === "gamepad" ? "bg-default-100 text-primary" : ""}
                 {...navUpAll.navProps}>
-                Subir guardados (PC → nube)
+                {t("library.header.syncAllLabel")}
               </DropdownItem>
             </DropdownMenu>
           </Dropdown>
@@ -523,7 +527,7 @@ export function GamesPageHeader({
           isDisabled={isRefreshing}
           className={`h-10 min-w-[120px] ${getGamepadFocusClass(navRefresh.isFocused, navRefresh.inputMode)}`}
           {...navRefresh.navProps}>
-          Actualizar lista
+          {t("library.header.refresh")}
         </Button>
 
         {trailingSlot}
