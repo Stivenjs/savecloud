@@ -133,18 +133,24 @@ export function GameDetailPage() {
     });
   }, [goBackFromDetail, isLowPerf]);
 
-  const requestDownloadFromCloud = useCallback(async (target: ConfiguredGame) => {
-    try {
-      const { conflicts } = await syncCheckDownloadConflicts(target.id);
-      if (conflicts.length > 0) {
-        setDownloadConflictState({ gameId: target.id, conflicts });
-        return;
+  const requestDownloadFromCloud = useCallback(
+    async (target: ConfiguredGame) => {
+      try {
+        const { conflicts } = await syncCheckDownloadConflicts(target.id);
+        if (conflicts.length > 0) {
+          setDownloadConflictState({ gameId: target.id, conflicts });
+          return;
+        }
+        setDownloadPreviewGameId(target.id);
+      } catch (e) {
+        toastError(
+          t("library.toast.cannotPrepareDownload"),
+          e instanceof Error ? e.message : t("library.toast.unexpectedError")
+        );
       }
-      setDownloadPreviewGameId(target.id);
-    } catch (e) {
-      toastError("No se pudo preparar la descarga", e instanceof Error ? e.message : "Error inesperado");
-    }
-  }, []);
+    },
+    [t]
+  );
 
   useRegisterGlobalBack(() => {
     switch (true) {
@@ -185,31 +191,43 @@ export function GameDetailPage() {
 
   const displayName = steamDetails?.name || formatGameDisplayName(gameId);
 
-  const handleOpenFolder = useCallback(async (g: ConfiguredGame) => {
-    try {
-      await openSaveFolder(g.id);
-    } catch (e) {
-      toastError("Error al abrir carpeta", e instanceof Error ? e.message : "Error inesperado");
-    }
-  }, []);
+  const handleOpenFolder = useCallback(
+    async (g: ConfiguredGame) => {
+      try {
+        await openSaveFolder(g.id);
+      } catch (e) {
+        toastError(
+          t("library.toast.cannotOpenFolder"),
+          e instanceof Error ? e.message : t("library.toast.unexpectedError")
+        );
+      }
+    },
+    [t]
+  );
 
-  const handlePlay = useCallback(async (g: ConfiguredGame) => {
-    try {
-      await launchGame(g.id);
-    } catch (e) {
-      toastError("No se pudo abrir el juego", e instanceof Error ? e.message : "Error inesperado");
-    }
-  }, []);
+  const handlePlay = useCallback(
+    async (g: ConfiguredGame) => {
+      try {
+        await launchGame(g.id);
+      } catch (e) {
+        toastError(t("library.toast.cannotPlay"), e instanceof Error ? e.message : t("library.toast.unexpectedError"));
+      }
+    },
+    [t]
+  );
 
-  const handleShare = useCallback(async (g: ConfiguredGame) => {
-    try {
-      const { shareUrl } = await createShareLink(g.id);
-      await navigator.clipboard.writeText(shareUrl);
-      toastSuccess("Link copiado", "Válido por 7 días.");
-    } catch (e) {
-      toastError("No se pudo crear el link", e instanceof Error ? e.message : "Error inesperado");
-    }
-  }, []);
+  const handleShare = useCallback(
+    async (g: ConfiguredGame) => {
+      try {
+        const { shareUrl } = await createShareLink(g.id);
+        await navigator.clipboard.writeText(shareUrl);
+        toastSuccess(t("library.toast.shareLinkCopied"), t("library.toast.shareLinkCopiedDesc"));
+      } catch (e) {
+        toastError(t("library.toast.cannotShare"), e instanceof Error ? e.message : t("library.toast.unexpectedError"));
+      }
+    },
+    [t]
+  );
 
   const handleOpenGraph = useCallback(
     (g: ConfiguredGame) => {
@@ -222,17 +240,23 @@ export function GameDetailPage() {
     async (g: ConfiguredGame) => {
       try {
         await removeGame(g.id);
-        toastSuccess("Eliminado", `${formatGameDisplayName(g.id)} eliminado.`);
+        toastSuccess(
+          t("library.toast.deleted"),
+          t("library.toast.deletedDesc", { gameName: formatGameDisplayName(g.id) })
+        );
         await Promise.all([
           queryClient.refetchQueries({ queryKey: CONFIG_QUERY_KEY }),
           queryClient.refetchQueries({ queryKey: LAST_SYNC_QUERY_KEY }),
         ]);
         navigate("/");
       } catch (e) {
-        toastError("Error al eliminar", e instanceof Error ? e.message : "Error inesperado");
+        toastError(
+          t("library.toast.cannotDelete"),
+          e instanceof Error ? e.message : t("library.toast.unexpectedError")
+        );
       }
     },
-    [navigate, queryClient]
+    [navigate, queryClient, t]
   );
 
   const handleRefreshDetails = useCallback(
@@ -241,17 +265,20 @@ export function GameDetailPage() {
       if (!appId) return;
       try {
         await forceRefreshSteamAppDetails(appId);
-        toastSuccess("Ficha de Steam actualizada", "Los detalles se han actualizado correctamente.");
+        toastSuccess(t("library.toast.steamSheetUpdated"), t("library.toast.steamSheetUpdatedDesc"));
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ["steam-app-details", appId] }),
           queryClient.invalidateQueries({ queryKey: ["steam-appdetails-media", appId] }),
           queryClient.invalidateQueries({ queryKey: ["steam-appdetails-media-batch"] }),
         ]);
       } catch (e) {
-        toastError("Error al actualizar", e instanceof Error ? e.message : "Error inesperado");
+        toastError(
+          t("library.toast.cannotUpdate"),
+          e instanceof Error ? e.message : t("library.toast.unexpectedError")
+        );
       }
     },
-    [steamAppId, queryClient]
+    [steamAppId, queryClient, t]
   );
 
   const showRequirementsTab = steamDetails ? hasSteamRequirements(steamDetails) : false;
@@ -328,12 +355,12 @@ export function GameDetailPage() {
           destinationDir: selectedPath.trim(),
           preferredProtocol: null,
         });
-        toastSuccess("Descarga iniciada", `Instalacion iniciada para ${displayName}.`);
+        toastSuccess(t("library.toast.downloadStarted"), t("library.toast.downloadStartedDesc", { displayName }));
       } catch (e) {
-        toastError("No se pudo iniciar", e instanceof Error ? e.message : "Error inesperado");
+        toastError(t("library.toast.cannotStart"), e instanceof Error ? e.message : t("library.toast.unexpectedError"));
       }
     },
-    [sourceCandidates, selectedSourceKey, displayName]
+    [sourceCandidates, selectedSourceKey, displayName, t]
   );
 
   const handleConfirmPeerInstall = useCallback(
@@ -349,12 +376,15 @@ export function GameDetailPage() {
           targetDeviceId: offer.deviceId,
           manifestHash: offer.manifestHash,
         });
-        toastSuccess("Transferencia iniciada", `Traiendo ${displayName} desde ${offer.deviceName}.`);
+        toastSuccess(
+          t("library.toast.transferStarted"),
+          t("library.toast.transferStartedDesc", { displayName, deviceName: offer.deviceName })
+        );
       } catch (e) {
-        toastError("No se pudo transferir", e instanceof Error ? e.message : String(e));
+        toastError(t("library.toast.cannotTransfer"), e instanceof Error ? e.message : String(e));
       }
     },
-    [peerOffersHook.gameKey, displayName]
+    [peerOffersHook.gameKey, displayName, t]
   );
 
   if (isLoading) {

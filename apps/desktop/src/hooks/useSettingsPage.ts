@@ -50,6 +50,7 @@ import { STEAM_SEED_FRESHNESS_QUERY_KEY } from "@features/steam-catalog/hooks/us
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastError, toastSuccess } from "@utils/toast";
 import { notifyTest } from "@utils/notification";
+import i18n from "@lib/i18n";
 
 type SettingsPageState = {
   testingNotification: boolean;
@@ -345,10 +346,10 @@ export function useSettingsPage() {
       });
       if (path) {
         await exportConfigToFile(path);
-        toastSuccess("Configuración exportada", path);
+        toastSuccess(i18n.t("settings.toast.exportSuccess"), path);
       }
     } catch (e) {
-      toastError("Error al exportar", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.exportError"), e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_EXPORTING", payload: false });
     }
@@ -365,11 +366,14 @@ export function useSettingsPage() {
       });
       if (path && typeof path === "string") {
         await importConfigFromFile(path, mode);
-        toastSuccess("Configuración importada", mode === "merge" ? "Juegos fusionados" : "Configuración reemplazada");
+        toastSuccess(
+          i18n.t("settings.toast.importSuccess"),
+          mode === "merge" ? i18n.t("settings.toast.gamesMerged") : i18n.t("settings.toast.configReplaced")
+        );
         window.location.reload();
       }
     } catch (e) {
-      toastError("Error al importar", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.importError"), e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_IMPORTING", payload: false });
     }
@@ -388,9 +392,9 @@ export function useSettingsPage() {
     dispatch({ type: "SET_BACKING_UP_CONFIG", payload: true });
     try {
       await backupConfigToCloud();
-      toastSuccess("Configuración respaldada", "Se subió config.json a la nube para este usuario.");
+      toastSuccess(i18n.t("settings.toast.backupSuccess"), i18n.t("settings.toast.backupSuccessDesc"));
     } catch (e) {
-      toastError("Error al respaldar", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.backupError"), e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_BACKING_UP_CONFIG", payload: false });
     }
@@ -400,10 +404,10 @@ export function useSettingsPage() {
     dispatch({ type: "SET_RESTORING_CONFIG", payload: true });
     try {
       await restoreConfigFromCloud();
-      toastSuccess("Configuración restaurada", "Se aplicó la configuración desde la nube.");
+      toastSuccess(i18n.t("settings.toast.restoreSuccess"), i18n.t("settings.toast.restoreSuccessDesc"));
       window.location.reload();
     } catch (e) {
-      toastError("Error al restaurar", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.restoreError"), e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_RESTORING_CONFIG", payload: false });
     }
@@ -411,21 +415,21 @@ export function useSettingsPage() {
 
   const handlePullFriendConfig = async () => {
     if (!state.pullFriendUserId.trim()) {
-      toastError("Error", "Ingresa un usuario válido.");
+      toastError(i18n.t("settings.toast.error"), i18n.t("settings.toast.invalidUsername"));
       return;
     }
     dispatch({ type: "SET_PULLING_FRIEND_CONFIG", payload: true });
     try {
       await importFriendConfig(state.pullFriendUserId);
       toastSuccess(
-        "Configuración importada",
+        i18n.t("settings.toast.importSuccess"),
         `Se ha importado la configuración de ${state.pullFriendUserId} correctamente.`
       );
       setTimeout(() => {
         window.location.reload();
       }, 1500);
     } catch (e) {
-      toastError("Error al importar", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.importError"), e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_PULLING_FRIEND_CONFIG", payload: false });
     }
@@ -469,10 +473,10 @@ export function useSettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["configPath"] });
 
       if (restoreAfter) {
-        toastSuccess("Conexión configurada", "Iniciando recuperación desde la nube...");
+        toastSuccess(i18n.t("settings.toast.connectionConfigured"), i18n.t("settings.toast.recoveringFromCloud"));
         await performRestoreConfigFromCloud();
       } else {
-        toastSuccess("Conexión guardada", path);
+        toastSuccess(i18n.t("settings.toast.connectionSaved"), path);
       }
     } catch (e) {
       dispatch({
@@ -502,13 +506,13 @@ export function useSettingsPage() {
       await setAlwaysShowSelectorCmd(checked);
       queryClient.setQueryData(["alwaysShowProfileSelector"], checked);
       toastSuccess(
-        "Preferencia guardada",
+        i18n.t("settings.toast.compressionSaved"), // preference saved / config saved
         checked
-          ? "Se mostrará el panel de perfiles en cada inicio."
-          : "La app abrirá directamente el último perfil usado."
+          ? i18n.t("settings.toast.alwaysShowProfileSelectorEnabled")
+          : i18n.t("settings.toast.alwaysShowProfileSelectorDisabled")
       );
     } catch (e) {
-      toastError("Error al guardar preferencia", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.savePreferenceError"), e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -518,11 +522,13 @@ export function useSettingsPage() {
       scheduleConfigBackupToCloud();
       queryClient.invalidateQueries({ queryKey: ["config"] });
       toastSuccess(
-        "Configuración guardada",
-        enabled ? "Backup completo en streaming activado." : "Backup completo en streaming desactivado."
+        i18n.t("settings.toast.compressionSaved"),
+        enabled
+          ? i18n.t("settings.toast.fullBackupStreamingEnabled")
+          : i18n.t("settings.toast.fullBackupStreamingDisabled")
       );
     } catch (e) {
-      toastError("Error al guardar", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.saveError"), e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -532,13 +538,11 @@ export function useSettingsPage() {
       scheduleConfigBackupToCloud();
       queryClient.invalidateQueries({ queryKey: ["config"] });
       toastSuccess(
-        "Configuración guardada",
-        enabled
-          ? "Modo prueba de backup streaming activado (no sube a la nube)."
-          : "Modo prueba de backup streaming desactivado."
+        i18n.t("settings.toast.compressionSaved"),
+        enabled ? i18n.t("settings.toast.dryRunEnabled") : i18n.t("settings.toast.dryRunDisabled")
       );
     } catch (e) {
-      toastError("Error al guardar", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.saveError"), e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -548,9 +552,9 @@ export function useSettingsPage() {
         await setFullBackupPackagedCompressionLevel(level);
         scheduleConfigBackupToCloud();
         queryClient.invalidateQueries({ queryKey: ["config"] });
-        toastSuccess("Configuración guardada", "Nivel de compresión de backups empaquetados actualizado.");
+        toastSuccess(i18n.t("settings.toast.compressionSaved"), i18n.t("settings.toast.compressionSavedDesc"));
       } catch (e) {
-        toastError("Error al guardar", e instanceof Error ? e.message : String(e));
+        toastError(i18n.t("settings.toast.saveError"), e instanceof Error ? e.message : String(e));
       }
     },
     [queryClient]
@@ -564,12 +568,12 @@ export function useSettingsPage() {
       scheduleConfigBackupToCloud();
       queryClient.invalidateQueries({ queryKey: ["config"] });
       toastSuccess(
-        "Preferencia guardada",
-        enabled ? "Modo desarrollador activado para este perfil." : "Modo desarrollador desactivado para este perfil."
+        i18n.t("settings.toast.compressionSaved"),
+        enabled ? i18n.t("settings.toast.developerModeEnabled") : i18n.t("settings.toast.developerModeDisabled")
       );
     } catch (e) {
       useProfileSessionStore.getState().patchSession({ developerMode: prev });
-      toastError("Error al guardar", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.saveError"), e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -579,11 +583,11 @@ export function useSettingsPage() {
       scheduleConfigBackupToCloud();
       queryClient.invalidateQueries({ queryKey: ["config"] });
       toastSuccess(
-        "Configuración guardada",
-        enabled ? "Extracción automática activada." : "Extracción automática desactivada."
+        i18n.t("settings.toast.compressionSaved"),
+        enabled ? i18n.t("settings.toast.autoExtractEnabled") : i18n.t("settings.toast.autoExtractDisabled")
       );
     } catch (e) {
-      toastError("Error al guardar", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.saveError"), e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -594,7 +598,7 @@ export function useSettingsPage() {
 
   const handleSyncSteamCatalog = async () => {
     if (state.steamCatalogBusy || state.steamSeedBusy) {
-      toastError("Sincronización en curso", "Por favor, espera a que terminen los procesos actuales.");
+      toastError(i18n.t("settings.toast.syncInProgress"), i18n.t("settings.toast.waitProcesses"));
       return;
     }
 
@@ -607,12 +611,19 @@ export function useSettingsPage() {
       });
       const stats = await syncSteamCatalog();
       toastSuccess(
-        "Listado de juegos actualizado",
-        `Se guardaron ${stats.appsUpserted.toLocaleString()} entradas en ${stats.batches} pasos (${stats.mode === "full" ? "descarga completa" : "solo novedades"}).`
+        i18n.t("settings.toast.steamListUpdated"),
+        i18n.t("settings.toast.steamListUpdatedDesc", {
+          count: stats.appsUpserted.toLocaleString(),
+          batches: stats.batches,
+          mode:
+            stats.mode === "full"
+              ? i18n.t("settings.toast.steamListUpdateDescFull")
+              : i18n.t("settings.toast.steamListUpdateDescDelta"),
+        })
       );
       queryClient.invalidateQueries({ queryKey: ["config"] });
     } catch (e) {
-      toastError("No se pudo actualizar el listado de Steam", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.steamListUpdateError"), e instanceof Error ? e.message : String(e));
     } finally {
       unlisten?.();
       setSteamCatalogSyncProgress(null);
@@ -626,17 +637,17 @@ export function useSettingsPage() {
 
   const confirmResetSteamCatalogSync = async () => {
     if (state.steamCatalogBusy || state.steamSeedBusy) {
-      toastError("Operación bloqueada", "Por favor, espera a que terminen los procesos actuales antes de reiniciar.");
+      toastError(i18n.t("settings.toast.operationBlocked"), i18n.t("settings.toast.waitProcessesReset"));
       return;
     }
 
     dispatch({ type: "SET_STEAM_CATALOG_BUSY", payload: true });
     try {
       await resetSteamCatalogSync();
-      toastSuccess("Listado restablecido", "La próxima vez se descargará el catálogo completo de nuevo.");
+      toastSuccess(i18n.t("settings.toast.catalogResetSuccess"), i18n.t("settings.toast.catalogResetSuccessDesc"));
       dispatch({ type: "SET_RESET_STEAM_CATALOG_CONFIRM_OPEN", payload: false });
     } catch (e) {
-      toastError("Error al restablecer", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.catalogResetError"), e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_STEAM_CATALOG_BUSY", payload: false });
     }
@@ -644,10 +655,7 @@ export function useSettingsPage() {
 
   const handleExportSteamSeedManifest = async () => {
     if (state.steamCatalogBusy || state.steamSeedBusy) {
-      toastError(
-        "Operación bloqueada",
-        "Por favor, espera a que terminen los procesos actuales antes de exportar a la nube."
-      );
+      toastError(i18n.t("settings.toast.operationBlocked"), i18n.t("settings.toast.waitProcessesExport"));
       return;
     }
 
@@ -655,11 +663,14 @@ export function useSettingsPage() {
     try {
       const result = await exportSteamSeedManifestToCloud();
       toastSuccess(
-        "Lista enviada a la nube",
-        `Se subieron ${result.appIdsExported.toLocaleString()} juegos en ${result.partsUploaded} parte(s).`
+        i18n.t("settings.toast.listSent"),
+        i18n.t("settings.toast.listSentDesc", {
+          count: result.appIdsExported.toLocaleString(),
+          parts: result.partsUploaded,
+        })
       );
     } catch (e) {
-      toastError("No se pudo enviar la lista", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.cannotSendList"), e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_STEAM_SEED_BUSY", payload: false });
     }
@@ -667,23 +678,17 @@ export function useSettingsPage() {
 
   const handleResetCloudSeed = async () => {
     if (state.steamCatalogBusy || state.steamSeedBusy) {
-      toastError(
-        "Operación bloqueada",
-        "Por favor, espera a que terminen los procesos actuales antes de borrar el progreso."
-      );
+      toastError(i18n.t("settings.toast.operationBlocked"), i18n.t("settings.toast.waitProcessesResetCloud"));
       return;
     }
 
     dispatch({ type: "SET_STEAM_SEED_BUSY", payload: true });
     try {
       await resetCloudSeedState();
-      toastSuccess(
-        "Progreso en la nube reiniciado",
-        "La próxima descarga volverá a empezar desde el principio (no borra lo que ya tienes guardado aquí)."
-      );
+      toastSuccess(i18n.t("settings.toast.cloudSeedResetSuccess"), i18n.t("settings.toast.cloudSeedResetSuccessDesc"));
       queryClient.invalidateQueries({ queryKey: STEAM_SEED_FRESHNESS_QUERY_KEY });
     } catch (e) {
-      toastError("No se pudo reiniciar", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.cannotRestart"), e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_STEAM_SEED_BUSY", payload: false });
     }
@@ -691,10 +696,7 @@ export function useSettingsPage() {
 
   const handleImportCloudSeedFromCloud = async () => {
     if (state.steamCatalogBusy || state.steamSeedBusy) {
-      toastError(
-        "Sincronización en curso",
-        "Por favor, espera a que terminen los procesos actuales antes de descargar."
-      );
+      toastError(i18n.t("settings.toast.syncInProgress"), i18n.t("settings.toast.waitProcessesDownload"));
       return;
     }
 
@@ -707,15 +709,22 @@ export function useSettingsPage() {
       });
       const result = await importCloudSeedRunUntilDone();
       const trending =
-        result.trendingPriorityEntries > 0 ? ` Orden de destacados: ${result.trendingPriorityEntries} juegos.` : "";
+        result.trendingPriorityEntries > 0
+          ? i18n.t("settings.toast.downloadInfoSuccessDescTrending", { count: result.trendingPriorityEntries })
+          : "";
       toastSuccess(
-        "Información descargada",
-        `Se actualizaron ${result.rowsUpdated.toLocaleString()} juegos en ${result.batchesProcessed} lotes (${result.rounds} pasadas).${trending}`
+        i18n.t("settings.toast.downloadInfoSuccess"),
+        i18n.t("settings.toast.downloadInfoSuccessDesc", {
+          rows: result.rowsUpdated.toLocaleString(),
+          batches: result.batchesProcessed,
+          rounds: result.rounds,
+          trending,
+        })
       );
       queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
       queryClient.invalidateQueries({ queryKey: STEAM_SEED_FRESHNESS_QUERY_KEY });
     } catch (e) {
-      toastError("No se pudo descargar la información", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.cannotDownloadInfo"), e instanceof Error ? e.message : String(e));
     } finally {
       unlisten?.();
       setSteamSeedImportProgress(null);
@@ -727,12 +736,16 @@ export function useSettingsPage() {
     if (!state.sourceUrl.trim()) return;
     dispatch({ type: "SET_SOURCES_BUSY", payload: true });
     try {
+      await i18n.t; // dummy to trigger i18n
       await importSourceFromUrl(state.sourceUrl.trim(), mode);
-      toastSuccess("Fuente importada", "Se importó correctamente desde URL.");
+      toastSuccess(
+        i18n.t("settings.toast.sourceImportUrlSuccess"),
+        i18n.t("settings.toast.sourceImportUrlSuccessDesc")
+      );
       dispatch({ type: "SET_SOURCE_URL", payload: "" });
       queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
     } catch (e) {
-      toastError("Error al importar", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.importError"), e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_SOURCES_BUSY", payload: false });
     }
@@ -749,10 +762,13 @@ export function useSettingsPage() {
       });
       if (!path || typeof path !== "string") return;
       await importSourceFromFile(path, mode);
-      toastSuccess("Fuente importada", "Se importó correctamente desde archivo.");
+      toastSuccess(
+        i18n.t("settings.toast.sourceImportFileSuccess"),
+        i18n.t("settings.toast.sourceImportFileSuccessDesc")
+      );
       queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
     } catch (e) {
-      toastError("Error al importar", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.importError"), e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_SOURCES_BUSY", payload: false });
     }
@@ -772,21 +788,27 @@ export function useSettingsPage() {
       const result = await importSourcesFromFilesBatch(paths, mode);
 
       if (result.failed === 0) {
-        toastSuccess(`${result.succeeded} fuentes importadas`, `Se importaron todos los archivos correctamente.`);
+        toastSuccess(
+          i18n.t("settings.toast.sourcesImportedCountSuccess", { count: result.succeeded }),
+          i18n.t("settings.toast.sourcesImportedCountSuccessDesc")
+        );
       } else if (result.succeeded === 0) {
-        toastError("Error al importar", `Ningún archivo se pudo importar. ${result.items[0]?.error ?? ""}`);
+        toastError(
+          i18n.t("settings.toast.importError"),
+          i18n.t("settings.toast.noSourceImportedError", { error: result.items[0]?.error ?? "" })
+        );
       } else {
         const updated = result.items.filter((i) => i.wasUpdated).length;
         const newOnes = result.succeeded - updated;
         toastSuccess(
-          `${result.succeeded} importadas, ${result.failed} fallidas`,
+          i18n.t("settings.toast.syncFinished", { count: result.succeeded }),
           `${newOnes} nuevas, ${updated} actualizadas. ${result.failed > 0 ? "Revisa los detalles." : ""}`
         );
       }
 
       queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
     } catch (e) {
-      toastError("Error al importar", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.importError"), e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_SOURCES_BUSY", payload: false });
     }
@@ -811,9 +833,9 @@ export function useSettingsPage() {
       await setDefaultSourceDownloadDir(next);
       queryClient.setQueryData(["defaultSourceDownloadDir"], next ?? "");
       queryClient.invalidateQueries({ queryKey: ["config"] });
-      toastSuccess("Ruta guardada", "Carpeta por defecto actualizada.");
+      toastSuccess(i18n.t("settings.toast.pathSaved"), i18n.t("settings.toast.pathSavedDesc"));
     } catch (e) {
-      toastError("Error al guardar ruta", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.pathSaveError"), e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -822,9 +844,12 @@ export function useSettingsPage() {
       const next = state.proxyUrl.trim() || null;
       await setProxyUrl(next);
       queryClient.invalidateQueries({ queryKey: ["config"] });
-      toastSuccess("Proxy guardado", next ? "Configuración de proxy actualizada." : "Proxy desactivado.");
+      toastSuccess(
+        i18n.t("settings.toast.proxySaved"),
+        next ? i18n.t("settings.toast.proxySavedUpdatedDesc") : i18n.t("settings.toast.proxySavedDisabledDesc")
+      );
     } catch (e) {
-      toastError("Error al guardar proxy", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.proxySaveError"), e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -832,10 +857,10 @@ export function useSettingsPage() {
     setDeletingSourceIds((prev) => new Set(prev).add(sourceId));
     try {
       await removeSource(sourceId);
-      toastSuccess("Fuente eliminada", "El catálogo ha sido eliminado correctamente.");
+      toastSuccess(i18n.t("settings.toast.sourceDeleted"), i18n.t("settings.toast.sourceDeletedDesc"));
       queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
     } catch (e) {
-      toastError("Error al eliminar", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.sourceDeleteError"), e instanceof Error ? e.message : String(e));
     } finally {
       setDeletingSourceIds((prev) => {
         const next = new Set(prev);
@@ -853,10 +878,10 @@ export function useSettingsPage() {
     try {
       await upsertRemoteSource(url, true);
       dispatch({ type: "SET_REMOTE_SOURCE_URL", payload: "" });
-      toastSuccess("Fuente remota agregada", "Se registró la URL para sincronización manual.");
+      toastSuccess(i18n.t("settings.toast.sourceAdded"), i18n.t("settings.toast.sourceAddedDesc"));
       queryClient.invalidateQueries({ queryKey: ["remote-sources"] });
     } catch (e) {
-      toastError("Error al registrar URL", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.sourceAddError"), e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_SOURCES_BUSY", payload: false });
     }
@@ -867,9 +892,12 @@ export function useSettingsPage() {
     try {
       await setRemoteSourceEnabled(sourceId, enabled);
       queryClient.invalidateQueries({ queryKey: ["remote-sources"] });
-      toastSuccess(enabled ? "Fuente activada" : "Fuente pausada", "El estado de la fuente remota se actualizó.");
+      toastSuccess(
+        enabled ? i18n.t("settings.toast.sourceEnabled") : i18n.t("settings.toast.sourcePaused"),
+        i18n.t("settings.toast.sourceStatusUpdatedDesc")
+      );
     } catch (e) {
-      toastError("Error al actualizar fuente remota", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.sourceStatusUpdateError"), e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_SOURCES_BUSY", payload: false });
     }
@@ -879,10 +907,10 @@ export function useSettingsPage() {
     setDeletingRemoteSourceIds((prev) => new Set(prev).add(sourceId));
     try {
       await removeRemoteSource(sourceId);
-      toastSuccess("Fuente remota eliminada", "La URL fue quitada de la lista.");
+      toastSuccess(i18n.t("settings.toast.sourceRemoteDeleted"), i18n.t("settings.toast.sourceRemoteDeletedDesc"));
       queryClient.invalidateQueries({ queryKey: ["remote-sources"] });
     } catch (e) {
-      toastError("Error al eliminar fuente remota", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.sourceRemoteDeleteError"), e instanceof Error ? e.message : String(e));
     } finally {
       setDeletingRemoteSourceIds((prev) => {
         const next = new Set(prev);
@@ -896,12 +924,18 @@ export function useSettingsPage() {
     dispatch({ type: "SET_SOURCES_BUSY", payload: true });
     try {
       const result = await syncRemoteSources();
-      const summary = `${result.updated} actualizadas, ${result.unchanged} sin cambios, ${result.failed} fallidas`;
-      toastSuccess(`Sincronización terminada (${result.total})`, summary);
+      toastSuccess(
+        i18n.t("settings.toast.syncFinished", { count: result.total }),
+        i18n.t("settings.toast.syncFinishedDesc", {
+          updated: result.updated,
+          unchanged: result.unchanged,
+          failed: result.failed,
+        })
+      );
       queryClient.invalidateQueries({ queryKey: ["remote-sources"] });
       queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
     } catch (e) {
-      toastError("Error al sincronizar fuentes remotas", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.toast.syncFinishedError"), e instanceof Error ? e.message : String(e));
     } finally {
       dispatch({ type: "SET_SOURCES_BUSY", payload: false });
     }

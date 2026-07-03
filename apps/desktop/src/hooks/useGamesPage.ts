@@ -28,6 +28,7 @@ import {
 } from "@utils/notification";
 import { toastDownloadResult, toastError, toastSuccess, toastSyncResult } from "@utils/toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import i18n from "@lib/i18n";
 import { useConfig } from "@hooks/useConfig";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
@@ -373,7 +374,7 @@ export function useGamesPage() {
       try {
         await deleteGameFromCloud(gameId);
       } catch (e) {
-        toastError("No se pudieron borrar los guardados en la nube", e instanceof Error ? e.message : String(e));
+        toastError(i18n.t("library.toast.cannotDeleteCloudSaves"), e instanceof Error ? e.message : String(e));
       }
 
       await removeGame(gameId);
@@ -399,17 +400,14 @@ export function useGamesPage() {
     setSyncOperation({ type: "upload", mode: "single", gameId: game.id, operationId: `sync-upload-${game.id}` });
     try {
       await createAndUploadFullBackup(game.id);
-      toastSuccess(
-        "Backup completo subido",
-        "Se empaquetó y subió a la nube. Recomendado para juegos con muchos archivos."
-      );
+      toastSuccess(i18n.t("library.toast.fullBackupUploadedTitle"), i18n.t("library.toast.fullBackupUploadedDesc"));
       refetchLastSync?.();
       queryClient.invalidateQueries({ queryKey: ["game-stats"] });
       queryClient.invalidateQueries({ queryKey: ["cloud-backups", game.id] });
       queryClient.invalidateQueries({ queryKey: ["cloud-backup-counts"] });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      toastError("Error al empaquetar y subir", msg);
+      toastError(i18n.t("library.toast.fullBackupUploadError"), msg);
       notifyFullBackupError(formatGameDisplayName(game.id), msg).catch(() => {});
     } finally {
       dispatch({ type: "SET_FULL_BACKUP_UPLOADING", gameId: null });
@@ -541,10 +539,7 @@ export function useGamesPage() {
   const restoreWizardTriggerDownload = (gameId: string) => {
     const game = config?.games?.find((g: ConfiguredGame) => g.id.toLowerCase() === gameId.toLowerCase());
     if (!game) {
-      toastError(
-        "No se encontró el juego tras enlazar",
-        "Cierra este diálogo, actualiza la lista y usa «Descargar» en la tarjeta del juego."
-      );
+      toastError(i18n.t("library.toast.gameNotFoundAfterLink"), i18n.t("library.toast.gameNotFoundAfterLinkDesc"));
       return;
     }
     startTransition(() => {
@@ -754,7 +749,7 @@ export function useGamesPage() {
     try {
       await openSaveFolder(game.id);
     } catch (e) {
-      toastError("No se pudo abrir", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("library.toast.cannotOpenFolder"), e instanceof Error ? e.message : String(e));
     }
   };
 
