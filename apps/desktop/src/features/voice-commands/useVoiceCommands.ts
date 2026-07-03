@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { toastError, toastInfo, toastSuccess } from "@utils/toast";
 import { formatGameDisplayName } from "@utils/gameImage";
@@ -118,6 +119,7 @@ function saveLearnedCorrections(corrections: Record<string, LearnedCorrection>):
 }
 
 export function useVoiceCommands() {
+  const { t } = useTranslation();
   const enabled = useVoiceStore((s) => s.enabled);
   const setEnabled = useVoiceStore((s) => s.setEnabled);
   const setStatus = useVoiceStore((s) => s.setStatus);
@@ -196,10 +198,10 @@ export function useVoiceCommands() {
               return;
             }
             toastInfo(
-              "No te escuché bien",
+              t("voiceCommands.toast.notHeardWell"),
               noiseSensitivity === "high"
-                ? "Hay mucho ruido. Intenta hablar más cerca del micrófono."
-                : "Prueba de nuevo: abre Counter Strike."
+                ? t("voiceCommands.toast.tooNoisy")
+                : t("voiceCommands.toast.tryAgainCounterStrike")
             );
             syncIdleListeningStatus();
             stop();
@@ -220,7 +222,7 @@ export function useVoiceCommands() {
               if (learned) {
                 try {
                   await invoke("launch_game", { gameId: learned.gameId });
-                  toastSuccess("Abriendo juego", formatGameDisplayName(learned.gameId));
+                  toastSuccess(t("voiceCommands.toast.launching"), formatGameDisplayName(learned.gameId));
                   launched = true;
                   break;
                 } catch {
@@ -247,7 +249,7 @@ export function useVoiceCommands() {
                 noisyRetryCountRef.current += 1;
                 commandInFlightRef.current = false;
                 commandCooldownUntilRef.current = 0;
-                toastInfo("No encontré el juego", "Voy a reintentar una vez. Intenta decir el nombre más claro.");
+                toastInfo(t("voiceCommands.toast.gameNotFound"), t("voiceCommands.toast.noisyRetry"));
                 syncIdleListeningStatus();
                 return;
               }
@@ -264,13 +266,16 @@ export function useVoiceCommands() {
                   .map((s) => formatGameDisplayName(s.game_id))
                   .join(" o ");
                 toastInfo(
-                  "Juego no encontrado",
+                  t("voiceCommands.toast.gameNotFound"),
                   isNoisy
-                    ? `Con el ruido no te escuché bien. ¿Quisiste decir: ${names}?`
-                    : `No encontré "${fallbackTarget}". Quizá quisiste decir: ${names}.`
+                    ? t("voiceCommands.toast.noisySuggestion", { names })
+                    : t("voiceCommands.toast.suggestion", { target: fallbackTarget, names })
                 );
               } else {
-                toastInfo("Juego no encontrado", `No encuentro "${fallbackTarget}" en tu librería.`);
+                toastInfo(
+                  t("voiceCommands.toast.gameNotFound"),
+                  t("voiceCommands.toast.notInLibrary", { target: fallbackTarget })
+                );
               }
               syncIdleListeningStatus();
               return;
@@ -283,10 +288,10 @@ export function useVoiceCommands() {
               gameName: formatGameDisplayName(resolvedMatch.game_id),
             };
             saveLearnedCorrections(learnedCorrectionsRef.current);
-            toastSuccess("Abriendo juego", formatGameDisplayName(resolvedMatch.game_id));
+            toastSuccess(t("voiceCommands.toast.launching"), formatGameDisplayName(resolvedMatch.game_id));
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            toastError("No se pudo ejecutar el comando de voz", message);
+            toastError(t("voiceCommands.toast.executionFailed"), message);
           } finally {
             stop();
             commandInFlightRef.current = false;
@@ -307,7 +312,7 @@ export function useVoiceCommands() {
           }
 
           setError(speechError);
-          toastError("Error de reconocimiento", speechError);
+          toastError(t("voiceCommands.toast.recognitionError"), speechError);
         },
         () => {
           commandInFlightRef.current = false;
@@ -317,7 +322,7 @@ export function useVoiceCommands() {
       );
 
       if (!started) {
-        toastError("Tu sistema no soporta reconocimiento de voz");
+        toastError(t("voiceCommands.toast.unsupportedSystem"));
         setStatus("error");
         return;
       }
@@ -325,7 +330,7 @@ export function useVoiceCommands() {
       speechSessionActiveRef.current = true;
       setStatus("listeningCommand");
       if (showWakeToast) {
-        toastInfo("Escuchando", "Di solo el nombre del juego o usa 'abre <juego>'.");
+        toastInfo(t("voiceCommands.toast.listeningTitle"), t("voiceCommands.toast.listeningDesc"));
       }
     };
 

@@ -2,19 +2,25 @@ import { AlertCircle, Loader2, Mic } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import BorderGlow from "@components/external/BorderGlow";
 import { useVoiceStore } from "@/features/voice-commands/voiceStore";
-
-const STATUS_TEXT: Record<string, string> = {
-  listeningWake: "Mantén V para hablar",
-  listeningCommand: "Di el nombre del juego",
-  executing: "Abriendo juego",
-  error: "Error de voz",
-};
+import { useTranslation } from "react-i18next";
+import { useMemo } from "react";
 
 export function VoiceCommandIndicator() {
+  const { t } = useTranslation();
   const enabled = useVoiceStore((s) => s.enabled);
   const status = useVoiceStore((s) => s.status);
   const holdKeyPressed = useVoiceStore((s) => s.holdKeyPressed);
   const errorMessage = useVoiceStore((s) => s.errorMessage);
+
+  const statusKeyMap: Record<string, string> = useMemo(
+    () => ({
+      listeningWake: "voiceCommands.indicator.statusListeningWake",
+      listeningCommand: "voiceCommands.indicator.statusListeningCommand",
+      executing: "voiceCommands.indicator.statusExecuting",
+      error: "voiceCommands.indicator.statusError",
+    }),
+    []
+  );
 
   if (!enabled || status === "idle") return null;
 
@@ -26,6 +32,8 @@ export function VoiceCommandIndicator() {
     : isListeningCommand
       ? "bg-success-500 animate-pulse"
       : "bg-default-500 animate-pulse";
+
+  const statusText = statusKeyMap[status] ? t(statusKeyMap[status]) : t("voiceCommands.indicator.defaultTitle");
 
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 z-40">
@@ -54,14 +62,14 @@ export function VoiceCommandIndicator() {
                   ) : (
                     <Mic size={16} className="text-default-500" />
                   )}
-                  <span className="text-sm font-medium text-foreground">
-                    {STATUS_TEXT[status] ?? "Comandos de voz"}
-                  </span>
+                  <span className="text-sm font-medium text-foreground">{statusText}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`h-2 w-2 rounded-full ${dotClass}`} />
                   <span className="text-xs text-default-500">
-                    {isError ? errorMessage || "Reintenta activar comandos de voz." : "Reconocimiento activo"}
+                    {isError
+                      ? errorMessage || t("voiceCommands.indicator.errorHint")
+                      : t("voiceCommands.indicator.active")}
                   </span>
                 </div>
               </div>

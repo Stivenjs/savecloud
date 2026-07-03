@@ -7,6 +7,8 @@ import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import type { ProfileSessionSource } from "@store/ProfileSessionStore";
 import { buildNiceAvatarConfig, generateNiceAvatarSeed, serializeNiceAvatarConfig } from "@features/profile/niceAvatar";
 import { TitleBar } from "@components/layout/TitleBar";
+import { useLanguageInitialization } from "@hooks/useLanguageInitialization";
+import { useTranslation } from "react-i18next";
 
 export interface StartupProfileOption {
   readonly id: string;
@@ -37,6 +39,8 @@ export function ProfileStartupSelector({
   onCreateProfile,
   onDeleteProfile,
 }: ProfileStartupSelectorProps) {
+  useLanguageInitialization();
+  const { t } = useTranslation();
   const [creatingOpen, setCreatingOpen] = useState(false);
   const [name, setName] = useState("");
   const [avatarSeed, setAvatarSeed] = useState(generateNiceAvatarSeed);
@@ -80,7 +84,7 @@ export function ProfileStartupSelector({
           className="w-full p-3 sm:p-6">
           <div className="mx-auto max-w-2xl text-center">
             <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-5xl dark:text-white">
-              ¿Quién va a jugar?
+              {t("profile.selector.whoIsPlaying")}
             </h1>
           </div>
 
@@ -97,7 +101,8 @@ export function ProfileStartupSelector({
             {options.map((option) => {
               const isSelecting = selectingId === option.id;
               const isDeleting = deletingId === option.id;
-              const accountDisplayName = option.localUserId.trim() || option.name.trim() || "Sin usuario";
+              const accountDisplayName =
+                option.localUserId.trim() || option.name.trim() || t("profile.selector.noUser");
               const isMenuOpen = openMenuId === option.id;
 
               const handleDeleteProfile = async () => {
@@ -133,13 +138,21 @@ export function ProfileStartupSelector({
 
                     <div className="mt-3">
                       <p className="line-clamp-1 text-3xl font-semibold text-foreground dark:text-white">
-                        {option.name || "Perfil"}
+                        {option.name || t("profile.selector.defaultProfileName")}
                       </p>
                       <p className="line-clamp-1 text-xl text-default-500 opacity-0 transition duration-200 group-hover:opacity-100 dark:text-white/65">
                         {accountDisplayName}
                       </p>
-                      {isSelecting && <p className="mt-1 text-xs text-default-500 dark:text-white/80">Cambiando...</p>}
-                      {isDeleting && <p className="mt-1 text-xs text-default-500 dark:text-white/80">Borrando...</p>}
+                      {isSelecting && (
+                        <p className="mt-1 text-xs text-default-500 dark:text-white/80">
+                          {t("profile.selector.switching")}
+                        </p>
+                      )}
+                      {isDeleting && (
+                        <p className="mt-1 text-xs text-default-500 dark:text-white/80">
+                          {t("profile.selector.deleting")}
+                        </p>
+                      )}
                     </div>
                   </button>
 
@@ -152,7 +165,7 @@ export function ProfileStartupSelector({
                     <PopoverTrigger>
                       <button
                         type="button"
-                        aria-label="Opciones del perfil"
+                        aria-label={t("profile.selector.optionsAria")}
                         className="absolute top-21 right-6 z-10 flex size-6 items-center justify-center border border-default-300/80 bg-content1/90 text-foreground/80 opacity-0 shadow-sm shadow-black/5 transition duration-150 hover:bg-content2/90 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 dark:border-white/20 dark:bg-[#6a7079]/65 dark:text-white/85 dark:shadow-black/10 dark:hover:bg-[#7a8089]/80 dark:hover:text-white"
                         disabled={selectingId != null || creatingProfile || isDeleting}>
                         <span className="-translate-y-px text-[14px] leading-none tracking-tight">•••</span>
@@ -160,7 +173,7 @@ export function ProfileStartupSelector({
                     </PopoverTrigger>
                     <PopoverContent className="min-w-48 rounded-none border-0 bg-[#3f434d] px-4 py-3 text-white shadow-2xl shadow-black/40">
                       <div className="space-y-3">
-                        <p className="text-sm font-semibold text-white/90">¿Eliminar esta cuenta?</p>
+                        <p className="text-sm font-semibold text-white/90">{t("profile.selector.deleteQuestion")}</p>
                         <Button
                           color="danger"
                           variant="flat"
@@ -169,7 +182,7 @@ export function ProfileStartupSelector({
                           startContent={<Trash2 size={14} />}
                           isDisabled={selectingId != null || creatingProfile || isDeleting}
                           onPress={() => void handleDeleteProfile()}>
-                          Eliminar cuenta
+                          {t("profile.selector.deleteButton")}
                         </Button>
                       </div>
                     </PopoverContent>
@@ -193,7 +206,7 @@ export function ProfileStartupSelector({
                 <span className="pointer-events-none absolute left-1/2 top-1/2 h-0.5 w-8 -translate-x-1/2 -translate-y-1/2 bg-current" />
               </div>
               <span className="mt-2 text-xl font-semibold text-foreground/90 opacity-0 transition duration-200 group-hover:opacity-100 dark:text-white/90">
-                Añadir cuenta
+                {t("profile.selector.addAccount")}
               </span>
             </motion.button>
           </motion.div>
@@ -211,11 +224,9 @@ export function ProfileStartupSelector({
               <div className="space-y-4">
                 <div className="space-y-1">
                   <h2 className="text-lg font-semibold tracking-tight text-foreground dark:text-white">
-                    Crear nuevo perfil
+                    {t("profile.selector.createTitle")}
                   </h2>
-                  <p className="text-sm text-default-500 dark:text-white/60">
-                    Usa un nombre claro para identificar esta cuenta más tarde.
-                  </p>
+                  <p className="text-sm text-default-500 dark:text-white/60">{t("profile.selector.createDesc")}</p>
                 </div>
 
                 <div className="flex items-center gap-4 rounded-xl border border-default-200 bg-content1/80 p-3 dark:border-white/10 dark:bg-white/5">
@@ -224,10 +235,10 @@ export function ProfileStartupSelector({
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-medium text-foreground/85 dark:text-white/85">
-                      Avatar generado automáticamente
+                      {t("profile.selector.autoAvatar")}
                     </p>
                     <p className="text-xs text-default-500 dark:text-white/55">
-                      Puedes regenerarlo antes de crear el perfil.
+                      {t("profile.selector.regenerateHint")}
                     </p>
                     <Button
                       size="sm"
@@ -236,17 +247,17 @@ export function ProfileStartupSelector({
                       startContent={<RefreshCw size={14} />}
                       onPress={() => setAvatarSeed(generateNiceAvatarSeed())}
                       isDisabled={creatingProfile || selectingId != null}>
-                      Regenerar avatar
+                      {t("profile.selector.regenerateButton")}
                     </Button>
                   </div>
                 </div>
 
                 <Input
-                  label="Nombre"
+                  label={t("profile.selector.nameLabel")}
                   labelPlacement="outside"
                   value={name}
                   onValueChange={setName}
-                  placeholder="Mi perfil"
+                  placeholder={t("profile.selector.namePlaceholder")}
                   variant="bordered"
                   size="sm"
                   classNames={{
@@ -258,9 +269,7 @@ export function ProfileStartupSelector({
                   }}
                 />
 
-                <p className="text-xs text-default-500 dark:text-white/45">
-                  Después podrás configurar usuario, API URL y credenciales desde Configuración.
-                </p>
+                <p className="text-xs text-default-500 dark:text-white/45">{t("profile.selector.setupLaterHint")}</p>
 
                 <div className="flex justify-end">
                   <Button
@@ -271,7 +280,7 @@ export function ProfileStartupSelector({
                     isDisabled={!canCreate}
                     isLoading={creatingProfile}
                     className="min-w-36">
-                    Crear perfil
+                    {t("profile.selector.createProfileButton")}
                   </Button>
                 </div>
               </div>

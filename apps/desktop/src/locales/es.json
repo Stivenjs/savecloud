@@ -28,13 +28,21 @@
     "actions": "Acciones",
     "retry": "Reintentar",
     "reload": "Recargar",
+    "goTo": "Ir a {{name}}",
     "minimize": "Minimizar",
     "maximize": "Maximizar",
     "restore": "Restaurar",
     "unknown": "Desconocido",
+    "inDevelopment": "Sección en desarrollo",
     "theme": {
       "light": "Cambiar a modo claro",
       "dark": "Cambiar a modo oscuro"
+    },
+    "connection": {
+      "online": "En línea",
+      "connecting": "Conectando…",
+      "offline": "Sin conexión",
+      "retrying": "Reintentando…"
     }
   },
   "errors": {
@@ -46,6 +54,17 @@
   },
   "library": {
     "title": "Biblioteca de Juegos",
+    "menu": {
+      "noResults": "Sin resultados para \"{{query}}\"",
+      "noGames": "No hay juegos configurados",
+      "filterLibraryPlaceholder": "Filtrar biblioteca",
+      "filterGamesAria": "Filtrar juegos",
+      "gamesListAria": "Lista de juegos",
+      "gamesTitle": "Juegos",
+      "gamesSectionAria": "Sección juegos"
+    },
+    "gamesCount_one": "{{count}} juego",
+    "gamesCount_other": "{{count}} juegos",
     "configuredGames": "Juegos configurados",
     "unsyncedChanges": "{{count}} con cambios sin subir",
     "subtitle": "Gestiona y sincroniza tus partidas guardadas en la nube",
@@ -67,6 +86,8 @@
     "searchPlaceholder": "Buscar juego...",
     "searchPlaceholderCompact": "Buscar...",
     "noGames": "No se encontraron juegos",
+    "noGamesConfigured": "Aún no tienes juegos configurados",
+    "scanOrAddHint": "Escanea tu PC para detectar carpetas de guardados o añade un juego manualmente con su ruta.",
     "localSize": "Tamaño local",
     "playtime": "Tiempo jugado",
     "modified": "Modificado",
@@ -465,6 +486,28 @@
       "fileCount_other": "{{count}} archivos",
       "overwriteAll": "Sobrescribir todos"
     },
+    "syncBadge": {
+      "playing": "JUGANDO",
+      "modified": "MODIFICADO",
+      "newCloud": "NUBE NUEVA",
+      "inSync": "AL DÍA",
+      "backups": "RESPALDOS"
+    },
+    "gamesStats": {
+      "alreadyInLibrary": "Ya en biblioteca",
+      "bringToDeviceTooltip": "Asistente: elegir carpeta local para poder descargar guardados desde la nube.",
+      "bringToDeviceButton": "Traer a este equipo",
+      "localGamesCard": "Juegos locales",
+      "totalPlaytimeCard": "Tiempo total",
+      "syncCard": "Sincronización",
+      "neverSynced": "Nunca",
+      "inCloudCard": "En la nube",
+      "gamesCountSuffix": "({{count}} j.)",
+      "cloudDetailTitle": "Detalle de la nube",
+      "cloudGamesModalTitle": "Juegos en la nube",
+      "totalFilesAndWeight": "Total archivos: {{count}} · Peso: {{size}}",
+      "close": "Cerrar"
+    },
     "addGame": "Añadir Juego",
     "scanGames": "Escanear Juegos",
     "syncAll": "Sincronizar Todo",
@@ -750,6 +793,14 @@
     "title": "Amigos",
     "subtitle": "Importar desde enlace o ver perfil por usuario",
     "descPlain": "Usa Importar por link si te pasaron un enlace de compartir, o Buscar por usuario para cargar el perfil de un amigo de confianza.",
+    "shareLinkCard": {
+      "title": "Importar desde link compartido",
+      "desc": "Si alguien te envió un <strong>link para compartir</strong> (desde el menú ⋮ del juego → \"Compartir por link\"), pégalo aquí. Verás qué archivos se copiarán y podrás confirmar antes de importar a tu nube.",
+      "descBp": "Si alguien te envió un link para compartir, pégalo aquí para ver qué archivos se copiarán.",
+      "label": "URL o código del link",
+      "placeholder": "https://.../share/abc123 o solo el código",
+      "button": "Ver archivos e importar"
+    },
     "tabs": {
       "members": "Miembros de Nube",
       "invites": "Invitaciones",
@@ -914,10 +965,86 @@
     "bigPictureSearch": {
       "title": "Buscar perfil por usuario",
       "desc": "Escribe el identificador de tu amigo para ver sus juegos, copiar guardados o añadir juegos a tu lista."
+    },
+    "cloudMembers": {
+      "title": "Miembros cloud",
+      "subtitle": "Red compartida",
+      "hideSearch": "Ocultar búsqueda",
+      "search": "Buscar",
+      "refresh": "Actualizar",
+      "detach": "Abrir en ventana separada",
+      "close": "Cerrar modal",
+      "searchPlaceholder": "Buscar miembro...",
+      "member": "Miembro",
+      "host": "Anfitrión",
+      "viewProfile": "Ver perfil",
+      "removeMember": "Remover miembro",
+      "leaveMembership": "Dejar membresía",
+      "actionsAria": "Acciones de miembro"
+    },
+    "cloudMembersPanel": {
+      "loading": "Cargando miembros...",
+      "errorLoading": "No se pudieron cargar los miembros.",
+      "noMembers": "No hay miembros cloud para mostrar.",
+      "yourAccount": "Tu cuenta"
+    },
+    "cloudMembersSection": {
+      "noMembersFound": "No se encontraron miembros.",
+      "noActiveMembers": "No tienes miembros activos.",
+      "notInOtherClouds": "No perteneces a otras nubes.",
+      "inYourCloud": "En tu nube",
+      "memberOf": "Miembro de"
+    },
+    "cloudStreams": {
+      "closeAria": "Cerrar modal de transmisiones",
+      "activeStreams": "Transmisiones activas",
+      "hidePreview": "Ocultar preview",
+      "showPreview": "Previsualizar",
+      "stop": "Detener",
+      "start": "Iniciar transmisión",
+      "processing": "Procesando...",
+      "localPreview": "Previsualizacion local (host)",
+      "noStreams": "No hay transmisiones activas en tu cloud.",
+      "systemAudio": "audio sistema",
+      "noAudio": "sin audio",
+      "micAudio": " + mic",
+      "yourStream": "Tu transmisión",
+      "full": "Lleno",
+      "view": "Ver"
+    },
+    "streamViewer": {
+      "title": "Visor de transmisión",
+      "host": "Anfitrión",
+      "streamId": "ID de transmisión",
+      "statusLabel": "Estado",
+      "unknown": "desconocido",
+      "noStream": "sin stream",
+      "debugLog": "Log de depuración",
+      "eventCount_one": "1 evento",
+      "eventCount_other": "{{count}} eventos",
+      "noEvents": "Sin eventos todavía.",
+      "playingRealtime": "Reproduciendo en tiempo real",
+      "waitingP2P": "Esperando conexión P2P...",
+      "closeWindow": "Cerrar ventana",
+      "status": {
+        "waiting": "Esperando señal de stream...",
+        "connected": "Conectado al stream",
+        "closed": "Conexión de stream cerrada",
+        "requesting": "Solicitando acceso al stream...",
+        "failed": "No se pudo unir",
+        "ended": "La transmisión finalizó."
+      },
+      "errors": {
+        "requestJoin": "No se pudo solicitar unión al stream.",
+        "streamFull": "La transmisión está llena (4 viewers).",
+        "hostUnavailable": "Host no disponible.",
+        "webrtcFailed": "No se pudo completar la negociación WebRTC."
+      }
     }
   },
   "remotePlay": {
     "title": "Remote Play (LAN)",
+    "windowTitle": "Transmisión de SaveCloud",
     "pageTitle": "Remote Play",
     "pageDesc": "Juega y comparte partidas en tu red local",
     "subtitle": "Transmite tus juegos o únete a sesiones en red local",
@@ -960,7 +1087,172 @@
       "errorTitle": "Error de conexión",
       "close": "Cerrar",
       "retry": "Reintentar"
+    },
+    "canvasContextError": "No se pudo obtener el contexto 2D del canvas",
+    "wsVideoError": "Error en la conexión WebSocket de video",
+    "startingStream": "Iniciando conexión de streaming..."
+  },
+  "profile": {
+    "selector": {
+      "whoIsPlaying": "¿Quién va a jugar?",
+      "defaultProfileName": "Perfil",
+      "deleting": "Borrando...",
+      "switching": "Cambiando...",
+      "noUser": "Sin usuario",
+      "optionsAria": "Opciones del perfil",
+      "deleteQuestion": "¿Eliminar esta cuenta?",
+      "deleteButton": "Eliminar cuenta",
+      "addAccount": "Añadir cuenta",
+      "createTitle": "Crear nuevo perfil",
+      "createDesc": "Usa un nombre claro para identificar esta cuenta más tarde.",
+      "autoAvatar": "Avatar generado automáticamente",
+      "regenerateHint": "Puedes regenerarlo antes de crear el perfil.",
+      "regenerateButton": "Regenerar avatar",
+      "nameLabel": "Nombre",
+      "namePlaceholder": "Mi perfil",
+      "setupLaterHint": "Después podrás configurar usuario, API URL y credenciales desde Configuración.",
+      "createProfileButton": "Crear perfil"
+    },
+    "drawer": {
+      "title": "Perfil",
+      "connection": {
+        "online": "En línea",
+        "connecting": "Conectando…",
+        "retrying": "Reintentando…",
+        "offline": "Sin conexión"
+      },
+      "toast": {
+        "success": "Perfil actualizado",
+        "successDesc": "Se guardó la apariencia del perfil.",
+        "error": "No se pudo guardar",
+        "invalidFile": "Archivo no válido"
+      },
+      "selectMedia": {
+        "bg": "Elegir imagen o vídeo de fondo",
+        "avatar": "Elegir imagen de perfil",
+        "frame": "Elegir imagen de marco",
+        "bgFilter": "Imagen o vídeo",
+        "imgFilter": "Imagen"
+      },
+      "logout": "Cerrar sesión",
+      "gamesPlayedSuffix": "jugados",
+      "gamesCount_one": "{{count}} juego",
+      "gamesCount_other": "{{count}} juegos",
+      "playingLabel": "Jugando: {{game}}",
+      "levelLabel": "Nivel",
+      "stats": {
+        "games": "Juegos",
+        "achievements": "Logros",
+        "uploads": "Subidas",
+        "streakCount_one": "{{count}} día racha",
+        "streakCount_other": "{{count}} días racha"
+      },
+      "thisWeek": "Esta semana: ",
+      "playStreak_one": "{{count}} día seguido",
+      "playStreak_other": "{{count}} días seguidos",
+      "levelProgress": "Progreso de nivel",
+      "levelNext": "Nivel {{level}} → {{next}}",
+      "levelMax": "Nivel máximo",
+      "levelPercent": "{{pct}}% completado",
+      "levelRemaining": "{{remaining}} para nivel {{next}}",
+      "reachedMax": "Has alcanzado el nivel 99.",
+      "unlockedAchievements": "Logros desbloqueados",
+      "accordion": {
+        "bg": "Fondo",
+        "avatar": "Foto de perfil",
+        "frame": "Marco",
+        "sharing": "Privacidad en la nube",
+        "help": "Ayuda"
+      },
+      "fields": {
+        "bgPlaceholder": "https://… · vacío quita el fondo",
+        "bgFileButton": "Archivo en disco…",
+        "avatarPlaceholder": "https://…",
+        "avatarFileButton": "Imagen local…",
+        "avatarLib": "Avatar generado con librería",
+        "avatarSeed": "Semilla",
+        "avatarSeedPlaceholder": "nombre, email o texto",
+        "avatarSeedButton": "Usar semilla",
+        "avatarRandomButton": "Aleatorio",
+        "framePlaceholder": "PNG con transparencia",
+        "frameFileButton": "Imagen local…",
+        "shareHosts": "Compartir con anfitriones",
+        "shareHostsDesc": "Quienes te invitaron como miembro podrán ver fondo, avatar y marco al cargar tu usuario en Amigos.",
+        "shareMembers": "Compartir con miembros de tu nube",
+        "shareMembersDesc": "Si eres anfitrión, los miembros de tu nube podrán ver tu perfil visual en Amigos.",
+        "helpDesc": "Puedes usar enlaces https o rutas a archivos locales. Las rutas locales dependen del archivo en disco; si mueves o borras el archivo, el perfil dejará de mostrarlo."
+      }
     }
+  },
+  "saveGraph": {
+    "legend": {
+      "title": "Leyenda",
+      "game": "Juego",
+      "activity": "Actividad",
+      "backup": "Respaldo",
+      "library": "Biblioteca",
+      "timeline": "Cronología",
+      "summary": "Resumen",
+      "node": "Nodo"
+    },
+    "operation": {
+      "upload": "Subida",
+      "download": "Descarga",
+      "friendCopy": "Copia de amigo",
+      "activity": "Actividad"
+    },
+    "unknownSize": "Tamaño desconocido",
+    "libraryTitle": "Mapa general de guardados",
+    "gamesConfigured": "{{count}} juegos configurados",
+    "recentEvents": "{{count}} eventos recientes",
+    "panoramicView": "Vista panorámica",
+    "latestOperation": "Última {{operation}}",
+    "filesWithErrorsHint": "{{count}} archivos · {{status}}",
+    "withErrors": "Con errores",
+    "success": "Correcto",
+    "review": "Revisar",
+    "ok": "Bien",
+    "localSavesLabel": "Guardados locales",
+    "noLocalData": "Sin datos locales",
+    "playedSuffix": "{{time}} jugados",
+    "savesInCloud": "Guardados en la nube",
+    "filesCount_one": "{{count}} archivo",
+    "filesCount_other": "{{count}} archivos",
+    "synced": "Sincronizado",
+    "noFiles": "Sin archivos",
+    "fullBackups": "Backups completos",
+    "archivedCopies_one": "{{count}} copia archivada",
+    "archivedCopies_other": "{{count}} copias archivadas",
+    "noDate": "Sin fecha",
+    "noBackups": "Sin backups",
+    "librarySubtitle": "{{count}} juegos · vista comparativa",
+    "detail": {
+      "title": "Detalle",
+      "nothingSelected": "Nada seleccionado",
+      "node": "Nodo",
+      "noSubtitle": "Sin subtítulo",
+      "type": "Tipo",
+      "metric": "Métrica",
+      "noMetrics": "Sin métricas",
+      "status": "Estado",
+      "noStatus": "Sin estado",
+      "game": "Juego",
+      "library": "Biblioteca",
+      "noData": "Sin datos"
+    }
+  },
+  "tray": {
+    "readConfigError": "No se pudo leer la configuración.",
+    "noGamesTitle": "Sin juegos",
+    "noGamesDesc": "Añade al menos un juego para hacer backup desde la bandeja.",
+    "backupSuccessTitle": "Backup completo subido",
+    "backupSuccessDesc": "{{gameName}}: empaquetado subido desde la bandeja.",
+    "backupErrorTitle": "Error al empaquetar y subir"
+  },
+  "shutdown": {
+    "title": "Saliendo de SaveCloud…",
+    "desc": "La aplicación se está cerrando de forma ordenada. No hace falta hacer nada más.",
+    "ariaLabel": "Cerrando"
   },
   "notifications": {
     "center": "Centro de notificaciones",
@@ -1161,6 +1453,21 @@
       "noCloudBatches": "En la nube no hay lotes de datos enriquecidos aún (el worker no ha escrito batches o no hay manifest).",
       "unknown": "No se pudo comprobar el estado (sin conexión, sesión o servicio no disponible).",
       "retry": "Reintentar"
+    },
+    "installModal": {
+      "title": "Instalar",
+      "requiredSize": "Tamaño necesario:",
+      "unknownSize": "Desconocido",
+      "installIn": "Instalar en:",
+      "chooseAnotherFolder": "Elegir otra carpeta",
+      "customFolder": "Carpeta personalizada",
+      "mountPointDefaultLabel": "Unidad local",
+      "insufficientSpace": "ESPACIO INSUFICIENTE",
+      "note": "Nota",
+      "peerTransferLanReachable": "Este juego se puede transferir en la red local desde el dispositivo {{device}}.",
+      "peerTransferLanUnreachable": "Este juego se puede transferir en la red local (para ahorrar ancho de banda) si enciendes el dispositivo {{device}}.",
+      "bringFromDevice": "Traer desde {{device}}",
+      "selectFolderTitle": "Seleccionar carpeta para {{name}}"
     }
   },
   "about": {
@@ -1243,6 +1550,55 @@
     "ctaDesc": "Revisa el repositorio en GitHub para instrucciones detalladas y documentación completa.",
     "githubButton": "Ver en GitHub",
     "footerTagline": "Open Source · Self-Hosted · Hecho para gamers"
+  },
+  "voiceCommands": {
+    "card": {
+      "title": "Comandos de voz",
+      "subtitle": "Mantén presionada la tecla <0>V</0> y di “abre &lt;juego&gt;”.",
+      "unsupportedWarning": "Tu sistema no soporta reconocimiento de voz nativo en Web Speech API. La wake word funciona, pero no se podrán procesar comandos de voz.",
+      "noiseSensitivity": "Sensibilidad al ruido",
+      "noiseSensitivityAria": "Sensibilidad al ruido para comandos de voz",
+      "noiseSensitivityLow": "Baja",
+      "noiseSensitivityLowDesc": "Entorno silencioso, máxima precisión.",
+      "noiseSensitivityMedium": "Media",
+      "noiseSensitivityMediumDesc": "Balance entre precisión y tolerancia al ruido.",
+      "noiseSensitivityHigh": "Alta",
+      "noiseSensitivityHighDesc": "Para ruido de fondo constante (ventilador, calle, etc.).",
+      "recognitionState": "Estado de reconocimiento",
+      "noiseDetected": "Ruido detectado",
+      "signalStable": "Señal estable",
+      "quality": "Calidad: {{confidence}}",
+      "noData": "Sin datos",
+      "testWakeWord": "Probar wake word",
+      "testWakeWordSuccess": "Evento de prueba emitido",
+      "testWakeWordSuccessDesc": "Si no cambia a 'Escuchando comando', el listener frontend falló.",
+      "testWakeWordError": "Falló prueba de wake word"
+    },
+    "indicator": {
+      "statusListeningWake": "Mantén V para hablar",
+      "statusListeningCommand": "Di el nombre del juego",
+      "statusExecuting": "Abriendo juego",
+      "statusError": "Error de voz",
+      "defaultTitle": "Comandos de voz",
+      "errorHint": "Reintenta activar comandos de voz.",
+      "active": "Reconocimiento activo"
+    },
+    "toast": {
+      "launching": "Abriendo juego",
+      "notHeardWell": "No te escuché bien",
+      "tooNoisy": "Hay mucho ruido. Intenta hablar más cerca del micrófono.",
+      "tryAgainCounterStrike": "Prueba de nuevo: abre Counter Strike.",
+      "gameNotFound": "Juego no encontrado",
+      "noisyRetry": "No encontré el juego. Voy a reintentar una vez. Intenta decir el nombre más claro.",
+      "noisySuggestion": "Con el ruido no te escuché bien. ¿Quisiste decir: {{names}}?",
+      "suggestion": "No encontré \"{{target}}\". Quizá quisiste decir: {{names}}.",
+      "notInLibrary": "No encuentro \"{{target}}\" en tu librería.",
+      "executionFailed": "No se pudo ejecutar el comando de voz",
+      "recognitionError": "Error de reconocimiento",
+      "unsupportedSystem": "Tu sistema no soporta reconocimiento de voz",
+      "listeningTitle": "Escuchando",
+      "listeningDesc": "Di solo el nombre del juego o usa 'abre <juego>'."
+    }
   },
   "bigPictureUi": {
     "consoleRailAria": "Barra de consola",

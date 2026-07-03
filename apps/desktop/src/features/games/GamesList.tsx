@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Button, Card, CardBody, Code } from "@heroui/react";
 import { FolderSearch, Gamepad2, PlusCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ConfiguredGame } from "@app-types/config";
 import type { GameStats } from "@services/tauri";
 import { useCloudBackupCounts } from "@hooks/useCloudBackupCounts";
@@ -108,6 +109,7 @@ export function GamesList({
   hasSyncConfig = false,
   consoleMode = false,
 }: GamesListProps) {
+  const { t } = useTranslation();
   const { layout, sortBy, sortDir, setLayout, setSortBy, setSortDir } = useGamesViewPreferences();
 
   const handleSortChange = useCallback(
@@ -161,14 +163,12 @@ export function GamesList({
             <Gamepad2 size={56} className="text-default-400" strokeWidth={1.5} />
             <div className="space-y-2">
               <p className="text-lg font-medium text-default-700">
-                {emptyFilterMessage ?? "Aún no tienes juegos configurados"}
+                {emptyFilterMessage ?? t("library.noGamesConfigured")}
               </p>
               {emptyFilterMessage ? (
                 <p className="text-sm text-default-500">{emptyFilterMessage}</p>
               ) : (
-                <p className="max-w-sm text-sm text-default-500">
-                  Escanea tu PC para detectar carpetas de guardados o añade un juego manualmente con su ruta.
-                </p>
+                <p className="max-w-sm text-sm text-default-500">{t("library.scanOrAddHint")}</p>
               )}
             </div>
             {isEmptyState && (onEmptyScanPress || onEmptyAddPress) && (
@@ -179,12 +179,12 @@ export function GamesList({
                     variant="bordered"
                     startContent={<FolderSearch size={18} />}
                     onPress={onEmptyScanPress}>
-                    Buscar juegos automáticamente
+                    {t("library.scan.autoScanTitle")}
                   </Button>
                 )}
                 {onEmptyAddPress && (
                   <Button color="primary" startContent={<PlusCircle size={18} />} onPress={onEmptyAddPress}>
-                    Añadir juego
+                    {t("library.addGame")}
                   </Button>
                 )}
               </div>
@@ -211,7 +211,7 @@ export function GamesList({
             : "justify-between",
         ].join(" ")}>
         <p className={consoleMode ? "text-base font-semibold text-default-400 md:text-lg" : "text-xs text-default-400"}>
-          {sortedGames.length} {sortedGames.length === 1 ? "juego" : "juegos"}
+          {t("library.gamesCount", { count: sortedGames.length })}
         </p>
         <GamesViewControls
           sortBy={sortBy}

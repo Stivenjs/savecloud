@@ -6,6 +6,7 @@ import { useMenuGamesList } from "@hooks/useMenuGameList";
 import type { ConfiguredGame } from "@app-types/config";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
 import { formatGameDisplayName } from "@utils/gameImage";
+import { useTranslation } from "react-i18next";
 
 /**
  * Props para {@link MenuGameItem}.
@@ -524,6 +525,7 @@ export function MenuGamesList({
   bigPictureConsole = false,
   bigPictureGamesStartExpanded = false,
 }: MenuGamesListProps) {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const reduceMotionFm = useReducedMotion();
   const hasGames = games.length > 0;
@@ -552,14 +554,14 @@ export function MenuGamesList({
     <div className="mg-empty" role="status" aria-live="polite">
       <Gamepad2 size={emptyIconSize} strokeWidth={1.2} />
       <p className="mg-empty-text">
-        {searchValue.trim() ? `Sin resultados para "${searchValue.trim()}"` : "No hay juegos configurados"}
+        {searchValue.trim() ? t("library.menu.noResults", { query: searchValue.trim() }) : t("library.menu.noGames")}
       </p>
     </div>
   ) : useAnimatedBpList ? (
     <motion.ul
       className="mg-list"
       role="list"
-      aria-label="Lista de juegos"
+      aria-label={t("library.menu.gamesListAria")}
       variants={MG_LIST_CONTAINER}
       initial={false}
       animate={!collapsibleLibrary || libraryExpanded ? "show" : "hidden"}>
@@ -575,7 +577,7 @@ export function MenuGamesList({
       ))}
     </motion.ul>
   ) : (
-    <ul className="mg-list" role="list" aria-label="Lista de juegos">
+    <ul className="mg-list" role="list" aria-label={t("library.menu.gamesListAria")}>
       {filteredGames.map((game) => (
         <li key={game.id}>
           <MenuGameItem
@@ -599,10 +601,10 @@ export function MenuGamesList({
           ref={inputRef}
           type="search"
           className="mg-search-input"
-          placeholder="Filtrar biblioteca"
+          placeholder={t("library.menu.filterLibraryPlaceholder")}
           value={searchValue}
           onChange={handleSearchChange}
-          aria-label="Filtrar juegos"
+          aria-label={t("library.menu.filterGamesAria")}
           autoComplete="off"
           spellCheck={false}
         />
@@ -622,15 +624,15 @@ export function MenuGamesList({
           aria-expanded={libraryExpanded}
           aria-controls="menu-games-list-body"
           onClick={() => setLibraryExpanded((v) => !v)}>
-          <span>Biblioteca</span>
+          <span>{t("nav.library")}</span>
           <span className="inline-flex shrink-0 items-center gap-2">
-            <span className="mg-bp-library-toggle-count">{`${games.length} juego${games.length === 1 ? "" : "s"}`}</span>
+            <span className="mg-bp-library-toggle-count">{t("library.gamesCount", { count: games.length })}</span>
             <ChevronDown aria-hidden />
           </span>
         </button>
       ) : (
-        <p className="mg-section-title" aria-label="Sección juegos">
-          Juegos
+        <p className="mg-section-title" aria-label={t("library.menu.gamesSectionAria")}>
+          {t("library.menu.gamesTitle")}
         </p>
       )}
 

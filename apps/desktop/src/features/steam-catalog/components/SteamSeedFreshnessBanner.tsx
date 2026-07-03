@@ -1,36 +1,38 @@
 import { Button, Skeleton } from "@heroui/react";
 import { AlertTriangle, CheckCircle2, CloudOff, RefreshCw } from "lucide-react";
 import { useSteamSeedFreshness } from "@features/steam-catalog/hooks/useSteamSeedFreshness";
+import { useTranslation } from "react-i18next";
 
 function messageForStatus(
   status: string,
-  error: string | null
+  error: string | null,
+  t: (key: string) => string
 ): { text: string; tone: "success" | "warning" | "neutral" | "danger" } {
   switch (status) {
     case "up_to_date":
       return {
-        text: "Tu catálogo local está al día con los datos que genera el worker en la nube.",
+        text: t("steamCatalog.freshness.upToDate"),
         tone: "success",
       };
     case "stale":
       return {
-        text: "Hay datos nuevos en la nube. Pulsa «Descargar información detallada» en Configuración para actualizar.",
+        text: t("steamCatalog.freshness.stale"),
         tone: "warning",
       };
     case "no_local_import":
       return {
-        text: "Aún no has descargado la información detallada desde la nube. Hazlo desde Configuración con «Descargar información detallada».",
+        text: t("steamCatalog.freshness.noLocalImport"),
         tone: "warning",
       };
     case "no_cloud_batches":
       return {
-        text: "En la nube no hay lotes de datos enriquecidos aún (el worker no ha escrito batches o no hay manifest).",
+        text: t("steamCatalog.freshness.noCloudBatches"),
         tone: "neutral",
       };
     case "unknown":
     default:
       return {
-        text: error?.trim() || "No se pudo comprobar el estado (sin conexión, sesión o servicio no disponible).",
+        text: error?.trim() || t("steamCatalog.freshness.unknown"),
         tone: "danger",
       };
   }
@@ -63,6 +65,7 @@ const iconClass: Record<"success" | "warning" | "neutral" | "danger", string> = 
 };
 
 export function SteamSeedFreshnessBanner() {
+  const { t } = useTranslation();
   const { data, isLoading, isFetching, refetch } = useSteamSeedFreshness();
 
   if (isLoading) {
@@ -73,7 +76,7 @@ export function SteamSeedFreshnessBanner() {
     return null;
   }
 
-  const { text, tone } = messageForStatus(data.status, data.error);
+  const { text, tone } = messageForStatus(data.status, data.error, t);
   const Icon =
     data.status === "up_to_date" ? CheckCircle2 : data.status === "no_cloud_batches" ? CloudOff : AlertTriangle;
 
@@ -97,7 +100,7 @@ export function SteamSeedFreshnessBanner() {
         isLoading={isFetching}
         startContent={!isFetching ? <RefreshCw size={14} strokeWidth={2.25} /> : undefined}
         onPress={() => void refetch()}>
-        Reintentar
+        {t("steamCatalog.freshness.retry")}
       </Button>
     </div>
   );

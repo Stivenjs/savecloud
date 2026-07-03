@@ -28,13 +28,21 @@
     "actions": "Actions",
     "retry": "Retry",
     "reload": "Reload",
+    "goTo": "Go to {{name}}",
     "minimize": "Minimize",
     "maximize": "Maximize",
     "restore": "Restore",
     "unknown": "Unknown",
+    "inDevelopment": "Section under development",
     "theme": {
       "light": "Switch to light mode",
       "dark": "Switch to dark mode"
+    },
+    "connection": {
+      "online": "Online",
+      "connecting": "Connecting…",
+      "offline": "Offline",
+      "retrying": "Retrying…"
     }
   },
   "errors": {
@@ -46,6 +54,17 @@
   },
   "library": {
     "title": "Games Library",
+    "menu": {
+      "noResults": "No results for \"{{query}}\"",
+      "noGames": "No games configured",
+      "filterLibraryPlaceholder": "Filter library",
+      "filterGamesAria": "Filter games",
+      "gamesListAria": "Game list",
+      "gamesTitle": "Games",
+      "gamesSectionAria": "Games section"
+    },
+    "gamesCount_one": "{{count}} game",
+    "gamesCount_other": "{{count}} games",
     "configuredGames": "Configured Games",
     "unsyncedChanges": "{{count}} with unsynced changes",
     "subtitle": "Manage and sync your game saves in the cloud",
@@ -67,6 +86,8 @@
     "searchPlaceholder": "Search game...",
     "searchPlaceholderCompact": "Search...",
     "noGames": "No games found",
+    "noGamesConfigured": "You don't have any games configured yet",
+    "scanOrAddHint": "Scan your PC to detect save folders or add a game manually with its path.",
     "localSize": "Local size",
     "playtime": "Playtime",
     "modified": "Modified",
@@ -465,6 +486,28 @@
       "fileCount_other": "{{count}} files",
       "overwriteAll": "Overwrite all"
     },
+    "syncBadge": {
+      "playing": "PLAYING",
+      "modified": "MODIFIED",
+      "newCloud": "NEW CLOUD",
+      "inSync": "UP TO DATE",
+      "backups": "BACKUPS"
+    },
+    "gamesStats": {
+      "alreadyInLibrary": "Already in library",
+      "bringToDeviceTooltip": "Wizard: choose local folder to be able to download saves from the cloud.",
+      "bringToDeviceButton": "Bring to this device",
+      "localGamesCard": "Local games",
+      "totalPlaytimeCard": "Total playtime",
+      "syncCard": "Synchronization",
+      "neverSynced": "Never",
+      "inCloudCard": "In the cloud",
+      "gamesCountSuffix": "({{count}} g.)",
+      "cloudDetailTitle": "Cloud detail",
+      "cloudGamesModalTitle": "Games in the cloud",
+      "totalFilesAndWeight": "Total files: {{count}} · Size: {{size}}",
+      "close": "Close"
+    },
     "addGame": "Add Game",
     "scanGames": "Scan Games",
     "syncAll": "Sync All",
@@ -750,6 +793,14 @@
     "title": "Friends",
     "subtitle": "Import from link or view profile by user",
     "descPlain": "Use Import by link if you were sent a share link, or Search by user to load the profile of a trusted friend.",
+    "shareLinkCard": {
+      "title": "Import from shared link",
+      "desc": "If someone sent you a <strong>sharing link</strong> (from the game's ⋮ menu → \"Share by link\"), paste it here. You'll see which files will be copied and can confirm before importing to your cloud.",
+      "descBp": "If someone sent you a sharing link, paste it here to see which files will be copied.",
+      "label": "URL or code of the link",
+      "placeholder": "https://.../share/abc123 or just the code",
+      "button": "View files and import"
+    },
     "tabs": {
       "members": "Cloud Members",
       "invites": "Invites",
@@ -914,10 +965,86 @@
     "bigPictureSearch": {
       "title": "Search profile by username",
       "desc": "Type your friend's username to view their games, copy saves, or add games to your list."
+    },
+    "cloudMembers": {
+      "title": "Cloud members",
+      "subtitle": "Shared network",
+      "hideSearch": "Hide search",
+      "search": "Search",
+      "refresh": "Refresh",
+      "detach": "Open in separate window",
+      "close": "Close modal",
+      "searchPlaceholder": "Search member...",
+      "member": "Member",
+      "host": "Host",
+      "viewProfile": "View profile",
+      "removeMember": "Remove member",
+      "leaveMembership": "Leave membership",
+      "actionsAria": "Member actions"
+    },
+    "cloudMembersPanel": {
+      "loading": "Loading members...",
+      "errorLoading": "Could not load members.",
+      "noMembers": "No cloud members to show.",
+      "yourAccount": "Your account"
+    },
+    "cloudMembersSection": {
+      "noMembersFound": "No members found.",
+      "noActiveMembers": "You don't have active members.",
+      "notInOtherClouds": "You don't belong to other clouds.",
+      "inYourCloud": "In your cloud",
+      "memberOf": "Member of"
+    },
+    "cloudStreams": {
+      "closeAria": "Close streams modal",
+      "activeStreams": "Active streams",
+      "hidePreview": "Hide preview",
+      "showPreview": "Preview",
+      "stop": "Stop",
+      "start": "Start stream",
+      "processing": "Processing...",
+      "localPreview": "Local preview (host)",
+      "noStreams": "No active streams in your cloud.",
+      "systemAudio": "system audio",
+      "noAudio": "no audio",
+      "micAudio": " + mic",
+      "yourStream": "Your stream",
+      "full": "Full",
+      "view": "View"
+    },
+    "streamViewer": {
+      "title": "Stream viewer",
+      "host": "Host",
+      "streamId": "Stream ID",
+      "statusLabel": "Status",
+      "unknown": "unknown",
+      "noStream": "no stream",
+      "debugLog": "Debug log",
+      "eventCount_one": "1 event",
+      "eventCount_other": "{{count}} events",
+      "noEvents": "No events yet.",
+      "playingRealtime": "Playing in real time",
+      "waitingP2P": "Waiting for P2P connection...",
+      "closeWindow": "Close window",
+      "status": {
+        "waiting": "Waiting for stream signal...",
+        "connected": "Connected to stream",
+        "closed": "Stream connection closed",
+        "requesting": "Requesting access to stream...",
+        "failed": "Could not join",
+        "ended": "The transmission has ended."
+      },
+      "errors": {
+        "requestJoin": "Could not request to join stream.",
+        "streamFull": "The stream is full (4 viewers).",
+        "hostUnavailable": "Host not available.",
+        "webrtcFailed": "Could not complete WebRTC negotiation."
+      }
     }
   },
   "remotePlay": {
     "title": "Remote Play (LAN)",
+    "windowTitle": "SaveCloud GameStream",
     "pageTitle": "Remote Play",
     "pageDesc": "Play and share games on your local network",
     "subtitle": "Stream your games or join sessions on your local network",
@@ -960,7 +1087,172 @@
       "errorTitle": "Connection error",
       "close": "Close",
       "retry": "Retry"
+    },
+    "canvasContextError": "Could not obtain 2D canvas context",
+    "wsVideoError": "Error in video WebSocket connection",
+    "startingStream": "Starting streaming connection..."
+  },
+  "profile": {
+    "selector": {
+      "whoIsPlaying": "Who is playing?",
+      "defaultProfileName": "Profile",
+      "deleting": "Deleting...",
+      "switching": "Switching...",
+      "noUser": "No user",
+      "optionsAria": "Profile options",
+      "deleteQuestion": "Delete this account?",
+      "deleteButton": "Delete account",
+      "addAccount": "Add account",
+      "createTitle": "Create new profile",
+      "createDesc": "Use a clear name to identify this account later.",
+      "autoAvatar": "Automatically generated avatar",
+      "regenerateHint": "You can regenerate it before creating the profile.",
+      "regenerateButton": "Regenerate avatar",
+      "nameLabel": "Name",
+      "namePlaceholder": "My profile",
+      "setupLaterHint": "You can configure user, API URL, and credentials from Settings later.",
+      "createProfileButton": "Create profile"
+    },
+    "drawer": {
+      "title": "Profile",
+      "connection": {
+        "online": "Online",
+        "connecting": "Connecting...",
+        "retrying": "Retrying...",
+        "offline": "Offline"
+      },
+      "toast": {
+        "success": "Profile updated",
+        "successDesc": "Profile appearance saved.",
+        "error": "Could not save",
+        "invalidFile": "Invalid file"
+      },
+      "selectMedia": {
+        "bg": "Choose background image or video",
+        "avatar": "Choose profile image",
+        "frame": "Choose frame image",
+        "bgFilter": "Image or video",
+        "imgFilter": "Image"
+      },
+      "logout": "Log out",
+      "gamesPlayedSuffix": "played",
+      "gamesCount_one": "{{count}} game",
+      "gamesCount_other": "{{count}} games",
+      "playingLabel": "Playing: {{game}}",
+      "levelLabel": "Level",
+      "stats": {
+        "games": "Games",
+        "achievements": "Achievements",
+        "uploads": "Uploads",
+        "streakCount_one": "{{count}} day streak",
+        "streakCount_other": "{{count}} days streak"
+      },
+      "thisWeek": "This week: ",
+      "playStreak_one": "{{count}} day in a row",
+      "playStreak_other": "{{count}} days in a row",
+      "levelProgress": "Level progress",
+      "levelNext": "Level {{level}} → {{next}}",
+      "levelMax": "Max level",
+      "levelPercent": "{{pct}}% completed",
+      "levelRemaining": "{{remaining}} for level {{next}}",
+      "reachedMax": "You have reached level 99.",
+      "unlockedAchievements": "Unlocked achievements",
+      "accordion": {
+        "bg": "Background",
+        "avatar": "Profile picture",
+        "frame": "Frame",
+        "sharing": "Cloud Privacy",
+        "help": "Help"
+      },
+      "fields": {
+        "bgPlaceholder": "https://… · empty removes background",
+        "bgFileButton": "File on disk…",
+        "avatarPlaceholder": "https://…",
+        "avatarFileButton": "Local image…",
+        "avatarLib": "Avatar generated with library",
+        "avatarSeed": "Seed",
+        "avatarSeedPlaceholder": "name, email, or text",
+        "avatarSeedButton": "Use seed",
+        "avatarRandomButton": "Random",
+        "framePlaceholder": "PNG with transparency",
+        "frameFileButton": "Local image…",
+        "shareHosts": "Share with hosts",
+        "shareHostsDesc": "Those who invited you as a member will be able to see your background, avatar, and frame when loading your user in Friends.",
+        "shareMembers": "Share with cloud members",
+        "shareMembersDesc": "If you are a host, members of your cloud will be able to see your visual profile in Friends.",
+        "helpDesc": "You can use https links or paths to local files. Local paths depend on the file on disk; if you move or delete the file, the profile will stop displaying it."
+      }
     }
+  },
+  "saveGraph": {
+    "legend": {
+      "title": "Legend",
+      "game": "Game",
+      "activity": "Activity",
+      "backup": "Backup",
+      "library": "Library",
+      "timeline": "Timeline",
+      "summary": "Summary",
+      "node": "Node"
+    },
+    "operation": {
+      "upload": "Upload",
+      "download": "Download",
+      "friendCopy": "Friend copy",
+      "activity": "Activity"
+    },
+    "unknownSize": "Unknown size",
+    "libraryTitle": "General saves map",
+    "gamesConfigured": "{{count}} games configured",
+    "recentEvents": "{{count}} recent events",
+    "panoramicView": "Panoramic view",
+    "latestOperation": "Latest {{operation}}",
+    "filesWithErrorsHint": "{{count}} files · {{status}}",
+    "withErrors": "With errors",
+    "success": "Success",
+    "review": "Review",
+    "ok": "OK",
+    "localSavesLabel": "Local saves",
+    "noLocalData": "No local data",
+    "playedSuffix": "{{time}} played",
+    "savesInCloud": "Saves in the cloud",
+    "filesCount_one": "{{count}} file",
+    "filesCount_other": "{{count}} files",
+    "synced": "Synced",
+    "noFiles": "No files",
+    "fullBackups": "Full backups",
+    "archivedCopies_one": "{{count}} archived copy",
+    "archivedCopies_other": "{{count}} archived copies",
+    "noDate": "No date",
+    "noBackups": "No backups",
+    "librarySubtitle": "{{count}} games · comparative view",
+    "detail": {
+      "title": "Detail",
+      "nothingSelected": "Nothing selected",
+      "node": "Node",
+      "noSubtitle": "No subtitle",
+      "type": "Type",
+      "metric": "Metric",
+      "noMetrics": "No metrics",
+      "status": "Status",
+      "noStatus": "No status",
+      "game": "Game",
+      "library": "Library",
+      "noData": "No data"
+    }
+  },
+  "tray": {
+    "readConfigError": "Could not read configuration.",
+    "noGamesTitle": "No games",
+    "noGamesDesc": "Add at least one game to perform backup from the tray.",
+    "backupSuccessTitle": "Full backup uploaded",
+    "backupSuccessDesc": "{{gameName}}: package uploaded from the tray.",
+    "backupErrorTitle": "Error packaging and uploading"
+  },
+  "shutdown": {
+    "title": "Exiting SaveCloud...",
+    "desc": "The application is closing orderly. No further action is required.",
+    "ariaLabel": "Closing"
   },
   "notifications": {
     "center": "Notification center",
@@ -1161,6 +1453,21 @@
       "noCloudBatches": "No enriched data batches in the cloud yet (the worker hasn't written batches or there is no manifest).",
       "unknown": "Could not check the status (no connection, session, or service unavailable).",
       "retry": "Retry"
+    },
+    "installModal": {
+      "title": "Install",
+      "requiredSize": "Required size:",
+      "unknownSize": "Unknown",
+      "installIn": "Install in:",
+      "chooseAnotherFolder": "Choose another folder",
+      "customFolder": "Custom folder",
+      "mountPointDefaultLabel": "Local drive",
+      "insufficientSpace": "INSUFFICIENT SPACE",
+      "note": "Note",
+      "peerTransferLanReachable": "This game can be transferred on the local network from device {{device}}.",
+      "peerTransferLanUnreachable": "This game can be transferred on the local network (to save bandwidth) if you turn on device {{device}}.",
+      "bringFromDevice": "Bring from {{device}}",
+      "selectFolderTitle": "Select folder for {{name}}"
     }
   },
   "about": {
@@ -1243,6 +1550,55 @@
     "ctaDesc": "Check the GitHub repository for detailed instructions and full documentation.",
     "githubButton": "View on GitHub",
     "footerTagline": "Open Source · Self-Hosted · Made for gamers"
+  },
+  "voiceCommands": {
+    "card": {
+      "title": "Voice Commands",
+      "subtitle": "Hold the <0>V</0> key and say “open &lt;game&gt;”.",
+      "unsupportedWarning": "Your system does not support native voice recognition via the Web Speech API. Wake word works, but you won't be able to process voice commands.",
+      "noiseSensitivity": "Noise Sensitivity",
+      "noiseSensitivityAria": "Noise sensitivity for voice commands",
+      "noiseSensitivityLow": "Low",
+      "noiseSensitivityLowDesc": "Quiet environment, maximum accuracy.",
+      "noiseSensitivityMedium": "Medium",
+      "noiseSensitivityMediumDesc": "Balance between accuracy and noise tolerance.",
+      "noiseSensitivityHigh": "High",
+      "noiseSensitivityHighDesc": "For constant background noise (fan, street, etc.).",
+      "recognitionState": "Recognition State",
+      "noiseDetected": "Noise detected",
+      "signalStable": "Signal stable",
+      "quality": "Quality: {{confidence}}",
+      "noData": "No data",
+      "testWakeWord": "Test wake word",
+      "testWakeWordSuccess": "Test event emitted",
+      "testWakeWordSuccessDesc": "If it doesn't switch to 'Listening for command', the frontend listener failed.",
+      "testWakeWordError": "Wake word test failed"
+    },
+    "indicator": {
+      "statusListeningWake": "Hold V to speak",
+      "statusListeningCommand": "Say the game name",
+      "statusExecuting": "Opening game",
+      "statusError": "Voice error",
+      "defaultTitle": "Voice Commands",
+      "errorHint": "Try reactivating voice commands.",
+      "active": "Recognition active"
+    },
+    "toast": {
+      "launching": "Opening game",
+      "notHeardWell": "I couldn't hear you well",
+      "tooNoisy": "It's very noisy. Try speaking closer to the microphone.",
+      "tryAgainCounterStrike": "Try again: open Counter Strike.",
+      "gameNotFound": "Game not found",
+      "noisyRetry": "I didn't find the game. I will retry once. Try saying the name more clearly.",
+      "noisySuggestion": "Due to noise, I couldn't hear you well. Did you mean: {{names}}?",
+      "suggestion": "I didn't find \"{{target}}\". Maybe you meant: {{names}}.",
+      "notInLibrary": "I can't find \"{{target}}\" in your library.",
+      "executionFailed": "Could not execute voice command",
+      "recognitionError": "Recognition error",
+      "unsupportedSystem": "Your system does not support voice recognition",
+      "listeningTitle": "Listening",
+      "listeningDesc": "Say just the game name or use 'open <game>'."
+    }
   },
   "bigPictureUi": {
     "consoleRailAria": "Console bar",

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Button, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from "@heroui/react";
 import { Eye, LogOut, Trash2, MoreVertical } from "lucide-react";
 import type { CloudMembership } from "@services/tauri/invites.service";
+import { useTranslation } from "react-i18next";
 
 interface CloudMemberActionsProps {
   userId: string;
@@ -26,13 +27,14 @@ export function CloudMemberActions({
   onRemoveMember,
   onLeaveMembership,
 }: CloudMemberActionsProps) {
+  const { t } = useTranslation();
   const [isActionLoading, setIsActionLoading] = useState(false);
 
   const actions = useMemo(() => {
     const items: Array<{ key: string; label: string; icon: React.ReactNode; color?: string; action: () => void }> = [
       {
         key: "view",
-        label: "Ver perfil",
+        label: t("friends.cloudMembers.viewProfile"),
         icon: <Eye className="h-4 w-4" />,
         action: () => onViewProfile(userId),
       },
@@ -41,7 +43,7 @@ export function CloudMemberActions({
     if (isHost && onRemoveMember) {
       items.push({
         key: "remove",
-        label: "Remover miembro",
+        label: t("friends.cloudMembers.removeMember"),
         icon: <Trash2 className="h-4 w-4" />,
         color: "danger",
         action: () => {
@@ -63,7 +65,7 @@ export function CloudMemberActions({
     } else if (!isHost && onLeaveMembership && userId === membership.hostUserId) {
       items.push({
         key: "leave",
-        label: "Dejar membresía",
+        label: t("friends.cloudMembers.leaveMembership"),
         icon: <LogOut className="h-4 w-4" />,
         color: "warning",
         action: () => {
@@ -94,6 +96,7 @@ export function CloudMemberActions({
     onRemoveMember,
     onLeaveMembership,
     membership.hostUserId,
+    t,
   ]);
 
   return (
@@ -109,7 +112,9 @@ export function CloudMemberActions({
           {!isActionLoading && <MoreVertical className="h-4 w-4" />}
         </Button>
       </DropdownTrigger>
-      <DropdownMenu onPointerDownCapture={(event) => event.stopPropagation()} aria-label="Acciones de miembro">
+      <DropdownMenu
+        onPointerDownCapture={(event) => event.stopPropagation()}
+        aria-label={t("friends.cloudMembers.actionsAria")}>
         {actions.map((action) => (
           <DropdownItem key={action.key} color={action.color as any} startContent={action.icon} onPress={action.action}>
             {action.label}

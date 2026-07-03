@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { VideoPlayer } from "@components/streaming/VideoPlayer";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { TitleBar } from "@components/layout/TitleBar";
+import { useTranslation } from "react-i18next";
 
 export const StreamingWindowPage = () => {
+  const { t } = useTranslation();
   const [wsPort, setWsPort] = useState<number | null>(null);
 
   useEffect(() => {
@@ -14,15 +16,15 @@ export const StreamingWindowPage = () => {
     }
 
     const appWindow = getCurrentWebviewWindow();
-    appWindow.setTitle("SaveCloud GameStream").catch(console.error);
-  }, []);
+    appWindow.setTitle(t("remotePlay.windowTitle")).catch(console.error);
+  }, [t]);
 
   if (!wsPort) {
     return (
       <div className="relative w-screen h-screen overflow-hidden bg-black text-white">
         <TitleBar />
         <div className="flex items-center justify-center h-full">
-          <h2>Iniciando conexión de streaming...</h2>
+          <h2>{t("remotePlay.startingStream")}</h2>
         </div>
       </div>
     );

@@ -1,5 +1,6 @@
 import { Button, Input } from "@heroui/react";
 import { Link2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface BigPictureShareLinkSectionProps {
   shareLinkInput: string;
@@ -22,6 +23,8 @@ export function BigPictureShareLinkSection({
   loading,
   disabled,
 }: BigPictureShareLinkSectionProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-primary-500/20 bg-primary-500/6 px-6 py-6 sm:px-8 sm:py-7">
@@ -29,15 +32,15 @@ export function BigPictureShareLinkSection({
           <div className="flex size-10 items-center justify-center rounded-xl bg-primary/15">
             <Link2 size={22} className="text-primary" />
           </div>
-          <h2 className="text-lg font-bold text-foreground md:text-xl">Importar desde link compartido</h2>
+          <h2 className="text-lg font-bold text-foreground md:text-xl">{t("friends.shareLinkCard.title")}</h2>
         </div>
         <p className="mb-5 text-sm text-default-400 md:text-base leading-relaxed max-w-2xl">
-          Si alguien te envió un link para compartir, pégalo aquí para ver qué archivos se copiarán.
+          {t("friends.shareLinkCard.descBp")}
         </p>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
           <Input
-            label="URL o código del link"
-            placeholder="https://.../share/abc123 o solo el código"
+            label={t("friends.shareLinkCard.label")}
+            placeholder={t("friends.shareLinkCard.placeholder")}
             value={shareLinkInput}
             onValueChange={onShareLinkChange}
             variant="bordered"
@@ -61,7 +64,7 @@ export function BigPictureShareLinkSection({
             isLoading={loading}
             isDisabled={disabled}
             className="h-12 px-6 text-base font-semibold rounded-xl">
-            Ver archivos e importar
+            {t("friends.shareLinkCard.button")}
           </Button>
         </div>
       </div>

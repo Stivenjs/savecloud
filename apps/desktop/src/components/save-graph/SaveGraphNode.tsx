@@ -2,6 +2,7 @@ import { Handle, Position, type NodeProps } from "reactflow";
 import { Archive, CircleDot, Database, Gamepad2, Layers3, Sparkles } from "lucide-react";
 import { formatRelativeDate } from "@utils/format";
 import type { SaveGraphFlowNodeData } from "@utils/saveGraph.mapper";
+import { useTranslation } from "react-i18next";
 
 const ICONS = {
   biblioteca: Database,
@@ -15,6 +16,7 @@ const ICONS = {
  * Nodo premium reutilizable para el grafo de guardados.
  */
 export function SaveGraphNode({ data, selected }: NodeProps<SaveGraphFlowNodeData>) {
+  const { t } = useTranslation();
   const Icon = ICONS[data.kind] ?? Sparkles;
 
   return (
@@ -38,12 +40,12 @@ export function SaveGraphNode({ data, selected }: NodeProps<SaveGraphFlowNodeDat
 
       <div className="mt-4 flex flex-wrap items-end justify-between gap-2 border-t border-divider/70 pt-3 text-xs">
         <div className="space-y-0.5">
-          <p className="font-medium text-default-500">Estado</p>
-          <p className="font-semibold">{data.status ?? "Sin estado"}</p>
+          <p className="font-medium text-default-500">{t("saveGraph.detail.status")}</p>
+          <p className="font-semibold">{data.status ?? t("saveGraph.detail.noStatus")}</p>
         </div>
         <div className="text-right space-y-0.5">
-          <p className="font-medium text-default-500">Métrica</p>
-          <p className="font-semibold">{data.metric ?? "Sin datos"}</p>
+          <p className="font-medium text-default-500">{t("saveGraph.detail.metric")}</p>
+          <p className="font-semibold">{data.metric ?? t("saveGraph.detail.noData")}</p>
         </div>
       </div>
 

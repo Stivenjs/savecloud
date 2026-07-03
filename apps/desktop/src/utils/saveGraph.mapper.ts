@@ -5,6 +5,7 @@ import { formatGameDisplayName } from "@utils/gameImage";
 import type { Config } from "@app-types/config";
 import type { CloudBackupInfo, CloudSavesSummary, GameStats, OperationLogEntry } from "@services/tauri";
 import type { GameSaveGraph, SaveGraphEdge, SaveGraphModel, SaveGraphNode, SaveGraphTone } from "@app-types/saveGraph";
+import i18n from "@lib/i18n";
 
 /**
  * Datos consumidos por el nodo custom de React Flow.
@@ -64,30 +65,30 @@ function toneForNode(kind: SaveGraphNode["kind"], hasError = false): SaveGraphTo
 function kindLabel(kind: SaveGraphNode["kind"]): string {
   switch (kind) {
     case "biblioteca":
-      return "Biblioteca";
+      return i18n.t("saveGraph.legend.library");
     case "juego":
-      return "Juego";
+      return i18n.t("saveGraph.legend.game");
     case "actividad":
-      return "Actividad";
+      return i18n.t("saveGraph.legend.activity");
     case "respaldo":
-      return "Respaldo";
+      return i18n.t("saveGraph.legend.backup");
     case "resumen":
-      return "Resumen";
+      return i18n.t("saveGraph.legend.summary");
     default:
-      return "Nodo";
+      return i18n.t("saveGraph.legend.node");
   }
 }
 
 function operationLabel(kind: OperationLogEntry["kind"]): string {
   switch (kind) {
     case "upload":
-      return "Subida";
+      return i18n.t("saveGraph.operation.upload");
     case "download":
-      return "Descarga";
+      return i18n.t("saveGraph.operation.download");
     case "copy_friend":
-      return "Copia de amigo";
+      return i18n.t("saveGraph.operation.friendCopy");
     default:
-      return "Actividad";
+      return i18n.t("saveGraph.operation.activity");
   }
 }
 
@@ -98,7 +99,7 @@ function pickLatestTimestamp(entries: Array<string | null | undefined>): string 
 }
 
 function formatBackupSize(size: number | undefined): string {
-  if (typeof size !== "number") return "Tamaño desconocido";
+  if (typeof size !== "number") return i18n.t("saveGraph.unknownSize");
   return formatBytes(size);
 }
 
@@ -161,10 +162,10 @@ export function buildLibrarySaveGraphModel({
     makeNode({
       id: "biblioteca",
       kind: "biblioteca",
-      title: "Mapa general de guardados",
-      subtitle: `${games.length} juegos configurados`,
-      metric: `${history.length} eventos recientes`,
-      status: "Vista panorámica",
+      title: i18n.t("saveGraph.libraryTitle"),
+      subtitle: i18n.t("saveGraph.gamesConfigured", { count: games.length }),
+      metric: i18n.t("saveGraph.recentEvents", { count: history.length }),
+      status: i18n.t("saveGraph.panoramicView"),
       timestamp: null,
       gameId: null,
     }),
@@ -181,29 +182,24 @@ export function buildLibrarySaveGraphModel({
       ? [...gameHistory].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0]
       : null;
     const remote = remoteByGameId.get(normalizedGameId);
-    const backups = fullBackupsByGame[gameId] ?? fullBackupsByGame[normalizedGameId] ?? [];
-
-    const gameTimestamp = pickLatestTimestamp([
-      gameStats?.cloudLastModified ?? null,
-      gameStats?.localLastModified ?? null,
-      latestHistory?.timestamp ?? null,
-      remote?.lastModified ?? null,
-      ...backups.map((item) => item.lastModified),
-    ]);
+    const backups = fullBackupsByGame[gameId] ?? [];
 
     nodes.push(
       makeNode({
         id: `juego:${gameId}`,
         kind: "juego",
         title: formatGameDisplayName(gameId),
-        subtitle: game.editionLabel ?? "Juego configurado",
-        metric: gameStats ? formatPlaytime(gameStats.playtimeSeconds) : "Sin tiempo acumulado",
-        status: latestHistory?.kind
-          ? `${operationLabel(latestHistory.kind)} reciente`
-          : remote
-            ? "Con nube activa"
-            : "Sin actividad",
-        timestamp: gameTimestamp,
+        subtitle: gameStats ? i18n.t("saveGraph.localSavesLabel") : i18n.t("saveGraph.noLocalData"),
+        metric: i18n.t("saveGraph.playedSuffix", {
+          time: gameStats ? formatPlaytime(gameStats.playtimeSeconds) : "0s",
+        }),
+        status: gameStats ? formatBytes(gameStats.localSizeBytes) : "0 B",
+        timestamp: pickLatestTimestamp([
+          gameStats?.localLastModified,
+          latestHistory?.timestamp,
+          remote?.lastModified,
+          ...backups.map((b) => b.lastModified),
+        ]),
         gameId,
       })
     );
@@ -215,10 +211,15 @@ export function buildLibrarySaveGraphModel({
         makeNode({
           id: activityNodeId,
           kind: "actividad",
-          title: `Última ${operationLabel(latestHistory.kind).toLowerCase()}`,
-          subtitle: `${latestHistory.fileCount} archivos · ${latestHistory.errCount > 0 ? "Con errores" : "Correcto"}`,
+          title: i18n.t("saveGraph.latestOperation", {
+            operation: operationLabel(latestHistory.kind).toLowerCase(),
+          }),
+          subtitle: i18n.t("saveGraph.filesWithErrorsHint", {
+            count: latestHistory.fileCount,
+            status: latestHistory.errCount > 0 ? i18n.t("saveGraph.withErrors") : i18n.t("saveGraph.success"),
+          }),
           metric: formatRelativeDate(latestHistory.timestamp),
-          status: latestHistory.errCount > 0 ? "Revisar" : "Bien",
+          status: latestHistory.errCount > 0 ? i18n.t("saveGraph.review") : i18n.t("saveGraph.ok"),
           timestamp: latestHistory.timestamp,
           gameId,
         })
@@ -232,10 +233,10 @@ export function buildLibrarySaveGraphModel({
         makeNode({
           id: remoteNodeId,
           kind: "resumen",
-          title: "Guardados en la nube",
-          subtitle: `${remote.fileCount} archivos`,
+          title: i18n.t("saveGraph.savesInCloud"),
+          subtitle: i18n.t("saveGraph.filesCount", { count: remote.fileCount }),
           metric: formatBackupSize(remote.totalSizeBytes),
-          status: remote.fileCount > 0 ? "Sincronizado" : "Sin archivos",
+          status: remote.fileCount > 0 ? i18n.t("saveGraph.synced") : i18n.t("saveGraph.noFiles"),
           timestamp: remote.lastModified,
           gameId,
         })
@@ -250,10 +251,10 @@ export function buildLibrarySaveGraphModel({
         makeNode({
           id: backupNodeId,
           kind: "respaldo",
-          title: "Backups completos",
-          subtitle: `${backups.length} copias archivadas`,
-          metric: latestBackup ? formatRelativeDate(latestBackup.lastModified) : "Sin fecha",
-          status: latestBackup ? formatBackupSize(latestBackup.size) : "Sin backups",
+          title: i18n.t("saveGraph.fullBackups"),
+          subtitle: i18n.t("saveGraph.archivedCopies", { count: backups.length }),
+          metric: latestBackup ? formatRelativeDate(latestBackup.lastModified) : i18n.t("saveGraph.noDate"),
+          status: latestBackup ? formatBackupSize(latestBackup.size) : i18n.t("saveGraph.noBackups"),
           timestamp: latestBackup?.lastModified ?? null,
           gameId,
         })
@@ -264,8 +265,8 @@ export function buildLibrarySaveGraphModel({
 
   return {
     scope: "biblioteca",
-    title: "Mapa general de guardados",
-    subtitle: `${games.length} juegos · vista comparativa`,
+    title: i18n.t("saveGraph.libraryTitle"),
+    subtitle: i18n.t("saveGraph.librarySubtitle", { count: games.length }),
     generatedAt: new Date().toISOString(),
     nodes,
     edges,

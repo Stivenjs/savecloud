@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, ScrollShadow, cn } from "@heroui/react";
 import { HardDrive, AlertCircle, FolderOpen, Globe, Share2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   downloadKindDescription,
   downloadKindLabel,
@@ -50,6 +51,7 @@ export function InstallModal({
   onConfirmPeer,
   consoleMode = false,
 }: InstallModalProps) {
+  const { t } = useTranslation();
   const { disks } = useDisks();
   const [selectedDisk, setSelectedDisk] = useState<string | null>(null);
   const [customPath, setCustomPath] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export function InstallModal({
     const selected = await open({
       directory: true,
       multiple: false,
-      title: `Seleccionar carpeta para ${gameName}`,
+      title: t("steamCatalog.installModal.selectFolderTitle", { name: gameName }),
     });
     if (selected && typeof selected === "string") {
       setCustomPath(selected);
@@ -143,7 +145,7 @@ export function InstallModal({
           <>
             <ModalHeader className="flex flex-col gap-1">
               <h2 className={cn("font-bold tracking-tight text-foreground", consoleMode ? "text-2xl" : "text-xl")}>
-                Instalar
+                {t("steamCatalog.installModal.title")}
               </h2>
             </ModalHeader>
             <ModalBody className="py-6">
@@ -165,7 +167,8 @@ export function InstallModal({
                     {gameName}
                   </h3>
                   <p className={cn("text-default-500 font-medium", consoleMode ? "text-base mt-1" : "text-sm")}>
-                    Tamaño necesario: <span className="text-foreground">{gameSizeStr || "Desconocido"}</span>
+                    {t("steamCatalog.installModal.requiredSize")}{" "}
+                    <span className="text-foreground">{gameSizeStr || t("steamCatalog.installModal.unknownSize")}</span>
                   </p>
                   {downloadKind !== "unknown" ? (
                     <div
@@ -198,7 +201,7 @@ export function InstallModal({
                       "font-bold uppercase tracking-widest text-default-400",
                       consoleMode ? "text-sm" : "text-xs"
                     )}>
-                    Instalar en:
+                    {t("steamCatalog.installModal.installIn")}
                   </h4>
                   <Button
                     size={consoleMode ? "md" : "sm"}
@@ -209,7 +212,7 @@ export function InstallModal({
                       consoleMode ? "h-9 text-sm font-semibold rounded-xl" : "h-7 min-w-unit-0 text-xs"
                     )}
                     onPress={handleCustomFolder}>
-                    Elegir otra carpeta
+                    {t("steamCatalog.installModal.chooseAnotherFolder")}
                   </Button>
                 </div>
 
@@ -224,7 +227,7 @@ export function InstallModal({
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className={cn("font-bold text-primary uppercase", consoleMode ? "text-xs" : "text-[10px]")}>
-                        Carpeta personalizada
+                        {t("steamCatalog.installModal.customFolder")}
                       </p>
                       <p
                         className={cn(
@@ -278,7 +281,8 @@ export function InstallModal({
                                   consoleMode ? "text-base" : "text-sm",
                                   isSelected ? "text-white" : "text-foreground"
                                 )}>
-                                {disk.name || "Unidad local"} ({disk.mountPoint.replace(/\\/g, "/")})
+                                {disk.name || t("steamCatalog.installModal.mountPointDefaultLabel")} (
+                                {disk.mountPoint.replace(/\\/g, "/")})
                                 {isSelected && (
                                   <span className="ml-1 opacity-70 font-normal">
                                     / {DEFAULT_DOWNLOAD_SUBFOLDER} / {sanitizeFolderName(gameName)}
@@ -304,7 +308,7 @@ export function InstallModal({
                                   consoleMode ? "text-xs" : "text-[10px]"
                                 )}>
                                 <AlertCircle size={consoleMode ? 14 : 12} />
-                                <span className="font-bold">ESPACIO INSUFICIENTE</span>
+                                <span className="font-bold">{t("steamCatalog.installModal.insufficientSpace")}</span>
                               </div>
                             )}
                           </div>
@@ -320,11 +324,17 @@ export function InstallModal({
                       "rounded-lg border border-warning/40 bg-warning/10 px-3 py-2.5 text-warning-700 dark:text-warning",
                       consoleMode ? "text-sm p-4" : "text-xs"
                     )}>
-                    <p className="font-semibold uppercase tracking-wide text-[10px] text-warning">Nota</p>
+                    <p className="font-semibold uppercase tracking-wide text-[10px] text-warning">
+                      {t("steamCatalog.installModal.note")}
+                    </p>
                     <p className="mt-1 leading-relaxed">
                       {peerReachable
-                        ? `Este juego se puede transferir en la red local desde el dispositivo ${selectedPeer.deviceName.toUpperCase()}.`
-                        : `Este juego se puede transferir en la red local (para ahorrar ancho de banda) si enciendes el dispositivo ${selectedPeer.deviceName.toUpperCase()}.`}
+                        ? t("steamCatalog.installModal.peerTransferLanReachable", {
+                            device: selectedPeer.deviceName.toUpperCase(),
+                          })
+                        : t("steamCatalog.installModal.peerTransferLanUnreachable", {
+                            device: selectedPeer.deviceName.toUpperCase(),
+                          })}
                     </p>
                     {peerOffers.length > 1 && onSelectPeerDevice ? (
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -354,7 +364,7 @@ export function InstallModal({
                   "bg-default-100 hover:bg-default-200 text-default-700 font-semibold",
                   consoleMode ? "h-12 text-base rounded-xl px-6" : ""
                 )}>
-                Cancelar
+                {t("common.cancel")}
               </Button>
 
               <Button
@@ -365,7 +375,9 @@ export function InstallModal({
                   "font-bold shadow-lg shadow-primary/20",
                   consoleMode ? "h-12 text-base rounded-xl px-8" : "px-8"
                 )}>
-                {peerReachable && selectedPeer ? `Traer desde ${selectedPeer.deviceName}` : "Instalar"}
+                {peerReachable && selectedPeer
+                  ? t("steamCatalog.installModal.bringFromDevice", { device: selectedPeer.deviceName })
+                  : t("steamCatalog.grid.install")}
               </Button>
             </ModalFooter>
           </>
