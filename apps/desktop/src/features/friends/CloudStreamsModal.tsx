@@ -167,7 +167,7 @@ export function CloudStreamsModal({ isOpen, onClose, modalRef }: CloudStreamsMod
                                 ? t("friends.cloudStreams.systemAudio")
                                 : t("friends.cloudStreams.noAudio")}
                               {stream.hasMicAudio ? t("friends.cloudStreams.micAudio") : ""} · {stream.viewerCount}/
-                              {stream.maxViewers} viewers
+                              {stream.maxViewers} {t("friends.cloudStreams.viewers", { count: stream.viewerCount })}
                             </p>
                           </div>
 

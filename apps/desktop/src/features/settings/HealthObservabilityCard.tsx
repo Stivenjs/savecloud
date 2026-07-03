@@ -11,14 +11,15 @@ import { focusMainWindow } from "@/windows/mainWindow";
 import { useObservabilityHealth } from "@hooks/useObservabilityHealth";
 import { sanitizeDiagnosticPayload } from "@services/tauri/observability.service";
 import { toastError, toastSuccess } from "@utils/toast";
+import { useTranslation } from "react-i18next";
 import {
   deriveKpis,
   formatNumber,
   formatPercent,
   formatRelative,
   formatRps,
+  getSeverityVisual,
   REMOTE_WINDOWS,
-  SEVERITY_VISUAL,
   timeOfDay,
 } from "@features/settings/observability/healthObservability.utils";
 import type { HealthErrorEntry, RemoteMetricsBucket, SuggestedAction } from "@app-types/observability";
@@ -67,6 +68,7 @@ interface LatencyBarProps {
 }
 
 function LatencyBar({ p50, p95, p99, ceiling = 2500 }: LatencyBarProps) {
+  const { t } = useTranslation();
   const safeP50 = p50 ?? 0;
   const safeP95 = p95 ?? 0;
   const safeP99 = p99 ?? safeP95;
@@ -79,7 +81,9 @@ function LatencyBar({ p50, p95, p99, ceiling = 2500 }: LatencyBarProps) {
     <div className="space-y-2 px-4 py-3">
       <div className="flex items-center justify-between text-[10px] font-medium uppercase tracking-[0.14em] text-default-400">
         <span>Latencia API · /saves</span>
-        <span className="font-mono text-default-500">objetivo P95 &lt; {ceiling}ms</span>
+        <span className="font-mono text-default-500">
+          {t("settings.health.snapshotPrefix")} P95 &lt; {ceiling}ms
+        </span>
       </div>
       <div className="relative h-2 overflow-hidden rounded-full bg-default-200/60">
         <motion.div
@@ -242,11 +246,12 @@ function HealthSkeleton() {
 }
 
 export function HealthObservabilityCard() {
+  const { t } = useTranslation();
   const [remoteWindow, setRemoteWindow] = useState<string>("15m");
   const [restartBusy, setRestartBusy] = useState(false);
   const { data, isLoading, isError, error, refetch, isFetching } = useObservabilityHealth(remoteWindow);
 
-  const visual = data ? SEVERITY_VISUAL[data.overallSeverity] : SEVERITY_VISUAL.ok;
+  const visual = useMemo(() => getSeverityVisual(data?.overallSeverity ?? "ok"), [data, t]);
   const kpis = useMemo(() => (data ? deriveKpis(data) : null), [data]);
 
   const handleSuggestedAction = async (action: SuggestedAction) => {
@@ -257,7 +262,7 @@ export function HealthObservabilityCard() {
           setRestartBusy(true);
           await invoke("stop_cloud_ws");
           await invoke("start_cloud_ws");
-          toastSuccess("WebSocket", "Conexión reiniciada.");
+          toastSuccess("WebSocket", t("settings.health.wsSuccess"));
           await refetch();
           break;
         case "open_history":
@@ -277,7 +282,7 @@ export function HealthObservabilityCard() {
             remote: data.remote,
           });
           await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-          toastSuccess("Portapapeles", "Diagnóstico copiado.");
+          toastSuccess("WebSocket", t("settings.health.clipboardSuccess"));
           break;
         default:
           break;
@@ -292,14 +297,14 @@ export function HealthObservabilityCard() {
   const handleRestart = () =>
     handleSuggestedAction({
       id: "restart_ws",
-      title: "Reiniciar WebSocket",
+      title: t("settings.health.restartWs"),
       description: "",
       actionKind: "restart_ws",
     });
   const handleCopy = () =>
     handleSuggestedAction({
       id: "copy_diag",
-      title: "Copiar diagnóstico",
+      title: t("settings.health.copyDiagnostic"),
       description: "",
       actionKind: "copy_diagnostic",
     });
@@ -307,13 +312,13 @@ export function HealthObservabilityCard() {
   const openDebugLog = async () => {
     const path = data?.local.debugLogPath?.trim();
     if (!path) {
-      toastError("Log", "No hay ruta de log disponible.");
+      toastError(t("settings.health.log"), t("settings.health.noLogPath"));
       return;
     }
     try {
       await openPath(path);
     } catch (e) {
-      toastError("Log", e instanceof Error ? e.message : String(e));
+      toastError(t("settings.health.log"), e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -333,16 +338,18 @@ export function HealthObservabilityCard() {
               <Stethoscope size={17} strokeWidth={1.5} />
             </div>
             <div>
-              <h2 className="text-base font-semibold tracking-tight text-foreground">Telemetría de salud</h2>
-              <p className="text-[11px] text-default-500">Estado del cliente y la API.</p>
+              <h2 className="text-base font-semibold tracking-tight text-foreground">{t("settings.health.title")}</h2>
+              <p className="text-[11px] text-default-500">{t("settings.health.subtitle")}</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2 rounded-full border border-default-200 bg-default-50 px-2 py-1">
-              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-default-400">Ventana</span>
+              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-default-400">
+                {t("settings.health.window")}
+              </span>
               <Select
                 size="sm"
-                aria-label="Ventana temporal de la telemetría remota"
+                aria-label={t("settings.health.windowSelectAria")}
                 selectedKeys={[remoteWindow]}
                 onSelectionChange={(keys) => {
                   const v = Array.from(keys)[0];
@@ -365,7 +372,7 @@ export function HealthObservabilityCard() {
               variant="flat"
               isIconOnly
               isLoading={isFetching && !isLoading}
-              aria-label="Refrescar telemetría"
+              aria-label={t("settings.health.refreshAria")}
               onPress={() => void refetch()}>
               <RefreshCw size={15} strokeWidth={1.5} />
             </Button>
@@ -380,10 +387,10 @@ export function HealthObservabilityCard() {
           </div>
         ) : isError || !data || !kpis ? (
           <div className="flex flex-col items-start gap-3 px-5 py-6 text-sm text-danger">
-            <span className="font-medium">No se pudo cargar la telemetría</span>
-            <span className="text-default-500">{error instanceof Error ? error.message : "Error desconocido"}</span>
+            <span className="font-medium">{t("settings.health.loadError")}</span>
+            <span className="text-default-500">{error instanceof Error ? error.message : t("errors.unexpected")}</span>
             <Button size="sm" variant="flat" onPress={() => void refetch()} startContent={<RotateCw size={14} />}>
-              Reintentar
+              {t("settings.health.retry")}
             </Button>
           </div>
         ) : (
@@ -401,7 +408,8 @@ export function HealthObservabilityCard() {
               </div>
               <div className="flex flex-col items-end font-mono text-[11px] text-default-500">
                 <span>
-                  snapshot <span className="text-foreground">{formatRelative(data.local.generatedAtMs)}</span>
+                  {t("settings.health.snapshotPrefix")}{" "}
+                  <span className="text-foreground">{formatRelative(data.local.generatedAtMs)}</span>
                 </span>
                 {data.local.cloud.apiBaseHostPreview ? (
                   <span className="opacity-70">host {data.local.cloud.apiBaseHostPreview}</span>
@@ -418,10 +426,10 @@ export function HealthObservabilityCard() {
                   value={kpis.wsState === "online" ? "Online" : kpis.wsState === "offline" ? "Offline" : "—"}
                   hint={
                     kpis.wsState === "online"
-                      ? `${data.local.ws.totalSuccessfulConnections} conex. ok`
+                      ? t("settings.health.connectionsOk", { count: data.local.ws.totalSuccessfulConnections })
                       : kpis.wsState === "offline"
-                        ? `desde ${formatRelative(data.local.ws.lastDisconnectedAtMs)}`
-                        : "sin configurar"
+                        ? t("settings.health.since", { time: formatRelative(data.local.ws.lastDisconnectedAtMs) })
+                        : t("settings.health.unconfigured")
                   }
                   intent={kpis.wsState === "offline" ? "warn" : "neutral"}
                 />
@@ -430,14 +438,14 @@ export function HealthObservabilityCard() {
                 <MetricCell
                   label="API P50"
                   value={formatNumber(data.local.syncApi.p50Ms, "ms")}
-                  hint={`${data.local.syncApi.sampleCount} muestras`}
+                  hint={t("settings.health.samples", { count: data.local.syncApi.sampleCount })}
                 />
               </div>
               <div className="bg-content1">
                 <MetricCell
                   label="API P95"
                   value={formatNumber(data.local.syncApi.p95Ms, "ms")}
-                  hint="ventana 15m"
+                  hint={t("settings.health.windowLabel", { window: "15m" })}
                   intent={kpis.p95Intent}
                 />
               </div>
@@ -445,7 +453,7 @@ export function HealthObservabilityCard() {
                 <MetricCell
                   label="Error rate"
                   value={formatPercent(kpis.errorRate)}
-                  hint={`${data.local.syncApi.errorCount} errores`}
+                  hint={t("settings.health.errorsCount", { count: data.local.syncApi.errorCount })}
                   intent={kpis.errorRateIntent}
                 />
               </div>
@@ -453,7 +461,7 @@ export function HealthObservabilityCard() {
                 <MetricCell
                   label="En cola"
                   value={String(data.local.ws.pendingQueueLen)}
-                  hint={`unread ${data.local.notifications.unreadCount}`}
+                  hint={t("settings.health.unreadCount", { count: data.local.notifications.unreadCount })}
                   intent={kpis.pendingIntent}
                 />
               </div>
@@ -470,7 +478,7 @@ export function HealthObservabilityCard() {
                 <div className="border-t border-default-200" />
                 <section className="px-5 py-3">
                   <div className="mb-1 flex items-center justify-between text-[10px] font-medium uppercase tracking-[0.14em] text-default-400">
-                    <span>Tráfico API · {data.remote?.window ?? remoteWindow}</span>
+                    <span>{t("settings.health.apiTraffic", { window: data.remote?.window ?? remoteWindow })}</span>
                     <span className="font-mono text-default-500">
                       {formatRps(remoteTotals?.rpsAvg)} · {remoteTotals?.requests ?? 0} req
                     </span>
@@ -486,7 +494,7 @@ export function HealthObservabilityCard() {
               <div className="px-5 py-3">
                 <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-default-400">
                   <Activity size={13} strokeWidth={1.5} />
-                  <span>Servidor · {data.remote?.window ?? remoteWindow}</span>
+                  <span>{t("settings.health.serverTraffic", { window: data.remote?.window ?? remoteWindow })}</span>
                 </div>
                 {remoteTotals ? (
                   <ul className="grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-[12px] tabular-nums text-default-700 dark:text-default-200">
@@ -516,10 +524,12 @@ export function HealthObservabilityCard() {
                     </li>
                   </ul>
                 ) : (
-                  <p className="text-[12px] text-default-500">
-                    Sin datos remotos. Revisa que la API exponga{" "}
-                    <code className="font-mono">/observability/desktop/summary</code>.
-                  </p>
+                  <p
+                    className="text-[12px] text-default-500"
+                    dangerouslySetInnerHTML={{
+                      __html: t("settings.health.noRemoteData", { path: "/observability/desktop/summary" }),
+                    }}
+                  />
                 )}
 
                 {Object.keys(byMethod).length > 0 ? (
@@ -530,7 +540,11 @@ export function HealthObservabilityCard() {
                         className="inline-flex items-center gap-1.5 rounded-md border border-default-200 bg-default-50 px-2 py-0.5 font-mono text-[11px] text-default-700 dark:bg-default-100/40">
                         <span className="font-semibold text-default-500">{method}</span>
                         <span>{m.requests}</span>
-                        {m.errors > 0 ? <span className="text-rose-500">{m.errors} err</span> : null}
+                        {m.errors > 0 ? (
+                          <span className="text-rose-500">
+                            {t("settings.health.errorsSuffix", { count: m.errors })}
+                          </span>
+                        ) : null}
                         {m.p95Ms != null ? <span className="text-default-400">{Math.round(m.p95Ms)}ms</span> : null}
                       </span>
                     ))}
@@ -562,11 +576,11 @@ export function HealthObservabilityCard() {
 
               <div className="px-5 py-3">
                 <div className="mb-2 flex items-center justify-between text-[11px] font-medium uppercase tracking-[0.14em] text-default-400">
-                  <span>Errores recientes</span>
-                  <span className="font-mono lowercase text-default-500">15m</span>
+                  <span>{t("settings.health.recentErrors")}</span>
+                  <span className="font-mono lowercase text-default-500">{remoteWindow}</span>
                 </div>
                 {data.local.recentErrors.length === 0 ? (
-                  <p className="text-[12px] text-default-500">Sin errores registrados en la ventana.</p>
+                  <p className="text-[12px] text-default-500">{t("settings.health.noErrorsInWindow")}</p>
                 ) : (
                   <div className="-mx-5 max-h-44 divide-y divide-default-100 overflow-y-auto">
                     {data.local.recentErrors.map((e, i) => (
@@ -583,10 +597,10 @@ export function HealthObservabilityCard() {
                 <section className="grid gap-0 sm:grid-cols-2 sm:divide-x sm:divide-default-200">
                   <div className="px-5 py-3">
                     <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-default-400">
-                      Rutas más lentas
+                      {t("settings.health.slowestRoutes")}
                     </div>
                     {slowPaths.length === 0 ? (
-                      <p className="text-[12px] text-default-500">Sin rutas con latencia destacada.</p>
+                      <p className="text-[12px] text-default-500">{t("settings.health.noSlowRoutes")}</p>
                     ) : (
                       <ul className="space-y-1.5">
                         {slowPaths.map((p) => (
@@ -614,10 +628,10 @@ export function HealthObservabilityCard() {
                   </div>
                   <div className="px-5 py-3">
                     <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-default-400">
-                      Rutas con errores
+                      {t("settings.health.errorRoutes")}
                     </div>
                     {errorPaths.length === 0 ? (
-                      <p className="text-[12px] text-default-500">Sin rutas con errores en la ventana.</p>
+                      <p className="text-[12px] text-default-500">{t("settings.health.noErrorRoutes")}</p>
                     ) : (
                       <ul className="space-y-1.5">
                         {errorPaths.map((p) => (
@@ -655,21 +669,21 @@ export function HealthObservabilityCard() {
                   startContent={<RotateCw size={14} strokeWidth={1.7} />}
                   isLoading={restartBusy}
                   onPress={() => void handleRestart()}>
-                  Reiniciar WebSocket
+                  {t("settings.health.restartWs")}
                 </Button>
                 <Button
                   size="sm"
                   variant="flat"
                   startContent={<FileText size={14} strokeWidth={1.7} />}
                   onPress={() => void openDebugLog()}>
-                  Abrir log
+                  {t("settings.health.openLog")}
                 </Button>
                 <Button
                   size="sm"
                   variant="light"
                   startContent={<Copy size={14} strokeWidth={1.7} />}
                   onPress={() => void handleCopy()}>
-                  Copiar diagnóstico
+                  {t("settings.health.copyDiagnostic")}
                 </Button>
               </div>
               {data.local.suggestedActions.length > 0 ? (

@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getName, getTauriVersion, getVersion } from "@tauri-apps/api/app";
+import { useTranslation } from "react-i18next";
+import i18n from "@lib/i18n";
 
 function webEngineLabel(): string {
-  if (typeof navigator === "undefined") return "Motor web";
+  if (typeof navigator === "undefined") return i18n.t("settings.sidebarFooter.webEngine", "Motor web");
   const ua = navigator.userAgent;
   const edg = ua.match(/Edg\/([\d.]+)/);
   if (edg) return `WebView Edge ${edg[1]}`;
@@ -13,7 +15,7 @@ function webEngineLabel(): string {
     const m = ua.match(/Version\/([\d.]+)/);
     if (m) return `WebKit ${m[1]}`;
   }
-  return "Motor web integrado";
+  return i18n.t("settings.sidebarFooter.integratedWebEngine", "Motor web integrado");
 }
 
 function commitSuffix(): string {
@@ -26,6 +28,7 @@ interface SettingsSidebarVersionFooterProps {
 }
 
 export function SettingsSidebarVersionFooter({ onGoToUpdates }: SettingsSidebarVersionFooterProps) {
+  const { t } = useTranslation();
   const [textLines, setTextLines] = useState<string[]>([]);
 
   useEffect(() => {
@@ -83,7 +86,7 @@ export function SettingsSidebarVersionFooter({ onGoToUpdates }: SettingsSidebarV
         type="button"
         onClick={onGoToUpdates}
         className="mt-1.5 cursor-pointer rounded-sm text-left text-[10px] text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-1 focus-visible:ring-offset-background">
-        Buscar actualizaciones
+        {t("settings.sidebarFooter.checkUpdates")}
       </button>
     </footer>
   );

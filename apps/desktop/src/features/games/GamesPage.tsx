@@ -444,7 +444,7 @@ export function GamesPage() {
           {/* Lista de juegos */}
           <section className="space-y-2">
             <h2 className={`font-medium text-default-500 ${bigPictureConsole ? "text-base md:text-lg" : "text-sm"}`}>
-              Lista de juegos
+              {t("library.menu.gamesTitle")}
             </h2>
             <GamesList
               games={filteredGames}

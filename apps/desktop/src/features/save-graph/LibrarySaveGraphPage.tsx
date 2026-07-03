@@ -10,11 +10,13 @@ import { SaveGraphFilters } from "@components/save-graph/SaveGraphFilters";
 import { SaveGraphLegend } from "@components/save-graph/SaveGraphLegend";
 import { SaveGraphDetailPanel } from "@components/save-graph/SaveGraphDetailPanel";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
+import { useTranslation } from "react-i18next";
 
 /**
  * Vista general de toda la biblioteca como grafo de guardados.
  */
 export function LibrarySaveGraphPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const selectedNodeId = useSaveGraphStore((state) => state.selectedNodeId);
   const windowDays = useSaveGraphStore((state) => state.filters.windowDays);
@@ -127,7 +129,7 @@ export function LibrarySaveGraphPage() {
                 remoteSummaryQuery.isError ||
                 fullBackupsQuery.isError ? (
                   <div className="flex min-h-[52vh] items-center justify-center rounded-3xl border border-danger/20 bg-danger/10 p-6 text-danger">
-                    No se pudo cargar el mapa general. Revisa la conexión o vuelve a intentar.
+                    {t("saveGraph.detail.loadLibraryError")}
                   </div>
                 ) : null}
 
@@ -143,10 +145,7 @@ export function LibrarySaveGraphPage() {
           </section>
 
           <aside className="space-y-4">
-            <SaveGraphDetailPanel
-              node={selectedNode}
-              emptyLabel="Selecciona un juego o un nodo de actividad para revisar su estado, últimos eventos y backups."
-            />
+            <SaveGraphDetailPanel node={selectedNode} emptyLabel={t("saveGraph.detail.nothingSelectedLibraryDesc")} />
           </aside>
         </div>
       </div>

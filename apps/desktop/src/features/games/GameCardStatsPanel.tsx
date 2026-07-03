@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
 import type { GameStats } from "@services/tauri";
 import { formatBytes, formatPlaytime, formatRelativeDate } from "@utils/format";
+import { useTranslation } from "react-i18next";
 
 export interface GameCardStatsPanelProps {
   stats: GameStats;
@@ -57,6 +58,8 @@ const itemVariants: Variants = {
 };
 
 export function GameCardStatsPanel({ stats, editionLabel }: GameCardStatsPanelProps) {
+  const { t } = useTranslation();
+
   return (
     <motion.div
       variants={panelVariants}
@@ -64,7 +67,7 @@ export function GameCardStatsPanel({ stats, editionLabel }: GameCardStatsPanelPr
       <motion.div
         variants={itemVariants}
         className="flex items-center justify-between text-[10px] text-zinc-400 backface-hidden">
-        <span className="font-semibold uppercase tracking-wider text-[8px]">Guardado:</span>
+        <span className="font-semibold uppercase tracking-wider text-[8px]">{t("library.gameCardStats.saved")}</span>
         <span className="font-bold font-mono text-zinc-200">{formatBytes(stats.localSizeBytes)}</span>
       </motion.div>
 
@@ -72,7 +75,9 @@ export function GameCardStatsPanel({ stats, editionLabel }: GameCardStatsPanelPr
         <motion.div
           variants={itemVariants}
           className="flex items-center justify-between text-[10px] text-zinc-400 backface-hidden">
-          <span className="font-semibold uppercase tracking-wider text-[8px]">Última vez:</span>
+          <span className="font-semibold uppercase tracking-wider text-[8px]">
+            {t("library.gameCardStats.lastTime")}
+          </span>
           <span
             className="font-bold text-right truncate max-w-[130px] text-zinc-200"
             title={formatRelativeDate(stats.localLastModified)}>
@@ -84,7 +89,7 @@ export function GameCardStatsPanel({ stats, editionLabel }: GameCardStatsPanelPr
       <motion.div
         variants={itemVariants}
         className="flex items-center justify-between text-[10px] text-zinc-400 backface-hidden">
-        <span className="font-semibold uppercase tracking-wider text-[8px]">Jugado:</span>
+        <span className="font-semibold uppercase tracking-wider text-[8px]">{t("library.gameCardStats.played")}</span>
         <div className="flex items-center gap-1 text-primary font-bold font-mono">
           <Clock size={10} className="shrink-0" />
           <span>{formatPlaytime(stats.playtimeSeconds).toUpperCase()}</span>

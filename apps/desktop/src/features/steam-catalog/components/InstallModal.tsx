@@ -295,7 +295,7 @@ export function InstallModal({
                                   consoleMode ? "text-xs" : "text-[10px]",
                                   isSelected ? "text-white/80" : "text-default-400"
                                 )}>
-                                Espacio Libre: {formatBytes(disk.availableSpace)}
+                                {t("steamCatalog.installModal.freeSpace", { size: formatBytes(disk.availableSpace) })}
                               </span>
                             </div>
 

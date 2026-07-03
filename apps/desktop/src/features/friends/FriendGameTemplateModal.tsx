@@ -94,7 +94,7 @@ export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: Fr
               />
               <Input
                 label={t("friends.templateModal.pathLabel")}
-                placeholder="C:\\Users\\TuUsuario\\Saved Games\\MiJuego"
+                placeholder={t("friends.templateModal.pathPlaceholder")}
                 value={path}
                 onValueChange={setPath}
                 variant="bordered"
@@ -110,14 +110,14 @@ export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: Fr
               />
               <Input
                 label={t("friends.templateModal.editionLabel")}
-                placeholder="Steam, Empress, RUNE..."
+                placeholder={t("friends.templateModal.editionPlaceholder")}
                 value={editionLabel}
                 onValueChange={setEditionLabel}
                 variant="bordered"
               />
               <Input
                 label={t("friends.templateModal.sourceUrlLabel")}
-                placeholder="https://..."
+                placeholder={t("friends.templateModal.sourcePlaceholder")}
                 type="url"
                 value={sourceUrl}
                 onValueChange={setSourceUrl}
@@ -125,7 +125,7 @@ export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: Fr
               />
               <Input
                 label={t("friends.templateModal.steamAppIdLabel")}
-                placeholder="ej. 1234560"
+                placeholder={t("friends.templateModal.steamPlaceholder")}
                 value={steamAppId}
                 onValueChange={setSteamAppId}
                 variant="bordered"

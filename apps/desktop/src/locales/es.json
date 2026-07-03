@@ -43,6 +43,14 @@
       "connecting": "Conectando…",
       "offline": "Sin conexión",
       "retrying": "Reintentando…"
+    },
+    "torrentStates": {
+      "checking": "Preparando descarga...",
+      "starting": "Iniciando...",
+      "downloading": "Descargando",
+      "paused": "Pausado",
+      "completed": "Completado",
+      "failed": "Error"
     }
   },
   "errors": {
@@ -518,6 +526,16 @@
     "neverSync": "Nunca sincronizado",
     "cloudStatus": "Estado en la nube",
     "backups": "Backups",
+    "viewMap": "Ver mapa",
+    "gameDetailActions": {
+      "configureExecutable": "Configura el ejecutable en la lista de juegos: Editar juego → pestaña Ejecución",
+      "gameRunning": "El juego parece estar en ejecución"
+    },
+    "gameCardStats": {
+      "saved": "Guardado:",
+      "lastTime": "Última vez:",
+      "played": "Jugado:"
+    },
     "actions": {
       "sync": "Sincronizar",
       "download": "Descargar",
@@ -539,9 +557,202 @@
       "tabSummary": "Resumen",
       "tabDetails": "Detalles",
       "tabRequirements": "Requisitos"
+    },
+    "toast": {
+      "downloadSuccessTitle": "Descarga completada",
+      "downloadSuccessDesc": "{{gameName}}: {{count}} archivo descargado",
+      "downloadSuccessDesc_other": "{{gameName}}: {{count}} archivos descargados",
+      "downloadSuccessDescNoName": "{{count}} archivo descargado",
+      "downloadSuccessDescNoName_other": "{{count}} archivos descargados",
+      "noCloudSavesTitle": "Sin guardados en la nube",
+      "noCloudSavesDesc": "No hay guardados de este juego",
+      "downloadPartialTitle": "Descarga parcial",
+      "downloadPartialDesc": "{{okCount}} descargado(s), {{errCount}} error(es)",
+      "downloadErrorTitle": "Error en la descarga",
+      "downloadErrorDesc": "No se pudo descargar",
+      "syncSuccessTitle": "Sincronización completada",
+      "syncSuccessDesc": "{{gameName}}: {{count}} archivo subido",
+      "syncSuccessDesc_other": "{{gameName}}: {{count}} archivos subidos",
+      "syncSuccessDescNoName": "{{count}} archivo subido",
+      "syncSuccessDescNoName_other": "{{count}} archivos subidos",
+      "syncNoChangesTitle": "Sin cambios en la sincronización",
+      "syncNoChangesDesc": "No se encontraron archivos para sincronizar",
+      "syncPartialTitle": "Sincronización parcial",
+      "syncPartialDesc": "{{okCount}} subido(s), {{errCount}} error(es)",
+      "syncErrorTitle": "Error en la sincronización",
+      "syncErrorDesc": "No se pudo subir"
     }
   },
   "settings": {
+    "createConfigModal": {
+      "title": "Configurar conexión a la nube",
+      "step": "Paso 1 de 1",
+      "intro": "Completa estos datos una sola vez para conectar la app con tu servidor de SaveCloud.<br/>Si este es un PC nuevo, usa \"Guardar y recuperar de la nube\" para restaurar tu configuración al final.",
+      "mainConnection": "Conexión principal",
+      "apiUrlLabel": "Dirección del servidor API",
+      "apiUrlDesc": "URL base donde corre tu backend de SaveCloud.",
+      "apiUrlPlaceholder": "https://tu-api.ejemplo.com",
+      "wsUrlLabel": "Dirección de WebSocket",
+      "wsUrlDesc": "Se usa para funciones en tiempo real, por ejemplo estado de amigos.",
+      "wsUrlPlaceholder": "wss://tu-api.ejemplo.com/dev",
+      "credentials": "Credenciales",
+      "userIdLabel": "ID de usuario",
+      "userIdDesc": "Es el identificador de tu cuenta en el servidor.",
+      "userIdPlaceholder": "Ej: gabi21",
+      "apiKeyLabel": "Clave de acceso (API Key)",
+      "apiKeyPlaceholder": "Pega aquí tu API Key",
+      "apiKeyDesc": "Tu clave privada para autenticar la conexión con la nube.",
+      "optionalIntegration": "Integración opcional",
+      "steamKeyLabel": "Clave de Steam (opcional)",
+      "steamKeyPlaceholder": "Solo si quieres sincronizar datos de Steam",
+      "steamKeyDesc": "Se guarda en el almacén seguro del sistema, no en config.json.",
+      "getSteamKey": "Obtener mi clave en steamcommunity.com",
+      "connectError": "No pudimos completar la conexión. Revisa tus datos e inténtalo de nuevo.",
+      "saveOnly": "Solo guardar",
+      "saveAndRecover": "Guardar y recuperar de la nube"
+    },
+    "health": {
+      "title": "Telemetría de salud",
+      "subtitle": "Estado del cliente y la API.",
+      "window": "Ventana",
+      "windowSelectAria": "Ventana temporal de la telemetría remota",
+      "refreshAria": "Refrescar telemetría",
+      "loadError": "No se pudo cargar la telemetría",
+      "retry": "Reintentar",
+      "snapshotPrefix": "snapshot",
+      "connectionsOk": "{{count}} conex. ok",
+      "since": "desde {{time}}",
+      "unconfigured": "sin configurar",
+      "samples": "{{count}} muestras",
+      "windowLabel": "ventana {{window}}",
+      "errorsCount": "{{count}} errores",
+      "unreadCount": "unread {{count}}",
+      "apiTraffic": "Tráfico API · {{window}}",
+      "serverTraffic": "Servidor · {{window}}",
+      "noRemoteData": "Sin datos remotos. Revisa que la API exponga <code class=\"font-mono\">{{path}}</code>.",
+      "errorsSuffix": "{{count}} err",
+      "recentErrors": "Errores recientes",
+      "noErrorsInWindow": "Sin errores registrados en la ventana.",
+      "slowestRoutes": "Rutas más lentas",
+      "noSlowRoutes": "Sin rutas con latencia destacada.",
+      "errorRoutes": "Rutas con errores",
+      "noErrorRoutes": "Sin rutas con errores en la ventana.",
+      "restartWs": "Reiniciar WebSocket",
+      "openLog": "Abrir log",
+      "copyDiagnostic": "Copiar diagnóstico",
+      "log": "Log",
+      "noLogPath": "No hay ruta de log disponible.",
+      "wsSuccess": "Conexión reiniciada.",
+      "clipboardSuccess": "Diagnóstico copiado.",
+      "severity": {
+        "ok": {
+          "label": "OPERATIVO",
+          "detail": "telemetría dentro de umbrales"
+        },
+        "warning": {
+          "label": "DEGRADADO",
+          "detail": "indicadores fuera de objetivo"
+        },
+        "critical": {
+          "label": "CRÍTICO",
+          "detail": "intervención sugerida"
+        }
+      },
+      "relative": {
+        "now": "ahora",
+        "seconds": "hace {{count}}s",
+        "minutes": "hace {{count}}m",
+        "hours": "hace {{count}}h",
+        "days": "hace {{count}}d"
+      }
+    },
+    "experimental": {
+      "title": "Funciones experimentales",
+      "subtitle": "Opciones avanzadas para mejorar rendimiento. Úsalas si sabes lo que haces.",
+      "streamingBackup": {
+        "title": "Backup completo en streaming (sin .tar temporal)",
+        "desc": "Sube el backup completo sin escribir el archivo <code>.tar</code> al disco. Puede acelerar juegos grandes. En este modo el progreso no muestra porcentaje y no soporta “Pausar/Reanudar”."
+      },
+      "dryRun": {
+        "title": "Modo prueba (streaming sin subir a la nube)",
+        "desc": "Genera el backup en streaming y mide el rendimiento, pero <strong>no crea objetos en la nube</strong>. Solo para pruebas locales; el backup no queda guardado en S3."
+      },
+      "compression": {
+        "title": "Compresión del backup empaquetado (Zstd)",
+        "desc": "Solo aplica al backup completo en <strong>modo streaming</strong> (incluido el modo prueba): el flujo empaqueta con Zstd antes de subir. Si el streaming está desactivado, el backup clásico sigue siendo un <code>.tar</code> sin compresión Zstd por fuera.",
+        "levelLabel": "Nivel Zstd (1–máx. 22):",
+        "defaultSuffix": "(predeterminado de la app: {{default}})",
+        "restoreDefault": "Restaurar predeterminado",
+        "debounceHint": "El valor en disco se actualiza al soltar o dejar de mover un momento (debounce). «Restaurar» guarda al instante.",
+        "prosConsTitle": "Ventajas y contras",
+        "lowLevels": "Niveles bajos (aprox. 1–5):",
+        "lowLevelsDesc": "menos CPU y backup más corto; la subida termina antes. Ideal si priorizas tiempo y estabilidad.",
+        "highLevels": "Niveles altos (aprox. 10–22):",
+        "highLevelsDesc": "archivo más pequeño en la nube y menos ancho de banda; mucho más lento y puede calentar el equipo al empaquetar.",
+        "gameDataHint": "Muchos juegos ya traen datos comprimidos (p. ej. <code>.pak</code>, texturas); en esos casos subir el nivel aporta poco tamaño extra a cambio de mucho tiempo."
+      }
+    },
+    "sdk": {
+      "title": "Entorno de Desarrollo para Plugins (SDK)",
+      "desc": "Descarga las definiciones de la API de SaveCloud (<code>savecloud-api.lua</code>). Este archivo <strong>no se ejecuta</strong>, solo proporciona <strong>autocompletado y tipado</strong>.",
+      "includes": "Incluye:",
+      "includesDesc": "log, ui, db (API disponible para plugins)",
+      "warning": "Debes colocarlo junto a tu archivo <code>init.lua</code>",
+      "exportButton": "Exportar SDK (Lua)",
+      "generating": "Generando...",
+      "viewLogs": "Ver logs",
+      "toastExportSuccess": "SDK exportado con éxito",
+      "toastExportSuccessDesc": "Guardado en: {{path}}",
+      "toastExportError": "Error al exportar SDK",
+      "toastExportErrorDesc": "Hubo un problema al generar el archivo. Verifica los permisos de la carpeta.",
+      "modal": {
+        "title": "Logs de plugins",
+        "emptyTitle": "No hay logs todavía",
+        "emptyDesc": "Los mensajes de tus plugins aparecerán aquí",
+        "table": {
+          "ariaLabel": "Logs de plugins",
+          "time": "Hora",
+          "level": "Nivel",
+          "plugin": "Plugin",
+          "message": "Mensaje"
+        },
+        "clear": "Limpiar",
+        "close": "Cerrar"
+      }
+    },
+    "sidebarFooter": {
+      "webEngine": "Motor web",
+      "integratedWebEngine": "Motor web integrado",
+      "checkUpdates": "Buscar actualizaciones"
+    },
+    "resetSteamCatalogModal": {
+      "title": "Volver a descargar todo el catálogo",
+      "desc1": "Se reiniciará el progreso de sincronización del catálogo Steam.",
+      "desc2": "La próxima sincronización hará una descarga completa por lotes y puede tardar varios minutos.",
+      "warning": "Esto no borra tus ajustes de la app, pero sí reinicia el estado de sincronización del catálogo.",
+      "confirm": "Restablecer y volver a descargar"
+    },
+    "resetCloudSeedModal": {
+      "title": "Reiniciar descarga en la nube",
+      "desc": "Esto reiniciará el estado del worker que trae los juegos de Steam desde la nube.",
+      "warning": "Se borrará el progreso actual y comenzará la descarga desde cero. Solo usa esto si tienes problemas con la sincronización o si quieres forzar una descarga completa.",
+      "confirm": "Reiniciar descarga"
+    },
+    "restoreConfigModal": {
+      "title": "Restaurar configuración desde la nube",
+      "desc1": "Se descargará la última copia de tu configuración desde la nube y se aplicará localmente.",
+      "desc2": "Antes de sobrescribir, se guardará un backup local del archivo actual en la carpeta de configuración:",
+      "warning": "Los cambios se aplicarán al instante y la app se recargará.",
+      "confirm": "Restaurar ahora"
+    },
+    "pullFriendConfigModal": {
+      "title": "Importar configuración de un amigo",
+      "desc": "Ingresa el <strong>usuario</strong> para descargar su configuración completa desde la nube de SaveCloud.",
+      "warning": "Nota: Al hacer esto, <strong>su configuración reemplazará la tuya por completo</strong> localmente, incluyendo tu propia API Key, usuario y URL del servidor. Esto es útil si estás intentando recuperar tu cuenta en un PC nuevo.",
+      "userLabel": "Usuario",
+      "userPlaceholder": "Ej: gabi21",
+      "confirm": "Importar configuración"
+    },
     "title": "Configuración",
     "subtitle": "Cuenta, nube, app, mandos e integraciones",
     "sections": {
@@ -559,6 +770,10 @@
       "gamepad": "Mando",
       "updates": "Versiones",
       "advanced": "Avanzado"
+    },
+    "startupBehavior": {
+      "title": "Panel de perfiles al iniciar",
+      "subtitle": "Actívalo para elegir perfil en cada arranque. Desactívalo para entrar directo con el último perfil usado."
     },
     "language": {
       "title": "Idioma de la aplicación",
@@ -894,9 +1109,13 @@
       "gameIdLabel": "Identificador del juego en tu config",
       "placeholder": "ej. re4-amigo",
       "pathLabel": "Ruta local de tus guardados",
+      "pathPlaceholder": "C:\\Users\\TuUsuario\\Saved Games\\MiJuego",
       "editionLabel": "Origen / edición",
+      "editionPlaceholder": "Steam, Empress, RUNE...",
       "sourceUrlLabel": "URL de descarga (opcional)",
+      "sourcePlaceholder": "https://...",
       "steamAppIdLabel": "Steam App ID (opcional)",
+      "steamPlaceholder": "ej. 1234560",
       "summaryLabel": "Resumen de la plantilla",
       "friendGamePrefix": "Juego del amigo",
       "friendPathsPrefix": "Rutas originales",
@@ -1010,7 +1229,11 @@
       "micAudio": " + mic",
       "yourStream": "Tu transmisión",
       "full": "Lleno",
-      "view": "Ver"
+      "view": "Ver",
+      "resolution": "Resolución",
+      "fps": "FPS",
+      "viewers_one": "espectador",
+      "viewers_other": "espectadores"
     },
     "streamViewer": {
       "title": "Visor de transmisión",
@@ -1113,6 +1336,12 @@
       "setupLaterHint": "Después podrás configurar usuario, API URL y credenciales desde Configuración.",
       "createProfileButton": "Crear perfil"
     },
+    "achievements": {
+      "first_upload": "Primera subida a la nube",
+      "syncs_10": "10 sincronizaciones exitosas",
+      "syncs_100": "100 sincronizaciones exitosas",
+      "hours_100": "100 horas de juego registradas"
+    },
     "drawer": {
       "title": "Perfil",
       "connection": {
@@ -1185,6 +1414,12 @@
     }
   },
   "saveGraph": {
+    "filters": {
+      "timeWindow": "Ventana temporal",
+      "days_one": "1 día",
+      "days_other": "{{count}} días",
+      "reset": "Restablecer"
+    },
     "legend": {
       "title": "Leyenda",
       "game": "Juego",
@@ -1229,6 +1464,10 @@
     "detail": {
       "title": "Detalle",
       "nothingSelected": "Nada seleccionado",
+      "nothingSelectedDesc": "Selecciona un nodo para ver métricas, estado y relación con el resto del mapa.",
+      "nothingSelectedLibraryDesc": "Selecciona un juego o un nodo de actividad para revisar su estado, últimos eventos y backups.",
+      "loadError": "No se pudo cargar el mapa: {{message}}",
+      "loadLibraryError": "No se pudo cargar el mapa general. Revisa la conexión o vuelve a intentar.",
       "node": "Nodo",
       "noSubtitle": "Sin subtítulo",
       "type": "Tipo",
@@ -1462,12 +1701,31 @@
       "chooseAnotherFolder": "Elegir otra carpeta",
       "customFolder": "Carpeta personalizada",
       "mountPointDefaultLabel": "Unidad local",
+      "freeSpace": "Espacio libre: {{size}}",
       "insufficientSpace": "ESPACIO INSUFICIENTE",
       "note": "Nota",
       "peerTransferLanReachable": "Este juego se puede transferir en la red local desde el dispositivo {{device}}.",
       "peerTransferLanUnreachable": "Este juego se puede transferir en la red local (para ahorrar ancho de banda) si enciendes el dispositivo {{device}}.",
       "bringFromDevice": "Traer desde {{device}}",
-      "selectFolderTitle": "Seleccionar carpeta para {{name}}"
+      "selectFolderTitle": "Seleccionar carpeta para {{name}}",
+      "protocols": {
+        "torrent": {
+          "label": "BitTorrent",
+          "desc": "Descarga P2P con el motor integrado (magnet o .torrent)."
+        },
+        "http": {
+          "label": "HTTP",
+          "desc": "Descarga directa desde el hoster del enlace."
+        },
+        "peerLan": {
+          "label": "Transferencia LAN",
+          "desc": "Copia desde otro miembro del cloud en tu red local."
+        },
+        "unknown": {
+          "label": "Desconocido",
+          "desc": "No se pudo determinar el método de descarga."
+        }
+      }
     }
   },
   "about": {

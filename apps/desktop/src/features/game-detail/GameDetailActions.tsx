@@ -3,6 +3,7 @@ import { ChevronDown, Network, Play } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import type { GameActionsMenuModelProps } from "@features/games/game-actions";
 import { GameActionsDropdownMenu } from "@features/games/game-actions";
+import { useTranslation } from "react-i18next";
 
 export type GameDetailActionsProps = Omit<GameActionsMenuModelProps, "surface"> & {
   /** Lanza el archivo configurado en el drawer (Ejecución). Deshabilitado si no hay ruta. */
@@ -22,12 +23,13 @@ export function GameDetailActions({
   onOpenGraph,
   ...menuProps
 }: GameDetailActionsProps) {
+  const { t } = useTranslation();
   const canPlay = Boolean(game.launchExecutablePath?.trim());
   const playDisabled = !canPlay || Boolean(isGameRunning);
   const playTitle = !canPlay
-    ? "Configura el ejecutable en la lista de juegos: Editar juego → pestaña Ejecución"
+    ? t("library.gameDetailActions.configureExecutable")
     : isGameRunning
-      ? "El juego parece estar en ejecución"
+      ? t("library.gameDetailActions.gameRunning")
       : undefined;
 
   const hasActions = Boolean(
@@ -55,13 +57,13 @@ export function GameDetailActions({
           isDisabled={playDisabled}
           title={playTitle}
           onPress={() => onPlay(game)}>
-          Jugar
+          {t("library.launch")}
         </Button>
       )}
 
       {onOpenGraph && (
         <Button variant="flat" startContent={<Network size={16} />} onPress={() => onOpenGraph(game)}>
-          Ver mapa
+          {t("library.viewMap")}
         </Button>
       )}
 
@@ -70,7 +72,7 @@ export function GameDetailActions({
         <Dropdown placement="bottom-end">
           <DropdownTrigger>
             <Button variant="bordered" endContent={<ChevronDown size={16} />}>
-              Acciones
+              {t("common.actions")}
             </Button>
           </DropdownTrigger>
           <GameActionsDropdownMenu

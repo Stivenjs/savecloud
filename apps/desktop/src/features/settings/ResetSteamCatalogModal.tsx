@@ -1,4 +1,5 @@
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from "@heroui/react";
+import { useTranslation } from "react-i18next";
 
 interface ResetSteamCatalogModalProps {
   isOpen: boolean;
@@ -8,6 +9,8 @@ interface ResetSteamCatalogModalProps {
 }
 
 export function ResetSteamCatalogModal({ isOpen, busy, onCancel, onConfirm }: ResetSteamCatalogModalProps) {
+  const { t } = useTranslation();
+
   return (
     <Modal
       isOpen={isOpen}
@@ -16,22 +19,18 @@ export function ResetSteamCatalogModal({ isOpen, busy, onCancel, onConfirm }: Re
       }}
       placement="center">
       <ModalContent>
-        <ModalHeader>Volver a descargar todo el catálogo</ModalHeader>
+        <ModalHeader>{t("settings.resetSteamCatalogModal.title")}</ModalHeader>
         <ModalBody className="gap-3">
-          <p className="text-sm text-default-500">Se reiniciará el progreso de sincronización del catálogo Steam.</p>
-          <p className="text-sm text-default-500">
-            La próxima sincronización hará una descarga completa por lotes y puede tardar varios minutos.
-          </p>
-          <p className="text-sm text-warning-500">
-            Esto no borra tus ajustes de la app, pero sí reinicia el estado de sincronización del catálogo.
-          </p>
+          <p className="text-sm text-default-500">{t("settings.resetSteamCatalogModal.desc1")}</p>
+          <p className="text-sm text-default-500">{t("settings.resetSteamCatalogModal.desc2")}</p>
+          <p className="text-sm text-warning-500">{t("settings.resetSteamCatalogModal.warning")}</p>
         </ModalBody>
         <ModalFooter>
           <Button variant="flat" onPress={onCancel} isDisabled={busy}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button color="warning" onPress={onConfirm} isLoading={busy}>
-            Restablecer y volver a descargar
+            {t("settings.resetSteamCatalogModal.confirm")}
           </Button>
         </ModalFooter>
       </ModalContent>

@@ -1,5 +1,6 @@
 import { Card, CardBody, Switch } from "@heroui/react";
 import { Users } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface ProfileStartupBehaviorCardProps {
   alwaysShowProfileSelector: boolean;
@@ -12,6 +13,8 @@ export function ProfileStartupBehaviorCard({
   loading,
   onChange,
 }: ProfileStartupBehaviorCardProps) {
+  const { t } = useTranslation();
+
   return (
     <Card>
       <CardBody className="gap-4">
@@ -19,11 +22,8 @@ export function ProfileStartupBehaviorCard({
           <div className="flex items-start gap-3">
             <Users size={20} className="mt-0.5 shrink-0 text-default-500" />
             <div>
-              <h2 className="text-base font-semibold text-foreground">Panel de perfiles al iniciar</h2>
-              <p className="mt-0.5 text-sm text-default-500">
-                Actívalo para elegir perfil en cada arranque. Desactívalo para entrar directo con el último perfil
-                usado.
-              </p>
+              <h2 className="text-base font-semibold text-foreground">{t("settings.startupBehavior.title")}</h2>
+              <p className="mt-0.5 text-sm text-default-500">{t("settings.startupBehavior.subtitle")}</p>
             </div>
           </div>
           <Switch isSelected={alwaysShowProfileSelector} onValueChange={onChange} isDisabled={loading} />
