@@ -1,15 +1,16 @@
 import { Download, Upload, Users, type LucideIcon } from "lucide-react";
+import i18n from "@lib/i18n";
 import type { OperationLogEntry } from "@services/tauri";
 
-/** Etiqueta legible del tipo de operación (UI en español). */
+/** Etiqueta legible del tipo de operación. */
 export function formatOperationLogKind(kind: OperationLogEntry["kind"]): string {
   switch (kind) {
     case "upload":
-      return "Subida";
+      return i18n.t("history.kind.upload");
     case "download":
-      return "Descarga";
+      return i18n.t("history.kind.download");
     case "copy_friend":
-      return "Copia desde amigo";
+      return i18n.t("history.kind.copyFriend");
     default:
       return kind;
   }
@@ -32,10 +33,10 @@ export function formatOperationLogRelativeTime(ts: string): string {
   const m = Math.floor(s / 60);
   const h = Math.floor(m / 60);
   const days = Math.floor(h / 24);
-  if (s < 45) return "hace un momento";
-  if (m < 60) return `hace ${m} min`;
-  if (h < 24) return `hace ${h} h`;
-  if (days < 7) return `hace ${days} d`;
+  if (s < 45) return i18n.t("history.relativeTime.justNow");
+  if (m < 60) return i18n.t("history.relativeTime.minutes", { count: m });
+  if (h < 24) return i18n.t("history.relativeTime.hours", { count: h });
+  if (days < 7) return i18n.t("history.relativeTime.days", { count: days });
   return "";
 }
 
@@ -49,9 +50,9 @@ export function getLocalDayKey(ts: string): string {
   return `${y}-${mo}-${da}`;
 }
 
-/** Título de grupo: Hoy, Ayer o fecha larga en español. */
+/** Título de grupo: Hoy, Ayer o fecha larga según idioma activo. */
 export function formatDayGroupHeading(dayKey: string): string {
-  if (dayKey === "unknown") return "Sin fecha";
+  if (dayKey === "unknown") return i18n.t("history.dayGroup.unknown");
   const [y, m, day] = dayKey.split("-").map(Number);
   const d = new Date(y, m - 1, day);
   const startToday = new Date();
@@ -59,9 +60,10 @@ export function formatDayGroupHeading(dayKey: string): string {
   const startD = new Date(d);
   startD.setHours(0, 0, 0, 0);
   const diffDays = Math.round((startToday.getTime() - startD.getTime()) / 86_400_000);
-  if (diffDays === 0) return "Hoy";
-  if (diffDays === 1) return "Ayer";
-  return d.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  if (diffDays === 0) return i18n.t("history.dayGroup.today");
+  if (diffDays === 1) return i18n.t("history.dayGroup.yesterday");
+  const locale = i18n.language.startsWith("en") ? "en" : "es";
+  return d.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 }
 
 export interface OperationHistoryDayGroup {

@@ -2,12 +2,14 @@ import { useCallback, useTransition } from "react";
 import { Card, CardBody, Switch } from "@heroui/react";
 import { Cpu } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 
 import { CONFIG_QUERY_KEY, useConfig } from "@hooks/useConfig";
 import { setLowPerformanceMode } from "@services/tauri";
 import { toastError } from "@utils/toast";
 
 export function LowPerformanceModeCard() {
+  const { t } = useTranslation();
   const { config, loading, refetch } = useConfig();
   const qc = useQueryClient();
   const [pending, startTransition] = useTransition();
@@ -36,19 +38,15 @@ export function LowPerformanceModeCard() {
           <div className="flex items-start gap-3">
             <Cpu size={20} className="mt-0.5 shrink-0 text-default-500" />
             <div>
-              <h2 className="text-base font-semibold text-foreground">Modo bajo rendimiento</h2>
-              <p className="mt-0.5 text-sm text-default-500">
-                Desactiva transiciones de interfaz, efectos visuales de desenfoque (blur), vídeos automáticos en el
-                catálogo/perfiles y componentes WebGL interactivos. Recomendado para equipos con GPU integrada,
-                portátiles con batería o PCs antiguas.
-              </p>
+              <h2 className="text-base font-semibold text-foreground">{t("settings.performance.title")}</h2>
+              <p className="mt-0.5 text-sm text-default-500">{t("settings.performance.subtitle")}</p>
             </div>
           </div>
           <Switch
             isSelected={isEnabled}
             onValueChange={onToggle}
             isDisabled={loading || pending}
-            aria-label="Activar modo bajo rendimiento"
+            aria-label={t("settings.performance.ariaLabel")}
           />
         </div>
       </CardBody>

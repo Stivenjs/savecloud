@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import type { RefObject } from "react";
+import { useTranslation } from "react-i18next";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { PauseCircle } from "lucide-react";
 
@@ -12,6 +13,8 @@ interface PausedUploadBarProps {
 }
 
 export function PausedUploadBar({ gameId, filename, constraintsRef, resuming, onResume }: PausedUploadBarProps) {
+  const { t } = useTranslation();
+
   return (
     <motion.div
       key="paused-upload"
@@ -27,7 +30,7 @@ export function PausedUploadBar({ gameId, filename, constraintsRef, resuming, on
       <div className="flex items-center gap-3">
         <PauseCircle size={20} className="shrink-0 text-warning" aria-hidden />
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-warning">Subida pausada</p>
+          <p className="text-xs font-semibold text-warning">{t("sync.uploadPaused")}</p>
           <p className="truncate text-xs text-default-500">
             {formatGameDisplayName(gameId)} — {filename}
           </p>
@@ -38,7 +41,7 @@ export function PausedUploadBar({ gameId, filename, constraintsRef, resuming, on
           disabled={resuming}
           onPointerDownCapture={(e) => e.stopPropagation()}
           className="shrink-0 rounded-full bg-warning/15 px-3 py-1 text-xs font-semibold text-warning hover:bg-warning/25 disabled:opacity-50 transition-colors">
-          {resuming ? "Reanudando…" : "Reanudar"}
+          {resuming ? t("sync.resuming") : t("sync.resume")}
         </button>
       </div>
     </motion.div>

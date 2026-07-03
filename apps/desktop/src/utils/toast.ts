@@ -1,6 +1,7 @@
 import { sileo, type SileoOptions } from "sileo";
 import { formatGameDisplayName } from "@/utils/gameImage";
 import type { SyncResult } from "@services/tauri";
+import i18n from "@lib/i18n";
 
 export interface ToastOptions {
   /** Duración en ms antes de cerrar el toast. */
@@ -69,18 +70,29 @@ export function toastInfo(title: string, description?: string, options?: ToastOp
  */
 export function toastDownloadResult(result: SyncResult, gameName?: string): void {
   if (result.errCount === 0 && result.okCount > 0) {
-    toastSuccess(
-      "Descarga completada",
-      gameName
-        ? `${formatGameDisplayName(gameName)}: ${result.okCount} archivo(s) descargado(s)`
-        : `${result.okCount} archivo(s) descargado(s)`
-    );
+    const title = i18n.t("library.toast.downloadSuccessTitle");
+    const desc = gameName
+      ? i18n.t("library.toast.downloadSuccessDesc", {
+          gameName: formatGameDisplayName(gameName),
+          count: result.okCount,
+        })
+      : i18n.t("library.toast.downloadSuccessDescNoName", { count: result.okCount });
+    toastSuccess(title, desc);
   } else if (result.errCount === 0 && result.okCount === 0) {
-    toastInfo("Sin guardados en la nube", result.errors[0] ?? "No hay guardados de este juego");
+    toastInfo(
+      i18n.t("library.toast.noCloudSavesTitle"),
+      result.errors[0] ? result.errors[0] : i18n.t("library.toast.noCloudSavesDesc")
+    );
   } else if (result.okCount > 0) {
-    toastWarning("Descarga parcial", `${result.okCount} descargado(s), ${result.errCount} error(es)`);
+    toastWarning(
+      i18n.t("library.toast.downloadPartialTitle"),
+      i18n.t("library.toast.downloadPartialDesc", { okCount: result.okCount, errCount: result.errCount })
+    );
   } else {
-    toastError("Error en la descarga", result.errors[0] ?? "No se pudo descargar");
+    toastError(
+      i18n.t("library.toast.downloadErrorTitle"),
+      result.errors[0] ? result.errors[0] : i18n.t("library.toast.downloadErrorDesc")
+    );
   }
 }
 
@@ -89,17 +101,25 @@ export function toastDownloadResult(result: SyncResult, gameName?: string): void
  */
 export function toastSyncResult(result: SyncResult, gameName?: string): void {
   if (result.errCount === 0 && result.okCount > 0) {
-    toastSuccess(
-      "Sincronización completada",
-      gameName
-        ? `${formatGameDisplayName(gameName)}: ${result.okCount} archivo(s) subido(s)`
-        : `${result.okCount} archivo(s) subido(s)`
-    );
+    const title = i18n.t("library.toast.syncSuccessTitle");
+    const desc = gameName
+      ? i18n.t("library.toast.syncSuccessDesc", { gameName: formatGameDisplayName(gameName), count: result.okCount })
+      : i18n.t("library.toast.syncSuccessDescNoName", { count: result.okCount });
+    toastSuccess(title, desc);
   } else if (result.errCount === 0 && result.okCount === 0) {
-    toastInfo("Sin cambios en la sincronización", result.errors[0] ?? "No se encontraron archivos para sincronizar");
+    toastInfo(
+      i18n.t("library.toast.syncNoChangesTitle"),
+      result.errors[0] ? result.errors[0] : i18n.t("library.toast.syncNoChangesDesc")
+    );
   } else if (result.okCount > 0) {
-    toastWarning("Sincronización parcial", `${result.okCount} subido(s), ${result.errCount} error(es)`);
+    toastWarning(
+      i18n.t("library.toast.syncPartialTitle"),
+      i18n.t("library.toast.syncPartialDesc", { okCount: result.okCount, errCount: result.errCount })
+    );
   } else {
-    toastError("Error en la sincronización", result.errors[0] ?? "No se pudo subir");
+    toastError(
+      i18n.t("library.toast.syncErrorTitle"),
+      result.errors[0] ? result.errors[0] : i18n.t("library.toast.syncErrorDesc")
+    );
   }
 }

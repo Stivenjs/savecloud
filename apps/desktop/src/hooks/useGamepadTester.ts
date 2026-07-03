@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { inferGamepadLayoutKind, type GamepadLayoutKind } from "@/lib/gamepadLabelMaps";
 import { toastError, toastInfo, toastSuccess } from "@/utils/toast";
+import i18n from "@lib/i18n";
 
 export interface GamepadSummaryDto {
   id: number;
@@ -134,18 +135,15 @@ export function useGamepadTester(): UseGamepadTesterResult {
   const installGamepadDriver = useCallback(async () => {
     if (!isTauri()) return;
     setDriverInstallBusy(true);
-    toastInfo(
-      "Instalando driver de mandos",
-      "Descargando el instalador oficial de Microsoft. Puede tardar unos segundos."
-    );
+    toastInfo(i18n.t("settings.gamepad.toast.installingDriver"), i18n.t("settings.gamepad.toast.installingDriverDesc"));
     try {
       await invoke("gamepad_install_windows_runtime");
       toastSuccess(
-        "Instalador iniciado",
-        "Se abrió el instalador oficial de DirectX/XInput. Si aparece UAC, acepta la elevación."
+        i18n.t("settings.gamepad.toast.installerStarted"),
+        i18n.t("settings.gamepad.toast.installerStartedDesc")
       );
     } catch (e) {
-      toastError("No se pudo iniciar la instalación", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.gamepad.toast.cannotInstall"), e instanceof Error ? e.message : String(e));
     } finally {
       setDriverInstallBusy(false);
     }

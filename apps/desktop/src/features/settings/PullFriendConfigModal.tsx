@@ -1,5 +1,6 @@
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Input } from "@heroui/react";
 import { User } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface PullFriendConfigModalProps {
   isOpen: boolean;
@@ -18,6 +19,8 @@ export function PullFriendConfigModal({
   onClose,
   onSubmit,
 }: PullFriendConfigModalProps) {
+  const { t } = useTranslation();
+
   return (
     <Modal
       isOpen={isOpen}
@@ -25,19 +28,19 @@ export function PullFriendConfigModal({
       isDismissable={!pulling}
       hideCloseButton={pulling}>
       <ModalContent>
-        <ModalHeader className="flex flex-col gap-1">Importar configuración de un amigo</ModalHeader>
+        <ModalHeader className="flex flex-col gap-1">{t("settings.pullFriendConfigModal.title")}</ModalHeader>
         <ModalBody>
-          <p className="text-sm text-default-500">
-            Ingresa el <strong>usuario</strong> para descargar su configuración completa desde la nube de SaveCloud.
-          </p>
-          <p className="text-xs text-warning">
-            Nota: Al hacer esto, <strong>su configuración reemplazará la tuya por completo</strong> localmente,
-            incluyendo tu propia API Key, usuario y URL del servidor. Esto es útil si estás intentando recuperar tu
-            cuenta en un PC nuevo.
-          </p>
+          <p
+            className="text-sm text-default-500"
+            dangerouslySetInnerHTML={{ __html: t("settings.pullFriendConfigModal.desc") }}
+          />
+          <p
+            className="text-xs text-warning"
+            dangerouslySetInnerHTML={{ __html: t("settings.pullFriendConfigModal.warning") }}
+          />
           <Input
-            label="Usuario"
-            placeholder="Ej: gabi21"
+            label={t("settings.pullFriendConfigModal.userLabel")}
+            placeholder={t("settings.pullFriendConfigModal.userPlaceholder")}
             value={userId}
             onChange={(e) => onChangeUserId(e.target.value)}
             disabled={pulling}
@@ -47,10 +50,10 @@ export function PullFriendConfigModal({
         </ModalBody>
         <ModalFooter>
           <Button variant="flat" onPress={onClose} isDisabled={pulling}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button color="primary" onPress={onSubmit} isLoading={pulling} isDisabled={!userId.trim()}>
-            Importar configuración
+            {t("settings.pullFriendConfigModal.confirm")}
           </Button>
         </ModalFooter>
       </ModalContent>

@@ -1,5 +1,6 @@
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, ScrollShadow } from "@heroui/react";
 import { CloudDownload, FileText } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { formatGameDisplayName } from "@utils/gameImage";
 
 export interface CopyFriendSaveItem {
@@ -33,6 +34,7 @@ export function CopyFriendSavesConfirmModal({
   onConfirm,
   isLoading = false,
 }: CopyFriendSavesConfirmModalProps) {
+  const { t } = useTranslation();
   const displayName = gameDisplayName ?? formatGameDisplayName(gameId);
   const hasConflicts = conflictCount > 0;
 
@@ -46,28 +48,22 @@ export function CopyFriendSavesConfirmModal({
       <ModalContent>
         <ModalHeader className="flex items-center gap-2">
           <CloudDownload size={22} className="text-primary" />
-          Copiar guardados del amigo a tu nube
+          {t("friends.copyConfirm.title")}
         </ModalHeader>
         <ModalBody>
-          <p className="text-sm text-default-600">
-            Se copiarán los guardados del juego <strong className="text-foreground">{displayName}</strong> desde la nube
-            de tu amigo a tu nube. Los archivos quedarán asociados a este juego en tu cuenta.
-          </p>
+          <p className="text-sm text-default-600">{t("friends.copyConfirm.desc", { name: displayName })}</p>
           {hasConflicts && (
             <p className="text-sm text-warning-600">
-              {conflictCount} archivo{conflictCount !== 1 ? "s" : ""} ya existe
-              {conflictCount !== 1 ? "n" : ""} en tu nube y se copiará
-              {conflictCount !== 1 ? "n" : ""} con un nombre distinto (ej.{" "}
-              <span className="font-mono text-xs">archivo (amigo 1).sav</span>) para no sobrescribir.
+              {t("friends.copyConfirm.conflictWarning", { count: conflictCount })}
             </p>
           )}
           <div className="rounded-lg border border-default-200 bg-default-50 p-3">
             <p className="mb-2 text-xs font-medium text-default-500">
-              {items.length} archivo{items.length !== 1 ? "s" : ""} en total
+              {t("friends.copyConfirm.filesTotal", { count: items.length })}
               {newCount > 0 && conflictCount > 0
-                ? ` · ${newCount} nuevo${newCount !== 1 ? "s" : ""}, ${conflictCount} con nuevo nombre`
+                ? t("friends.copyConfirm.statsNewAndConflicts", { newCount, conflictCount })
                 : conflictCount > 0
-                  ? ` · ${conflictCount} con nuevo nombre`
+                  ? t("friends.copyConfirm.statsOnlyConflicts", { conflictCount })
                   : ""}
             </p>
             <ScrollShadow className="max-h-[40vh]">
@@ -91,14 +87,14 @@ export function CopyFriendSavesConfirmModal({
         </ModalBody>
         <ModalFooter>
           <Button variant="flat" onPress={onClose} isDisabled={isLoading}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button
             color="primary"
             onPress={handleConfirm}
             isLoading={isLoading}
             startContent={!isLoading ? <CloudDownload size={18} /> : undefined}>
-            Copiar a mi nube
+            {t("friends.copyConfirm.confirmButton")}
           </Button>
         </ModalFooter>
       </ModalContent>

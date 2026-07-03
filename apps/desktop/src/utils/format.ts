@@ -1,3 +1,5 @@
+import i18n from "@lib/i18n";
+
 /**
  * Formatea bytes a string legible (KB, MB, GB, TB).
  */
@@ -46,12 +48,14 @@ export function formatRelativeDate(dateStr: string | null): string {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return "Ahora";
-  if (diffMins < 60) return `Hace ${diffMins} min`;
-  if (diffHours < 24) return `Hace ${diffHours} h`;
-  if (diffDays === 1) return "Ayer";
-  if (diffDays < 7) return `Hace ${diffDays} días`;
-  return date.toLocaleDateString(undefined, {
+  const lang = i18n.language || "es";
+
+  if (diffMins < 1) return i18n.t("history.relativeTime.justNow");
+  if (diffMins < 60) return i18n.t("history.relativeTime.minutes", { count: diffMins });
+  if (diffHours < 24) return i18n.t("history.relativeTime.hours", { count: diffHours });
+  if (diffDays === 1) return i18n.t("history.dayGroup.yesterday");
+  if (diffDays < 7) return i18n.t("history.relativeTime.days", { count: diffDays });
+  return date.toLocaleDateString(lang, {
     day: "numeric",
     month: "short",
     year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
@@ -75,13 +79,15 @@ export function formatLastSync(date: Date): string {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return "Hace un momento";
-  if (diffMins < 60) return `Hace ${diffMins} min`;
-  if (diffHours < 24) return `Hace ${diffHours} h`;
-  if (diffDays === 1) return "Ayer";
-  if (diffDays < 7) return `Hace ${diffDays} días`;
+  const lang = i18n.language || "es";
 
-  return date.toLocaleDateString("es", {
+  if (diffMins < 1) return i18n.t("history.relativeTime.justNow");
+  if (diffMins < 60) return i18n.t("history.relativeTime.minutes", { count: diffMins });
+  if (diffHours < 24) return i18n.t("history.relativeTime.hours", { count: diffHours });
+  if (diffDays === 1) return i18n.t("history.dayGroup.yesterday");
+  if (diffDays < 7) return i18n.t("history.relativeTime.days", { count: diffDays });
+
+  return date.toLocaleDateString(lang, {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -107,17 +113,17 @@ export function getSourceDisplayName(sourceUrl: string): string {
 export function mapTorrentState(state: string) {
   switch (state) {
     case "checking":
-      return "Preparando descarga...";
+      return i18n.t("common.torrentStates.checking");
     case "starting":
-      return "Iniciando...";
+      return i18n.t("common.torrentStates.starting");
     case "downloading":
-      return "Descargando";
+      return i18n.t("common.torrentStates.downloading");
     case "paused":
-      return "Pausado";
+      return i18n.t("common.torrentStates.paused");
     case "completed":
-      return "Completado";
+      return i18n.t("common.torrentStates.completed");
     case "failed":
-      return "Error";
+      return i18n.t("common.torrentStates.failed");
     default:
       return state;
   }

@@ -110,6 +110,9 @@ pub struct AppSettings {
     /// Desactivar aceleración por hardware (GPU) en el webview.
     #[serde(default)]
     pub disable_hardware_acceleration: bool,
+    /// Idioma preferido de la aplicación ("es", "en", etc.).
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -324,6 +327,8 @@ pub struct ConfigDto {
     pub auto_extract_downloads: bool,
     pub low_performance_mode: bool,
     pub disable_hardware_acceleration: bool,
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 /// DTO representativo de un juego para el frontend.

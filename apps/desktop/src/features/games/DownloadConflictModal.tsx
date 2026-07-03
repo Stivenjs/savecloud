@@ -1,12 +1,13 @@
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from "@heroui/react";
 import { AlertTriangle, CloudDownload } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { DownloadConflict } from "@services/tauri";
 import { formatGameDisplayName } from "@utils/gameImage";
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, locale: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleString("es", {
+    return d.toLocaleString(locale.startsWith("en") ? "en" : "es", {
       day: "2-digit",
       month: "short",
       year: "numeric",
@@ -35,6 +36,8 @@ export function DownloadConflictModal({
   onConfirm,
   isLoading = false,
 }: DownloadConflictModalProps) {
+  const { t, i18n } = useTranslation();
+
   if (conflicts.length === 0) return null;
 
   const gameName = formatGameDisplayName(gameId);
@@ -44,32 +47,38 @@ export function DownloadConflictModal({
       <ModalContent>
         <ModalHeader className="flex items-center gap-2">
           <AlertTriangle size={22} className="text-warning" />
-          Conflictos de descarga
+          {t("library.downloadConflict.title")}
         </ModalHeader>
         <ModalBody>
-          <p className="text-default-600">
-            {conflicts.length} archivo{conflicts.length !== 1 ? "s" : ""} de <strong>{gameName}</strong>{" "}
-            {conflicts.length === 1 ? "es" : "son"} más reciente{conflicts.length !== 1 ? "s" : ""} que en la nube. Si
-            continúas, se sobrescribirán con las versiones de la nube.
-          </p>
+          <p
+            className="text-default-600"
+            dangerouslySetInnerHTML={{
+              __html: t("library.downloadConflict.desc", { count: conflicts.length, gameName }),
+            }}
+          />
           <ul className="max-h-48 space-y-2 overflow-y-auto rounded-lg bg-default-100 p-3">
             {conflicts.slice(0, 10).map((c, i) => (
               <li key={i} className="flex flex-col gap-0.5 text-sm">
                 <span className="font-medium text-foreground">{c.filename}</span>
                 <span className="text-xs text-default-500">
-                  Local: {formatDate(c.localModified)} → Nube: {formatDate(c.cloudModified)}
+                  {t("library.downloadConflict.localLabel")}: {formatDate(c.localModified, i18n.language)} →{" "}
+                  {t("library.downloadConflict.cloudLabel")}: {formatDate(c.cloudModified, i18n.language)}
                 </span>
               </li>
             ))}
-            {conflicts.length > 10 && <li className="text-xs text-default-500">… y {conflicts.length - 10} más</li>}
+            {conflicts.length > 10 && (
+              <li className="text-xs text-default-500">
+                {t("library.downloadConflict.andMore", { count: conflicts.length - 10 })}
+              </li>
+            )}
           </ul>
         </ModalBody>
         <ModalFooter>
           <Button variant="flat" onPress={onClose} isDisabled={isLoading}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button color="warning" onPress={onConfirm} isLoading={isLoading} startContent={<CloudDownload size={18} />}>
-            Sobrescribir igualmente
+            {t("library.downloadConflict.overwrite")}
           </Button>
         </ModalFooter>
       </ModalContent>

@@ -3,6 +3,7 @@ import { Accordion, AccordionItem, Button, Checkbox, Chip, Input, Skeleton, cn }
 import type { CatalogFilterFacet } from "@services/tauri";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { Search, TagsIcon, Swords } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 type SteamCatalogFiltersProps = {
   genres: CatalogFilterFacet[];
@@ -35,6 +36,7 @@ const FacetFilterPanel = memo(function FacetFilterPanel({
   filterPlaceholder: string;
   consoleMode?: boolean;
 }) {
+  const { t } = useTranslation();
   const [filterText, setFilterText] = useState("");
   const debouncedFilterText = useDebouncedValue(filterText, 300);
   const needle = normalizeFilter(debouncedFilterText);
@@ -70,8 +72,8 @@ const FacetFilterPanel = memo(function FacetFilterPanel({
 
   const subtitle =
     needle.length > 0
-      ? `${filtered.length} de ${items.length} visibles`
-      : `${items.length} disponible${items.length === 1 ? "" : "s"}`;
+      ? t("steamCatalog.filters.visibleOf", { filtered: filtered.length, total: items.length })
+      : t("steamCatalog.filters.available", { count: items.length });
 
   return (
     <div className={cn("flex flex-col gap-3 pt-1", consoleMode && "gap-4")}>
@@ -88,14 +90,14 @@ const FacetFilterPanel = memo(function FacetFilterPanel({
             input: consoleMode ? "text-base font-medium" : "text-xs",
             inputWrapper: consoleMode ? "h-12 min-h-12 rounded-xl" : "h-8 min-h-8",
           }}
-          aria-label="Filtrar lista"
+          aria-label={t("steamCatalog.filters.filterList")}
         />
       </div>
 
       <div className={cn("overflow-y-auto pr-2", consoleMode ? "max-h-[calc(100dvh-320px)]" : "max-h-64")}>
         {filtered.length === 0 ? (
           <p className={cn("text-center text-default-400", consoleMode ? "py-6 text-sm" : "py-4 text-xs")}>
-            Sin coincidencias
+            {t("steamCatalog.filters.noMatches")}
           </p>
         ) : (
           <ul className={cn("flex flex-col gap-1.5", consoleMode && "gap-3")}>
@@ -151,6 +153,7 @@ export function SteamCatalogFilters({
   isLoading,
   consoleMode = false,
 }: SteamCatalogFiltersProps) {
+  const { t } = useTranslation();
   const genreSet = useMemo(() => new Set(selectedGenres), [selectedGenres]);
   const tagSet = useMemo(() => new Set(selectedTags), [selectedTags]);
   const hasSelection = selectedGenres.length > 0 || selectedTags.length > 0;
@@ -197,7 +200,7 @@ export function SteamCatalogFilters({
             "font-bold uppercase tracking-widest text-default-400",
             consoleMode ? "text-xs" : "text-[11px]"
           )}>
-          Filtros
+          {t("steamCatalog.filters.title")}
         </p>
         {hasSelection ? (
           <Button
@@ -212,17 +215,17 @@ export function SteamCatalogFilters({
                          bg-warning text-[10px] font-bold text-warning-foreground">
                 {selectedGenres.length + selectedTags.length}
               </span>
-              Quitar filtros
+              {t("steamCatalog.filters.clearButton")}
             </span>
           </Button>
         ) : null}
       </div>
       <p className={cn("text-default-500", consoleMode ? "text-sm font-medium" : "text-xs")}>
-        Solo afectan a juegos con ficha descargada (géneros y etiquetas de la tienda Steam).
+        {t("steamCatalog.filters.onlyAffects")}
       </p>
       {!genres.length && !tags.length ? (
         <p className={cn("text-default-400", consoleMode ? "text-sm" : "text-xs")}>
-          Aún no hay datos para filtrar. Sincroniza el catálogo y abre algunas fichas para rellenar géneros y etiquetas.
+          {t("steamCatalog.filters.noDataYet")}
         </p>
       ) : (
         <Accordion
@@ -238,7 +241,7 @@ export function SteamCatalogFilters({
           {genres.length > 0 ? (
             <AccordionItem
               key="genres"
-              aria-label="Géneros"
+              aria-label={t("steamCatalog.filters.genres")}
               title={
                 <span className="flex w-full min-w-0 items-center gap-2 pr-1">
                   <Swords className={cn("shrink-0 text-secondary", consoleMode ? "size-5" : "size-4")} />
@@ -247,7 +250,7 @@ export function SteamCatalogFilters({
                       "min-w-0 flex-1 truncate text-left font-semibold",
                       consoleMode ? "text-base" : "text-sm"
                     )}>
-                    Géneros
+                    {t("steamCatalog.filters.genres")}
                   </span>
                   <Chip size={consoleMode ? "md" : "sm"} variant="flat" className="shrink-0">
                     {genres.length}
@@ -258,7 +261,7 @@ export function SteamCatalogFilters({
                 items={genres}
                 selected={genreSet}
                 onToggle={handleToggleGenre}
-                filterPlaceholder="Filtrar…"
+                filterPlaceholder={t("steamCatalog.filters.filterPlaceholder")}
                 consoleMode={consoleMode}
               />
             </AccordionItem>
@@ -266,7 +269,7 @@ export function SteamCatalogFilters({
           {tags.length > 0 ? (
             <AccordionItem
               key="tags"
-              aria-label="Etiquetas"
+              aria-label={t("steamCatalog.filters.tags")}
               title={
                 <span className="flex w-full min-w-0 items-center gap-2 pr-1">
                   <TagsIcon className={cn("shrink-0 text-success", consoleMode ? "size-5" : "size-4")} />
@@ -275,7 +278,7 @@ export function SteamCatalogFilters({
                       "min-w-0 flex-1 truncate text-left font-semibold",
                       consoleMode ? "text-base" : "text-sm"
                     )}>
-                    Etiquetas
+                    {t("steamCatalog.filters.tags")}
                   </span>
                   <Chip size={consoleMode ? "md" : "sm"} variant="flat" className="shrink-0">
                     {tags.length}
@@ -286,7 +289,7 @@ export function SteamCatalogFilters({
                 items={tags}
                 selected={tagSet}
                 onToggle={handleToggleTag}
-                filterPlaceholder="Filtrar…"
+                filterPlaceholder={t("steamCatalog.filters.filterPlaceholder")}
                 consoleMode={consoleMode}
               />
             </AccordionItem>

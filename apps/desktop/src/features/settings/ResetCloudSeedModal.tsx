@@ -1,5 +1,6 @@
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from "@heroui/react";
 import { AlertTriangle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface ResetCloudSeedModalProps {
   isOpen: boolean;
@@ -9,6 +10,8 @@ interface ResetCloudSeedModalProps {
 }
 
 export function ResetCloudSeedModal({ isOpen, busy, onCancel, onConfirm }: ResetCloudSeedModalProps) {
+  const { t } = useTranslation();
+
   return (
     <Modal
       isOpen={isOpen}
@@ -19,23 +22,20 @@ export function ResetCloudSeedModal({ isOpen, busy, onCancel, onConfirm }: Reset
       <ModalContent>
         <ModalHeader className="flex items-center gap-2 text-warning-600">
           <AlertTriangle size={20} />
-          Reiniciar descarga en la nube
+          {t("settings.resetCloudSeedModal.title")}
         </ModalHeader>
         <ModalBody className="gap-3">
-          <p className="text-sm text-default-600">
-            Esto reiniciará el estado del worker que trae los juegos de Steam desde la nube.
-          </p>
+          <p className="text-sm text-default-600">{t("settings.resetCloudSeedModal.desc")}</p>
           <p className="text-sm text-warning-600">
-            <strong>Advertencia:</strong> Se borrará el progreso actual y comenzará la descarga desde cero. Solo usa
-            esto si tienes problemas con la sincronización o si quieres forzar una descarga completa.
+            <strong>{t("steamCatalog.installModal.note")}:</strong> {t("settings.resetCloudSeedModal.warning")}
           </p>
         </ModalBody>
         <ModalFooter>
           <Button variant="flat" onPress={onCancel} isDisabled={busy}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button color="warning" onPress={onConfirm} isLoading={busy}>
-            Reiniciar descarga
+            {t("settings.resetCloudSeedModal.confirm")}
           </Button>
         </ModalFooter>
       </ModalContent>

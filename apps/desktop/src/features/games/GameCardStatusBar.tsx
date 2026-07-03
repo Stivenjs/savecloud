@@ -1,4 +1,5 @@
 import { AlertTriangle, Archive, Check, CloudDownload, CloudUpload } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export type SyncStatusType = "pending_upload" | "pending_download" | "in_sync" | null;
 
@@ -16,41 +17,42 @@ interface GameCardStatusBarProps {
  * Se muestra en el footer para no tapar la portada; una sola línea con iconos y texto breve.
  */
 export function GameCardStatusBar({ isGameRunning, syncStatus, cloudBackupCount = 0 }: GameCardStatusBarProps) {
+  const { t } = useTranslation();
   const parts: { icon: React.ReactNode; text: string; title: string }[] = [];
 
   if (isGameRunning) {
     parts.push({
       icon: <AlertTriangle size={12} className="shrink-0" />,
-      text: "En ejecución",
-      title: "Cierra el juego antes de sincronizar.",
+      text: t("library.statusBar.running"),
+      title: t("library.statusBar.runningTitle"),
     });
   }
 
   if (syncStatus === "pending_upload") {
     parts.push({
       icon: <CloudUpload size={12} className="shrink-0" />,
-      text: "Pend. subir",
-      title: "Hay guardados locales sin subir.",
+      text: t("library.statusBar.pendingUpload"),
+      title: t("library.statusBar.pendingUploadTitle"),
     });
   } else if (syncStatus === "pending_download") {
     parts.push({
       icon: <CloudDownload size={12} className="shrink-0" />,
-      text: "Pend. descargar",
-      title: "Hay guardados en la nube más recientes.",
+      text: t("library.statusBar.pendingDownload"),
+      title: t("library.statusBar.pendingDownloadTitle"),
     });
   } else if (syncStatus === "in_sync") {
     parts.push({
       icon: <Check size={12} className="shrink-0" />,
-      text: "Sincronizado",
-      title: "Sincronizado con la nube.",
+      text: t("library.statusBar.inSync"),
+      title: t("library.statusBar.inSyncTitle"),
     });
   }
 
   if (cloudBackupCount > 0) {
     parts.push({
       icon: <Archive size={12} className="shrink-0" />,
-      text: `${cloudBackupCount} empaquetado${cloudBackupCount !== 1 ? "s" : ""}`,
-      title: "Backups completos en la nube. Restaurar desde backup → En la nube.",
+      text: t("library.statusBar.packaged", { count: cloudBackupCount }),
+      title: t("library.statusBar.packagedTitle"),
     });
   }
 

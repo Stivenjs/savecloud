@@ -28,6 +28,7 @@ import { toastError, toastInfo, toastSyncResult } from "@utils/toast";
 import { useConfig } from "@hooks/useConfig";
 import { useQueryClient } from "@tanstack/react-query";
 import { getUnknownErrorMessage } from "@utils/errorMessage";
+import i18n from "@lib/i18n";
 
 export interface FriendGameSummary {
   game: ConfiguredGame;
@@ -376,18 +377,18 @@ export function useFriendsPage() {
         dispatch({ type: "SET_LAST_CREATED_INVITE_TOKEN", payload: shareLinkOrToken });
         try {
           await navigator.clipboard.writeText(shareLinkOrToken);
-          toastInfo("Invitación creada", "Enlace copiado al portapapeles.");
+          toastInfo(i18n.t("friends.toast.inviteCreated"), i18n.t("friends.toast.linkCopied"));
         } catch {
-          toastInfo("Invitación creada", `Enlace/código: ${shareLinkOrToken}`);
+          toastInfo(i18n.t("friends.toast.inviteCreated"), i18n.t("friends.toast.linkCode", { shareLinkOrToken }));
         }
       } else {
         dispatch({ type: "SET_LAST_CREATED_INVITE_TOKEN", payload: null });
-        toastInfo("Invitación creada", "Se creó la invitación.");
+        toastInfo(i18n.t("friends.toast.inviteCreated"), i18n.t("friends.toast.inviteCreatedOnly"));
       }
       dispatch({ type: "SET_INVITEE_USER_ID_INPUT", payload: "" });
       await refreshInvitesState();
     } catch (e) {
-      toastError("No se pudo crear la invitación", getUnknownErrorMessage(e));
+      toastError(i18n.t("friends.toast.cannotCreateInvite"), getUnknownErrorMessage(e));
     } finally {
       dispatch({ type: "SET_INVITE_BUSY", payload: false });
     }
@@ -396,7 +397,7 @@ export function useFriendsPage() {
   const handleAcceptInviteByToken = async () => {
     const raw = inviteTokenInput.trim();
     if (!raw) {
-      toastError("Token vacío", "Pega un token válido.");
+      toastError(i18n.t("friends.toast.emptyToken"), i18n.t("friends.toast.pasteValidToken"));
       return;
     }
     dispatch({ type: "SET_INVITE_BUSY", payload: true });
@@ -407,13 +408,13 @@ export function useFriendsPage() {
         await acceptCloudInviteByToken(raw);
       }
       dispatch({ type: "SET_INVITE_TOKEN_INPUT", payload: "" });
-      toastInfo("Invitación aceptada", "Ahora puedes usar la nube del anfitrión.");
+      toastInfo(i18n.t("friends.toast.inviteAccepted"), i18n.t("friends.toast.useHostCloud"));
       await queryClient.invalidateQueries({ queryKey: ["config"] });
       await queryClient.invalidateQueries({ queryKey: ["cloud-presence"] });
       await queryClient.invalidateQueries({ queryKey: ["cloud-memberships"] });
       await refreshInvitesState();
     } catch (e) {
-      toastError("No se pudo aceptar", getUnknownErrorMessage(e));
+      toastError(i18n.t("friends.toast.cannotAccept"), getUnknownErrorMessage(e));
     } finally {
       dispatch({ type: "SET_INVITE_BUSY", payload: false });
     }
@@ -429,9 +430,12 @@ export function useFriendsPage() {
         await queryClient.invalidateQueries({ queryKey: ["cloud-memberships"] });
       }
       await refreshInvitesState();
-      toastInfo("Invitación actualizada", action === "accept" ? "Invitación aceptada." : "Invitación rechazada.");
+      toastInfo(
+        i18n.t("friends.toast.inviteUpdated"),
+        action === "accept" ? i18n.t("friends.toast.inviteAcceptedDesc") : i18n.t("friends.toast.inviteRejectedDesc")
+      );
     } catch (e) {
-      toastError("No se pudo actualizar", getUnknownErrorMessage(e));
+      toastError(i18n.t("friends.toast.cannotUpdate"), getUnknownErrorMessage(e));
     } finally {
       dispatch({ type: "SET_INVITE_BUSY", payload: false });
     }
@@ -441,10 +445,10 @@ export function useFriendsPage() {
     dispatch({ type: "SET_INVITE_BUSY", payload: true });
     try {
       await leaveCloudMembership(hostUserId);
-      toastInfo("Saliste de la nube", `Ya no usarás la nube de ${hostUserId}.`);
+      toastInfo(i18n.t("friends.toast.leftCloud"), i18n.t("friends.toast.noLongerUseCloud", { hostUserId }));
       await refreshInvitesState();
     } catch (e) {
-      toastError("No se pudo salir", getUnknownErrorMessage(e));
+      toastError(i18n.t("friends.toast.cannotLeave"), getUnknownErrorMessage(e));
     } finally {
       dispatch({ type: "SET_INVITE_BUSY", payload: false });
     }
@@ -454,10 +458,10 @@ export function useFriendsPage() {
     dispatch({ type: "SET_INVITE_BUSY", payload: true });
     try {
       await removeCloudMember(memberUserId);
-      toastInfo("Miembro eliminado", `${memberUserId} fue removido de tu nube.`);
+      toastInfo(i18n.t("friends.toast.memberRemoved"), i18n.t("friends.toast.memberRemovedDesc", { memberUserId }));
       await refreshInvitesState();
     } catch (e) {
-      toastError("No se pudo eliminar", getUnknownErrorMessage(e));
+      toastError(i18n.t("friends.toast.cannotRemove"), getUnknownErrorMessage(e));
     } finally {
       dispatch({ type: "SET_INVITE_BUSY", payload: false });
     }
@@ -474,13 +478,13 @@ export function useFriendsPage() {
       }
       await setActiveCloudHostUserId(hostUserId);
       if (hostUserId?.trim()) {
-        toastInfo("Nube activa actualizada", `Ahora usarás la nube de ${hostUserId}.`);
+        toastInfo(i18n.t("friends.toast.activeCloudUpdated"), i18n.t("friends.toast.useHostCloudDesc", { hostUserId }));
       } else {
-        toastInfo("Nube activa actualizada", "Ahora usarás tu nube propia.");
+        toastInfo(i18n.t("friends.toast.activeCloudUpdated"), i18n.t("friends.toast.useOwnCloudDesc"));
       }
       await queryClient.invalidateQueries({ queryKey: ["config"] });
     } catch (e) {
-      toastError("No se pudo actualizar la nube activa", getUnknownErrorMessage(e));
+      toastError(i18n.t("friends.toast.cannotUpdateActiveCloud"), getUnknownErrorMessage(e));
     } finally {
       dispatch({ type: "SET_INVITE_BUSY", payload: false });
     }
@@ -491,16 +495,16 @@ export function useFriendsPage() {
     if (!token) return;
     try {
       await navigator.clipboard.writeText(token);
-      toastInfo("Copiado", "Se copió al portapapeles.");
+      toastInfo(i18n.t("friends.toast.copied"), i18n.t("friends.toast.copiedToClipboard"));
     } catch {
-      toastError("No se pudo copiar", "Copia manualmente el enlace/código mostrado.");
+      toastError(i18n.t("friends.toast.cannotCopy"), i18n.t("friends.toast.copyManually"));
     }
   };
 
   const handleImportFromShareLink = async () => {
     const token = extractShareTokenFromUrl(shareLinkInput);
     if (!token) {
-      toastError("Link inválido", "Pega la URL completa del link compartido o solo el código.");
+      toastError(i18n.t("friends.toast.invalidLink"), i18n.t("friends.toast.pasteFullUrl"));
       return;
     }
     dispatch({ type: "SET_SHARE_LINK_LOADING", payload: true });
@@ -524,7 +528,10 @@ export function useFriendsPage() {
         },
       });
     } catch (e) {
-      toastError("No se pudo cargar el link", e instanceof Error ? e.message : "Link inválido o expirado");
+      toastError(
+        i18n.t("friends.toast.cannotLoadLink"),
+        e instanceof Error ? e.message : i18n.t("friends.toast.invalidLink")
+      );
     } finally {
       dispatch({ type: "SET_SHARE_LINK_LOADING", payload: false });
     }
@@ -557,7 +564,10 @@ export function useFriendsPage() {
       queryClient.invalidateQueries({ queryKey: ["last-sync-info"] });
       queryClient.invalidateQueries({ queryKey: ["config"] });
     } catch (e) {
-      toastError("No se pudo importar", e instanceof Error ? e.message : "Error inesperado");
+      toastError(
+        i18n.t("friends.toast.cannotImport"),
+        e instanceof Error ? e.message : i18n.t("friends.toast.cannotImport")
+      );
     } finally {
       dispatch({ type: "SET_SHARE_LINK_CONFIRM_LOADING", payload: false });
     }
@@ -566,7 +576,7 @@ export function useFriendsPage() {
   const handleCopySaves = async (gameId: string) => {
     const friendId = friendIdInput.trim();
     if (!friendId) {
-      toastError("Falta el usuario del amigo", "Escribe el usuario y carga el perfil primero.");
+      toastError(i18n.t("friends.toast.missingFriendUsername"), i18n.t("friends.toast.missingFriendUsernameDesc"));
       return;
     }
 
@@ -589,7 +599,7 @@ export function useFriendsPage() {
 
     const friendGameSaves = friendSaves.filter((s) => s.gameId.toLowerCase() === gameId.toLowerCase());
     if (friendGameSaves.length === 0) {
-      toastInfo("Sin guardados de amigo", "Tu amigo no tiene guardados para este juego.");
+      toastInfo(i18n.t("friends.toast.noFriendSaves"), i18n.t("friends.toast.noFriendSavesDesc"));
       return;
     }
 
@@ -631,7 +641,7 @@ export function useFriendsPage() {
     }
 
     if (plan.length === 0) {
-      toastInfo("Nada que copiar", "Todos los archivos del amigo ya existen en tu nube.");
+      toastInfo(i18n.t("friends.toast.nothingToCopy"), i18n.t("friends.toast.nothingToCopyDesc"));
       return;
     }
 
@@ -661,14 +671,17 @@ export function useFriendsPage() {
       const hadBefore = myGameIdsWithSaves.has(gameId);
       const suffix =
         preview.conflictCount > 0 && preview.strategy === "rename"
-          ? " (conflictos renombrados)"
+          ? i18n.t("friends.toast.renamedConflicts")
           : hadBefore
-            ? " (ya tenías guardados, se han fusionado)"
+            ? i18n.t("friends.toast.mergedSaves")
             : "";
       toastSyncResult(result, `${gameId}${suffix}`);
       queryClient.invalidateQueries({ queryKey: ["last-sync-info"] });
     } catch (e) {
-      toastError("No se pudieron copiar los guardados", e instanceof Error ? e.message : "Ocurrió un error inesperado");
+      toastError(
+        i18n.t("friends.toast.cannotCopySaves"),
+        e instanceof Error ? e.message : i18n.t("friends.toast.cannotCopySaves")
+      );
     } finally {
       dispatch({ type: "SET_COPYING_GAME_ID", payload: null });
     }

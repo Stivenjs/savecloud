@@ -1,5 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "@lib/i18n";
+import i18n from "@lib/i18n";
 import { ThemeProvider } from "next-themes";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { HeroUIProvider } from "@heroui/react";
@@ -241,9 +243,9 @@ async function bootstrap(): Promise<void> {
           background: #0a0a0a;
           color: #fff;
         ">
-          <h1 style="font-size: 2rem; margin-bottom: 1rem;">Error al cargar la aplicación</h1>
+          <h1 style="font-size: 2rem; margin-bottom: 1rem;">${i18n.t("errors.bootstrapTitle")}</h1>
           <p style="color: #888; margin-bottom: 2rem;">
-            Ha ocurrido un error inesperado. Por favor, recarga la página.
+            ${i18n.t("errors.bootstrapDesc")}
           </p>
           <button 
             onclick="window.location.reload()" 
@@ -257,7 +259,7 @@ async function bootstrap(): Promise<void> {
               font-size: 1rem;
             "
           >
-            Recargar
+            ${i18n.t("common.reload")}
           </button>
         </div>
       `;

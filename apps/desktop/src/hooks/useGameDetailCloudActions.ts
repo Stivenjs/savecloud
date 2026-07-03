@@ -6,6 +6,7 @@ import { toastError, toastSuccess } from "@utils/toast";
 import { notifyFullBackupError } from "@utils/notification";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
 import { useSyncStore } from "@store/SyncStore";
+import i18n from "@lib/i18n";
 import type { ConfiguredGame } from "@app-types/config";
 
 /**
@@ -25,12 +26,18 @@ export function useGameDetailCloudActions() {
         .setSyncOperation({ type: "upload", mode: "single", gameId: g.id, operationId: `sync-upload-${g.id}` });
       try {
         await syncUploadGame(g.id);
-        toastSuccess("Subido", `${formatGameDisplayName(g.id)} sincronizado con la nube.`);
+        toastSuccess(
+          i18n.t("library.toast.uploadedTitle"),
+          i18n.t("library.toast.uploadedDesc", { gameName: formatGameDisplayName(g.id) })
+        );
         await queryClient.invalidateQueries({ queryKey: ["game-stats"] });
         await queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
         await queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
       } catch (e) {
-        toastError("Error al sincronizar", e instanceof Error ? e.message : "Error inesperado");
+        toastError(
+          i18n.t("library.toast.syncError"),
+          e instanceof Error ? e.message : i18n.t("library.toast.unexpectedError")
+        );
       } finally {
         setOpLoading(null);
         useSyncStore.getState().setSyncOperation(null);
@@ -50,11 +57,17 @@ export function useGameDetailCloudActions() {
       });
       try {
         await syncDownloadGame(g.id);
-        toastSuccess("Descargado", `${formatGameDisplayName(g.id)} restaurado desde la nube.`);
+        toastSuccess(
+          i18n.t("library.toast.downloadedTitle"),
+          i18n.t("library.toast.downloadedDesc", { gameName: formatGameDisplayName(g.id) })
+        );
         await queryClient.invalidateQueries({ queryKey: ["game-stats"] });
         await queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
       } catch (e) {
-        toastError("Error al descargar", e instanceof Error ? e.message : "Error inesperado");
+        toastError(
+          i18n.t("library.toast.downloadError"),
+          e instanceof Error ? e.message : i18n.t("library.toast.unexpectedError")
+        );
       } finally {
         setOpLoading(null);
         useSyncStore.getState().setSyncOperation(null);
@@ -71,10 +84,7 @@ export function useGameDetailCloudActions() {
         .setSyncOperation({ type: "upload", mode: "single", gameId: g.id, operationId: `sync-upload-${g.id}` });
       try {
         await createAndUploadFullBackup(g.id);
-        toastSuccess(
-          "Backup completo subido",
-          "Se empaquetó y subió a la nube. Recomendado para juegos con muchos archivos."
-        );
+        toastSuccess(i18n.t("library.toast.fullBackupUploadedTitle"), i18n.t("library.toast.fullBackupUploadedDesc"));
         await queryClient.invalidateQueries({ queryKey: ["game-stats"] });
         await queryClient.invalidateQueries({ queryKey: ["cloud-backups", g.id] });
         await queryClient.invalidateQueries({ queryKey: ["cloud-backup-counts"] });
@@ -82,7 +92,7 @@ export function useGameDetailCloudActions() {
         await queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        toastError("Error al empaquetar y subir", msg);
+        toastError(i18n.t("library.toast.fullBackupUploadError"), msg);
         notifyFullBackupError(formatGameDisplayName(g.id), msg).catch(() => {});
       } finally {
         setFullBackupUploadingGameId(null);

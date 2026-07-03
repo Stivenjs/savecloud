@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, Textarea } from "@heroui/react";
 import { FolderOpen } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useTranslation } from "react-i18next";
 import type { ConfiguredGame } from "@app-types/config";
 import { addGame } from "@services/tauri";
 import { toastError, toastSuccess } from "@utils/toast";
@@ -14,6 +15,7 @@ interface FriendGameTemplateModalProps {
 }
 
 export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: FriendGameTemplateModalProps) {
+  const { t } = useTranslation();
   const [gameId, setGameId] = useState("");
   const [path, setPath] = useState("");
   const [editionLabel, setEditionLabel] = useState("");
@@ -36,7 +38,7 @@ export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: Fr
       const result = await open({
         directory: true,
         multiple: false,
-        title: "Selecciona la carpeta de tus guardados",
+        title: t("friends.templateModal.browseTitle"),
       });
       if (typeof result === "string") {
         setPath(result);
@@ -50,17 +52,20 @@ export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: Fr
     const trimmedId = gameId.trim();
     const trimmedPath = path.trim();
     if (!trimmedId || !trimmedPath) {
-      toastError("Faltan datos", "Necesitas indicar al menos el identificador y una ruta local.");
+      toastError(t("friends.templateModal.errorMissing"), t("friends.templateModal.errorMissingDesc"));
       return;
     }
     setSaving(true);
     try {
       await addGame(trimmedId, [trimmedPath], editionLabel, sourceUrl, steamAppId);
-      toastSuccess("Juego creado desde plantilla", `Se añadió ${trimmedId} usando la configuración del amigo.`);
+      toastSuccess(t("friends.templateModal.successTitle"), t("friends.templateModal.successDesc", { id: trimmedId }));
       onCreated?.();
       onClose();
     } catch (e) {
-      toastError("No se pudo crear el juego", e instanceof Error ? e.message : "Ocurrió un error inesperado");
+      toastError(
+        t("friends.templateModal.errorCreate"),
+        e instanceof Error ? e.message : t("friends.templateModal.errorCreateDesc")
+      );
     } finally {
       setSaving(false);
     }
@@ -75,24 +80,21 @@ export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: Fr
       placement="center"
       size="lg">
       <ModalContent>
-        <ModalHeader>Usar configuración de amigo como plantilla</ModalHeader>
+        <ModalHeader>{t("friends.templateModal.title")}</ModalHeader>
         <ModalBody className="gap-4">
           {game ? (
             <>
-              <p className="text-sm text-default-500">
-                Crea un juego en tu configuración copiando los metadatos del juego de tu amigo. Solo necesitas ajustar
-                la ruta local donde están tus guardados.
-              </p>
+              <p className="text-sm text-default-500">{t("friends.templateModal.desc")}</p>
               <Input
-                label="Identificador del juego en tu config"
-                placeholder="ej. re4-amigo"
+                label={t("friends.templateModal.gameIdLabel")}
+                placeholder={t("friends.templateModal.placeholder")}
                 value={gameId}
                 onValueChange={setGameId}
                 variant="bordered"
               />
               <Input
-                label="Ruta local de tus guardados"
-                placeholder="C:\\Users\\TuUsuario\\Saved Games\\MiJuego"
+                label={t("friends.templateModal.pathLabel")}
+                placeholder={t("friends.templateModal.pathPlaceholder")}
                 value={path}
                 onValueChange={setPath}
                 variant="bordered"
@@ -101,51 +103,54 @@ export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: Fr
                     type="button"
                     onClick={handleBrowsePath}
                     className="flex items-center justify-center text-default-400 hover:text-default-700"
-                    aria-label="Buscar carpeta">
+                    aria-label={t("friends.templateModal.pathLabel")}>
                     <FolderOpen size={16} />
                   </button>
                 }
               />
               <Input
-                label="Origen / edición"
-                placeholder="Steam, Empress, RUNE..."
+                label={t("friends.templateModal.editionLabel")}
+                placeholder={t("friends.templateModal.editionPlaceholder")}
                 value={editionLabel}
                 onValueChange={setEditionLabel}
                 variant="bordered"
               />
               <Input
-                label="URL de descarga (opcional)"
-                placeholder="https://..."
+                label={t("friends.templateModal.sourceUrlLabel")}
+                placeholder={t("friends.templateModal.sourcePlaceholder")}
                 type="url"
                 value={sourceUrl}
                 onValueChange={setSourceUrl}
                 variant="bordered"
               />
               <Input
-                label="Steam App ID (opcional)"
-                placeholder="ej. 1234560"
+                label={t("friends.templateModal.steamAppIdLabel")}
+                placeholder={t("friends.templateModal.steamPlaceholder")}
                 value={steamAppId}
                 onValueChange={setSteamAppId}
                 variant="bordered"
               />
               <Textarea
-                label="Resumen de la plantilla"
+                label={t("friends.templateModal.summaryLabel")}
                 readOnly
                 variant="bordered"
                 minRows={2}
-                value={`Juego del amigo: ${game.id}\n` + `Rutas originales: ${game.paths.join(", ")}`}
+                value={
+                  `${t("friends.templateModal.friendGamePrefix")}: ${game.id}\n` +
+                  `${t("friends.templateModal.friendPathsPrefix")}: ${game.paths.join(", ")}`
+                }
               />
             </>
           ) : (
-            <p className="text-sm text-default-500">No hay juego seleccionado.</p>
+            <p className="text-sm text-default-500">{t("friends.templateModal.noGameSelected")}</p>
           )}
         </ModalBody>
         <ModalFooter>
           <Button variant="flat" onPress={onClose}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button color="primary" onPress={handleSubmit} isLoading={saving} isDisabled={!game}>
-            Crear juego en mi config
+            {t("friends.templateModal.createButton")}
           </Button>
         </ModalFooter>
       </ModalContent>

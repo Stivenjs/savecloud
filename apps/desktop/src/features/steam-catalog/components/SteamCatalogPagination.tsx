@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { Pagination, Button } from "@heroui/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 type SteamCatalogPaginationProps = {
   totalPages: number;
@@ -17,13 +18,16 @@ export const SteamCatalogPagination = memo(function SteamCatalogPagination({
   isDisabled,
   consoleMode = false,
 }: SteamCatalogPaginationProps) {
+  const { t } = useTranslation();
   if (totalPages <= 1) {
     return null;
   }
 
   if (consoleMode) {
     return (
-      <nav className="flex items-center justify-center gap-6 pt-8 pb-4" aria-label="Páginas del catálogo">
+      <nav
+        className="flex items-center justify-center gap-6 pt-8 pb-4"
+        aria-label={t("steamCatalog.pagination.ariaLabel")}>
         <Button
           size="lg"
           variant="flat"
@@ -31,10 +35,10 @@ export const SteamCatalogPagination = memo(function SteamCatalogPagination({
           className="h-12 px-6 text-base font-semibold rounded-xl bg-default-100/30 text-white hover:bg-default-100/50"
           startContent={<ChevronLeft size={20} />}
           onPress={() => onChange(page - 1)}>
-          Anterior
+          {t("steamCatalog.pagination.previous")}
         </Button>
         <span className="text-lg font-bold text-default-400 min-w-36 text-center tabular-nums">
-          Página {page} de {totalPages}
+          {t("steamCatalog.pageXofY", { page, total: totalPages })}
         </span>
         <Button
           size="lg"
@@ -43,16 +47,16 @@ export const SteamCatalogPagination = memo(function SteamCatalogPagination({
           className="h-12 px-6 text-base font-semibold rounded-xl bg-default-100/30 text-white hover:bg-default-100/50"
           endContent={<ChevronRight size={20} />}
           onPress={() => onChange(page + 1)}>
-          Siguiente
+          {t("steamCatalog.pagination.next")}
         </Button>
       </nav>
     );
   }
 
   return (
-    <nav className="flex justify-center pt-6 pb-2" aria-label="Páginas del catálogo">
+    <nav className="flex justify-center pt-6 pb-2" aria-label={t("steamCatalog.pagination.ariaLabel")}>
       <Pagination
-        aria-label="Páginas del catálogo"
+        aria-label={t("steamCatalog.pagination.ariaLabel")}
         total={totalPages}
         page={page}
         onChange={onChange}

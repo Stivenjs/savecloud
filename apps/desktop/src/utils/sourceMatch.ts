@@ -1,4 +1,5 @@
 import type { DownloadProtocol, SourceBestMatch } from "@services/tauri";
+import i18n from "@lib/i18n";
 
 /** Separador improbable; válido en atributos `id` de HeroUI ListBox. */
 const SEP = "|||";
@@ -21,26 +22,32 @@ export function resolveDefaultDownloadKind(
 export function downloadKindLabel(kind: EffectiveDownloadKind): string {
   switch (kind) {
     case "torrent":
-      return "BitTorrent";
+      return i18n.t("steamCatalog.installModal.protocols.torrent.label", "BitTorrent");
     case "http":
-      return "HTTP";
+      return i18n.t("steamCatalog.installModal.protocols.http.label", "HTTP");
     case "peerLan":
-      return "Transferencia LAN";
+      return i18n.t("steamCatalog.installModal.protocols.peerLan.label", "Transferencia LAN");
     default:
-      return "Desconocido";
+      return i18n.t("steamCatalog.installModal.protocols.unknown.label", "Desconocido");
   }
 }
 
 export function downloadKindDescription(kind: EffectiveDownloadKind): string {
   switch (kind) {
     case "torrent":
-      return "Descarga P2P con el motor integrado (magnet o .torrent).";
+      return i18n.t(
+        "steamCatalog.installModal.protocols.torrent.desc",
+        "Descarga P2P con el motor integrado (magnet o .torrent)."
+      );
     case "http":
-      return "Descarga directa desde el hoster del enlace.";
+      return i18n.t("steamCatalog.installModal.protocols.http.desc", "Descarga directa desde el hoster del enlace.");
     case "peerLan":
-      return "Copia desde otro miembro del cloud en tu red local.";
+      return i18n.t(
+        "steamCatalog.installModal.protocols.peerLan.desc",
+        "Copia desde otro miembro del cloud en tu red local."
+      );
     default:
-      return "No se pudo determinar el método de descarga.";
+      return i18n.t("steamCatalog.installModal.protocols.unknown.desc", "No se pudo determinar el método de descarga.");
   }
 }
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { CloudMembership, CloudPresenceItem } from "@services/tauri/invites.service";
 import { CloudMemberRow } from "@features/friends/CloudMemberRow";
+import { useTranslation } from "react-i18next";
 
 interface CloudMembersSectionProps {
   title: string;
@@ -36,6 +37,7 @@ export function CloudMembersSection({
   searchQuery = "",
   localUserId,
 }: CloudMembersSectionProps) {
+  const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(true);
 
   // Filtrar miembros según búsqueda
@@ -96,13 +98,15 @@ export function CloudMembersSection({
                 })
               ) : (
                 <p className="rounded-lg border border-default-200/50 bg-default-50/50 px-2.5 py-2 text-xs text-default-500">
-                  No se encontraron miembros.
+                  {t("friends.cloudMembersSection.noMembersFound")}
                 </p>
               )}
             </>
           ) : (
             <p className="rounded-lg border border-default-200/50 bg-default-50/50 px-2.5 py-2 text-xs text-default-500">
-              {isHost ? "No tienes miembros activos." : "No perteneces a otras nubes."}
+              {isHost
+                ? t("friends.cloudMembersSection.noActiveMembers")
+                : t("friends.cloudMembersSection.notInOtherClouds")}
             </p>
           )}
         </div>

@@ -409,6 +409,7 @@ pub fn initialize_profile_storage(profile: &super::profiles::Profile) -> Result<
         proxy_url: None,
         low_performance_mode: false,
         disable_hardware_acceleration: false,
+        language: None,
     };
 
     save_settings_for_profile(&profile.id, &settings)?;

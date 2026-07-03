@@ -3,6 +3,7 @@ import { Card, CardBody, Checkbox, Switch } from "@heroui/react";
 import { type as getOsType } from "@tauri-apps/plugin-os";
 import { Gamepad2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 
 import { CONFIG_QUERY_KEY, useConfig } from "@hooks/useConfig";
 import {
@@ -21,6 +22,7 @@ function invalidateConfig(queryClient: ReturnType<typeof useQueryClient>) {
 
 /** Opciones modestas sin privilegios de administrador obligatorios. */
 export function GameModeCard() {
+  const { t } = useTranslation();
   const { config, loading, refetch } = useConfig();
   const qc = useQueryClient();
   const [mainPending, startMainTransition] = useTransition();
@@ -66,22 +68,15 @@ export function GameModeCard() {
           <div className="flex items-start gap-3">
             <Gamepad2 size={20} className="mt-0.5 shrink-0 text-default-500" />
             <div>
-              <h2 className="text-base font-semibold text-foreground">Modo juego</h2>
-              <p className="mt-0.5 text-sm text-default-500">
-                Reduce la contención con tus partidas: menos red y disco ocupados por SaveCloud y, si el sistema lo
-                permite, un perfil de energía más favorable.{" "}
-                <span className="text-default-600">
-                  No sustituye a controladores de GPU ni garantiza más FPS en todos los equipos corporativos o con
-                  políticas restringidas.
-                </span>
-              </p>
+              <h2 className="text-base font-semibold text-foreground">{t("settings.gameMode.title")}</h2>
+              <p className="mt-0.5 text-sm text-default-500">{t("settings.gameMode.subtitle")}</p>
             </div>
           </div>
           <Switch
             isSelected={gmEnabled}
             onValueChange={onMainToggle}
             isDisabled={loading || mainPending}
-            aria-label="Activar modo juego"
+            aria-label={t("settings.gameMode.ariaLabel")}
           />
         </div>
 
@@ -95,10 +90,9 @@ export function GameModeCard() {
             onValueChange={(v) => void saveOptionThenRefreshOs(() => setGameModeThrottleSavecloudBackground(v))}
             isDisabled={loading}>
             <div className="space-y-0.5">
-              <span className="block text-sm font-medium text-foreground">Pausar tráfico de SaveCloud</span>
+              <span className="block text-sm font-medium text-foreground">{t("settings.gameMode.pauseTraffic")}</span>
               <span className="block text-xs text-default-500 leading-relaxed font-normal">
-                Pausa subidas multipart activas (si las hay), torrents de SaveCloud en curso y descargas desde fuentes
-                con estado Running hasta salir del modo.
+                {t("settings.gameMode.pauseTrafficDesc")}
               </span>
             </div>
           </Checkbox>
@@ -112,13 +106,9 @@ export function GameModeCard() {
             onValueChange={(v) => void saveOptionThenRefreshOs(() => setGameModeApplyPowerProfile(v))}
             isDisabled={loading}>
             <div className="space-y-0.5">
-              <span className="block text-sm font-medium text-foreground">
-                Perfil alto rendimiento / sin suspensión
-              </span>
+              <span className="block text-sm font-medium text-foreground">{t("settings.gameMode.powerProfile")}</span>
               <span className="block text-xs text-default-500 leading-relaxed font-normal">
-                {isWindows
-                  ? "Activa el plan de energía «Alto rendimiento» de Windows con powercfg (si el sistema lo permite)."
-                  : "En macOS puede usar caffeinate si está disponible. En algunos escritorios Linux se intenta «powerprofilesctl set performance» (debe estar en PATH)."}
+                {isWindows ? t("settings.gameMode.powerProfileWin") : t("settings.gameMode.powerProfileOther")}
               </span>
             </div>
           </Checkbox>
@@ -132,12 +122,9 @@ export function GameModeCard() {
             onValueChange={(v) => void saveOptionThenRefreshOs(() => setGameModeReduceCaptureOverhead(v))}
             isDisabled={loading || !isWindows}>
             <div className="space-y-0.5">
-              <span className="block text-sm font-medium text-foreground">
-                Menos sobrecoste de Xbox Game DVR (solo Windows)
-              </span>
+              <span className="block text-sm font-medium text-foreground">{t("settings.gameMode.gameBar")}</span>
               <span className="block text-xs text-default-500 leading-relaxed font-normal">
-                Opcional: ajusta AppCaptureEnabled bajo HKCU para reducir grabación/fondo relacionado con Game Bar. Se
-                revierte al desactivar modo juego.
+                {t("settings.gameMode.gameBarDesc")}
               </span>
             </div>
           </Checkbox>
@@ -151,14 +138,9 @@ export function GameModeCard() {
             onValueChange={(v) => void saveOptionThenRefreshOs(() => setGameModeBoostDetectedGameCpu(v))}
             isDisabled={loading}>
             <div className="space-y-0.5">
-              <span className="block text-sm font-medium text-foreground">Prioridad de CPU al detectar partida</span>
+              <span className="block text-sm font-medium text-foreground">{t("settings.gameMode.cpuPriority")}</span>
               <span className="block text-xs text-default-500 leading-relaxed font-normal">
-                Tras unos segundos (~intervalo del monitor de procesos), solo si el{" "}
-                <span className="font-medium text-default-600">nombre del .exe</span> del juego en ejecución coincide
-                con lo configurado para ese juego en la biblioteca — por ejemplo{" "}
-                <code className="text-xs">re9.exe</code>. Si no coincide, SaveCloud no toca ese proceso. En Windows, en
-                los logs aparece «[CpuBoost] Prioridad elevada…» cuando funciona o un aviso si el proceso denegó acceso
-                (antivirus o título muy protegido). Independiente del interruptor «Modo juego».
+                {t("settings.gameMode.cpuPriorityDesc")}
               </span>
             </div>
           </Checkbox>

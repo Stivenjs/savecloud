@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Card } from "@heroui/react";
+import { useTranslation } from "react-i18next";
 
 interface VideoPlayerProps {
   wsPort: number;
 }
 
 export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
+  const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -15,7 +17,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
 
     const ctx = canvas.getContext("2d");
     if (!ctx) {
-      setError("No se pudo obtener el contexto 2D del canvas");
+      setError(t("remotePlay.canvasContextError"));
       return;
     }
 
@@ -96,7 +98,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
       ws.onerror = (e) => {
         if (isUnmounted) return;
         console.error("Video WS Error:", e);
-        setError("Error en la conexión WebSocket de video");
+        setError(t("remotePlay.wsVideoError"));
       };
     };
 
@@ -118,7 +120,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
         decoder.close();
       }
     };
-  }, [wsPort]);
+  }, [wsPort, t]);
 
   return (
     <Card className="w-full h-full bg-black flex items-center justify-center overflow-hidden border-none rounded-none absolute inset-0 z-50">

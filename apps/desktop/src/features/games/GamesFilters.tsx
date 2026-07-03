@@ -1,6 +1,7 @@
 import { Input, Tabs, Tab, type InputProps } from "@heroui/react";
 import { Search } from "lucide-react";
 import { useState, useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import type { ConfiguredGame } from "@app-types/config";
 import { filterGamesBySearch, isSteamGame } from "@utils/gameImage";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
@@ -49,6 +50,8 @@ export function DebouncedGamesSearchInput({
   const [localSearch, setLocalSearch] = useState(searchTerm);
   const debouncedSearch = useDebouncedValue(localSearch, 300);
   const onSearchChangeRef = useRef(onSearchChange);
+  const { t } = useTranslation();
+
   useEffect(() => {
     onSearchChangeRef.current = onSearchChange;
   }, [onSearchChange]);
@@ -67,8 +70,8 @@ export function DebouncedGamesSearchInput({
   return (
     <Input
       type="text"
-      aria-label="Buscar en la biblioteca"
-      placeholder={placeholder ?? (compact ? "Buscar…" : "Buscar juegos...")}
+      aria-label={t("library.searchPlaceholder")}
+      placeholder={placeholder ?? (compact ? t("library.searchPlaceholderCompact") : t("library.searchPlaceholder"))}
       value={localSearch}
       autoFocus={autoFocus}
       onValueChange={setLocalSearch}
@@ -112,12 +115,6 @@ export function filterGames(
   return result;
 }
 
-const ORIGIN_SEGMENTS: { key: OriginFilter; label: string }[] = [
-  { key: "all", label: "Todos" },
-  { key: "steam", label: "Steam" },
-  { key: "other", label: "Otros" },
-];
-
 /** Filtro de origen ligero para consola (evita el componente Tabs, muy pesado visualmente). */
 function ConsoleOriginSegments({
   originFilter,
@@ -126,12 +123,18 @@ function ConsoleOriginSegments({
   originFilter: OriginFilter;
   onOriginFilterChange: (value: OriginFilter) => void;
 }) {
+  const { t } = useTranslation();
+  const segments = [
+    { key: "all" as const, label: t("library.filter.all") },
+    { key: "steam" as const, label: t("library.filter.steam") },
+    { key: "other" as const, label: t("library.filter.other") },
+  ];
   return (
     <div
       role="radiogroup"
-      aria-label="Filtros de origen"
+      aria-label={t("library.filter.title")}
       className="inline-flex w-fit max-w-full flex-wrap items-center gap-1 self-start rounded-xl border border-default-200/70 bg-default-100/30 p-1 dark:border-default-100/25 dark:bg-default-50/15">
-      {ORIGIN_SEGMENTS.map(({ key, label }) => {
+      {segments.map(({ key, label }) => {
         const selected = originFilter === key;
         return (
           <button
@@ -164,6 +167,7 @@ export function GamesFilters({
   consoleMode = false,
   className: rootClassName,
 }: GamesFiltersProps) {
+  const { t } = useTranslation();
   const rowLayout = consoleMode
     ? "flex flex-col items-start gap-3"
     : `flex flex-col gap-4 sm:flex-row sm:items-center ${omitSearch ? "sm:justify-end" : "sm:justify-between"}`;
@@ -187,10 +191,10 @@ export function GamesFilters({
           variant="solid"
           color="primary"
           size="sm"
-          aria-label="Filtros de origen">
-          <Tab key="all" title="Todos" />
-          <Tab key="steam" title="Steam" />
-          <Tab key="other" title="Otros" />
+          aria-label={t("library.filter.title")}>
+          <Tab key="all" title={t("library.filter.all")} />
+          <Tab key="steam" title={t("library.filter.steam")} />
+          <Tab key="other" title={t("library.filter.other")} />
         </Tabs>
       )}
     </div>

@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Tooltip } from "@heroui/react";
 import { useCallback, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { TorrentProgressState } from "@store/TorrentStore";
 import { useTorrentStore } from "@store/TorrentStore";
 import { cancelTorrent, pauseTorrent, resumeTorrent } from "@services/tauri";
@@ -13,6 +14,7 @@ interface TorrentProgressBarProps {
 }
 
 export function TorrentProgressBar({ progress }: TorrentProgressBarProps) {
+  const { t } = useTranslation();
   const constraintsRef = useRef<HTMLDivElement | null>(null);
   const value = Math.min(100, Math.round(progress.progressPercent));
   const isCompleted = progress.state === "completed";
@@ -41,6 +43,22 @@ export function TorrentProgressBar({ progress }: TorrentProgressBarProps) {
     }
   }, [progress.infoHash, isPaused]);
 
+  const statusText = (() => {
+    if (progress.state === "starting") {
+      return progress.totalBytes > 0 && progress.progressPercent > 0
+        ? t("sync.state.verifyingResume")
+        : t("sync.state.starting");
+    }
+    if (progress.state === "downloading") {
+      if (progress.downloadedBytes > 0) return t("sync.state.downloading");
+      if (progress.peersConnected > 0) return t("sync.state.connectedWaiting");
+      return t("sync.state.findingPeers");
+    }
+    if (progress.state === "paused") return t("sync.state.paused");
+    if (progress.state === "completed") return t("sync.state.completed");
+    return "";
+  })();
+
   return (
     <>
       <div ref={constraintsRef} className="pointer-events-none fixed inset-0 z-50" />
@@ -55,7 +73,7 @@ export function TorrentProgressBar({ progress }: TorrentProgressBarProps) {
         exit={{ y: 48, opacity: 0 }}
         transition={{ duration: 0.2 }}
         className="fixed bottom-4 left-6 right-6 z-50 cursor-grab rounded-xl border border-default-200 bg-default-50/95 px-4 py-3.5 shadow-lg backdrop-blur active:cursor-grabbing sm:left-1/2 sm:right-auto sm:w-104 sm:-translate-x-1/2"
-        aria-label="Progreso de descarga torrent"
+        aria-label={t("sync.torrentProgress")}
         role="status"
         aria-valuenow={value}
         aria-valuemin={0}
@@ -67,7 +85,7 @@ export function TorrentProgressBar({ progress }: TorrentProgressBarProps) {
                 isPaused ? "bg-warning/10 text-warning" : "bg-secondary/10 text-secondary"
               }`}>
               <Download size={10} aria-hidden />
-              {isPaused ? "Pausado" : "Torrent"}
+              {isPaused ? t("sync.paused") : t("sync.torrent")}
             </span>
             <span className="truncate text-sm font-medium text-foreground">{progress.name}</span>
           </div>
@@ -77,44 +95,31 @@ export function TorrentProgressBar({ progress }: TorrentProgressBarProps) {
         </div>
 
         <div className="mt-1 flex items-center gap-2">
-          <p className="min-w-0 flex-1 truncate text-xs text-default-400">
-            {progress.state === "starting" &&
-              (progress.totalBytes > 0 && progress.progressPercent > 0
-                ? "Verificando datos ya en disco (reanudación)…"
-                : "Iniciando…")}
-            {progress.state === "downloading" &&
-              (progress.downloadedBytes > 0
-                ? "Descargando…"
-                : progress.peersConnected > 0
-                  ? "Conectado, esperando datos…"
-                  : "Buscando peers…")}
-            {progress.state === "paused" && "Descarga en pausa"}
-            {progress.state === "completed" && "¡Descarga completa!"}
-          </p>
+          <p className="min-w-0 flex-1 truncate text-xs text-default-400">{statusText}</p>
           {!isCompleted && (
             <>
               <span className="shrink-0 text-default-200 select-none" aria-hidden>
                 |
               </span>
               <span className="flex shrink-0 gap-1 pointer-events-auto">
-                <Tooltip content={isPaused ? "Reanudar" : "Pausar"} placement="top">
+                <Tooltip content={isPaused ? t("sync.resume") : t("sync.pauseTorrent")} placement="top">
                   <button
                     type="button"
                     onClick={onTogglePause}
                     disabled={toggling || !hasInfoHash}
                     className="inline-flex h-6 w-6 items-center justify-center rounded-full text-foreground hover:bg-default-200 transition-colors disabled:opacity-50"
-                    aria-label={isPaused ? "Reanudar torrent" : "Pausar torrent"}
+                    aria-label={isPaused ? t("sync.resumeTorrent") : t("sync.pauseTorrent")}
                     onPointerDownCapture={(e) => e.stopPropagation()}>
                     {isPaused ? <Play size={14} /> : <Pause size={14} />}
                   </button>
                 </Tooltip>
-                <Tooltip content="Cancelar torrent" placement="top">
+                <Tooltip content={t("sync.cancelTorrent")} placement="top">
                   <button
                     type="button"
                     onClick={onCancel}
                     disabled={!hasInfoHash}
                     className="inline-flex h-6 w-6 items-center justify-center rounded-full text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
-                    aria-label="Cancelar torrent"
+                    aria-label={t("sync.cancelTorrent")}
                     onPointerDownCapture={(e) => e.stopPropagation()}>
                     <X size={14} />
                   </button>
@@ -154,10 +159,8 @@ export function TorrentProgressBar({ progress }: TorrentProgressBarProps) {
                 {progress.totalBytes > 0 ? ` / ${formatBytes(progress.totalBytes)}` : ""}
               </span>
               {progress.state === "starting" && progress.totalBytes > 0 && progress.progressPercent > 0 ? (
-                <span
-                  className="ml-1 text-[10px] opacity-80"
-                  title="Incluye archivos que ya estaban en la carpeta de destino">
-                  (en disco)
+                <span className="ml-1 text-[10px] opacity-80" title={t("sync.onDiskHint")}>
+                  {t("sync.onDiskShort")}
                 </span>
               ) : null}
             </span>

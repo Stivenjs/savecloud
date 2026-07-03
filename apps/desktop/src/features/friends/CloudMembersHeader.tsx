@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Button, Input, Tooltip } from "@heroui/react";
 import { Cloud, RefreshCcw, Search, SquareArrowOutUpRight, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface CloudMembersHeaderProps {
   isRefreshing: boolean;
@@ -24,6 +25,7 @@ export function CloudMembersHeader({
   onDetachToWindow,
   showCloseButton = true,
 }: CloudMembersHeaderProps) {
+  const { t } = useTranslation();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -56,12 +58,14 @@ export function CloudMembersHeader({
             <Cloud size={16} />
           </span>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">Miembros cloud</p>
-            <p className="text-[10px] text-default-500">Red compartida</p>
+            <p className="text-sm font-semibold text-foreground">{t("friends.cloudMembers.title")}</p>
+            <p className="text-[10px] text-default-500">{t("friends.cloudMembers.subtitle")}</p>
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Tooltip content={isSearchOpen ? "Ocultar búsqueda" : "Buscar"} placement="bottom">
+          <Tooltip
+            content={isSearchOpen ? t("friends.cloudMembers.hideSearch") : t("friends.cloudMembers.search")}
+            placement="bottom">
             <Button
               isIconOnly
               size="sm"
@@ -72,7 +76,7 @@ export function CloudMembersHeader({
               <Search className="h-4 w-4" />
             </Button>
           </Tooltip>
-          <Tooltip content="Actualizar" placement="bottom">
+          <Tooltip content={t("friends.cloudMembers.refresh")} placement="bottom">
             <Button
               isIconOnly
               size="sm"
@@ -85,7 +89,7 @@ export function CloudMembersHeader({
             </Button>
           </Tooltip>
           {onDetachToWindow ? (
-            <Tooltip content="Abrir en ventana separada" placement="bottom">
+            <Tooltip content={t("friends.cloudMembers.detach")} placement="bottom">
               <Button
                 isIconOnly
                 size="sm"
@@ -102,7 +106,7 @@ export function CloudMembersHeader({
               size="sm"
               variant="light"
               color="danger"
-              aria-label="Cerrar modal"
+              aria-label={t("friends.cloudMembers.close")}
               onPointerDownCapture={(event) => event.stopPropagation()}
               onPress={onClose}>
               <X className="h-4 w-4" />
@@ -126,7 +130,7 @@ export function CloudMembersHeader({
           isClearable
           size="sm"
           radius="md"
-          placeholder="Buscar miembro..."
+          placeholder={t("friends.cloudMembers.searchPlaceholder")}
           startContent={<Search className="h-4 w-4 text-default-400" />}
           value={searchValue}
           onValueChange={onSearchChange}

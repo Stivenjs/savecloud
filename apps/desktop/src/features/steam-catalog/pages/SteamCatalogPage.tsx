@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { Spinner, Drawer, DrawerBody, DrawerContent, DrawerHeader, Button, cn } from "@heroui/react";
 import { Library, SlidersHorizontal } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { SteamCatalogFilters } from "@features/steam-catalog/components/SteamCatalogFilters";
 import { SteamCatalogGrid } from "@features/steam-catalog/components/SteamCatalogGrid";
@@ -14,6 +15,7 @@ import { useShellUiStore } from "@store/ShellUiStore";
 import { useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
 
 export function SteamCatalogPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   const catalogScrollPosition = useShellUiStore((state) => state.catalogScrollPosition);
@@ -144,10 +146,10 @@ export function SteamCatalogPage() {
                 "font-bold tracking-tight text-foreground",
                 bigPictureConsole ? "text-2xl md:text-[1.875rem]" : "text-2xl"
               )}>
-              Catálogo Steam
+              {t("steamCatalog.title")}
             </h1>
             <p className="text-xs text-default-400 mt-0.5">
-              {totalBrowse > 0 ? `${totalBrowse.toLocaleString()} juegos indexados` : ""}
+              {totalBrowse > 0 ? t("steamCatalog.indexedGames", { count: totalBrowse }) : ""}
             </p>
           </div>
         </div>
@@ -161,7 +163,7 @@ export function SteamCatalogPage() {
               className="font-semibold px-5 h-12 rounded-xl text-base bg-default-100/30 hover:bg-default-100/50"
               startContent={<SlidersHorizontal size={19} />}
               onPress={() => setIsFilterDrawerOpen(true)}>
-              Filtrar
+              {t("steamCatalog.filterButton")}
               {totalSelectedFilters > 0 && (
                 <span className="ml-1 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
                   {totalSelectedFilters}
@@ -204,19 +206,19 @@ export function SteamCatalogPage() {
 
           {isLoading ? (
             <div className="flex min-h-[40vh] items-center justify-center">
-              <Spinner size="lg" color="primary" label="Cargando catálogo…" />
+              <Spinner size="lg" color="primary" label={t("steamCatalog.loadingCatalog")} />
             </div>
           ) : isError ? (
-            <p className="text-sm text-danger">{errorMsg?.message ?? "No se pudo cargar el catálogo."}</p>
+            <p className="text-sm text-danger">{errorMsg?.message ?? t("steamCatalog.errorLoading")}</p>
           ) : items.length === 0 ? (
             <p className="text-sm text-default-500">
               {searchMode
-                ? "Sin resultados para esa búsqueda."
+                ? t("steamCatalog.noSearchResults")
                 : totalBrowse === 0
-                  ? "Aún no hay juegos listados. Ve a Configuración, revisa la clave de Steam y pulsa «Sincronizar catálogo ahora»."
+                  ? t("steamCatalog.noGamesListed")
                   : selectedGenres.length > 0 || selectedTags.length > 0
-                    ? "Ningún juego cumple estos filtros. Prueba a quitar algunos o combinar con la búsqueda por nombre."
-                    : "Sin resultados."}
+                    ? t("steamCatalog.noFilterResults")
+                    : t("steamCatalog.noResults")}
             </p>
           ) : (
             <>
@@ -224,28 +226,28 @@ export function SteamCatalogPage() {
                 <span className="font-semibold text-default-700 dark:text-default-300">
                   {rangeStart}–{rangeEnd}
                 </span>{" "}
-                de{" "}
+                {t("steamCatalog.rangeOf")}{" "}
                 <span className="font-semibold text-default-700 dark:text-default-300">
                   {totalForRange.toLocaleString()}
                 </span>{" "}
-                {totalForRange === 1 ? "resultado" : "resultados"}
+                {t("steamCatalog.result", { count: totalForRange })}
               </p>
 
               {isMediaBatchPending ? (
                 <div className="flex min-h-[40vh] items-center justify-center">
-                  <Spinner size="lg" color="primary" label="Cargando portadas y datos de la tienda…" />
+                  <Spinner size="lg" color="primary" label={t("steamCatalog.loadingCovers")} />
                 </div>
               ) : (
                 <>
                   {isMatchingPending ? (
-                    <p className="text-xs text-default-400">Validando disponibilidad en tus fuentes...</p>
+                    <p className="text-xs text-default-400">{t("steamCatalog.validatingSources")}</p>
                   ) : null}
                   <div className="relative">
                     {isListRefetching ? (
                       <div
                         className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-large bg-background/60 pt-8 backdrop-blur-[1px]"
                         aria-busy="true"
-                        aria-label="Actualizando listado">
+                        aria-label={t("steamCatalog.updatingList")}>
                         <Spinner size="md" color="primary" />
                       </div>
                     ) : null}
@@ -278,9 +280,7 @@ export function SteamCatalogPage() {
                           </span>
                         )}
                       </span>
-                      <span className="tracking-wide">
-                        Página {page} de {totalPages}
-                      </span>
+                      <span className="tracking-wide">{t("steamCatalog.pageXofY", { page, total: totalPages })}</span>
                       <span className="flex items-center gap-3">
                         {triggerUrls.right ? (
                           <img
@@ -328,7 +328,7 @@ export function SteamCatalogPage() {
                 <DrawerHeader className="flex flex-col gap-1">
                   <h2 className="flex items-center gap-2 text-lg font-bold text-white">
                     <SlidersHorizontal size={20} className="text-primary" />
-                    Filtrar catálogo
+                    {t("steamCatalog.filterDrawerTitle")}
                   </h2>
                 </DrawerHeader>
                 <DrawerBody>

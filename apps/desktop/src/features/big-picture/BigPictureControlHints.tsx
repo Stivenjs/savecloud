@@ -1,5 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigationStore } from "@features/input/store";
 import { useShellUiStore } from "@store/ShellUiStore";
 import { toggleSettingsWindowFromBigPicture } from "@/windows/settingsWindow";
@@ -70,6 +71,7 @@ function Hint({
 }
 
 export function BigPictureControlHints() {
+  const { t } = useTranslation();
   const { activeProfile } = useProfileSession();
   const [layoutKind, setLayoutKind] = useState<GamepadLayoutKind>("xbox");
 
@@ -99,16 +101,16 @@ export function BigPictureControlHints() {
     const selectUrl = getKenneyGamepadAssetUrl(layoutKind, kenneyFaceAssetId(layoutKind, "South"));
     const backUrl = getKenneyGamepadAssetUrl(layoutKind, kenneyFaceAssetId(layoutKind, "East"));
     return [
-      { id: "options", iconUrl: optionsUrl, label: "Opciones" },
-      { id: "select", iconUrl: selectUrl, label: "Seleccionar" },
-      { id: "back", iconUrl: backUrl, label: "Atrás" },
+      { id: "options", iconUrl: optionsUrl, label: t("bigPictureUi.hints.options") },
+      { id: "select", iconUrl: selectUrl, label: t("bigPictureUi.hints.select") },
+      { id: "back", iconUrl: backUrl, label: t("bigPictureUi.hints.back") },
     ];
-  }, [layoutKind]);
+  }, [layoutKind, t]);
 
   const leftHints = useMemo<HintItem[]>(() => {
     const menuUrl = getKenneyGamepadAssetUrl(layoutKind, kenneyModeAssetId(layoutKind));
-    return [{ id: "menu", iconUrl: menuUrl, label: "Menú" }];
-  }, [layoutKind]);
+    return [{ id: "menu", iconUrl: menuUrl, label: t("bigPictureUi.hints.menu") }];
+  }, [layoutKind, t]);
 
   return (
     <div
@@ -123,7 +125,7 @@ export function BigPictureControlHints() {
               onActivate={
                 item.id === "menu" ? () => useShellUiStore.getState().requestStaggeredMenuToggle() : undefined
               }
-              hintAriaAction={item.id === "menu" ? "abrir o cerrar menú lateral" : undefined}
+              hintAriaAction={item.id === "menu" ? t("bigPictureUi.hintAria.menu") : undefined}
             />
           ))}
         </div>
@@ -149,11 +151,11 @@ export function BigPictureControlHints() {
               }
               hintAriaAction={
                 item.id === "options"
-                  ? "mostrar u ocultar ajustes"
+                  ? t("bigPictureUi.hintAria.options")
                   : item.id === "select"
-                    ? "activar la opción enfocada"
+                    ? t("bigPictureUi.hintAria.select")
                     : item.id === "back"
-                      ? "volver atrás o cerrar menú lateral"
+                      ? t("bigPictureUi.hintAria.back")
                       : undefined
               }
             />

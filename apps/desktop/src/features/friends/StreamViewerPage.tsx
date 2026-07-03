@@ -7,6 +7,8 @@ import { useAppInitialization } from "@hooks/useAppInitialization";
 import { useProfileSession, useProfileSessionHydration } from "@hooks/useProfileSession";
 import { useConfig } from "@hooks/useConfig";
 import { TitleBar } from "@components/layout/TitleBar";
+import { useTranslation } from "react-i18next";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // EXPERIMENTAL: Stream viewer window used for development/testing only.
 
@@ -38,9 +40,21 @@ function createPeerConnection(): RTCPeerConnection {
   });
 }
 
+type StreamStatus = "waiting" | "connected" | "closed" | "requesting" | "failed" | "ended";
+
+const STATUS_KEYS: Record<StreamStatus, string> = {
+  waiting: "friends.streamViewer.status.waiting",
+  connected: "friends.streamViewer.status.connected",
+  closed: "friends.streamViewer.status.closed",
+  requesting: "friends.streamViewer.status.requesting",
+  failed: "friends.streamViewer.status.failed",
+  ended: "friends.streamViewer.status.ended",
+};
+
 export function StreamViewerPage() {
   useProfileSessionHydration();
   useAppInitialization();
+  const { t } = useTranslation();
 
   const { activeProfile } = useProfileSession();
   const { config } = useConfig();
@@ -50,7 +64,7 @@ export function StreamViewerPage() {
     [activeProfile?.localUserId, config?.userId]
   );
 
-  const [status, setStatus] = useState("Esperando señal de stream...");
+  const [status, setStatus] = useState<StreamStatus>("waiting");
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
@@ -65,33 +79,36 @@ export function StreamViewerPage() {
   const streamId = useMemo(() => params.get("streamId")?.trim() ?? "", [params]);
   const hostUserId = useMemo(() => params.get("hostUserId")?.trim() ?? "", [params]);
 
-  const pushDebugLog = (message: string) => {
-    const entry = `[${new Date().toLocaleTimeString()}] ${message}`;
-    setDebugLogs((current) => [entry, ...current].slice(0, 12));
-    console.debug("[SaveCloud:StreamViewer]", entry);
-  };
+  useEffect(() => {
+    void getCurrentWindow().setTitle(`${t("friends.streamViewer.title")} · ${hostUserId}`);
+  }, [t, hostUserId]);
 
   useEffect(() => {
     if (!streamId || !hostUserId || !localUserId) return;
 
-    pushDebugLog(`Inicializando viewer para host=${hostUserId} stream=${streamId} user=${localUserId}`);
+    let unlistenIncoming: (() => void) | null = null;
 
-    let unlistenIncoming: (() => void) | undefined;
+    const pushDebugLog = (msg: string) => {
+      setDebugLogs((logs) => [...logs.slice(-30), `[${new Date().toLocaleTimeString()}] ${msg}`]);
+    };
 
-    const ensurePeer = () => {
+    const ensurePeer = (): RTCPeerConnection => {
       if (peerRef.current) return peerRef.current;
 
+      pushDebugLog("Iniciando conexión peer RTCPeerConnection");
       const peer = createPeerConnection();
       peerRef.current = peer;
-      remoteStreamRef.current = new MediaStream();
-      pushDebugLog("PeerConnection creado");
 
       peer.ontrack = (event) => {
+        const track = event.track;
         const remoteStream = remoteStreamRef.current;
-        remoteStream.addTrack(event.track);
-        pushDebugLog(`ontrack recibido kind=${event.track.kind} readyState=${event.track.readyState}`);
+        pushDebugLog(`Track remoto detectado id=${track.id} kind=${track.kind}`);
 
-        if (videoRef.current) {
+        if (track.kind === "video") {
+          remoteStream.addTrack(track);
+        }
+
+        if (videoRef.current && videoRef.current.srcObject !== remoteStream) {
           videoRef.current.srcObject = remoteStream;
 
           window.setTimeout(() => {
@@ -101,7 +118,7 @@ export function StreamViewerPage() {
             });
           }, 0);
 
-          setStatus("Conectado al stream");
+          setStatus("connected");
           setIsConnected(true);
         }
       };
@@ -122,12 +139,12 @@ export function StreamViewerPage() {
       peer.onconnectionstatechange = () => {
         pushDebugLog(`connectionState=${peer.connectionState}`);
         if (peer.connectionState === "connected") {
-          setStatus("Conectado al stream");
+          setStatus("connected");
           setIsConnected(true);
           return;
         }
         if (["failed", "disconnected", "closed"].includes(peer.connectionState)) {
-          setStatus("Conexión de stream cerrada");
+          setStatus("closed");
           setIsConnected(false);
         }
       };
@@ -156,10 +173,10 @@ export function StreamViewerPage() {
           streamId,
           targetUserId: hostUserId,
         });
-        setStatus("Solicitando acceso al stream...");
+        setStatus("requesting");
       } catch {
         if (attempt >= 2) {
-          setError("No se pudo solicitar unión al stream.");
+          setError(t("friends.streamViewer.errors.requestJoin"));
           pushDebugLog("Fallo definitivo al enviar STREAM_JOIN");
           return;
         }
@@ -183,9 +200,11 @@ export function StreamViewerPage() {
 
         if (signal.event === "STREAM_JOIN_REJECTED" && signal.targetUserId === localUserId) {
           setError(
-            signal.payload?.reason === "stream_full" ? "La transmisión está llena (4 viewers)." : "Host no disponible."
+            signal.payload?.reason === "stream_full"
+              ? t("friends.streamViewer.errors.streamFull")
+              : t("friends.streamViewer.errors.hostUnavailable")
           );
-          setStatus("No se pudo unir");
+          setStatus("failed");
           return;
         }
 
@@ -233,7 +252,7 @@ export function StreamViewerPage() {
               },
             });
           })().catch(() => {
-            setError("No se pudo completar la negociación WebRTC.");
+            setError(t("friends.streamViewer.errors.webrtcFailed"));
           });
           return;
         }
@@ -259,7 +278,7 @@ export function StreamViewerPage() {
         }
 
         if (signal.event === "STREAM_ENDED") {
-          setStatus("La transmisión finalizó.");
+          setStatus("ended");
           setIsConnected(false);
           pushDebugLog("STREAM_ENDED recibido");
           const peer = peerRef.current;
@@ -296,7 +315,7 @@ export function StreamViewerPage() {
         targetUserId: hostUserId,
       });
     };
-  }, [hostUserId, localUserId, streamId]);
+  }, [hostUserId, localUserId, streamId, t]);
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background px-6 pt-20 pb-10">
@@ -304,18 +323,21 @@ export function StreamViewerPage() {
       <div className="w-full max-w-3xl rounded-2xl border border-default-200/80 bg-default-50/35 p-6 shadow-xl">
         <div className="mb-4 flex items-center gap-2 text-foreground">
           <MonitorPlay className="h-5 w-5" />
-          <h1 className="text-lg font-semibold">Visor de transmisión</h1>
+          <h1 className="text-lg font-semibold">{t("friends.streamViewer.title")}</h1>
         </div>
 
         <div className="space-y-2 rounded-xl border border-default-200/70 bg-background/80 p-4 text-sm text-default-600">
           <p>
-            <strong className="text-foreground">Host:</strong> {hostUserId || "desconocido"}
+            <strong className="text-foreground">{t("friends.streamViewer.host")}:</strong>{" "}
+            {hostUserId || t("friends.streamViewer.unknown")}
           </p>
           <p>
-            <strong className="text-foreground">Stream ID:</strong> {streamId || "sin stream"}
+            <strong className="text-foreground">{t("friends.streamViewer.streamId")}:</strong>{" "}
+            {streamId || t("friends.streamViewer.noStream")}
           </p>
           <p>
-            <strong className="text-foreground">Estado:</strong> {status}
+            <strong className="text-foreground">{t("friends.streamViewer.statusLabel")}:</strong>{" "}
+            {t(STATUS_KEYS[status])}
           </p>
           {error ? (
             <p className="rounded-md border border-danger/30 bg-danger/10 px-2 py-1 text-danger">{error}</p>
@@ -344,8 +366,8 @@ export function StreamViewerPage() {
 
         <div className="mt-3 rounded-xl border border-default-200/70 bg-background/75 p-3 text-[11px] text-default-500">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="font-medium text-default-600">Log de depuración</span>
-            <span>{debugLogs.length} eventos</span>
+            <span className="font-medium text-default-600">{t("friends.streamViewer.debugLog")}</span>
+            <span>{t("friends.streamViewer.eventCount", { count: debugLogs.length })}</span>
           </div>
           <div className="max-h-40 space-y-1 overflow-y-auto font-mono">
             {debugLogs.length ? (
@@ -355,17 +377,17 @@ export function StreamViewerPage() {
                 </div>
               ))
             ) : (
-              <div>Sin eventos todavía.</div>
+              <div>{t("friends.streamViewer.noEvents")}</div>
             )}
           </div>
         </div>
 
         <div className="mt-4 flex items-center justify-between gap-2">
           <span className="text-xs text-default-500">
-            {isConnected ? "Reproduciendo en tiempo real" : "Esperando conexión P2P..."}
+            {isConnected ? t("friends.streamViewer.playingRealtime") : t("friends.streamViewer.waitingP2P")}
           </span>
           <Button color="primary" variant="flat" onPress={() => window.close()}>
-            Cerrar ventana
+            {t("friends.streamViewer.closeWindow")}
           </Button>
         </div>
       </div>

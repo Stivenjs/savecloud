@@ -1,6 +1,7 @@
 import { Input } from "@heroui/react";
 import { Search } from "lucide-react";
 import { STEAM_CATALOG_SEARCH_MIN } from "@/constants/constants";
+import { useTranslation } from "react-i18next";
 
 type SteamCatalogToolbarProps = {
   searchTerm: string;
@@ -8,10 +9,11 @@ type SteamCatalogToolbarProps = {
 };
 
 export function SteamCatalogToolbar({ searchTerm, onSearchTermChange }: SteamCatalogToolbarProps) {
+  const { t } = useTranslation();
   return (
     <Input
-      aria-label="Buscar en catálogo"
-      placeholder={`Varias palabras; mín. ${STEAM_CATALOG_SEARCH_MIN} caracteres…`}
+      aria-label={t("steamCatalog.searchAriaLabel")}
+      placeholder={t("steamCatalog.searchPlaceholder", { min: STEAM_CATALOG_SEARCH_MIN })}
       value={searchTerm}
       onValueChange={onSearchTermChange}
       startContent={<Search size={18} className="text-default-400 transition-colors group-focus-within:text-primary" />}

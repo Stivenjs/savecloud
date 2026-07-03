@@ -1,5 +1,6 @@
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, ScrollShadow, Spinner } from "@heroui/react";
 import { Archive, CloudDownload, CloudUpload, FileText, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { previewDownload, previewUpload, type PreviewDownload, type PreviewUpload } from "@services/tauri";
 import type { PreviewFile } from "@services/tauri";
 import { formatGameDisplayName } from "@utils/gameImage";
@@ -27,6 +28,7 @@ export function SyncPreviewModal({
   onFullBackupInstead,
   isLoading = false,
 }: SyncPreviewModalProps) {
+  const { t } = useTranslation();
   const gameName = formatGameDisplayName(gameId);
 
   const { data, isLoading: loadingPreview } = useQuery({
@@ -59,7 +61,7 @@ export function SyncPreviewModal({
           ) : (
             <CloudDownload size={22} className="text-primary" />
           )}
-          {type === "upload" ? "Vista previa: Subir" : "Vista previa: Descargar"}
+          {type === "upload" ? t("library.syncPreview.uploadTitle") : t("library.syncPreview.downloadTitle")}
         </ModalHeader>
         <ModalBody>
           {loadingPreview ? (
@@ -68,7 +70,7 @@ export function SyncPreviewModal({
             </div>
           ) : fileCount === 0 ? (
             <p className="py-4 text-default-500">
-              {type === "upload" ? "No hay archivos locales para subir." : "No hay archivos en la nube para descargar."}
+              {type === "upload" ? t("library.syncPreview.noLocalFiles") : t("library.syncPreview.noCloudFiles")}
             </p>
           ) : (
             <>
@@ -81,10 +83,7 @@ export function SyncPreviewModal({
                     <div className="rounded-lg border p-3 text-sm text-foreground border-warning bg-warning/10 mb-3">
                       <p className="flex items-start gap-2 font-medium">
                         <Sparkles size={18} className="mt-0.5 shrink-0 text-warning" />
-                        <span>
-                          Este juego es demasiado grande para subir archivo a archivo. Debes usar &quot;Empaquetar y
-                          subir&quot;.
-                        </span>
+                        <span>{t("library.syncPreview.tooLargeWarning")}</span>
                       </p>
                       <Button
                         size="sm"
@@ -97,7 +96,7 @@ export function SyncPreviewModal({
                           onClose();
                         }}
                         isDisabled={isLoading}>
-                        Empaquetar y subir (obligatorio)
+                        {t("library.syncPreview.packageUploadRequired")}
                       </Button>
                     </div>
                   ) : (
@@ -118,7 +117,7 @@ export function SyncPreviewModal({
                             onClose();
                           }}
                           isDisabled={isLoading}>
-                          Recomendado: empaquetar y subir
+                          {t("library.syncPreview.packageUploadRecommended")}
                         </Button>
                       </div>
                     )
@@ -128,8 +127,8 @@ export function SyncPreviewModal({
               <div className="rounded-lg bg-default-100 p-4 text-sm">
                 <p>
                   {type === "upload"
-                    ? `${fileCount} archivo${fileCount !== 1 ? "s" : ""} a subir`
-                    : `${fileCount} archivo${fileCount !== 1 ? "s" : ""} a descargar`}
+                    ? t("library.syncPreview.filesToUpload", { count: fileCount })
+                    : t("library.syncPreview.filesToDownload", { count: fileCount })}
                   {" · "}
                   <strong>{formatBytes(totalBytes)}</strong>
                 </p>
@@ -145,20 +144,21 @@ export function SyncPreviewModal({
                         onClose();
                       }}
                       isDisabled={isLoading}>
-                      Empaquetar todo y subir (backup completo)
+                      {t("library.syncPreview.packageUploadFull")}
                     </Button>
                   </p>
                 )}
                 {type === "download" && conflictCount > 0 && (
                   <p className="mt-1 text-warning">
-                    {conflictCount} archivo{conflictCount !== 1 ? "s" : ""} con versión local más reciente se
-                    sobrescribirán
+                    {t("library.syncPreview.conflictsOverwrite", { count: conflictCount })}
                   </p>
                 )}
               </div>
               {files.length > 0 && (
                 <div className="mt-3">
-                  <p className="mb-2 text-xs font-medium text-default-500">Archivos y carpetas</p>
+                  <p className="mb-2 text-xs font-medium text-default-500">
+                    {t("library.syncPreview.filesAndFolders")}
+                  </p>
                   <ScrollShadow className="max-h-60 w-full rounded-medium border border-default-200">
                     <ul className="list-inside space-y-1 px-3 py-2 text-sm">
                       {files.map((file) => (
@@ -172,7 +172,7 @@ export function SyncPreviewModal({
                             </span>
                             {type === "download" && file.localNewer === true && (
                               <span className="shrink-0 rounded bg-warning/20 px-1.5 py-0.5 text-[10px] text-warning">
-                                local más reciente
+                                {t("library.syncPreview.localNewer")}
                               </span>
                             )}
                           </span>
@@ -188,7 +188,7 @@ export function SyncPreviewModal({
         </ModalBody>
         <ModalFooter>
           <Button variant="flat" onPress={onClose} isDisabled={isLoading}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button
             color="primary"
@@ -196,7 +196,7 @@ export function SyncPreviewModal({
             isLoading={isLoading}
             isDisabled={loadingPreview || fileCount === 0 || (type === "upload" && isUploadBlocked)}
             startContent={type === "upload" ? <CloudUpload size={18} /> : <CloudDownload size={18} />}>
-            {type === "upload" ? "Subir" : "Descargar"}
+            {type === "upload" ? t("library.syncPreview.upload") : t("library.syncPreview.download")}
           </Button>
         </ModalFooter>
       </ModalContent>

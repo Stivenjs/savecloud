@@ -10,6 +10,7 @@ import {
   ScrollShadow,
 } from "@heroui/react";
 import { UserPlus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ConfiguredGame } from "@app-types/config";
 import { addGamesFromFriend } from "@services/tauri";
 import { toastError, toastSuccess } from "@utils/toast";
@@ -25,6 +26,7 @@ interface AddFriendGamesModalProps {
 }
 
 export function AddFriendGamesModal({ isOpen, onClose, friendGames, ourGameIds, onAdded }: AddFriendGamesModalProps) {
+  const { t } = useTranslation();
   const gamesToOffer = useMemo(
     () => friendGames.filter((g) => g.id && !ourGameIds.has(g.id.toLowerCase())),
     [friendGames, ourGameIds]
@@ -59,7 +61,7 @@ export function AddFriendGamesModal({ isOpen, onClose, friendGames, ourGameIds, 
   const handleAdd = async () => {
     const toAdd = gamesToOffer.filter((g) => selected.has(g.id));
     if (toAdd.length === 0) {
-      toastError("Ninguno seleccionado", "Marca al menos un juego para añadir.");
+      toastError(t("friends.addGamesModal.toastNoneSelectedTitle"), t("friends.addGamesModal.toastNoneSelectedDesc"));
       return;
     }
     setSaving(true);
@@ -74,13 +76,13 @@ export function AddFriendGamesModal({ isOpen, onClose, friendGames, ourGameIds, 
       }));
       const count = await addGamesFromFriend(payload);
       toastSuccess(
-        "Juegos añadidos",
-        `Se añadieron ${count} juego${count !== 1 ? "s" : ""} a tu configuración. Revisa las rutas en Configuración si es necesario.`
+        t("friends.addGamesModal.toastSuccessTitle"),
+        t("friends.addGamesModal.toastSuccessDesc", { count })
       );
       onAdded?.();
       onClose();
     } catch (e) {
-      toastError("No se pudieron añadir", e instanceof Error ? e.message : "Error inesperado");
+      toastError(t("friends.addGamesModal.toastErrorTitle"), e instanceof Error ? e.message : "Error");
     } finally {
       setSaving(false);
     }
@@ -93,25 +95,20 @@ export function AddFriendGamesModal({ isOpen, onClose, friendGames, ourGameIds, 
       <ModalContent>
         <ModalHeader className="flex items-center gap-2">
           <UserPlus size={22} className="text-primary" />
-          Añadir juegos de este perfil
+          {t("friends.gamesSection.actions.addGames")}
         </ModalHeader>
         <ModalBody>
-          <p className="text-sm text-default-600">
-            Se añadirán solo los juegos que aún no tienes. No se modifica tu API key ni tu usuario. Revisa las rutas en
-            Configuración después.
-          </p>
+          <p className="text-sm text-default-600">{t("friends.addGamesModal.desc")}</p>
           {gamesToOffer.length === 0 ? (
-            <p className="py-4 text-default-500">
-              No hay juegos nuevos que añadir; ya tienes todos los de este perfil.
-            </p>
+            <p className="py-4 text-default-500">{t("friends.addGamesModal.noNewGames")}</p>
           ) : (
             <>
               <div className="flex gap-2">
                 <Button size="sm" variant="flat" onPress={selectAll}>
-                  Marcar todos
+                  {t("friends.addGamesModal.selectAll")}
                 </Button>
                 <Button size="sm" variant="flat" onPress={selectNone}>
-                  Desmarcar todos
+                  {t("friends.addGamesModal.selectNone")}
                 </Button>
               </div>
               <ScrollShadow className="max-h-[40vh]">
@@ -128,14 +125,14 @@ export function AddFriendGamesModal({ isOpen, onClose, friendGames, ourGameIds, 
         </ModalBody>
         <ModalFooter>
           <Button variant="flat" onPress={onClose}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button
             color="primary"
             onPress={handleAdd}
             isDisabled={gamesToOffer.length === 0 || selected.size === 0}
             isLoading={saving}>
-            Añadir seleccionados ({selected.size})
+            {t("friends.addGamesModal.addButton", { count: selected.size })}
           </Button>
         </ModalFooter>
       </ModalContent>

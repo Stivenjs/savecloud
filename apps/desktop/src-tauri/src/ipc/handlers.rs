@@ -28,6 +28,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::config::config_cmds::get_preferred_gamepad_layout,
         crate::config::config_cmds::set_preferred_gamepad_layout,
         crate::config::config_cmds::set_startup_window_mode,
+        crate::config::config_cmds::set_language,
         crate::config::config_cmds::get_default_source_download_dir,
         crate::config::config_cmds::set_default_source_download_dir,
         crate::config::config_cmds::set_profile_appearance,

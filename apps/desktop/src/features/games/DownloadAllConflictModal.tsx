@@ -1,5 +1,6 @@
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from "@heroui/react";
 import { AlertTriangle, CloudDownload } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { formatGameDisplayName } from "@utils/gameImage";
 
 export interface GameWithConflicts {
@@ -22,6 +23,8 @@ export function DownloadAllConflictModal({
   onConfirm,
   isLoading = false,
 }: DownloadAllConflictModalProps) {
+  const { t } = useTranslation();
+
   if (gamesWithConflicts.length === 0) return null;
 
   const totalConflicts = gamesWithConflicts.reduce((sum, g) => sum + g.conflictCount, 0);
@@ -31,21 +34,21 @@ export function DownloadAllConflictModal({
       <ModalContent>
         <ModalHeader className="flex items-center gap-2">
           <AlertTriangle size={22} className="text-warning" />
-          Conflictos en varios juegos
+          {t("library.downloadAllConflict.title")}
         </ModalHeader>
         <ModalBody>
           <p className="text-default-600">
-            Los siguientes {gamesWithConflicts.length} juego
-            {gamesWithConflicts.length !== 1 ? "s tienen" : " tiene"} {totalConflicts} archivo
-            {totalConflicts !== 1 ? "s" : ""} locales más reciente{totalConflicts !== 1 ? "s" : ""} que en la nube. Si
-            continúas, se sobrescribirán con las versiones de la nube.
+            {t("library.downloadAllConflict.desc", {
+              count: gamesWithConflicts.length,
+              totalConflicts,
+            })}
           </p>
           <ul className="max-h-48 space-y-2 overflow-y-auto rounded-lg bg-default-100 p-3">
             {gamesWithConflicts.map((g) => (
               <li key={g.gameId} className="text-sm">
                 <span className="font-medium text-foreground">{formatGameDisplayName(g.gameId)}</span>{" "}
                 <span className="text-default-500">
-                  ({g.conflictCount} archivo{g.conflictCount !== 1 ? "s" : ""})
+                  ({t("library.downloadAllConflict.fileCount", { count: g.conflictCount })})
                 </span>
               </li>
             ))}
@@ -53,10 +56,10 @@ export function DownloadAllConflictModal({
         </ModalBody>
         <ModalFooter>
           <Button variant="flat" onPress={onClose} isDisabled={isLoading}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button color="warning" onPress={onConfirm} isLoading={isLoading} startContent={<CloudDownload size={18} />}>
-            Sobrescribir todos
+            {t("library.downloadAllConflict.overwriteAll")}
           </Button>
         </ModalFooter>
       </ModalContent>

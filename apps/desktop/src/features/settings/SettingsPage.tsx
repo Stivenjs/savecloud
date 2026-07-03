@@ -1,6 +1,7 @@
 import { useState, lazy, Suspense, useEffect, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Tab, Tabs } from "@heroui/react";
+import { useTranslation } from "react-i18next";
 import { AppWindow, Bell, Cloud, FlaskConical, Gamepad2, Monitor, RefreshCw, User } from "lucide-react";
 import { AutostartCard } from "@features/settings/AutostartCard";
 import { BigPictureModeCard } from "@features/settings/BigPictureModeCard";
@@ -29,6 +30,7 @@ import { VoiceCommandsCard } from "@features/voice-commands";
 import { GameModeCard } from "@features/settings/GameModeCard";
 import { LowPerformanceModeCard } from "@features/settings/LowPerformanceModeCard";
 import { DisableHardwareAccelerationCard } from "@features/settings/DisableHardwareAccelerationCard";
+import { LanguageSettingsCard } from "@features/settings/LanguageSettingsCard";
 import { HealthObservabilityCard } from "@features/settings/HealthObservabilityCard";
 import { CloudDashboardPanel } from "@features/settings/CloudDashboardPanel";
 import { SettingsSidebarAnimatedPanel } from "@features/settings/SettingsSidebarAnimatedPanel";
@@ -66,6 +68,15 @@ interface SettingsPageProps {
 }
 
 export function SettingsPage({ compactWindowMode = false, initialSelectedTab = null }: SettingsPageProps) {
+  const { t } = useTranslation();
+  const getTabTranslationKey = (key: SettingsTabKey): string => {
+    switch (key) {
+      case "big-picture":
+        return "settings.tabs.bigPicture";
+      default:
+        return `settings.tabs.${key}`;
+    }
+  };
   const { activeProfile } = useProfileSession();
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [resetCloudSeedModalOpen, setResetCloudSeedModalOpen] = useState(false);
@@ -244,6 +255,7 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
       case "app":
         return (
           <div className="space-y-3">
+            <LanguageSettingsCard />
             <GameModeCard />
             <LowPerformanceModeCard />
             <DisableHardwareAccelerationCard />
@@ -359,14 +371,12 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
       ) : (
         <>
           <div>
-            <h1 className="text-2xl font-semibold">Configuración</h1>
-            <p className="mt-1 text-sm text-default-500">
-              Ajusta tu cuenta, la app, los mandos conectados y las integraciones desde un solo lugar.
-            </p>
+            <h1 className="text-2xl font-semibold">{t("settings.title")}</h1>
+            <p className="mt-1 text-sm text-default-500">{t("settings.subtitle")}</p>
           </div>
 
           <Tabs
-            aria-label="Secciones de configuración"
+            aria-label={t("settings.title")}
             selectedKey={settingsTab}
             onSelectionChange={(key) => setSettingsTab(String(key) as SettingsTabKey)}
             variant="underlined"
@@ -382,7 +392,7 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
                 title={
                   <span className="flex items-center gap-2">
                     {tab.icon}
-                    {tab.label}
+                    {t(getTabTranslationKey(tab.key))}
                   </span>
                 }>
                 {renderTabContent(tab.key)}

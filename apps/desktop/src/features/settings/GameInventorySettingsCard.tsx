@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { FolderOpen, Gamepad2, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useTranslation } from "react-i18next";
 import { CONFIG_QUERY_KEY, useConfig } from "@hooks/useConfig";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import {
@@ -23,6 +24,7 @@ const INVENTORY_LOCAL_QUERY_KEY = ["inventory-local"] as const;
 export function GameInventorySettingsCard() {
   const queryClient = useQueryClient();
   const { config } = useConfig();
+  const { t } = useTranslation();
   const sharing = config?.shareGameInventoryWithCloud ?? true;
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -53,14 +55,12 @@ export function GameInventorySettingsCard() {
         queryClient.invalidateQueries({ queryKey: INVENTORY_LOCAL_QUERY_KEY }),
       ]);
       toastSuccess(
-        enabled ? "Inventario compartido" : "Inventario privado",
-        enabled
-          ? "Los miembros de tu cloud pueden ver qué juegos tienes verificados."
-          : "Tu inventario ya no se publica en la nube."
+        enabled ? t("settings.inventory.toast.sharedInventory") : t("settings.inventory.toast.privateInventory"),
+        enabled ? t("settings.inventory.toast.sharedDesc") : t("settings.inventory.toast.privateDesc")
       );
     },
     onError: (e) => {
-      toastError("No se pudo guardar", e instanceof Error ? e.message : String(e));
+      toastError(t("settings.inventory.toast.cannotSave"), e instanceof Error ? e.message : String(e));
     },
   });
 
@@ -68,10 +68,13 @@ export function GameInventorySettingsCard() {
     mutationFn: () => inventoryScanAndPublish(true),
     onSuccess: (manifest) => {
       queryClient.setQueryData(INVENTORY_LOCAL_QUERY_KEY, { manifest });
-      toastSuccess("Inventario actualizado", `${manifest.games.length} juego(s) verificado(s).`);
+      toastSuccess(
+        t("settings.inventory.toast.inventoryUpdated"),
+        t("settings.inventory.toast.verifiedGames", { count: manifest.games.length })
+      );
     },
     onError: (e) => {
-      toastError("Error al escanear", e instanceof Error ? e.message : String(e));
+      toastError(t("settings.inventory.toast.scanError"), e instanceof Error ? e.message : String(e));
     },
   });
 
@@ -84,14 +87,17 @@ export function GameInventorySettingsCard() {
     },
     onSuccess: (manifest) => {
       queryClient.setQueryData(INVENTORY_LOCAL_QUERY_KEY, { manifest });
-      toastSuccess("Juego añadido", `${selectedSteam?.name ?? "Juego"} listo para compartir por LAN.`);
+      toastSuccess(
+        t("settings.inventory.toast.gameAdded"),
+        t("settings.inventory.toast.readyShareLan", { name: selectedSteam?.name ?? "Juego" })
+      );
       setShowAddForm(false);
       setSearchInput("");
       setSelectedSteam(null);
       setFolderPath(null);
     },
     onError: (e) => {
-      toastError("No se pudo añadir", e instanceof Error ? e.message : String(e));
+      toastError(t("settings.inventory.toast.cannotAdd"), e instanceof Error ? e.message : String(e));
     },
   });
 
@@ -101,11 +107,11 @@ export function GameInventorySettingsCard() {
     mutationFn: (gameKey: string) => inventoryUnregisterInstallFolder(gameKey),
     onSuccess: (manifest) => {
       queryClient.setQueryData(INVENTORY_LOCAL_QUERY_KEY, { manifest });
-      toastSuccess("Juego eliminado", "El juego ha sido eliminado del inventario.");
+      toastSuccess(t("settings.inventory.toast.gameDeleted"), t("settings.inventory.toast.deletedFromInventory"));
       setSelectedKeyToDelete(null);
     },
     onError: (e) => {
-      toastError("No se pudo eliminar", e instanceof Error ? e.message : String(e));
+      toastError(t("settings.inventory.toast.cannotDelete"), e instanceof Error ? e.message : String(e));
       setSelectedKeyToDelete(null);
     },
   });
@@ -120,12 +126,12 @@ export function GameInventorySettingsCard() {
       const selected = await open({
         directory: true,
         multiple: false,
-        title: "Carpeta de instalación del juego",
+        title: t("settings.inventory.folderTitle"),
       });
       if (selected == null || Array.isArray(selected)) return;
       setFolderPath(selected);
     } catch (e) {
-      toastError("No se pudo abrir el selector", e instanceof Error ? e.message : String(e));
+      toastError(t("settings.inventory.toast.cannotOpenPicker"), e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -141,17 +147,15 @@ export function GameInventorySettingsCard() {
             <Gamepad2 size={18} className="text-secondary" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-foreground">Inventario de juegos en el cloud</h3>
-            <p className="mt-0.5 text-xs leading-relaxed text-default-500">
-              Comparte instalaciones verificadas para que otros en tu cloud puedan traer juegos por LAN.
-            </p>
+            <h3 className="text-sm font-semibold text-foreground">{t("settings.inventory.title")}</h3>
+            <p className="mt-0.5 text-xs leading-relaxed text-default-500">{t("settings.inventory.subtitle")}</p>
           </div>
         </div>
 
         <div className="flex items-center justify-between gap-4 rounded-lg border border-default-200 bg-default-100/50 px-3 py-2.5 dark:border-default-100/15">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-default-700">Compartir inventario con el cloud</p>
-            <p className="mt-0.5 text-xs text-default-500">Desactívalo si no quieres que otros vean tus juegos.</p>
+            <p className="text-sm font-medium text-default-700">{t("settings.inventory.shareLabel")}</p>
+            <p className="mt-0.5 text-xs text-default-500">{t("settings.inventory.shareDesc")}</p>
           </div>
           <Switch
             isSelected={sharing}
@@ -162,7 +166,9 @@ export function GameInventorySettingsCard() {
 
         {verifiedGames > 0 && localInventory?.manifest?.games && localInventory.manifest.games.length > 0 ? (
           <div className="space-y-2">
-            <p className="text-[10px] font-semibold text-default-400 uppercase tracking-wider">Juegos en inventario</p>
+            <p className="text-[10px] font-semibold text-default-400 uppercase tracking-wider">
+              {t("settings.inventory.gamesLabel")}
+            </p>
             <div className="divide-y divide-default-100 rounded-lg border border-default-200 bg-default-50/30 dark:divide-default-100/10 dark:border-default-100/10 overflow-hidden">
               <AnimatePresence initial={false}>
                 {localInventory.manifest.games.map((game) => (
@@ -177,8 +183,10 @@ export function GameInventorySettingsCard() {
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-foreground truncate">{formatGameDisplayName(game.displayName)}</p>
                       <p className="text-[10px] text-default-400 truncate">
-                        {game.payloadKind === "installedFolder" ? "Añadido manualmente" : "Escaneo automático"} ·{" "}
-                        {(game.totalBytes / (1024 * 1024 * 1024)).toFixed(2)} GB
+                        {game.payloadKind === "installedFolder"
+                          ? t("settings.inventory.manualAdd")
+                          : t("settings.inventory.autoScan")}{" "}
+                        · {(game.totalBytes / (1024 * 1024 * 1024)).toFixed(2)} GB
                       </p>
                     </div>
                     {game.payloadKind === "installedFolder" ? (
@@ -204,8 +212,8 @@ export function GameInventorySettingsCard() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs text-default-500">
               {verifiedGames > 0
-                ? `${verifiedGames} juego(s)${lastPublishedAt ? ` · ${formatRelativeDate(lastPublishedAt)}` : ""}`
-                : "Sin juegos en inventario"}
+                ? `${t("settings.inventory.gamesCount", { count: verifiedGames })}${lastPublishedAt ? ` · ${formatRelativeDate(lastPublishedAt)}` : ""}`
+                : t("settings.inventory.noGames")}
             </span>
             <div className="flex flex-wrap gap-2">
               {!showAddForm ? (
@@ -216,7 +224,7 @@ export function GameInventorySettingsCard() {
                   startContent={<Plus size={14} />}
                   isDisabled={!sharing}
                   onPress={() => setShowAddForm(true)}>
-                  Añadir juego
+                  {t("settings.inventory.addButton")}
                 </Button>
               ) : null}
               <Button
@@ -226,7 +234,7 @@ export function GameInventorySettingsCard() {
                 startContent={<RefreshCw size={14} className={scanMutation.isPending ? "animate-spin" : ""} />}
                 isDisabled={scanMutation.isPending || !sharing}
                 onPress={() => scanMutation.mutate()}>
-                Reescanear
+                {t("settings.inventory.rescanButton")}
               </Button>
             </div>
           </div>
@@ -240,13 +248,11 @@ export function GameInventorySettingsCard() {
                 transition={{ type: "spring", stiffness: 160, damping: 22 }}
                 style={{ overflow: "hidden" }}>
                 <div className="space-y-3 rounded-lg border border-default-200 bg-content1/60 px-3 py-3 dark:border-default-100/15">
-                  <p className="text-xs text-default-500">
-                    Busca el juego en Steam (como al añadirlo a la biblioteca) y elige la carpeta donde está instalado.
-                  </p>
+                  <p className="text-xs text-default-500">{t("settings.inventory.addFormDesc")}</p>
 
                   <Input
-                    label="Buscar en Steam"
-                    placeholder="Ej. Sons Of The Forest"
+                    label={t("settings.inventory.searchLabel")}
+                    placeholder={t("settings.inventory.searchPlaceholder")}
                     value={searchInput}
                     onValueChange={(value) => {
                       setSearchInput(value);
@@ -260,9 +266,9 @@ export function GameInventorySettingsCard() {
                   {debouncedSearch.length >= 3 ? (
                     <div className="max-h-36 space-y-0.5 overflow-y-auto rounded-medium border border-default-200 bg-default-50 px-1 py-1 text-xs">
                       {steamLoading ? (
-                        <p className="px-2 py-1.5 text-default-500">Buscando en Steam...</p>
+                        <p className="px-2 py-1.5 text-default-500">{t("settings.inventory.searchingSteam")}</p>
                       ) : steamResults.length === 0 ? (
-                        <p className="px-2 py-1.5 text-default-500">No se encontraron juegos.</p>
+                        <p className="px-2 py-1.5 text-default-500">{t("settings.inventory.noGamesFound")}</p>
                       ) : (
                         steamResults.map((r) => (
                           <button
@@ -291,7 +297,7 @@ export function GameInventorySettingsCard() {
                       variant="bordered"
                       startContent={<FolderOpen size={14} />}
                       onPress={() => void pickFolder()}>
-                      {folderPath ? "Cambiar carpeta" : "Elegir carpeta"}
+                      {folderPath ? t("settings.inventory.changeFolder") : t("settings.inventory.chooseFolder")}
                     </Button>
                     {folderPath ? (
                       <span className="min-w-0 flex-1 truncate text-xs text-default-500" title={folderPath}>
@@ -310,7 +316,7 @@ export function GameInventorySettingsCard() {
                         setSelectedSteam(null);
                         setFolderPath(null);
                       }}>
-                      Cancelar
+                      {t("common.cancel")}
                     </Button>
                     <Button
                       size="sm"
@@ -318,7 +324,7 @@ export function GameInventorySettingsCard() {
                       isDisabled={!canRegister}
                       isLoading={registerMutation.isPending}
                       onPress={() => registerMutation.mutate()}>
-                      Añadir al inventario
+                      {t("settings.inventory.addInventoryButton")}
                     </Button>
                   </div>
                 </div>

@@ -3,6 +3,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { fetchGitHubReleaseNotes } from "@services/github/release-notes.service";
 import { toastError, toastInfo, toastSuccess } from "@utils/toast";
+import i18n from "@lib/i18n";
 
 export type UpdateCheckResult =
   | { ok: true; hasUpdate: false }
@@ -61,7 +62,7 @@ export async function checkForUpdatesWithPrompt(silentWhenUpToDate = false): Pro
     const update = await check();
     if (!update) {
       if (!silentWhenUpToDate) {
-        toastInfo("Ya tienes la última versión");
+        toastInfo(i18n.t("updater.toast.upToDate"));
       }
       return;
     }
@@ -77,14 +78,14 @@ export async function checkForUpdatesWithPrompt(silentWhenUpToDate = false): Pro
       }
     }
 
-    const releaseNotes = notes || "Mejoras y correcciones.";
-    const message = `Nueva versión ${update.version} disponible.\n\n${releaseNotes}\n\n¿Descargar e instalar ahora?`;
+    const releaseNotes = notes || i18n.t("updater.notesDefault");
+    const message = i18n.t("updater.promptMessage", { version: update.version, notes: releaseNotes });
 
     const shouldUpdate = await ask(message, {
-      title: "Actualización disponible",
+      title: i18n.t("updater.promptTitle"),
       kind: "info",
-      okLabel: "Actualizar",
-      cancelLabel: "Más tarde",
+      okLabel: i18n.t("updater.updateButton"),
+      cancelLabel: i18n.t("updater.laterButton"),
     });
 
     if (!shouldUpdate) return;
@@ -99,16 +100,16 @@ export async function checkForUpdatesWithPrompt(silentWhenUpToDate = false): Pro
       }
     });
 
-    toastSuccess("Actualización instalada", "La aplicación se reiniciará ahora.");
+    toastSuccess(i18n.t("updater.toast.installedTitle"), i18n.t("updater.toast.installedDesc"));
     await relaunch();
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (isTransientUpdaterReleaseMetadataError(msg)) {
       if (!silentWhenUpToDate) {
-        toastInfo("No se pudo comprobar la actualización", TRANSIENT_UPDATE_USER_MESSAGE);
+        toastInfo(i18n.t("updater.toast.checkErrorTitle"), TRANSIENT_UPDATE_USER_MESSAGE);
       }
       return;
     }
-    toastError("Error al buscar actualizaciones", msg);
+    toastError(i18n.t("updater.toast.generalError"), msg);
   }
 }

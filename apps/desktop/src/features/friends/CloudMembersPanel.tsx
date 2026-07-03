@@ -18,6 +18,7 @@ import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { useConfig } from "@hooks/useConfig";
 import { ProfileAvatar } from "@features/profile";
+import { useTranslation } from "react-i18next";
 
 interface CloudMembersPanelProps {
   isOpen: boolean;
@@ -42,6 +43,7 @@ export function CloudMembersPanel({
   onDetachToWindow,
   showCloseButton = true,
 }: CloudMembersPanelProps) {
+  const { t } = useTranslation();
   const { activeProfile } = useProfileSession();
   const { config } = useConfig();
 
@@ -219,20 +221,20 @@ export function CloudMembersPanel({
           {membershipsLoading ? (
             <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-default-500">
               <Spinner size="md" color="primary" />
-              <p className="text-sm">Cargando miembros...</p>
+              <p className="text-sm">{t("friends.cloudMembersPanel.loading")}</p>
             </div>
           ) : null}
 
           {!membershipsLoading && membershipsError ? (
             <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
-              No se pudieron cargar los miembros.
+              {t("friends.cloudMembersPanel.errorLoading")}
             </div>
           ) : null}
 
           {!membershipsLoading && !membershipsError && !hasAnyMembers ? (
             <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-lg border border-default-200/80 bg-background/45 px-4 py-6 text-center">
               <UserRound className="h-5 w-5 text-default-400" />
-              <p className="text-sm text-default-500">No hay miembros cloud para mostrar.</p>
+              <p className="text-sm text-default-500">{t("friends.cloudMembersPanel.noMembers")}</p>
             </div>
           ) : null}
 
@@ -247,8 +249,8 @@ export function CloudMembersPanel({
                         <p className="truncate text-sm font-medium text-foreground">{localUserId}</p>
                         <p className="truncate text-[11px] text-default-500">
                           {localPresence?.status === "playing"
-                            ? `Jugando${localPresence?.gameName ? ` · ${localPresence.gameName}` : ""}`
-                            : "Tu cuenta"}
+                            ? `${t("friends.presence.playing")}${localPresence?.gameName ? ` · ${localPresence.gameName}` : ""}`
+                            : t("friends.cloudMembersPanel.yourAccount")}
                         </p>
                       </div>
                     </div>
@@ -258,7 +260,7 @@ export function CloudMembersPanel({
               ) : null}
 
               <CloudMembersSection
-                title="En tu nube"
+                title={t("friends.cloudMembersSection.inYourCloud")}
                 memberships={hostMemberships}
                 presenceMap={presenceByUser}
                 avatarByUser={memberAvatarByUser}
@@ -273,7 +275,7 @@ export function CloudMembersPanel({
               />
 
               <CloudMembersSection
-                title="Miembro de"
+                title={t("friends.cloudMembersSection.memberOf")}
                 memberships={memberMemberships}
                 presenceMap={presenceByUser}
                 avatarByUser={memberAvatarByUser}

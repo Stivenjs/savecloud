@@ -1,5 +1,6 @@
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, Tooltip, Skeleton } from "@heroui/react";
 import { Archive, CloudUpload } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { previewUploadBatch } from "@services/tauri";
 import { formatGameDisplayName } from "@utils/gameImage";
@@ -26,6 +27,8 @@ export function UnsyncedSavesModal({
   isLoadingAll = false,
   loadingGameId = null,
 }: UnsyncedSavesModalProps) {
+  const { t } = useTranslation();
+
   const { data: previewsMap = {}, isPending: isLoadingPreviews } = useQuery({
     queryKey: ["unsynced-previews-batch", gameIds],
     queryFn: () => previewUploadBatch(gameIds),
@@ -54,33 +57,31 @@ export function UnsyncedSavesModal({
       <ModalContent>
         <ModalHeader className="flex gap-2">
           <CloudUpload size={22} />
-          Guardados sin subir
+          {t("library.unsyncedSaves.title")}
         </ModalHeader>
 
         <ModalBody className="gap-3">
           <p className="text-default-600">
             {gameIds.length === 1
-              ? `Tienes guardados nuevos en ${formatGameDisplayName(gameIds[0])}.`
-              : `Tienes guardados nuevos en ${gameIds.length} juegos.`}
+              ? t("library.unsyncedSaves.desc_one", { gameName: formatGameDisplayName(gameIds[0]) })
+              : t("library.unsyncedSaves.desc_other", { count: gameIds.length })}
           </p>
 
           <div className="rounded-lg border border-default-200 bg-default-100/50 p-3 text-sm text-default-600">
-            <p className="font-medium text-foreground">Opciones</p>
+            <p className="font-medium text-foreground">{t("library.unsyncedSaves.optionsTitle")}</p>
             <ul className="mt-1 list-inside list-disc space-y-0.5">
               <li>
-                <strong>Subir</strong>: sincroniza archivo a archivo (ideal para pocos cambios). No disponible para
-                juegos grandes.
+                <Trans i18nKey="library.unsyncedSaves.uploadOption" components={{ strong: <strong /> }} />
               </li>
               <li>
-                <strong>Empaquetar y subir</strong>: crea un .tar con toda la carpeta y lo sube en una sola operación
-                (obligatorio para juegos con muchos archivos o mucho peso).
+                <Trans i18nKey="library.unsyncedSaves.packageOption" components={{ strong: <strong /> }} />
               </li>
             </ul>
           </div>
 
           {hasPerGameActions && (
             <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground">Por juego</p>
+              <p className="text-sm font-medium text-foreground">{t("library.unsyncedSaves.perGame")}</p>
               <ul className="flex flex-col gap-1.5">
                 {gameIds.map((gameId) => {
                   const busy = loadingGameId === gameId;
@@ -96,7 +97,6 @@ export function UnsyncedSavesModal({
                       </span>
 
                       <span className="flex shrink-0 gap-2">
-                        {/* Skeleton mientras la preview está en vuelo */}
                         {previewPending ? (
                           <>
                             <Skeleton className="h-8 w-16 rounded-lg" />
@@ -104,10 +104,10 @@ export function UnsyncedSavesModal({
                           </>
                         ) : isLarge ? (
                           <>
-                            <Tooltip content="Este juego es demasiado grande. Usa Empaquetar y subir." placement="top">
+                            <Tooltip content={t("library.unsyncedSaves.tooLargeTooltip")} placement="top">
                               <span className="inline-flex">
                                 <Button size="sm" variant="flat" isDisabled startContent={<CloudUpload size={14} />}>
-                                  Subir
+                                  {t("library.unsyncedSaves.upload")}
                                 </Button>
                               </span>
                             </Tooltip>
@@ -119,7 +119,7 @@ export function UnsyncedSavesModal({
                               onPress={() => onFullBackupGame?.(gameId)}
                               isLoading={busy}
                               isDisabled={isLoadingAll}>
-                              Empaquetar y subir
+                              {t("library.unsyncedSaves.packageUpload")}
                             </Button>
                           </>
                         ) : (
@@ -131,7 +131,7 @@ export function UnsyncedSavesModal({
                               onPress={() => onUploadGame?.(gameId)}
                               isLoading={busy}
                               isDisabled={isLoadingAll}>
-                              Subir
+                              {t("library.unsyncedSaves.upload")}
                             </Button>
                             <Button
                               size="sm"
@@ -141,7 +141,7 @@ export function UnsyncedSavesModal({
                               onPress={() => onFullBackupGame?.(gameId)}
                               isLoading={busy}
                               isDisabled={isLoadingAll}>
-                              Empaquetar y subir
+                              {t("library.unsyncedSaves.packageUpload")}
                             </Button>
                           </>
                         )}
@@ -155,16 +155,15 @@ export function UnsyncedSavesModal({
         </ModalBody>
 
         <ModalFooter>
-          {/* Solo muestra el aviso de "grandes" cuando ya terminaron de cargar */}
           {!isLoadingPreviews && largeGameIds.size > 0 && (
             <p className="mr-auto text-sm text-warning">
               {largeGameIds.size === gameIds.length
-                ? "Todos son demasiado grandes. Usa Empaquetar y subir."
-                : `${largeGameIds.size} grande${largeGameIds.size !== 1 ? "s" : ""}: Empaquetar y subir.`}
+                ? t("library.unsyncedSaves.allTooLarge")
+                : t("library.unsyncedSaves.someTooLarge", { count: largeGameIds.size })}
             </p>
           )}
           <Button variant="light" onPress={onClose} isDisabled={isLoadingAll}>
-            Omitir
+            {t("library.unsyncedSaves.skip")}
           </Button>
         </ModalFooter>
       </ModalContent>

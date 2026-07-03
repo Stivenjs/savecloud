@@ -23,6 +23,7 @@ import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { featureFlags } from "@/constants/featureFlags";
 import { openOrFocusSettingsWindow } from "@/windows/settingsWindow";
 import type { ConfiguredGame } from "@app-types/config";
+import { useTranslation } from "react-i18next";
 
 const ProfileDrawer = lazy(() => import("@features/profile/ProfileDrawer").then((m) => ({ default: m.ProfileDrawer })));
 
@@ -57,15 +58,41 @@ interface AppLayoutProps {
  * @param currentPath - Pathname actual de React Router.
  * @returns Array de ítems formateados para `StaggeredMenu`.
  */
-const menuItemsFromNav = (navItems: NavItem[], currentPath: string) =>
-  navItems.map((n) => ({
-    id: n.id,
-    label: n.label,
-    ariaLabel: `Ir a ${n.label}`,
-    link: n.id,
-    disabled: currentPath === n.id,
-    icon: n.icon,
-  }));
+const menuItemsFromNav = (navItems: NavItem[], currentPath: string, t: (key: string, options?: any) => string) => {
+  const getNavTranslationKey = (id: string): string => {
+    switch (id) {
+      case "/":
+        return "nav.library";
+      case "/remote-play":
+        return "nav.remotePlay";
+      case "/catalog":
+        return "nav.catalog";
+      case "/friends":
+        return "nav.social";
+      case "/history":
+        return "nav.activity";
+      case "/settings":
+        return "nav.settings";
+      case "/about":
+        return "nav.about";
+      default:
+        return "";
+    }
+  };
+
+  return navItems.map((n) => {
+    const key = getNavTranslationKey(n.id);
+    const label = key ? t(key) : n.label;
+    return {
+      id: n.id,
+      label,
+      ariaLabel: t("common.goTo", { name: label }),
+      link: n.id,
+      disabled: currentPath === n.id,
+      icon: n.icon,
+    };
+  });
+};
 
 /**
  * Layout principal de la aplicación.
@@ -92,6 +119,7 @@ const menuItemsFromNav = (navItems: NavItem[], currentPath: string) =>
  * ```
  */
 export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitleBar = false }: AppLayoutProps) {
+  const { t } = useTranslation();
   const { resolvedTheme, setTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -194,7 +222,7 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
         bigPictureMode={hideTitleBar}
         hideFloatingHeader={hideTitleBar}
         headerOffset={hideTitleBar ? 0 : 40}
-        items={menuItemsFromNav(navItems, location.pathname)}
+        items={menuItemsFromNav(navItems, location.pathname, t)}
         displaySocials={true}
         displayItemNumbering
         menuButtonColor={isDark ? "#e4e4e7" : "#18181b"}

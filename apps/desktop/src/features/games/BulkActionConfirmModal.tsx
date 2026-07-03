@@ -1,5 +1,6 @@
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from "@heroui/react";
 import { CloudDownload, CloudUpload, Sparkles } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 
 interface BulkActionConfirmModalProps {
   isOpen: boolean;
@@ -19,12 +20,14 @@ export function BulkActionConfirmModal({
   onConfirm,
   onClose,
 }: BulkActionConfirmModalProps) {
+  const { t } = useTranslation();
   const isSync = type === "sync";
-  const title = isSync ? "Subir guardados de todos los juegos" : "Descargar guardados de todos los juegos";
+  const title = isSync ? t("library.bulkAction.uploadTitle") : t("library.bulkAction.downloadTitle");
   const message = isSync
-    ? `¿Subir guardados de ${count} ${count === 1 ? "juego" : "juegos"} a la nube?`
-    : `¿Descargar guardados de ${count} ${count === 1 ? "juego" : "juegos"} desde la nube?`;
+    ? t("library.bulkAction.uploadMessage", { count })
+    : t("library.bulkAction.downloadMessage", { count });
   const showPackageRecommendation = isSync && gamesOverSizeThreshold > 0 && count > 0;
+  const gamesLabel = t("library.bulkAction.game", { count });
 
   const handleConfirm = async () => {
     await onConfirm();
@@ -52,9 +55,11 @@ export function BulkActionConfirmModal({
               <p className="flex items-start gap-2">
                 <Sparkles size={18} className="mt-0.5 shrink-0 text-primary" />
                 <span>
-                  <strong>{gamesOverSizeThreshold}</strong> de {count} {count === 1 ? "juego" : "juegos"} superan 400
-                  MB. Para una subida más rápida, usa <strong>Empaquetar y subir</strong> desde el menú ⋯ de cada juego
-                  en lugar de subir todos.
+                  <Trans
+                    i18nKey="library.bulkAction.packageRecommendation"
+                    values={{ overThreshold: gamesOverSizeThreshold, total: count, gamesLabel }}
+                    components={{ strong: <strong /> }}
+                  />
                 </span>
               </p>
             </div>
@@ -62,10 +67,10 @@ export function BulkActionConfirmModal({
         </ModalBody>
         <ModalFooter>
           <Button variant="flat" onPress={onClose}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button color="primary" onPress={handleConfirm}>
-            {isSync ? "Subir todos" : "Descargar todos"}
+            {isSync ? t("library.bulkAction.uploadAll") : t("library.bulkAction.downloadAll")}
           </Button>
         </ModalFooter>
       </ModalContent>

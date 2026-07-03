@@ -1,5 +1,6 @@
 import { Button, Card, CardBody } from "@heroui/react";
 import { RefreshCw, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { OperationResult } from "@/hooks/useGamesPage";
 
 interface OperationErrorCardProps {
@@ -11,12 +12,13 @@ interface OperationErrorCardProps {
 }
 
 export function OperationErrorCard({ operationResult, onDismiss, onRetry }: OperationErrorCardProps) {
+  const { t } = useTranslation();
   const { type, gameId, result } = operationResult;
   const hasErrors = result.errors.length > 0;
 
   if (!hasErrors) return null;
 
-  const title = type === "sync" ? "Errores de sincronización" : "Errores de descarga";
+  const title = type === "sync" ? t("library.operationError.syncTitle") : t("library.operationError.downloadTitle");
   const canRetry = !!gameId && !!onRetry;
 
   return (
@@ -32,11 +34,11 @@ export function OperationErrorCard({ operationResult, onDismiss, onRetry }: Oper
                 color="primary"
                 startContent={<RefreshCw size={14} />}
                 onPress={() => onRetry(gameId, type)}>
-                Reintentar
+                {t("common.retry")}
               </Button>
             )}
             {onDismiss && (
-              <Button size="sm" variant="light" isIconOnly aria-label="Cerrar" onPress={onDismiss}>
+              <Button size="sm" variant="light" isIconOnly aria-label={t("common.close")} onPress={onDismiss}>
                 <X size={16} />
               </Button>
             )}
@@ -46,7 +48,9 @@ export function OperationErrorCard({ operationResult, onDismiss, onRetry }: Oper
           {result.errors.slice(0, 5).map((err, i) => (
             <li key={i}>{err}</li>
           ))}
-          {result.errors.length > 5 && <li>… y {result.errors.length - 5} más</li>}
+          {result.errors.length > 5 && (
+            <li>{t("library.operationError.andMore", { count: result.errors.length - 5 })}</li>
+          )}
         </ul>
       </CardBody>
     </Card>

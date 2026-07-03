@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { formatBytes } from "@utils/format";
+import { useTranslation } from "react-i18next";
 
 export interface GameCardSyncBadgeProps {
   syncStatus?: "pending_upload" | "pending_download" | "in_sync" | null;
@@ -14,6 +15,8 @@ export function GameCardSyncBadge({
   cloudBackupCount = 0,
   localSizeBytes,
 }: GameCardSyncBadgeProps) {
+  const { t } = useTranslation();
+
   const badge = useMemo(() => {
     let badgeText = "";
     let badgeColorClass = "";
@@ -26,7 +29,7 @@ export function GameCardSyncBadge({
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger-foreground opacity-75"></span>
               <span className="relative inline-flex rounded-full h-1 w-1 bg-danger-foreground"></span>
             </span>
-            JUGANDO
+            {t("library.syncBadge.playing")}
           </span>
           {localSizeBytes != null && (
             <span className="text-zinc-200 font-mono text-[9.5px] font-bold tracking-tight">
@@ -39,19 +42,19 @@ export function GameCardSyncBadge({
     }
 
     if (syncStatus === "pending_upload") {
-      badgeText = "MODIFICADO";
+      badgeText = t("library.syncBadge.modified");
       badgeColorClass =
         "bg-warning text-warning-foreground font-sans text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-[4px] tracking-wide";
     } else if (syncStatus === "pending_download") {
-      badgeText = "NUBE NUEVA";
+      badgeText = t("library.syncBadge.newCloud");
       badgeColorClass =
         "bg-primary text-primary-foreground font-sans text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-[4px] tracking-wide";
     } else if (syncStatus === "in_sync") {
-      badgeText = "AL DÍA";
+      badgeText = t("library.syncBadge.inSync");
       badgeColorClass =
         "bg-success text-success-foreground font-sans text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-[4px] tracking-wide";
     } else if (cloudBackupCount > 0) {
-      badgeText = "RESPALDOS";
+      badgeText = t("library.syncBadge.backups");
       badgeColorClass =
         "bg-secondary text-secondary-foreground font-sans text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-[4px] tracking-wide";
     }
@@ -69,7 +72,7 @@ export function GameCardSyncBadge({
         )}
       </div>
     );
-  }, [isGameRunning, syncStatus, cloudBackupCount, localSizeBytes]);
+  }, [isGameRunning, syncStatus, cloudBackupCount, localSizeBytes, t]);
 
   return badge;
 }

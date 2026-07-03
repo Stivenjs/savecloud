@@ -1,5 +1,6 @@
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, ScrollShadow } from "@heroui/react";
 import { CloudDownload, FileText } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { formatSize } from "@utils/format";
 import { formatGameDisplayName } from "@utils/gameImage";
 
@@ -27,6 +28,7 @@ export function ShareLinkImportConfirmModal({
   onConfirm,
   isLoading = false,
 }: ShareLinkImportConfirmModalProps) {
+  const { t } = useTranslation();
   const totalBytes = files.reduce((s, f) => s + (f.size ?? 0), 0);
   const displayName = gameDisplayName ?? formatGameDisplayName(gameId);
 
@@ -40,28 +42,19 @@ export function ShareLinkImportConfirmModal({
       <ModalContent>
         <ModalHeader className="flex items-center gap-2">
           <CloudDownload size={22} className="text-primary" />
-          Importar guardados desde link
+          {t("friends.shareLinkImport.title")}
         </ModalHeader>
         <ModalBody>
           <p className="text-sm text-default-600">
-            {files.length > 0 ? (
-              <>
-                Se copiarán a tu nube los siguientes archivos del juego{" "}
-                <strong className="text-foreground">{displayName}</strong>. Si no tienes este juego en tu lista, se
-                añadirá una entrada para que configures tu ruta local después.
-              </>
-            ) : (
-              <>
-                No hay archivos de guardado en este link para <strong className="text-foreground">{displayName}</strong>
-                . Puedes importar igualmente para añadir el juego a tu lista y configurar tu ruta local después.
-              </>
-            )}
+            {files.length > 0
+              ? t("friends.shareLinkImport.descWithFiles", { name: displayName })
+              : t("friends.shareLinkImport.descNoFiles", { name: displayName })}
           </p>
           <div className="rounded-lg border border-default-200 bg-default-50 p-3">
             <p className="mb-2 text-xs font-medium text-default-500">
               {files.length > 0
-                ? `${files.length} archivo${files.length !== 1 ? "s" : ""}${totalBytes > 0 ? ` · ${formatSize(totalBytes)} total` : ""}`
-                : "Ningún archivo"}
+                ? t("friends.shareLinkImport.filesStats", { count: files.length, size: formatSize(totalBytes) })
+                : t("friends.shareLinkImport.noFiles")}
             </p>
             {files.length > 0 ? (
               <ScrollShadow className="max-h-[40vh]">
@@ -78,20 +71,20 @@ export function ShareLinkImportConfirmModal({
                 </ul>
               </ScrollShadow>
             ) : (
-              <p className="text-xs text-default-500">El juego se añadirá a tu configuración sin copiar archivos.</p>
+              <p className="text-xs text-default-500">{t("friends.shareLinkImport.gameAddedOnly")}</p>
             )}
           </div>
         </ModalBody>
         <ModalFooter>
           <Button variant="flat" onPress={onClose} isDisabled={isLoading}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button
             color="primary"
             onPress={handleConfirm}
             isLoading={isLoading}
             startContent={!isLoading ? <CloudDownload size={18} /> : undefined}>
-            Importar a mi nube
+            {t("friends.shareLinkImport.importButton")}
           </Button>
         </ModalFooter>
       </ModalContent>

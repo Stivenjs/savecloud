@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { CatalogListItem } from "@services/tauri";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
 import type { SourceBestMatch } from "@services/tauri";
@@ -65,6 +66,7 @@ const CatalogGridItem = memo(function CatalogGridItem({
   onInstall,
   consoleMode = false,
 }: CatalogGridItemProps) {
+  const { t } = useTranslation();
   const isLowPerf = useLowPerformanceMode();
   const game = libraryGame ?? catalogListItemToConfiguredGame(item);
   const navigate = useNavigate();
@@ -137,7 +139,7 @@ const CatalogGridItem = memo(function CatalogGridItem({
               )}>
               <span className="flex items-center gap-1.5">
                 <span className="size-1.5 rounded-full bg-success-500 animate-pulse" />
-                En Biblioteca
+                {t("steamCatalog.grid.inLibrary")}
               </span>
             </Button>
           ) : best ? (
@@ -147,8 +149,8 @@ const CatalogGridItem = memo(function CatalogGridItem({
                   size={consoleMode ? "lg" : "sm"}
                   variant="bordered"
                   className="w-full"
-                  placeholder={best ? `${best.source_name} — ${best.item_title}` : "Fuente"}
-                  aria-label={`Elegir fuente para ${item.name}`}
+                  placeholder={best ? `${best.source_name} — ${best.item_title}` : t("steamCatalog.grid.source")}
+                  aria-label={t("steamCatalog.grid.chooseSource", { name: item.name })}
                   selectionMode="single"
                   selectedKeys={new Set([selectKey ?? sourceCandidateKey(best)])}
                   onSelectionChange={(keys) => {
@@ -182,12 +184,12 @@ const CatalogGridItem = memo(function CatalogGridItem({
                   consoleMode ? "h-11 text-base rounded-xl" : "h-8 text-xs rounded-medium"
                 )}
                 onPress={() => onInstall(item.name)}>
-                Instalar
+                {t("steamCatalog.grid.install")}
               </Button>
             </>
           ) : (
             <p className={cn("pt-2 text-center text-default-400 font-medium", consoleMode ? "text-sm" : "text-xs")}>
-              No disponible en tus fuentes
+              {t("steamCatalog.grid.notAvailable")}
             </p>
           )}
         </div>
@@ -214,6 +216,7 @@ export function SteamCatalogGrid({
   consoleMode = false,
 }: SteamCatalogGridProps) {
   const { config } = useConfig();
+  const { t } = useTranslation();
   const [pickByGame, setPickByGame] = useState<PickByGame>({});
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
   const [installingGame, setInstallingGame] = useState<{
@@ -299,9 +302,9 @@ export function SteamCatalogGrid({
           preferredProtocol: null,
         });
 
-        toastSuccess("Descarga iniciada", `Instalacion iniciada para ${name}.`);
+        toastSuccess(t("steamCatalog.grid.downloadStarted"), t("steamCatalog.grid.downloadStartedDesc", { name }));
       } catch (e) {
-        toastError("No se pudo iniciar", e instanceof Error ? e.message : String(e));
+        toastError(t("steamCatalog.grid.downloadFailed"), e instanceof Error ? e.message : String(e));
       }
     },
     [installingGame]
@@ -322,9 +325,12 @@ export function SteamCatalogGrid({
           manifestHash: offer.manifestHash,
         });
 
-        toastSuccess("Transferencia iniciada", `Traiendo ${name} desde ${offer.deviceName}.`);
+        toastSuccess(
+          t("steamCatalog.grid.transferStarted"),
+          t("steamCatalog.grid.transferStartedDesc", { name, device: offer.deviceName })
+        );
       } catch (e) {
-        toastError("No se pudo transferir", e instanceof Error ? e.message : String(e));
+        toastError(t("steamCatalog.grid.transferFailed"), e instanceof Error ? e.message : String(e));
       }
     },
     [installingGame, peerOffersHook.gameKey]

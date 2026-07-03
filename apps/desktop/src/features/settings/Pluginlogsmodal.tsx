@@ -21,6 +21,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState, useRef } from "react";
 import { Trash2 } from "lucide-react";
 import { getPluginLogs, PluginLogEntry } from "@/services/tauri/config.service";
+import { useTranslation } from "react-i18next";
 
 interface PluginLogsModalProps {
   isOpen: boolean;
@@ -84,6 +85,7 @@ function MessageWithAccordion({ entry }: { entry: PluginLogEntry }) {
 }
 
 export function PluginLogsModal({ isOpen, onClose }: PluginLogsModalProps) {
+  const { t } = useTranslation();
   const [logs, setLogs] = useState<PluginLogEntry[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -120,7 +122,7 @@ export function PluginLogsModal({ isOpen, onClose }: PluginLogsModalProps) {
       <ModalContent>
         <ModalHeader className="flex items-center justify-between pr-10">
           <div className="flex items-center gap-2">
-            <span className="text-base font-semibold">Logs de plugins</span>
+            <span className="text-base font-semibold">{t("settings.sdk.modal.title")}</span>
             {logs.length > 0 && (
               <Chip size="sm" variant="flat" color="default">
                 {logs.length}
@@ -134,24 +136,24 @@ export function PluginLogsModal({ isOpen, onClose }: PluginLogsModalProps) {
         <ModalBody>
           {logs.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 py-16 text-default-400">
-              <span className="text-sm">No hay logs todavía</span>
-              <span className="text-xs text-default-300">Los mensajes de tus plugins aparecerán aquí</span>
+              <span className="text-sm">{t("settings.sdk.modal.emptyTitle")}</span>
+              <span className="text-xs text-default-300">{t("settings.sdk.modal.emptyDesc")}</span>
             </div>
           ) : (
             <ScrollShadow className="h-[480px]">
               <Table
                 removeWrapper
                 isStriped
-                aria-label="Logs de plugins"
+                aria-label={t("settings.sdk.modal.table.ariaLabel")}
                 classNames={{
                   th: "text-xs font-medium bg-default-50 first:rounded-none last:rounded-none",
                   td: "font-mono text-xs py-1.5 align-top",
                 }}>
                 <TableHeader>
-                  <TableColumn width={70}>Hora</TableColumn>
-                  <TableColumn width={60}>Nivel</TableColumn>
-                  <TableColumn width={110}>Plugin</TableColumn>
-                  <TableColumn>Mensaje</TableColumn>
+                  <TableColumn width={70}>{t("settings.sdk.modal.table.time")}</TableColumn>
+                  <TableColumn width={60}>{t("settings.sdk.modal.table.level")}</TableColumn>
+                  <TableColumn width={110}>{t("settings.sdk.modal.table.plugin")}</TableColumn>
+                  <TableColumn>{t("settings.sdk.modal.table.message")}</TableColumn>
                 </TableHeader>
                 <TableBody>
                   {logs.map((entry, i) => (
@@ -194,10 +196,10 @@ export function PluginLogsModal({ isOpen, onClose }: PluginLogsModalProps) {
             startContent={<Trash2 size={14} />}
             onPress={handleClear}
             isDisabled={logs.length === 0}>
-            Limpiar
+            {t("settings.sdk.modal.clear")}
           </Button>
           <Button size="sm" variant="flat" onPress={onClose}>
-            Cerrar
+            {t("settings.sdk.modal.close")}
           </Button>
         </ModalFooter>
       </ModalContent>

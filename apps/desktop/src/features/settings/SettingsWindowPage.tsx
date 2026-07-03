@@ -1,11 +1,14 @@
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
 import { TitleBar } from "@components/layout/TitleBar";
 import { SettingsPage } from "@features/settings/SettingsPage";
 import { useProfileSessionHydration } from "@hooks/useProfileSession";
+import { useLanguageInitialization } from "@hooks/useLanguageInitialization";
 import { parseSettingsTabQueryValue } from "@/constants/savecloudCrossWindow";
 import type { SettingsTabKey } from "@features/settings/SettingsSidebar";
 import { SAVECLOUD_SETTINGS_CHROME_EVENT, type SavecloudSettingsChromePayload } from "@/windows/settingsWindow";
+import { useTranslation } from "react-i18next";
 
 function readInitialHideTitleBarFromSearch(): boolean {
   return new URLSearchParams(window.location.search).get("bpSettings") === "1";
@@ -18,8 +21,14 @@ function readInitialSettingsTabFromSearch(): SettingsTabKey | null {
 
 export function SettingsWindowPage() {
   useProfileSessionHydration();
+  useLanguageInitialization();
+  const { t } = useTranslation();
   const [hideTitleBar, setHideTitleBar] = useState(readInitialHideTitleBarFromSearch);
   const [initialSelectedTab] = useState<SettingsTabKey | null>(() => readInitialSettingsTabFromSearch());
+
+  useEffect(() => {
+    void getCurrentWindow().setTitle(t("nav.settings"));
+  }, [t]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;

@@ -16,30 +16,27 @@ import {
 import { open } from "@tauri-apps/plugin-dialog";
 import { type as getOsType } from "@tauri-apps/plugin-os";
 import { AppWindow, Cpu, FileSearch, RotateCcw, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { GameFormState } from "@/hooks/useGameForm";
 import { listRunningProcessesForPick } from "@/services/tauri";
 
-/** Diálogo del SO: permite launchers tipo .jar, scripts y ejecutables sin forzar marca comercial ni rutas fijas. */
-function launchTargetDialogFilters(): { name: string; extensions: string[] }[] {
+function launchTargetDialogFilters(t: (key: string) => string): { name: string; extensions: string[] }[] {
   const os = getOsType();
   if (os === "windows") {
     return [
-      { name: "Ejecutables, Java .jar y scripts", extensions: ["exe", "jar", "bat", "cmd"] },
-      { name: "Todos los archivos", extensions: ["*"] },
+      { name: t("library.gameDrawerLaunch.fileFilterWinExecutables"), extensions: ["exe", "jar", "bat", "cmd"] },
+      { name: t("library.gameDrawerLaunch.fileFilterWinAll"), extensions: ["*"] },
     ];
   }
   if (os === "macos") {
     return [
-      { name: "Apps y scripts", extensions: ["app", "jar", "sh", "command"] },
-      { name: "Todos los archivos", extensions: ["*"] },
+      { name: t("library.gameDrawerLaunch.fileFilterMacApps"), extensions: ["app", "jar", "sh", "command"] },
+      { name: t("library.gameDrawerLaunch.fileFilterMacAll"), extensions: ["*"] },
     ];
   }
   return [
-    {
-      name: "Ejecutables y scripts",
-      extensions: ["jar", "sh", "AppImage", "run"],
-    },
-    { name: "Todos los archivos", extensions: ["*"] },
+    { name: t("library.gameDrawerLaunch.fileFilterLinuxExecutables"), extensions: ["jar", "sh", "AppImage", "run"] },
+    { name: t("library.gameDrawerLaunch.fileFilterLinuxAll"), extensions: ["*"] },
   ];
 }
 
@@ -51,6 +48,7 @@ interface GameDrawerLaunchTabProps {
 }
 
 export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDrawerLaunchTabProps) {
+  const { t } = useTranslation();
   const [processModalOpen, setProcessModalOpen] = useState(false);
   const [filter, setFilter] = useState("");
 
@@ -77,8 +75,8 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
       const selected = await open({
         directory: false,
         multiple: false,
-        title: "Seleccionar programa para lanzar el juego",
-        filters: launchTargetDialogFilters(),
+        title: t("library.gameDrawerLaunch.pickLaunchTitle"),
+        filters: launchTargetDialogFilters(t),
       });
       if (selected && typeof selected === "string") {
         setField("launchExecutablePath", selected);
@@ -86,7 +84,7 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [setError, setField]);
+  }, [setError, setField, t]);
 
   const handleClearLaunch = useCallback(() => {
     setField("launchExecutablePath", "");
@@ -116,22 +114,21 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
   return (
     <>
       <div className="flex flex-col gap-4">
-        <p className="text-xs text-default-500">
-          Estos datos se guardan al pulsar «Añadir» o «Guardar cambios». El botón «Jugar» solo se habilita cuando hay
-          aquí un archivo elegido (.exe en Windows; también puedes usar .jar, .bat/.cmd / scripts según sistema).
-        </p>
+        <p className="text-xs text-default-500">{t("library.gameDrawerLaunch.introSaveHint")}</p>
 
         <Card className="border border-default-200/60 shadow-sm">
           <CardBody className="space-y-3 px-4 py-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-sm font-semibold text-default-700">Archivo para lanzar</span>
+              <span className="text-sm font-semibold text-default-700">
+                {t("library.gameDrawerLaunch.launchFileTitle")}
+              </span>
               <div className="flex flex-wrap gap-2">
                 <Button
                   size="sm"
                   variant="bordered"
                   startContent={<FileSearch size={16} />}
                   onPress={handlePickExecutable}>
-                  Elegir archivo
+                  {t("library.gameDrawerLaunch.browseFile")}
                 </Button>
                 {hasLaunchPath && (
                   <Button
@@ -140,7 +137,7 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
                     color="danger"
                     startContent={<Trash2 size={16} />}
                     onPress={handleClearLaunch}>
-                    Quitar
+                    {t("library.gameDrawerLaunch.clearLaunch")}
                   </Button>
                 )}
               </div>
@@ -150,10 +147,7 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
                 {form.launchExecutablePath}
               </p>
             ) : (
-              <p className="text-xs text-default-400">
-                Sin archivo: no podrás usar «Jugar» hasta que elijas uno (filtro amplio en el selector; también «Todos
-                los archivos»).
-              </p>
+              <p className="text-xs text-default-400">{t("library.gameDrawerLaunch.noLaunchFileHint")}</p>
             )}
           </CardBody>
         </Card>
@@ -163,11 +157,11 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-center gap-2 text-sm font-semibold text-default-700">
                 <Cpu size={16} />
-                Detección de proceso
+                {t("library.gameDrawerLaunch.processDetectionTitle")}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="bordered" onPress={handleOpenProcessModal}>
-                  Elegir proceso en ejecución
+                  {t("library.gameDrawerLaunch.pickRunningProcess")}
                 </Button>
                 {manualNames && (
                   <Button
@@ -175,15 +169,12 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
                     variant="light"
                     startContent={<RotateCcw size={16} />}
                     onPress={handleResetProcessDetection}>
-                    Automático
+                    {t("library.gameDrawerLaunch.automatic")}
                   </Button>
                 )}
               </div>
             </div>
-            <p className="text-xs text-default-500">
-              Si SaveCloud no detecta cuando el juego está abierto, abre el juego, vuelve aquí y elige el mismo nombre
-              de proceso que en el Administrador de tareas.
-            </p>
+            <p className="text-xs text-default-500">{t("library.gameDrawerLaunch.processDetectionDesc")}</p>
             {manualNames ? (
               <div className="flex flex-wrap gap-2">
                 {form.executableNames.map((n) => (
@@ -193,7 +184,7 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
                 ))}
               </div>
             ) : (
-              <p className="text-xs italic text-default-400">Inferencia automática según el nombre del juego.</p>
+              <p className="text-xs italic text-default-400">{t("library.gameDrawerLaunch.autoInference")}</p>
             )}
           </CardBody>
         </Card>
@@ -209,16 +200,15 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
         placement="center">
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
-            <span>Proceso en ejecución</span>
+            <span>{t("library.gameDrawerLaunch.processModalTitle")}</span>
             <span className="text-xs font-normal text-default-500">
-              Elige el proceso que coincida con tu juego (en Windows suele llevar el mismo icono que en Administrador de
-              tareas).
+              {t("library.gameDrawerLaunch.processModalSubtitle")}
             </span>
           </ModalHeader>
           <ModalBody className="gap-3">
             <Input
-              label="Filtrar"
-              placeholder="Escribe parte del nombre…"
+              label={t("library.gameDrawerLaunch.filterLabel")}
+              placeholder={t("library.gameDrawerLaunch.filterPlaceholder")}
               value={filter}
               onValueChange={setFilter}
               size="sm"
@@ -230,7 +220,9 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
                 </div>
               ) : filteredRows.length === 0 ? (
                 <p className="py-6 text-center text-sm text-default-400">
-                  {runningRows.length === 0 ? "No hay procesos listados." : "Ningún resultado con ese filtro."}
+                  {runningRows.length === 0
+                    ? t("library.gameDrawerLaunch.noProcesses")
+                    : t("library.gameDrawerLaunch.noFilterResults")}
                 </p>
               ) : (
                 <ul className="space-y-1">
@@ -263,7 +255,7 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
           </ModalBody>
           <ModalFooter>
             <Button variant="light" onPress={() => setProcessModalOpen(false)}>
-              Cerrar
+              {t("common.close")}
             </Button>
           </ModalFooter>
         </ModalContent>

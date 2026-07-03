@@ -11,11 +11,13 @@ import { SaveGraphLegend } from "@components/save-graph/SaveGraphLegend";
 import { SaveGraphDetailPanel } from "@components/save-graph/SaveGraphDetailPanel";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
+import { useTranslation } from "react-i18next";
 
 /**
  * Vista detallada del grafo de guardados de un juego.
  */
 export function GameSaveGraphPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { gameId } = useParams<{ gameId: string }>();
   const selectedNodeId = useSaveGraphStore((state) => state.selectedNodeId);
@@ -131,7 +133,9 @@ export function GameSaveGraphPage() {
 
                 {isError ? (
                   <div className="flex min-h-[52vh] items-center justify-center rounded-3xl border border-danger/20 bg-danger/10 p-6 text-danger">
-                    No se pudo cargar el mapa: {error instanceof Error ? error.message : "Error desconocido"}
+                    {t("saveGraph.detail.loadError", {
+                      message: error instanceof Error ? error.message : t("errors.unexpected"),
+                    })}
                   </div>
                 ) : null}
 
@@ -143,10 +147,7 @@ export function GameSaveGraphPage() {
           </section>
 
           <aside className="space-y-4">
-            <SaveGraphDetailPanel
-              node={selectedNode}
-              emptyLabel="Selecciona un nodo para ver métricas, estado y relación con el resto del mapa."
-            />
+            <SaveGraphDetailPanel node={selectedNode} emptyLabel={t("saveGraph.detail.nothingSelectedDesc")} />
           </aside>
         </div>
       </div>

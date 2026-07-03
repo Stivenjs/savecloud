@@ -14,6 +14,7 @@ import {
   PopoverContent,
 } from "@heroui/react";
 import { FolderOpen, Plus, Search, HardDrive, Gamepad2, MoreVertical, EyeOff, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { scanPathCandidates } from "@services/tauri";
 import type { PathCandidate } from "@services/tauri";
 import type { ConfiguredGame } from "@app-types/config";
@@ -25,6 +26,7 @@ import { dedupePreserveGamePaths, mergeScanPathsWithConfigured, normPathKey } fr
 import { useNavigable } from "@features/input/useNavigable";
 import { getGamepadFocusClass } from "@features/input/styles";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
+import { CatalogCoverImage } from "@features/steam-catalog/components/CatalogCoverImage";
 
 const MagicRings = lazy(() => import("@components/external/MagicRings"));
 
@@ -37,6 +39,7 @@ interface ScanModalProps {
 }
 
 function CandidateMenu({ onDismiss }: { onDismiss: () => void }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   return (
@@ -46,7 +49,7 @@ function CandidateMenu({ onDismiss }: { onDismiss: () => void }) {
           isIconOnly
           size="sm"
           variant="light"
-          aria-label="Más opciones"
+          aria-label={t("library.scan.moreOptions")}
           className="text-default-400 hover:text-default-600 shrink-0"
           onPress={() => setOpen((v) => !v)}>
           <MoreVertical size={15} />
@@ -61,8 +64,8 @@ function CandidateMenu({ onDismiss }: { onDismiss: () => void }) {
           }}>
           <EyeOff size={14} className="shrink-0 text-default-400" />
           <div>
-            <p className="font-medium leading-tight text-foreground">No es un juego</p>
-            <p className="mt-0.5 text-[11px] leading-tight text-default-400">No volver a mostrar esto</p>
+            <p className="font-medium leading-tight text-foreground">{t("library.scan.notAGame")}</p>
+            <p className="mt-0.5 text-[11px] leading-tight text-default-400">{t("library.scan.dontShowAgain")}</p>
           </div>
         </button>
       </PopoverContent>
@@ -88,7 +91,9 @@ function CandidateRow({
   onDismiss: () => void;
   index: number;
 }) {
-  const hasAppId = !!candidate.steamAppId || !!extractAppIdFromFolderName(candidate.folderName ?? "");
+  const { t } = useTranslation();
+  const appId = candidate.steamAppId || extractAppIdFromFolderName(candidate.folderName ?? "");
+  const hasAppId = !!appId;
   const displayName = hasAppId && resolvedName ? resolvedName : candidate.folderName;
   const isLoading = hasAppId && resolvedName === undefined;
 
@@ -103,43 +108,58 @@ function CandidateRow({
       className={`flex flex-col gap-3 rounded-lg border border-default-200/70 px-4 py-3 transition-colors hover:border-default-300 hover:bg-default-50 outline-none focus-within:ring-0 focus-within:border-default-200/70 sm:flex-row sm:items-center sm:justify-between ${
         navAdd.isFocused && navAdd.inputMode === "gamepad" ? "border-primary/40 bg-primary/5" : ""
       }`}>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <Gamepad2 size={15} className="shrink-0 text-primary" />
-          <p className="truncate text-sm font-medium text-foreground">
-            {displayName}
-            {isLoading && <Spinner size="sm" className="ml-2 inline-block" color="default" />}
-          </p>
+      <div className="flex flex-1 items-start gap-3.5 min-w-0">
+        <div className="h-11 w-24 shrink-0 overflow-hidden rounded-md bg-default-100 dark:bg-default-50/50 flex items-center justify-center border border-default-200/50">
+          {appId ? (
+            <CatalogCoverImage
+              alt={displayName ?? ""}
+              candidates={[
+                `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
+                `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_184x69.jpg`,
+              ]}
+              className="h-full w-full object-cover"
+              fallbackClassName="flex h-full w-full items-center justify-center text-default-400"
+            />
+          ) : (
+            <Gamepad2 size={18} className="text-default-400" />
+          )}
         </div>
-        <div className="mt-2 flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] font-medium uppercase tracking-wide text-default-400">
-              {displayPaths.length === 1 ? "Ruta" : `${displayPaths.length} rutas`}
-            </span>
-            {mergedFromConfigured && (
-              <span
-                className="text-[10px] text-primary"
-                title="Incluye todas las rutas configuradas para este juego en la app.">
-                + config local
-              </span>
-            )}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-medium text-foreground">
+              {displayName}
+              {isLoading && <Spinner size="sm" className="ml-2 inline-block" color="default" />}
+            </p>
           </div>
-          <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-md border border-default-100/80 bg-default-50/80 px-2 py-1.5 dark:border-default-100/15 dark:bg-default-50/10">
-            {displayPaths.map((absPath, i) => (
-              <li
-                key={`${normPathKey(absPath)}:${i}`}
-                className="flex items-start gap-1.5 text-[11px] leading-snug text-default-500">
-                <HardDrive size={11} className="mt-0.5 shrink-0 text-default-400" aria-hidden />
-                <span className="min-w-0 break-all" title={absPath}>
-                  {absPath}
+          <div className="mt-1.5 flex flex-col gap-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-default-400">
+                {t("library.scan.path", { count: displayPaths.length })}
+              </span>
+              {mergedFromConfigured && (
+                <span className="text-[10px] text-primary" title={t("library.scan.includesConfiguredPaths")}>
+                  {t("library.scan.localConfigSuffix")}
                 </span>
-              </li>
-            ))}
-          </ul>
+              )}
+            </div>
+            <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-md border border-default-100/80 bg-default-50/80 px-2 py-1.5 dark:border-default-100/15 dark:bg-default-50/10">
+              {displayPaths.map((absPath, i) => (
+                <li
+                  key={`${normPathKey(absPath)}:${i}`}
+                  className="flex items-start gap-1.5 text-[11px] leading-snug text-default-500">
+                  <HardDrive size={11} className="mt-0.5 shrink-0 text-default-400" aria-hidden />
+                  <span className="min-w-0 break-all" title={absPath}>
+                    {absPath}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-1.5 justify-end">
         <Button
           size="sm"
           color="primary"
@@ -148,7 +168,7 @@ function CandidateRow({
           onPress={onAdd}
           className={getGamepadFocusClass(navAdd.isFocused, navAdd.inputMode)}
           {...navAdd.navProps}>
-          Añadir
+          {t("library.scan.add")}
         </Button>
         <CandidateMenu onDismiss={onDismiss} />
       </div>
@@ -157,6 +177,7 @@ function CandidateRow({
 }
 
 export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames = [] }: ScanModalProps) {
+  const { t } = useTranslation();
   const isLowPerf = useLowPerformanceMode();
 
   const {
@@ -242,7 +263,7 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames 
         <ModalHeader className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm font-medium">
             <FolderOpen size={15} className="text-secondary" />
-            Buscar juegos automáticamente
+            {t("library.scan.autoScanTitle")}
           </div>
           <Button isIconOnly size="sm" variant="light" className="size-7 min-w-0 text-default-400" onPress={onClose}>
             <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" width="12" height="12">
@@ -257,9 +278,7 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames 
               {isLowPerf ? (
                 <div className="flex flex-col items-center justify-center py-10 gap-3">
                   <Spinner size="lg" color="secondary" />
-                  <p className="max-w-md text-center text-sm text-default-500">
-                    Revisando tu PC para encontrar juegos y sus guardados...
-                  </p>
+                  <p className="max-w-md text-center text-sm text-default-500">{t("library.scan.scanningPcDesc")}</p>
                 </div>
               ) : (
                 <>
@@ -293,11 +312,9 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames 
                     </Suspense>
                   </div>
                   <p className="max-w-md animate-pulse text-center text-sm text-default-500">
-                    Revisando tu PC para encontrar juegos y sus guardados...
+                    {t("library.scan.scanningPcDesc")}
                     <br />
-                    <span className="text-xs text-default-400">
-                      Esto puede tardar unos segundos dependiendo de tu sistema
-                    </span>
+                    <span className="text-xs text-default-400">{t("library.scan.scanningHintSeconds")}</span>
                   </p>
                 </>
               )}
@@ -309,8 +326,8 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames 
                 className={`rounded-lg transition-all ${navSearch.isFocused && navSearch.inputMode === "gamepad" ? "ring-2 ring-primary/30" : ""}`}
                 {...navSearch.navProps}>
                 <Input
-                  aria-label="Buscar juegos encontrados"
-                  placeholder="Buscar juego, carpeta o ruta..."
+                  aria-label={t("library.scan.searchAriaLabel")}
+                  placeholder={t("library.scan.searchPlaceholder")}
                   size="sm"
                   radius="lg"
                   startContent={<Search size={13} className="text-default-400" />}
@@ -328,15 +345,13 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames 
                 <div className="flex items-center justify-between rounded-lg border border-default-200/70 bg-default-50 px-3 py-2 text-xs">
                   <div className="flex items-center gap-2 text-default-500">
                     <EyeOff size={13} className="shrink-0" />
-                    <span>
-                      {dismissedCount} {dismissedCount === 1 ? "entrada ocultada" : "entradas ocultadas"}
-                    </span>
+                    <span>{t("library.scan.hidden", { count: dismissedCount })}</span>
                   </div>
                   <button
                     className="flex items-center gap-1 font-medium text-primary transition-colors hover:text-primary/70"
                     onClick={clearAll}>
                     <Trash2 size={12} />
-                    Restaurar todo
+                    {t("library.scan.restoreAll")}
                   </button>
                 </div>
               )}
@@ -362,17 +377,17 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames 
                   })
                 ) : debouncedSearch ? (
                   <li className="py-8 text-center text-sm text-default-400">
-                    No hay coincidencias para &quot;{searchQuery}&quot;
+                    {t("library.scan.noMatches", { query: searchQuery })}
                   </li>
                 ) : (
                   <li className="flex flex-col items-center gap-3 py-10 text-center">
                     <EyeOff size={28} className="text-default-300" />
-                    <p className="text-sm text-default-400">Todas las entradas encontradas han sido ocultadas.</p>
+                    <p className="text-sm text-default-400">{t("library.scan.allHidden")}</p>
                     {dismissedCount > 0 && (
                       <button
                         className="text-xs font-medium text-primary transition-colors hover:text-primary/70"
                         onClick={clearAll}>
-                        Restaurar entradas ocultadas
+                        {t("library.scan.restoreHiddenEntries")}
                       </button>
                     )}
                   </li>
@@ -382,17 +397,15 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames 
           ) : (
             <div className="flex flex-col items-center gap-3 py-12 text-center">
               <FolderOpen size={36} className="text-default-300" />
-              <p className="text-sm text-default-500">No se encontraron carpetas candidatas.</p>
-              <p className="text-xs text-default-400">Puedes añadir un juego manualmente con su ruta.</p>
+              <p className="text-sm text-default-500">{t("library.scan.noCandidates")}</p>
+              <p className="text-xs text-default-400">{t("library.scan.addManuallyHint")}</p>
             </div>
           )}
         </ModalBody>
 
         <ModalFooter className="flex items-center justify-between">
           <span className="text-xs text-default-400">
-            {!isLoading && candidates
-              ? `${visibleCandidates.length} encontrado${visibleCandidates.length !== 1 ? "s" : ""}`
-              : ""}
+            {!isLoading && candidates ? t("library.scan.found", { count: visibleCandidates.length }) : ""}
           </span>
           <div className="flex gap-2">
             <Button
@@ -402,7 +415,7 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames 
               isDisabled={isLoading}
               className={getGamepadFocusClass(navRefetch.isFocused, navRefetch.inputMode)}
               {...navRefetch.navProps}>
-              Volver a analizar
+              {t("library.scan.rescan")}
             </Button>
             <Button
               size="sm"
@@ -410,7 +423,7 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames 
               onPress={onClose}
               className={getGamepadFocusClass(navClose.isFocused, navClose.inputMode)}
               {...navClose.navProps}>
-              Cerrar
+              {t("library.scan.close")}
             </Button>
           </div>
         </ModalFooter>

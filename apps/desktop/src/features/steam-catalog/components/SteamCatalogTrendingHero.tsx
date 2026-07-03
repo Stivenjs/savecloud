@@ -2,6 +2,7 @@ import { Button } from "@heroui/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addTransitionType, startTransition } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import type { CatalogListItem, SteamAppdetailsMediaResult } from "@services/tauri";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay, EffectFade } from "swiper/modules";
@@ -33,6 +34,7 @@ export function SteamCatalogTrendingHero({
   isError,
   errorMessage,
 }: SteamCatalogTrendingHeroProps) {
+  const { t } = useTranslation();
   const isLowPerf = useLowPerformanceMode();
   const navigate = useNavigate();
   const location = useLocation();
@@ -95,7 +97,7 @@ export function SteamCatalogTrendingHero({
   if (isError) {
     return (
       <section className="rounded-2xl border border-danger-300/70 bg-danger-100/70 p-4 text-sm text-danger-700 dark:border-danger-500/50 dark:bg-danger-950/50 dark:text-danger-100">
-        {errorMessage ?? "No se pudo cargar el bloque de destacados."}
+        {errorMessage ?? t("steamCatalog.trending.errorLoading")}
       </section>
     );
   }
@@ -105,14 +107,14 @@ export function SteamCatalogTrendingHero({
   }
 
   return (
-    <section className="space-y-3" aria-label="Destacados y recomendados">
+    <section className="space-y-3" aria-label={t("steamCatalog.trending.featured")}>
       <div className="relative">
         <Button
           isIconOnly
           variant="flat"
           className="absolute -left-2 top-1/2 z-20 hidden size-11 -translate-y-1/2 rounded-none bg-content1/80 text-foreground lg:flex"
           onPress={() => swiperRef.current?.slidePrev()}
-          aria-label="Anterior">
+          aria-label={t("steamCatalog.trending.previousSlide")}>
           <ChevronLeft size={28} />
         </Button>
 
@@ -121,7 +123,7 @@ export function SteamCatalogTrendingHero({
           variant="flat"
           className="absolute -right-2 top-1/2 z-20 hidden size-11 -translate-y-1/2 rounded-none bg-content1/80 text-foreground lg:flex"
           onPress={() => swiperRef.current?.slideNext()}
-          aria-label="Siguiente">
+          aria-label={t("steamCatalog.trending.nextSlide")}>
           <ChevronRight size={28} />
         </Button>
 

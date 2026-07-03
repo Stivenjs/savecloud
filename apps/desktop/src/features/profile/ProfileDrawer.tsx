@@ -57,6 +57,7 @@ import { achievementLabel, formatHoursToNextLevel } from "@utils/gamificationLab
 import { formatPlaytime } from "@utils/format";
 import { resolveProfileAsset } from "@utils/profileMedia";
 import { toastError, toastSuccess } from "@utils/toast";
+import { useTranslation } from "react-i18next";
 
 interface ProfileDrawerProps {
   isOpen: boolean;
@@ -69,16 +70,19 @@ interface ProfileDrawerProps {
   bpReserveGlobalTopChromeSlot?: boolean;
 }
 
-function connectionLabel(status: ConnectionStatus | undefined): { text: string; tone: string } {
+function connectionLabel(
+  status: ConnectionStatus | undefined,
+  t: (key: string) => string
+): { text: string; tone: string } {
   switch (status) {
     case "connected":
-      return { text: "En línea", tone: "text-success" };
+      return { text: t("profile.drawer.connection.online"), tone: "text-success" };
     case "connecting":
-      return { text: "Conectando…", tone: "text-default-500" };
+      return { text: t("profile.drawer.connection.connecting"), tone: "text-default-500" };
     case "retrying":
-      return { text: "Reintentando…", tone: "text-warning" };
+      return { text: t("profile.drawer.connection.retrying"), tone: "text-warning" };
     case "error":
-      return { text: "Sin conexión", tone: "text-danger" };
+      return { text: t("profile.drawer.connection.offline"), tone: "text-danger" };
     default:
       return { text: "—", tone: "text-default-400" };
   }
@@ -102,6 +106,7 @@ export function ProfileDrawer({
   bigPictureConsole = false,
   bpReserveGlobalTopChromeSlot = true,
 }: ProfileDrawerProps) {
+  const { t } = useTranslation();
   const bp = bigPictureConsole;
   const { activeProfile } = useProfileSession();
   const queryClient = useQueryClient();
@@ -126,8 +131,8 @@ export function ProfileDrawer({
   const gamesCount = config?.games?.length ?? 0;
   const totalSeconds = config?.totalPlaytime ?? 0;
   const userId = activeProfile?.localUserId?.trim() || config?.userId?.trim() || "";
-  const displayName = userId || "Usuario";
-  const conn = connectionLabel(hasSyncConfig ? connectionStatus : undefined);
+  const displayName = userId || t("profile.selector.noUser");
+  const conn = connectionLabel(hasSyncConfig ? connectionStatus : undefined, t);
 
   const { data: cloudPresence = [], isLoading: cloudPresenceLoading } = useQuery({
     queryKey: ["cloud-presence"],
@@ -172,14 +177,14 @@ export function ProfileDrawer({
       await setShareVisualProfileWithMembers(shareVisualWithMembers);
       await queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
       scheduleConfigBackupToCloud();
-      toastSuccess("Perfil actualizado", "Se guardó la apariencia del perfil.");
+      toastSuccess(t("profile.drawer.toast.success"), t("profile.drawer.toast.successDesc"));
       onClose();
     } catch (e) {
-      toastError("No se pudo guardar", e instanceof Error ? e.message : String(e));
+      toastError(t("profile.drawer.toast.error"), e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
-  }, [avatar, bg, frame, onClose, queryClient, shareVisualWithHosts, shareVisualWithMembers]);
+  }, [avatar, bg, frame, onClose, queryClient, shareVisualWithHosts, shareVisualWithMembers, t]);
 
   const handleLogout = useCallback(() => {
     onClose();
@@ -188,33 +193,41 @@ export function ProfileDrawer({
     useProfileSessionStore.getState().clearSession();
   }, [onClose, queryClient]);
 
-  const pickFile = useCallback(async (kind: "background" | "avatar" | "frame") => {
-    try {
-      if (kind === "background") {
+  const pickFile = useCallback(
+    async (kind: "background" | "avatar" | "frame") => {
+      try {
+        if (kind === "background") {
+          const selected = await open({
+            multiple: false,
+            title: t("profile.drawer.selectMedia.bg"),
+            filters: [
+              {
+                name: t("profile.drawer.selectMedia.bgFilter"),
+                extensions: ["jpg", "jpeg", "png", "gif", "webp", "mp4", "webm", "mov"],
+              },
+            ],
+          });
+          if (typeof selected === "string") setBg(selected);
+          return;
+        }
         const selected = await open({
           multiple: false,
-          title: "Elegir imagen o vídeo de fondo",
+          title: kind === "avatar" ? t("profile.drawer.selectMedia.avatar") : t("profile.drawer.selectMedia.frame"),
           filters: [
-            { name: "Imagen o vídeo", extensions: ["jpg", "jpeg", "png", "gif", "webp", "mp4", "webm", "mov"] },
+            { name: t("profile.drawer.selectMedia.imgFilter"), extensions: ["jpg", "jpeg", "png", "gif", "webp"] },
           ],
         });
-        if (typeof selected === "string") setBg(selected);
-        return;
+        if (typeof selected === "string") {
+          const dataUrl = await readImageAsDataUrl(selected);
+          if (kind === "avatar") setAvatar(dataUrl);
+          else setFrame(dataUrl);
+        }
+      } catch (e) {
+        toastError(t("profile.drawer.toast.invalidFile"), e instanceof Error ? e.message : String(e));
       }
-      const selected = await open({
-        multiple: false,
-        title: kind === "avatar" ? "Elegir imagen de perfil" : "Elegir imagen de marco",
-        filters: [{ name: "Imagen", extensions: ["jpg", "jpeg", "png", "gif", "webp"] }],
-      });
-      if (typeof selected === "string") {
-        const dataUrl = await readImageAsDataUrl(selected);
-        if (kind === "avatar") setAvatar(dataUrl);
-        else setFrame(dataUrl);
-      }
-    } catch (e) {
-      toastError("Archivo no válido", e instanceof Error ? e.message : String(e));
-    }
-  }, []);
+    },
+    [t]
+  );
 
   const applyGeneratedAvatar = useCallback((seed: string) => {
     const normalizedSeed = seed.trim() || generateNiceAvatarSeed();
@@ -276,7 +289,7 @@ export function ProfileDrawer({
                 onPress={handleLogout}>
                 <LogOut size={14} className="text-danger-400 shrink-0" />
                 <span className="opacity-0 max-w-0 overflow-hidden transition-all duration-300 ease-in-out group-hover:opacity-100 group-hover:max-w-24 group-hover:ml-2 whitespace-nowrap text-xs text-danger-200 font-semibold select-none">
-                  Cerrar sesión
+                  {t("profile.drawer.logout")}
                 </span>
               </Button>
             </div>
@@ -332,16 +345,16 @@ export function ProfileDrawer({
                   ) : null}
                   <span className="text-default-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">·</span>
                   <span className="text-default-500 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
-                    {formatPlaytime(totalSeconds)} jugados
+                    {formatPlaytime(totalSeconds)} {t("profile.drawer.gamesPlayedSuffix")}
                   </span>
                   <span className="text-default-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">·</span>
                   <span className="text-default-500 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
-                    {gamesCount} {gamesCount === 1 ? "juego" : "juegos"}
+                    {t("profile.drawer.gamesCount", { count: gamesCount })}
                   </span>
                 </div>
                 {ownPresence?.status === "playing" && ownPresence?.gameName ? (
                   <p className={`mt-1 text-default-500 ${bp ? "text-sm" : "text-xs"}`}>
-                    Jugando: {ownPresence.gameName}
+                    {t("profile.drawer.playingLabel", { game: ownPresence.gameName })}
                   </p>
                 ) : null}
               </div>
@@ -352,7 +365,7 @@ export function ProfileDrawer({
                   className={`flex items-center rounded-full border border-default-200/80 bg-default-100/80 dark:bg-default-50/10 ${
                     bp ? "gap-2 px-4 py-1 text-sm" : "gap-1.5 px-2.5 py-0.5 text-xs"
                   }`}>
-                  <span className="text-default-500">Nivel</span>
+                  <span className="text-default-500">{t("profile.drawer.levelLabel")}</span>
                   <span
                     className={`flex items-center justify-center rounded-full border border-primary/40 bg-primary/10 font-semibold text-primary ${
                       bp ? "size-9 text-base" : "size-6"
@@ -378,7 +391,7 @@ export function ProfileDrawer({
               <span className={`font-semibold text-foreground ${bp ? "text-xl" : "text-sm"}`}>{gamesCount}</span>
               <span
                 className={`font-medium uppercase tracking-wider text-default-500 ${bp ? "text-xs" : "text-[10px]"}`}>
-                Juegos
+                {t("profile.drawer.stats.games")}
               </span>
             </div>
             <div
@@ -393,7 +406,7 @@ export function ProfileDrawer({
               </span>
               <span
                 className={`font-medium uppercase tracking-wider text-default-500 ${bp ? "text-xs" : "text-[10px]"}`}>
-                Logros
+                {t("profile.drawer.stats.achievements")}
               </span>
             </div>
             <div
@@ -408,7 +421,7 @@ export function ProfileDrawer({
               </span>
               <span
                 className={`font-medium uppercase tracking-wider text-default-500 ${bp ? "text-xs" : "text-[10px]"}`}>
-                Subidas
+                {t("profile.drawer.stats.uploads")}
               </span>
             </div>
             <div
@@ -421,7 +434,7 @@ export function ProfileDrawer({
               <span className={`font-semibold text-foreground ${bp ? "text-xl" : "text-sm"}`}>{syncStreakDays}</span>
               <span
                 className={`font-medium uppercase tracking-wider text-default-500 ${bp ? "text-xs" : "text-[10px]"}`}>
-                {syncStreakDays === 1 ? "día racha" : "días racha"}
+                {t("profile.drawer.stats.streakCount", { count: syncStreakDays })}
               </span>
             </div>
           </div>
@@ -435,13 +448,14 @@ export function ProfileDrawer({
               }`}>
               <Zap size={bp ? 20 : 14} className="shrink-0 text-warning" />
               <span className={`flex-1 text-default-600 ${bp ? "text-sm font-medium" : "text-xs"}`}>
-                Esta semana:{" "}
-                <span className="font-medium text-foreground">{formatPlaytime(weeklyPlaytimeSeconds)}</span> jugados
+                {t("profile.drawer.thisWeek")}{" "}
+                <span className="font-medium text-foreground">{formatPlaytime(weeklyPlaytimeSeconds)}</span>{" "}
+                {t("profile.drawer.gamesPlayedSuffix")}
               </span>
               {playStreakDays > 0 && (
                 <span className={`flex items-center gap-1 text-default-500 ${bp ? "gap-2 text-sm" : "text-xs"}`}>
                   <Flame size={bp ? 16 : 12} className="text-danger" />
-                  {playStreakDays} {playStreakDays === 1 ? "día" : "días"} seguidos
+                  {t("profile.drawer.playStreak", { count: playStreakDays })}
                 </span>
               )}
             </div>
@@ -455,14 +469,14 @@ export function ProfileDrawer({
               <span
                 className={`flex items-center font-medium text-foreground ${bp ? "gap-2 text-lg" : "gap-1.5 text-sm"}`}>
                 <Trophy size={bp ? 22 : 15} className="text-warning" />
-                Progreso de nivel
+                {t("profile.drawer.levelProgress")}
               </span>
               {!atMaxLevel && nextLevel != null ? (
                 <span className={`text-default-500 ${bp ? "text-sm" : "text-xs"}`}>
-                  Nivel {level} → {nextLevel}
+                  {t("profile.drawer.levelNext", { level, next: nextLevel })}
                 </span>
               ) : (
-                <span className={`text-default-500 ${bp ? "text-sm" : "text-xs"}`}>Nivel máximo</span>
+                <span className={`text-default-500 ${bp ? "text-sm" : "text-xs"}`}>{t("profile.drawer.levelMax")}</span>
               )}
             </div>
 
@@ -476,22 +490,27 @@ export function ProfileDrawer({
                   />
                 </div>
                 <div className={`flex items-center justify-between ${bp ? "mt-2.5" : "mt-1.5"}`}>
-                  <span className={`text-default-500 ${bp ? "text-sm" : "text-xs"}`}>{progressPct}% completado</span>
+                  <span className={`text-default-500 ${bp ? "text-sm" : "text-xs"}`}>
+                    {t("profile.drawer.levelPercent", { pct: progressPct })}
+                  </span>
                   <span className={`flex items-center gap-1 text-default-500 ${bp ? "gap-2 text-sm" : "text-xs"}`}>
                     <Clock size={bp ? 14 : 11} />
-                    {formatHoursToNextLevel(secondsToNext)} para nivel {nextLevel ?? "—"}
+                    {t("profile.drawer.levelRemaining", {
+                      remaining: formatHoursToNextLevel(secondsToNext),
+                      next: nextLevel ?? "—",
+                    })}
                   </span>
                 </div>
               </>
             ) : (
-              <p className={`text-default-500 ${bp ? "text-sm" : "text-xs"}`}>Has alcanzado el nivel 99.</p>
+              <p className={`text-default-500 ${bp ? "text-sm" : "text-xs"}`}>{t("profile.drawer.reachedMax")}</p>
             )}
 
             {/* Achievements list */}
             {achievementsUnlocked.length > 0 && (
               <div className={bp ? "mt-5 border-t border-white/15 pt-4" : "mt-3 border-t border-default-200 pt-3"}>
                 <p className={`mb-2 font-medium text-default-600 ${bp ? "mb-3 text-base" : "text-xs"}`}>
-                  Logros desbloqueados
+                  {t("profile.drawer.unlockedAchievements")}
                 </p>
                 <ul className={`flex flex-col ${bp ? "gap-3" : "gap-2"}`}>
                   {achievementsUnlocked.map((id) => (
@@ -525,18 +544,18 @@ export function ProfileDrawer({
             }}>
             <AccordionItem
               key="bg"
-              aria-label="Fondo"
+              aria-label={t("profile.drawer.accordion.bg")}
               title={
                 <span className={`flex items-center ${bp ? "gap-3 text-foreground" : "gap-2"}`}>
                   <MonitorPlay size={bp ? 20 : 15} className="text-default-500" />
-                  Fondo
+                  {t("profile.drawer.accordion.bg")}
                 </span>
               }>
               <div className={`flex flex-col ${bp ? "gap-3" : "gap-2"}`}>
                 <Input
                   size={bp ? "lg" : "sm"}
                   label="URL"
-                  placeholder="https://… · vacío quita el fondo"
+                  placeholder={t("profile.drawer.fields.bgPlaceholder")}
                   value={bg}
                   onValueChange={setBg}
                   variant="bordered"
@@ -548,25 +567,25 @@ export function ProfileDrawer({
                   className={`w-full justify-start ${bp ? "min-h-12 text-base" : ""}`}
                   startContent={<FolderOpen size={bp ? 20 : 16} />}
                   onPress={() => void pickFile("background")}>
-                  Archivo en disco…
+                  {t("profile.drawer.fields.bgFileButton")}
                 </Button>
               </div>
             </AccordionItem>
 
             <AccordionItem
               key="avatar"
-              aria-label="Foto de perfil"
+              aria-label={t("profile.drawer.accordion.avatar")}
               title={
                 <span className={`flex items-center ${bp ? "gap-3 text-foreground" : "gap-2"}`}>
                   <ImageIcon size={bp ? 20 : 15} className="text-default-500" />
-                  Foto de perfil
+                  {t("profile.drawer.accordion.avatar")}
                 </span>
               }>
               <div className={`flex flex-col ${bp ? "gap-3" : "gap-2"}`}>
                 <Input
                   size={bp ? "lg" : "sm"}
                   label="URL"
-                  placeholder="https://…"
+                  placeholder={t("profile.drawer.fields.avatarPlaceholder")}
                   value={avatar}
                   onValueChange={setAvatar}
                   variant="bordered"
@@ -578,7 +597,7 @@ export function ProfileDrawer({
                   className={`w-full justify-start ${bp ? "min-h-12 text-base" : ""}`}
                   startContent={<FolderOpen size={bp ? 20 : 16} />}
                   onPress={() => void pickFile("avatar")}>
-                  Imagen local…
+                  {t("profile.drawer.fields.avatarFileButton")}
                 </Button>
 
                 <div
@@ -586,7 +605,7 @@ export function ProfileDrawer({
                     bp ? "border-white/15 p-4 ring-1 ring-white/[0.07]" : "rounded-lg border-default-200 p-2.5"
                   }`}>
                   <p className={`mb-2 font-medium text-default-600 ${bp ? "mb-3 text-base" : "text-xs"}`}>
-                    Avatar generado con librería
+                    {t("profile.drawer.fields.avatarLib")}
                   </p>
                   <div className={`flex items-center ${bp ? "gap-4" : "gap-2"}`}>
                     <div
@@ -597,8 +616,8 @@ export function ProfileDrawer({
                     </div>
                     <Input
                       size={bp ? "lg" : "sm"}
-                      label="Semilla"
-                      placeholder="nombre, email o texto"
+                      label={t("profile.drawer.fields.avatarSeed")}
+                      placeholder={t("profile.drawer.fields.avatarSeedPlaceholder")}
                       value={avatarGeneratorSeed}
                       onValueChange={setAvatarGeneratorSeed}
                       variant="bordered"
@@ -611,7 +630,7 @@ export function ProfileDrawer({
                       variant="flat"
                       className={bp ? "min-h-12 text-base font-medium" : ""}
                       onPress={() => applyGeneratedAvatar(avatarGeneratorSeed)}>
-                      Usar semilla
+                      {t("profile.drawer.fields.avatarSeedButton")}
                     </Button>
                     <Button
                       size={bp ? "lg" : "sm"}
@@ -623,7 +642,7 @@ export function ProfileDrawer({
                         setAvatarGeneratorSeed(seed);
                         applyGeneratedAvatar(seed);
                       }}>
-                      Aleatorio
+                      {t("profile.drawer.fields.avatarRandomButton")}
                     </Button>
                   </div>
                 </div>
@@ -632,18 +651,18 @@ export function ProfileDrawer({
 
             <AccordionItem
               key="frame"
-              aria-label="Marco"
+              aria-label={t("profile.drawer.accordion.frame")}
               title={
                 <span className={`flex items-center ${bp ? "gap-3 text-foreground" : "gap-2"}`}>
                   <Layers size={bp ? 20 : 15} className="text-default-500" />
-                  Marco
+                  {t("profile.drawer.accordion.frame")}
                 </span>
               }>
               <div className={`flex flex-col ${bp ? "gap-3" : "gap-2"}`}>
                 <Input
                   size={bp ? "lg" : "sm"}
                   label="URL"
-                  placeholder="PNG con transparencia"
+                  placeholder={t("profile.drawer.fields.framePlaceholder")}
                   value={frame}
                   onValueChange={setFrame}
                   variant="bordered"
@@ -655,18 +674,18 @@ export function ProfileDrawer({
                   className={`w-full justify-start ${bp ? "min-h-12 text-base" : ""}`}
                   startContent={<FolderOpen size={bp ? 20 : 16} />}
                   onPress={() => void pickFile("frame")}>
-                  Imagen local…
+                  {t("profile.drawer.fields.frameFileButton")}
                 </Button>
               </div>
             </AccordionItem>
 
             <AccordionItem
               key="sharing"
-              aria-label="Privacidad en la nube"
+              aria-label={t("profile.drawer.accordion.sharing")}
               title={
                 <span className={`flex items-center ${bp ? "gap-3 text-foreground" : "gap-2"}`}>
                   <Shield size={bp ? 20 : 15} className="text-default-500" />
-                  Privacidad en la nube
+                  {t("profile.drawer.accordion.sharing")}
                 </span>
               }>
               <div className={`flex flex-col ${bp ? "gap-4" : "gap-2"}`}>
@@ -679,10 +698,10 @@ export function ProfileDrawer({
                       ? { label: "text-base font-semibold text-foreground", base: "gap-4" }
                       : { label: "text-sm text-foreground" }
                   }>
-                  Compartir con anfitriones
+                  {t("profile.drawer.fields.shareHosts")}
                 </Switch>
                 <p className={`leading-snug text-default-500 ${bp ? "text-sm" : "text-[11px]"}`}>
-                  Quienes te invitaron como miembro podrán ver fondo, avatar y marco al cargar tu usuario en Amigos.
+                  {t("profile.drawer.fields.shareHostsDesc")}
                 </p>
                 <Switch
                   isSelected={shareVisualWithMembers}
@@ -693,26 +712,25 @@ export function ProfileDrawer({
                       ? { label: "text-base font-semibold text-foreground", base: "gap-4" }
                       : { label: "text-sm text-foreground" }
                   }>
-                  Compartir con miembros de tu nube
+                  {t("profile.drawer.fields.shareMembers")}
                 </Switch>
                 <p className={`leading-snug text-default-500 ${bp ? "text-sm" : "text-[11px]"}`}>
-                  Si eres anfitrión, los miembros de tu nube podrán ver tu perfil visual en Amigos.
+                  {t("profile.drawer.fields.shareMembersDesc")}
                 </p>
               </div>
             </AccordionItem>
 
             <AccordionItem
               key="help"
-              aria-label="Ayuda"
+              aria-label={t("profile.drawer.accordion.help")}
               title={
                 <span className={`flex items-center ${bp ? "gap-3 text-foreground" : "gap-2"}`}>
                   <CircleHelp size={bp ? 20 : 15} className="text-default-500" />
-                  Ayuda
+                  {t("profile.drawer.accordion.help")}
                 </span>
               }>
               <p className={`leading-snug text-default-500 ${bp ? "text-sm" : "text-[11px]"}`}>
-                Puedes usar enlaces https o rutas a archivos locales. Las rutas locales dependen del archivo en disco;
-                si mueves o borras el archivo, el perfil dejará de mostrarlo.
+                {t("profile.drawer.fields.helpDesc")}
               </p>
             </AccordionItem>
           </Accordion>
@@ -726,7 +744,7 @@ export function ProfileDrawer({
               size={bp ? "lg" : "md"}
               className={`flex-1 ${bp ? "min-h-14 text-base font-semibold" : ""}`}
               onPress={onClose}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
             <Button
               color="primary"
@@ -735,7 +753,7 @@ export function ProfileDrawer({
               isLoading={saving}
               startContent={<Save size={bp ? 22 : 18} />}
               onPress={() => void handleSave()}>
-              Guardar
+              {t("common.save")}
             </Button>
           </div>
         </DrawerBody>

@@ -4,8 +4,10 @@ import { useState } from "react";
 import { toastSuccess, toastError } from "@utils/toast";
 import { Download, Code2, AlertTriangle, ScrollText } from "lucide-react";
 import { PluginLogsModal } from "@/features/settings/Pluginlogsmodal";
+import { useTranslation, Trans } from "react-i18next";
 
 export function DevSdk() {
+  const { t } = useTranslation();
   const [isExporting, setIsExporting] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
 
@@ -15,14 +17,11 @@ export function DevSdk() {
     try {
       const path = await exportPluginSdk();
       if (path) {
-        toastSuccess("SDK exportado con éxito", `Guardado en: ${path}`);
+        toastSuccess(t("settings.sdk.toastExportSuccess"), t("settings.sdk.toastExportSuccessDesc", { path }));
       }
     } catch (error) {
       if (error !== "CANCELADO") {
-        toastError(
-          "Error al exportar SDK",
-          "Hubo un problema al generar el archivo. Verifica los permisos de la carpeta."
-        );
+        toastError(t("settings.sdk.toastExportError"), t("settings.sdk.toastExportErrorDesc"));
       }
     } finally {
       setIsExporting(false);
@@ -35,20 +34,24 @@ export function DevSdk() {
         <CardHeader className="flex flex-col items-start gap-2">
           <div className="flex items-center gap-2">
             <Code2 size={18} className="text-primary" />
-            <h3 className="text-lg font-semibold">Entorno de Desarrollo para Plugins (SDK)</h3>
+            <h3 className="text-lg font-semibold">{t("settings.sdk.title")}</h3>
           </div>
 
           <p className="text-sm text-default-500 leading-relaxed">
-            Descarga las definiciones de la API de SaveCloud (
-            <code className="bg-default-100 px-1.5 py-0.5 rounded text-xs font-mono">savecloud-api.lua</code>
-            ). Este archivo <strong>no se ejecuta</strong>, solo proporciona <strong>autocompletado y tipado</strong>.
+            <Trans
+              i18nKey="settings.sdk.desc"
+              components={{
+                code: <code className="bg-default-100 px-1.5 py-0.5 rounded text-xs font-mono" />,
+                strong: <strong />,
+              }}
+            />
           </p>
         </CardHeader>
 
         <CardBody className="gap-3">
           <div className="text-sm text-default-600">
-            <span className="font-medium">Incluye:</span>{" "}
-            <span className="text-default-500">log, ui, db (API disponible para plugins)</span>
+            <span className="font-medium">{t("settings.sdk.includes")}</span>{" "}
+            <span className="text-default-500">{t("settings.sdk.includesDesc")}</span>
           </div>
 
           <div className="rounded-lg bg-default-100 p-3 font-mono text-xs text-default-700">
@@ -62,7 +65,7 @@ export function DevSdk() {
           <div className="flex items-center gap-2 text-xs text-warning-600">
             <AlertTriangle size={14} />
             <span>
-              Debes colocarlo junto a tu archivo <code className="font-mono">init.lua</code>
+              <Trans i18nKey="settings.sdk.warning" components={{ code: <code className="font-mono" /> }} />
             </span>
           </div>
         </CardBody>
@@ -73,11 +76,11 @@ export function DevSdk() {
             color="primary"
             isLoading={isExporting}
             startContent={!isExporting && <Download size={16} />}>
-            {isExporting ? "Generando..." : "Exportar SDK (Lua)"}
+            {isExporting ? t("settings.sdk.generating") : t("settings.sdk.exportButton")}
           </Button>
 
           <Button onPress={() => setLogsOpen(true)} variant="flat" startContent={<ScrollText size={16} />}>
-            Ver logs
+            {t("settings.sdk.viewLogs")}
           </Button>
         </CardFooter>
       </Card>

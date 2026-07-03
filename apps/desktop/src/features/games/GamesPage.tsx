@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Spinner } from "@heroui/react";
+import { useTranslation } from "react-i18next";
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
@@ -30,6 +31,7 @@ import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useShellUiStore } from "@store/ShellUiStore";
 
 export function GamesPage() {
+  const { t } = useTranslation();
   const prefersReducedMotion = useReducedMotion();
   const navigate = useNavigate();
   const pushLayer = useNavigationStore((state) => state.pushLayer);
@@ -191,9 +193,12 @@ export function GamesPage() {
     try {
       const { shareUrl } = await createShareLink(game.id);
       await navigator.clipboard.writeText(shareUrl);
-      toastSuccess("Link copiado", "El link para compartir este juego está en el portapapeles. Válido 7 días.");
+      toastSuccess(t("library.shareLink.copiedTitle"), t("library.shareLink.copiedDesc"));
     } catch (e) {
-      toastError("No se pudo crear el link", e instanceof Error ? e.message : "Error inesperado");
+      toastError(
+        t("library.shareLink.errorTitle"),
+        e instanceof Error ? e.message : t("library.shareLink.unexpectedError")
+      );
     }
   };
 
@@ -201,7 +206,7 @@ export function GamesPage() {
     return (
       <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4">
         <Spinner size="lg" color="primary" />
-        <p className="text-default-500">Cargando configuración...</p>
+        <p className="text-default-500">{t("common.loading")}</p>
       </div>
     );
   }
@@ -211,7 +216,7 @@ export function GamesPage() {
       <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4">
         <p className="text-danger">{error}</p>
         <Button color="primary" startContent={<RefreshCw size={18} />} onPress={() => refetch?.()}>
-          Reintentar
+          {t("common.retry")}
         </Button>
       </div>
     );
@@ -226,10 +231,12 @@ export function GamesPage() {
             <div className="mt-4 flex flex-col gap-3 sm:mt-6">
               <div className="flex flex-wrap items-center gap-3 gap-y-4">
                 <div className="flex min-w-0 flex-wrap items-center gap-3">
-                  <h1 className="text-2xl font-semibold text-foreground md:text-[1.875rem]">Juegos configurados</h1>
+                  <h1 className="text-2xl font-semibold text-foreground md:text-[1.875rem]">
+                    {t("library.configuredGames")}
+                  </h1>
                   {hasSyncConfig && unsyncedGameIds.length > 0 ? (
                     <span className="rounded-full bg-warning/20 px-3 py-1 text-sm font-medium text-warning">
-                      {unsyncedGameIds.length} con cambios sin subir
+                      {t("library.unsyncedChanges", { count: unsyncedGameIds.length })}
                     </span>
                   ) : null}
                 </div>
@@ -242,11 +249,11 @@ export function GamesPage() {
               <div className="flex flex-col gap-4">
                 <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
                   <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground">
-                    Juegos configurados
+                    {t("library.configuredGames")}
                   </h1>
                   {hasSyncConfig && unsyncedGameIds.length > 0 ? (
                     <span className="rounded-full bg-warning/20 px-3 py-1 text-sm font-medium text-warning">
-                      {unsyncedGameIds.length} con cambios sin subir
+                      {t("library.unsyncedChanges", { count: unsyncedGameIds.length })}
                     </span>
                   ) : null}
                 </div>
@@ -421,7 +428,9 @@ export function GamesPage() {
           <section className={bigPictureConsole ? "flex flex-wrap items-center gap-x-4 gap-y-2" : "space-y-2"}>
             <h2
               className={`font-medium text-default-500 ${bigPictureConsole ? "shrink-0 text-base md:text-lg" : "text-sm"}`}>
-              {bigPictureConsole ? "Filtrar por origen" : "Buscar y filtrar"}
+              {bigPictureConsole
+                ? t("library.filtersSection.filterByOrigin")
+                : t("library.filtersSection.searchAndFilter")}
             </h2>
             <GamesFilters
               searchTerm={searchTerm}
@@ -435,7 +444,7 @@ export function GamesPage() {
           {/* Lista de juegos */}
           <section className="space-y-2">
             <h2 className={`font-medium text-default-500 ${bigPictureConsole ? "text-base md:text-lg" : "text-sm"}`}>
-              Lista de juegos
+              {t("library.menu.gamesTitle")}
             </h2>
             <GamesList
               games={filteredGames}

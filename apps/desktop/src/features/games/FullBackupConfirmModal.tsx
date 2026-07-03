@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from "@heroui/react";
 import { Archive } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { formatGameDisplayName } from "@utils/gameImage";
 import type { ConfiguredGame } from "@app-types/config";
 
@@ -13,6 +14,7 @@ interface FullBackupConfirmModalProps {
 }
 
 export function FullBackupConfirmModal({ isOpen, onClose, game, onConfirm }: FullBackupConfirmModalProps) {
+  const { t } = useTranslation();
   const gameName = game ? formatGameDisplayName(game.id) : "";
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -31,38 +33,31 @@ export function FullBackupConfirmModal({ isOpen, onClose, game, onConfirm }: Ful
       <ModalContent>
         <ModalHeader className="flex items-center gap-2">
           <Archive size={22} className="text-primary" />
-          Empaquetar y subir (backup completo)
+          {t("library.fullBackup.title")}
         </ModalHeader>
         <ModalBody className="space-y-4">
           {game && (
-            <p className="text-default-600">
-              Vas a crear un <strong>backup completo</strong> de <strong>{gameName}</strong> y subirlo a la nube.
-            </p>
+            <p
+              className="text-default-600"
+              dangerouslySetInnerHTML={{
+                __html: t("library.fullBackup.intro", { gameName }),
+              }}
+            />
           )}
           <div className="rounded-lg bg-default-100 p-4 text-sm text-default-600">
-            <p className="font-medium text-foreground">¿Para qué sirve esta opción?</p>
+            <p className="font-medium text-foreground">{t("library.fullBackup.purposeTitle")}</p>
             <ul className="mt-2 list-inside list-disc space-y-1">
-              <li>
-                Se empaqueta toda la carpeta del juego en un solo archivo .tar (sin comprimir, para que sea más rápido).
-              </li>
-              <li>Ese archivo se sube a la nube en una única operación, en lugar de miles de archivos sueltos.</li>
-              <li>
-                Es la opción recomendada para juegos con muchos archivos o guardados muy pesados: va más rápido y evita
-                saturar la sincronización normal.
-              </li>
-              <li>
-                Después puedes restaurar ese backup desde &quot;Restaurar desde backup&quot; → pestaña &quot;En la
-                nube&quot;.
-              </li>
+              <li>{t("library.fullBackup.purpose1")}</li>
+              <li>{t("library.fullBackup.purpose2")}</li>
+              <li>{t("library.fullBackup.purpose3")}</li>
+              <li>{t("library.fullBackup.purpose4")}</li>
             </ul>
           </div>
-          <p className="text-default-500">
-            ¿Quieres continuar y empaquetar ahora la carpeta de este juego para subirla a la nube?
-          </p>
+          <p className="text-default-500">{t("library.fullBackup.confirmQuestion")}</p>
         </ModalBody>
         <ModalFooter>
           <Button variant="flat" onPress={onClose} isDisabled={isSubmitting}>
-            Cancelar
+            {t("common.cancel")}
           </Button>
           <Button
             color="primary"
@@ -70,7 +65,7 @@ export function FullBackupConfirmModal({ isOpen, onClose, game, onConfirm }: Ful
             isLoading={isSubmitting}
             isDisabled={isSubmitting}
             startContent={!isSubmitting ? <Archive size={18} /> : undefined}>
-            Sí, empaquetar y subir
+            {t("library.fullBackup.confirmButton")}
           </Button>
         </ModalFooter>
       </ModalContent>

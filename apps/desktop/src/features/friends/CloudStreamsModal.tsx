@@ -2,6 +2,7 @@ import { Button, Modal, ModalBody, ModalContent, ModalHeader, Spinner } from "@h
 import { Eye, Radio, RadioTower, Square, Video, X } from "lucide-react";
 import { useCloudStreamsModal } from "@hooks/useCloudStreamsModal";
 import { StreamQualityControls } from "@features/friends/StreamQualityControls";
+import { useTranslation } from "react-i18next";
 
 // EXPERIMENTAL: Cloud streaming UI is under development and can be hidden for release builds.
 
@@ -12,6 +13,7 @@ interface CloudStreamsModalProps {
 }
 
 export function CloudStreamsModal({ isOpen, onClose, modalRef }: CloudStreamsModalProps) {
+  const { t } = useTranslation();
   const {
     error,
     handleJoinStream,
@@ -55,7 +57,7 @@ export function CloudStreamsModal({ isOpen, onClose, modalRef }: CloudStreamsMod
               variant="light"
               color="default"
               className="absolute right-2 top-2 z-20"
-              aria-label="Cerrar modal de transmisiones"
+              aria-label={t("friends.cloudStreams.closeAria")}
               onPress={onClose}>
               <X className="h-4 w-4" />
             </Button>
@@ -65,7 +67,7 @@ export function CloudStreamsModal({ isOpen, onClose, modalRef }: CloudStreamsMod
               className="flex items-center justify-between gap-2 border-b border-default-200/70 pr-12">
               <div className="flex items-center gap-2">
                 <Radio className="h-4 w-4 text-danger" />
-                <span className="text-sm font-semibold">Transmisiones activas</span>
+                <span className="text-sm font-semibold">{t("friends.cloudStreams.activeStreams")}</span>
               </div>
               <div className="flex items-center gap-2">
                 {myStream ? (
@@ -77,7 +79,7 @@ export function CloudStreamsModal({ isOpen, onClose, modalRef }: CloudStreamsMod
                       startContent={<Eye className="h-4 w-4" />}
                       isDisabled={isLoading}
                       onPress={() => setPreviewEnabled((prev) => !prev)}>
-                      {previewEnabled ? "Ocultar preview" : "Previsualizar"}
+                      {previewEnabled ? t("friends.cloudStreams.hidePreview") : t("friends.cloudStreams.showPreview")}
                     </Button>
                     <Button
                       size="sm"
@@ -86,7 +88,7 @@ export function CloudStreamsModal({ isOpen, onClose, modalRef }: CloudStreamsMod
                       startContent={<Square className="h-4 w-4" />}
                       isDisabled={isLoading}
                       onPress={() => handleStopStream(myStream.streamId)}>
-                      Detener
+                      {t("friends.cloudStreams.stop")}
                     </Button>
                   </>
                 ) : (
@@ -97,7 +99,7 @@ export function CloudStreamsModal({ isOpen, onClose, modalRef }: CloudStreamsMod
                     startContent={<RadioTower className="h-4 w-4" />}
                     isDisabled={isLoading}
                     onPress={handleStartStream}>
-                    Iniciar transmisión
+                    {t("friends.cloudStreams.start")}
                   </Button>
                 )}
               </div>
@@ -123,13 +125,13 @@ export function CloudStreamsModal({ isOpen, onClose, modalRef }: CloudStreamsMod
               {isLoading ? (
                 <div className="flex items-center gap-2 text-default-500">
                   <Spinner size="sm" color="primary" />
-                  <span className="text-sm">Procesando...</span>
+                  <span className="text-sm">{t("friends.cloudStreams.processing")}</span>
                 </div>
               ) : null}
 
               {previewEnabled && myStream ? (
                 <div className="space-y-2 rounded-lg border border-default-200/70 bg-background/70 p-2">
-                  <p className="text-[11px] font-medium text-default-600">Previsualizacion local (host)</p>
+                  <p className="text-[11px] font-medium text-default-600">{t("friends.cloudStreams.localPreview")}</p>
                   <div className="overflow-hidden rounded-md border border-default-200/60 bg-black/80">
                     <video
                       ref={previewVideoRef}
@@ -146,7 +148,7 @@ export function CloudStreamsModal({ isOpen, onClose, modalRef }: CloudStreamsMod
               {!sortedStreams.length ? (
                 <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-lg border border-default-200/70 bg-default-50/30 px-4 py-6 text-center text-default-500">
                   <Video className="h-5 w-5" />
-                  <p className="text-sm">No hay transmisiones activas en tu cloud.</p>
+                  <p className="text-sm">{t("friends.cloudStreams.noStreams")}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -160,14 +162,18 @@ export function CloudStreamsModal({ isOpen, onClose, modalRef }: CloudStreamsMod
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium text-foreground">{stream.hostUserId}</p>
                             <p className="truncate text-[11px] text-default-500">
-                              {stream.qualityPreset} · {stream.hasSystemAudio ? "audio sistema" : "sin audio"}
-                              {stream.hasMicAudio ? " + mic" : ""} · {stream.viewerCount}/{stream.maxViewers} viewers
+                              {stream.qualityPreset} ·{" "}
+                              {stream.hasSystemAudio
+                                ? t("friends.cloudStreams.systemAudio")
+                                : t("friends.cloudStreams.noAudio")}
+                              {stream.hasMicAudio ? t("friends.cloudStreams.micAudio") : ""} · {stream.viewerCount}/
+                              {stream.maxViewers} {t("friends.cloudStreams.viewers", { count: stream.viewerCount })}
                             </p>
                           </div>
 
                           {isMine ? (
                             <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                              Tu transmisión
+                              {t("friends.cloudStreams.yourStream")}
                             </span>
                           ) : (
                             <Button
@@ -176,7 +182,9 @@ export function CloudStreamsModal({ isOpen, onClose, modalRef }: CloudStreamsMod
                               color="primary"
                               isDisabled={stream.viewerCount >= stream.maxViewers}
                               onPress={() => handleJoinStream(stream.streamId, stream.hostUserId)}>
-                              {stream.viewerCount >= stream.maxViewers ? "Lleno" : "Ver"}
+                              {stream.viewerCount >= stream.maxViewers
+                                ? t("friends.cloudStreams.full")
+                                : t("friends.cloudStreams.view")}
                             </Button>
                           )}
                         </div>

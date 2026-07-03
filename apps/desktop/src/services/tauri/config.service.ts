@@ -53,6 +53,10 @@ export async function setStartupWindowMode(mode: StartupWindowMode): Promise<voi
   await invoke("set_startup_window_mode", { mode });
 }
 
+export async function setLanguage(language: string | null): Promise<void> {
+  await invoke("set_language", { language: language || null });
+}
+
 /** Ruta del archivo de configuración (para mostrar al usuario) */
 export async function getConfigPath(): Promise<string> {
   return invoke<string>("get_config_path");

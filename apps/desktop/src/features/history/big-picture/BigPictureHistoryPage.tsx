@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardBody, Spinner, Tab, Tabs } from "@heroui/react";
 import { History } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -11,27 +12,14 @@ import { BigPictureHistorySummary } from "./BigPictureHistorySummary";
 
 type HistoryFilter = "all" | OperationLogEntry["kind"];
 
-/**
- * Versión Big Picture (modo consola) de la página de Actividad.
- *
- * Reutiliza los mismos queries y utilidades que `HistoryPage`,
- * pero con layout, tamaños y espaciado adaptados a pantalla TV/gamepad:
- *
- * - Extra `pb-32` para la barra de control hints inferior.
- * - Top margin `mt-4 sm:mt-6` para despejar el HUD superior.
- * - Tabs y tarjetas más grandes con touch-targets amplios.
- * - Texto con escala legible desde distancia de sofá.
- */
 export function BigPictureHistoryPage() {
+  const { t } = useTranslation();
   const [filter, setFilter] = useState<HistoryFilter>("all");
   const popLayer = useNavigationStore((s) => s.popLayer);
 
   useRegisterGlobalBack(() => {
-    switch (true) {
-      default:
-        popLayer();
-        return true;
-    }
+    popLayer();
+    return true;
   });
 
   const { data, isLoading, error } = useQuery({
@@ -52,20 +40,15 @@ export function BigPictureHistoryPage() {
 
   return (
     <div className="space-y-5 pb-32">
-      {/* Cabecera */}
       <div className="mt-4 flex flex-col gap-2 sm:mt-6">
         <div className="flex flex-wrap items-center gap-3 gap-y-4">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-[1.875rem]">
-            Historial de operaciones
-          </h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-[1.875rem]">{t("history.title")}</h1>
         </div>
-        <p className="text-sm text-default-400 md:text-base">Subidas, descargas y copias desde amigos</p>
+        <p className="text-sm text-default-400 md:text-base">{t("history.subtitle")}</p>
       </div>
 
-      {/* Resumen */}
       {!isLoading && !error && summary ? <BigPictureHistorySummary {...summary} /> : null}
 
-      {/* Filtros */}
       {!isLoading && !error && allEntries.length > 0 ? (
         <Tabs
           selectedKey={filter}
@@ -77,46 +60,39 @@ export function BigPictureHistoryPage() {
             tab: "text-base md:text-lg font-semibold px-1 py-3",
             cursor: "h-[3px]",
           }}>
-          <Tab key="all" title="Todos" />
-          <Tab key="upload" title="Subidas" />
-          <Tab key="download" title="Descargas" />
-          <Tab key="copy_friend" title="Copia amigos" />
+          <Tab key="all" title={t("history.tabs.all")} />
+          <Tab key="upload" title={t("history.tabs.upload")} />
+          <Tab key="download" title={t("history.tabs.download")} />
+          <Tab key="copy_friend" title={t("history.tabs.copyFriend")} />
         </Tabs>
       ) : null}
 
-      {/* Loading */}
       {isLoading ? (
         <div className="flex min-h-[20vh] flex-col items-center justify-center gap-4">
           <Spinner size="lg" color="primary" />
-          <p className="text-base text-default-500">Cargando historial...</p>
+          <p className="text-base text-default-500">{t("history.loading")}</p>
         </div>
       ) : null}
 
-      {/* Error */}
       {error && !isLoading ? (
         <Card>
           <CardBody>
             <p className="text-base text-danger">
-              No se pudo cargar el historial: {error instanceof Error ? error.message : "Error desconocido"}
+              {t("history.error")}: {error instanceof Error ? error.message : t("history.unknownError")}
             </p>
           </CardBody>
         </Card>
       ) : null}
 
-      {/* Empty (sin datos) */}
       {!isLoading && !error && entries.length === 0 && allEntries.length === 0 ? (
         <Card>
           <CardBody className="flex flex-col items-center gap-4 py-12 text-center">
             <History size={48} className="text-default-400" />
-            <p className="text-base text-default-500">
-              Aún no hay operaciones registradas. Cuando subas, descargues o copies guardados desde amigos, aparecerán
-              aquí.
-            </p>
+            <p className="text-base text-default-500">{t("history.emptyDetailed")}</p>
           </CardBody>
         </Card>
       ) : null}
 
-      {/* Lista agrupada por día */}
       {!isLoading && !error && entries.length > 0 ? (
         <div className="space-y-6">
           {groupedByDay.map((group) => (
@@ -139,12 +115,9 @@ export function BigPictureHistoryPage() {
         </div>
       ) : null}
 
-      {/* Sin resultados de filtro */}
       {!isLoading && !error && allEntries.length > 0 && entries.length === 0 ? (
         <Card>
-          <CardBody className="py-10 text-center text-base text-default-500">
-            No hay operaciones de este tipo en el historial.
-          </CardBody>
+          <CardBody className="py-10 text-center text-base text-default-500">{t("history.emptyFilter")}</CardBody>
         </Card>
       ) : null}
     </div>

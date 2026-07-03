@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Avatar, Button, Divider } from "@heroui/react";
 import { Copy } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { toastSuccess } from "@utils/toast";
 import type { ConnectionStatus } from "@hooks/useLastSyncInfo";
@@ -30,6 +31,7 @@ export function UserBadge({
   onOpenProfile,
   onIntentOpenProfile,
 }: UserBadgeProps) {
+  const { t } = useTranslation();
   const isConfigured = !!userId?.trim();
 
   const frameSrc = useMemo(() => resolveProfileAsset(profileFrame ?? undefined), [profileFrame]);
@@ -38,7 +40,7 @@ export function UserBadge({
     if (!isConfigured) return;
     try {
       await navigator.clipboard.writeText(userId ?? "");
-      toastSuccess("Usuario copiado", "Puedes compartirlo con tus amigos.");
+      toastSuccess(t("library.userBadge.copiedTitle"), t("library.userBadge.copiedDesc"));
     } catch {
       // ignore
     }
@@ -71,11 +73,11 @@ export function UserBadge({
         ) : null}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-xs font-medium text-foreground">Tu ID de Sincronización</span>
+        <span className="text-xs font-medium text-foreground">{t("library.userBadge.syncIdLabel")}</span>
         {isConfigured ? (
           <code className="block truncate font-mono text-xs text-default-500">{userId}</code>
         ) : (
-          <span className="text-xs text-default-400">Sin configurar</span>
+          <span className="text-xs text-default-400">{t("library.userBadge.notConfigured")}</span>
         )}
       </div>
     </div>
@@ -101,7 +103,7 @@ export function UserBadge({
           size="sm"
           variant="light"
           isIconOnly
-          aria-label="Copiar usuario"
+          aria-label={t("library.userBadge.copyUser")}
           onPress={handleCopy}
           className="-ml-1 text-default-400 hover:text-foreground">
           <Copy size={16} />

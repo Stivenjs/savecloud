@@ -11,8 +11,10 @@ import {
   notifyFullBackupError,
 } from "@utils/notification";
 import { formatGameDisplayName } from "@utils/gameImage";
+import { useTranslation } from "react-i18next";
 
 export function TrayActionsListener() {
+  const { t } = useTranslation();
   const setSyncOperation = useSyncStore((state) => state.setSyncOperation);
   const queryClient = useQueryClient();
 
@@ -72,12 +74,12 @@ export function TrayActionsListener() {
       try {
         config = await getConfig();
       } catch {
-        toastError("Error", "No se pudo leer la configuración.");
+        toastError(t("common.error"), t("tray.readConfigError"));
         return;
       }
       const firstGameId = config?.games?.[0]?.id;
       if (!firstGameId) {
-        toastError("Sin juegos", "Añade al menos un juego para hacer backup desde la bandeja.");
+        toastError(t("tray.noGamesTitle"), t("tray.noGamesDesc"));
         return;
       }
       setSyncOperation({
@@ -89,13 +91,13 @@ export function TrayActionsListener() {
       try {
         await createAndUploadFullBackup(firstGameId);
         toastSuccess(
-          "Backup completo subido",
-          `${formatGameDisplayName(firstGameId)}: empaquetado subido desde la bandeja.`
+          t("tray.backupSuccessTitle"),
+          t("tray.backupSuccessDesc", { gameName: formatGameDisplayName(firstGameId) })
         );
         notifyFullBackupDone(formatGameDisplayName(firstGameId)).catch(() => {});
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        toastError("Error al empaquetar y subir", msg);
+        toastError(t("tray.backupErrorTitle"), msg);
         notifyFullBackupError(formatGameDisplayName(firstGameId), msg).catch(() => {});
       } finally {
         setSyncOperation(null);
@@ -112,7 +114,7 @@ export function TrayActionsListener() {
       unsubDownload.then((f) => f());
       unsubBackup.then((f) => f());
     };
-  }, [setSyncOperation, queryClient]);
+  }, [setSyncOperation, queryClient, t]);
 
   return null;
 }

@@ -2,6 +2,7 @@ import { Button } from "@heroui/react";
 import { ArrowRight, Flame } from "lucide-react";
 import type { CatalogListItem, SteamAppdetailsMediaResult } from "@services/tauri";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { initHls, isHlsUrl } from "@utils/hls";
 import type { HlsType } from "@utils/hls";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,7 +11,6 @@ import {
   getGalleryForCatalogItem,
   getImageForCatalogItem,
   getLibraryHeroUrl,
-  getRecommendationCopyVariant,
 } from "@features/steam-catalog/components/steamCatalogTrendingHero.utils";
 
 function HeroVideoPlayer({ videoUrl, className = "" }: { videoUrl: string; className?: string }) {
@@ -88,11 +88,16 @@ type TrendingHeroSlideProps = {
 };
 
 export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, onOpenGame }: TrendingHeroSlideProps) {
+  const { t } = useTranslation();
   const gallery = useMemo(() => getGalleryForCatalogItem(featured, mediaBySteamAppId), [featured, mediaBySteamAppId]);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [hasManualImageSelection, setHasManualImageSelection] = useState(false);
   const [failedHeroUrls, setFailedHeroUrls] = useState<Set<string>>(new Set());
-  const recommendationCopy = useMemo(() => getRecommendationCopyVariant(), [featured.steamAppId]);
+  const recommendationVariants = t("steamCatalog.trending.recommendationVariants", { returnObjects: true }) as string[];
+  const recommendationCopy = useMemo(() => {
+    const variants = Array.isArray(recommendationVariants) ? recommendationVariants : [];
+    return variants.length > 0 ? variants[Math.floor(Math.random() * variants.length)] : "";
+  }, [featured.steamAppId]);
 
   const [isHovered, setIsHovered] = useState(false);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -194,7 +199,7 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
         <div className="relative z-10 flex h-full flex-col justify-between p-5 sm:p-6 bg-black/10 group-hover:bg-black/0 transition-colors duration-300">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white/90">
             <Flame size={14} className="text-primary" />
-            Trending
+            {t("steamCatalog.trending.label")}
           </div>
 
           <div className="space-y-3">
@@ -207,7 +212,7 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
               className="font-semibold"
               endContent={<ArrowRight size={14} />}
               onPress={() => onOpenGame(featured)}>
-              Ver ficha
+              {t("steamCatalog.trending.viewCard")}
             </Button>
           </div>
         </div>
@@ -217,7 +222,9 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
         <div className="flex flex-col flex-1 justify-between gap-4">
           <div className="space-y-1.5">
             <p className="text-3xl font-semibold leading-none tracking-tight">{featured.name}</p>
-            <p className="text-3xl font-semibold leading-none tracking-tight text-primary">Recomendado</p>
+            <p className="text-3xl font-semibold leading-none tracking-tight text-primary">
+              {t("steamCatalog.trending.recommended")}
+            </p>
             <p className="text-sm text-white/90 mt-2">{recommendationCopy}</p>
           </div>
 
@@ -237,7 +244,7 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
                 }}>
                 <img
                   src={url}
-                  alt={`${featured.name} captura ${index + 1}`}
+                  alt={`${featured.name} ${t("steamCatalog.trending.screenshot")} ${index + 1}`}
                   className="absolute inset-0 h-full w-full object-cover"
                   loading="lazy"
                   decoding="async"

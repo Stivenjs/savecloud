@@ -1,12 +1,7 @@
-const LABELS: Record<string, string> = {
-  first_upload: "Primera subida a la nube",
-  syncs_10: "10 sincronizaciones exitosas",
-  syncs_100: "100 sincronizaciones exitosas",
-  hours_100: "100 horas de juego registradas",
-};
+import i18n from "@lib/i18n";
 
 export function achievementLabel(id: string): string {
-  return LABELS[id] ?? id;
+  return i18n.t(`profile.achievements.${id}`, id);
 }
 
 /** Formatea segundos hasta el siguiente nivel como horas enteras (ceil). */

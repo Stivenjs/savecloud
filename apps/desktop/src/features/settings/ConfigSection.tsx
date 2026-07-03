@@ -1,6 +1,7 @@
 import { Button, Card, CardBody, Divider, Progress, Skeleton, Tab, Tabs } from "@heroui/react";
 import { SteamSeedFreshnessBanner } from "@features/steam-catalog/components/SteamSeedFreshnessBanner";
 import { FileJson, Cloud, HardDrive, FolderOpen, Link2, Library, Zap } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import type { SteamCatalogSyncProgressPayload, SteamSeedImportProgressPayload } from "@services/tauri";
 import type { ReactNode } from "react";
 
@@ -111,6 +112,7 @@ export function ConfigSection({
   onImportCloudSeedFromCloud,
   onOpenResetCloudSeedModal,
 }: ConfigSectionProps) {
+  const { t } = useTranslation();
   const showS3TransferBlock = isLoadingData || (s3TransferEndpointType != null && s3TransferEndpointType !== "unknown");
 
   return (
@@ -122,9 +124,9 @@ export function ConfigSection({
               <FileJson size={22} />
             </div>
             <div className="min-w-0">
-              <h2 className="text-base font-semibold text-foreground">Cuenta y datos de sincronización</h2>
+              <h2 className="text-base font-semibold text-foreground">{t("settings.configSection.title")}</h2>
               <p className="mt-1 max-w-2xl text-sm leading-relaxed text-default-600">
-                Gestiona identidad, conexión cloud, catálogo Steam e importación de respaldos.
+                {t("settings.configSection.subtitle")}
               </p>
             </div>
           </div>
@@ -139,7 +141,9 @@ export function ConfigSection({
                   <span className="text-xs text-default-600">
                     S3:{" "}
                     <strong className="font-semibold text-foreground">
-                      {s3TransferEndpointType === "accelerated" ? "Acelerada" : "Estándar"}
+                      {s3TransferEndpointType === "accelerated"
+                        ? t("settings.configSection.s3Accelerated")
+                        : t("settings.configSection.s3Standard")}
                     </strong>
                   </span>
                 </div>
@@ -151,7 +155,7 @@ export function ConfigSection({
         <Divider className="my-4" />
 
         <Tabs
-          aria-label="Subsecciones de cuenta y datos"
+          aria-label={t("settings.configSection.tabsAriaLabel")}
           variant="underlined"
           color="primary"
           classNames={{
@@ -160,16 +164,16 @@ export function ConfigSection({
             tabContent: "group-data-[selected=true]:text-foreground",
             panel: "pt-4",
           }}>
-          <Tab key="identity" title="Tu cuenta">
+          <Tab key="identity" title={t("settings.configSection.tabIdentity")}>
             <div className="grid gap-4 lg:grid-cols-[1.35fr_0.85fr]">
               <section aria-labelledby="config-path-user" className={sectionShellClass}>
                 <div className={sectionInnerClass}>
                   <SectionHeader
                     id="config-path-user"
                     icon={<FolderOpen size={18} />}
-                    eyebrow="Archivo y usuario"
-                    title="Ruta de config.json"
-                    description="La app lee tu identidad local desde este archivo y la usa para compartir tu perfil."
+                    eyebrow={t("settings.configSection.identityEyebrow")}
+                    title={t("settings.configSection.identityTitle")}
+                    description={t("settings.configSection.identityDesc")}
                   />
 
                   <div className="mt-4 rounded-xl border border-default-200/70 bg-default-50/55 p-3 dark:border-default-100/15 dark:bg-default-50/10">
@@ -178,28 +182,35 @@ export function ConfigSection({
                     ) : configPath ? (
                       <p className="break-all font-mono text-xs leading-relaxed text-default-600">{configPath}</p>
                     ) : (
-                      <p className="text-xs italic text-default-400">Ruta no disponible.</p>
+                      <p className="text-xs italic text-default-400">{t("settings.configSection.pathUnavailable")}</p>
                     )}
 
                     <p className="mt-2 text-xs text-default-500">
-                      La app solo lee <code className="rounded bg-default-200 px-1">config.json</code> aquí.
+                      <Trans
+                        i18nKey="settings.configSection.readsConfigOnly"
+                        components={{ code: <code className="rounded bg-default-200 px-1" /> }}
+                      />
                     </p>
                   </div>
 
                   <div className="mt-4 rounded-xl border border-default-200/70 bg-content1/70 p-3 dark:border-default-100/15">
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                      <span className="text-xs font-medium text-default-500">Usuario</span>
+                      <span className="text-xs font-medium text-default-500">
+                        {t("settings.configSection.userLabel")}
+                      </span>
                       {isLoadingData ? (
                         <Skeleton className="h-4 w-32 rounded-lg" />
                       ) : userId ? (
                         <span className="font-mono text-sm text-foreground">{userId}</span>
                       ) : (
-                        <span className="text-xs text-default-400 italic">No configurado</span>
+                        <span className="text-xs text-default-400 italic">
+                          {t("settings.configSection.notConfigured")}
+                        </span>
                       )}
                     </div>
                     <p className="mt-1 flex items-start gap-1.5 text-xs text-default-500">
                       <Link2 size={14} className="mt-0.5 shrink-0 text-default-400" />
-                      Úsalo para compartir tu perfil con amigos.
+                      {t("settings.configSection.shareProfileHint")}
                     </p>
                   </div>
                 </div>
@@ -210,9 +221,9 @@ export function ConfigSection({
                   <SectionHeader
                     id="config-cloud-link"
                     icon={<Cloud size={18} />}
-                    eyebrow="Conexión a la nube"
-                    title="Servidor y credenciales"
-                    description="Define API, claves y usuario para sincronizar y recuperar tu configuración."
+                    eyebrow={t("settings.configSection.cloudEyebrow")}
+                    title={t("settings.configSection.cloudTitle")}
+                    description={t("settings.configSection.cloudDesc")}
                   />
                   <Button
                     size="sm"
@@ -221,37 +232,37 @@ export function ConfigSection({
                     onPress={onCreateConfig}
                     startContent={<Cloud size={16} />}
                     className={`${actionButtonClass} w-fit`}>
-                    Configurar conexión
+                    {t("settings.configSection.configureConnection")}
                   </Button>
                 </div>
               </section>
             </div>
           </Tab>
 
-          <Tab key="steam" title="Steam">
+          <Tab key="steam" title={t("settings.configSection.tabSteam")}>
             <div className="grid gap-4 xl:grid-cols-2">
               <section aria-labelledby="config-steam-catalog" className={sectionShellClass}>
                 <div className={`${sectionInnerClass} space-y-4`}>
                   <SectionHeader
                     id="config-steam-catalog"
                     icon={<Library size={18} />}
-                    eyebrow="Catálogo Steam"
-                    title="Listado oficial de juegos"
-                    description="Descarga y mantiene el catálogo oficial para mejorar la búsqueda de juegos."
+                    eyebrow={t("settings.configSection.catalogEyebrow")}
+                    title={t("settings.configSection.catalogTitle")}
+                    description={t("settings.configSection.catalogDesc")}
                   />
 
                   <div className="rounded-xl border border-default-200/70 bg-default-50/55 px-3 py-2.5 dark:border-default-100/15 dark:bg-default-50/10">
-                    <span className="text-xs font-medium text-default-500">Clave de Steam</span>
+                    <span className="text-xs font-medium text-default-500">
+                      {t("settings.configSection.steamKeyLabel")}
+                    </span>
                     {isLoadingData ? (
                       <Skeleton className="mt-1 h-4 w-40 rounded-lg" />
                     ) : (
                       <p className="mt-1 text-sm font-medium text-foreground">
                         {hasSteamWebApiKey ? (
-                          <span className="text-success-600">Configurada</span>
+                          <span className="text-success-600">{t("settings.configSection.steamKeyConfigured")}</span>
                         ) : (
-                          <span className="italic text-default-400">
-                            No configurada — añádela en Configurar conexión
-                          </span>
+                          <span className="italic text-default-400">{t("settings.configSection.steamKeyMissing")}</span>
                         )}
                       </p>
                     )}
@@ -266,7 +277,7 @@ export function ConfigSection({
                       isLoading={steamCatalogBusy}
                       onPress={() => onSyncSteamCatalog?.()}
                       className={actionButtonClass}>
-                      Actualizar listado ahora
+                      {t("settings.configSection.syncCatalogNow")}
                     </Button>
                     <Button
                       size="sm"
@@ -275,19 +286,22 @@ export function ConfigSection({
                       isDisabled={steamCatalogBusy}
                       onPress={() => onResetSteamCatalogSync?.()}
                       className={actionButtonClass}>
-                      Borrar progreso y volver a descargar todo
+                      {t("settings.configSection.resetCatalogSync")}
                     </Button>
                   </div>
 
                   {steamCatalogBusy ? (
                     <ProgressStatus
-                      ariaLabel="Progreso de actualización del catálogo Steam"
+                      ariaLabel={t("settings.configSection.catalogProgressAria")}
                       message={
                         steamCatalogSyncProgress
                           ? steamCatalogSyncProgress.done
-                            ? "Listo."
-                            : `Paso ${steamCatalogSyncProgress.batch} · ${steamCatalogSyncProgress.appsUpserted.toLocaleString()} juegos guardados`
-                          : "Conectando con Steam…"
+                            ? t("settings.configSection.catalogDone")
+                            : t("settings.configSection.catalogStep", {
+                                batch: steamCatalogSyncProgress.batch,
+                                count: steamCatalogSyncProgress.appsUpserted.toLocaleString(),
+                              })
+                          : t("settings.configSection.catalogConnecting")
                       }
                     />
                   ) : null}
@@ -299,9 +313,9 @@ export function ConfigSection({
                   <SectionHeader
                     id="config-steam-seed"
                     icon={<Cloud size={18} />}
-                    eyebrow="Datos enriquecidos"
-                    title="Información de juegos desde la nube"
-                    description="Envía tu lista o descarga datos enriquecidos de juegos desde la nube compartida."
+                    eyebrow={t("settings.configSection.seedEyebrow")}
+                    title={t("settings.configSection.seedTitle")}
+                    description={t("settings.configSection.seedDesc")}
                   />
                   <SteamSeedFreshnessBanner />
                   <div className="flex flex-wrap gap-2">
@@ -313,7 +327,7 @@ export function ConfigSection({
                       isLoading={steamSeedBusy}
                       onPress={() => onExportSteamSeedManifest?.()}
                       className={actionButtonClass}>
-                      Enviar mi lista de juegos
+                      {t("settings.configSection.sendGameList")}
                     </Button>
                     <Button
                       size="sm"
@@ -322,7 +336,7 @@ export function ConfigSection({
                       isDisabled={steamSeedBusy}
                       onPress={() => onImportCloudSeedFromCloud?.()}
                       className={actionButtonClass}>
-                      Descargar información detallada
+                      {t("settings.configSection.downloadDetailedInfo")}
                     </Button>
                     <Button
                       size="sm"
@@ -331,18 +345,22 @@ export function ConfigSection({
                       isDisabled={steamSeedBusy}
                       onPress={() => onOpenResetCloudSeedModal?.()}
                       className={actionButtonClass}>
-                      Reiniciar descarga en la nube
+                      {t("settings.configSection.resetCloudSeed")}
                     </Button>
                   </div>
                   {steamSeedBusy ? (
                     <ProgressStatus
-                      ariaLabel="Progreso de descarga de información desde la nube"
+                      ariaLabel={t("settings.configSection.seedProgressAria")}
                       message={
                         steamSeedImportProgress
                           ? steamSeedImportProgress.done
-                            ? "Finalizando…"
-                            : `Pasada ${steamSeedImportProgress.iteration} · ${steamSeedImportProgress.totalBatches} lotes · ${steamSeedImportProgress.totalRowsUpdated.toLocaleString()} juegos actualizados`
-                          : "Preparando descarga…"
+                            ? t("settings.configSection.seedFinishing")
+                            : t("settings.configSection.seedPass", {
+                                iteration: steamSeedImportProgress.iteration,
+                                batches: steamSeedImportProgress.totalBatches,
+                                count: steamSeedImportProgress.totalRowsUpdated.toLocaleString(),
+                              })
+                          : t("settings.configSection.seedPreparing")
                       }
                     />
                   ) : null}
@@ -351,31 +369,41 @@ export function ConfigSection({
             </div>
           </Tab>
 
-          <Tab key="backups" title="Importar y respaldar">
+          <Tab key="backups" title={t("settings.configSection.tabBackups")}>
             <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
               <section aria-labelledby="config-local-files" className={sectionShellClass}>
                 <div className={`${sectionInnerClass} space-y-4`}>
                   <SectionHeader
                     id="config-local-files"
                     icon={<HardDrive size={18} />}
-                    eyebrow="Archivos locales"
-                    title="Importar y exportar en este equipo"
-                    description="Mueve respaldos JSON entre instalaciones o trae una configuración pública."
+                    eyebrow={t("settings.configSection.localFilesEyebrow")}
+                    title={t("settings.configSection.localFilesTitle")}
+                    description={t("settings.configSection.localFilesDesc")}
                   />
                   <div className="grid gap-2 text-xs text-default-500 sm:grid-cols-2">
                     <p className="rounded-xl border border-default-200/60 bg-default-50/50 px-3 py-2 dark:border-default-100/15 dark:bg-default-50/10">
-                      <strong className="text-default-600">Exportar:</strong> guarda juegos y rutas en un archivo JSON.
+                      <Trans
+                        i18nKey="settings.configSection.exportHint"
+                        components={{ strong: <strong className="text-default-600" /> }}
+                      />
                     </p>
                     <p className="rounded-xl border border-default-200/60 bg-default-50/50 px-3 py-2 dark:border-default-100/15 dark:bg-default-50/10">
-                      <strong className="text-default-600">Fusionar:</strong> añade juegos del JSON sin borrar los datos
-                      actuales.
+                      <Trans
+                        i18nKey="settings.configSection.mergeHint"
+                        components={{ strong: <strong className="text-default-600" /> }}
+                      />
                     </p>
                     <p className="rounded-xl border border-default-200/60 bg-default-50/50 px-3 py-2 dark:border-default-100/15 dark:bg-default-50/10">
-                      <strong className="text-default-600">Reemplazar:</strong> sustituye toda la configuración.
+                      <Trans
+                        i18nKey="settings.configSection.replaceHint"
+                        components={{ strong: <strong className="text-default-600" /> }}
+                      />
                     </p>
                     <p className="rounded-xl border border-default-200/60 bg-default-50/50 px-3 py-2 dark:border-default-100/15 dark:bg-default-50/10">
-                      <strong className="text-default-600">Importar de usuario:</strong> trae la configuración pública
-                      de otro usuario.
+                      <Trans
+                        i18nKey="settings.configSection.importUserHint"
+                        components={{ strong: <strong className="text-default-600" /> }}
+                      />
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -385,7 +413,7 @@ export function ConfigSection({
                       onPress={onExport}
                       isLoading={exporting}
                       className={actionButtonClass}>
-                      Exportar
+                      {t("settings.configSection.export")}
                     </Button>
                     <Button
                       size="sm"
@@ -393,7 +421,7 @@ export function ConfigSection({
                       onPress={onImportMerge}
                       isLoading={importing}
                       className={actionButtonClass}>
-                      Importar (fusionar)
+                      {t("settings.configSection.importMerge")}
                     </Button>
                     <Button
                       size="sm"
@@ -402,7 +430,7 @@ export function ConfigSection({
                       onPress={onImportReplace}
                       isLoading={importing}
                       className={actionButtonClass}>
-                      Importar (reemplazar)
+                      {t("settings.configSection.importReplace")}
                     </Button>
                     <Button
                       size="sm"
@@ -410,7 +438,7 @@ export function ConfigSection({
                       color="secondary"
                       onPress={onPullFriendConfig}
                       className={actionButtonClass}>
-                      Importar de usuario
+                      {t("settings.configSection.importFromUser")}
                     </Button>
                   </div>
                 </div>
@@ -421,9 +449,9 @@ export function ConfigSection({
                   <SectionHeader
                     id="config-cloud-backup"
                     icon={<Cloud size={18} />}
-                    eyebrow="Respaldos remotos"
-                    title="Copias en la nube"
-                    description="Sube tu configuración al servidor o aplica la última copia guardada."
+                    eyebrow={t("settings.configSection.remoteBackupEyebrow")}
+                    title={t("settings.configSection.remoteBackupTitle")}
+                    description={t("settings.configSection.remoteBackupDesc")}
                   />
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -433,7 +461,7 @@ export function ConfigSection({
                       onPress={onBackupToCloud}
                       isLoading={backingUpConfig}
                       className={actionButtonClass}>
-                      Respaldar en la nube
+                      {t("settings.configSection.backupToCloud")}
                     </Button>
                     <Button
                       size="sm"
@@ -442,7 +470,7 @@ export function ConfigSection({
                       onPress={onRestoreFromCloud}
                       isLoading={restoringConfig}
                       className={actionButtonClass}>
-                      Restaurar desde la nube
+                      {t("settings.configSection.restoreFromCloud")}
                     </Button>
                   </div>
                 </div>

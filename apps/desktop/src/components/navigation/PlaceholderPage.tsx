@@ -1,8 +1,10 @@
 import { useNavigationStore } from "@features/input/store";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
+import { useTranslation } from "react-i18next";
 
 /** Rutas sin página dedicada: atrás (B / Escape) hace pop de capa de foco si aplica. */
 export function PlaceholderPage() {
+  const { t } = useTranslation();
   const popLayer = useNavigationStore((s) => s.popLayer);
   useRegisterGlobalBack(() => {
     switch (true) {
@@ -14,7 +16,7 @@ export function PlaceholderPage() {
 
   return (
     <div className="flex min-h-[40vh] items-center justify-center">
-      <p className="text-default-500">Sección en desarrollo</p>
+      <p className="text-default-500">{t("common.inDevelopment")}</p>
     </div>
   );
 }

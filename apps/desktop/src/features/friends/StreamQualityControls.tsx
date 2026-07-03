@@ -1,4 +1,5 @@
 import { Select, SelectItem } from "@heroui/react";
+import { useTranslation } from "react-i18next";
 
 export type StreamResolutionPreset = "720p" | "1080p" | "1440p";
 export type StreamFpsPreset = 30 | 60;
@@ -18,10 +19,12 @@ export function StreamQualityControls({
   onFpsChange,
   disabled = false,
 }: StreamQualityControlsProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="grid grid-cols-2 gap-2 rounded-lg border border-default-200/70 bg-default-50/30 p-2">
       <Select
-        label="Resolucion"
+        label={t("friends.cloudStreams.resolution")}
         labelPlacement="outside"
         size="sm"
         isDisabled={disabled}
@@ -45,7 +48,7 @@ export function StreamQualityControls({
       </Select>
 
       <Select
-        label="FPS"
+        label={t("friends.cloudStreams.fps")}
         labelPlacement="outside"
         size="sm"
         isDisabled={disabled}

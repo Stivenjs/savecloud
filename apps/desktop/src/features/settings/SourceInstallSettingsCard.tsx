@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button, Card, CardBody, Input, Tooltip, Chip, Switch } from "@heroui/react";
+import { useTranslation } from "react-i18next";
 import {
   FileJson,
   FolderOpen,
@@ -44,6 +45,7 @@ type Props = {
 };
 
 export function SourceInstallSettingsCard(props: Props) {
+  const { t } = useTranslation();
   const [hoveredSourceId, setHoveredSourceId] = useState<string | null>(null);
 
   const totalDownloads = props.sources.reduce((acc, s) => acc + s.downloadsCount, 0);
@@ -57,17 +59,17 @@ export function SourceInstallSettingsCard(props: Props) {
             <Download size={18} className="text-primary" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold text-default-900">Instalación desde fuentes</h3>
-            <p className="mt-0.5 text-xs leading-relaxed text-default-500">
-              Importa catálogos JSON (por URL o archivo) y configura la carpeta destino para las descargas.
-            </p>
+            <h3 className="text-sm font-semibold text-default-900">{t("settings.sourceInstall.title")}</h3>
+            <p className="mt-0.5 text-xs leading-relaxed text-default-500">{t("settings.sourceInstall.subtitle")}</p>
           </div>
           {props.sources.length > 0 && (
             <div className="flex shrink-0 flex-col items-end gap-1">
               <Chip size="sm" variant="flat" color="primary" className="h-5 text-[10px]">
-                {props.sources.length} {props.sources.length === 1 ? "fuente" : "fuentes"}
+                {t("settings.sourceInstall.sourcesStats", { count: props.sources.length })}
               </Chip>
-              <span className="text-[10px] text-default-400">{totalDownloads.toLocaleString()} juegos</span>
+              <span className="text-[10px] text-default-400">
+                {t("settings.sourceInstall.gamesStats", { count: totalDownloads })}
+              </span>
             </div>
           )}
         </div>
@@ -79,7 +81,7 @@ export function SourceInstallSettingsCard(props: Props) {
         <div className="space-y-3">
           <div className="flex items-center gap-1.5">
             <FileJson size={13} className="text-default-500" />
-            <span className="text-xs font-medium text-default-600">Importar desde archivos</span>
+            <span className="text-xs font-medium text-default-600">{t("settings.sourceInstall.importFilesTitle")}</span>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -89,7 +91,7 @@ export function SourceInstallSettingsCard(props: Props) {
               onPress={props.onImportFile}
               startContent={!props.sourcesBusy && <FileJson size={13} />}
               className="h-8 text-xs">
-              Archivo JSON
+              {t("settings.sourceInstall.importFileButton")}
             </Button>
             <Button
               size="sm"
@@ -99,7 +101,7 @@ export function SourceInstallSettingsCard(props: Props) {
               onPress={props.onImportBatch}
               startContent={!props.sourcesBusy && <Files size={13} />}
               className="h-8 text-xs">
-              Múltiples JSONs
+              {t("settings.sourceInstall.importBatchButton")}
             </Button>
           </div>
         </div>
@@ -108,7 +110,9 @@ export function SourceInstallSettingsCard(props: Props) {
         <div className="space-y-3">
           <div className="flex items-center gap-1.5">
             <RefreshCw size={13} className="text-default-500" />
-            <span className="text-xs font-medium text-default-600">Fuentes remotas registradas</span>
+            <span className="text-xs font-medium text-default-600">
+              {t("settings.sourceInstall.remoteSourcesTitle")}
+            </span>
             {props.remoteSources.length > 0 && (
               <Chip size="sm" variant="flat" color="secondary" className="h-5 text-[10px]">
                 {props.remoteSources.length}
@@ -136,7 +140,7 @@ export function SourceInstallSettingsCard(props: Props) {
               isDisabled={!props.remoteSourceUrl.trim()}
               onPress={props.onRegisterRemoteSource}
               className="h-9 shrink-0 px-4 text-xs font-medium">
-              Agregar
+              {t("settings.sourceInstall.addButton")}
             </Button>
             <Button
               size="sm"
@@ -146,7 +150,7 @@ export function SourceInstallSettingsCard(props: Props) {
               onPress={props.onSyncRemoteSources}
               startContent={<RefreshCw size={13} />}
               className="h-9 shrink-0 px-4 text-xs font-medium">
-              Sincronizar todo
+              {t("settings.sourceInstall.syncAllButton")}
             </Button>
           </div>
 
@@ -167,7 +171,11 @@ export function SourceInstallSettingsCard(props: Props) {
                         <p className="truncate text-xs font-medium text-default-800">{source.url}</p>
                         <p
                           className={`mt-0.5 truncate text-[10px] ${hasError ? "text-danger-500" : "text-default-400"}`}>
-                          {hasError ? source.sync.syncError : source.enabled ? "Activa" : "Pausada"}
+                          {hasError
+                            ? source.sync.syncError
+                            : source.enabled
+                              ? t("settings.sourceInstall.active")
+                              : t("settings.sourceInstall.paused")}
                         </p>
                       </div>
 
@@ -179,12 +187,20 @@ export function SourceInstallSettingsCard(props: Props) {
                         isDisabled={props.sourcesBusy || isDeleting}
                         onPress={() => props.onToggleRemoteSourceEnabled(source.id, !source.enabled)}
                         className="h-7 w-7 min-w-0 shrink-0"
-                        aria-label={source.enabled ? "Pausar fuente remota" : "Activar fuente remota"}>
+                        aria-label={
+                          source.enabled
+                            ? t("settings.sourceInstall.pauseRemoteAria")
+                            : t("settings.sourceInstall.activateRemoteAria")
+                        }>
                         <Power size={13} />
                       </Button>
 
                       <Tooltip
-                        content={isDeleting ? "Eliminando..." : "Eliminar fuente remota"}
+                        content={
+                          isDeleting
+                            ? t("settings.sourceInstall.deleting")
+                            : t("settings.sourceInstall.deleteRemoteTooltip")
+                        }
                         placement="left"
                         delay={300}>
                         <Button
@@ -196,7 +212,7 @@ export function SourceInstallSettingsCard(props: Props) {
                           isDisabled={props.sourcesBusy || isDeleting}
                           onPress={() => props.onDeleteRemoteSource(source.id)}
                           className="h-7 w-7 min-w-0 shrink-0"
-                          aria-label="Eliminar fuente remota">
+                          aria-label={t("settings.sourceInstall.deleteRemoteTooltip")}>
                           {!isDeleting && <Trash2 size={13} />}
                         </Button>
                       </Tooltip>
@@ -207,7 +223,7 @@ export function SourceInstallSettingsCard(props: Props) {
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-default-200 px-3 py-4 text-center text-[11px] text-default-400">
-              No hay URLs remotas registradas todavía.
+              {t("settings.sourceInstall.noRemoteSources")}
             </div>
           )}
         </div>
@@ -217,7 +233,9 @@ export function SourceInstallSettingsCard(props: Props) {
           <div className="space-y-2">
             <div className="flex items-center gap-1.5">
               <FolderInput size={13} className="text-default-500" />
-              <span className="text-xs font-medium text-default-600">Catálogos importados</span>
+              <span className="text-xs font-medium text-default-600">
+                {t("settings.sourceInstall.importedCatalogsTitle")}
+              </span>
             </div>
             <div className="overflow-hidden rounded-xl border border-default-200 bg-default-50">
               <div className="max-h-52 divide-y divide-default-100 overflow-y-auto">
@@ -263,7 +281,14 @@ export function SourceInstallSettingsCard(props: Props) {
                       </Chip>
 
                       {/* Delete button */}
-                      <Tooltip content={isDeleting ? "Eliminando..." : "Eliminar fuente"} placement="left" delay={300}>
+                      <Tooltip
+                        content={
+                          isDeleting
+                            ? t("settings.sourceInstall.deleting")
+                            : t("settings.sourceInstall.deleteSourceTooltip")
+                        }
+                        placement="left"
+                        delay={300}>
                         <Button
                           isIconOnly
                           size="sm"
@@ -275,7 +300,7 @@ export function SourceInstallSettingsCard(props: Props) {
                           className={`h-7 w-7 min-w-0 shrink-0 transition-all ${
                             isHovered || isDeleting ? "opacity-100 scale-100" : "opacity-0 scale-90"
                           }`}
-                          aria-label={`Eliminar ${source.name}`}>
+                          aria-label={`${t("settings.sourceInstall.deleteSourceTooltip")} ${source.name}`}>
                           {!isDeleting && <Trash2 size={13} />}
                         </Button>
                       </Tooltip>
@@ -294,10 +319,8 @@ export function SourceInstallSettingsCard(props: Props) {
               <FileJson size={16} className="text-default-400" />
             </div>
             <div>
-              <p className="text-xs font-medium text-default-500">Sin catálogos importados</p>
-              <p className="mt-0.5 text-[11px] text-default-400">
-                Importa un JSON de fuente para ver tus catálogos aquí.
-              </p>
+              <p className="text-xs font-medium text-default-500">{t("settings.sourceInstall.noImportedCatalogs")}</p>
+              <p className="mt-0.5 text-[11px] text-default-400">{t("settings.sourceInstall.importJsonHelp")}</p>
             </div>
           </div>
         )}
@@ -309,7 +332,7 @@ export function SourceInstallSettingsCard(props: Props) {
         <div className="space-y-3">
           <div className="flex items-center gap-1.5">
             <FolderOpen size={13} className="text-default-500" />
-            <span className="text-xs font-medium text-default-600">Carpeta destino por defecto</span>
+            <span className="text-xs font-medium text-default-600">{t("settings.sourceInstall.defaultDestTitle")}</span>
           </div>
           <Input
             size="sm"
@@ -329,7 +352,7 @@ export function SourceInstallSettingsCard(props: Props) {
               onPress={props.onPickFolder}
               startContent={<FolderOpen size={13} />}
               className="h-8 text-xs">
-              Elegir carpeta
+              {t("settings.sourceInstall.pickFolderButton")}
             </Button>
             <Button
               size="sm"
@@ -338,7 +361,7 @@ export function SourceInstallSettingsCard(props: Props) {
               onPress={props.onSaveDefaultDir}
               startContent={<Save size={13} />}
               className="h-8 text-xs">
-              Guardar ruta
+              {t("settings.sourceInstall.savePathButton")}
             </Button>
           </div>
         </div>
@@ -350,21 +373,20 @@ export function SourceInstallSettingsCard(props: Props) {
         <div className="space-y-3">
           <div className="flex items-center gap-1.5">
             <Archive size={13} className="text-default-500" />
-            <span className="text-xs font-medium text-default-600">Extracción automática</span>
+            <span className="text-xs font-medium text-default-600">{t("settings.sourceInstall.autoExtractTitle")}</span>
           </div>
           <div className="flex items-center justify-between gap-4 rounded-xl border border-default-200 bg-default-50 p-3">
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-default-800">Extraer juegos automáticamente</p>
+              <p className="text-xs font-medium text-default-800">{t("settings.sourceInstall.autoExtractLabel")}</p>
               <p className="mt-0.5 text-[10px] leading-relaxed text-default-550">
-                Descomprime automáticamente los archivos comprimidos al finalizar la descarga (ZIP, RAR, 7Z, TAR, etc.).
-                Si está desactivado, el archivo descargado se conservará sin extraer.
+                {t("settings.sourceInstall.autoExtractHelp")}
               </p>
             </div>
             <Switch
               size="sm"
               isSelected={props.autoExtractDownloads}
               onValueChange={props.onAutoExtractDownloadsChange}
-              aria-label="Extraer automáticamente juegos descargados"
+              aria-label={t("settings.sourceInstall.autoExtractLabel")}
             />
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Button, Card, CardBody, Select, SelectItem } from "@heroui/react";
 import { Gamepad2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { GamepadDiagram } from "@/features/settings/GamepadDiagram";
 import {
   axisRowCopy,
@@ -19,15 +20,8 @@ import {
 /** Cómo dibujar el HUD Kenney y las leyendas; «auto» usa la heurística por nombre USB/del SO. */
 type DiagramLayoutChoice = "auto" | GamepadLayoutKind;
 
-const DIAGRAM_LAYOUT_OPTIONS: { id: DiagramLayoutChoice; label: string }[] = [
-  { id: "auto", label: "Automático (según nombre del mando)" },
-  { id: "xbox", label: "Xbox" },
-  { id: "playstation", label: "PlayStation" },
-  { id: "nintendo", label: "Nintendo Switch" },
-  { id: "generic", label: "Genérico (leyendas tipo Xbox)" },
-];
-
 export function GamepadTesterCard() {
+  const { t } = useTranslation();
   const {
     isDesktop,
     isWindowsDesktop,
@@ -49,6 +43,17 @@ export function GamepadTesterCard() {
     triggerRumble,
     installGamepadDriver,
   } = useGamepadTester();
+
+  const DIAGRAM_LAYOUT_OPTIONS: { id: DiagramLayoutChoice; label: string }[] = useMemo(
+    () => [
+      { id: "auto", label: t("settings.gamepadTester.layoutOptions.auto") },
+      { id: "xbox", label: "Xbox" },
+      { id: "playstation", label: "PlayStation" },
+      { id: "nintendo", label: "Nintendo Switch" },
+      { id: "generic", label: t("settings.gamepadTester.layoutOptions.generic") },
+    ],
+    [t]
+  );
 
   const diagramLayoutChoice: DiagramLayoutChoice = preferredLayoutKind ?? "auto";
 
@@ -81,11 +86,9 @@ export function GamepadTesterCard() {
         <CardBody className="gap-3">
           <div className="flex items-center gap-2">
             <Gamepad2 size={20} className="text-default-500" />
-            <h2 className="text-base font-semibold text-foreground">Tu mando</h2>
+            <h2 className="text-base font-semibold text-foreground">{t("settings.gamepadTester.title")}</h2>
           </div>
-          <p className="text-sm text-default-500">
-            Esta prueba solo está disponible en la app de escritorio de Savecloud.
-          </p>
+          <p className="text-sm text-default-500">{t("settings.gamepadTester.desktopOnlyDesc")}</p>
         </CardBody>
       </Card>
     );
@@ -96,33 +99,29 @@ export function GamepadTesterCard() {
       <CardBody className="gap-4">
         <div className="flex items-center gap-2">
           <Gamepad2 size={20} className="text-default-500" />
-          <h2 className="text-base font-semibold text-foreground">Tu mando</h2>
+          <h2 className="text-base font-semibold text-foreground">{t("settings.gamepadTester.title")}</h2>
         </div>
-        <p className="text-sm text-default-500">
-          Conecta el mando por cable o su adaptador inalámbrico. Con Savecloud o la ventana de Ajustes al frente verás
-          cómo responden sticks y botones. El botón de vibración envía un pequeño pulso si el sistema lo permite (en
-          algunos Mac no hay vibración).
-        </p>
-        <p className="text-xs text-default-400">
-          Puedes usar el mando también para moverte por la app (navegación, confirmar y atrás).
-        </p>
+        <p className="text-sm text-default-500">{t("settings.gamepadTester.mainDesc")}</p>
+        <p className="text-xs text-default-400">{t("settings.gamepadTester.navDesc")}</p>
 
         {loadErr ? <p className="text-sm text-danger">{loadErr}</p> : null}
 
         {rumbleErr ? <p className="text-sm text-danger">{rumbleErr}</p> : null}
         {gamepads.length === 0 ? (
-          <p className="text-sm text-default-500">No detectamos ningún mando. Enchufa uno y pulsa «Buscar de nuevo».</p>
+          <p className="text-sm text-default-500">{t("settings.gamepadTester.noGamepadFound")}</p>
         ) : selectedGamepadName ? (
           <p className="text-xs text-default-400">
-            Detección por nombre «{selectedGamepadName}»: el perfil automático es{" "}
-            {layoutKindDescription(selectedLayoutKind)}. Puedes fijar otro esquema abajo para la vista y las etiquetas.
+            {t("settings.gamepadTester.detectionInfo", {
+              name: selectedGamepadName,
+              profile: layoutKindDescription(selectedLayoutKind),
+            })}
           </p>
         ) : null}
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
           {gamepads.length > 0 && (
             <Select
-              label="¿Qué mando quieres mirar?"
+              label={t("settings.gamepadTester.selectLabel")}
               selectedKeys={selectedKey ? new Set([selectedKey]) : new Set()}
               onSelectionChange={(keys) => {
                 const k = Array.from(keys)[0];
@@ -131,7 +130,7 @@ export function GamepadTesterCard() {
               className="max-w-md w-full"
               size="sm"
               variant="bordered"
-              aria-label="Elegir mando conectado">
+              aria-label={t("settings.gamepadTester.selectLabel")}>
               {gamepads.map((g) => (
                 <SelectItem key={String(g.id)} textValue={g.name}>
                   {g.name}
@@ -144,8 +143,8 @@ export function GamepadTesterCard() {
             variant="flat"
             isLoading={listRefreshing}
             onPress={() => void refreshList({ showLoading: true })}
-            aria-label="Buscar mandos de nuevo">
-            Buscar de nuevo
+            aria-label={t("settings.gamepadTester.searchButton")}>
+            {t("settings.gamepadTester.searchButton")}
           </Button>
           {gamepads.length > 0 && (
             <Button
@@ -154,8 +153,8 @@ export function GamepadTesterCard() {
               color="primary"
               isDisabled={selectedId == null || rumbleBusy}
               onPress={() => void triggerRumble()}
-              aria-label="Probar vibración del mando">
-              Probar vibración
+              aria-label={t("settings.gamepadTester.rumbleButton")}>
+              {t("settings.gamepadTester.rumbleButton")}
             </Button>
           )}
           {isWindowsDesktop ? (
@@ -166,8 +165,8 @@ export function GamepadTesterCard() {
               isLoading={driverInstallBusy}
               isDisabled={driverInstallBusy}
               onPress={() => void installGamepadDriver()}
-              aria-label="Instalar driver">
-              Instalar drivers
+              aria-label={t("settings.gamepadTester.installDriversButton")}>
+              {t("settings.gamepadTester.installDriversButton")}
             </Button>
           ) : null}
         </div>
@@ -178,10 +177,10 @@ export function GamepadTesterCard() {
               <div className="rounded-xl border border-default-200/70 bg-content1/40 p-4 dark:border-default-100/40">
                 <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                   <p className="text-center text-xs font-medium uppercase tracking-wide text-default-500 sm:text-left">
-                    Vista del mando
+                    {t("settings.gamepadTester.diagramViewTitle")}
                   </p>
                   <Select
-                    label="Esquema visual"
+                    label={t("settings.gamepadTester.visualLayoutLabel")}
                     selectedKeys={new Set([diagramLayoutChoice])}
                     onSelectionChange={(keys) => {
                       const raw = Array.from(keys)[0];
@@ -197,7 +196,7 @@ export function GamepadTesterCard() {
                     className="min-w-[min(100%,280px)] sm:max-w-xs"
                     size="sm"
                     variant="bordered"
-                    aria-label="Esquema del mando (silueta Kenney y leyendas)">
+                    aria-label={t("settings.gamepadTester.visualLayoutLabel")}>
                     {DIAGRAM_LAYOUT_OPTIONS.map((opt) => (
                       <SelectItem key={opt.id} textValue={opt.label}>
                         {opt.label}
@@ -206,8 +205,10 @@ export function GamepadTesterCard() {
                   </Select>
                 </div>
                 <p className="mb-3 text-center text-[11px] text-default-400 sm:text-left">
-                  Mostrando {layoutKindDescription(diagramLayoutKind)}
-                  {diagramLayoutChoice === "auto" ? " (automático)." : " (elección manual guardada)."}
+                  {t("settings.gamepadTester.showingLayout", { layout: layoutKindDescription(diagramLayoutKind) })}
+                  {diagramLayoutChoice === "auto"
+                    ? t("settings.gamepadTester.autoChoice")
+                    : t("settings.gamepadTester.manualChoice")}
                 </p>
                 <GamepadDiagram layoutKind={diagramLayoutKind} telemetry={diagramTelemetry} />
               </div>
@@ -215,7 +216,9 @@ export function GamepadTesterCard() {
 
             {selectedTelemetry ? (
               <div className="grid gap-4 rounded-lg border border-default-200/80 bg-default-50/40 p-4 dark:border-default-100/60 dark:bg-default-100/10">
-                <p className="text-xs font-medium uppercase tracking-wide text-default-500">Detalle numérico</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-default-500">
+                  {t("settings.gamepadTester.numericDetailTitle")}
+                </p>
                 <div className="grid gap-2 text-sm sm:grid-cols-2">
                   <div>
                     <span className="text-default-600">{axisLabels.triggers.left}: </span>
@@ -266,9 +269,9 @@ export function GamepadTesterCard() {
                   </div>
                 </div>
                 <div>
-                  <p className="mb-1 text-xs text-default-500">Botones que detectamos ahora mismo</p>
+                  <p className="mb-1 text-xs text-default-500">{t("settings.gamepadTester.buttonsDetectedTitle")}</p>
                   {selectedTelemetry.pressed_buttons.length === 0 ? (
-                    <p className="text-sm text-default-400">Ninguno pulsado. Prueba la cruceta o la cara de botones.</p>
+                    <p className="text-sm text-default-400">{t("settings.gamepadTester.noButtonsPressed")}</p>
                   ) : (
                     <p className="text-sm leading-relaxed text-default-800">
                       {formatPressedButtonsDisplay(diagramLayoutKind, selectedTelemetry.pressed_buttons)}
@@ -277,10 +280,7 @@ export function GamepadTesterCard() {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-default-500">
-                Toca algo del mando: con la ventana de Savecloud o Ajustes activa deberían aparecer números y nombres
-                claros arriba.
-              </p>
+              <p className="text-sm text-default-500">{t("settings.gamepadTester.telemetryHelp")}</p>
             )}
           </>
         ) : null}

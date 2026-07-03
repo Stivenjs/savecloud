@@ -5,6 +5,7 @@ import { Code2, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { useState } from "react";
 import { closeWebviewDevtools, openWebviewDevtools } from "@services/tauri/system.service";
 import { toastError } from "@utils/toast";
+import { useTranslation } from "react-i18next";
 
 interface DeveloperModeCardProps {
   enabled: boolean;
@@ -12,6 +13,7 @@ interface DeveloperModeCardProps {
 }
 
 export function DeveloperModeCard({ enabled, onEnabledChange }: DeveloperModeCardProps) {
+  const { t } = useTranslation();
   const [devtoolsBusy, setDevtoolsBusy] = useState<"open" | "close" | null>(null);
 
   const devtoolsActionsUnlocked = import.meta.env.DEV || enabled;
@@ -28,7 +30,7 @@ export function DeveloperModeCard({ enabled, onEnabledChange }: DeveloperModeCar
       }
     } catch (e) {
       toastError(
-        kind === "open" ? "No se pudo abrir DevTools" : "No se pudo cerrar DevTools",
+        kind === "open" ? t("settings.developer.errorOpen") : t("settings.developer.errorClose"),
         e instanceof Error ? e.message : String(e)
       );
     } finally {
@@ -43,17 +45,10 @@ export function DeveloperModeCard({ enabled, onEnabledChange }: DeveloperModeCar
           <div className="flex min-w-0 flex-1 items-start gap-3">
             <Code2 size={20} className="mt-0.5 shrink-0 text-default-500" />
             <div className="min-w-0">
-              <h2 className="text-base font-semibold text-foreground">Modo desarrollador</h2>
-              <p className="mt-1 text-sm text-default-500">
-                Se guarda en el perfil activo. En la app instalada desbloquea el inspector del webview (DevTools),
-                atajos como F12 / Ctrl+Shift+I y el menú contextual; también muestra las herramientas para plugins (SDK
-                Lua, logs).
-              </p>
+              <h2 className="text-base font-semibold text-foreground">{t("settings.developer.title")}</h2>
+              <p className="mt-1 text-sm text-default-500">{t("settings.developer.desc")}</p>
               {import.meta.env.DEV ? (
-                <p className="mt-2 text-[11px] leading-snug text-default-400">
-                  En `vite` el inspector suele estar ya disponible; el interruptor afecta sobre todo a builds de
-                  producción y a lo que queda guardado en el perfil.
-                </p>
+                <p className="mt-2 text-[11px] leading-snug text-default-400">{t("settings.developer.viteInfo")}</p>
               ) : null}
             </div>
           </div>
@@ -61,7 +56,7 @@ export function DeveloperModeCard({ enabled, onEnabledChange }: DeveloperModeCar
             className="shrink-0"
             isSelected={enabled}
             onValueChange={onEnabledChange}
-            aria-label="Modo desarrollador"
+            aria-label={t("settings.developer.title")}
           />
         </div>
 
@@ -74,7 +69,7 @@ export function DeveloperModeCard({ enabled, onEnabledChange }: DeveloperModeCar
             isDisabled={!devtoolsActionsUnlocked}
             isLoading={devtoolsBusy === "open"}
             onPress={() => void runDevtools("open")}>
-            Abrir DevTools (esta ventana)
+            {t("settings.developer.openDevTools")}
           </Button>
           <Button
             size="sm"
@@ -83,12 +78,10 @@ export function DeveloperModeCard({ enabled, onEnabledChange }: DeveloperModeCar
             isDisabled={!devtoolsActionsUnlocked}
             isLoading={devtoolsBusy === "close"}
             onPress={() => void runDevtools("close")}>
-            Cerrar DevTools
+            {t("settings.developer.closeDevTools")}
           </Button>
           {!devtoolsActionsUnlocked ? (
-            <p className="w-full text-[11px] text-default-400">
-              Activa el modo arriba para usar DevTools en producción.
-            </p>
+            <p className="w-full text-[11px] text-default-400">{t("settings.developer.lockedInfo")}</p>
           ) : null}
         </div>
       </CardBody>

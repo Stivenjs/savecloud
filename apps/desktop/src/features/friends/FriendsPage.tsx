@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useBigPictureConsole } from "@hooks/useBigPictureConsole";
 import { BigPictureFriendsPage } from "@features/friends/big-picture/BigPictureFriendsPage";
 import { useQuery } from "@tanstack/react-query";
@@ -27,6 +28,7 @@ import { visibilityManager } from "@hooks/useAppVisibility";
 type FriendsTabKey = "link" | "user" | "invites";
 
 export function FriendsPage() {
+  const { t } = useTranslation();
   const bigPictureConsole = useBigPictureConsole();
 
   if (bigPictureConsole) return <BigPictureFriendsPage />;
@@ -163,16 +165,12 @@ export function FriendsPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-1">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold">Amigos</h1>
+          <h1 className="text-2xl font-semibold">{t("friends.title")}</h1>
           <Chip size="sm" variant="flat" color="default" className="text-xs">
-            Importar desde enlace o ver perfil por usuario
+            {t("friends.subtitle")}
           </Chip>
         </div>
-        <p className="max-w-3xl text-sm text-default-500">
-          Usa <strong className="text-foreground">Importar por link</strong> si te pasaron un enlace de compartir, o{" "}
-          <strong className="text-foreground">Buscar por usuario</strong> para cargar el perfil de un amigo de
-          confianza.
-        </p>
+        <p className="max-w-3xl text-sm text-default-500">{t("friends.descPlain")}</p>
       </div>
 
       <Tabs
@@ -194,7 +192,7 @@ export function FriendsPage() {
           title={
             <div className="flex items-center gap-2">
               <Link2 className="h-4 w-4" />
-              <span>Importar por link</span>
+              <span>{t("friends.tabs.importLink")}</span>
             </div>
           }>
           <ShareLinkCard
@@ -211,7 +209,7 @@ export function FriendsPage() {
           title={
             <div className="flex items-center gap-2">
               <UserRound className="h-4 w-4" />
-              <span>Buscar por usuario</span>
+              <span>{t("friends.tabs.searchUser")}</span>
             </div>
           }>
           <div className="space-y-6">
@@ -225,12 +223,12 @@ export function FriendsPage() {
             {loading ? (
               <div className="flex min-h-[20vh] flex-col items-center justify-center gap-3">
                 <Spinner size="lg" color="primary" />
-                <p className="text-default-500">Cargando perfil del amigo...</p>
+                <p className="text-default-500">{t("friends.loadingProfile")}</p>
               </div>
             ) : null}
             {friendConfig && !loading ? (
               <FriendGamesSection
-                userIdDisplay={friendConfig.userId ?? "(sin usuario en config)"}
+                userIdDisplay={friendConfig.userId ?? t("friends.noUserConfig")}
                 friendVisualProfile={
                   friendConfig.shareVisualProfileWithHosts
                     ? {

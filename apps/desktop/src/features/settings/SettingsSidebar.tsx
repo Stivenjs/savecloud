@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { SETTINGS_SIDEBAR_SECTIONS } from "@/constants/settingsSidebarSections";
 import { SettingsSidebarVersionFooter } from "@/features/settings/SettingsSidebarVersionFooter";
+import { useTranslation } from "react-i18next";
 
 export type SettingsTabKey =
   | "account"
@@ -26,13 +27,54 @@ interface SettingsSidebarProps {
 
 export function SettingsSidebar({ tabs, selectedTab, onSelectTab }: SettingsSidebarProps) {
   const byKey = new Map(tabs.map((t) => [t.key, t]));
+  const { t } = useTranslation();
+
+  const getSectionTitle = (title: string) => {
+    switch (title) {
+      case "Cuenta y datos":
+        return t("settings.sections.account");
+      case "Aplicación":
+        return t("settings.sections.app");
+      case "Dispositivos e integraciones":
+        return t("settings.sections.integrations");
+      case "Sistema":
+        return t("settings.sections.system");
+      default:
+        return title;
+    }
+  };
+
+  const getTabLabel = (key: string, defaultLabel: string) => {
+    switch (key) {
+      case "account":
+        return t("settings.tabs.account");
+      case "cloud":
+        return t("settings.tabs.cloud");
+      case "app":
+        return t("settings.tabs.app");
+      case "big-picture":
+        return t("settings.tabs.bigPicture");
+      case "integrations":
+        return t("settings.tabs.integrations");
+      case "gamepad":
+        return t("settings.tabs.gamepad");
+      case "updates":
+        return t("settings.tabs.updates");
+      case "advanced":
+        return t("settings.tabs.advanced");
+      default:
+        return defaultLabel;
+    }
+  };
 
   return (
     <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-default-200/70 bg-linear-to-b from-default-100/50 to-default-50/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] dark:border-default-100/20 dark:from-default-50/25 dark:to-default-100/10">
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2.5 py-3">
         <header className="border-b border-default-200/60 px-1 pb-3 dark:border-default-100/15">
-          <p className="text-[11px] font-bold uppercase leading-tight tracking-[0.14em] text-primary">Configuración</p>
-          <p className="mt-1.5 text-[11px] leading-snug text-default-500">Cuenta, nube, app, mandos e integraciones</p>
+          <p className="text-[11px] font-bold uppercase leading-tight tracking-[0.14em] text-primary">
+            {t("settings.title")}
+          </p>
+          <p className="mt-1.5 text-[11px] leading-snug text-default-500">{t("settings.subtitle")}</p>
         </header>
 
         <nav className="mt-3 space-y-0" aria-label="Secciones de configuración">
@@ -43,7 +85,7 @@ export function SettingsSidebar({ tabs, selectedTab, onSelectTab }: SettingsSide
               ) : null}
               <div className="px-1">
                 <h2 className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-default-400">
-                  {section.title}
+                  {getSectionTitle(section.title)}
                 </h2>
                 <ul className="space-y-0.5">
                   {section.tabKeys.map((key) => {
@@ -69,7 +111,7 @@ export function SettingsSidebar({ tabs, selectedTab, onSelectTab }: SettingsSide
                             ].join(" ")}>
                             {tab.icon}
                           </span>
-                          <span className="min-w-0 truncate">{tab.label}</span>
+                          <span className="min-w-0 truncate">{getTabLabel(tab.key, tab.label)}</span>
                         </button>
                       </li>
                     );

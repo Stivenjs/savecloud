@@ -13,6 +13,7 @@ import {
   Tabs,
 } from "@heroui/react";
 import { Cloud, CloudDownload, FolderArchive, FolderOpen, History, Pencil, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   listBackups,
   restoreBackup,
@@ -54,6 +55,7 @@ export function RestoreBackupModal({
   isDownloadingFromCloud = false,
   hasCloudIntegration = true,
 }: RestoreBackupModalProps) {
+  const { t } = useTranslation();
   const gameId = game?.id ?? "";
   const queryClient = useQueryClient();
   const setSyncOperation = useSyncStore((state) => state.setSyncOperation);
@@ -123,13 +125,10 @@ export function RestoreBackupModal({
     setSyncOperation({ type: "upload", mode: "single", gameId, operationId: `sync-upload-${gameId}` });
     try {
       await createAndUploadFullBackup(gameId);
-      toastSuccess(
-        "Backup completo creado",
-        "El backup se ha subido a la nube. Recomendado para juegos con muchos archivos."
-      );
+      toastSuccess(t("library.restoreBackup.fullBackupCreatedTitle"), t("library.restoreBackup.fullBackupCreatedDesc"));
       await refetchCloudBackups();
     } catch (e) {
-      toastError("Error al crear backup", e instanceof Error ? e.message : String(e));
+      toastError(t("library.restoreBackup.createBackupError"), e instanceof Error ? e.message : String(e));
     } finally {
       setCreatingFullBackup(false);
     }
@@ -141,11 +140,14 @@ export function RestoreBackupModal({
     setSyncOperation({ type: "download", mode: "single", gameId, operationId: `sync-download-${gameId}` });
     try {
       await downloadAndRestoreFullBackup(gameId, b.key);
-      toastSuccess("Restauración completada", `Se ha restaurado el backup ${b.filename} en la carpeta del juego.`);
+      toastSuccess(
+        t("library.restoreBackup.restoreCompleteTitle"),
+        t("library.restoreBackup.restoreCompleteDesc", { filename: b.filename })
+      );
       onSuccess?.();
       onClose();
     } catch (e) {
-      toastError("Error al restaurar", e instanceof Error ? e.message : String(e));
+      toastError(t("library.restoreBackup.restoreError"), e instanceof Error ? e.message : String(e));
     } finally {
       setRestoringCloudKey(null);
     }
@@ -153,21 +155,21 @@ export function RestoreBackupModal({
 
   const handleDeleteCloud = async (b: CloudBackupInfo) => {
     if (!gameId || !game) return;
-    const confirmed = await ask(`¿Eliminar el backup "${b.filename}" de la nube? Esta acción no se puede deshacer.`, {
-      title: "Eliminar backup",
+    const confirmed = await ask(t("library.restoreBackup.deleteConfirm", { filename: b.filename }), {
+      title: t("library.restoreBackup.deleteTitle"),
       kind: "warning",
-      okLabel: "Aceptar",
-      cancelLabel: "Cancelar",
+      okLabel: t("common.confirm"),
+      cancelLabel: t("common.cancel"),
     });
     if (!confirmed) return;
     setDeletingCloudKey(b.key);
     try {
       await deleteFullBackup(gameId, b.key);
-      toastSuccess("Backup eliminado", "Se ha eliminado el backup de la nube.");
+      toastSuccess(t("library.restoreBackup.deleteSuccessTitle"), t("library.restoreBackup.deleteSuccessDesc"));
       queryClient.invalidateQueries({ queryKey: ["cloud-backups", gameId] });
       queryClient.invalidateQueries({ queryKey: ["cloud-backup-counts"] });
     } catch (e) {
-      toastError("Error al eliminar", e instanceof Error ? e.message : String(e));
+      toastError(t("library.restoreBackup.deleteError"), e instanceof Error ? e.message : String(e));
     } finally {
       setDeletingCloudKey(null);
     }
@@ -182,21 +184,24 @@ export function RestoreBackupModal({
     if (!gameId || !renamingBackup) return;
     const name = renameValue.trim();
     if (!name.endsWith(".tar")) {
-      toastError("Nombre inválido", "El nombre debe terminar en .tar");
+      toastError(t("library.restoreBackup.invalidNameTitle"), t("library.restoreBackup.invalidNameTar"));
       return;
     }
     if (name.includes("/") || name.includes("..")) {
-      toastError("Nombre inválido", "El nombre no puede contener rutas.");
+      toastError(t("library.restoreBackup.invalidNameTitle"), t("library.restoreBackup.invalidNamePath"));
       return;
     }
     setIsRenaming(true);
     try {
       await renameFullBackup(gameId, renamingBackup.key, name);
-      toastSuccess("Backup renombrado", `Ahora se llama "${name}".`);
+      toastSuccess(
+        t("library.restoreBackup.renameSuccessTitle"),
+        t("library.restoreBackup.renameSuccessDesc", { name })
+      );
       setRenamingBackup(null);
       queryClient.invalidateQueries({ queryKey: ["cloud-backups", gameId] });
     } catch (e) {
-      toastError("Error al renombrar", e instanceof Error ? e.message : String(e));
+      toastError(t("library.restoreBackup.renameError"), e instanceof Error ? e.message : String(e));
     } finally {
       setIsRenaming(false);
     }
@@ -209,10 +214,11 @@ export function RestoreBackupModal({
   ) : !backups?.length ? (
     <div className="rounded-xl border border-dashed border-default-300 bg-default-50/40 px-4 py-6 text-center dark:border-default-100/25 dark:bg-default-100/10">
       <FolderArchive className="mx-auto mb-2 size-10 text-default-400" aria-hidden strokeWidth={1.25} />
-      <p className="text-sm font-medium text-default-700 dark:text-default-300">Sin copias automáticas aún</p>
+      <p className="text-sm font-medium text-default-700 dark:text-default-300">
+        {t("library.restoreBackup.noLocalBackupsTitle")}
+      </p>
       <p className="mt-1 max-w-[52ch] text-xs leading-relaxed text-default-500">
-        Suele aparecer una copia aquí después de sobrescribir guardados usando la nube — Sirve por si necesitas volver
-        atrás sin tocar tu carpeta principal a mano.
+        {t("library.restoreBackup.noLocalBackupsDesc")}
       </p>
     </div>
   ) : (
@@ -224,7 +230,7 @@ export function RestoreBackupModal({
           <div className="min-w-0">
             <p className="text-sm font-semibold tabular-nums text-foreground">{b.createdAt}</p>
             <p className="text-xs font-medium uppercase tracking-wide text-default-400">
-              {b.fileCount} archivo{b.fileCount !== 1 ? "s" : ""}
+              {t("library.restoreBackup.fileCount", { count: b.fileCount })}
             </p>
           </div>
           <Button
@@ -235,7 +241,7 @@ export function RestoreBackupModal({
             onPress={() => handleRestore(b)}
             isLoading={restoring === b.id}
             isDisabled={!!restoring || isDownloadingFromCloud}>
-            Aplicar
+            {t("library.restoreBackup.apply")}
           </Button>
         </li>
       ))}
@@ -250,14 +256,15 @@ export function RestoreBackupModal({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="min-w-0 flex-1 space-y-2">
             <div className="flex items-center gap-2">
-              <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-primary">Recomendado</span>
+              <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-primary">
+                {t("library.restoreBackup.recommended")}
+              </span>
             </div>
             <h3 id="recover-primary-heading" className="text-base font-semibold tracking-tight text-foreground">
-              Archivos sincronizados en la nube
+              {t("library.restoreBackup.cloudFilesTitle")}
             </h3>
             <p className="max-w-[65ch] text-sm leading-relaxed text-default-600 dark:text-default-400">
-              Alinea esta carpeta con lo que tienes guardado en tu cuenta — Archivo por archivo — Es la opción habitual
-              después de formatear o cambiar de PC.
+              {t("library.restoreBackup.cloudFilesDesc")}
             </p>
           </div>
           <Button
@@ -275,7 +282,9 @@ export function RestoreBackupModal({
             isDisabled={
               isDownloadingFromCloud || restoring !== null || cloudBusy || creatingFullBackup || !!restoringCloudKey
             }>
-            {isDownloadingFromCloud ? "Descargando…" : "Descargar y aplicar"}
+            {isDownloadingFromCloud
+              ? t("library.restoreBackup.downloading")
+              : t("library.restoreBackup.downloadAndApply")}
           </Button>
         </div>
       </section>
@@ -286,19 +295,18 @@ export function RestoreBackupModal({
       <Modal isOpen={isOpen} onOpenChange={(o) => !o && onClose()} size="2xl" scrollBehavior="inside">
         <ModalContent>
           <ModalHeader className="flex-col items-stretch gap-3 border-b border-default-200/80 pb-4 dark:border-default-100/15">
-            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-default-400">Guardados</p>
+            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-default-400">
+              {t("library.restoreBackup.sectionLabel")}
+            </p>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
               <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary dark:bg-primary/20">
                 <CloudDownload className="size-6" aria-hidden strokeWidth={1.75} />
               </div>
               <div className="min-w-0 flex-1 space-y-1">
                 <h2 className="text-xl font-semibold tracking-tight text-balance text-foreground sm:text-2xl">
-                  Traer guardados a este equipo
+                  {t("library.restoreBackup.modalTitle")}
                 </h2>
-                <p className="text-sm leading-relaxed text-default-500">
-                  Elige una fuente — La recomendación depende de si ya usás la sincronización por archivos o backups
-                  empaquetados.
-                </p>
+                <p className="text-sm leading-relaxed text-default-500">{t("library.restoreBackup.modalDesc")}</p>
               </div>
             </div>
             {game && (
@@ -312,8 +320,7 @@ export function RestoreBackupModal({
           <ModalBody className="gap-8 py-6">
             {!hasCloudIntegration && (
               <p className="rounded-xl border border-default-200 bg-default-50/50 px-4 py-3 text-sm text-default-600 dark:border-default-100/20 dark:bg-default-100/10 dark:text-default-400">
-                Conectá la nube desde Configuración para descargar archivos y usar snapshots remotos — Mientras tanto
-                solo podés usar las copias que ya hay en este equipo.
+                {t("library.restoreBackup.noCloudHint")}
               </p>
             )}
 
@@ -324,12 +331,12 @@ export function RestoreBackupModal({
                 <div className="flex items-center gap-3">
                   <Divider className="flex-1" />
                   <span className="shrink-0 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-default-400">
-                    Otras formas de recuperar
+                    {t("library.restoreBackup.otherRecovery")}
                   </span>
                   <Divider className="flex-1" />
                 </div>
                 <Tabs
-                  aria-label="Origen del guardado"
+                  aria-label={t("library.restoreBackup.tabsAriaLabel")}
                   fullWidth
                   classNames={{
                     tabList: "w-full gap-1 rounded-lg bg-default-100 p-1 dark:bg-default-100/40",
@@ -341,7 +348,7 @@ export function RestoreBackupModal({
                     title={
                       <span className="flex items-center justify-center gap-2">
                         <FolderArchive size={17} aria-hidden strokeWidth={1.75} />
-                        <span>Copias en este equipo</span>
+                        <span>{t("library.restoreBackup.localCopiesTab")}</span>
                       </span>
                     }>
                     <div className="pt-4">{localBackupList}</div>
@@ -351,14 +358,13 @@ export function RestoreBackupModal({
                     title={
                       <span className="flex items-center justify-center gap-2">
                         <History size={17} aria-hidden strokeWidth={1.75} />
-                        <span className="hidden xs:inline">Snapshots remotos (.tar)</span>
-                        <span className="xs:hidden">Snapshots</span>
+                        <span className="hidden xs:inline">{t("library.restoreBackup.remoteSnapshotsTab")}</span>
+                        <span className="xs:hidden">{t("library.restoreBackup.remoteSnapshotsShort")}</span>
                       </span>
                     }>
                     <div className="space-y-4 pt-4">
                       <p className="text-sm leading-relaxed text-default-600 dark:text-default-400">
-                        Un único archivo con toda la carpeta — Pensado para muchos ficheros — Podés crear uno nuevo,
-                        recuperar uno antiguo o gestionarlo.
+                        {t("library.restoreBackup.snapshotsDesc")}
                       </p>
                       <Button
                         color="primary"
@@ -367,7 +373,7 @@ export function RestoreBackupModal({
                         onPress={handleCreateFullBackup}
                         isLoading={creatingFullBackup}
                         isDisabled={creatingFullBackup || isDownloadingFromCloud}>
-                        Crear snapshot y subir a la nube
+                        {t("library.restoreBackup.createSnapshot")}
                       </Button>
                       {cloudLoading ? (
                         <div className="flex items-center justify-center py-8">
@@ -375,7 +381,7 @@ export function RestoreBackupModal({
                         </div>
                       ) : !cloudBackups?.length ? (
                         <div className="rounded-xl border border-dashed border-default-300 px-4 py-6 text-center text-sm text-default-500 dark:border-default-100/25">
-                          No hay snapshots en la nube — Creá uno con el botón de arriba.
+                          {t("library.restoreBackup.noCloudSnapshots")}
                         </div>
                       ) : (
                         <ul className="max-h-[min(14rem,45vh)] space-y-2 overflow-y-auto pr-1">
@@ -398,13 +404,13 @@ export function RestoreBackupModal({
                                   onPress={() => handleRestoreCloud(b)}
                                   isLoading={restoringCloudKey === b.key}
                                   isDisabled={!!restoringCloudKey || !!deletingCloudKey}>
-                                  Restaurar
+                                  {t("library.restoreBackup.restore")}
                                 </Button>
                                 <Button
                                   size="sm"
                                   isIconOnly
                                   variant="light"
-                                  aria-label="Renombrar backup"
+                                  aria-label={t("library.restoreBackup.renameBackup")}
                                   onPress={() => openRenameModal(b)}
                                   isDisabled={!!restoringCloudKey || !!deletingCloudKey}>
                                   <Pencil size={16} className="text-default-600" />
@@ -414,7 +420,7 @@ export function RestoreBackupModal({
                                   isIconOnly
                                   variant="light"
                                   color="danger"
-                                  aria-label="Eliminar backup"
+                                  aria-label={t("library.restoreBackup.deleteBackup")}
                                   onPress={() => handleDeleteCloud(b)}
                                   isLoading={deletingCloudKey === b.key}
                                   isDisabled={
@@ -436,7 +442,7 @@ export function RestoreBackupModal({
             {!hasCloudIntegration && (
               <div className="space-y-3">
                 <h3 className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-default-400">
-                  Copias en este equipo
+                  {t("library.restoreBackup.localCopiesHeading")}
                 </h3>
                 {localBackupList}
               </div>
@@ -444,7 +450,7 @@ export function RestoreBackupModal({
           </ModalBody>
           <ModalFooter className="border-t border-default-200 dark:border-default-100/15">
             <Button variant="flat" onPress={onClose}>
-              Cerrar
+              {t("common.close")}
             </Button>
           </ModalFooter>
         </ModalContent>
@@ -452,24 +458,25 @@ export function RestoreBackupModal({
 
       <Modal isOpen={!!renamingBackup} onOpenChange={(open) => !open && setRenamingBackup(null)} size="md">
         <ModalContent>
-          <ModalHeader>Renombrar backup</ModalHeader>
+          <ModalHeader>{t("library.restoreBackup.renameModalTitle")}</ModalHeader>
           <ModalBody>
-            <p className="text-sm text-default-500">
-              El nombre debe terminar en <code>.tar</code> (ej. mi-backup.tar).
-            </p>
+            <p
+              className="text-sm text-default-500"
+              dangerouslySetInnerHTML={{ __html: t("library.restoreBackup.renameModalHint") }}
+            />
             <Input
-              label="Nuevo nombre"
+              label={t("library.restoreBackup.newNameLabel")}
               value={renameValue}
               onValueChange={setRenameValue}
-              placeholder="mi-backup.tar"
+              placeholder={t("library.restoreBackup.newNamePlaceholder")}
             />
           </ModalBody>
           <ModalFooter>
             <Button variant="flat" onPress={() => setRenamingBackup(null)} isDisabled={isRenaming}>
-              Cancelar
+              {t("common.cancel")}
             </Button>
             <Button color="primary" onPress={handleRenameSubmit} isLoading={isRenaming} isDisabled={isRenaming}>
-              Guardar
+              {t("common.save")}
             </Button>
           </ModalFooter>
         </ModalContent>

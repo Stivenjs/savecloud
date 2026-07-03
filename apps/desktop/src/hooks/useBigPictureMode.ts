@@ -8,6 +8,7 @@ import {
   type StartupWindowMode,
 } from "@services/tauri/config.service";
 import { toastError, toastSuccess } from "@/utils/toast";
+import i18n from "@lib/i18n";
 import { isBigPictureWindowOpen, openOrFocusBigPictureWindow, switchToNormalMode } from "@/windows/bigPictureWindow";
 
 export function useBigPictureMode() {
@@ -44,13 +45,13 @@ export function useBigPictureMode() {
         await queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
         scheduleConfigBackupToCloud();
         toastSuccess(
-          "Preferencia guardada",
+          i18n.t("settings.bigPicture.toast.preferenceSaved"),
           mode === "big_picture"
-            ? "La próxima vez Savecloud abrirá en la ventana Big Picture."
-            : "La próxima vez Savecloud abrirá en ventana normal."
+            ? i18n.t("settings.bigPicture.toast.nextTimeBigPicture")
+            : i18n.t("settings.bigPicture.toast.nextTimeNormal")
         );
       } catch (e) {
-        toastError("No se pudo guardar", e instanceof Error ? e.message : String(e));
+        toastError(i18n.t("settings.bigPicture.toast.cannotSave"), e instanceof Error ? e.message : String(e));
       } finally {
         setSaving(false);
       }
@@ -65,14 +66,20 @@ export function useBigPictureMode() {
       if (bigPictureActive) {
         await switchToNormalMode();
         setBigPictureActive(false);
-        toastSuccess("Modo normal", "Se cerró Big Picture y volvió la ventana principal.");
+        toastSuccess(
+          i18n.t("settings.bigPicture.toast.normalMode"),
+          i18n.t("settings.bigPicture.toast.normalModeDesc")
+        );
       } else {
         await openOrFocusBigPictureWindow();
         setBigPictureActive(true);
-        toastSuccess("Big Picture", "La ventana principal se ocultó al tray y se abrió Big Picture.");
+        toastSuccess(
+          i18n.t("settings.bigPicture.toast.bigPictureTitle"),
+          i18n.t("settings.bigPicture.toast.bigPictureDesc")
+        );
       }
     } catch (e) {
-      toastError("No se pudo cambiar el modo", e instanceof Error ? e.message : String(e));
+      toastError(i18n.t("settings.bigPicture.toast.cannotChangeMode"), e instanceof Error ? e.message : String(e));
     } finally {
       setToggleBusy(false);
     }

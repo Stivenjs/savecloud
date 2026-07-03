@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { type as getOsType } from "@tauri-apps/plugin-os";
+import { useTranslation } from "react-i18next";
 
 /**
  * Define el estado actual de la ventana y las funciones de control.
@@ -16,6 +17,13 @@ export interface WindowControls {
   maximize: () => void;
   /** Cierra la ventana y termina el proceso si es la única abierta. */
   close: () => void;
+}
+
+interface WindowControlLabels {
+  close: string;
+  minimize: string;
+  maximize: string;
+  restore: string;
 }
 
 /**
@@ -68,13 +76,18 @@ function useTauriWindow(): WindowControls {
 /**
  * Componente que renderiza los controles de ventana estilo macOS.
  */
-const MacControls = ({ close, minimize, maximize }: Pick<WindowControls, "close" | "minimize" | "maximize">) => (
+const MacControls = ({
+  close,
+  minimize,
+  maximize,
+  labels,
+}: Pick<WindowControls, "close" | "minimize" | "maximize"> & { labels: WindowControlLabels }) => (
   <>
     <div className="flex items-center h-full px-4 gap-2">
       <button
         onClick={close}
         className="w-3 h-3 rounded-full bg-[#ff5f57] hover:bg-[#ff5f57]/80 flex items-center justify-center group"
-        aria-label="Cerrar">
+        aria-label={labels.close}>
         <svg className="w-2 h-2 opacity-0 group-hover:opacity-100" viewBox="0 0 10 10" fill="currentColor">
           <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" />
         </svg>
@@ -82,7 +95,7 @@ const MacControls = ({ close, minimize, maximize }: Pick<WindowControls, "close"
       <button
         onClick={minimize}
         className="w-3 h-3 rounded-full bg-[#febc2e] hover:bg-[#febc2e]/80 flex items-center justify-center group"
-        aria-label="Minimizar">
+        aria-label={labels.minimize}>
         <svg className="w-2 h-2 opacity-0 group-hover:opacity-100" viewBox="0 0 10 10" fill="currentColor">
           <rect y="4" width="10" height="2" />
         </svg>
@@ -90,7 +103,7 @@ const MacControls = ({ close, minimize, maximize }: Pick<WindowControls, "close"
       <button
         onClick={maximize}
         className="w-3 h-3 rounded-full bg-[#28c840] hover:bg-[#28c840]/80 flex items-center justify-center group"
-        aria-label="Maximizar">
+        aria-label={labels.maximize}>
         <svg className="w-2 h-2 opacity-0 group-hover:opacity-100" viewBox="0 0 10 10" fill="currentColor">
           <path d="M1 5L5 1L9 5L5 9Z" />
         </svg>
@@ -106,7 +119,13 @@ const MacControls = ({ close, minimize, maximize }: Pick<WindowControls, "close"
 /**
  * Componente que renderiza los controles de ventana estilo Windows.
  */
-const WindowsControls = ({ close, minimize, maximize, isMaximized }: Omit<WindowControls, "platform">) => (
+const WindowsControls = ({
+  close,
+  minimize,
+  maximize,
+  isMaximized,
+  labels,
+}: Omit<WindowControls, "platform"> & { labels: WindowControlLabels }) => (
   <>
     <div data-tauri-drag-region className="flex-1 h-full flex items-center px-4">
       <span className="text-sm font-medium text-foreground/80 pointer-events-none">SaveCloud</span>
@@ -115,7 +134,7 @@ const WindowsControls = ({ close, minimize, maximize, isMaximized }: Omit<Window
       <button
         onClick={minimize}
         className="w-12 h-full flex items-center justify-center hover:bg-white/10 transition-colors"
-        aria-label="Minimizar">
+        aria-label={labels.minimize}>
         <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
           <rect y="5" width="12" height="2" />
         </svg>
@@ -123,7 +142,7 @@ const WindowsControls = ({ close, minimize, maximize, isMaximized }: Omit<Window
       <button
         onClick={maximize}
         className="w-12 h-full flex items-center justify-center hover:bg-white/10 transition-colors"
-        aria-label={isMaximized ? "Restaurar" : "Maximizar"}>
+        aria-label={isMaximized ? labels.restore : labels.maximize}>
         {isMaximized ? (
           <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
             <path d="M1 3v8h8V3H1zm7 7H2V4h6v6z" />
@@ -138,7 +157,7 @@ const WindowsControls = ({ close, minimize, maximize, isMaximized }: Omit<Window
       <button
         onClick={close}
         className="w-12 h-full flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors"
-        aria-label="Cerrar">
+        aria-label={labels.close}>
         <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
           <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.5" />
         </svg>
@@ -152,17 +171,30 @@ const WindowsControls = ({ close, minimize, maximize, isMaximized }: Omit<Window
  * Se adapta automáticamente al sistema operativo anfitrión (macOS o Windows).
  */
 export function TitleBar() {
+  const { t } = useTranslation();
   const { isMaximized, platform, minimize, maximize, close } = useTauriWindow();
   const isMac = platform === "macos";
+  const labels: WindowControlLabels = {
+    close: t("common.close"),
+    minimize: t("common.minimize"),
+    maximize: t("common.maximize"),
+    restore: t("common.restore"),
+  };
 
   return (
     <div
       data-tauri-drag-region
       className="fixed top-0 left-0 right-0 z-50 h-10 bg-transparent flex items-center justify-between select-none">
       {isMac ? (
-        <MacControls close={close} minimize={minimize} maximize={maximize} />
+        <MacControls close={close} minimize={minimize} maximize={maximize} labels={labels} />
       ) : (
-        <WindowsControls close={close} minimize={minimize} maximize={maximize} isMaximized={isMaximized} />
+        <WindowsControls
+          close={close}
+          minimize={minimize}
+          maximize={maximize}
+          isMaximized={isMaximized}
+          labels={labels}
+        />
       )}
     </div>
   );

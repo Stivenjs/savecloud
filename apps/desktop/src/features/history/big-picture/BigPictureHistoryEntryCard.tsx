@@ -1,4 +1,5 @@
 import { Card, CardBody, Chip } from "@heroui/react";
+import { useTranslation } from "react-i18next";
 import type { OperationLogEntry } from "@services/tauri";
 import { formatGameDisplayName } from "@utils/gameImage";
 import {
@@ -13,14 +14,8 @@ interface BigPictureHistoryEntryCardProps {
   entry: OperationLogEntry;
 }
 
-/**
- * Tarjeta de entrada de historial optimizada para Big Picture.
- *
- * Mayor padding, iconos más grandes y texto con tamaño legible
- * desde distancia de sofá. Misma información que la versión desktop
- * pero con espaciado y escala adaptados a pantalla TV.
- */
 export function BigPictureHistoryEntryCard({ entry }: BigPictureHistoryEntryCardProps) {
+  const { t } = useTranslation();
   const Icon = OPERATION_LOG_KIND_ICON[entry.kind];
   const chipColor = OPERATION_LOG_KIND_CHIP_COLOR[entry.kind];
   const hasErrors = entry.errCount > 0;
@@ -44,7 +39,7 @@ export function BigPictureHistoryEntryCard({ entry }: BigPictureHistoryEntryCard
             </Chip>
             {hasErrors ? (
               <Chip size="md" color="warning" variant="flat" className="text-sm font-medium">
-                {entry.errCount} error{entry.errCount === 1 ? "" : "es"}
+                {t("history.entry.errors", { count: entry.errCount })}
               </Chip>
             ) : null}
           </div>
@@ -59,8 +54,8 @@ export function BigPictureHistoryEntryCard({ entry }: BigPictureHistoryEntryCard
             <span className="ml-1.5 font-mono text-default-400">({entry.gameId})</span>
           </span>
           <span>
-            Archivos: {entry.fileCount} ok
-            {entry.errCount > 0 ? ` / ${entry.errCount} con error` : ""}
+            {t("history.entry.filesOk", { count: entry.fileCount })}
+            {entry.errCount > 0 ? t("history.entry.filesWithErrors", { count: entry.errCount }) : ""}
           </span>
         </div>
       </CardBody>

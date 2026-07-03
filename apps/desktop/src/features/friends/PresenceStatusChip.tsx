@@ -1,4 +1,5 @@
 import { Chip, Skeleton } from "@heroui/react";
+import { useTranslation } from "react-i18next";
 
 export type PresenceStatus = "offline" | "online" | "playing";
 
@@ -8,6 +9,8 @@ interface PresenceStatusChipProps {
 }
 
 export function PresenceStatusChip({ status, loading = false }: PresenceStatusChipProps) {
+  const { t } = useTranslation();
+
   if (loading) {
     return <Skeleton className="h-5 w-20 rounded-full" />;
   }
@@ -15,7 +18,7 @@ export function PresenceStatusChip({ status, loading = false }: PresenceStatusCh
   if (status === "playing") {
     return (
       <Chip size="sm" variant="flat" color="success">
-        Jugando
+        {t("friends.presence.playing")}
       </Chip>
     );
   }
@@ -23,7 +26,7 @@ export function PresenceStatusChip({ status, loading = false }: PresenceStatusCh
   if (status === "online") {
     return (
       <Chip size="sm" variant="flat" color="primary">
-        En linea
+        {t("friends.presence.online")}
       </Chip>
     );
   }
@@ -31,14 +34,14 @@ export function PresenceStatusChip({ status, loading = false }: PresenceStatusCh
   if (status === "offline") {
     return (
       <Chip size="sm" variant="flat" color="default">
-        Sin conexion
+        {t("friends.presence.noConnection")}
       </Chip>
     );
   }
 
   return (
     <Chip size="sm" variant="flat" color="default">
-      Desconocido
+      {t("friends.presence.unknown")}
     </Chip>
   );
 }
