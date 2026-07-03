@@ -26,6 +26,7 @@ import { dedupePreserveGamePaths, mergeScanPathsWithConfigured, normPathKey } fr
 import { useNavigable } from "@features/input/useNavigable";
 import { getGamepadFocusClass } from "@features/input/styles";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
+import { CatalogCoverImage } from "@features/steam-catalog/components/CatalogCoverImage";
 
 const MagicRings = lazy(() => import("@components/external/MagicRings"));
 
@@ -91,7 +92,8 @@ function CandidateRow({
   index: number;
 }) {
   const { t } = useTranslation();
-  const hasAppId = !!candidate.steamAppId || !!extractAppIdFromFolderName(candidate.folderName ?? "");
+  const appId = candidate.steamAppId || extractAppIdFromFolderName(candidate.folderName ?? "");
+  const hasAppId = !!appId;
   const displayName = hasAppId && resolvedName ? resolvedName : candidate.folderName;
   const isLoading = hasAppId && resolvedName === undefined;
 
@@ -106,41 +108,58 @@ function CandidateRow({
       className={`flex flex-col gap-3 rounded-lg border border-default-200/70 px-4 py-3 transition-colors hover:border-default-300 hover:bg-default-50 outline-none focus-within:ring-0 focus-within:border-default-200/70 sm:flex-row sm:items-center sm:justify-between ${
         navAdd.isFocused && navAdd.inputMode === "gamepad" ? "border-primary/40 bg-primary/5" : ""
       }`}>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <Gamepad2 size={15} className="shrink-0 text-primary" />
-          <p className="truncate text-sm font-medium text-foreground">
-            {displayName}
-            {isLoading && <Spinner size="sm" className="ml-2 inline-block" color="default" />}
-          </p>
+      <div className="flex flex-1 items-start gap-3.5 min-w-0">
+        <div className="h-11 w-24 shrink-0 overflow-hidden rounded-md bg-default-100 dark:bg-default-50/50 flex items-center justify-center border border-default-200/50">
+          {appId ? (
+            <CatalogCoverImage
+              alt={displayName ?? ""}
+              candidates={[
+                `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
+                `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_184x69.jpg`,
+              ]}
+              className="h-full w-full object-cover"
+              fallbackClassName="flex h-full w-full items-center justify-center text-default-400"
+            />
+          ) : (
+            <Gamepad2 size={18} className="text-default-400" />
+          )}
         </div>
-        <div className="mt-2 flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] font-medium uppercase tracking-wide text-default-400">
-              {t("library.scan.path", { count: displayPaths.length })}
-            </span>
-            {mergedFromConfigured && (
-              <span className="text-[10px] text-primary" title={t("library.scan.includesConfiguredPaths")}>
-                {t("library.scan.localConfigSuffix")}
-              </span>
-            )}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-medium text-foreground">
+              {displayName}
+              {isLoading && <Spinner size="sm" className="ml-2 inline-block" color="default" />}
+            </p>
           </div>
-          <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-md border border-default-100/80 bg-default-50/80 px-2 py-1.5 dark:border-default-100/15 dark:bg-default-50/10">
-            {displayPaths.map((absPath, i) => (
-              <li
-                key={`${normPathKey(absPath)}:${i}`}
-                className="flex items-start gap-1.5 text-[11px] leading-snug text-default-500">
-                <HardDrive size={11} className="mt-0.5 shrink-0 text-default-400" aria-hidden />
-                <span className="min-w-0 break-all" title={absPath}>
-                  {absPath}
+          <div className="mt-1.5 flex flex-col gap-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-default-400">
+                {t("library.scan.path", { count: displayPaths.length })}
+              </span>
+              {mergedFromConfigured && (
+                <span className="text-[10px] text-primary" title={t("library.scan.includesConfiguredPaths")}>
+                  {t("library.scan.localConfigSuffix")}
                 </span>
-              </li>
-            ))}
-          </ul>
+              )}
+            </div>
+            <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-md border border-default-100/80 bg-default-50/80 px-2 py-1.5 dark:border-default-100/15 dark:bg-default-50/10">
+              {displayPaths.map((absPath, i) => (
+                <li
+                  key={`${normPathKey(absPath)}:${i}`}
+                  className="flex items-start gap-1.5 text-[11px] leading-snug text-default-500">
+                  <HardDrive size={11} className="mt-0.5 shrink-0 text-default-400" aria-hidden />
+                  <span className="min-w-0 break-all" title={absPath}>
+                    {absPath}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-1.5 justify-end">
         <Button
           size="sm"
           color="primary"

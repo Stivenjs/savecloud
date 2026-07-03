@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, ScrollShadow, cn } from "@heroui/react";
 import { HardDrive, AlertCircle, FolderOpen, Globe, Share2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -52,9 +52,15 @@ export function InstallModal({
   consoleMode = false,
 }: InstallModalProps) {
   const { t } = useTranslation();
-  const { disks } = useDisks();
+  const { disks, refreshDisks } = useDisks();
   const [selectedDisk, setSelectedDisk] = useState<string | null>(null);
   const [customPath, setCustomPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      void refreshDisks();
+    }
+  }, [isOpen, refreshDisks]);
 
   const sanitizeFolderName = (name: string) => {
     return name.replace(/[:*?"<>|/\\]/g, "").trim();
