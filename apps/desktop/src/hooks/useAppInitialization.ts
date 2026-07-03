@@ -44,7 +44,6 @@ import { useProfileSessionStore } from "@store/ProfileSessionStore";
 export function useAppInitialization() {
   const developerMode = useProfileSessionStore((s) => s.activeProfile?.developerMode ?? false);
   useLanguageInitialization();
-
   useInputManager();
   initSyncListeners();
   initSourcesListeners();
