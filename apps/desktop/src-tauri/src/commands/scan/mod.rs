@@ -829,7 +829,7 @@ pub fn scan_path_candidates_sync(
                         path: display_path,
                         folder_name: entry.name.clone(),
                         base_path: "Base de Datos Oficial".to_string(),
-                        steam_app_id: None,
+                        steam_app_id: entry.steam_app_id.clone(),
                         paths: paths_opt,
                     })
                 } else {

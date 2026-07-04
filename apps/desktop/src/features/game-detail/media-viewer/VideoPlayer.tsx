@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useMemo } from "react";
 import { initHls, isHlsUrl } from "@utils/hls";
 import type { HlsType } from "@utils/hls";
+import { useAppVisibility } from "@hooks/useAppVisibility";
 
 export interface VideoPlayerProps {
   /** URL del vídeo (HLS .m3u8 o directa). */
@@ -42,6 +43,8 @@ export function VideoPlayer({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<HlsType | null>(null);
   const isInitializedRef = useRef(false);
+  const { isVisible } = useAppVisibility();
+  const wasPlayingRef = useRef(autoPlay);
 
   const useHls = useMemo(() => videoUrl != null && isHlsUrl(videoUrl), [videoUrl]);
 
@@ -52,6 +55,22 @@ export function VideoPlayer({
       isInitializedRef.current = false;
     };
   }, [videoUrl]);
+
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    if (!videoEl || !isInitializedRef.current) return;
+
+    if (!isVisible) {
+      wasPlayingRef.current = !videoEl.paused;
+      if (wasPlayingRef.current) {
+        videoEl.pause();
+      }
+    } else {
+      if (wasPlayingRef.current) {
+        videoEl.play().catch(() => {});
+      }
+    }
+  }, [isVisible]);
 
   useEffect(() => {
     if (!videoUrl || !useHls || isInitializedRef.current) {
@@ -76,7 +95,7 @@ export function VideoPlayer({
           onManifestParsed: () => {
             if (isMounted) {
               onReady?.();
-              if (autoPlay && videoEl.paused) {
+              if (autoPlay && videoEl.paused && isVisible) {
                 videoEl.play().catch(() => {});
               }
             }
@@ -112,29 +131,29 @@ export function VideoPlayer({
     return () => {
       isMounted = false;
     };
-  }, [videoUrl, useHls]);
+  }, [videoUrl, useHls, isVisible]);
 
   useEffect(() => {
     if (!useHls && videoRef.current && videoUrl && !isInitializedRef.current) {
       isInitializedRef.current = true;
       videoRef.current.src = videoUrl;
       onReady?.();
-      if (autoPlay && videoRef.current.paused) {
+      if (autoPlay && videoRef.current.paused && isVisible) {
         videoRef.current.play().catch(() => {});
       }
     }
-  }, [videoUrl, useHls]);
+  }, [videoUrl, useHls, isVisible]);
 
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl || !isInitializedRef.current) return;
 
-    if (autoPlay && videoEl.paused) {
+    if (autoPlay && videoEl.paused && isVisible) {
       videoEl.play().catch(() => {});
     } else if (!autoPlay && !videoEl.paused) {
       videoEl.pause();
     }
-  }, [autoPlay]);
+  }, [autoPlay, isVisible]);
 
   const handlePlay = useCallback(() => {
     onPlayStateChange?.(true);

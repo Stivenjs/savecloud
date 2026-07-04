@@ -224,11 +224,13 @@ pub fn resolve_steam_app_id_from_map(
     #[cfg(target_os = "windows")]
     {
         let normalized = normalize_path(game_path);
+        let normalized_str = normalized.to_string_lossy().to_lowercase();
 
         let mut best: Option<(&PathBuf, &String)> = None;
 
         for (steam_game_path, appid) in path_to_appid {
-            if normalized.starts_with(steam_game_path) {
+            let steam_game_str = steam_game_path.to_string_lossy().to_lowercase();
+            if normalized_str.starts_with(&steam_game_str) {
                 let current_components = steam_game_path.components().count();
                 let best_components = best
                     .as_ref()

@@ -1,9 +1,27 @@
-import { memo, type ReactNode, useMemo } from "react";
+import { memo, type ReactNode, useMemo, useRef, useEffect } from "react";
 import { User } from "lucide-react";
 import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { formatPlaytime } from "@utils/format";
 import { isProfileVideoSource, resolveProfileAsset } from "@utils/profileMedia";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
+import { useAppVisibility } from "@hooks/useAppVisibility";
+
+function ProfileVideo({ src, className, ...props }: React.VideoHTMLAttributes<HTMLVideoElement>) {
+  const ref = useRef<HTMLVideoElement | null>(null);
+  const { isVisible } = useAppVisibility();
+
+  useEffect(() => {
+    const video = ref.current;
+    if (!video) return;
+    if (!isVisible) {
+      video.pause();
+    } else {
+      video.play().catch(() => {});
+    }
+  }, [isVisible]);
+
+  return <video ref={ref} src={src} className={className} {...props} />;
+}
 
 export const ProfileHeroBackground = memo(function ProfileHeroBackground({
   rawUrl,
@@ -25,7 +43,7 @@ export const ProfileHeroBackground = memo(function ProfileHeroBackground({
     return (
       <>
         {imageMode === "contain" && (
-          <video
+          <ProfileVideo
             src={resolved}
             className="absolute inset-0 size-full object-cover opacity-40 blur-2xl scale-110"
             autoPlay
@@ -35,7 +53,7 @@ export const ProfileHeroBackground = memo(function ProfileHeroBackground({
             preload="none"
           />
         )}
-        <video
+        <ProfileVideo
           src={resolved}
           className={`absolute inset-0 size-full object-${imageMode} drop-shadow-2xl`}
           autoPlay

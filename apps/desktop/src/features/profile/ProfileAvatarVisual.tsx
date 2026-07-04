@@ -1,6 +1,8 @@
+import { useRef, useEffect } from "react";
 import Avatar from "react-nice-avatar";
 import { parseLegacyNiceAvatarHtml, parseNiceAvatarConfig } from "@features/profile/niceAvatar";
 import { resolveProfileAsset, isProfileVideoSource } from "@utils/profileMedia";
+import { useAppVisibility } from "@hooks/useAppVisibility";
 
 interface ProfileAvatarVisualProps {
   rawAvatar: string | null | undefined;
@@ -13,6 +15,20 @@ export function ProfileAvatarVisual({
   alt,
   className = "size-full object-cover",
 }: ProfileAvatarVisualProps) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const { isVisible } = useAppVisibility();
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (!isVisible) {
+      video.pause();
+    } else {
+      video.play().catch(() => {});
+    }
+  }, [isVisible]);
+
   const niceAvatarConfig = parseNiceAvatarConfig(rawAvatar);
   if (niceAvatarConfig) {
     return <Avatar className={className} shape="square" {...niceAvatarConfig} />;
@@ -30,6 +46,7 @@ export function ProfileAvatarVisual({
   if (isProfileVideoSource(rawAvatar)) {
     return (
       <video
+        ref={videoRef}
         src={asset}
         className={className + " object-cover object-center"}
         autoPlay
