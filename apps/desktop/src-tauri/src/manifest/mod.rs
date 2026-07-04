@@ -25,6 +25,7 @@ pub struct GameManifestEntry {
     pub name: String,
     pub save_paths: Vec<PathTemplate>,
     pub registry_path: Option<String>,
+    pub steam_app_id: Option<String>,
     #[allow(dead_code)]
     pub install_dirs: Vec<String>,
 }
@@ -249,10 +250,13 @@ fn parse_manifest_yaml(content: &str) -> Result<ManifestIndex, String> {
             .registry
             .and_then(|reg| reg.keys().next().cloned());
 
+        let steam_app_id = steam_ids.first().cloned();
+
         let entry = GameManifestEntry {
             name: game_name.clone(),
             save_paths,
             registry_path,
+            steam_app_id,
             install_dirs,
         };
 

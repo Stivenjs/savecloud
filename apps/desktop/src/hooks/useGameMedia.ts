@@ -83,10 +83,10 @@ export function buildGameMediaCoverCandidates(
   for (const url of mediaUrls) {
     if (url?.trim()) urls.push(url.trim());
   }
-  const libraryHero = getGameLibraryHeroUrl(game, resolvedSteamAppId);
   const legacyHeader = getGameImageUrl(game, resolvedSteamAppId);
-  if (libraryHero) urls.push(libraryHero);
+  const libraryHero = getGameLibraryHeroUrl(game, resolvedSteamAppId);
   if (legacyHeader) urls.push(legacyHeader);
+  if (libraryHero) urls.push(libraryHero);
   return [...new Set(urls)];
 }
 

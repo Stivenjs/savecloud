@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FolderOpen } from "lucide-react";
+import { Gamepad2 } from "lucide-react";
 
 export interface CatalogCoverImageProps {
   alt: string;
@@ -39,7 +39,7 @@ export function CatalogCoverImage({
   if (!activeUrl) {
     return (
       <div className={fallbackClassName} aria-hidden>
-        <FolderOpen size={32} />
+        <Gamepad2 size={20} strokeWidth={1.5} />
       </div>
     );
   }

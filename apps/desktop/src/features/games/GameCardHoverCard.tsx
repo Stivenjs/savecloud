@@ -12,6 +12,7 @@ import type { GameStats } from "@services/tauri";
 import { GameVideoModal } from "@features/games/GameVideoModal";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { formatGameDisplayName } from "@utils/gameImage";
+import { useAppVisibility } from "@hooks/useAppVisibility";
 
 import "swiper/css";
 import "swiper/css/effect-fade";
@@ -82,6 +83,8 @@ export function GameCardHoverCard({
   const isHoveringRef = useRef(false);
 
   const hlsRef = useRef<HlsType | null>(null);
+  const { isVisible } = useAppVisibility();
+  const wasPlayingRef = useRef(false);
 
   const hasVideo = Boolean(videoUrl?.trim());
   const useHls = hasVideo && videoUrl != null && isHlsUrl(videoUrl);
@@ -99,7 +102,24 @@ export function GameCardHoverCard({
   const stopVideo = useCallback(() => {
     videoRef.current?.pause();
     destroyHls();
+    wasPlayingRef.current = false;
   }, [destroyHls]);
+
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    if (!videoEl || !showHovercard || !isVideoMode) return;
+
+    if (!isVisible) {
+      wasPlayingRef.current = !videoEl.paused;
+      if (wasPlayingRef.current) {
+        videoEl.pause();
+      }
+    } else {
+      if (wasPlayingRef.current) {
+        videoEl.play().catch(() => {});
+      }
+    }
+  }, [isVisible, showHovercard, isVideoMode]);
 
   useEffect(() => {
     if (!showHovercard) {
