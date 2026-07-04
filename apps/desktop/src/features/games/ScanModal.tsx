@@ -15,7 +15,7 @@ import {
 } from "@heroui/react";
 import { FolderOpen, Plus, Search, HardDrive, Gamepad2, MoreVertical, EyeOff, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { scanPathCandidates } from "@services/tauri";
+import { scanPathCandidates, searchSteamAppIdsBatch } from "@services/tauri";
 import type { PathCandidate } from "@services/tauri";
 import type { ConfiguredGame } from "@app-types/config";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
@@ -27,6 +27,7 @@ import { useNavigable } from "@features/input/useNavigable";
 import { getGamepadFocusClass } from "@features/input/styles";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { CatalogCoverImage } from "@features/steam-catalog/components/CatalogCoverImage";
+import { useGameMedia, useGameMediaBatch } from "@hooks/useGameMedia";
 
 const MagicRings = lazy(() => import("@components/external/MagicRings"));
 
@@ -73,6 +74,8 @@ function CandidateMenu({ onDismiss }: { onDismiss: () => void }) {
   );
 }
 
+import type { SteamAppdetailsMediaResult } from "@services/tauri";
+
 function CandidateRow({
   candidate,
   resolvedName,
@@ -81,6 +84,8 @@ function CandidateRow({
   onAdd,
   onDismiss,
   index,
+  mediaBySteamAppId,
+  resolvedAppIdsMap,
 }: {
   candidate: PathCandidate;
   resolvedName: string | null | undefined;
@@ -90,12 +95,40 @@ function CandidateRow({
   onAdd: () => void;
   onDismiss: () => void;
   index: number;
+  mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null;
+  resolvedAppIdsMap?: Record<string, string> | null;
 }) {
   const { t } = useTranslation();
-  const appId = candidate.steamAppId || extractAppIdFromFolderName(candidate.folderName ?? "");
+  const appId =
+    candidate.steamAppId ||
+    (candidate.folderName && resolvedAppIdsMap?.[candidate.folderName]) ||
+    extractAppIdFromFolderName(candidate.folderName ?? "");
   const hasAppId = !!appId;
   const displayName = hasAppId && resolvedName ? resolvedName : candidate.folderName;
   const isLoading = hasAppId && resolvedName === undefined;
+
+  const game = useMemo<ConfiguredGame>(() => {
+    return {
+      id: candidate.path,
+      name: displayName ?? candidate.folderName,
+      steamAppId: appId || undefined,
+      imageUrl: undefined,
+      savePaths: [],
+      paths: [],
+      backupSavesCount: 0,
+      tags: [],
+      notes: "",
+      syncEnabled: false,
+      updatedAt: "",
+    };
+  }, [candidate.path, candidate.folderName, displayName, appId]);
+
+  const { coverCandidates } = useGameMedia({
+    game,
+    resolvedSteamAppId: appId,
+    mediaBySteamAppId,
+    mediaFromBatch: true,
+  });
 
   const navAdd = useNavigable({
     id: `scan-row-add-${index}`,
@@ -113,10 +146,7 @@ function CandidateRow({
           {appId ? (
             <CatalogCoverImage
               alt={displayName ?? ""}
-              candidates={[
-                `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`,
-                `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_184x69.jpg`,
-              ]}
+              candidates={coverCandidates}
               className="h-full w-full object-cover"
               fallbackClassName="flex h-full w-full items-center justify-center text-default-400"
             />
@@ -127,10 +157,10 @@ function CandidateRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-medium text-foreground">
+            <div className="truncate text-sm font-medium text-foreground">
               {displayName}
               {isLoading && <Spinner size="sm" className="ml-2 inline-block" color="default" />}
-            </p>
+            </div>
           </div>
           <div className="mt-1.5 flex flex-col gap-1">
             <div className="flex items-center justify-between gap-2">
@@ -192,6 +222,63 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames 
 
   const { dismissed, dismiss, clearAll } = useDismissedCandidates();
   const resolvedNames = useResolvedCandidateNames(candidates);
+
+  const queriesToResolve = useMemo(() => {
+    if (!candidates) return [];
+    const queries = candidates
+      .filter((c) => !c.steamAppId)
+      .map((c) => c.folderName)
+      .filter(Boolean) as string[];
+    return [...new Set(queries)];
+  }, [candidates]);
+
+  const { data: resolvedAppIdsMap = null } = useQuery({
+    queryKey: ["scan-resolved-appids-batch", queriesToResolve.join(",")],
+    queryFn: async () => {
+      if (queriesToResolve.length === 0) return {};
+      const results = await searchSteamAppIdsBatch(queriesToResolve);
+      const map: Record<string, string> = {};
+      queriesToResolve.forEach((q, index) => {
+        const id = results[index];
+        if (id) {
+          map[q] = id;
+        }
+      });
+      return map;
+    },
+    enabled: isOpen && queriesToResolve.length > 0,
+    staleTime: 1000 * 60 * 60,
+  });
+
+  const mockGames = useMemo<ConfiguredGame[]>(() => {
+    if (!candidates) return [];
+    return candidates.map((c) => {
+      const appId =
+        c.steamAppId ||
+        (c.folderName && resolvedAppIdsMap?.[c.folderName]) ||
+        extractAppIdFromFolderName(c.folderName ?? "");
+      return {
+        id: c.path,
+        name: c.folderName,
+        steamAppId: appId || undefined,
+        imageUrl: undefined,
+        savePaths: [],
+        paths: [],
+        backupSavesCount: 0,
+        tags: [],
+        notes: "",
+        syncEnabled: false,
+        updatedAt: "",
+      };
+    });
+  }, [candidates, resolvedAppIdsMap]);
+
+  const { mediaBySteamAppId } = useGameMediaBatch({
+    games: mockGames,
+    resolvedSteamAppIds: {},
+    isResolvingIds: false,
+  });
+
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebouncedValue(searchQuery.trim().toLowerCase(), 300);
 
@@ -215,13 +302,16 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames 
     if (!debouncedSearch) return visibleCandidates;
     return visibleCandidates.filter((c: PathCandidate) => {
       const resolvedName = resolvedNames[c.path];
-      const hasAppId = !!c.steamAppId || !!extractAppIdFromFolderName(c.folderName ?? "");
+      const hasAppId =
+        !!c.steamAppId ||
+        !!(c.folderName && resolvedAppIdsMap?.[c.folderName]) ||
+        !!extractAppIdFromFolderName(c.folderName ?? "");
       const displayName = hasAppId && resolvedName ? resolvedName : (c.folderName ?? "");
       const merged = displayPathsMetaByCandidatePath.get(c.path)?.paths ?? [c.path];
       const searchIn = [displayName, c.folderName ?? "", c.path, c.basePath ?? "", ...merged].join(" ");
       return searchIn.toLowerCase().includes(debouncedSearch);
     });
-  }, [visibleCandidates, debouncedSearch, resolvedNames, displayPathsMetaByCandidatePath]);
+  }, [visibleCandidates, debouncedSearch, resolvedNames, displayPathsMetaByCandidatePath, resolvedAppIdsMap]);
 
   const dismissedCount = useMemo(
     () => (candidates ?? []).filter((c: PathCandidate) => dismissed.has(c.path)).length,
@@ -372,6 +462,7 @@ export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames 
                         onAdd={() => handleAdd(c)}
                         onDismiss={() => dismiss(c.path)}
                         index={idx}
+                        mediaBySteamAppId={mediaBySteamAppId}
                       />
                     );
                   })

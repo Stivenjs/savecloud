@@ -7,6 +7,7 @@ import { initHls, isHlsUrl } from "@utils/hls";
 import type { HlsType } from "@utils/hls";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
+import { useAppVisibility } from "@hooks/useAppVisibility";
 import {
   getGalleryForCatalogItem,
   getImageForCatalogItem,
@@ -17,6 +18,7 @@ function HeroVideoPlayer({ videoUrl, className = "" }: { videoUrl: string; class
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<HlsType | null>(null);
   const useHls = isHlsUrl(videoUrl);
+  const { isVisible } = useAppVisibility();
 
   useEffect(() => {
     const videoEl = videoRef.current;
@@ -35,7 +37,7 @@ function HeroVideoPlayer({ videoUrl, className = "" }: { videoUrl: string; class
               maxMaxBufferLength: 20,
             },
             onManifestParsed: () => {
-              if (isMounted) {
+              if (isMounted && isVisible) {
                 videoEl.play().catch(() => {});
               }
             },
@@ -55,14 +57,18 @@ function HeroVideoPlayer({ videoUrl, className = "" }: { videoUrl: string; class
             hlsRef.current = hlsInstance;
           } else if (videoEl.canPlayType("application/vnd.apple.mpegurl")) {
             videoEl.src = videoUrl;
-            videoEl.play().catch(() => {});
+            if (isVisible) {
+              videoEl.play().catch(() => {});
+            }
           }
         } catch {
           // ignore
         }
       } else {
         videoEl.src = videoUrl;
-        videoEl.play().catch(() => {});
+        if (isVisible) {
+          videoEl.play().catch(() => {});
+        }
       }
     };
 
@@ -75,7 +81,20 @@ function HeroVideoPlayer({ videoUrl, className = "" }: { videoUrl: string; class
         hlsRef.current = null;
       }
     };
-  }, [videoUrl, useHls]);
+  }, [videoUrl, useHls, isVisible]);
+
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+
+    if (!isVisible) {
+      videoEl.pause();
+    } else {
+      if (videoEl.src || useHls) {
+        videoEl.play().catch(() => {});
+      }
+    }
+  }, [isVisible, useHls]);
 
   return <video ref={videoRef} className={className} muted loop playsInline preload="auto" />;
 }

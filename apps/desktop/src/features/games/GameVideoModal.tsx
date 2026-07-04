@@ -3,17 +3,20 @@ import { initHls, isHlsUrl } from "@utils/hls";
 import type { HlsType } from "@utils/hls";
 import { Button, Modal, ModalContent } from "@heroui/react";
 import { X } from "lucide-react";
+import { useAppVisibility } from "@hooks/useAppVisibility";
 
 export interface GameVideoModalProps {
-  isOpen: boolean;
-  onClose: () => void;
   /** URL del vídeo (HLS .m3u8 o directa). */
   videoUrl: string;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 export function GameVideoModal({ isOpen, onClose, videoUrl }: GameVideoModalProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<HlsType | null>(null);
+  const { isVisible } = useAppVisibility();
+  const wasPlayingRef = useRef(false);
 
   const useHls = isOpen && videoUrl != null && isHlsUrl(videoUrl);
 
@@ -22,9 +25,26 @@ export function GameVideoModal({ isOpen, onClose, videoUrl }: GameVideoModalProp
       hlsRef.current?.destroy();
       hlsRef.current = null;
       videoRef.current?.pause();
+      wasPlayingRef.current = false;
       return;
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    if (!videoEl || !isOpen) return;
+
+    if (!isVisible) {
+      wasPlayingRef.current = !videoEl.paused;
+      if (wasPlayingRef.current) {
+        videoEl.pause();
+      }
+    } else {
+      if (wasPlayingRef.current) {
+        videoEl.play().catch(() => {});
+      }
+    }
+  }, [isVisible, isOpen]);
 
   useEffect(() => {
     if (!isOpen || !videoUrl || !useHls) return;
