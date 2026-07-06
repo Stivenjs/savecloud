@@ -1718,6 +1718,7 @@
     "title": "Notifications",
     "dismiss": "Dismiss notification",
     "openFolder": "Open folder",
+    "openUrl": "Open Link",
     "markRead": "Mark as read",
     "markAllRead": "Mark all read",
     "clearAll": "Clear",

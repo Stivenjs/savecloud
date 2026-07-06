@@ -89,13 +89,22 @@ def _smart_referer(url: str) -> str:
     return "https://www.google.com/"
 
 def ensure_fetchers_installed():
+    global StealthyFetcher
     try:
-        from scrapling.fetchers import StealthyFetcher  # noqa: F401
+        from scrapling.fetchers import StealthyFetcher as SF
+        StealthyFetcher = SF
         return True
     except ModuleNotFoundError as exc:
         missing = str(exc)
         if "curl_cffi" not in missing and "scrapling.fetchers" not in missing:
             raise
+
+    if getattr(sys, 'frozen', False):
+        raise RuntimeError(
+            "Scrapling fetchers are not bundled in the compiled executable. "
+            "Please ensure 'scrapling[fetchers]' is included in your PyInstaller build configuration."
+        )
+
     cmd = [sys.executable, "-m", "pip", "install", "--user", "scrapling[fetchers]"]
     result = subprocess.run(cmd, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
     if result.returncode != 0:
@@ -103,6 +112,9 @@ def ensure_fetchers_installed():
             "No se pudieron instalar los extras de Scrapling.\n"
             f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
         )
+    
+    from scrapling.fetchers import StealthyFetcher as SF
+    StealthyFetcher = SF
     return True
 
 
@@ -111,8 +123,11 @@ def ensure_browsers_installed():
         from scrapling.cli import install
         install([], standalone_mode=False)
         return
-    except Exception:
-        pass
+    except Exception as exc:
+        if getattr(sys, 'frozen', False):
+            raise RuntimeError(
+                f"No se pudieron instalar los navegadores de Scrapling programáticamente dentro de la aplicación empaquetada: {exc}"
+            )
     last_error = None
     for cmd in [
         [sys.executable, "-m", "scrapling.cli", "install"],
@@ -128,8 +143,7 @@ def ensure_browsers_installed():
     raise RuntimeError(last_error or "No se pudieron instalar los navegadores de Scrapling.")
 
 
-ensure_fetchers_installed()
-from scrapling.fetchers import StealthyFetcher  # noqa: E402
+StealthyFetcher = None
 
 JS_STREAM_FETCH = """async (targetUrl) => {
     try {
@@ -379,6 +393,33 @@ def _setup_generic_route(page, target_url: str):
         pass
 
 
+def is_ignored_download_url(url: str) -> bool:
+    try:
+        lower_path = urlparse(url).path.lower()
+        ignored_extensions = {
+            ".webmanifest", ".js", ".css", ".png", ".jpg", ".jpeg",
+            ".gif", ".webp", ".svg", ".ico", ".woff", ".woff2",
+            ".ttf", ".otf", ".html", ".htm", ".txt", ".json", ".map"
+        }
+        return any(lower_path.endswith(ext) for ext in ignored_extensions)
+    except Exception:
+        return False
+
+
+def is_ad_domain(url: str) -> bool:
+    try:
+        ad_keywords = [
+            "opera.com", "adcash", "popunder", "clickunder", "acscdn",
+            "adsterra", "doubleclick", "adsystem", "onclick", "traffic",
+            "adnxs", "adform", "optimizely", "outbrain", "taboola",
+            "revcontent", "mgid", "criteo"
+        ]
+        url_lower = url.lower()
+        return any(kw in url_lower for kw in ad_keywords)
+    except Exception:
+        return False
+
+
 def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> str | None:
     captured_responses = []
     fetched_holder = {"text": None}
@@ -394,7 +435,7 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
                 content_disposition = headers.get("content-disposition", "")
                 content_type = headers.get("content-type", "")
                 
-                if "attachment" in content_disposition or "octet-stream" in content_type:
+                if ("attachment" in content_disposition or "octet-stream" in content_type) and not is_ignored_download_url(response_url) and not is_ad_domain(response_url):
                     captured_download["url"] = response_url
                     return
                 
@@ -416,8 +457,10 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
 
         def on_download(download):
             try:
-                captured_download["url"] = download.url
-                download.cancel()
+                dl_url = download.url
+                if not is_ad_domain(dl_url):
+                    captured_download["url"] = dl_url
+                    download.cancel()
             except Exception:
                 pass
 
@@ -426,6 +469,12 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
                 popup.on("download", on_download)
             except Exception:
                 pass
+
+        try:
+            page.on("console", lambda msg: sys.stderr.write(f"CONSOLE: {msg.text}\n"))
+            page.on("pageerror", lambda err: sys.stderr.write(f"PAGE ERROR: {err.message}\n"))
+        except Exception:
+            pass
 
         _setup_generic_route(page, url)
 
@@ -451,15 +500,15 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
             pass
 
         try:
-            target_selectors = ["a#download-link", "#download-btn", ".download-button", "a.download-btn"]
-            for sel in target_selectors:
-                if page.locator(sel).count() > 0:
-                    sys.stderr.write(f"Waiting for selector '{sel}' to become visible...\n")
-                    page.wait_for_selector(sel, state="visible", timeout=25000)
-                    sys.stderr.write(f"Selector '{sel}' is now visible!\n")
-                    break
+            combined_selector = (
+                "a#download-link, #download-button, #download-btn, .download-button, "
+                "a.download-btn, button#download-button, a[hx-get*='download'], [hx-get*='download']"
+            )
+            sys.stderr.write("Waiting for any download button/link to become visible...\n")
+            page.wait_for_selector(combined_selector, state="visible", timeout=15000)
+            sys.stderr.write("Download element is now visible!\n")
         except Exception as e:
-            sys.stderr.write(f"Wait for download button visibility failed: {e}\n")
+            sys.stderr.write(f"Wait for download element visibility failed: {e}\n")
 
         try:
             for sel in ["a#download-link", "a[href*='/download/']", "a[href*='?download']", "a.download-btn"]:
@@ -486,18 +535,26 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
                 return
             
             selectors = [
-                "a[href*='/download/']",
-                "a[href*='?download']",
+                "#download-button",
+                "#download-btn",
+                "a#download-link",
+                "button#download-button",
+                ".download-button",
                 "a.download-btn",
                 "button.download-btn",
+                "a[hx-get*='download']",
+                "a[hx-post*='download']",
+                "[hx-get*='download']",
+                "[hx-post*='download']",
                 "a:has-text('Download')",
                 "a:has-text('Descargar')",
                 "button:has-text('Download')",
                 "button:has-text('Descargar')",
-                "#download-btn",
-                ".download-button",
-                "#download-link",
-                "a#download-link"
+                "a[href*='/download/']",
+                "a[href*='?download']",
+                "a[href*='download']",
+                "a[href*='/dl/']",
+                "a[href*='dl']"
             ]
             for selector in selectors:
                 try:
@@ -506,13 +563,27 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
                     for i in range(count):
                         el = elements.nth(i)
                         if el.is_visible():
-                            el.click(timeout=3000)
-                            page.wait_for_timeout(2000)
-                            solve_embedded_turnstile(page)
+                            try:
+                                sys.stderr.write(f"Clicking element: {selector}\n")
+                                el.click(timeout=3000, force=True)
+                                page.wait_for_timeout(1000)
+                                solve_embedded_turnstile(page)
+                            except Exception as click_err:
+                                sys.stderr.write(f"First click failed on {selector}: {click_err}\n")
+                            
+                            if not captured_download["url"]:
+                                sys.stderr.write(f"Download not captured, retrying click on: {selector}\n")
+                                try:
+                                    el.click(timeout=3000, force=True)
+                                    page.wait_for_timeout(2000)
+                                    solve_embedded_turnstile(page)
+                                except Exception as click_err:
+                                    sys.stderr.write(f"Retry click failed on {selector}: {click_err}\n")
+                                    
                             if captured_download["url"]:
                                 return
-                except Exception:
-                    pass
+                except Exception as loop_err:
+                    sys.stderr.write(f"Error in selector loop for {selector}: {loop_err}\n")
         except Exception:
             pass
 
@@ -616,7 +687,12 @@ def write_stdout(text: str):
 
 
 def main() -> int:
+    import multiprocessing
+    multiprocessing.freeze_support()
+
     _start_watchdog(PROCESS_TIMEOUT_SECONDS)
+
+    ensure_fetchers_installed()
 
     if len(sys.argv) < 2:
         print(json.dumps({"error": "missing url"}), file=sys.stderr)

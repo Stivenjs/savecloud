@@ -1,6 +1,7 @@
 //! Buzzheavier / dominios relacionados
 
-use crate::network::{get, head_no_redirect, ProfilePreset};
+use crate::network::{get, ProfilePreset};
+use tauri::AppHandle;
 
 use super::error::{ensure_resolve, HosterError};
 
@@ -11,7 +12,12 @@ pub fn is_supported_domain(url: &str) -> bool {
     DOMAINS.iter().any(|d| lower.contains(d))
 }
 
-pub async fn resolve(client: &reqwest::Client, url: &str) -> Result<(String, String), HosterError> {
+pub async fn resolve(
+    app: Option<&AppHandle>,
+    client: &reqwest::Client,
+    url: &str,
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) -> Result<(String, String), HosterError> {
     if !is_supported_domain(url) {
         return Err(HosterError::ResolutionFailed(
             "buzzheavier: dominio no soportado".into(),
@@ -20,12 +26,22 @@ pub async fn resolve(client: &reqwest::Client, url: &str) -> Result<(String, Str
 
     let base_url = url.split('#').next().unwrap_or(url).to_string();
 
+    if let Some(app) = app {
+        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &base_url, cancel_flag) {
+            let trimmed = scraped.trim();
+            if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                return Ok((trimmed.to_string(), base_url));
+            }
+        }
+    }
+
     let response = get(client, &base_url, ProfilePreset::BuzzheavierPage).await?;
     ensure_resolve(response)?;
 
     let download_url = format!("{}/download", base_url.trim_end_matches('/'));
 
-    let head_response = head_no_redirect(
+    let head_response = get(
+        client,
         &download_url,
         ProfilePreset::BuzzheavierHead {
             page_url: base_url.clone(),

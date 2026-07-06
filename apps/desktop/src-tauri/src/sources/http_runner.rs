@@ -9,7 +9,7 @@ use futures_util::StreamExt;
 use reqwest::header::HeaderMap;
 use tokio::io::AsyncWriteExt;
 
-use crate::network::{ensure_download_success, get_with_profile, get_hoster_download_client};
+use crate::network::{ensure_download_success, get_hoster_download_client, get_with_profile};
 use crate::utils::transfer_metrics::TransferSpeedTracker;
 use tauri::AppHandle;
 
@@ -65,9 +65,14 @@ pub async fn run_http_download(
     emit_progress(0, 0, false)?;
 
     let client = get_hoster_download_client();
-    let resolved = hosters::resolve_download_url_with_client(Some(app), &client, uri)
-        .await
-        .map_err(|e: HosterError| e.to_user_string_for_uri(uri))?;
+    let resolved = hosters::resolve_download_url_with_client(
+        Some(app),
+        &client,
+        uri,
+        Some(cancel_flag.clone()),
+    )
+    .await
+    .map_err(|e: HosterError| e.to_user_string_for_uri(uri))?;
     let effective_uri = resolved.url.as_ref();
 
     let response = get_with_profile(&client, effective_uri, &resolved.download_profile)

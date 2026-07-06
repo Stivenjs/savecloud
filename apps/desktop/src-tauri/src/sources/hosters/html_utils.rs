@@ -167,6 +167,18 @@ pub fn extract_download_link(
                 score += 15;
             }
 
+            let lowered_text = text.to_ascii_lowercase();
+            let lowered_raw = raw.to_ascii_lowercase();
+            let has_any_download_indicator = has_path_hint(&candidate)
+                || text_markers.iter().any(|marker| lowered_text.contains(marker))
+                || lowered_raw.contains("download")
+                || lowered_raw.contains("dl")
+                || value.attr("download").is_some();
+
+            if !has_any_download_indicator {
+                continue;
+            }
+
             if score <= 0 {
                 continue;
             }

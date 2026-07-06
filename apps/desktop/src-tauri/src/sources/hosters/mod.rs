@@ -51,9 +51,10 @@ fn normalized_host(url: &reqwest::Url) -> String {
 pub async fn resolve_download_url<'a>(
     app: Option<&AppHandle>,
     uri: &'a str,
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 ) -> Result<ResolvedDownload<'a>, HosterError> {
     let client = get_hoster_download_client();
-    resolve_download_url_with_client(app, &client, uri).await
+    resolve_download_url_with_client(app, &client, uri, cancel_flag).await
 }
 
 /// Igual que [`resolve_download_url`] pero con un cliente explícito (misma sesión resolve + download).
@@ -61,8 +62,9 @@ pub async fn resolve_download_url_with_client<'a>(
     app: Option<&AppHandle>,
     client: &Client,
     uri: &'a str,
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 ) -> Result<ResolvedDownload<'a>, HosterError> {
-    match resolve_hoster_url_internal(app, client, uri).await {
+    match resolve_hoster_url_internal(app, client, uri, cancel_flag.clone()).await {
         Ok(res) => Ok(res),
         Err(e) => {
             if let Some(app) = app {
@@ -71,7 +73,7 @@ pub async fn resolve_download_url_with_client<'a>(
                     e,
                     uri
                 );
-                match crate::sources::commands::fetch::run_scrapling_fetch(app, uri) {
+                match crate::sources::commands::fetch::run_scrapling_fetch(app, uri, cancel_flag) {
                     Ok(stdout) => {
                         let trimmed = stdout.trim();
                         if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
@@ -97,6 +99,7 @@ async fn resolve_hoster_url_internal<'a>(
     app: Option<&AppHandle>,
     client: &Client,
     uri: &'a str,
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 ) -> Result<ResolvedDownload<'a>, HosterError> {
     let parsed = reqwest::Url::parse(uri).map_err(|_| HosterError::InvalidUrl(uri.to_string()))?;
     let host = normalized_host(&parsed);
@@ -111,7 +114,7 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if host.contains("1fichier.com") {
-        let (url, page_url) = onefichier::resolve(client, uri).await?;
+        let (url, page_url) = onefichier::resolve(app, client, uri, cancel_flag.clone()).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::BrowserSameOrigin { referer: page_url }.build(),
@@ -120,7 +123,7 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if host.contains("akirabox.com") || host.contains("akirabox.to") {
-        let (url, _page_url) = akirabox::resolve(app, client, uri).await?;
+        let (url, _page_url) = akirabox::resolve(app, client, uri, cancel_flag.clone()).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::Passthrough.build(),
@@ -129,7 +132,7 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if host.contains("filekeeper.net") {
-        let (url, page_url) = filekeeper::resolve(app, client, uri).await?;
+        let (url, page_url) = filekeeper::resolve(app, client, uri, cancel_flag.clone()).await?;
         let download_profile = if is_signed_cdn_url(&url)
             || !normalized_host(
                 &reqwest::Url::parse(&url).map_err(|_| HosterError::InvalidUrl(url.clone()))?,
@@ -175,7 +178,7 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if buzzheavier::is_supported_domain(uri) {
-        let (url, page_url) = buzzheavier::resolve(client, uri).await?;
+        let (url, page_url) = buzzheavier::resolve(app, client, uri, cancel_flag.clone()).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::Downloader { referer: page_url }.build(),
@@ -202,7 +205,7 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if host.contains("rootz.so") {
-        let (url, referer, file_name_hint) = rootz::resolve(client, uri).await?;
+        let (url, referer, file_name_hint) = rootz::resolve(app, client, uri, cancel_flag.clone()).await?;
         let download_profile = if is_signed_cdn_url(&url) {
             ProfilePreset::Passthrough.build()
         } else {

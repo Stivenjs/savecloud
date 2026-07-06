@@ -162,9 +162,11 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
 
     if let Err(e) = commands::init_match_config(0.58) {
         log::warn!(
-        "[Setup] No se pudieron cargar las stopwords embebidas. El motor de búsqueda funcionará con valores por defecto. Error: {}",
-        e
-    );
+            "[Setup] No se pudieron cargar las stopwords embebidas. El motor de búsqueda funcionará con valores por defecto. Error: {}",
+            e
+        );
+    } else {
+        commands::preload_index_background();
     }
 
     app.manage(queue::SourcesState::new_from_disk());
