@@ -29,6 +29,7 @@ dirs = "5"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "blocking", "stream", "cookies", "multipart", "gzip", "socks"] }
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1"
+scraper = "0.24"
 urlencoding = "2"
 futures-util = "0.3"
 tauri-plugin-dialog = "2"

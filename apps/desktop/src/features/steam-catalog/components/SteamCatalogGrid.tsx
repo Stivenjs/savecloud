@@ -290,7 +290,7 @@ export function SteamCatalogGrid({
   );
 
   const handleConfirmInstall = useCallback(
-    async (selectedPath: string) => {
+    async (selectedPath: string, selectedUri?: string | null) => {
       if (!installingGame) return;
       const { name, chosen } = installingGame;
 
@@ -300,6 +300,7 @@ export function SteamCatalogGrid({
           itemId: chosen.item_id,
           destinationDir: selectedPath.trim(),
           preferredProtocol: null,
+          selectedUri: selectedUri ?? null,
         });
 
         toastSuccess(t("steamCatalog.grid.downloadStarted"), t("steamCatalog.grid.downloadStartedDesc", { name }));
@@ -375,6 +376,7 @@ export function SteamCatalogGrid({
           gameName={installingGame.name}
           gameSizeStr={installingGame.size}
           protocols={installingGame.chosen.protocols}
+          uris={installingGame.chosen.uris}
           game={installingGame.game}
           mediaBySteamAppId={mediaBySteamAppId}
           peerOffers={peerOffersHook.offers}

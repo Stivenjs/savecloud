@@ -344,7 +344,7 @@ export function GameDetailPage() {
   }, [steamAppId, steamDetails]);
 
   const handleConfirmInstall = useCallback(
-    async (selectedPath: string) => {
+    async (selectedPath: string, selectedUri?: string | null) => {
       const chosen = pickCandidate(sourceCandidates, selectedSourceKey);
       if (!chosen) return;
 
@@ -354,6 +354,7 @@ export function GameDetailPage() {
           itemId: chosen.item_id,
           destinationDir: selectedPath.trim(),
           preferredProtocol: null,
+          selectedUri: selectedUri ?? null,
         });
         toastSuccess(t("library.toast.downloadStarted"), t("library.toast.downloadStartedDesc", { displayName }));
       } catch (e) {
@@ -480,7 +481,9 @@ export function GameDetailPage() {
                   selectedKeys={new Set([selectedSourceKey ?? sourceCandidateKey(bestSourceMatch)])}
                   onSelectionChange={(keys) => {
                     const next = [...keys][0];
-                    if (next !== undefined) setSelectedSourceKey(String(next));
+                    if (next !== undefined) {
+                      setSelectedSourceKey(String(next));
+                    }
                   }}>
                   {sourceCandidates.map((c) => (
                     <SelectItem key={sourceCandidateKey(c)} textValue={`${c.source_name} — ${c.item_title}`}>
@@ -642,6 +645,7 @@ export function GameDetailPage() {
           gameName={displayName}
           gameSizeStr={installingFromSource.size}
           protocols={installingFromSource.protocols}
+          uris={pickCandidate(sourceCandidates, selectedSourceKey)?.uris}
           game={game}
           mediaBySteamAppId={installModalMediaBySteamAppId}
           peerOffers={peerOffersHook.offers}

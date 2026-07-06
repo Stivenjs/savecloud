@@ -1928,6 +1928,12 @@
       "peerTransferLanUnreachable": "Este juego se puede transferir en la red local (para ahorrar ancho de banda) si enciendes el dispositivo {{device}}.",
       "bringFromDevice": "Traer desde {{device}}",
       "selectFolderTitle": "Seleccionar carpeta para {{name}}",
+      "chooseHoster": "Elegir hoster",
+      "selectHoster": "Seleccionar hoster",
+      "hosterProtocol": {
+        "http": "HTTP",
+        "torrent": "Torrent"
+      },
       "protocols": {
         "torrent": {
           "label": "BitTorrent",

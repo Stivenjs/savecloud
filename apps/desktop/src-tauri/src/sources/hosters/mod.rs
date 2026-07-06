@@ -1,10 +1,14 @@
 //! Resolución de enlaces de hosters gratuitos
 
+mod akirabox;
 mod buzzheavier;
 mod datanodes;
+mod filekeeper;
 mod fuckingfast;
 mod gofile;
+mod html_utils;
 mod mediafire;
+mod onefichier;
 mod pixeldrain;
 mod rootz;
 mod vikingfile;
@@ -14,8 +18,9 @@ pub mod error;
 use std::borrow::Cow;
 
 use reqwest::Client;
+use tauri::AppHandle;
 
-use crate::network::{DownloadProfile, ProfilePreset, get_hoster_download_client};
+use crate::network::{get_hoster_download_client, DownloadProfile, ProfilePreset};
 
 pub use error::HosterError;
 
@@ -43,13 +48,53 @@ fn normalized_host(url: &reqwest::Url) -> String {
 
 /// Resuelve la URL directa y el perfil de descarga usando el cliente compartido con cookie jar.
 #[allow(dead_code)]
-pub async fn resolve_download_url<'a>(uri: &'a str) -> Result<ResolvedDownload<'a>, HosterError> {
+pub async fn resolve_download_url<'a>(
+    app: Option<&AppHandle>,
+    uri: &'a str,
+) -> Result<ResolvedDownload<'a>, HosterError> {
     let client = get_hoster_download_client();
-    resolve_download_url_with_client(&client, uri).await
+    resolve_download_url_with_client(app, &client, uri).await
 }
 
 /// Igual que [`resolve_download_url`] pero con un cliente explícito (misma sesión resolve + download).
 pub async fn resolve_download_url_with_client<'a>(
+    app: Option<&AppHandle>,
+    client: &Client,
+    uri: &'a str,
+) -> Result<ResolvedDownload<'a>, HosterError> {
+    match resolve_hoster_url_internal(app, client, uri).await {
+        Ok(res) => Ok(res),
+        Err(e) => {
+            if let Some(app) = app {
+                log::info!(
+                    "Hoster resolution failed: {:?}. Attempting Scrapling fallback for: {}",
+                    e,
+                    uri
+                );
+                match crate::sources::commands::fetch::run_scrapling_fetch(app, uri) {
+                    Ok(stdout) => {
+                        let trimmed = stdout.trim();
+                        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                            log::info!("Scrapling successfully resolved download URL: {}", trimmed);
+                            return Ok(ResolvedDownload {
+                                url: Cow::Owned(trimmed.to_string()),
+                                download_profile: ProfilePreset::Passthrough.build(),
+                                file_name_hint: None,
+                            });
+                        }
+                    }
+                    Err(scrapling_err) => {
+                        log::error!("Scrapling resolution failed: {}", scrapling_err);
+                    }
+                }
+            }
+            Err(e)
+        }
+    }
+}
+
+async fn resolve_hoster_url_internal<'a>(
+    app: Option<&AppHandle>,
     client: &Client,
     uri: &'a str,
 ) -> Result<ResolvedDownload<'a>, HosterError> {
@@ -61,6 +106,43 @@ pub async fn resolve_download_url_with_client<'a>(
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::GofileDownload { account_token }.build(),
+            file_name_hint: None,
+        });
+    }
+
+    if host.contains("1fichier.com") {
+        let (url, page_url) = onefichier::resolve(client, uri).await?;
+        return Ok(ResolvedDownload {
+            url: Cow::Owned(url),
+            download_profile: ProfilePreset::BrowserSameOrigin { referer: page_url }.build(),
+            file_name_hint: None,
+        });
+    }
+
+    if host.contains("akirabox.com") || host.contains("akirabox.to") {
+        let (url, _page_url) = akirabox::resolve(app, client, uri).await?;
+        return Ok(ResolvedDownload {
+            url: Cow::Owned(url),
+            download_profile: ProfilePreset::Passthrough.build(),
+            file_name_hint: None,
+        });
+    }
+
+    if host.contains("filekeeper.net") {
+        let (url, page_url) = filekeeper::resolve(app, client, uri).await?;
+        let download_profile = if is_signed_cdn_url(&url)
+            || !normalized_host(
+                &reqwest::Url::parse(&url).map_err(|_| HosterError::InvalidUrl(url.clone()))?,
+            )
+            .contains("filekeeper.net")
+        {
+            ProfilePreset::Passthrough.build()
+        } else {
+            ProfilePreset::BrowserSameOrigin { referer: page_url }.build()
+        };
+        return Ok(ResolvedDownload {
+            url: Cow::Owned(url),
+            download_profile,
             file_name_hint: None,
         });
     }
