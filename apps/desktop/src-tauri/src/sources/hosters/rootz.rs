@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use regex::Regex;
 use serde::Deserialize;
+use tauri::AppHandle;
 use tokio::time::sleep;
 
 use crate::network::{get, head_with_client, ProfilePreset};
@@ -129,7 +130,22 @@ fn metadata_denied_message(data: &RootzData) -> String {
     format!("rootz: no se pudo obtener la URL de descarga{hint}.")
 }
 
-async fn fetch_page_token(client: &reqwest::Client, page_url: &str) -> Result<String, HosterError> {
+async fn fetch_page_token(
+    app: Option<&AppHandle>,
+    client: &reqwest::Client,
+    page_url: &str,
+) -> Result<String, HosterError> {
+    if let Some(app) = app {
+        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, page_url) {
+            let trimmed = scraped.trim();
+            if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
+                if let Ok(token) = extract_page_token(trimmed) {
+                    return Ok(token);
+                }
+            }
+        }
+    }
+
     let response = get(
         client,
         page_url,
@@ -316,6 +332,7 @@ async fn resolve_direct_url(
 }
 
 pub async fn resolve(
+    app: Option<&AppHandle>,
     client: &reqwest::Client,
     url: &str,
 ) -> Result<(String, String, Option<String>), HosterError> {
@@ -323,7 +340,16 @@ pub async fn resolve(
     let referer = format!("{ROOTZ_ORIGIN}/d/{short_id}");
     let page_url = referer.clone();
 
-    let page_token = fetch_page_token(client, &page_url).await?;
+    if let Some(app) = app {
+        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url) {
+            let trimmed = scraped.trim();
+            if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                return Ok((trimmed.to_string(), referer, None));
+            }
+        }
+    }
+
+    let page_token = fetch_page_token(app, client, &page_url).await?;
     let (direct_url, file_name_hint) =
         resolve_direct_url(client, &short_id, &page_token, &referer).await?;
 

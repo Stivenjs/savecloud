@@ -79,7 +79,6 @@ fn find_python_executable() -> Result<(String, Vec<String>), String> {
 use std::os::windows::process::CommandExt;
 
 pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String> {
-    /// Maximum time (seconds) to wait for the scrapling subprocess before killing it.
     const SCRAPLING_TIMEOUT_SECS: u64 = 90;
 
     let binary_path = resolve_scrapling_binary(app);
@@ -143,8 +142,12 @@ pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String>
     let _ = tx.send(());
     let _ = watchdog.join();
 
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if !stderr.is_empty() {
+        log::info!("[Scrapling Debug Output]:\n{}", stderr);
+    }
+
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
         if let Some(code) = output.status.code() {
@@ -156,7 +159,7 @@ pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String>
             }
         }
 
-        let details = if stderr.is_empty() { stdout } else { stderr };
+        let details = if stderr.is_empty() { stdout } else { stderr.clone() };
         return Err(if details.is_empty() {
             "Scrapling falló sin mensaje de error".to_string()
         } else {

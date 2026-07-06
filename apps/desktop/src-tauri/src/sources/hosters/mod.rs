@@ -111,7 +111,7 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if host.contains("1fichier.com") {
-        let (url, page_url) = onefichier::resolve(client, uri).await?;
+        let (url, page_url) = onefichier::resolve(app, client, uri).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::BrowserSameOrigin { referer: page_url }.build(),
@@ -175,7 +175,7 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if buzzheavier::is_supported_domain(uri) {
-        let (url, page_url) = buzzheavier::resolve(client, uri).await?;
+        let (url, page_url) = buzzheavier::resolve(app, client, uri).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::Downloader { referer: page_url }.build(),
@@ -202,7 +202,7 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if host.contains("rootz.so") {
-        let (url, referer, file_name_hint) = rootz::resolve(client, uri).await?;
+        let (url, referer, file_name_hint) = rootz::resolve(app, client, uri).await?;
         let download_profile = if is_signed_cdn_url(&url) {
             ProfilePreset::Passthrough.build()
         } else {

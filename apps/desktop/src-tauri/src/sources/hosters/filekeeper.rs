@@ -76,26 +76,36 @@ pub async fn resolve(
         ));
     }
 
+    let mut page_html = None;
+
     if let Some(app) = app {
-        let scraped = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url)
-            .map_err(HosterError::ResolutionFailed)?;
-        let trimmed = scraped.trim();
-        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-            return Ok((trimmed.to_string(), page_url));
+        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url) {
+            let trimmed = scraped.trim();
+            if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                return Ok((trimmed.to_string(), page_url));
+            }
+            if !trimmed.is_empty() {
+                page_html = Some(trimmed.to_string());
+            }
         }
     }
 
-    let response = get(
-        client,
-        &page_url,
-        ProfilePreset::BrowserSameOrigin {
-            referer: page_url.clone(),
-        },
-    )
-    .await?;
+    let page_html = match page_html {
+        Some(html) => html,
+        None => {
+            let response = get(
+                client,
+                &page_url,
+                ProfilePreset::BrowserSameOrigin {
+                    referer: page_url.clone(),
+                },
+            )
+            .await?;
 
-    let response = ensure_resolve(response)?;
-    let page_html = response.text().await?;
+            let response = ensure_resolve(response)?;
+            response.text().await?
+        }
+    };
 
     if let Some(direct) = extract_download_link(&page_html, &page_url, HOST_MARKERS, TEXT_MARKERS) {
         return Ok((direct, page_url));

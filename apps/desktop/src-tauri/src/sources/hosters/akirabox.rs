@@ -34,6 +34,14 @@ pub async fn resolve(
         if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
             return Ok((trimmed.to_string(), page_url));
         }
+        if let Some(direct) = extract_download_link(
+            trimmed,
+            &page_url,
+            HOST_MARKERS,
+            &["download", "descargar", "télécharger", "telecharger"],
+        ) {
+            return Ok((direct, page_url));
+        }
     }
 
     let response = get(
