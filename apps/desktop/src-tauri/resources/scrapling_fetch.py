@@ -311,6 +311,7 @@ def _strategy_browser_fetch(url: str, expect_json: bool) -> str | None:
         "page_action": page_action,
         "google_search": False,
         "dns_over_https": True,
+        "disable_ads": True,
     }
 
     kwargs["page_setup"] = page_setup
@@ -376,6 +377,13 @@ def _setup_generic_route(page, target_url: str):
 
     def handle_route(route, request):
         try:
+            if is_ad_domain(request.url):
+                try:
+                    route.abort()
+                except Exception:
+                    pass
+                return
+
             if request.is_navigation_request():
                 headers = {**request.headers, "Referer": referer}
                 route.continue_(headers=headers)
@@ -412,7 +420,10 @@ def is_ad_domain(url: str) -> bool:
             "opera.com", "adcash", "popunder", "clickunder", "acscdn",
             "adsterra", "doubleclick", "adsystem", "onclick", "traffic",
             "adnxs", "adform", "optimizely", "outbrain", "taboola",
-            "revcontent", "mgid", "criteo"
+            "revcontent", "mgid", "criteo", "google-analytics", "googletagmanager",
+            "googlesyndication", "adservice", "adserver", "adskeeper", "popads",
+            "propellerads", "exoclick", "a-ads", "amazon-adsystem", "pubmatic",
+            "rubiconproject", "smartadserver", "openx", "bidswitch", "casalemedia"
         ]
         url_lower = url.lower()
         return any(kw in url_lower for kw in ad_keywords)
@@ -596,6 +607,7 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
         "page_action": page_action,
         "google_search": False,
         "dns_over_https": True,
+        "disable_ads": True,
     }
 
     page = StealthyFetcher.fetch(url, **kwargs)
