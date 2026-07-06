@@ -202,7 +202,7 @@ async fn scrapling_phase(
     let app_for_blocking = app.clone();
     let url_for_blocking = url.clone();
     let raw = tokio::task::spawn_blocking(move || {
-        run_scrapling_fetch(&app_for_blocking, &url_for_blocking)
+        run_scrapling_fetch(&app_for_blocking, &url_for_blocking, None)
     })
     .await
     .map_err(|error| format!("Scrapling interrumpido: {error}"))??;

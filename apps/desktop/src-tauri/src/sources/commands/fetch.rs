@@ -78,7 +78,11 @@ fn find_python_executable() -> Result<(String, Vec<String>), String> {
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
-pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String> {
+pub fn run_scrapling_fetch(
+    app: &AppHandle,
+    url: &str,
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) -> Result<String, String> {
     const SCRAPLING_TIMEOUT_SECS: u64 = 90;
 
     let binary_path = resolve_scrapling_binary(app);
@@ -119,19 +123,36 @@ pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String>
     let child_pid = child.id();
 
     let (tx, rx) = std::sync::mpsc::channel::<()>();
+    let cancel_flag_clone = cancel_flag.clone();
     let watchdog = std::thread::spawn(move || {
-        match rx.recv_timeout(std::time::Duration::from_secs(SCRAPLING_TIMEOUT_SECS)) {
-            Ok(()) => {}
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                log::warn!(
-                    "Scrapling subprocess {} timed out after {}s — killing process tree",
-                    child_pid,
-                    SCRAPLING_TIMEOUT_SECS
-                );
-                kill_process_tree(child_pid);
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(SCRAPLING_TIMEOUT_SECS);
+        while start.elapsed() < timeout {
+            if rx
+                .recv_timeout(std::time::Duration::from_millis(200))
+                .is_ok()
+            {
+                return;
             }
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {}
+
+            if let Some(ref flag) = cancel_flag_clone {
+                if flag.load(std::sync::atomic::Ordering::Relaxed) {
+                    log::info!(
+                        "Scrapling execution cancelled by user — killing process tree {}",
+                        child_pid
+                    );
+                    kill_process_tree(child_pid);
+                    return;
+                }
+            }
         }
+
+        log::warn!(
+            "Scrapling subprocess {} timed out after {}s — killing process tree",
+            child_pid,
+            SCRAPLING_TIMEOUT_SECS
+        );
+        kill_process_tree(child_pid);
     });
 
     let output = child.wait_with_output().map_err(|e| {
@@ -141,6 +162,12 @@ pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String>
 
     let _ = tx.send(());
     let _ = watchdog.join();
+
+    if let Some(ref flag) = cancel_flag {
+        if flag.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err("stopped_by_user".to_string());
+        }
+    }
 
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     if !stderr.is_empty() {
@@ -159,7 +186,11 @@ pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String>
             }
         }
 
-        let details = if stderr.is_empty() { stdout } else { stderr.clone() };
+        let details = if stderr.is_empty() {
+            stdout
+        } else {
+            stderr.clone()
+        };
         return Err(if details.is_empty() {
             "Scrapling falló sin mensaje de error".to_string()
         } else {
@@ -273,7 +304,7 @@ pub fn resolve_body_with_scrapling(
     raw: String,
 ) -> Result<String, String> {
     if should_attempt_scrapling(status) || looks_like_cloudflare_block(content_type, raw.as_str()) {
-        return run_scrapling_fetch(app, url);
+        return run_scrapling_fetch(app, url, None);
     }
     if !status.is_success() {
         return Err(format!("La URL devolvió estado HTTP {status}"));

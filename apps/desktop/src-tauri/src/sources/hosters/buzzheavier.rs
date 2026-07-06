@@ -16,6 +16,7 @@ pub async fn resolve(
     app: Option<&AppHandle>,
     client: &reqwest::Client,
     url: &str,
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 ) -> Result<(String, String), HosterError> {
     if !is_supported_domain(url) {
         return Err(HosterError::ResolutionFailed(
@@ -26,7 +27,7 @@ pub async fn resolve(
     let base_url = url.split('#').next().unwrap_or(url).to_string();
 
     if let Some(app) = app {
-        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &base_url) {
+        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &base_url, cancel_flag) {
             let trimmed = scraped.trim();
             if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
                 return Ok((trimmed.to_string(), base_url));

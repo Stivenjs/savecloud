@@ -29,6 +29,7 @@ pub async fn resolve(
     app: Option<&AppHandle>,
     client: &reqwest::Client,
     url: &str,
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 ) -> Result<(String, String), HosterError> {
     let page_url = normalize_page_url(url)?;
     let parsed =
@@ -42,7 +43,7 @@ pub async fn resolve(
     let mut page_html = None;
 
     if let Some(app) = app {
-        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url) {
+        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url, cancel_flag.clone()) {
             let trimmed = scraped.trim();
             if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
                 return Ok((trimmed.to_string(), page_url));

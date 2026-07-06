@@ -134,9 +134,10 @@ async fn fetch_page_token(
     app: Option<&AppHandle>,
     client: &reqwest::Client,
     page_url: &str,
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 ) -> Result<String, HosterError> {
     if let Some(app) = app {
-        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, page_url) {
+        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, page_url, cancel_flag) {
             let trimmed = scraped.trim();
             if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
                 if let Ok(token) = extract_page_token(trimmed) {
@@ -335,13 +336,14 @@ pub async fn resolve(
     app: Option<&AppHandle>,
     client: &reqwest::Client,
     url: &str,
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 ) -> Result<(String, String, Option<String>), HosterError> {
     let short_id = extract_short_id(url)?;
     let referer = format!("{ROOTZ_ORIGIN}/d/{short_id}");
     let page_url = referer.clone();
 
     if let Some(app) = app {
-        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url) {
+        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url, cancel_flag.clone()) {
             let trimmed = scraped.trim();
             if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
                 return Ok((trimmed.to_string(), referer, None));
@@ -349,7 +351,7 @@ pub async fn resolve(
         }
     }
 
-    let page_token = fetch_page_token(app, client, &page_url).await?;
+    let page_token = fetch_page_token(app, client, &page_url, cancel_flag).await?;
     let (direct_url, file_name_hint) =
         resolve_direct_url(client, &short_id, &page_token, &referer).await?;
 
