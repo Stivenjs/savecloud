@@ -22,6 +22,7 @@ pub async fn start_source_download(
     item_id: String,
     destination_dir: String,
     preferred_protocol: Option<DownloadProtocol>,
+    selected_uri: Option<String>,
     app: AppHandle,
     state: tauri::State<'_, SourcesState>,
 ) -> Result<String, String> {
@@ -36,7 +37,13 @@ pub async fn start_source_download(
         .find(|s| s.id == item_id)
         .ok_or_else(|| format!("Item no encontrado: {item_id}"))?;
 
-    let selected = if let Some(pref) = preferred_protocol {
+    let selected = if let Some(ref explicit_uri) = selected_uri {
+        item.uris
+            .iter()
+            .find(|u| u.uri == *explicit_uri)
+            .cloned()
+            .or_else(|| item.uris.first().cloned())
+    } else if let Some(pref) = preferred_protocol {
         item.uris
             .iter()
             .find(|u| u.protocol == pref)

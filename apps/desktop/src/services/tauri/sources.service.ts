@@ -131,6 +131,7 @@ export interface SourceBestMatch {
   score: number;
   protocols: string[];
   file_size?: string | null;
+  uris: SourceUri[];
 }
 
 export interface BatchImportItemResult {
@@ -210,6 +211,7 @@ export function startSourceDownload(params: {
   itemId: string;
   destinationDir: string;
   preferredProtocol?: DownloadProtocol | null;
+  selectedUri?: string | null;
 }): Promise<string> {
   return invoke<string>("start_source_download", params);
 }

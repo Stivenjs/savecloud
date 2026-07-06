@@ -14,6 +14,7 @@ pub mod error;
 use std::borrow::Cow;
 
 use reqwest::Client;
+use tauri::AppHandle;
 
 use crate::network::{DownloadProfile, ProfilePreset, get_hoster_download_client};
 
@@ -43,13 +44,48 @@ fn normalized_host(url: &reqwest::Url) -> String {
 
 /// Resuelve la URL directa y el perfil de descarga usando el cliente compartido con cookie jar.
 #[allow(dead_code)]
-pub async fn resolve_download_url<'a>(uri: &'a str) -> Result<ResolvedDownload<'a>, HosterError> {
+pub async fn resolve_download_url<'a>(
+    app: Option<&AppHandle>,
+    uri: &'a str,
+) -> Result<ResolvedDownload<'a>, HosterError> {
     let client = get_hoster_download_client();
-    resolve_download_url_with_client(&client, uri).await
+    resolve_download_url_with_client(app, &client, uri).await
 }
 
 /// Igual que [`resolve_download_url`] pero con un cliente explícito (misma sesión resolve + download).
 pub async fn resolve_download_url_with_client<'a>(
+    app: Option<&AppHandle>,
+    client: &Client,
+    uri: &'a str,
+) -> Result<ResolvedDownload<'a>, HosterError> {
+    match resolve_hoster_url_internal(client, uri).await {
+        Ok(res) => Ok(res),
+        Err(e) => {
+            if let Some(app) = app {
+                log::info!("Hoster resolution failed: {:?}. Attempting Scrapling fallback for: {}", e, uri);
+                match crate::sources::commands::fetch::run_scrapling_fetch(app, uri) {
+                    Ok(stdout) => {
+                        let trimmed = stdout.trim();
+                        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                            log::info!("Scrapling successfully resolved download URL: {}", trimmed);
+                            return Ok(ResolvedDownload {
+                                url: Cow::Owned(trimmed.to_string()),
+                                download_profile: ProfilePreset::Passthrough.build(),
+                                file_name_hint: None,
+                            });
+                        }
+                    }
+                    Err(scrapling_err) => {
+                        log::error!("Scrapling resolution failed: {}", scrapling_err);
+                    }
+                }
+            }
+            Err(e)
+        }
+    }
+}
+
+async fn resolve_hoster_url_internal<'a>(
     client: &Client,
     uri: &'a str,
 ) -> Result<ResolvedDownload<'a>, HosterError> {

@@ -119,6 +119,7 @@ fn build_match_index() -> Result<Vec<IndexedSourceItem>, String> {
                 token_hashes,
                 protocols,
                 file_size: item.file_size.clone(),
+                uris: item.uris,
             });
         }
     }

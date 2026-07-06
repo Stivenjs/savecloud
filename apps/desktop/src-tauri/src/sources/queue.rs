@@ -186,6 +186,7 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
         DownloadProtocol::Http => {
             let cancel_flag = state.create_cancel_flag(job_id);
             let result = http_runner::run_http_download(
+                app,
                 &job.title,
                 &job.destination_dir,
                 &job.selected_uri,

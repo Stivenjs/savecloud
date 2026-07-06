@@ -11,6 +11,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::network::{ensure_download_success, get_with_profile, get_hoster_download_client};
 use crate::utils::transfer_metrics::TransferSpeedTracker;
+use tauri::AppHandle;
 
 use super::hosters::{self, HosterError};
 use super::parser::slugify;
@@ -32,6 +33,7 @@ pub struct HttpRunResult {
 
 /// Descarga una URI HTTP a disco con cancelación cooperativa (sin pausa/resume).
 pub async fn run_http_download(
+    app: &AppHandle,
     title: &str,
     destination_dir: &str,
     uri: &str,
@@ -63,7 +65,7 @@ pub async fn run_http_download(
     emit_progress(0, 0, false)?;
 
     let client = get_hoster_download_client();
-    let resolved = hosters::resolve_download_url_with_client(&client, uri)
+    let resolved = hosters::resolve_download_url_with_client(Some(app), &client, uri)
         .await
         .map_err(|e: HosterError| e.to_user_string_for_uri(uri))?;
     let effective_uri = resolved.url.as_ref();

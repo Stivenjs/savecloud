@@ -1,4 +1,4 @@
-import type { DownloadProtocol, SourceBestMatch } from "@services/tauri";
+import type { DownloadProtocol, SourceBestMatch, SourceUri } from "@services/tauri";
 import i18n from "@lib/i18n";
 
 /** Separador improbable; válido en atributos `id` de HeroUI ListBox. */
@@ -49,6 +49,33 @@ export function downloadKindDescription(kind: EffectiveDownloadKind): string {
     default:
       return i18n.t("steamCatalog.installModal.protocols.unknown.desc", "No se pudo determinar el método de descarga.");
   }
+}
+
+/** Nombre legible del hoster a partir de una URI HTTP(S). */
+export function getHosterDisplayName(uri: string): string {
+  try {
+    const host = new URL(uri).hostname.replace(/^www\./, "");
+    const parts = host.split(".");
+    return parts.length >= 2 ? parts.slice(0, -1).join(".") : host;
+  } catch {
+    return uri;
+  }
+}
+
+export function hosterProtocolLabel(protocol: DownloadProtocol | string): string {
+  if (protocol === "http") {
+    return i18n.t("steamCatalog.installModal.hosterProtocol.http", "HTTP");
+  }
+  if (protocol === "torrentMagnet" || protocol === "torrentFile") {
+    return i18n.t("steamCatalog.installModal.hosterProtocol.torrent", "Torrent");
+  }
+  return String(protocol);
+}
+
+/** URIs HTTP con más de una opción (p. ej. gofile, vikingfile). */
+export function selectableHttpUris(uris: readonly SourceUri[] | undefined): SourceUri[] {
+  if (!uris?.length) return [];
+  return uris.filter((u) => u.protocol === "http");
 }
 
 /** Clave estable para identificar un candidato en selects y estado local. */

@@ -31,6 +31,7 @@ pub struct IndexEntry {
     pub token_hashes: Vec<u64>,
     pub protocols: Vec<crate::sources::domain::DownloadProtocol>,
     pub file_size: Option<String>,
+    pub uris: Vec<crate::sources::domain::SourceUri>,
 }
 
 /// Un candidato temporal que ha sido evaluado y superado el umbral mínimo de similitud.
@@ -50,6 +51,7 @@ pub struct SourceBestMatch {
     pub score: f32,
     pub protocols: Vec<crate::sources::domain::DownloadProtocol>,
     pub file_size: Option<String>,
+    pub uris: Vec<crate::sources::domain::SourceUri>,
 }
 
 /// Clasificación heurística del tipo de consulta (query) solicitada por el usuario.
@@ -492,6 +494,7 @@ pub fn find_best_per_source(
                     .unwrap_or(0.0),
                 protocols: winner.protocols.clone(),
                 file_size: winner.file_size.clone(),
+                uris: winner.uris.clone(),
             })
         })
         .collect();

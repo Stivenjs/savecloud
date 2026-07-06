@@ -1,14 +1,29 @@
 import { useState, useMemo, useEffect } from "react";
-import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, ScrollShadow, cn } from "@heroui/react";
+import {
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  Button,
+  ScrollShadow,
+  Select,
+  SelectItem,
+  cn,
+} from "@heroui/react";
 import { HardDrive, AlertCircle, FolderOpen, Globe, Share2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   downloadKindDescription,
   downloadKindLabel,
   resolveDefaultDownloadKind,
+  getHosterDisplayName,
+  hosterProtocolLabel,
+  selectableHttpUris,
   type EffectiveDownloadKind,
 } from "@utils/sourceMatch";
 import type { ConfiguredGame } from "@app-types/config";
+import type { SourceUri } from "@services/tauri";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
 import { useDisks } from "@hooks/useDisks";
 import { formatBytes } from "@utils/format";
@@ -26,10 +41,12 @@ export interface InstallModalProps {
   mediaBySteamAppId?: Record<string, SteamAppdetailsMediaResult> | null;
   /** Protocolos disponibles del ítem; define el método mostrado (torrent vs HTTP). */
   protocols?: readonly string[] | null;
+  /** URIs del ítem elegido; si hay varios hosters HTTP, se muestra selector en el modal. */
+  uris?: readonly SourceUri[] | null;
   peerOffers?: PeerInstallOffer[];
   selectedPeerDeviceId?: string | null;
   onSelectPeerDevice?: (deviceId: string) => void;
-  onConfirm: (path: string) => void;
+  onConfirm: (path: string, selectedUri?: string | null) => void;
   onConfirmPeer?: (path: string, offer: PeerInstallOffer) => void;
   consoleMode?: boolean;
 }
@@ -44,6 +61,7 @@ export function InstallModal({
   game,
   mediaBySteamAppId,
   protocols,
+  uris,
   peerOffers = [],
   selectedPeerDeviceId,
   onSelectPeerDevice,
@@ -55,12 +73,24 @@ export function InstallModal({
   const { disks, refreshDisks } = useDisks();
   const [selectedDisk, setSelectedDisk] = useState<string | null>(null);
   const [customPath, setCustomPath] = useState<string | null>(null);
+  const [selectedHosterUri, setSelectedHosterUri] = useState<string | null>(null);
+
+  const httpUris = useMemo(() => selectableHttpUris(uris ?? undefined), [uris]);
+  const showHosterSelect = httpUris.length > 1;
 
   useEffect(() => {
     if (isOpen) {
       void refreshDisks();
     }
   }, [isOpen, refreshDisks]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedHosterUri(null);
+      return;
+    }
+    setSelectedHosterUri(httpUris[0]?.uri ?? null);
+  }, [isOpen, httpUris]);
 
   const sanitizeFolderName = (name: string) => {
     return name.replace(/[:*?"<>|/\\]/g, "").trim();
@@ -130,7 +160,7 @@ export function InstallModal({
     if (peerReachable && selectedPeer && onConfirmPeer) {
       onConfirmPeer(effectivePath, selectedPeer);
     } else {
-      onConfirm(effectivePath);
+      onConfirm(effectivePath, showHosterSelect ? selectedHosterUri : null);
     }
     onOpenChange(false);
   };
@@ -201,6 +231,45 @@ export function InstallModal({
               </div>
 
               <div className="space-y-4">
+                {showHosterSelect ? (
+                  <div className="space-y-2">
+                    <h4
+                      className={cn(
+                        "font-bold uppercase tracking-widest text-default-400 px-1",
+                        consoleMode ? "text-sm" : "text-xs"
+                      )}>
+                      {t("steamCatalog.installModal.chooseHoster")}
+                    </h4>
+                    <Select
+                      label={t("steamCatalog.installModal.chooseHoster")}
+                      placeholder={t("steamCatalog.installModal.selectHoster")}
+                      size={consoleMode ? "lg" : "sm"}
+                      variant="bordered"
+                      className="w-full"
+                      selectionMode="single"
+                      selectedKeys={new Set([selectedHosterUri ?? httpUris[0]?.uri ?? ""])}
+                      onSelectionChange={(keys) => {
+                        const next = [...keys][0];
+                        if (next !== undefined) setSelectedHosterUri(String(next));
+                      }}
+                      classNames={
+                        consoleMode
+                          ? {
+                              trigger: "h-12 min-h-12 rounded-xl text-base",
+                              value: "text-base font-semibold",
+                            }
+                          : undefined
+                      }>
+                      {httpUris.map((u) => (
+                        <SelectItem key={u.uri} textValue={getHosterDisplayName(u.uri)}>
+                          <span className="capitalize">{getHosterDisplayName(u.uri)}</span>
+                          <span className="ml-2 text-xs text-default-400">{hosterProtocolLabel(u.protocol)}</span>
+                        </SelectItem>
+                      ))}
+                    </Select>
+                  </div>
+                ) : null}
+
                 <div className="flex items-center justify-between px-1">
                   <h4
                     className={cn(

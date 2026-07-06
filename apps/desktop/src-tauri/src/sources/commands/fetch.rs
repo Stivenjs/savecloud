@@ -79,6 +79,9 @@ fn find_python_executable() -> Result<(String, Vec<String>), String> {
 use std::os::windows::process::CommandExt;
 
 pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String> {
+    /// Maximum time (seconds) to wait for the scrapling subprocess before killing it.
+    const SCRAPLING_TIMEOUT_SECS: u64 = 90;
+
     let binary_path = resolve_scrapling_binary(app);
     let mut command = if let Some(bin_path) = binary_path.as_ref().ok().filter(|p| p.is_file()) {
         let mut cmd = std::process::Command::new(bin_path);
@@ -99,7 +102,10 @@ pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String>
         cmd
     };
 
-    command.env("PYTHONUNBUFFERED", "1");
+    command
+        .env("PYTHONUNBUFFERED", "1")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
 
     #[cfg(target_os = "windows")]
     {
@@ -107,13 +113,49 @@ pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String>
         command.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let output = command
-        .output()
+    let child = command
+        .spawn()
         .map_err(|e| format!("No se pudo ejecutar Scrapling: {e}"))?;
+
+    let child_pid = child.id();
+
+    let (tx, rx) = std::sync::mpsc::channel::<()>();
+    let watchdog = std::thread::spawn(move || {
+        match rx.recv_timeout(std::time::Duration::from_secs(SCRAPLING_TIMEOUT_SECS)) {
+            Ok(()) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                log::warn!(
+                    "Scrapling subprocess {} timed out after {}s — killing process tree",
+                    child_pid,
+                    SCRAPLING_TIMEOUT_SECS
+                );
+                kill_process_tree(child_pid);
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {}
+        }
+    });
+
+    let output = child.wait_with_output().map_err(|e| {
+        let _ = tx.send(());
+        format!("Error al esperar resultado de Scrapling: {e}")
+    })?;
+
+    let _ = tx.send(());
+    let _ = watchdog.join();
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+        if let Some(code) = output.status.code() {
+            if code == 3 {
+                return Err(
+                    "Scrapling: timeout — el proceso fue terminado después de 90 segundos"
+                        .to_string(),
+                );
+            }
+        }
+
         let details = if stderr.is_empty() { stdout } else { stderr };
         return Err(if details.is_empty() {
             "Scrapling falló sin mensaje de error".to_string()
@@ -123,6 +165,23 @@ pub fn run_scrapling_fetch(app: &AppHandle, url: &str) -> Result<String, String>
     }
 
     String::from_utf8(output.stdout).map_err(|e| format!("Scrapling devolvió texto no UTF-8: {e}"))
+}
+
+fn kill_process_tree(pid: u32) {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/T", "/PID", &pid.to_string()])
+            .creation_flags(0x08000000)
+            .output();
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = std::process::Command::new("kill")
+            .args(["-9", &format!("-{pid}")])
+            .output();
+    }
 }
 
 pub(crate) fn should_attempt_scrapling(status: StatusCode) -> bool {
