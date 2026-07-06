@@ -1,25 +1,13 @@
 import { useState, useMemo, useEffect } from "react";
-import {
-  Modal,
-  ModalContent,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
-  Button,
-  ScrollShadow,
-  Select,
-  SelectItem,
-  cn,
-} from "@heroui/react";
+import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, ScrollShadow, cn } from "@heroui/react";
 import { HardDrive, AlertCircle, FolderOpen, Globe, Share2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   downloadKindDescription,
   downloadKindLabel,
   resolveDefaultDownloadKind,
-  getHosterDisplayName,
   hosterProtocolLabel,
-  selectableHttpUris,
+  getUriDisplayName,
   type EffectiveDownloadKind,
 } from "@utils/sourceMatch";
 import type { ConfiguredGame } from "@app-types/config";
@@ -75,8 +63,8 @@ export function InstallModal({
   const [customPath, setCustomPath] = useState<string | null>(null);
   const [selectedHosterUri, setSelectedHosterUri] = useState<string | null>(null);
 
-  const httpUris = useMemo(() => selectableHttpUris(uris ?? undefined), [uris]);
-  const showHosterSelect = httpUris.length > 1;
+  const selectableUris = useMemo(() => uris ?? [], [uris]);
+  const showHosterSelect = selectableUris.length > 0;
 
   useEffect(() => {
     if (isOpen) {
@@ -89,8 +77,8 @@ export function InstallModal({
       setSelectedHosterUri(null);
       return;
     }
-    setSelectedHosterUri(httpUris[0]?.uri ?? null);
-  }, [isOpen, httpUris]);
+    setSelectedHosterUri(selectableUris[0]?.uri ?? null);
+  }, [isOpen, selectableUris]);
 
   const sanitizeFolderName = (name: string) => {
     return name.replace(/[:*?"<>|/\\]/g, "").trim();
@@ -103,10 +91,21 @@ export function InstallModal({
 
   const gameSizeBytes = useMemo(() => parseSize(gameSizeStr), [gameSizeStr]);
 
-  const downloadKind: EffectiveDownloadKind = useMemo(
-    () => resolveDefaultDownloadKind(protocols ?? undefined),
-    [protocols]
-  );
+  const selectedUriObject = useMemo(() => {
+    return selectableUris.find((u) => u.uri === selectedHosterUri) ?? selectableUris[0] ?? null;
+  }, [selectableUris, selectedHosterUri]);
+
+  const downloadKind: EffectiveDownloadKind = useMemo(() => {
+    if (selectedUriObject) {
+      if (selectedUriObject.protocol === "torrentMagnet" || selectedUriObject.protocol === "torrentFile") {
+        return "torrent";
+      }
+      if (selectedUriObject.protocol === "http") {
+        return "http";
+      }
+    }
+    return resolveDefaultDownloadKind(protocols ?? undefined);
+  }, [selectedUriObject, protocols]);
 
   const handleCustomFolder = async () => {
     const selected = await open({
@@ -240,33 +239,134 @@ export function InstallModal({
                       )}>
                       {t("steamCatalog.installModal.chooseHoster")}
                     </h4>
-                    <Select
-                      label={t("steamCatalog.installModal.chooseHoster")}
-                      placeholder={t("steamCatalog.installModal.selectHoster")}
-                      size={consoleMode ? "lg" : "sm"}
-                      variant="bordered"
-                      className="w-full"
-                      selectionMode="single"
-                      selectedKeys={new Set([selectedHosterUri ?? httpUris[0]?.uri ?? ""])}
-                      onSelectionChange={(keys) => {
-                        const next = [...keys][0];
-                        if (next !== undefined) setSelectedHosterUri(String(next));
-                      }}
-                      classNames={
-                        consoleMode
-                          ? {
-                              trigger: "h-12 min-h-12 rounded-xl text-base",
-                              value: "text-base font-semibold",
-                            }
-                          : undefined
-                      }>
-                      {httpUris.map((u) => (
-                        <SelectItem key={u.uri} textValue={getHosterDisplayName(u.uri)}>
-                          <span className="capitalize">{getHosterDisplayName(u.uri)}</span>
-                          <span className="ml-2 text-xs text-default-400">{hosterProtocolLabel(u.protocol)}</span>
-                        </SelectItem>
-                      ))}
-                    </Select>
+                    {selectableUris.length === 1 ? (
+                      /* Single URI: compact inline pill */
+                      (() => {
+                        const u = selectableUris[0];
+                        const isTorrent = u.protocol === "torrentMagnet" || u.protocol === "torrentFile";
+                        return (
+                          <div
+                            className={cn(
+                              "flex items-center gap-3 rounded-xl border px-3 py-2.5",
+                              isTorrent
+                                ? "border-secondary/40 bg-secondary/10 text-secondary"
+                                : "border-primary/40 bg-primary/10 text-primary"
+                            )}>
+                            <span
+                              className={cn(
+                                "flex shrink-0 items-center justify-center rounded-lg",
+                                consoleMode ? "h-8 w-8" : "h-6 w-6",
+                                isTorrent ? "bg-secondary/20" : "bg-primary/20"
+                              )}>
+                              {isTorrent ? (
+                                <Share2 size={consoleMode ? 16 : 13} strokeWidth={2} />
+                              ) : (
+                                <Globe size={consoleMode ? 16 : 13} strokeWidth={2} />
+                              )}
+                            </span>
+                            <span className={cn("font-semibold capitalize", consoleMode ? "text-sm" : "text-xs")}>
+                              {getUriDisplayName(u)}
+                            </span>
+                            <span
+                              className={cn(
+                                "ml-auto shrink-0 rounded-md px-1.5 py-0.5 font-bold uppercase tracking-wider",
+                                consoleMode ? "text-[10px]" : "text-[9px]",
+                                isTorrent ? "bg-secondary/15 text-secondary" : "bg-primary/15 text-primary"
+                              )}>
+                              {hosterProtocolLabel(u.protocol)}
+                            </span>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      /* Multiple URIs: card grid */
+                      <div
+                        className={cn(
+                          "grid gap-2",
+                          selectableUris.length === 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3"
+                        )}
+                        role="radiogroup"
+                        aria-label={t("steamCatalog.installModal.chooseHoster")}>
+                        {selectableUris.map((u) => {
+                          const isSelected = (selectedHosterUri ?? selectableUris[0]?.uri) === u.uri;
+                          const isTorrent = u.protocol === "torrentMagnet" || u.protocol === "torrentFile";
+                          return (
+                            <button
+                              key={u.uri}
+                              type="button"
+                              role="radio"
+                              aria-checked={isSelected}
+                              onClick={() => setSelectedHosterUri(u.uri)}
+                              className={cn(
+                                "group relative flex flex-col items-start gap-1.5 rounded-xl border text-left",
+                                "transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]",
+                                "active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+                                consoleMode ? "p-4 rounded-2xl" : "p-3",
+                                isSelected
+                                  ? isTorrent
+                                    ? "border-secondary/60 bg-secondary/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]"
+                                    : "border-primary/60 bg-primary/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]"
+                                  : "border-divider bg-content2 hover:border-default-300 hover:bg-content3"
+                              )}>
+                              {/* Selection ring */}
+                              <span
+                                className={cn(
+                                  "absolute right-2.5 top-2.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 transition-all duration-200",
+                                  isSelected
+                                    ? isTorrent
+                                      ? "border-secondary bg-secondary"
+                                      : "border-primary bg-primary"
+                                    : "border-default-300 bg-transparent"
+                                )}>
+                                {isSelected && <span className="block h-1.5 w-1.5 rounded-full bg-white" />}
+                              </span>
+
+                              {/* Protocol icon */}
+                              <span
+                                className={cn(
+                                  "flex items-center justify-center rounded-lg transition-colors duration-200",
+                                  consoleMode ? "h-9 w-9 rounded-xl" : "h-7 w-7",
+                                  isSelected
+                                    ? isTorrent
+                                      ? "bg-secondary/20 text-secondary"
+                                      : "bg-primary/20 text-primary"
+                                    : "bg-default-100 text-default-500 group-hover:text-foreground"
+                                )}>
+                                {isTorrent ? (
+                                  <Share2 size={consoleMode ? 18 : 14} strokeWidth={2} />
+                                ) : (
+                                  <Globe size={consoleMode ? 18 : 14} strokeWidth={2} />
+                                )}
+                              </span>
+
+                              {/* Label */}
+                              <span
+                                className={cn(
+                                  "w-full truncate pr-4 font-semibold capitalize leading-tight",
+                                  consoleMode ? "text-sm" : "text-xs",
+                                  isSelected ? (isTorrent ? "text-secondary" : "text-primary") : "text-foreground"
+                                )}>
+                                {getUriDisplayName(u)}
+                              </span>
+
+                              {/* Protocol badge */}
+                              <span
+                                className={cn(
+                                  "rounded-md px-1.5 py-0.5 font-bold uppercase tracking-wider",
+                                  consoleMode ? "text-[10px]" : "text-[9px]",
+                                  isSelected
+                                    ? isTorrent
+                                      ? "bg-secondary/15 text-secondary"
+                                      : "bg-primary/15 text-primary"
+                                    : "bg-default-100 text-default-400"
+                                )}>
+                                {hosterProtocolLabel(u.protocol)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 ) : null}
 

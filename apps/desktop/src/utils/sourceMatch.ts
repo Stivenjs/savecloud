@@ -72,6 +72,16 @@ export function hosterProtocolLabel(protocol: DownloadProtocol | string): string
   return String(protocol);
 }
 
+export function getUriDisplayName(u: SourceUri): string {
+  if (u.protocol === "torrentMagnet") {
+    return i18n.t("steamCatalog.installModal.protocols.torrent.label", "BitTorrent");
+  }
+  if (u.protocol === "torrentFile") {
+    return i18n.t("steamCatalog.installModal.protocols.torrent.label", "BitTorrent") + " (.torrent)";
+  }
+  return getHosterDisplayName(u.uri);
+}
+
 /** URIs HTTP con más de una opción (p. ej. gofile, vikingfile). */
 export function selectableHttpUris(uris: readonly SourceUri[] | undefined): SourceUri[] {
   if (!uris?.length) return [];
