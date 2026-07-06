@@ -1718,6 +1718,7 @@
     "title": "Notificaciones",
     "dismiss": "Descartar notificación",
     "openFolder": "Abrir carpeta",
+    "openUrl": "Abrir enlace",
     "markRead": "Leída",
     "markAllRead": "Marcar leídas",
     "clearAll": "Limpiar",

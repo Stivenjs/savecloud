@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { Badge, Button, Popover, PopoverContent, PopoverTrigger, ScrollShadow, Spinner } from "@heroui/react";
-import { AlertTriangle, Bell, CheckCheck, Download, FolderOpen, Info, Trash2, X } from "lucide-react";
+import { AlertTriangle, Bell, CheckCheck, Download, ExternalLink, FolderOpen, Info, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   useNotificationsQuery,
@@ -10,7 +10,7 @@ import {
 import type { NotificationRecord } from "@services/tauri/notifications.service";
 import { formatRelativeDate } from "@utils/format";
 import { formatDayGroupHeading, getLocalDayKey } from "@utils/operationHistory";
-import { openPath } from "@tauri-apps/plugin-opener";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { formatGameDisplayName } from "@utils/gameImage";
 
 function severityColor(severity: string): "default" | "primary" | "success" | "warning" | "danger" {
@@ -44,6 +44,27 @@ async function openFolder(dir: string) {
     await openPath(dir);
   } catch (err) {
     console.error("Could not open folder:", err);
+  }
+}
+
+/** Toma la URI de destino del payloadJson si la descarga de fuentes falló, sino null */
+function getDownloadUri(n: NotificationRecord): string | null {
+  if (n.kind !== "source_download_terminal") return null;
+  if (n.severity !== "error") return null;
+  try {
+    const payload = JSON.parse(n.payloadJson ?? "{}");
+    return typeof payload.selectedUri === "string" ? payload.selectedUri : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Abre la URL en el navegador externo */
+async function openLink(url: string) {
+  try {
+    await openUrl(url);
+  } catch (err) {
+    console.error("Could not open URL:", err);
   }
 }
 
@@ -83,6 +104,7 @@ function NotificationRow({
   const color = severityColor(n.severity);
   const iconBg = iconBgMap[color] ?? iconBgMap.default;
   const downloadDir = getDownloadDir(n);
+  const downloadUri = getDownloadUri(n);
 
   let displayBody = n.body;
   if (n.gameId) {
@@ -139,6 +161,19 @@ function NotificationRow({
                 startContent={<FolderOpen size={12} />}
                 onPress={() => void openFolder(downloadDir)}>
                 {t("notifications.openFolder")}
+              </Button>
+            )}
+
+            {/* Botón de apertura de URL — para descargas fallidas */}
+            {downloadUri && (
+              <Button
+                size="sm"
+                variant="flat"
+                color="warning"
+                className="h-6 px-2 text-[11px] gap-1 min-w-0"
+                startContent={<ExternalLink size={12} />}
+                onPress={() => void openLink(downloadUri)}>
+                {t("notifications.openUrl")}
               </Button>
             )}
 

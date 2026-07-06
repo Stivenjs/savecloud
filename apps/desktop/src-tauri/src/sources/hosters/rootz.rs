@@ -101,7 +101,7 @@ fn is_signed_cdn_url(url: &str) -> bool {
 }
 
 fn is_truly_deleted(data: &RootzData) -> bool {
-    data.status.as_deref() == Some("deleted") && data.file_id.is_none()
+    data.status.as_deref() == Some("deleted")
 }
 
 fn metadata_denied_message(data: &RootzData) -> String {
@@ -362,6 +362,41 @@ pub async fn resolve(
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    #[ignore]
+    async fn live_test_rootz_resolve() {
+        let client = crate::network::get_hoster_download_client();
+        let urls = vec![
+            "https://www.rootz.so/d/2KssK0",
+            "https://www.rootz.so/d/20ah72",
+            "https://rootz.so/d/1EoJ28"
+        ];
+        
+        for url in urls {
+            println!("--- TESTING URL: {} ---", url);
+            let short_id = extract_short_id(url).unwrap();
+            let referer = format!("{ROOTZ_ORIGIN}/d/{short_id}");
+            let page_url = referer.clone();
+            
+            if let Ok(page_token) = fetch_page_token(None, &client, &page_url, None).await {
+                println!("PAGE TOKEN: {}", page_token);
+                if let Ok(meta) = fetch_metadata(&client, &short_id, &page_token, &referer).await {
+                    println!("METADATA FILE_NAME: {:?}", meta.file_name);
+                    println!("METADATA DOWNLOAD_ALLOWED: {:?}", meta.download_allowed);
+                    println!("METADATA STATUS: {:?}", meta.status);
+                    
+                    let file_id_ref = meta.file_id.as_deref();
+                    let cdn_res = resolve_proxy_cdn_url(&client, &short_id, file_id_ref, &page_token, &referer).await;
+                    println!("CDN RES: {:?}", cdn_res);
+                } else {
+                    println!("Failed to fetch metadata");
+                }
+            } else {
+                println!("Failed to fetch page token");
+            }
+        }
+    }
+
     #[test]
     fn extracts_page_token_from_next_payload() {
         let html = r#"shortId\":\"abc\",\"pageToken\":\"tok.test_123\""#;
@@ -399,7 +434,7 @@ mod tests {
             file_name: Some("Bellwright.v0.0.46862.RexaGames.com.zip".into()),
             download_allowed: Some(false),
             password_protected: None,
-            status: Some("deleted".into()),
+            status: Some("active".into()),
             remaining_downloads: Some(-1),
         };
         let msg = metadata_denied_message(&data);

@@ -111,15 +111,18 @@ pub fn try_record_source_download_terminal(app: &AppHandle, job: &SourceDownload
             format!("Descarga completada: {}", job.title),
             format!("{proto} · guardado en {dest_short}"),
         ),
-        SourceJobStatus::Failed => (
-            "error",
-            format!("Error al descargar: {}", job.title),
-            job.error
+        SourceJobStatus::Failed => {
+            let base_err = job
+                .error
                 .as_deref()
                 .filter(|s| !s.trim().is_empty())
-                .unwrap_or("La descarga falló.")
-                .to_string(),
-        ),
+                .unwrap_or("La descarga falló.");
+            (
+                "error",
+                format!("Error al descargar: {}", job.title),
+                format!("{} Intenta abrir el enlace en el navegador e iniciar la descarga de forma manual.", base_err),
+            )
+        }
         SourceJobStatus::Cancelled => (
             "warning",
             format!("Descarga cancelada: {}", job.title),
@@ -133,6 +136,7 @@ pub fn try_record_source_download_terminal(app: &AppHandle, job: &SourceDownload
         "protocol": job.protocol,
         "status": status_str,
         "destinationDir": job.destination_dir,
+        "selectedUri": job.selected_uri,
     });
 
     let device_id = get_or_create_device_id(&db).unwrap_or_else(|_| String::new());
