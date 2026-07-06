@@ -89,13 +89,22 @@ def _smart_referer(url: str) -> str:
     return "https://www.google.com/"
 
 def ensure_fetchers_installed():
+    global StealthyFetcher
     try:
-        from scrapling.fetchers import StealthyFetcher  # noqa: F401
+        from scrapling.fetchers import StealthyFetcher as SF
+        StealthyFetcher = SF
         return True
     except ModuleNotFoundError as exc:
         missing = str(exc)
         if "curl_cffi" not in missing and "scrapling.fetchers" not in missing:
             raise
+
+    if getattr(sys, 'frozen', False):
+        raise RuntimeError(
+            "Scrapling fetchers are not bundled in the compiled executable. "
+            "Please ensure 'scrapling[fetchers]' is included in your PyInstaller build configuration."
+        )
+
     cmd = [sys.executable, "-m", "pip", "install", "--user", "scrapling[fetchers]"]
     result = subprocess.run(cmd, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
     if result.returncode != 0:
@@ -103,6 +112,9 @@ def ensure_fetchers_installed():
             "No se pudieron instalar los extras de Scrapling.\n"
             f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
         )
+    
+    from scrapling.fetchers import StealthyFetcher as SF
+    StealthyFetcher = SF
     return True
 
 
@@ -111,8 +123,11 @@ def ensure_browsers_installed():
         from scrapling.cli import install
         install([], standalone_mode=False)
         return
-    except Exception:
-        pass
+    except Exception as exc:
+        if getattr(sys, 'frozen', False):
+            raise RuntimeError(
+                f"No se pudieron instalar los navegadores de Scrapling programáticamente dentro de la aplicación empaquetada: {exc}"
+            )
     last_error = None
     for cmd in [
         [sys.executable, "-m", "scrapling.cli", "install"],
@@ -128,8 +143,7 @@ def ensure_browsers_installed():
     raise RuntimeError(last_error or "No se pudieron instalar los navegadores de Scrapling.")
 
 
-ensure_fetchers_installed()
-from scrapling.fetchers import StealthyFetcher  # noqa: E402
+StealthyFetcher = None
 
 JS_STREAM_FETCH = """async (targetUrl) => {
     try {
@@ -616,7 +630,12 @@ def write_stdout(text: str):
 
 
 def main() -> int:
+    import multiprocessing
+    multiprocessing.freeze_support()
+
     _start_watchdog(PROCESS_TIMEOUT_SECONDS)
+
+    ensure_fetchers_installed()
 
     if len(sys.argv) < 2:
         print(json.dumps({"error": "missing url"}), file=sys.stderr)
