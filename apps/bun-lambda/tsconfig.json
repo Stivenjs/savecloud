@@ -2,10 +2,12 @@
   "compilerOptions": {
     "lib": ["ESNext"],
     "module": "ESNext",
+    "rootDir": "./",
+    "outDir": "./dist",
     "target": "ESNext",
     "moduleResolution": "node",
-    "ignoreDeprecations": "6.0",
     "types": ["bun-types"],
+    "skipLibCheck": true,
     "esModuleInterop": true,
     "allowJs": true,
     "strict": true

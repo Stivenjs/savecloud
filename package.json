@@ -62,6 +62,6 @@
     "lint-staged": "^16.4.0",
     "oxfmt": "^0.47.0",
     "serverless": "^4.0.0",
-    "typescript": "^5.6.0"
+    "typescript": "^7.0.2"
   }
 }
