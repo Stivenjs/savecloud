@@ -88,13 +88,19 @@ function useOverlayNotifications() {
     const id = window.crypto.randomUUID();
     const notification: OverlayNotification = { id, ...payload };
 
+    try {
+      const audio = new Audio("/sounds/2575.wav");
+      audio.volume = 0.6;
+      audio.play().catch((e) => console.warn("[Overlay] Audio autoplay blocked or failed:", e));
+    } catch (e) {
+      console.warn("[Overlay] Failed to play audio:", e);
+    }
+
     setNotifications((prev) => {
-      // Limitar número de notificaciones simultáneas
       const updated = [...prev, notification];
       if (updated.length > MAX_NOTIFICATIONS) {
         const removed = updated.shift();
         if (removed) {
-          // Limpiar timeout de la notificación eliminada
           const timeout = timeoutsRef.current.get(removed.id);
           if (timeout) {
             clearTimeout(timeout);

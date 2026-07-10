@@ -119,28 +119,67 @@ def ensure_fetchers_installed():
 
 
 def ensure_browsers_installed():
-    try:
-        from scrapling.cli import install
-        install([], standalone_mode=False)
-        return
-    except Exception as exc:
-        if getattr(sys, 'frozen', False):
-            raise RuntimeError(
-                f"No se pudieron instalar los navegadores de Scrapling programáticamente dentro de la aplicación empaquetada: {exc}"
-            )
     last_error = None
-    for cmd in [
-        [sys.executable, "-m", "scrapling.cli", "install"],
-        [sys.executable, "-m", "scrapling.cli", "install", "--force"],
-    ]:
-        result = subprocess.run(cmd, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
-        if result.returncode == 0:
-            return
-        last_error = (
-            "No se pudieron instalar los navegadores de Scrapling.\n"
-            f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    
+    try:
+        from patchright._impl._driver import compute_driver_executable, get_driver_env
+        driver_executable, driver_cli = compute_driver_executable()
+        env = get_driver_env()
+        env["PLAYWRIGHT_BROWSERS_PATH"] = os.environ.get(
+            "PLAYWRIGHT_BROWSERS_PATH",
+            os.path.join(os.path.expanduser("~"), "AppData", "Local", "ms-playwright")
         )
-    raise RuntimeError(last_error or "No se pudieron instalar los navegadores de Scrapling.")
+        sys.stderr.write(f"Instalando navegadores de Patchright usando el driver: {driver_executable}\n")
+        cmd = [driver_executable, driver_cli, "install", "chromium"]
+        result = subprocess.run(
+            cmd,
+            env=env,
+            capture_output=True,
+            text=True,
+            creationflags=CREATE_NO_WINDOW
+        )
+        if result.returncode == 0:
+            sys.stderr.write("Navegadores de Patchright instalados exitosamente.\n")
+            return
+        else:
+            last_error = f"Patchright driver error: {result.stderr}"
+    except Exception as e:
+        last_error = f"Patchright import error: {e}"
+
+    try:
+        from playwright._impl._driver import compute_driver_executable, get_driver_env
+        driver_executable, driver_cli = compute_driver_executable()
+        env = get_driver_env()
+        env["PLAYWRIGHT_BROWSERS_PATH"] = os.environ.get(
+            "PLAYWRIGHT_BROWSERS_PATH",
+            os.path.join(os.path.expanduser("~"), "AppData", "Local", "ms-playwright")
+        )
+        sys.stderr.write(f"Instalando navegadores de Playwright usando el driver: {driver_executable}\n")
+        cmd = [driver_executable, driver_cli, "install", "chromium"]
+        result = subprocess.run(
+            cmd,
+            env=env,
+            capture_output=True,
+            text=True,
+            creationflags=CREATE_NO_WINDOW
+        )
+        if result.returncode == 0:
+            sys.stderr.write("Navegadores de Playwright instalados exitosamente.\n")
+            return
+        else:
+            last_error = f"{last_error} | Playwright driver error: {result.stderr}"
+    except Exception as e:
+        last_error = f"{last_error} | Playwright import error: {e}"
+
+    if not getattr(sys, 'frozen', False):
+        try:
+            from scrapling.cli import install as scrapling_install
+            scrapling_install([], standalone_mode=False)
+            return
+        except Exception as e:
+            last_error = f"{last_error} | Scrapling CLI error: {e}"
+
+    raise RuntimeError(f"No se pudieron instalar los navegadores de Scrapling: {last_error}")
 
 
 StealthyFetcher = None
@@ -311,6 +350,7 @@ def _strategy_browser_fetch(url: str, expect_json: bool) -> str | None:
         "page_action": page_action,
         "google_search": False,
         "dns_over_https": True,
+        "disable_ads": True,
     }
 
     kwargs["page_setup"] = page_setup
@@ -376,6 +416,13 @@ def _setup_generic_route(page, target_url: str):
 
     def handle_route(route, request):
         try:
+            if is_ad_domain(request.url):
+                try:
+                    route.abort()
+                except Exception:
+                    pass
+                return
+
             if request.is_navigation_request():
                 headers = {**request.headers, "Referer": referer}
                 route.continue_(headers=headers)
@@ -412,7 +459,10 @@ def is_ad_domain(url: str) -> bool:
             "opera.com", "adcash", "popunder", "clickunder", "acscdn",
             "adsterra", "doubleclick", "adsystem", "onclick", "traffic",
             "adnxs", "adform", "optimizely", "outbrain", "taboola",
-            "revcontent", "mgid", "criteo"
+            "revcontent", "mgid", "criteo", "google-analytics", "googletagmanager",
+            "googlesyndication", "adservice", "adserver", "adskeeper", "popads",
+            "propellerads", "exoclick", "a-ads", "amazon-adsystem", "pubmatic",
+            "rubiconproject", "smartadserver", "openx", "bidswitch", "casalemedia"
         ]
         url_lower = url.lower()
         return any(kw in url_lower for kw in ad_keywords)
@@ -596,6 +646,7 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
         "page_action": page_action,
         "google_search": False,
         "dns_over_https": True,
+        "disable_ads": True,
     }
 
     page = StealthyFetcher.fetch(url, **kwargs)
