@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { getActiveTorrentDownloads } from "@services/tauri/config.service";
 
 export type TorrentDownloadState = "starting" | "checking" | "downloading" | "paused" | "completed";
@@ -146,5 +147,12 @@ export function initTorrentListeners() {
 
   listen<TorrentProgressState>("torrent-download-done", (ev) => {
     setProgress({ ...ev.payload, state: "completed", progressPercent: 100 });
+
+    invoke("show_overlay_notification", {
+      title: "Juego Descargado",
+      body: ev.payload.name || "La descarga ha finalizado.",
+    }).catch((err) => {
+      console.error("Error al mostrar la notificación del overlay:", err);
+    });
   });
 }

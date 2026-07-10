@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import {
   listSourceDownloadJobs,
   type SourceDownloadJob,
@@ -171,5 +172,14 @@ export function initSourcesListeners() {
 
   listen<SourceProgressPayload>("sources-download-terminal", (ev) => {
     useSourcesDownloadsStore.getState().upsertFromPayload(ev.payload);
+
+    if (ev.payload.status === "completed") {
+      invoke("show_overlay_notification", {
+        title: "Juego Descargado",
+        body: ev.payload.title || "La descarga ha finalizado.",
+      }).catch((err) => {
+        console.error("Error al mostrar la notificación del overlay:", err);
+      });
+    }
   });
 }
