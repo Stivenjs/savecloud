@@ -18,6 +18,26 @@ if (fs.existsSync(iconPath)) {
   iconArgs.push("--icon", iconPath);
 }
 
+const dllArgs: string[] = [];
+if (process.platform === "win32") {
+  const system32 = "C:\\Windows\\System32";
+  const dllNames = [
+    "vcruntime140.dll",
+    "vcruntime140_1.dll",
+    "msvcp140.dll",
+    "msvcp140_1.dll",
+    "msvcp140_2.dll",
+    "vcruntime140_threads.dll",
+  ];
+  for (const name of dllNames) {
+    const dllPath = path.join(system32, name);
+    if (fs.existsSync(dllPath)) {
+      console.log(`Bundling system DLL: ${name}`);
+      dllArgs.push("--add-binary", `${dllPath};.`);
+    }
+  }
+}
+
 console.log("Starting Scrapling Python compilation using PyInstaller...");
 
 if (!fs.existsSync(pythonScriptPath)) {
@@ -93,6 +113,7 @@ const pyinstallerCmd = spawnSync(
     "patchright",
     "--hidden-import",
     "_cffi_backend",
+    ...dllArgs,
     ...iconArgs,
     pythonScriptPath,
   ],
