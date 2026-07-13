@@ -1,7 +1,7 @@
 use crate::config;
 use crate::network;
 use crate::network::stream_download::{stream_url_to_file, GlobalDownloadProgress};
-use crate::sources::extractor::extract_zip;
+use crate::sources::extractor::extract_archive;
 use crate::utils::transfer_metrics::TransferSpeedTracker;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -43,26 +43,52 @@ fn is_valid_exe(path_str: &Option<String>) -> bool {
 }
 
 fn find_in_standard_paths(exe_names: &[&str]) -> Option<String> {
-    let appdata = std::env::var("APPDATA").unwrap_or_default();
-    let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
-
     let mut paths_to_check = vec![];
-
-    if !appdata.is_empty() {
-        paths_to_check.push(PathBuf::from(&appdata).join("Ryujinx/publish/Ryujinx.exe"));
-        paths_to_check.push(PathBuf::from(&appdata).join("Ryujinx/Ryujinx.exe"));
-        paths_to_check.push(PathBuf::from(&appdata).join("shadps4/shadps4.exe"));
-    }
-    if !localappdata.is_empty() {
-        paths_to_check.push(PathBuf::from(&localappdata).join("Ryujinx/publish/Ryujinx.exe"));
-        paths_to_check.push(PathBuf::from(&localappdata).join("Ryujinx/Ryujinx.exe"));
-        paths_to_check.push(PathBuf::from(&localappdata).join("shadps4/shadps4.exe"));
-    }
 
     if let Some(config_dir) = config::paths::config_dir() {
         paths_to_check.push(config_dir.join("emulators/ryujinx/publish/Ryujinx.exe"));
         paths_to_check.push(config_dir.join("emulators/ryujinx/Ryujinx.exe"));
+        paths_to_check.push(config_dir.join("emulators/ryujinx/Ryujinx"));
         paths_to_check.push(config_dir.join("emulators/shadps4/shadps4.exe"));
+        paths_to_check.push(config_dir.join("emulators/shadps4/shadps4"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let appdata = std::env::var("APPDATA").unwrap_or_default();
+        let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
+        if !appdata.is_empty() {
+            paths_to_check.push(PathBuf::from(&appdata).join("Ryujinx/publish/Ryujinx.exe"));
+            paths_to_check.push(PathBuf::from(&appdata).join("Ryujinx/Ryujinx.exe"));
+            paths_to_check.push(PathBuf::from(&appdata).join("shadps4/shadps4.exe"));
+        }
+        if !localappdata.is_empty() {
+            paths_to_check.push(PathBuf::from(&localappdata).join("Ryujinx/publish/Ryujinx.exe"));
+            paths_to_check.push(PathBuf::from(&localappdata).join("Ryujinx/Ryujinx.exe"));
+            paths_to_check.push(PathBuf::from(&localappdata).join("shadps4/shadps4.exe"));
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        paths_to_check.push(PathBuf::from(
+            "/Applications/Ryujinx.app/Contents/MacOS/Ryujinx",
+        ));
+        paths_to_check.push(PathBuf::from(
+            "/Applications/shadps4.app/Contents/MacOS/shadps4",
+        ));
+        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+            paths_to_check.push(home.join("Applications/Ryujinx.app/Contents/MacOS/Ryujinx"));
+            paths_to_check.push(home.join("Applications/shadps4.app/Contents/MacOS/shadps4"));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        paths_to_check.push(PathBuf::from("/usr/bin/ryujinx"));
+        paths_to_check.push(PathBuf::from("/usr/local/bin/ryujinx"));
+        paths_to_check.push(PathBuf::from("/usr/bin/shadps4"));
+        paths_to_check.push(PathBuf::from("/usr/local/bin/shadps4"));
     }
 
     for path in paths_to_check {
@@ -87,7 +113,7 @@ pub fn detect_emulators() -> Result<HashMap<String, EmulatorStatus>, String> {
     let ryujinx_path = if ryujinx_installed {
         settings.ryujinx_path.clone()
     } else {
-        find_in_standard_paths(&["ryujinx.exe"])
+        find_in_standard_paths(&["ryujinx.exe", "ryujinx"])
     };
 
     map.insert(
@@ -104,7 +130,7 @@ pub fn detect_emulators() -> Result<HashMap<String, EmulatorStatus>, String> {
     let shadps4_path = if shadps4_installed {
         settings.shadps4_path.clone()
     } else {
-        find_in_standard_paths(&["shadps4.exe"])
+        find_in_standard_paths(&["shadps4.exe", "shadps4"])
     };
 
     map.insert(
@@ -186,10 +212,12 @@ async fn download_emulator_async(app: &AppHandle, emulator: &str) -> Result<(), 
         ));
     }
 
-    let release_json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("Error decodificando respuesta de la API del emulador: {}", e))?;
+    let release_json: serde_json::Value = response.json().await.map_err(|e| {
+        format!(
+            "Error decodificando respuesta de la API del emulador: {}",
+            e
+        )
+    })?;
 
     let assets = release_json["assets"]
         .as_array()
@@ -202,11 +230,29 @@ async fn download_emulator_async(app: &AppHandle, emulator: &str) -> Result<(), 
         if let Some(name) = asset["name"].as_str() {
             let lower_name = name.to_lowercase();
             let is_match = if emulator == "ryujinx" {
-                lower_name.contains("win")
-                    && lower_name.contains("x64")
-                    && lower_name.ends_with(".zip")
+                if cfg!(target_os = "windows") {
+                    lower_name.contains("win")
+                        && lower_name.contains("x64")
+                        && lower_name.ends_with(".zip")
+                } else if cfg!(target_os = "macos") {
+                    lower_name.contains("macos")
+                        && (lower_name.ends_with(".tar.gz") || lower_name.ends_with(".zip"))
+                } else {
+                    lower_name.contains("linux")
+                        && lower_name.contains("x64")
+                        && (lower_name.ends_with(".tar.gz") || lower_name.ends_with(".zip"))
+                }
             } else {
-                lower_name.contains("win") && lower_name.ends_with(".zip")
+                if cfg!(target_os = "windows") {
+                    lower_name.contains("win") && lower_name.ends_with(".zip")
+                } else if cfg!(target_os = "macos") {
+                    lower_name.contains("macos") && lower_name.ends_with(".zip")
+                } else {
+                    (lower_name.contains("linux")
+                        || lower_name.contains("ubuntu")
+                        || lower_name.contains("sdl"))
+                        && lower_name.ends_with(".zip")
+                }
             };
 
             if is_match {
@@ -221,11 +267,19 @@ async fn download_emulator_async(app: &AppHandle, emulator: &str) -> Result<(), 
 
     let download_url = download_url.ok_or_else(|| {
         format!(
-            "No se encontró un archivo .zip para Windows en los assets de {}",
+            "No se encontró un archivo compatible para tu sistema en los assets de {}",
             emulator
         )
     })?;
-    let file_name = file_name.unwrap_or_else(|| format!("{}.zip", emulator));
+
+    let file_ext = if download_url.ends_with(".tar.gz") {
+        "tar.gz"
+    } else if download_url.ends_with(".tgz") {
+        "tgz"
+    } else {
+        "zip"
+    };
+    let file_name = file_name.unwrap_or_else(|| format!("{}.{}", emulator, file_ext));
 
     let cache_dir = config::paths::cache_dir()
         .ok_or_else(|| "No se pudo obtener el directorio de caché".to_string())?;
@@ -294,7 +348,7 @@ async fn download_emulator_async(app: &AppHandle, emulator: &str) -> Result<(), 
         },
     );
 
-    extract_zip(app, "dummy-emu-job", &temp_zip_path, &dest_dir)?;
+    extract_archive(app, "dummy-emu-job", &temp_zip_path, &dest_dir)?;
 
     let _ = std::fs::remove_file(&temp_zip_path);
 
@@ -321,9 +375,17 @@ async fn download_emulator_async(app: &AppHandle, emulator: &str) -> Result<(), 
     }
 
     let exe_name = if emulator == "ryujinx" {
-        "Ryujinx.exe"
+        if cfg!(target_os = "windows") {
+            "Ryujinx.exe"
+        } else {
+            "Ryujinx"
+        }
     } else {
-        "shadps4.exe"
+        if cfg!(target_os = "windows") {
+            "shadps4.exe"
+        } else {
+            "shadps4"
+        }
     };
     if let Some(found_path) = find_exe(&dest_dir, exe_name) {
         exe_path = Some(found_path.to_string_lossy().into_owned());
@@ -335,6 +397,16 @@ async fn download_emulator_async(app: &AppHandle, emulator: &str) -> Result<(), 
             exe_name
         )
     })?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = std::fs::metadata(&exe_path_str) {
+            let mut perms = metadata.permissions();
+            perms.set_mode(0o755);
+            let _ = std::fs::set_permissions(&exe_path_str, perms);
+        }
+    }
 
     let mut settings = config::load_settings();
     if emulator == "ryujinx" {
