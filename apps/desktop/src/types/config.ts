@@ -89,4 +89,6 @@ export interface Config {
   /** Desactivar aceleración por hardware (GPU) en el webview (requiere reiniciar). */
   readonly disableHardwareAcceleration?: boolean;
   readonly language?: string;
+  readonly ryujinxPath?: string;
+  readonly shadps4Path?: string;
 }

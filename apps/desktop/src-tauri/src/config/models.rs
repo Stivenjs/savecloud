@@ -113,6 +113,12 @@ pub struct AppSettings {
     /// Idioma preferido de la aplicación ("es", "en", etc.).
     #[serde(default)]
     pub language: Option<String>,
+    /// Ruta al ejecutable de Ryujinx
+    #[serde(default)]
+    pub ryujinx_path: Option<String>,
+    /// Ruta al ejecutable de ShadPS4
+    #[serde(default)]
+    pub shadps4_path: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -264,6 +270,10 @@ pub struct Config {
     pub low_performance_mode: bool,
     #[serde(default)]
     pub disable_hardware_acceleration: bool,
+    #[serde(default)]
+    pub ryujinx_path: Option<String>,
+    #[serde(default)]
+    pub shadps4_path: Option<String>,
 }
 
 /// Objeto de transferencia de datos (DTO) de la configuración principal,
@@ -329,6 +339,10 @@ pub struct ConfigDto {
     pub disable_hardware_acceleration: bool,
     #[serde(default)]
     pub language: Option<String>,
+    #[serde(default)]
+    pub ryujinx_path: Option<String>,
+    #[serde(default)]
+    pub shadps4_path: Option<String>,
 }
 
 /// DTO representativo de un juego para el frontend.

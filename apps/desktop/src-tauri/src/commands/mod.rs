@@ -6,3 +6,4 @@ pub mod scan;
 pub mod share;
 pub mod stats;
 pub mod sync;
+pub mod emulators;

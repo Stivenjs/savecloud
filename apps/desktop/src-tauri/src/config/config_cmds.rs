@@ -111,6 +111,8 @@ pub fn get_config() -> ConfigDto {
         developer_mode: settings.developer_mode,
         proxy_url: settings.proxy_url.clone(),
         language: settings.language.clone(),
+        ryujinx_path: settings.ryujinx_path.clone(),
+        shadps4_path: settings.shadps4_path.clone(),
         games: library
             .games
             .into_iter()

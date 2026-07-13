@@ -320,6 +320,8 @@ pub fn get_combined_config() -> Config {
         game_mode_boost_detected_game_cpu: settings.game_mode_boost_detected_game_cpu,
         developer_mode: settings.developer_mode,
         proxy_url: settings.proxy_url,
+        ryujinx_path: settings.ryujinx_path,
+        shadps4_path: settings.shadps4_path,
     }
 }
 
