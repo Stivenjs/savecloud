@@ -383,12 +383,90 @@ pub fn get_entry_for_steam_app(
     let entry = index.get(steam_app_id)?;
     let mut resolved = Vec::new();
 
+    #[allow(unused_mut)]
+    let mut proton_prefix: Option<std::path::PathBuf> = None;
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(dir) = install_dir {
+            let path = Path::new(dir);
+            if let Some(common_parent) = path.parent() {
+                if let Some(steamapps) = common_parent.parent() {
+                    let pfx = steamapps.join("compatdata").join(steam_app_id).join("pfx");
+                    if pfx.exists() && pfx.is_dir() {
+                        proton_prefix = Some(pfx);
+                    }
+                }
+            }
+        }
+    }
+
     for template in &entry.save_paths {
-        let path = resolve_path_template(template, install_dir);
+        let path = if let Some(ref pfx_path) = proton_prefix {
+            resolve_path_template_for_proton(template, install_dir, pfx_path)
+        } else {
+            resolve_path_template(template, install_dir)
+        };
         if !path.is_empty() {
             resolved.push(path);
         }
     }
 
     Some((entry.clone(), resolved))
+}
+
+fn resolve_path_template_for_proton(
+    template: &PathTemplate,
+    install_dir: Option<&str>,
+    pfx_path: &Path,
+) -> String {
+    match template {
+        PathTemplate::Absolute(s) => {
+            let mut result = s.clone();
+
+            let steamuser_profile = pfx_path.join("drive_c").join("users").join("steamuser");
+            let steamuser_str = steamuser_profile.to_string_lossy().to_string();
+
+            result = result.replace("<home>", &steamuser_str);
+            result = result.replace("<osUserName>", "steamuser");
+            result = result.replace("%USERPROFILE%", &steamuser_str);
+            result = result.replace("%HOMEPATH%", &steamuser_str);
+
+            let appdata_profile = steamuser_profile.join("AppData").join("Roaming");
+            let appdata_str = appdata_profile.to_string_lossy().to_string();
+            result = result.replace("%APPDATA%", &appdata_str);
+            result = result.replace("<winAppData>", &appdata_str);
+
+            let localappdata_profile = steamuser_profile.join("AppData").join("Local");
+            let localappdata_str = localappdata_profile.to_string_lossy().to_string();
+            result = result.replace("%LOCALAPPDATA%", &localappdata_str);
+            result = result.replace("<winLocalAppData>", &localappdata_str);
+
+            let documents_profile = steamuser_profile.join("Documents");
+            let documents_str = documents_profile.to_string_lossy().to_string();
+            result = result.replace("<winDocuments>", &documents_str);
+
+            let saved_games_profile = steamuser_profile.join("Saved Games");
+            let saved_games_str = saved_games_profile.to_string_lossy().to_string();
+            result = result.replace("<savedGames>", &saved_games_str);
+
+            let public_profile = pfx_path.join("drive_c").join("users").join("Public");
+            let public_str = public_profile.to_string_lossy().to_string();
+            result = result.replace("%PUBLIC%", &public_str);
+            result = result.replace("<winPublic>", &public_str);
+
+            let programdata_profile = pfx_path.join("drive_c").join("ProgramData");
+            let programdata_str = programdata_profile.to_string_lossy().to_string();
+            result = result.replace("%PROGRAMDATA%", &programdata_str);
+            result = result.replace("%ALLUSERSPROFILE%", &programdata_str);
+
+            if result.starts_with("C:") || result.starts_with("c:") {
+                let drive_c = pfx_path.join("drive_c");
+                let drive_c_str = drive_c.to_string_lossy().to_string();
+                result = format!("{}{}", drive_c_str, &result[2..]);
+            }
+
+            result.replace('\\', "/")
+        }
+        PathTemplate::RelativeToInstall(_rel) => resolve_path_template(template, install_dir),
+    }
 }

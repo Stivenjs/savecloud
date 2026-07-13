@@ -1,30 +1,18 @@
 //! Detección automática de Steam App ID a partir de rutas de guardados.
 //! Escanea las bibliotecas de Steam y asocia rutas de juego con sus app IDs.
 
-use std::collections::HashMap;
-use std::path::PathBuf;
-
-#[cfg(target_os = "windows")]
 use regex::Regex;
-
-#[cfg(target_os = "windows")]
+use std::collections::HashMap;
 use std::fs;
-
-#[cfg(target_os = "windows")]
-use std::path::Path;
-
-#[cfg(target_os = "windows")]
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
-#[cfg(target_os = "windows")]
 static VDF_PATH_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#""path"\s+"([^"]+)""#).unwrap());
 
-#[cfg(target_os = "windows")]
 static ENV_VAR_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"%([^%]+)%").unwrap());
 
 /// Limpia el prefijo UNC (\\?\) que añade `canonicalize` en Windows.
-#[cfg(target_os = "windows")]
 fn clean_unc_path(path: &Path) -> PathBuf {
     let s = path.to_string_lossy();
     if s.starts_with(r"\\?\") {
@@ -35,7 +23,6 @@ fn clean_unc_path(path: &Path) -> PathBuf {
 }
 
 /// Expande variables de entorno como %APPDATA%.
-#[cfg(target_os = "windows")]
 fn expand_env_vars(s: &str) -> String {
     let mut result = s.to_string();
 
@@ -52,7 +39,6 @@ fn expand_env_vars(s: &str) -> String {
 }
 
 /// Normaliza una ruta para comparación.
-#[cfg(target_os = "windows")]
 fn normalize_path(s: &str) -> PathBuf {
     let expanded = expand_env_vars(s);
     let path = PathBuf::from(&expanded);
@@ -64,17 +50,34 @@ fn normalize_path(s: &str) -> PathBuf {
     }
 }
 
-/// Rutas posibles de Steam en Windows.
-#[cfg(target_os = "windows")]
-fn steam_path_candidates() -> Vec<PathBuf> {
+/// Rutas posibles de Steam en diferentes sistemas operativos.
+pub fn steam_path_candidates() -> Vec<PathBuf> {
     let mut candidates = Vec::new();
 
-    if let Ok(path) = read_steam_path_from_registry() {
-        candidates.push(path);
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(path) = read_steam_path_from_registry() {
+            candidates.push(path);
+        }
+        candidates.push(PathBuf::from(r"C:\Program Files (x86)\Steam"));
+        candidates.push(PathBuf::from(r"C:\Program Files\Steam"));
     }
 
-    candidates.push(PathBuf::from(r"C:\Program Files (x86)\Steam"));
-    candidates.push(PathBuf::from(r"C:\Program Files\Steam"));
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+            candidates.push(home.join("Library/Application Support/Steam"));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+            candidates.push(home.join(".local/share/Steam"));
+            candidates.push(home.join(".steam/steam"));
+            candidates.push(home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam"));
+        }
+    }
 
     candidates
 }
@@ -93,7 +96,6 @@ fn read_steam_path_from_registry() -> Result<PathBuf, std::io::Error> {
 }
 
 /// Lee libraryfolders.vdf y extrae las rutas de las bibliotecas.
-#[cfg(target_os = "windows")]
 fn read_library_paths(steam_root: &Path) -> Vec<PathBuf> {
     let vdf_paths = [
         steam_root.join("steamapps").join("libraryfolders.vdf"),
@@ -116,12 +118,11 @@ fn read_library_paths(steam_root: &Path) -> Vec<PathBuf> {
 }
 
 /// Extrae las rutas del VDF.
-#[cfg(target_os = "windows")]
 fn parse_libraryfolders_vdf(content: &str) -> Option<Vec<PathBuf>> {
     let paths: Vec<PathBuf> = VDF_PATH_REGEX
         .captures_iter(content)
         .filter_map(|cap| cap.get(1))
-        .map(|m| PathBuf::from(m.as_str().replace("\\\\", "\\")))
+        .map(|m| PathBuf::from(m.as_str().replace("\\\\", "/").replace("\\", "/")))
         .filter(|p| p.is_dir())
         .collect();
 
@@ -133,7 +134,6 @@ fn parse_libraryfolders_vdf(content: &str) -> Option<Vec<PathBuf>> {
 }
 
 /// Parsea appmanifest_*.acf
-#[cfg(target_os = "windows")]
 fn parse_appmanifest(content: &str) -> Option<(String, String)> {
     let mut appid = None;
     let mut installdir = None;
@@ -160,7 +160,6 @@ fn parse_appmanifest(content: &str) -> Option<(String, String)> {
 }
 
 /// Construye el mapa path -> appid.
-#[cfg(target_os = "windows")]
 fn build_path_to_appid_map(library_paths: &[PathBuf]) -> HashMap<PathBuf, String> {
     let mut map = HashMap::new();
 
@@ -196,8 +195,7 @@ fn build_path_to_appid_map(library_paths: &[PathBuf]) -> HashMap<PathBuf, String
     map
 }
 
-/// Construye el mapa ruta -> Steam AppID (Windows).
-#[cfg(target_os = "windows")]
+/// Construye el mapa ruta -> Steam AppID.
 pub fn get_steam_path_to_appid_map() -> HashMap<PathBuf, String> {
     let Some(steam_root) = steam_path_candidates()
         .into_iter()
@@ -210,48 +208,32 @@ pub fn get_steam_path_to_appid_map() -> HashMap<PathBuf, String> {
     build_path_to_appid_map(&library_paths)
 }
 
-/// En Linux/macOS no construimos el mapa desde `libraryfolders.vdf`; devuelve mapa vacío.
-#[cfg(not(target_os = "windows"))]
-pub fn get_steam_path_to_appid_map() -> HashMap<PathBuf, String> {
-    HashMap::new()
-}
-
 /// Busca el appid desde una ruta.
 pub fn resolve_steam_app_id_from_map(
     path_to_appid: &HashMap<PathBuf, String>,
     game_path: &str,
 ) -> Option<String> {
-    #[cfg(target_os = "windows")]
-    {
-        let normalized = normalize_path(game_path);
-        let normalized_str = normalized.to_string_lossy().to_lowercase();
+    let normalized = normalize_path(game_path);
+    let normalized_str = normalized.to_string_lossy().to_lowercase();
 
-        let mut best: Option<(&PathBuf, &String)> = None;
+    let mut best: Option<(&PathBuf, &String)> = None;
 
-        for (steam_game_path, appid) in path_to_appid {
-            let steam_game_str = steam_game_path.to_string_lossy().to_lowercase();
-            if normalized_str.starts_with(&steam_game_str) {
-                let current_components = steam_game_path.components().count();
-                let best_components = best
-                    .as_ref()
-                    .map(|(p, _)| p.components().count())
-                    .unwrap_or(0);
+    for (steam_game_path, appid) in path_to_appid {
+        let steam_game_str = steam_game_path.to_string_lossy().to_lowercase();
+        if normalized_str.starts_with(&steam_game_str) {
+            let current_components = steam_game_path.components().count();
+            let best_components = best
+                .as_ref()
+                .map(|(p, _)| p.components().count())
+                .unwrap_or(0);
 
-                if best_components < current_components {
-                    best = Some((steam_game_path, appid));
-                }
+            if best_components < current_components {
+                best = Some((steam_game_path, appid));
             }
         }
-
-        best.map(|(_, id)| id.clone())
     }
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = path_to_appid;
-        let _ = game_path;
-        None
-    }
+    best.map(|(_, id)| id.clone())
 }
 
 /// Busca la carpeta de instalación en `steamapps/common` para un App ID.
