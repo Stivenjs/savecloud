@@ -111,6 +111,8 @@ pub fn get_config() -> ConfigDto {
         developer_mode: settings.developer_mode,
         proxy_url: settings.proxy_url.clone(),
         language: settings.language.clone(),
+        ryujinx_path: settings.ryujinx_path.clone(),
+        shadps4_path: settings.shadps4_path.clone(),
         games: library
             .games
             .into_iter()
@@ -300,7 +302,10 @@ pub fn set_low_performance_mode(app: tauri::AppHandle, enabled: bool) -> Result<
 
 /// Activa o desactiva la desactivación de aceleración por hardware.
 #[tauri::command]
-pub fn set_disable_hardware_acceleration(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+pub fn set_disable_hardware_acceleration(
+    app: tauri::AppHandle,
+    enabled: bool,
+) -> Result<(), String> {
     let mut settings = config::load_settings();
     settings.disable_hardware_acceleration = enabled;
     config::save_settings(&settings)?;
@@ -648,6 +653,49 @@ pub fn launch_game(game_id: String) -> Result<(), String> {
     if !Path::new(path).is_file() {
         return Err(format!("El archivo no existe: {}", path));
     }
+
+    let ext = Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    if ext == "nsp" || ext == "xci" || ext == "nsz" {
+        let settings = config::load_settings();
+        if let Some(ref emu_path) = settings.ryujinx_path {
+            if Path::new(emu_path).exists() {
+                let emu_dir = Path::new(emu_path).parent();
+                let mut cmd = std::process::Command::new(emu_path);
+                if let Some(dir) = emu_dir {
+                    cmd.current_dir(dir);
+                }
+                cmd.arg(path)
+                    .spawn()
+                    .map(|_| ())
+                    .map_err(|e| format!("Error al lanzar Ryujinx: {}", e))?;
+                return Ok(());
+            }
+        }
+        return Err("Ryujinx no está configurado o no existe en la ruta guardada. Por favor, instálalo o configúralo en los Ajustes.".to_string());
+    } else if ext == "pkg" {
+        let settings = config::load_settings();
+        if let Some(ref emu_path) = settings.shadps4_path {
+            if Path::new(emu_path).exists() {
+                let emu_dir = Path::new(emu_path).parent();
+                let mut cmd = std::process::Command::new(emu_path);
+                if let Some(dir) = emu_dir {
+                    cmd.current_dir(dir);
+                }
+                cmd.args(["-g", path])
+                    .spawn()
+                    .map(|_| ())
+                    .map_err(|e| format!("Error al lanzar ShadPS4: {}", e))?;
+                return Ok(());
+            }
+        }
+        return Err("ShadPS4 no está configurado o no existe en la ruta guardada. Por favor, instálalo o configúralo en los Ajustes.".to_string());
+    }
+
     launch_exe::launch_game_executable(path)
 }
 

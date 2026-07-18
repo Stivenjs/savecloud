@@ -615,6 +615,25 @@
     }
   },
   "settings": {
+    "emulators": {
+      "title": "Emulators & Tools",
+      "subtitle": "Download or configure your emulator paths to manage and sync your console saves.",
+      "loading": "Loading status...",
+      "detected": "Detected",
+      "notInstalled": "Not installed",
+      "downloading": "Downloading...",
+      "extracting": "Extracting...",
+      "downloadButton": "Download",
+      "pickExecutableTooltip": "Select executable",
+      "changeExecutableTooltip": "Change executable",
+      "searchExecutableTooltip": "Browse local executable",
+      "decompressing": "Extracting files...",
+      "selectExecutableTitle": "Select {{name}} executable",
+      "executablesFilter": "Executables",
+      "allFilesFilter": "All files",
+      "ryujinxSubtitle": "Nintendo Switch emulator (Ryujinx.exe executable)",
+      "shadps4Subtitle": "PlayStation 4 emulator (shadps4.exe executable)"
+    },
     "createConfigModal": {
       "title": "Configure Cloud Connection",
       "step": "Step 1 of 1",

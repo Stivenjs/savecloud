@@ -75,8 +75,8 @@ export default function Downloads() {
             <h4 className="text-xs font-bold text-default-700 uppercase tracking-wider mb-2">Requisitos Mínimos</h4>
             <p className="text-xs text-default-400 leading-relaxed">
               Mínimo macOS 10.15 (Catalina), recomendado macOS 12 (Monterey) o superior. Soporte nativo para sistemas
-              Intel y Apple Silicon (Universal .dmg). Configuración manual de rutas de partidas (detección de Steam no
-              disponible en macOS).
+              Intel y Apple Silicon (Universal .dmg). Incluye detección automática de partidas locales en tus
+              bibliotecas de Steam.
             </p>
           </div>
         </div>
@@ -160,7 +160,7 @@ export default function Downloads() {
             <p className="text-xs text-default-400 leading-relaxed">
               glibc &gt;= 2.28, glibcxx &gt;= 3.4.25 (Ubuntu 20.04+, Debian 10+). Requiere dependencias de sistema:
               webkit2gtk-4.1, gtk3, libsecret-1-0, libxdo3 (simulación de teclado/xdotool), libasound2 y libnotify.
-              Configuración manual de rutas de partidas (detección de Steam no disponible en Linux).
+              Incluye detección automática de partidas locales en tus bibliotecas de Steam.
             </p>
           </div>
         </div>

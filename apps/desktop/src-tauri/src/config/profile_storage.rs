@@ -410,6 +410,8 @@ pub fn initialize_profile_storage(profile: &super::profiles::Profile) -> Result<
         low_performance_mode: false,
         disable_hardware_acceleration: false,
         language: None,
+        ryujinx_path: None,
+        shadps4_path: None,
     };
 
     save_settings_for_profile(&profile.id, &settings)?;

@@ -25,6 +25,7 @@ import { DevSdk } from "@features/settings/DevSdk";
 import { DeveloperModeCard } from "@features/settings/DeveloperModeCard";
 import { SourceInstallSettingsCard } from "@features/settings/SourceInstallSettingsCard";
 import { ProxySettingsCard } from "@features/settings/ProxySettingsCard";
+import { EmulatorIntegrationsCard } from "@features/settings/EmulatorIntegrationsCard";
 import { GamepadTesterCard } from "@features/settings/GamepadTesterCard";
 import { VoiceCommandsCard } from "@features/voice-commands";
 import { GameModeCard } from "@features/settings/GameModeCard";
@@ -313,6 +314,7 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
                 onTestNotification={handleTestNotification}
               />
               <VoiceCommandsCard />
+              <EmulatorIntegrationsCard />
             </div>
           </div>
         );

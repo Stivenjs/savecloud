@@ -70,17 +70,17 @@ function findPythonPath(): string {
 
 const pythonBin = findPythonPath();
 
-console.log("Checking if pyinstaller is installed...");
-const checkPyInstaller = spawnSync(pythonBin, ["-m", "PyInstaller", "--version"], { shell: true, encoding: "utf8" });
+console.log("Checking Python dependencies (PyInstaller and Scrapling with fetchers)...");
+const checkDeps = spawnSync(pythonBin, ["-c", "import PyInstaller, scrapling.fetchers"], { shell: true });
 
-if (checkPyInstaller.status !== 0) {
-  console.log("pyinstaller not found. Attempting to install it via pip...");
-  const installPip = spawnSync(pythonBin, ["-m", "pip", "install", "pyinstaller", "scrapling"], {
+if (checkDeps.status !== 0) {
+  console.log("Required dependencies missing. Installing/updating pyinstaller and scrapling[fetchers] via pip...");
+  const installPip = spawnSync(pythonBin, ["-m", "pip", "install", "pyinstaller", '"scrapling[fetchers]"'], {
     shell: true,
     stdio: "inherit",
   });
   if (installPip.status !== 0) {
-    console.error("Failed to install pyinstaller and scrapling via pip. Please install them manually.");
+    console.error("Failed to install pyinstaller and scrapling[fetchers] via pip. Please install them manually.");
     process.exit(1);
   }
 }

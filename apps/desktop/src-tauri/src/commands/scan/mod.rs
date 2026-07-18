@@ -333,7 +333,6 @@ fn scan_base_paths_into_vec(base_path: &str, base_label: &str) -> Vec<PathCandid
     candidates
 }
 
-#[cfg(target_os = "windows")]
 mod windows_scanners {
     use super::*;
 
@@ -343,6 +342,7 @@ mod windows_scanners {
     const MAX_SCAN_DEPTH: usize = 5;
 
     /// Devuelve todas las unidades lógicas disponibles (A:\ … Z:\).
+    #[cfg(target_os = "windows")]
     pub fn logical_drives() -> Vec<String> {
         (b'A'..=b'Z')
             .map(|c| format!("{}:\\", c as char))
@@ -512,15 +512,16 @@ mod windows_scanners {
         path_to_appid: &std::collections::HashMap<PathBuf, String>,
         manifest_index: &Option<manifest::ManifestIndex>,
     ) {
-        let steam_path = paths::default_steam_path();
-        if !Path::new(steam_path).exists() {
+        let steam_paths = crate::steam::steam_path_candidates();
+        let Some(steam_path) = steam_paths.into_iter().find(|p| p.exists()) else {
             return;
-        }
+        };
+        let steam_path_str = steam_path.to_string_lossy().to_string();
 
-        candidate_list.extend(find_steam_userdata_candidates(steam_path, manifest_index));
+        candidate_list.extend(find_steam_userdata_candidates(&steam_path_str, manifest_index));
 
-        let mut libraries = vec![steam_path.to_string()];
-        libraries.extend(find_steam_library_paths(steam_path));
+        let mut libraries = vec![steam_path_str.clone()];
+        libraries.extend(find_steam_library_paths(&steam_path_str));
 
         let lib_candidates: Vec<PathCandidateDto> = libraries
             .par_iter()
@@ -567,6 +568,7 @@ mod windows_scanners {
     }
 
     /// Escanea ubicaciones de guardados de versiones "crackeadas" / emuladas.
+    #[cfg(target_os = "windows")]
     pub fn scan_cracks(
         candidate_list: &mut CandidateList,
         manifest_index: &Option<manifest::ManifestIndex>,
@@ -645,6 +647,75 @@ fn base_scan_jobs(cfg: &config::Config, env: &EnvContext) -> Vec<(String, String
         .iter()
         .filter_map(|entry| expand_path(&entry.path, env).map(|exp| (exp, entry.label.clone())))
         .collect();
+
+    let mut ryujinx_added = false;
+    if let Some(ref ryujinx_exe) = cfg.ryujinx_path {
+        let exe_path = Path::new(ryujinx_exe);
+        if let Some(parent) = exe_path.parent() {
+            let portable_save = parent.join("portable/bis/user/save");
+            if portable_save.exists() && portable_save.is_dir() {
+                jobs.push((
+                    portable_save.to_string_lossy().into_owned(),
+                    "Ryujinx Portable (Switch)".to_string(),
+                ));
+                ryujinx_added = true;
+            }
+        }
+    }
+    if !ryujinx_added {
+        let ryujinx_std = if cfg!(target_os = "windows") {
+            expand_path("%APPDATA%/Ryujinx/bis/user/save", env)
+        } else if cfg!(target_os = "macos") {
+            expand_path("~/Library/Application Support/Ryujinx/bis/user/save", env)
+        } else {
+            expand_path("~/.config/Ryujinx/bis/user/save", env)
+        };
+        if let Some(path) = ryujinx_std {
+            if Path::new(&path).exists() {
+                jobs.push((path, "Ryujinx (Switch)".to_string()));
+            }
+        }
+    }
+
+    let mut shadps4_added = false;
+    if let Some(ref shadps4_exe) = cfg.shadps4_path {
+        let exe_path = Path::new(shadps4_exe);
+        if let Some(parent) = exe_path.parent() {
+            let portable_save = parent.join("user/savedata");
+            if portable_save.exists() && portable_save.is_dir() {
+                jobs.push((
+                    portable_save.to_string_lossy().into_owned(),
+                    "ShadPS4 Portable (PS4)".to_string(),
+                ));
+                shadps4_added = true;
+            }
+        }
+    }
+    if !shadps4_added {
+        let shadps4_paths = if cfg!(target_os = "windows") {
+            vec![
+                expand_path("%APPDATA%/shadps4/user/savedata", env),
+                expand_path("%LOCALAPPDATA%/shadps4/user/savedata", env),
+            ]
+        } else if cfg!(target_os = "macos") {
+            vec![expand_path(
+                "~/Library/Application Support/shadps4/user/savedata",
+                env,
+            )]
+        } else {
+            vec![
+                expand_path("~/.config/shadps4/user/savedata", env),
+                expand_path("~/.local/share/shadps4/user/savedata", env),
+            ]
+        };
+        for path_opt in shadps4_paths {
+            if let Some(path) = path_opt {
+                if Path::new(&path).exists() {
+                    jobs.push((path, "ShadPS4 (PS4)".to_string()));
+                }
+            }
+        }
+    }
 
     #[cfg(target_os = "windows")]
     {
@@ -729,7 +800,6 @@ fn read_registry_install_dir(full_path: &str) -> Option<String> {
 ///
 /// Este índice permite que el filtro de redundancia opere en O(1) por
 /// candidato en lugar de iterar toda la lista en cada comprobación (O(n²)).
-#[cfg(target_os = "windows")]
 fn build_official_path_index(candidates: &[PathCandidateDto]) -> HashSet<String> {
     let mut index = HashSet::new();
     for c in candidates {
@@ -746,13 +816,12 @@ fn build_official_path_index(candidates: &[PathCandidateDto]) -> HashSet<String>
 }
 
 pub fn scan_path_candidates_sync(
-    #[cfg(target_os = "windows")] manifest_index: Option<crate::manifest::ManifestIndex>,
+    manifest_index: Option<crate::manifest::ManifestIndex>,
 ) -> Vec<PathCandidateDto> {
     let cfg = config::load_config();
     let env = EnvContext::resolve();
     let mut list = CandidateList::new();
 
-    #[cfg(target_os = "windows")]
     if let Some(manifest) = &manifest_index {
         let mut unique_entries = Vec::new();
         let mut seen_names = HashSet::new();
@@ -768,6 +837,7 @@ pub fn scan_path_candidates_sync(
                 let mut valid_game_paths = Vec::new();
 
                 let mut install_dir_cache: Option<String> = None;
+                #[cfg(target_os = "windows")]
                 if let Some(reg_path) = &entry.registry_path {
                     install_dir_cache = read_registry_install_dir(reg_path);
                 }
@@ -848,19 +918,15 @@ pub fn scan_path_candidates_sync(
 
     list.extend(parallel_candidates);
 
+    let path_to_appid = crate::steam::get_steam_path_to_appid_map();
+    windows_scanners::scan_steam(&mut list, &path_to_appid, &manifest_index);
+
     #[cfg(target_os = "windows")]
-    {
-        let path_to_appid = crate::steam::get_steam_path_to_appid_map();
-        windows_scanners::scan_steam(&mut list, &path_to_appid, &manifest_index);
-        windows_scanners::scan_cracks(&mut list, &manifest_index, &env);
-    }
+    windows_scanners::scan_cracks(&mut list, &manifest_index, &env);
 
     let all_candidates = list.into_vec();
 
-    #[cfg(target_os = "windows")]
     let official_index = build_official_path_index(&all_candidates);
-    #[cfg(not(target_os = "windows"))]
-    let official_index: HashSet<String> = HashSet::new();
 
     all_candidates
         .into_iter()
@@ -882,18 +948,10 @@ pub fn scan_path_candidates_sync(
 
 #[tauri::command]
 pub async fn scan_path_candidates() -> Result<Vec<PathCandidateDto>, String> {
-    #[cfg(target_os = "windows")]
     let manifest_index = crate::manifest::load_manifest_index_async().await.ok();
 
     tauri::async_runtime::spawn_blocking(move || {
-        #[cfg(target_os = "windows")]
-        {
-            scan_path_candidates_sync(manifest_index)
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            scan_path_candidates_sync()
-        }
+        scan_path_candidates_sync(manifest_index)
     })
     .await
     .map_err(|e| format!("Error en el hilo de escaneo: {}", e))

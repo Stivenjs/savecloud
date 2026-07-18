@@ -11,3 +11,4 @@ export * from "./profile.service";
 export * from "./stream.service";
 export * from "./system.service";
 export * from "./observability.service";
+export * from "./emulators.service";

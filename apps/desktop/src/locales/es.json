@@ -615,6 +615,25 @@
     }
   },
   "settings": {
+    "emulators": {
+      "title": "Emuladores y Herramientas",
+      "subtitle": "Descarga o configura las rutas de tus emuladores para gestionar y subir tus partidas guardadas de consolas.",
+      "loading": "Cargando estado...",
+      "detected": "Detectado",
+      "notInstalled": "No instalado",
+      "downloading": "Descargando...",
+      "extracting": "Extrayendo...",
+      "downloadButton": "Descargar",
+      "pickExecutableTooltip": "Buscar ejecutable",
+      "changeExecutableTooltip": "Cambiar ejecutable",
+      "searchExecutableTooltip": "Buscar ejecutable local",
+      "decompressing": "Descomprimiendo archivos...",
+      "selectExecutableTitle": "Seleccionar ejecutable de {{name}}",
+      "executablesFilter": "Ejecutables",
+      "allFilesFilter": "Todos los archivos",
+      "ryujinxSubtitle": "Emulador de Nintendo Switch (ejecutable Ryujinx.exe)",
+      "shadps4Subtitle": "Emulador de PlayStation 4 (ejecutable shadps4.exe)"
+    },
     "createConfigModal": {
       "title": "Configurar conexión a la nube",
       "step": "Paso 1 de 1",

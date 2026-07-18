@@ -222,5 +222,8 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::streaming::commands::streaming_connect_lan,
         crate::streaming::commands::streaming_stop,
         crate::streaming::commands::streaming_get_state,
+        crate::commands::emulators::detect_emulators,
+        crate::commands::emulators::set_emulator_path,
+        crate::commands::emulators::download_emulator,
     ])
 }
