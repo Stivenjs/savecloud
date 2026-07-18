@@ -6,7 +6,6 @@ mod controller;
 mod devtools_cmds;
 mod game_mode;
 mod ipc;
-#[cfg(target_os = "windows")]
 mod manifest;
 mod network;
 mod notifications;
