@@ -13,8 +13,6 @@ import { queryClient } from "@lib/queryClient";
 import { useShellUiStore } from "@store/ShellUiStore";
 import App from "@/App";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
-import { WindowEntranceAnimation } from "@components/layout";
-import { MotionConfig } from "framer-motion";
 import { useEffect } from "react";
 import { preloadHls } from "@utils/hls";
 import "@/styles/index.css";
@@ -58,11 +56,7 @@ function getRootElement(): HTMLElement {
  * Componente wrapper para la aplicación en modo overlay
  */
 function OverlayWrapper({ children }: { children: React.ReactNode }) {
-  return (
-    <HeroUIProvider>
-      <WindowEntranceAnimation>{children}</WindowEntranceAnimation>
-    </HeroUIProvider>
-  );
+  return <HeroUIProvider>{children}</HeroUIProvider>;
 }
 
 /**
@@ -80,13 +74,7 @@ function AppConfigProvider({ children }: { children: React.ReactNode }) {
     }
   }, [lowPerf]);
 
-  return (
-    <HeroUIProvider disableAnimation={lowPerf}>
-      <MotionConfig reducedMotion={lowPerf ? "always" : "user"}>
-        <WindowEntranceAnimation lowPerf={lowPerf}>{children}</WindowEntranceAnimation>
-      </MotionConfig>
-    </HeroUIProvider>
-  );
+  return <HeroUIProvider disableAnimation={lowPerf}>{children}</HeroUIProvider>;
 }
 
 function MainAppWrapper({ children }: { children: React.ReactNode }) {
