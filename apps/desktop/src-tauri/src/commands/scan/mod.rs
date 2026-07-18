@@ -15,9 +15,7 @@ mod paths;
 
 pub use filters::path_suggests_save_location;
 
-use crate::config;
-#[cfg(target_os = "windows")]
-use crate::{manifest, steam};
+use crate::{config, manifest, steam};
 use filters::{
     folder_contains_save_like_files, folder_name_hints_save, is_excluded_folder,
     GENERIC_INNER_FOLDERS,
@@ -63,17 +61,23 @@ static COMMON_ROOT_DIRS: LazyLock<HashSet<String>> = LazyLock::new(|| {
     .collect()
 });
 
-/// Devuelve `true` si el path es una raíz genérica del sistema (Windows).
-#[cfg(target_os = "windows")]
 fn is_common_root_dir(path_str: &str) -> bool {
-    let mut p = path_str.to_lowercase();
-    p = p.trim_end_matches(['\\', '/']).to_string();
+    #[cfg(target_os = "windows")]
+    {
+        let mut p = path_str.to_lowercase();
+        p = p.trim_end_matches(['\\', '/']).to_string();
 
-    if p.len() <= 3 && p.ends_with(':') {
-        return true;
+        if p.len() <= 3 && p.ends_with(':') {
+            return true;
+        }
+
+        COMMON_ROOT_DIRS.contains(&p)
     }
-
-    COMMON_ROOT_DIRS.contains(&p)
+    #[cfg(not(target_os = "windows"))]
+    {
+        let p = path_str.trim_end_matches('/');
+        p.is_empty() || p == "/" || p == "/home" || p == "/root" || p == "/usr"
+    }
 }
 
 struct EnvContext {
