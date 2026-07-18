@@ -5,3 +5,4 @@ export { SyncProgressBar, type SyncProgressState } from "./SyncProgressBar";
 export { DownloadsPanel } from "./DownloadsPanel";
 export { TransferOverlayRouter } from "./TransferOverlayRouter";
 export { TitleBar } from "./TitleBar";
+export { WindowEntranceAnimation } from "./WindowEntranceAnimation";
