@@ -1,9 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { initHls, isHlsUrl } from "@utils/hls";
 import type { HlsType } from "@utils/hls";
 import { Button, Modal, ModalContent } from "@heroui/react";
 import { X } from "lucide-react";
 import { useAppVisibility } from "@hooks/useAppVisibility";
+import { VideoQualitySelector } from "@/components/video/VideoQualitySelector";
 
 export interface GameVideoModalProps {
   /** URL del vídeo (HLS .m3u8 o directa). */
@@ -17,6 +18,8 @@ export function GameVideoModal({ isOpen, onClose, videoUrl }: GameVideoModalProp
   const hlsRef = useRef<HlsType | null>(null);
   const { isVisible } = useAppVisibility();
   const wasPlayingRef = useRef(false);
+  const [qualities, setQualities] = useState<{ index: number; label: string }[]>([]);
+  const [currentQuality, setCurrentQuality] = useState<number>(-1);
 
   const useHls = isOpen && videoUrl != null && isHlsUrl(videoUrl);
 
@@ -26,6 +29,8 @@ export function GameVideoModal({ isOpen, onClose, videoUrl }: GameVideoModalProp
       hlsRef.current = null;
       videoRef.current?.pause();
       wasPlayingRef.current = false;
+      setQualities([]);
+      setCurrentQuality(-1);
       return;
     }
   }, [isOpen]);
@@ -60,6 +65,15 @@ export function GameVideoModal({ isOpen, onClose, videoUrl }: GameVideoModalProp
         onManifestParsed: () => {
           if (isMounted) {
             videoEl.play().catch(() => {});
+            if (hlsInstance) {
+              const levels = hlsInstance.levels;
+              const list = levels.map((lvl, idx) => ({
+                index: idx,
+                label: lvl.height ? `${lvl.height}p` : `Calidad ${idx + 1}`,
+              }));
+              setQualities(list);
+              setCurrentQuality(hlsInstance.currentLevel);
+            }
           }
         },
         onError: (data) => {
@@ -99,6 +113,29 @@ export function GameVideoModal({ isOpen, onClose, videoUrl }: GameVideoModalProp
     }
   }, [isOpen, useHls]);
 
+  const selectQuality = useCallback((idx: number) => {
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = idx;
+      setCurrentQuality(idx);
+    }
+  }, []);
+
+  const handleVideoClick = useCallback((e: React.MouseEvent<HTMLVideoElement>) => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+
+    const rect = videoEl.getBoundingClientRect();
+    const clickY = e.clientY - rect.top;
+    if (clickY < rect.height - 60) {
+      e.preventDefault();
+      if (videoEl.paused) {
+        videoEl.play().catch(() => {});
+      } else {
+        videoEl.pause();
+      }
+    }
+  }, []);
+
   if (!videoUrl?.trim()) return null;
 
   return (
@@ -116,15 +153,25 @@ export function GameVideoModal({ isOpen, onClose, videoUrl }: GameVideoModalProp
           <video
             ref={videoRef}
             src={useHls ? undefined : videoUrl}
-            className="max-h-[92vh] w-full object-contain"
+            className="max-h-[92vh] w-full object-contain cursor-pointer"
             muted
             loop
             playsInline
             controls
             controlsList="nofullscreen"
             preload="auto"
+            onClick={handleVideoClick}
           />
-          <div className="absolute right-2 top-2 z-10">
+          <div className="absolute right-2 top-2 z-10 flex items-center gap-2">
+            {qualities.length > 0 && (
+              <VideoQualitySelector
+                qualities={qualities}
+                currentQuality={currentQuality}
+                onSelectQuality={selectQuality}
+                placement="bottom-end"
+                buttonSize="md"
+              />
+            )}
             <Button
               isIconOnly
               size="sm"
