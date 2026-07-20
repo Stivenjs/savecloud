@@ -283,6 +283,7 @@ pub async fn run_catalog_sync(
 
     if stats.apps_upserted > 0 {
         let _ = db.checkpoint("TRUNCATE");
+        crate::steam_catalog::commands::listing::invalidate_facets_cache();
     }
 
     // Backfill de catalog_rank_score para apps enriquecidas antes de la migración 017.

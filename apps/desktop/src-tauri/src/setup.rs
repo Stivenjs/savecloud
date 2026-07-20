@@ -18,6 +18,7 @@ use crate::shutdown::{ShutdownBus, ShutdownCoordinator, ShutdownGuard};
 use crate::sources::commands;
 use crate::sources::queue;
 use crate::sqlite::AppDb;
+use crate::steam_catalog::commands::listing::preload_facets_background;
 use crate::streaming::session::{StreamingState, SunshineShutdownGuard};
 use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
@@ -70,6 +71,7 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     db.ping()?;
 
     let db_for_maintenance = db.clone();
+    preload_facets_background(db.clone());
     app.manage(db);
 
     // 4. Hilo de mantenimiento de la base de datos (periódico + cierre limpio)
