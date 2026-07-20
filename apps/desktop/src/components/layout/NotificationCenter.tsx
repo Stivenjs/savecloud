@@ -241,17 +241,21 @@ export function NotificationCenter() {
       <PopoverTrigger>
         <Button
           isIconOnly
-          radius="sm"
+          radius="full"
           variant="light"
-          className="bg-transparent border-transparent shadow-none"
+          size="sm"
+          className="h-9 w-9 min-w-0 text-foreground hover:bg-default-100/50 bg-transparent border-transparent shadow-none"
           aria-label={t("notifications.center")}>
           <Badge
             content={unreadCount > 0 ? (unreadCount > 9 ? "9+" : unreadCount) : undefined}
             color="danger"
             size="sm"
             shape="circle"
-            isInvisible={unreadCount === 0}>
-            <Bell size={20} />
+            isInvisible={unreadCount === 0}
+            classNames={{
+              badge: "text-[10px] font-bold h-4 min-w-4 right-[2px] top-[2px]",
+            }}>
+            <Bell size={18} />
           </Badge>
         </Button>
       </PopoverTrigger>

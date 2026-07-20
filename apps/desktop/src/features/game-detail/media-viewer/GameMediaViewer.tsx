@@ -110,7 +110,7 @@ export function GameMediaViewer({
   // Si no hay media, mostrar placeholder
   if (displayItems.length === 0) {
     return (
-      <div className={`relative aspect-21/9 w-full overflow-hidden rounded-lg bg-default-100 ${className}`}>
+      <div className={`relative aspect-21/9 w-full overflow-hidden rounded-b-lg bg-default-100 ${className}`}>
         <Skeleton className="size-full" />
       </div>
     );
@@ -141,7 +141,7 @@ export function GameMediaViewer({
           initialSlide={initialSlide}
           spaceBetween={0}
           slidesPerView={1}
-          className="aspect-21/9 w-full overflow-hidden rounded-lg"
+          className="aspect-21/9 w-full overflow-hidden rounded-b-lg"
           style={{ aspectRatio: "21/9" }}>
           {displayItems.map((item, index) => (
             <SwiperSlide key={item.id}>

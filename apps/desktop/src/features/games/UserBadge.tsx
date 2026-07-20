@@ -47,7 +47,7 @@ export function UserBadge({
   };
 
   const userBlock = (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
+    <div className="flex min-w-0 items-center gap-2">
       <div className="relative size-8 shrink-0">
         <div className="relative size-full overflow-hidden rounded-md border border-default-200/70 bg-default-100/60 dark:border-default-100/35 dark:bg-default-50/25">
           {profileAvatar ? (
@@ -72,48 +72,49 @@ export function UserBadge({
           />
         ) : null}
       </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-xs font-medium text-foreground">{t("library.userBadge.syncIdLabel")}</span>
+      <div className="flex min-w-0 flex-col justify-center">
         {isConfigured ? (
-          <code className="block truncate font-mono text-xs text-default-500">{userId}</code>
+          <span className="truncate text-sm font-semibold tracking-tight text-foreground/90">{userId}</span>
         ) : (
-          <span className="text-xs text-default-400">{t("library.userBadge.notConfigured")}</span>
+          <span className="text-xs font-medium text-default-400">{t("library.userBadge.notConfigured")}</span>
         )}
       </div>
     </div>
   );
 
   return (
-    <div className="flex w-fit items-center gap-2 px-3 py-1.5 text-foreground">
+    <div className="flex items-center gap-1.5 text-foreground pl-1.5">
       {onOpenProfile ? (
         <Button
           variant="light"
-          className="h-auto min-h-0 flex-1 justify-start gap-0 px-1 py-0"
+          radius="full"
+          className="h-9 min-h-0 min-w-0 px-2.5 hover:bg-default-100/50"
           onPointerEnter={() => onIntentOpenProfile?.()}
           onFocus={() => onIntentOpenProfile?.()}
           onPress={onOpenProfile}>
           {userBlock}
         </Button>
       ) : (
-        userBlock
+        <div className="px-2.5 py-1">{userBlock}</div>
       )}
 
       {isConfigured && (
         <Button
           size="sm"
           variant="light"
+          radius="full"
           isIconOnly
           aria-label={t("library.userBadge.copyUser")}
           onPress={handleCopy}
-          className="-ml-1 text-default-400 hover:text-foreground">
-          <Copy size={16} />
+          className="h-7 w-7 min-w-0 text-default-400 hover:text-foreground hover:bg-default-100/50">
+          <Copy size={13} />
         </Button>
       )}
 
       {hasSyncConfig && connectionStatus && (
         <>
-          <Divider orientation="vertical" className="mx-1 h-6" />
-          <div className="px-1">
+          <Divider orientation="vertical" className="mx-0.5 h-4 bg-default-200/50" />
+          <div className="pl-1 pr-1.5">
             <ConnectionStatusIndicator status={connectionStatus} />
           </div>
         </>

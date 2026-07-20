@@ -105,6 +105,8 @@ pub async fn fetch_catalog_app_details(
         .map_err(|e| e.to_string())?
         .map_err(|e: SqliteError| e.to_string())?;
 
+    crate::steam_catalog::commands::listing::invalidate_facets_cache();
+
     // 6. Actualizar RAM y retornar
     steam_api_cache().insert_details(sid, details.clone());
 

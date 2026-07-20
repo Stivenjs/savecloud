@@ -1,7 +1,8 @@
-import { useEffect, useRef, useCallback, useMemo } from "react";
+import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { initHls, isHlsUrl } from "@utils/hls";
 import type { HlsType } from "@utils/hls";
 import { useAppVisibility } from "@hooks/useAppVisibility";
+import { VideoQualitySelector } from "@/components/video/VideoQualitySelector";
 
 export interface VideoPlayerProps {
   /** URL del vídeo (HLS .m3u8 o directa). */
@@ -42,6 +43,8 @@ export function VideoPlayer({
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hlsRef = useRef<HlsType | null>(null);
+  const [qualities, setQualities] = useState<{ index: number; label: string }[]>([]);
+  const [currentQuality, setCurrentQuality] = useState<number>(-1);
   const isInitializedRef = useRef(false);
   const { isVisible } = useAppVisibility();
   const wasPlayingRef = useRef(autoPlay);
@@ -97,6 +100,15 @@ export function VideoPlayer({
               onReady?.();
               if (autoPlay && videoEl.paused && isVisible) {
                 videoEl.play().catch(() => {});
+              }
+              if (hlsInstance) {
+                const levels = hlsInstance.levels;
+                const list = levels.map((lvl, idx) => ({
+                  index: idx,
+                  label: lvl.height ? `${lvl.height}p` : `Calidad ${idx + 1}`,
+                }));
+                setQualities(list);
+                setCurrentQuality(hlsInstance.currentLevel);
               }
             }
           },
@@ -167,19 +179,56 @@ export function VideoPlayer({
     onError?.();
   }, [onError]);
 
+  const selectQuality = useCallback((idx: number) => {
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = idx;
+      setCurrentQuality(idx);
+    }
+  }, []);
+
+  const handleVideoClick = useCallback((e: React.MouseEvent<HTMLVideoElement>) => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+
+    const rect = videoEl.getBoundingClientRect();
+    const clickY = e.clientY - rect.top;
+
+    if (clickY < rect.height - 60) {
+      e.preventDefault();
+      if (videoEl.paused) {
+        videoEl.play().catch(() => {});
+      } else {
+        videoEl.pause();
+      }
+    }
+  }, []);
+
   return (
-    <video
-      ref={videoRef}
-      className={`size-full object-cover object-center ${className}`}
-      muted={muted}
-      loop={loop}
-      playsInline
-      controlsList="nofullscreen"
-      controls
-      preload={preload}
-      onPlay={handlePlay}
-      onPause={handlePause}
-      onError={handleError}
-    />
+    <div className={`relative group size-full ${className}`}>
+      <video
+        ref={videoRef}
+        className="size-full object-cover object-center"
+        muted={muted}
+        loop={loop}
+        playsInline
+        controlsList="nofullscreen"
+        controls
+        preload={preload}
+        onPlay={handlePlay}
+        onPause={handlePause}
+        onError={handleError}
+        onClick={handleVideoClick}
+      />
+      {qualities.length > 0 && (
+        <VideoQualitySelector
+          qualities={qualities}
+          currentQuality={currentQuality}
+          onSelectQuality={selectQuality}
+          className="absolute right-4 bottom-20 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+          placement="top-end"
+          buttonSize="sm"
+        />
+      )}
+    </div>
   );
 }

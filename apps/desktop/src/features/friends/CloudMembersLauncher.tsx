@@ -30,13 +30,13 @@ export function CloudMembersLauncher() {
       <Button
         isIconOnly
         variant="light"
-        radius="md"
+        radius="full"
         color="default"
-        size="lg"
-        className="text-foreground"
+        size="sm"
+        className="h-9 w-9 min-w-0 text-foreground hover:bg-default-100/50"
         aria-label="Abrir miembros cloud"
         onPress={() => setIsOpen(true)}>
-        <Users size={20} />
+        <Users size={18} />
       </Button>
 
       <CloudMembersModal

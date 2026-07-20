@@ -3,7 +3,7 @@ import { useLanguageInitialization } from "@hooks/useLanguageInitialization";
 import { visibilityManager } from "@hooks/useAppVisibility";
 import { listen } from "@tauri-apps/api/event";
 import { NOTIFICATIONS_CHANGED_EVENT } from "@services/tauri/notifications.service";
-import { backupConfigToCloud, checkForUpdatesWithPrompt } from "@services/tauri";
+import { backupConfigToCloud, checkForUpdatesWithPrompt, listSteamCatalogPage } from "@services/tauri";
 import { toastSyncResult } from "@utils/toast";
 import { notifySyncComplete, notifySyncError } from "@utils/notification";
 import { formatGameDisplayName } from "@utils/gameImage";
@@ -16,6 +16,8 @@ import { useCloudWebSockets } from "@hooks/useCloudWebSockets";
 import { useCloudStreamRealtime } from "@hooks/useCloudStreamRealtime";
 import { useCloudStreamHostSignaling } from "@hooks/useCloudStreamHostSignaling";
 import { useProfileSessionStore } from "@store/ProfileSessionStore";
+import { queryClient } from "@lib/queryClient";
+import { STEAM_CATALOG_PAGE_SIZE } from "@/constants/constants";
 
 /**
  * Hook encargado de inicializar comportamientos globales de la aplicación.
@@ -269,4 +271,33 @@ export function useAppInitialization() {
       window.removeEventListener("contextmenu", blockContextMenu);
     };
   }, [developerMode]);
+
+  /**
+   * Prefetch de la primera página del catálogo de Steam 1 segundo después del inicio.
+   */
+  useEffect(() => {
+    const prefetchCatalog = async () => {
+      try {
+        const bigPictureConsole =
+          typeof document !== "undefined" && document.documentElement.classList.contains("savecloud-big-picture");
+        const pageSize = bigPictureConsole ? 25 : STEAM_CATALOG_PAGE_SIZE;
+        const queryKey = ["steamCatalog", "browse", 1, "", "", pageSize];
+
+        await queryClient.prefetchQuery({
+          queryKey,
+          queryFn: () => listSteamCatalogPage(0, pageSize, null, null, null),
+          staleTime: 60 * 1000,
+        });
+        console.info("[useAppInitialization] Prefetched first catalog page (size: " + pageSize + ")");
+      } catch (e) {
+        console.warn("[SaveCloud:useAppInitialization] Prefetch catálogo error", e);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      void prefetchCatalog();
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, []);
 }

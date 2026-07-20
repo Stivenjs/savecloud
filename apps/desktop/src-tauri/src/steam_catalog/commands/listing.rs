@@ -1,7 +1,9 @@
 //! Consultas locales al catálogo (búsqueda, paginación y facetas).
 
 use std::ops::Deref;
+use std::sync::RwLock;
 
+use once_cell::sync::Lazy;
 use tauri::State;
 
 use crate::sqlite::AppDb;
@@ -69,16 +71,59 @@ pub async fn list_steam_catalog_page(
     .map_err(|e| e.to_string())
 }
 
+static FACETS_CACHE: Lazy<RwLock<Option<CatalogFilterFacets>>> =
+    Lazy::new(|| RwLock::new(None));
+
+/// Pre-carga las facetas de filtro en memoria en segundo plano al iniciar la aplicación.
+pub fn preload_facets_background(db: AppDb) {
+    tauri::async_runtime::spawn_blocking(move || {
+        log::info!("[FacetsPreload] Preloading filter facets in background...");
+        match db.with_conn(catalog_query::filter_facets) {
+            Ok(facets) => {
+                if let Ok(mut guard) = FACETS_CACHE.write() {
+                    *guard = Some(facets);
+                }
+                log::info!("[FacetsPreload] Filter facets preloaded successfully");
+            }
+            Err(e) => {
+                log::warn!("[FacetsPreload] Failed to preload filter facets: {}", e);
+            }
+        }
+    });
+}
+
+/// Invalida la caché de facetas en memoria.
+pub fn invalidate_facets_cache() {
+    if let Ok(mut guard) = FACETS_CACHE.write() {
+        *guard = None;
+        log::info!("[FacetsPreload] Filter facets cache invalidated");
+    }
+}
+
 /// Géneros y etiquetas (categorías) con recuento, solo apps con `details_json`.
 #[tauri::command]
 pub async fn get_steam_catalog_filter_facets(
     db: State<'_, AppDb>,
 ) -> Result<CatalogFilterFacets, String> {
+    {
+        if let Ok(guard) = FACETS_CACHE.read() {
+            if let Some(ref cached) = *guard {
+                return Ok(cached.clone());
+            }
+        }
+    }
+
     let db = db.deref().clone();
-    tokio::task::spawn_blocking(move || db.with_conn(catalog_query::filter_facets))
+    let facets = tokio::task::spawn_blocking(move || db.with_conn(catalog_query::filter_facets))
         .await
         .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    if let Ok(mut guard) = FACETS_CACHE.write() {
+        *guard = Some(facets.clone());
+    }
+
+    Ok(facets)
 }
 
 /// Top de tendencias para el hero de la primera vista del catálogo.
