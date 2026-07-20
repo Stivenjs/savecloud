@@ -14,13 +14,13 @@ export function CloudStreamsLauncher() {
       <Button
         isIconOnly
         variant="light"
-        radius="md"
+        radius="full"
         color="default"
-        size="lg"
-        className="text-foreground"
+        size="sm"
+        className="h-9 w-9 min-w-0 text-foreground hover:bg-default-100/50"
         aria-label="Abrir transmisiones cloud"
         onPress={() => setOpen(true)}>
-        <Radio size={20} />
+        <Radio size={18} />
       </Button>
 
       <CloudStreamsModal isOpen={open} onClose={() => setOpen(false)} modalRef={modalRef} />
