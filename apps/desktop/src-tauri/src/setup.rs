@@ -24,6 +24,7 @@ use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray::tray_state::TrayState;
 use crate::voice::VoiceState;
+use crate::steam_catalog::trending::sync_store_trending;
 use std::sync::Arc;
 use tauri::{App, Manager};
 use tokio::sync::Mutex;
@@ -72,6 +73,17 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
 
     let db_for_maintenance = db.clone();
     preload_facets_background(db.clone());
+
+    // Pre-cargar la sincronización de tendencias de la tienda en segundo plano
+    let db_trending = db.clone();
+    tauri::async_runtime::spawn(async move {
+        log::info!("[TrendingPreload] Sincronizando tendencias de Steam en segundo plano...");
+        match sync_store_trending(&db_trending).await {
+            Ok(count) => log::info!("[TrendingPreload] Tendencias sincronizadas con éxito ({} juegos)", count),
+            Err(e) => log::warn!("[TrendingPreload] Falló la sincronización de tendencias: {}", e),
+        }
+    });
+
     app.manage(db);
 
     // 4. Hilo de mantenimiento de la base de datos (periódico + cierre limpio)
