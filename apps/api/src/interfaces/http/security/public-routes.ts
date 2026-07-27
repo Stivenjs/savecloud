@@ -48,8 +48,8 @@ export function isPublicHttpRoute(method: string, path: string): boolean {
     return true;
   }
 
-  // Endpoint de salud (monitoreo público)
-  if (path === HEALTH_PATH || path === "/") {
+  // Endpoint de salud y WebSocket (monitoreo y conexión pública)
+  if (path === HEALTH_PATH || path === "/" || path === "/ws") {
     return true;
   }
 

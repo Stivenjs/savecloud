@@ -1,26 +1,38 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { ProcessS3EventUseCase } from "@application/use-cases/ProcessS3EventUseCase";
+import type { ProcessS3EventInput, ProcessS3EventUseCase } from "@application/use-cases/ProcessS3EventUseCase";
 
-export function parseMinioNotification(body: any): Array<{
-  detailType: "Object Created" | "Object Deleted";
-  s3Key: string;
-  size?: number;
-  eventTime?: Date;
-}> {
+export interface MinioObjectRecord {
+  eventName?: string;
+  eventTime?: string;
+  Key?: string;
+  s3?: {
+    object?: {
+      key?: string;
+      size?: number;
+    };
+  };
+}
+
+export interface MinioNotificationPayload {
+  EventName?: string;
+  Key?: string;
+  Records?: MinioObjectRecord[];
+}
+
+export function parseMinioNotification(body: unknown): ProcessS3EventInput[] {
   if (!body || typeof body !== "object") return [];
 
-  const results: Array<{
-    detailType: "Object Created" | "Object Deleted";
-    s3Key: string;
-    size?: number;
-    eventTime?: Date;
-  }> = [];
+  const payload = body as MinioNotificationPayload;
+  const results: ProcessS3EventInput[] = [];
 
-  const records = Array.isArray(body.Records) ? body.Records : [body];
+  const records: MinioObjectRecord[] = Array.isArray(payload.Records)
+    ? payload.Records
+    : [payload as MinioObjectRecord];
+
   const bucketName = process.env.BUCKET_NAME || "savecloud-saves";
 
   for (const rec of records) {
-    let rawKey: string = rec?.s3?.object?.key || rec?.Key || body.Key || "";
+    let rawKey: string = rec?.s3?.object?.key || rec?.Key || payload.Key || "";
     if (!rawKey) continue;
 
     let decodedKey = decodeURIComponent(rawKey.replace(/\+/g, " "));
@@ -29,7 +41,7 @@ export function parseMinioNotification(body: any): Array<{
       decodedKey = decodedKey.slice(bucketName.length + 1);
     }
 
-    const eventName: string = rec?.eventName || body.EventName || "";
+    const eventName: string = rec?.eventName || payload.EventName || "";
     let detailType: "Object Created" | "Object Deleted" = "Object Created";
 
     if (eventName.toLowerCase().includes("delete") || eventName.toLowerCase().includes("removed")) {

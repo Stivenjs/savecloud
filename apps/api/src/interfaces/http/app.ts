@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
+import "@fastify/websocket";
 import type { SaveRepository } from "@domain/ports/SaveRepository";
 import type { SaveFileIndexRepository } from "@domain/ports/SaveFileIndexRepository";
 import type { GameStatRepository } from "@domain/ports/GameStatRepository";
@@ -51,6 +52,7 @@ import { isPublicRoute } from "@interfaces/http/security/public-routes";
 import { GetFriendProfileUseCase } from "@application/use-cases/GetFriendProfileUseCase";
 import { ProcessS3EventUseCase } from "@application/use-cases/ProcessS3EventUseCase";
 import { registerWebhookRoutes } from "@interfaces/http/routes/webhooks.routes";
+import { registerWebSocketRoutes } from "@interfaces/http/routes/websocket.routes";
 
 export interface AppDependencies {
   saveRepository: SaveRepository;
@@ -106,6 +108,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
 
   await app.register(cors, { origin: true });
   await app.register(import("@fastify/compress"));
+  await app.register(import("@fastify/websocket"));
 
   await app.register(rateLimit, {
     global: false,
@@ -182,25 +185,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       : undefined;
 
   await registerWebhookRoutes(app, { processS3EventUseCase });
-
-  /**
-   * Endpoint de bienvenida y comprobación rápida del servicio API.
-   * Publicamente accesible sin necesidad de API Key.
-   */
-  app.get(
-    "/",
-    {
-      config: {
-        rateLimit: {
-          max: 60,
-          timeWindow: "1 minute",
-        },
-      },
-    },
-    async (_, reply: FastifyReply) => {
-      return reply.send({ status: "ok", service: "SaveCloud API", health: "/health" });
-    }
-  );
+  await registerWebSocketRoutes(app, { connectionRepository: deps.connectionRepository });
 
   app.get(
     "/health",
@@ -256,14 +241,23 @@ function registerApiKeyAuthHook(app: FastifyInstance, expectedApiKey?: string): 
   app.addHook("onRequest", async (request, reply) => {
     if (isPublicRoute(request)) return;
 
-    const key = request.headers["x-api-key"];
+    const query = (request.query as Record<string, string> | undefined) ?? {};
+    const headerKey = request.headers["x-api-key"];
+    const key =
+      typeof headerKey === "string" && headerKey.trim()
+        ? headerKey.trim()
+        : query.apiKey?.trim() || query.token?.trim();
+
     if (key === expectedApiKey) return;
 
     if (typeof key === "string" && key.trim()) {
       const token = verifyUserAccessToken(key);
       if (token) {
-        const userId = request.headers["x-user-id"];
-        if (typeof userId === "string" && userId.trim() && userId.trim() === token.userId) return;
+        const headerUserId = request.headers["x-user-id"];
+        const userId =
+          typeof headerUserId === "string" && headerUserId.trim() ? headerUserId.trim() : query.userId?.trim();
+
+        if (userId && userId === token.userId) return;
       }
     }
 
