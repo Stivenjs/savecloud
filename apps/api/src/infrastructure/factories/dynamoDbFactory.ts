@@ -13,7 +13,7 @@ const DEFAULT_AWS_REGION = "us-east-2";
 const DEFAULT_MAX_ATTEMPTS = 3;
 
 /** Tiempo máximo de espera (en ms) para la verificación de tablas al arrancar el servidor */
-const TABLE_INIT_TIMEOUT_MS = 5000;
+const TABLE_INIT_TIMEOUT_MS = 15000;
 
 /** Estructura con las configuraciones opcionales de tablas de DynamoDB */
 export interface DynamoDbTablesConfig {
@@ -48,8 +48,8 @@ export function createDynamoDbClient(): DynamoDBClient {
 /**
  * Verifica la existencia de las tablas de DynamoDB necesarias y las crea automáticamente en entornos locales o Docker.
  *
- * Incluye un tiempo máximo de espera de 5 segundos (`TABLE_INIT_TIMEOUT_MS`) para asegurar que la inicialización
- * del servidor no se cuelgue si DynamoDB Local tarda en responder.
+ * Incluye un tiempo máximo de espera de 15 segundos (`TABLE_INIT_TIMEOUT_MS`) para asegurar que la inicialización
+ * del servidor espere a que DynamoDB Local levante.
  *
  * @param client - Instancia de `DynamoDBClient` para realizar las operaciones.
  * @param tables - Nombres de las tablas configuradas (`gameStatsTable`, `saveFilesIndexTable`, `connectionsTable`).
@@ -126,38 +126,62 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
 /**
  * Comprueba si una tabla existe en DynamoDB y la crea si falta.
  *
- * Tolera variaciones en los tipos de error de DynamoDB Local (`ResourceNotFoundException`, `__type` o mensajes).
+ * Incluye reintentos automáticos si la conexión es rechazada (ECONNREFUSED) mientras DynamoDB Local termina de arrancar.
  *
  * @param client - Instancia de `DynamoDBClient`.
  * @param tableInput - Definición del comando `CreateTableCommandInput` a ejecutar.
+ * @param maxRetries - Número máximo de reintentos de conexión (por defecto 5).
+ * @param delayMs - Tiempo de espera entre reintentos en ms (por defecto 1000 ms).
  */
-async function createTableIfNotExists(client: DynamoDBClient, tableInput: CreateTableCommandInput): Promise<void> {
+async function createTableIfNotExists(
+  client: DynamoDBClient,
+  tableInput: CreateTableCommandInput,
+  maxRetries = 5,
+  delayMs = 1000
+): Promise<void> {
   const tableName = tableInput.TableName;
   if (!tableName) return;
 
-  try {
-    await client.send(new DescribeTableCommand({ TableName: tableName }));
-  } catch (err: unknown) {
-    const errorObj = err as { name?: string; __type?: string; message?: string } | undefined;
-    const isNotFound =
-      err instanceof ResourceNotFoundException ||
-      errorObj?.name === "ResourceNotFoundException" ||
-      errorObj?.__type?.includes("ResourceNotFoundException") ||
-      errorObj?.message?.includes("not found") ||
-      errorObj?.message?.includes("non-existent");
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await client.send(new DescribeTableCommand({ TableName: tableName }));
+      return;
+    } catch (err: unknown) {
+      const errorObj = err as { name?: string; __type?: string; message?: string; code?: string } | undefined;
+      const isConnRefused =
+        errorObj?.code === "ECONNREFUSED" ||
+        errorObj?.message?.includes("ECONNREFUSED") ||
+        errorObj?.name === "TimeoutError";
 
-    if (isNotFound) {
-      try {
-        await client.send(new CreateTableCommand(tableInput));
-        console.log(`[DynamoDB Local] Tabla '${tableName}' creada exitosamente.`);
-      } catch (createErr: unknown) {
-        const createErrObj = createErr as { name?: string } | undefined;
-        if (createErrObj?.name !== "ResourceInUseException") {
-          console.warn(`[DynamoDB Local] Advertencia al crear tabla '${tableName}':`, createErr);
-        }
+      if (isConnRefused && attempt < maxRetries) {
+        console.log(`[DynamoDB Local] Esperando a que DynamoDB esté disponible (intento ${attempt}/${maxRetries})...`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
       }
-    } else {
-      console.error(`[DynamoDB Local] Error al verificar tabla '${tableName}':`, err);
+
+      const isNotFound =
+        err instanceof ResourceNotFoundException ||
+        errorObj?.name === "ResourceNotFoundException" ||
+        errorObj?.__type?.includes("ResourceNotFoundException") ||
+        errorObj?.message?.includes("not found") ||
+        errorObj?.message?.includes("non-existent");
+
+      if (isNotFound) {
+        try {
+          await client.send(new CreateTableCommand(tableInput));
+          console.log(`[DynamoDB Local] Tabla '${tableName}' creada exitosamente.`);
+          return;
+        } catch (createErr: unknown) {
+          const createErrObj = createErr as { name?: string } | undefined;
+          if (createErrObj?.name !== "ResourceInUseException") {
+            console.warn(`[DynamoDB Local] Advertencia al crear tabla '${tableName}':`, createErr);
+          }
+          return;
+        }
+      } else {
+        console.error(`[DynamoDB Local] Error al verificar tabla '${tableName}':`, err);
+        return;
+      }
     }
   }
 }

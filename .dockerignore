@@ -1,0 +1,12 @@
+node_modules
+.git
+.github
+.husky
+.serverless
+.vscode
+apps/desktop
+apps/web
+dist
+*.log
+.env*
+!.env.docker.example
