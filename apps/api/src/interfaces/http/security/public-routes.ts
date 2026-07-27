@@ -49,7 +49,7 @@ export function isPublicHttpRoute(method: string, path: string): boolean {
   }
 
   // Endpoint de salud (monitoreo público)
-  if (path === HEALTH_PATH) {
+  if (path === HEALTH_PATH || path === "/") {
     return true;
   }
 

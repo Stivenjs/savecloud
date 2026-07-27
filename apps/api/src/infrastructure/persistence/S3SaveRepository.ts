@@ -25,6 +25,7 @@ import type {
   UploadUrlItem,
   UploadUrlResult,
 } from "@domain/ports/SaveRepository";
+import { resolvePublicUrl } from "@infrastructure/factories/storageFactory";
 
 export const PRESIGN_EXPIRES_IN_SECONDS = 3600;
 const DOWNLOAD_BASE_URL = process.env.DOWNLOAD_BASE_URL;
@@ -75,10 +76,15 @@ const DELETE_BATCH_CONCURRENCY = 10;
  * agotar el pool de conexiones del SDK.
  */
 export class S3SaveRepository implements SaveRepository {
+  private readonly presignS3: S3Client;
+
   constructor(
     private readonly s3: S3Client,
-    private readonly bucketName: string
-  ) {}
+    private readonly bucketName: string,
+    presignS3?: S3Client
+  ) {
+    this.presignS3 = presignS3 ?? s3;
+  }
 
   /** Lista todos los usuarios en la nube (carpetas en el bucket) */
   async listAllUsers(): Promise<string[]> {
@@ -179,7 +185,7 @@ export class S3SaveRepository implements SaveRepository {
   async getUploadUrl(userId: string, gameId: string, filename: string): Promise<string> {
     const key = `${userId}/${gameId}/${filename}`;
     const command = new PutObjectCommand({ Bucket: this.bucketName, Key: key });
-    return getSignedUrl(this.s3, command, { expiresIn: PRESIGN_EXPIRES_IN_SECONDS });
+    return getSignedUrl(this.presignS3, command, { expiresIn: PRESIGN_EXPIRES_IN_SECONDS });
   }
 
   async getDownloadUrl(
@@ -198,7 +204,7 @@ export class S3SaveRepository implements SaveRepository {
       Key: key,
       ...(range != null && { Range: `bytes=${range.start}-${range.end}` }),
     });
-    return getSignedUrl(this.s3, command, { expiresIn: PRESIGN_EXPIRES_IN_SECONDS });
+    return getSignedUrl(this.presignS3, command, { expiresIn: PRESIGN_EXPIRES_IN_SECONDS });
   }
 
   /**
@@ -225,7 +231,7 @@ export class S3SaveRepository implements SaveRepository {
         limit(async () => {
           const key = `${userId}/${gameId}/${filename}`;
           const command = new PutObjectCommand({ Bucket: this.bucketName, Key: key });
-          const uploadUrl = await getSignedUrl(this.s3, command, options);
+          const uploadUrl = await getSignedUrl(this.presignS3, command, options);
           return { uploadUrl, key, gameId, filename };
         })
       )
@@ -255,7 +261,7 @@ export class S3SaveRepository implements SaveRepository {
           if (cloudFrontUrl) return { downloadUrl: cloudFrontUrl, gameId, key };
 
           const command = new GetObjectCommand({ Bucket: this.bucketName, Key: key });
-          const downloadUrl = await getSignedUrl(this.s3, command, options);
+          const downloadUrl = await getSignedUrl(this.presignS3, command, options);
           return { downloadUrl, gameId, key };
         })
       )
@@ -294,7 +300,7 @@ export class S3SaveRepository implements SaveRepository {
             UploadId: uploadId,
             PartNumber: partNumber,
           });
-          const url = await getSignedUrl(this.s3, command, options);
+          const url = await getSignedUrl(this.presignS3, command, options);
           return { partNumber, url };
         })
       )

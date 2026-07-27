@@ -46,12 +46,13 @@ pub async fn start_cloud_ws(
     let device_id = crate::peer_inventory::resolve_device_id()?;
 
     let final_url = if let Some(host) = active_host {
-        let ws_base = settings
+        let ws_base_raw = settings
             .cloud_host_ws_base_urls
             .get(&host)
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .ok_or("No hay URL de nube para este host.")?;
+        let ws_base = crate::commands::share::invites::normalize_ws_url(&ws_base_raw);
 
         let token = config::get_secure_api_key_for_cloud_host(&host)
             .ok_or("No tienes credenciales (token) para este host.")?;
@@ -64,12 +65,13 @@ pub async fn start_cloud_ws(
             urlencoding::encode(&device_id)
         )
     } else {
-        let ws_base = settings
+        let ws_base_raw = settings
             .ws_base_url
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .ok_or("URL de nube no configurada en ajustes.")?;
+        let ws_base = crate::commands::share::invites::normalize_ws_url(ws_base_raw);
 
         let api_key = settings
             .api_key

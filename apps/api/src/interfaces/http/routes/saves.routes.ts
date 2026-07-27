@@ -529,6 +529,21 @@ export async function registerSavesRoutes(
     return reply.send({ downloadUrl });
   });
 
+  app.post("/saves/steam-seed/tick", async (request, reply) => {
+    if (!deps.steamSeedRepository) {
+      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
+    }
+    try {
+      const { handler: seedHandler } = await import("@interfaces/lambda/steam-seed/handler");
+      const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
+      const result = await seedHandler({ ownerId });
+      return reply.send(result);
+    } catch (err: unknown) {
+      request.log.error({ err }, "steam-seed tick failed");
+      return reply.status(500).send({ error: "Internal Server Error", message: String(err) });
+    }
+  });
+
   app.post("/saves/steam-seed/reset", async (request, reply) => {
     if (!deps.steamSeedRepository) {
       return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
