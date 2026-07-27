@@ -81,19 +81,33 @@ export function useCloudWebSockets() {
     prevGameStatusRef.current = {};
   }
 
+  const hostId = cloudConfig?.activeCloudHostUserId?.trim() ?? "";
+  const isUsingHostCloud = !!hostId;
+  const activeWsBaseUrl = isUsingHostCloud
+    ? (cloudConfig?.cloudHostWsBaseUrls?.[hostId]?.trim() ?? "")
+    : (cloudConfig?.wsBaseUrl?.trim() ?? "");
+
+  const wsConnectionTargetKey = `${activeUserId}|${hostId}|${activeWsBaseUrl}`;
+  const lastWsConnectionTargetKeyRef = useRef<string>("");
+
   useEffect(() => {
     if (configLoading || profileLoading) {
       return;
     }
 
     if (!activeUserId || cloudConfig == null || !hasUsableCloudConnection(cloudConfig)) {
-      invoke("stop_cloud_ws").catch(() => {});
+      if (lastWsConnectionTargetKeyRef.current !== "") {
+        lastWsConnectionTargetKeyRef.current = "";
+        invoke("stop_cloud_ws").catch(() => {});
+      }
       return;
     }
 
-    const hostId = cloudConfig.activeCloudHostUserId;
-    const isUsingHostCloud = !!hostId;
-    const activeWsBaseUrl = isUsingHostCloud ? cloudConfig.cloudHostWsBaseUrls?.[hostId] : cloudConfig.wsBaseUrl;
+    if (lastWsConnectionTargetKeyRef.current === wsConnectionTargetKey) {
+      return;
+    }
+
+    lastWsConnectionTargetKeyRef.current = wsConnectionTargetKey;
 
     let isComponentMounted = true;
     let unlistenIncoming: (() => void) | undefined;
@@ -135,7 +149,18 @@ export function useCloudWebSockets() {
       isComponentMounted = false;
       unlistenIncoming?.();
     };
-  }, [activeUserId, cloudConfig, configLoading, profileLoading, refetch, queryClient]);
+  }, [
+    wsConnectionTargetKey,
+    activeUserId,
+    cloudConfig,
+    configLoading,
+    profileLoading,
+    hostId,
+    isUsingHostCloud,
+    activeWsBaseUrl,
+    refetch,
+    queryClient,
+  ]);
 
   useEffect(() => {
     if (!activeUserId) return;
