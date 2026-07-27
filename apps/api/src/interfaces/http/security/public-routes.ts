@@ -67,6 +67,11 @@ export function isPublicHttpRoute(method: string, path: string): boolean {
     return true;
   }
 
+  // Webhook de MinIO (exclusivo para notificaciones de eventos en Docker)
+  if (upperMethod === "POST" && path === "/webhooks/minio") {
+    return true;
+  }
+
   // Todo lo demás requiere autenticación
   return false;
 }

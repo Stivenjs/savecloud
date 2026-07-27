@@ -49,6 +49,8 @@ import { registerObservabilityRoutes } from "@interfaces/http/routes/observabili
 import { verifyUserAccessToken } from "@shared/accessToken";
 import { isPublicRoute } from "@interfaces/http/security/public-routes";
 import { GetFriendProfileUseCase } from "@application/use-cases/GetFriendProfileUseCase";
+import { ProcessS3EventUseCase } from "@application/use-cases/ProcessS3EventUseCase";
+import { registerWebhookRoutes } from "@interfaces/http/routes/webhooks.routes";
 
 export interface AppDependencies {
   saveRepository: SaveRepository;
@@ -173,6 +175,13 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       gameInventoryRepository: deps.gameInventoryRepository,
     });
   }
+
+  const processS3EventUseCase =
+    deps.saveFileIndexRepository && deps.gameStatRepository
+      ? new ProcessS3EventUseCase(deps.saveFileIndexRepository, deps.gameStatRepository)
+      : undefined;
+
+  await registerWebhookRoutes(app, { processS3EventUseCase });
 
   /**
    * Endpoint de bienvenida y comprobación rápida del servicio API.
