@@ -53,7 +53,7 @@ export default function DockerSection() {
         </p>
 
         {/* macOS Terminal Window Box */}
-        <div className="mb-8 rounded-xl border border-divider bg-background p-5 md:p-6 relative">
+        <div className="mb-8 rounded-xl border border-divider p-5 md:p-6 relative">
           <div className="flex items-center justify-between border-b border-divider pb-3 mb-4">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-red-500/80" />
@@ -78,7 +78,8 @@ export default function DockerSection() {
               <span className="text-default-400"># Inicia todos los servicios en segundo plano</span>
               {"\n"}
               <span className="text-emerald-500 font-semibold">cd</span> savecloud{" "}
-              <span className="text-emerald-500 font-semibold">&&</span> docker compose up -d
+              <span className="text-emerald-500 font-semibold">&&</span>{" "}
+              <span className="text-emerald-500 font-semibold">docker compose up -d</span>
             </code>
           </pre>
         </div>
@@ -87,11 +88,11 @@ export default function DockerSection() {
         <p className="text-xs uppercase tracking-widest text-default-400 font-medium mb-4">
           Servicios Incluidos en la Pila Docker
         </p>
-        <div className="grid sm:grid-cols-2 gap-px bg-divider border border-divider rounded-xl overflow-hidden">
+        <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-divider border border-divider rounded-xl overflow-hidden">
           {stackServices.map((srv, idx) => {
             const SrvIcon = srv.icon;
             return (
-              <div key={idx} className="bg-background px-6 py-5 flex flex-col justify-between">
+              <div key={idx} className="px-6 py-5 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
