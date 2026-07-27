@@ -446,6 +446,9 @@ export function useFriendsPage() {
     try {
       await leaveCloudMembership(hostUserId);
       toastInfo(i18n.t("friends.toast.leftCloud"), i18n.t("friends.toast.noLongerUseCloud", { hostUserId }));
+      await queryClient.invalidateQueries({ queryKey: ["config"] });
+      await queryClient.invalidateQueries({ queryKey: ["cloud-presence"] });
+      await queryClient.invalidateQueries({ queryKey: ["cloud-memberships"] });
       await refreshInvitesState();
     } catch (e) {
       toastError(i18n.t("friends.toast.cannotLeave"), getUnknownErrorMessage(e));
@@ -459,6 +462,9 @@ export function useFriendsPage() {
     try {
       await removeCloudMember(memberUserId);
       toastInfo(i18n.t("friends.toast.memberRemoved"), i18n.t("friends.toast.memberRemovedDesc", { memberUserId }));
+      await queryClient.invalidateQueries({ queryKey: ["config"] });
+      await queryClient.invalidateQueries({ queryKey: ["cloud-presence"] });
+      await queryClient.invalidateQueries({ queryKey: ["cloud-memberships"] });
       await refreshInvitesState();
     } catch (e) {
       toastError(i18n.t("friends.toast.cannotRemove"), getUnknownErrorMessage(e));
