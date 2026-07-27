@@ -52,7 +52,11 @@ services:
       until (/usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin) do echo 'Esperando a MinIO...'; sleep 1; done;
       /usr/bin/mc mb myminio/savecloud-saves --ignore-existing;
       /usr/bin/mc event add myminio/savecloud-saves arn:minio:sqs::primary:webhook --event put,delete --ignore-existing;
-      echo 'Bucket S3 savecloud-saves y notificaciones MinIO configurados!';
+      /usr/bin/mc ilm rule add myminio/savecloud-saves --expire-days 7 --prefix \"share-tokens/\" || true;
+      /usr/bin/mc ilm rule add myminio/savecloud-saves --expire-days 30 --prefix \"cloud-invites/\" || true;
+      /usr/bin/mc ilm rule add myminio/savecloud-saves --expire-days 30 --prefix \"notifications/\" || true;
+      /usr/bin/mc ilm rule add myminio/savecloud-saves --expire-days 90 --prefix \"game-inventory/\" || true;
+      echo 'Bucket S3 savecloud-saves, notificaciones MinIO y reglas de Lifecycle (ILM) verificados!';
       exit 0;
       "
 
