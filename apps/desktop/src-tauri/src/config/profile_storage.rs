@@ -31,7 +31,7 @@ fn is_default_profile_active() -> bool {
         .is_some_and(|profile| profile.id == DEFAULT_PROFILE_ID)
 }
 
-fn scoped_data_path(file_name: &str) -> Option<PathBuf> {
+pub fn scoped_data_path(file_name: &str) -> Option<PathBuf> {
     if let Some(profile) = active_profile() {
         return profile_file_path(&profile.id, file_name);
     }
@@ -41,6 +41,10 @@ fn scoped_data_path(file_name: &str) -> Option<PathBuf> {
         paths::LIBRARY_FILE_NAME => paths::library_path(),
         paths::HISTORY_FILE_NAME => paths::history_path(),
         paths::GAMIFICATION_FILE_NAME => paths::gamification_path(),
+        paths::SOURCES_FILE_NAME => paths::sources_path(),
+        paths::REMOTE_SOURCES_FILE_NAME => paths::remote_sources_path(),
+        paths::ACTIVE_JOBS_FILE_NAME => paths::active_jobs_path(),
+        paths::GAME_MODE_SESSION_FILE_NAME => paths::game_mode_session_path(),
         _ => paths::data_dir().map(|dir| dir.join(file_name)),
     }
 }
@@ -51,11 +55,15 @@ fn legacy_root_path(file_name: &str) -> Option<PathBuf> {
         paths::LIBRARY_FILE_NAME => paths::library_path(),
         paths::HISTORY_FILE_NAME => paths::history_path(),
         paths::GAMIFICATION_FILE_NAME => paths::gamification_path(),
+        paths::SOURCES_FILE_NAME => paths::sources_path(),
+        paths::REMOTE_SOURCES_FILE_NAME => paths::remote_sources_path(),
+        paths::ACTIVE_JOBS_FILE_NAME => paths::active_jobs_path(),
+        paths::GAME_MODE_SESSION_FILE_NAME => paths::game_mode_session_path(),
         _ => paths::data_dir().map(|dir| dir.join(file_name)),
     }
 }
 
-fn scoped_or_legacy_path(file_name: &str) -> Option<PathBuf> {
+pub fn scoped_or_legacy_path(file_name: &str) -> Option<PathBuf> {
     let scoped = scoped_data_path(file_name);
     if scoped.as_ref().is_some_and(|path| path.exists()) {
         return scoped;

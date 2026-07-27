@@ -2140,5 +2140,16 @@
     "promptMessage": "Nueva versión {{version}} disponible.\n\n{{notes}}\n\n¿Descargar e instalar ahora?",
     "updateButton": "Actualizar",
     "laterButton": "Más tarde"
+  },
+  "releaseNotes": {
+    "title": "Notas de versión",
+    "subtitle": "Mostrando hasta 10 versiones recientes de GitHub, de la más nueva a la más antigua.",
+    "loading": "Cargando versiones de GitHub...",
+    "errorFallback": "No se pudieron cargar las notas desde GitHub. Mostrando la versión local como respaldo.",
+    "emptyFallback": "GitHub no devolvió versiones visibles. Mostrando la versión local como respaldo.",
+    "openInGithub": "Abrir en GitHub",
+    "stable": "Versión estable",
+    "prerelease": "Versión preliminar",
+    "noDate": "Fecha no disponible"
   }
 }

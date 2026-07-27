@@ -2140,5 +2140,16 @@
     "promptMessage": "New version {{version}} available.\n\n{{notes}}\n\nDownload and install now?",
     "updateButton": "Update",
     "laterButton": "Later"
+  },
+  "releaseNotes": {
+    "title": "Release Notes",
+    "subtitle": "Showing up to 10 recent GitHub releases, from newest to oldest.",
+    "loading": "Loading GitHub releases...",
+    "errorFallback": "Could not load release notes from GitHub. Showing local version as fallback.",
+    "emptyFallback": "GitHub returned no visible releases. Showing local version as fallback.",
+    "openInGithub": "Open on GitHub",
+    "stable": "Stable release",
+    "prerelease": "Pre-release",
+    "noDate": "Date unavailable"
   }
 }

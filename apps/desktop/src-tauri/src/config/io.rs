@@ -115,6 +115,51 @@ pub fn delete_secure_api_key_for_cloud_host_in_profile(
     Ok(())
 }
 
+pub fn delete_secure_api_key_for_cloud_host(host_user_id: &str) -> Result<(), String> {
+    let host = host_user_id.trim();
+    if host.is_empty() {
+        return Ok(());
+    }
+    if let Some(profile_id) = active_profile_id() {
+        let _ = delete_secure_api_key_for_cloud_host_in_profile(&profile_id, host);
+    } else {
+        let account = cloud_host_keyring_account(host);
+        let _ = delete_secret(KEYRING_SERVICE, &account);
+    }
+    Ok(())
+}
+
+pub fn clean_up_cloud_host(host_user_id: &str) -> Result<(), String> {
+    let host = host_user_id.trim();
+    if host.is_empty() {
+        return Ok(());
+    }
+
+    let mut settings = load_settings();
+    let mut changed = false;
+
+    if settings.cloud_host_api_base_urls.remove(host).is_some() {
+        changed = true;
+    }
+
+    if settings.cloud_host_ws_base_urls.remove(host).is_some() {
+        changed = true;
+    }
+
+    if settings.active_cloud_host_user_id.as_deref().map(str::trim) == Some(host) {
+        settings.active_cloud_host_user_id = None;
+        changed = true;
+    }
+
+    let _ = delete_secure_api_key_for_cloud_host(host);
+
+    if changed {
+        save_settings(&settings)?;
+    }
+
+    Ok(())
+}
+
 fn get_secure_steam_web_api_key() -> Option<String> {
     get_secret(
         KEYRING_SERVICE,

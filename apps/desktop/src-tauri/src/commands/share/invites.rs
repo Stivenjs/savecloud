@@ -393,34 +393,29 @@ pub async fn accept_cloud_invite_by_url(invite_url: String) -> Result<(), String
 
 #[command]
 pub async fn leave_cloud_membership(host_user_id: String) -> Result<(), String> {
-    let (base_url, api_key, user_id) = load_member_api_auth(&host_user_id)?;
-    let endpoint = format!("{}/invites/memberships/leave", base_url);
-    let payload = serde_json::json!({
-      "hostUserId": host_user_id.trim(),
-      "memberUserId": user_id,
-    });
-    let response = API_CLIENT
-        .post(&endpoint)
-        .header("x-api-key", api_key)
-        .header(
-            "x-user-id",
-            payload
-                .get("memberUserId")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default(),
-        )
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| format!("Fallo de red: {}", e))?;
-    if response.status().is_success() || response.status().as_u16() == 204 {
-        return Ok(());
+    let host = host_user_id.trim().to_string();
+    if host.is_empty() {
+        return Err("Host inválido".into());
     }
-    Err(format!(
-        "API Error ({}): {}",
-        response.status(),
-        response.text().await.unwrap_or_default()
-    ))
+
+    if let Ok((base_url, api_key, user_id)) = load_member_api_auth(&host) {
+        let endpoint = format!("{}/invites/memberships/leave", base_url);
+        let payload = serde_json::json!({
+            "hostUserId": host,
+            "memberUserId": user_id,
+        });
+        let _ = API_CLIENT
+            .post(&endpoint)
+            .header("x-api-key", api_key)
+            .header("x-user-id", &user_id)
+            .json(&payload)
+            .send()
+            .await;
+    }
+
+    config::clean_up_cloud_host(&host)?;
+
+    Ok(())
 }
 
 #[command]
@@ -494,27 +489,42 @@ pub async fn list_cloud_memberships() -> Result<CloudMembershipsResponseDto, Str
     }
 
     // 2) Nubes de hosts donde eres miembro: solo nos interesan member_memberships.
-    for (host, _base_url) in settings.cloud_host_api_base_urls.iter() {
-        let (base_url, api_key, _) = match load_member_api_auth(host) {
+    let host_ids: Vec<String> = settings.cloud_host_api_base_urls.keys().cloned().collect();
+    for host in host_ids {
+        let (base_url, api_key, _) = match load_member_api_auth(&host) {
             Ok(v) => v,
-            Err(_) => continue,
+            Err(_) => {
+                let _ = config::clean_up_cloud_host(&host);
+                continue;
+            }
         };
         let endpoint = format!("{}/invites/memberships", base_url);
-        let response = match API_CLIENT
+        let response_result = API_CLIENT
             .get(&endpoint)
             .header("x-api-key", api_key)
             .header("x-user-id", &user_id)
             .send()
-            .await
-        {
-            Ok(r) => r,
-            Err(_) => continue,
-        };
+            .await;
 
-        if response.status().is_success() {
-            if let Ok(parsed) = response.json::<CloudMembershipsResponseDto>().await {
-                member_memberships.extend(parsed.member_memberships);
+        match response_result {
+            Ok(response) => {
+                let status = response.status();
+                if status.is_success() {
+                    if let Ok(parsed) = response.json::<CloudMembershipsResponseDto>().await {
+                        let is_active = parsed.member_memberships.iter().any(|m| {
+                            m.host_user_id == host && m.member_user_id == user_id && m.active
+                        });
+                        if is_active {
+                            member_memberships.extend(parsed.member_memberships);
+                        } else {
+                            let _ = config::clean_up_cloud_host(&host);
+                        }
+                    }
+                } else if status.as_u16() == 401 || status.as_u16() == 403 {
+                    let _ = config::clean_up_cloud_host(&host);
+                }
             }
+            Err(_) => {}
         }
     }
 
