@@ -47,11 +47,11 @@ export default function PrivacySection() {
           almacenamiento centralizado obligatorio.
         </p>
 
-        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-px bg-divider border border-divider rounded-xl overflow-hidden">
+        <div className="grid sm:grid-cols-2 md:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x md:divide-x divide-divider border border-divider rounded-xl overflow-hidden">
           {privacyPillars.map((p, i) => {
             const Icon = p.icon;
             return (
-              <div key={i} className="bg-background px-7 py-6">
+              <div key={i} className="px-7 py-6">
                 <div className="flex items-center gap-2 mb-2 text-default-400">
                   <Icon size={18} />
                   <h3 className="text-sm font-semibold text-foreground">{p.title}</h3>

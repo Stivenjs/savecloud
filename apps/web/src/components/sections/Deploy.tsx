@@ -65,8 +65,8 @@ export default function Deploy() {
             OPCIÓN A: DOCKER COMPOSE (LOCAL / HOMELAB)
           </p>
 
-          <div className="bg-default-100 rounded-lg p-5 border border-default-200 mb-4">
-            <div className="flex items-center justify-between border-b border-default-200 pb-3 mb-4">
+          <div className="rounded-xl p-5 md:p-6 border border-divider mb-4">
+            <div className="flex items-center justify-between border-b border-divider pb-3 mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-red-500/80" />
                 <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
@@ -75,7 +75,7 @@ export default function Deploy() {
               </div>
               <button
                 onClick={copyDocker}
-                className="flex items-center gap-1.5 px-3 py-1 rounded bg-background hover:bg-default-200 border border-default-200 text-default-700 text-xs font-medium transition-all active:scale-95 cursor-pointer">
+                className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-default-100 hover:bg-default-200 border border-divider text-default-700 text-xs font-medium transition-all active:scale-95 cursor-pointer">
                 {copiedDocker ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
                 <span>{copiedDocker ? "¡Copiado!" : "Copiar"}</span>
               </button>
@@ -86,10 +86,11 @@ export default function Deploy() {
                   # Clona el repositorio y levanta la pila local (MinIO + DynamoDB)
                 </span>
                 {"\n"}
-                <span className="font-semibold text-foreground">git clone</span>{" "}
+                <span className="text-emerald-500 font-semibold">git clone</span>{" "}
                 https://github.com/Stivenjs/savecloud.git{"\n"}
-                <span className="font-semibold text-foreground">cd</span> savecloud{" "}
-                <span className="font-semibold text-foreground">&&</span> docker compose up -d
+                <span className="text-emerald-500 font-semibold">cd</span> savecloud{" "}
+                <span className="text-emerald-500 font-semibold">&&</span>{" "}
+                <span className="text-emerald-500 font-semibold">docker compose up -d</span>
               </code>
             </pre>
           </div>
@@ -97,11 +98,11 @@ export default function Deploy() {
           <p className="text-xs uppercase tracking-widest text-default-400 font-medium mb-3">
             Servicios Incluidos en el Contenedor
           </p>
-          <div className="grid sm:grid-cols-2 gap-px bg-divider border border-divider rounded-xl overflow-hidden">
+          <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-divider border border-divider rounded-xl overflow-hidden">
             {stackServices.map((srv, i) => {
               const SrvIcon = srv.icon;
               return (
-                <div key={i} className="bg-background px-6 py-5 flex flex-col justify-between">
+                <div key={i} className="px-6 py-5 flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
@@ -126,8 +127,8 @@ export default function Deploy() {
             OPCIÓN B: AWS SERVERLESS (NUBE PERSONAL)
           </p>
 
-          <div className="bg-default-100 rounded-lg p-5 border border-default-200">
-            <div className="flex items-center justify-between border-b border-default-200 pb-3 mb-4">
+          <div className="rounded-xl p-5 md:p-6 border border-divider">
+            <div className="flex items-center justify-between border-b border-divider pb-3 mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-red-500/80" />
                 <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
@@ -136,7 +137,7 @@ export default function Deploy() {
               </div>
               <button
                 onClick={copyAws}
-                className="flex items-center gap-1.5 px-3 py-1 rounded bg-background hover:bg-default-200 border border-default-200 text-default-700 text-xs font-medium transition-all active:scale-95 cursor-pointer">
+                className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-default-100 hover:bg-default-200 border border-divider text-default-700 text-xs font-medium transition-all active:scale-95 cursor-pointer">
                 {copiedAws ? <Check size={13} className="text-green-500" /> : <Copy size={13} />}
                 <span>{copiedAws ? "¡Copiado!" : "Copiar"}</span>
               </button>
@@ -145,10 +146,11 @@ export default function Deploy() {
               <code>
                 <span className="text-default-400"># Clona el repositorio y despliega en tu cuenta propia de AWS</span>
                 {"\n"}
-                <span className="font-semibold text-foreground">git clone</span>{" "}
+                <span className="text-emerald-500 font-semibold">git clone</span>{" "}
                 https://github.com/Stivenjs/savecloud.git{"\n"}
-                <span className="font-semibold text-foreground">cd</span> savecloud{" "}
-                <span className="font-semibold text-foreground">&&</span> bun run deploy:live
+                <span className="text-emerald-500 font-semibold">cd</span> savecloud{" "}
+                <span className="text-emerald-500 font-semibold">&&</span>{" "}
+                <span className="text-emerald-500 font-semibold">bun run deploy:live</span>
               </code>
             </pre>
           </div>

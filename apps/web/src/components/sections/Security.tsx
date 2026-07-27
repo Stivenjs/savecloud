@@ -12,9 +12,9 @@ export default function Security() {
         <p className="text-xs uppercase tracking-widest text-default-400 font-medium">Seguridad</p>
       </div>
       <div>
-        <div className="grid sm:grid-cols-2 gap-px bg-divider border border-divider rounded-xl overflow-hidden">
+        <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-divider border border-divider rounded-xl overflow-hidden">
           {security.map((s, i) => (
-            <div key={i} className="bg-background px-7 py-6">
+            <div key={i} className="px-7 py-6">
               <h3 className="text-sm font-semibold mb-1">{s.title}</h3>
               <p className="text-xs text-default-500">{s.desc}</p>
             </div>
