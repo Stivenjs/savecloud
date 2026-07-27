@@ -48,8 +48,8 @@ export function isPublicHttpRoute(method: string, path: string): boolean {
     return true;
   }
 
-  // Endpoint de salud (monitoreo público)
-  if (path === HEALTH_PATH || path === "/") {
+  // Endpoint de salud y WebSocket (monitoreo y conexión pública)
+  if (path === HEALTH_PATH || path === "/" || path === "/ws") {
     return true;
   }
 
@@ -64,6 +64,11 @@ export function isPublicHttpRoute(method: string, path: string): boolean {
 
   // Aceptar invitación por token es público (bootstrap de credenciales de usuario)
   if (upperMethod === "POST" && path === ACCEPT_INVITE_TOKEN_PATH) {
+    return true;
+  }
+
+  // Webhook de MinIO (exclusivo para notificaciones de eventos en Docker)
+  if (upperMethod === "POST" && path === "/webhooks/minio") {
     return true;
   }
 
