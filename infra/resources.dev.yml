@@ -25,6 +25,18 @@ Resources:
             Status: Enabled
             Prefix: share-tokens/
             ExpirationInDays: 7
+          - Id: ExpirePendingCloudInvites30Days
+            Status: Enabled
+            Prefix: cloud-invites/
+            ExpirationInDays: 30
+          - Id: ExpireNotifications30Days
+            Status: Enabled
+            Prefix: notifications/
+            ExpirationInDays: 30
+          - Id: ExpireOldGameInventory90Days
+            Status: Enabled
+            Prefix: game-inventory/
+            ExpirationInDays: 90
 
   # Tabla Efímera para WebSockets
   ActiveConnectionsTable:

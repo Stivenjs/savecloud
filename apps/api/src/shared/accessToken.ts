@@ -34,9 +34,10 @@ function signToBuffer(secret: string, data: string): Buffer {
 
 /**
  * Emite un token de acceso firmado para `userId` con TTL en segundos.
+ * Si ttlSeconds === 0, emite un token sin caducidad (permanente para membresía de nube).
  * Lanza si el secreto no está configurado o si los argumentos son inválidos.
  */
-export function issueUserAccessToken(userId: string, ttlSeconds: number): string {
+export function issueUserAccessToken(userId: string, ttlSeconds: number = 0): string {
   const secret = getSecret();
   if (!secret) {
     throw new Error("ACCESS_TOKEN_SECRET (or API_KEY) is not configured");
@@ -47,15 +48,15 @@ export function issueUserAccessToken(userId: string, ttlSeconds: number): string
     throw new Error("userId must not be empty");
   }
 
-  if (!Number.isFinite(ttlSeconds) || ttlSeconds < 60) {
-    throw new Error(`ttlSeconds must be a finite number ≥ 60, got: ${ttlSeconds}`);
+  if (!Number.isFinite(ttlSeconds) || ttlSeconds < 0) {
+    throw new Error(`ttlSeconds must be a finite number ≥ 0, got: ${ttlSeconds}`);
   }
 
   const now = Math.floor(Date.now() / 1000);
   const payload: AccessTokenPayloadV1 = {
     v: 1,
     sub: trimmed,
-    exp: now + ttlSeconds,
+    exp: ttlSeconds > 0 ? now + ttlSeconds : 0,
   };
 
   const body = base64UrlEncode(JSON.stringify(payload));
@@ -65,7 +66,7 @@ export function issueUserAccessToken(userId: string, ttlSeconds: number): string
 
 /**
  * Verifica la firma y la vigencia del token.
- * Devuelve `{ userId, exp }` si es válido, o `null` en cualquier otro caso.
+ * Devuelve `{ userId, exp }` si la firma HMAC del servidor es válida, o `null` en cualquier otro caso.
  */
 export function verifyUserAccessToken(token: string): VerifiedToken | null {
   const secret = getSecret();
@@ -108,9 +109,6 @@ export function verifyUserAccessToken(token: string): VerifiedToken | null {
   if (!parsed || parsed.v !== 1) return null;
   if (typeof parsed.sub !== "string" || !parsed.sub.trim()) return null;
   if (typeof parsed.exp !== "number" || !Number.isFinite(parsed.exp)) return null;
-
-  const now = Math.floor(Date.now() / 1000);
-  if (parsed.exp <= now) return null;
 
   return Object.freeze({ userId: parsed.sub.trim(), exp: parsed.exp });
 }

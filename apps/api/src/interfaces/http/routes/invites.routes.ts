@@ -110,7 +110,7 @@ export async function registerInviteRoutes(
           token: request.body.token.trim(),
           action: "accept",
         });
-        const accessToken = issueUserAccessToken(userId, 30 * 24 * 60 * 60);
+        const accessToken = issueUserAccessToken(userId, 0);
         return reply.send({
           accessToken,
           apiUrl: `${request.protocol}://${request.hostname}`,

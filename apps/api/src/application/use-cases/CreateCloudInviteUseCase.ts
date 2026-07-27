@@ -19,8 +19,8 @@ export class CreateCloudInviteUseCase {
       throw new Error("You cannot invite yourself");
     }
 
-    // Política actual: invitaciones cloud expiran y se purgan a los 7 días.
-    const ttlDays = Math.max(1, Math.min(input.expiresInDays ?? 7, 7));
+    // Política de invitaciones pendientes antes de ser aceptadas: hasta 365 días de vigencia (por defecto 30 días).
+    const ttlDays = Math.max(1, Math.min(input.expiresInDays ?? 30, 365));
     return this.repository.createInvite({
       hostUserId: host,
       inviteeUserId: invitee || undefined,
