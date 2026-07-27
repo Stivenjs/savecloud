@@ -3,15 +3,42 @@ use crate::network::API_CLIENT;
 use serde::{Deserialize, Serialize};
 use tauri::command;
 
-fn normalize_base_url(input: &str) -> String {
+pub fn normalize_base_url(input: &str) -> String {
     let s = input.trim().trim_end_matches('/').to_string();
-    if s.starts_with("https://") {
+    if s.starts_with("https://127.0.0.1")
+        || s.starts_with("https://localhost")
+        || s.starts_with("https://0.0.0.0")
+        || s.starts_with("https://192.168.")
+        || s.starts_with("https://10.")
+    {
+        return format!("http://{}", s.trim_start_matches("https://"));
+    }
+    if s.starts_with("https://") || s.starts_with("http://") {
         return s;
     }
-    if s.starts_with("http://") {
-        return format!("https://{}", s.trim_start_matches("http://"));
+    format!("http://{}", s)
+}
+
+pub fn normalize_ws_url(input: &str) -> String {
+    let s = input.trim().trim_end_matches('/').to_string();
+    if s.starts_with("wss://127.0.0.1")
+        || s.starts_with("wss://localhost")
+        || s.starts_with("wss://0.0.0.0")
+        || s.starts_with("wss://192.168.")
+        || s.starts_with("wss://10.")
+    {
+        return format!("ws://{}", s.trim_start_matches("wss://"));
     }
-    format!("https://{}", s)
+    if s.starts_with("ws://") || s.starts_with("wss://") {
+        return s;
+    }
+    if s.starts_with("https://") {
+        return format!("wss://{}", s.trim_start_matches("https://"));
+    }
+    if s.starts_with("http://") {
+        return format!("ws://{}", s.trim_start_matches("http://"));
+    }
+    format!("ws://{}", s)
 }
 
 #[derive(Debug, Serialize, Deserialize)]

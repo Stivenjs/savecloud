@@ -174,6 +174,25 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     });
   }
 
+  /**
+   * Endpoint de bienvenida y comprobación rápida del servicio API.
+   * Publicamente accesible sin necesidad de API Key.
+   */
+  app.get(
+    "/",
+    {
+      config: {
+        rateLimit: {
+          max: 60,
+          timeWindow: "1 minute",
+        },
+      },
+    },
+    async (_, reply: FastifyReply) => {
+      return reply.send({ status: "ok", service: "SaveCloud API", health: "/health" });
+    }
+  );
+
   app.get(
     "/health",
     {

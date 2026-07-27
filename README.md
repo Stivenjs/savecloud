@@ -24,13 +24,12 @@ Servidor de guardado en la nube para juegos (S3 + Lambda) y app de escritorio pa
 
 ---
 
-## Guía de despliegue
+## Guía de despliegue y Self-Hosting
 
-La infraestructura backend y la configuración completa del proyecto se explican en la guía de despliegue disponible en:
+SaveCloud puede desplegarse en **AWS Cloud** o autohospedarse en tu propio servidor/NAS mediante **Docker Compose**:
 
-[Guía de despliegue](./doc/DEPLOYMENT.md)
-
-Esta guía cubre la preparación del entorno, generación de API keys, configuración del archivo `.env`, despliegue en AWS (dev y live), configuración de la aplicación de escritorio y verificación del sistema.
+- 🐳 **[Guía de despliegue rápido con Docker](./doc/DOCKER.md)** — Autohospedaje local en 2 minutos (Fastify + MinIO + DynamoDB Local).
+- ☁️ **[Guía de despliegue en AWS Cloud](./doc/DEPLOYMENT.md)** — Despliegue en producción serverless con AWS Lambda, API Gateway y S3.
 
 ## Contenido del repositorio
 

@@ -78,10 +78,15 @@ function defaultState(): SeedState {
 const PRESIGN_CONCURRENCY = 64;
 
 export class S3SteamSeedRepository {
+  private readonly presignS3: S3Client;
+
   constructor(
     private readonly s3: S3Client,
-    private readonly bucketName: string
-  ) {}
+    private readonly bucketName: string,
+    presignS3?: S3Client
+  ) {
+    this.presignS3 = presignS3 ?? s3;
+  }
 
   /**
    * Devuelve el prefijo de clave S3 que posee todos los objetos para `ownerId`.
@@ -153,7 +158,7 @@ export class S3SteamSeedRepository {
       Key: key,
       ContentType: "text/plain; charset=utf-8",
     });
-    const uploadUrl = await getSignedUrl(this.s3, command, {
+    const uploadUrl = await getSignedUrl(this.presignS3, command, {
       expiresIn: PRESIGN_EXPIRES_IN_SECONDS,
     });
     return { uploadUrl, key };
@@ -172,7 +177,7 @@ export class S3SteamSeedRepository {
       Key: key,
       ContentType: "text/plain; charset=utf-8",
     });
-    const uploadUrl = await getSignedUrl(this.s3, command, {
+    const uploadUrl = await getSignedUrl(this.presignS3, command, {
       expiresIn: PRESIGN_EXPIRES_IN_SECONDS,
     });
     return { uploadUrl, key };
@@ -187,7 +192,7 @@ export class S3SteamSeedRepository {
   async getPriorityDownloadUrl(ownerId: string): Promise<string> {
     const key = `${this.basePrefix(ownerId)}priority_appids.jsonl`;
     const command = new GetObjectCommand({ Bucket: this.bucketName, Key: key });
-    return getSignedUrl(this.s3, command, {
+    return getSignedUrl(this.presignS3, command, {
       expiresIn: PRESIGN_EXPIRES_IN_SECONDS,
     });
   }
@@ -245,7 +250,7 @@ export class S3SteamSeedRepository {
           limit(async () => {
             try {
               const command = new GetObjectCommand({ Bucket: this.bucketName, Key: key });
-              const url = await getSignedUrl(this.s3, command, { expiresIn: PRESIGN_EXPIRES_IN_SECONDS });
+              const url = await getSignedUrl(this.presignS3, command, { expiresIn: PRESIGN_EXPIRES_IN_SECONDS });
               results[idx] = { key, url };
             } catch (err) {
               results[idx] = {
@@ -263,7 +268,7 @@ export class S3SteamSeedRepository {
 
     this.assertOwnedKey(ownerId, keyOrKeys);
     const command = new GetObjectCommand({ Bucket: this.bucketName, Key: keyOrKeys });
-    return getSignedUrl(this.s3, command, { expiresIn: PRESIGN_EXPIRES_IN_SECONDS });
+    return getSignedUrl(this.presignS3, command, { expiresIn: PRESIGN_EXPIRES_IN_SECONDS });
   }
 
   /**

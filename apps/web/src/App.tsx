@@ -1,13 +1,13 @@
 import React from "react";
 import Hero from "@/components/sections/Hero";
-import Downloads from "@/components/sections/Downloads";
 import WhatIs from "@/components/sections/WhatIs";
 import Features from "@/components/sections/Features";
-import Store from "@/components/sections/Store";
-import Inspiration from "@/components/sections/Inspiration";
+import PrivacySection from "@/components/sections/PrivacySection";
 import Deploy from "@/components/sections/Deploy";
-import WhySelfHosted from "@/components/sections/WhySelfHosted";
+import Downloads from "@/components/sections/Downloads";
+import Store from "@/components/sections/Store";
 import Share from "@/components/sections/Share";
+import WhySelfHosted from "@/components/sections/WhySelfHosted";
 import Security from "@/components/sections/Security";
 import CTA from "@/components/sections/CTA";
 import Footer from "@/components/sections/Footer";
@@ -27,14 +27,14 @@ export default function App() {
     <AppAmbientBackground>
       <div className="w-full">
         <Hero />
-        <Downloads />
         <WhatIs />
         <Features />
-        <Store />
-        <Inspiration />
+        <PrivacySection />
         <Deploy />
-        <WhySelfHosted />
+        <Downloads />
+        <Store />
         <Share />
+        <WhySelfHosted />
         <Security />
         <CTA />
         <Footer />

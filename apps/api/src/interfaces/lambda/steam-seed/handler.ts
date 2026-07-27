@@ -1,4 +1,4 @@
-import { S3Client } from "@aws-sdk/client-s3";
+import { createS3Client } from "@infrastructure/factories/storageFactory";
 import type { Context } from "aws-lambda";
 import { DEFAULT_STEAM_FILTERS } from "@interfaces/lambda/steam-seed/layout";
 import { pickOwnerIdAuto } from "@interfaces/lambda/steam-seed/owners";
@@ -20,7 +20,7 @@ import { runReviewsTick } from "@interfaces/lambda/steam-seed/run_reviews";
  * provocan que el Lambda lance una excepción — el progreso de detalles nunca es
  * bloqueado por las reseñas.
  */
-export async function handler(_event: unknown, _context: Context): Promise<Record<string, unknown>> {
+export async function handler(_event: unknown, _context?: Partial<Context>): Promise<Record<string, unknown>> {
   const requestId =
     typeof _context === "object" && _context !== null && "awsRequestId" in _context
       ? String((_context as { awsRequestId?: unknown }).awsRequestId ?? "")
@@ -34,7 +34,7 @@ export async function handler(_event: unknown, _context: Context): Promise<Recor
     }
 
     const region = process.env.AWS_REGION ?? "us-east-2";
-    const s3 = new S3Client({ region });
+    const s3 = createS3Client();
 
     const basePrefix = (process.env.STEAM_SEED_PREFIX ?? "steam-seed").replace(/\/$/, "");
     const ownerIdFromEvent =
