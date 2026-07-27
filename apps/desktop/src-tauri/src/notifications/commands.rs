@@ -179,8 +179,10 @@ async fn sync_notifications_pull_internal(app: &AppHandle, db: &AppDb, emit: boo
         .filter(|s| !s.trim().is_empty())
         .ok_or("Configura tu usuario en Configuración")?;
 
-    let cursor = db::get_meta(db, "last_pull_cursor")
+    let cursor_key = format!("{user_id}:last_pull_cursor");
+    let cursor = db::get_meta(db, &cursor_key)
         .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?
+        .or_else(|| db::get_meta(db, "last_pull_cursor").ok().flatten())
         .filter(|s| !s.trim().is_empty());
 
     let resp = sync_http::pull_since(cursor.as_deref(), 200)
@@ -206,7 +208,7 @@ async fn sync_notifications_pull_internal(app: &AppHandle, db: &AppDb, emit: boo
     }
 
     if let Some(c) = next {
-        db::set_meta(db, "last_pull_cursor", &c)
+        db::set_meta(db, &cursor_key, &c)
             .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
     }
 

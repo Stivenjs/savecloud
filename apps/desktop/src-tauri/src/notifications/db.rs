@@ -10,11 +10,16 @@ use super::models::NotificationRecordDto;
 const DEDUP_WINDOW_SECS: i64 = 10;
 
 pub fn get_or_create_device_id(db: &AppDb) -> Result<String, crate::sqlite::error::SqliteError> {
-    let key = "device_id";
+    let user_id = crate::config::load_config().user_id.unwrap_or_default();
+    let user_key = if user_id.trim().is_empty() {
+        "device_id".to_string()
+    } else {
+        format!("{user_id}:device_id")
+    };
     let existing: Option<String> = db.with_conn(|conn| {
         conn.query_row(
-            "SELECT value FROM notification_meta WHERE key = ?1",
-            [key],
+            "SELECT value FROM notification_meta WHERE key = ?1 OR key = 'device_id'",
+            [&user_key],
             |row| row.get::<_, String>(0),
         )
         .optional()
@@ -28,7 +33,7 @@ pub fn get_or_create_device_id(db: &AppDb) -> Result<String, crate::sqlite::erro
     db.with_conn(|conn| {
         conn.execute(
             "INSERT OR REPLACE INTO notification_meta (key, value) VALUES (?1, ?2)",
-            params![key, &id],
+            params![&user_key, &id],
         )?;
         Ok(())
     })?;

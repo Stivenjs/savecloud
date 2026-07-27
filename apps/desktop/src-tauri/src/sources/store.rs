@@ -7,7 +7,7 @@ use crate::config::paths;
 use super::domain::{ImportMode, RemoteSourceConfig, SourceCatalog, SourceDownloadJob};
 
 fn sources_path() -> Result<PathBuf, String> {
-    let Some(path) = paths::sources_path() else {
+    let Some(path) = crate::config::profile_storage::scoped_or_legacy_path(paths::SOURCES_FILE_NAME) else {
         return Err("No se pudo resolver sources_path".to_string());
     };
     if let Some(parent) = path.parent() {
@@ -17,7 +17,7 @@ fn sources_path() -> Result<PathBuf, String> {
 }
 
 fn jobs_path() -> Result<PathBuf, String> {
-    let Some(path) = paths::active_jobs_path() else {
+    let Some(path) = crate::config::profile_storage::scoped_or_legacy_path(paths::ACTIVE_JOBS_FILE_NAME) else {
         return Err("No se pudo resolver active_jobs_path".to_string());
     };
     if let Some(parent) = path.parent() {
@@ -27,7 +27,7 @@ fn jobs_path() -> Result<PathBuf, String> {
 }
 
 fn remote_sources_path() -> Result<PathBuf, String> {
-    let Some(path) = paths::remote_sources_path() else {
+    let Some(path) = crate::config::profile_storage::scoped_or_legacy_path(paths::REMOTE_SOURCES_FILE_NAME) else {
         return Err("No se pudo resolver remote_sources_path".to_string());
     };
     if let Some(parent) = path.parent() {
