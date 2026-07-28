@@ -10,6 +10,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { WebSocket, RawData } from "ws";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
+import type { FastifyWebSocketNotifier } from "@infrastructure/websocket/FastifyWebSocketNotifier";
 
 /**
  * Tiempo de vida (TTL) predeterminado para las conexiones en DynamoDB (24 horas).
@@ -38,10 +39,12 @@ export interface WsIncomingPayload {
 export interface WebSocketRouteDependencies {
   /** Puerto de persistencia de conexiones en la base de datos */
   connectionRepository?: ConnectionRepository;
+  /** Notificador WebSocket local para standalone/Docker */
+  webSocketNotifier?: FastifyWebSocketNotifier;
 }
 
 /**
- * Registra los endpoints de conexión WebSocket (`/` y `/ws`) en la instancia de Fastify.
+ * Registra los endpoints de conexión WebSocket (`/`, `/ws`, `/dev`, `/dev/ws`) en la instancia de Fastify.
  *
  * @param {FastifyInstance} app - Instancia principal del servidor Fastify.
  * @param {WebSocketRouteDependencies} deps - Contenedor de dependencias inyectadas.
@@ -60,6 +63,14 @@ export async function registerWebSocketRoutes(app: FastifyInstance, deps: WebSoc
       const query = (request.query as Record<string, string> | undefined) ?? {};
       const userId = query.userId?.trim();
       const deviceId = query.deviceId?.trim();
+
+      console.log(
+        `[SaveCloud WS] Handshake exitoso! connectionId=${connectionId}, userId=${userId || "anónimo"}, url=${request.url}`
+      );
+
+      if (deps.webSocketNotifier) {
+        deps.webSocketNotifier.registerSocket(connectionId, socket);
+      }
 
       if (deps.connectionRepository && userId) {
         const ttl = Math.floor(Date.now() / 1000) + CONNECTION_TTL_SECONDS;
@@ -89,6 +100,10 @@ export async function registerWebSocketRoutes(app: FastifyInstance, deps: WebSoc
       });
 
       const cleanup = () => {
+        console.log(`[SaveCloud WS] Conexión cerrada: connectionId=${connectionId}`);
+        if (deps.webSocketNotifier) {
+          deps.webSocketNotifier.unregisterSocket(connectionId);
+        }
         if (deps.connectionRepository) {
           deps.connectionRepository.deleteConnection(connectionId).catch((err: unknown) => {
             console.error("[SaveCloud WS] Error eliminando conexión en DynamoDB:", err);
@@ -97,10 +112,15 @@ export async function registerWebSocketRoutes(app: FastifyInstance, deps: WebSoc
       };
 
       socket.on("close", cleanup);
-      socket.on("error", cleanup);
+      socket.on("error", (err) => {
+        console.error(`[SaveCloud WS] Error en socket ${connectionId}:`, err);
+        cleanup();
+      });
     };
 
-    wsScope.get("/ws", { websocket: true }, handleWsConnection);
-    wsScope.get("/", { websocket: true }, handleWsConnection);
+    app.get("/ws", { websocket: true }, handleWsConnection);
+    app.get("/", { websocket: true }, handleWsConnection);
+    app.get("/dev", { websocket: true }, handleWsConnection);
+    app.get("/dev/ws", { websocket: true }, handleWsConnection);
   });
 }

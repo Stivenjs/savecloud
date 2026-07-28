@@ -3,16 +3,65 @@ use crate::network::API_CLIENT;
 use serde::{Deserialize, Serialize};
 use tauri::command;
 
+fn is_local_net(s: &str) -> bool {
+    let cleaned = s
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_start_matches("wss://")
+        .trim_start_matches("ws://");
+
+    let host = cleaned.split(':').next().unwrap_or("").split('/').next().unwrap_or("").trim();
+
+    if host.is_empty() {
+        return false;
+    }
+
+    if host == "localhost"
+        || host == "127.0.0.1"
+        || host == "0.0.0.0"
+        || host.ends_with(".local")
+        || host.ends_with(".lan")
+    {
+        return true;
+    }
+
+    if host.starts_with("192.168.") || host.starts_with("10.") {
+        return true;
+    }
+
+    // 172.16.0.0 - 172.31.255.255 (Docker / Clase B privada)
+    for b in 16..=31 {
+        if host.starts_with(&format!("172.{}.", b)) {
+            return true;
+        }
+    }
+
+    // 100.64.0.0 - 100.127.255.255 (Tailscale / CGNAT)
+    for b in 64..=127 {
+        if host.starts_with(&format!("100.{}.", b)) {
+            return true;
+        }
+    }
+
+    false
+}
+
 pub fn normalize_base_url(input: &str) -> String {
     let s = input.trim().trim_end_matches('/').to_string();
-    if s.starts_with("https://127.0.0.1")
-        || s.starts_with("https://localhost")
-        || s.starts_with("https://0.0.0.0")
-        || s.starts_with("https://192.168.")
-        || s.starts_with("https://10.")
-    {
-        return format!("http://{}", s.trim_start_matches("https://"));
+    if s.is_empty() {
+        return s;
     }
+
+    if is_local_net(&s) {
+        if s.starts_with("https://") {
+            return format!("http://{}", s.trim_start_matches("https://"));
+        }
+        if !s.starts_with("http://") {
+            return format!("http://{}", s);
+        }
+        return s;
+    }
+
     if s.starts_with("https://") || s.starts_with("http://") {
         return s;
     }
@@ -21,14 +70,26 @@ pub fn normalize_base_url(input: &str) -> String {
 
 pub fn normalize_ws_url(input: &str) -> String {
     let s = input.trim().trim_end_matches('/').to_string();
-    if s.starts_with("wss://127.0.0.1")
-        || s.starts_with("wss://localhost")
-        || s.starts_with("wss://0.0.0.0")
-        || s.starts_with("wss://192.168.")
-        || s.starts_with("wss://10.")
-    {
-        return format!("ws://{}", s.trim_start_matches("wss://"));
+    if s.is_empty() {
+        return s;
     }
+
+    if is_local_net(&s) {
+        if s.starts_with("wss://") {
+            return format!("ws://{}", s.trim_start_matches("wss://"));
+        }
+        if s.starts_with("https://") {
+            return format!("ws://{}", s.trim_start_matches("https://"));
+        }
+        if s.starts_with("http://") {
+            return format!("ws://{}", s.trim_start_matches("http://"));
+        }
+        if s.starts_with("ws://") {
+            return s;
+        }
+        return format!("ws://{}", s);
+    }
+
     if s.starts_with("ws://") || s.starts_with("wss://") {
         return s;
     }

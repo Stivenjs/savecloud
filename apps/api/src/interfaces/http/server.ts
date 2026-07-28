@@ -8,8 +8,10 @@ import { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
 import { DynamoDbGameStatRepository } from "@infrastructure/persistence/DynamoDbGameStatRepository";
 import { DynamoDbSaveFileIndexRepository } from "@infrastructure/persistence/DynamoDbSaveFileIndexRepository";
 import { DynamoDbConnectionRepository } from "@infrastructure/persistence/DynamoDbConnectionRepository";
+import { FastifyWebSocketNotifier } from "@infrastructure/websocket/FastifyWebSocketNotifier";
 import { createS3Client, createPresignS3Client, getBucketName } from "@infrastructure/factories/storageFactory";
 import { createDynamoDbClient, ensureDynamoDbTablesExist } from "@infrastructure/factories/dynamoDbFactory";
+import { startBunServer } from "@infrastructure/websocket/BunWebSocketServer";
 
 /** Puerto por defecto para el servidor HTTP de Fastify */
 const DEFAULT_SERVER_PORT = 3000;
@@ -59,13 +61,15 @@ const connectionRepository = connectionsTable
   ? new DynamoDbConnectionRepository(dynamoClient, connectionsTable)
   : undefined;
 
+const webSocketNotifier = new FastifyWebSocketNotifier(connectionRepository);
+
 /**
  * Función de arranque principal de la API HTTP de SaveCloud.
  *
  * Se encarga de:
  * 1. Inicializar y verificar las tablas en DynamoDB Local/AWS.
  * 2. Construir la aplicación Fastify con la inyección de dependencias necesaria.
- * 3. Iniciar el servidor HTTP escuchando en el puerto configurado (`PORT` o 3000) y en todas las interfaces de red (`0.0.0.0`).
+ * 3. Iniciar el servidor de Bun o Fastify escuchando en el puerto configurado (`PORT` o 3000).
  */
 async function main(): Promise<void> {
   console.log("[SaveCloud API] Starting server initialization...");
@@ -91,37 +95,52 @@ async function main(): Promise<void> {
     gameInventoryRepository,
     gameStatRepository,
     connectionRepository,
+    webSocketNotifier,
   });
 
   const port = Number(process.env.PORT) || DEFAULT_SERVER_PORT;
-  app.listen({ port, host: DEFAULT_SERVER_HOST }, (err, address) => {
-    if (err) {
-      console.error("[SaveCloud API] Error starting HTTP server:", err);
-      process.exit(1);
-    }
-    console.log(`[SaveCloud API] Server listening on ${address}`);
+  const host = DEFAULT_SERVER_HOST;
 
-    if (process.env.ENABLE_SEED_WORKER === "true" || process.env.NODE_ENV !== "production") {
-      const SEED_INTERVAL_MS = Number(process.env.SEED_INTERVAL_MS) || 5 * 60 * 1000;
-      console.log(`[SaveCloud API] Background Steam Seed Worker active (interval: ${SEED_INTERVAL_MS / 1000}s)`);
+  const isBun = typeof (globalThis as unknown as { Bun?: unknown }).Bun !== "undefined";
 
-      setTimeout(() => {
-        import("@interfaces/lambda/steam-seed/handler")
-          .then(({ handler }) => handler({}))
-          .catch((workerErr) => {
-            console.error("[SaveCloud API] Initial Steam Seed Worker tick error:", workerErr);
-          });
-      }, 10000);
+  if (isBun) {
+    await startBunServer({
+      port,
+      host,
+      app,
+      connectionRepository,
+      webSocketNotifier,
+    });
+  } else {
+    app.listen({ port, host }, (err, address) => {
+      if (err) {
+        console.error("[SaveCloud API] Error starting HTTP server:", err);
+        process.exit(1);
+      }
+      console.log(`[SaveCloud API] Server listening on ${address}`);
+    });
+  }
 
-      setInterval(() => {
-        import("@interfaces/lambda/steam-seed/handler")
-          .then(({ handler }) => handler({}))
-          .catch((workerErr) => {
-            console.error("[SaveCloud API] Periodic Steam Seed Worker tick error:", workerErr);
-          });
-      }, SEED_INTERVAL_MS);
-    }
-  });
+  if (process.env.ENABLE_SEED_WORKER === "true" || process.env.NODE_ENV !== "production") {
+    const SEED_INTERVAL_MS = Number(process.env.SEED_INTERVAL_MS) || 5 * 60 * 1000;
+    console.log(`[SaveCloud API] Background Steam Seed Worker active (interval: ${SEED_INTERVAL_MS / 1000}s)`);
+
+    setTimeout(() => {
+      import("@interfaces/lambda/steam-seed/handler")
+        .then(({ handler }) => handler({}))
+        .catch((workerErr) => {
+          console.error("[SaveCloud API] Initial Steam Seed Worker tick error:", workerErr);
+        });
+    }, 10000);
+
+    setInterval(() => {
+      import("@interfaces/lambda/steam-seed/handler")
+        .then(({ handler }) => handler({}))
+        .catch((workerErr) => {
+          console.error("[SaveCloud API] Periodic Steam Seed Worker tick error:", workerErr);
+        });
+    }, SEED_INTERVAL_MS);
+  }
 }
 
 main().catch((err: unknown) => {
