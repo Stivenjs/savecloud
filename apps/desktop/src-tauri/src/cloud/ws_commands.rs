@@ -17,6 +17,29 @@ use tauri::{command, AppHandle, State};
 /// conexión en segundo plano. Los mensajes enviados antes de que el WS esté
 /// listo se guardan en la cola del manager y se envían automáticamente en
 /// cuanto el handshake termina (cold-start buffer).
+
+/// Garantiza que la URL de WebSocket mantenga una ruta HTTP válida (mínimo `/`)
+/// antes de añadir los parámetros de consulta (query string).
+fn append_ws_query(ws_base: &str, query: &str) -> String {
+    let trimmed = ws_base.trim();
+    if let Ok(parsed) = url::Url::parse(trimmed) {
+        let scheme = parsed.scheme();
+        let host = parsed.host_str().unwrap_or("");
+        let port_part = match parsed.port() {
+            Some(p) => format!(":{}", p),
+            None => "".to_string(),
+        };
+        let path = parsed.path();
+        let effective_path = if path.is_empty() { "/" } else { path };
+        format!(
+            "{}://{}{}{}?{}",
+            scheme, host, port_part, effective_path, query
+        )
+    } else {
+        format!("{}/?{}", trimmed.trim_end_matches('/'), query)
+    }
+}
+
 #[command]
 pub async fn start_cloud_ws(
     app_handle: AppHandle,
@@ -49,27 +72,41 @@ pub async fn start_cloud_ws(
         let ws_base_raw = settings
             .cloud_host_ws_base_urls
             .get(&host)
-            .map(|s| s.trim().to_string())
+            .map(|s| s.trim())
             .filter(|s| !s.is_empty())
+            .or_else(|| {
+                settings
+                    .cloud_host_api_base_urls
+                    .get(&host)
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+            })
             .ok_or("No hay URL de nube para este host.")?;
-        let ws_base = crate::commands::share::invites::normalize_ws_url(&ws_base_raw);
+        let ws_base = crate::commands::share::invites::normalize_ws_url(ws_base_raw);
 
         let token = config::get_secure_api_key_for_cloud_host(&host)
             .ok_or("No tienes credenciales (token) para este host.")?;
 
-        format!(
-            "{}?userId={}&token={}&deviceId={}",
-            ws_base.trim_end_matches('/'),
+        let query = format!(
+            "userId={}&token={}&deviceId={}",
             urlencoding::encode(&user_id),
             urlencoding::encode(&token),
             urlencoding::encode(&device_id)
-        )
+        );
+        append_ws_query(&ws_base, &query)
     } else {
         let ws_base_raw = settings
             .ws_base_url
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
+            .or_else(|| {
+                settings
+                    .api_base_url
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+            })
             .ok_or("URL de nube no configurada en ajustes.")?;
         let ws_base = crate::commands::share::invites::normalize_ws_url(ws_base_raw);
 
@@ -80,13 +117,13 @@ pub async fn start_cloud_ws(
             .filter(|s| !s.is_empty())
             .ok_or("API Key no configurada en ajustes.")?;
 
-        format!(
-            "{}?userId={}&apiKey={}&deviceId={}",
-            ws_base.trim_end_matches('/'),
+        let query = format!(
+            "userId={}&apiKey={}&deviceId={}",
             urlencoding::encode(&user_id),
             urlencoding::encode(api_key),
             urlencoding::encode(&device_id)
-        )
+        );
+        append_ws_query(&ws_base, &query)
     };
 
     let ws_endpoint_preview = final_url
