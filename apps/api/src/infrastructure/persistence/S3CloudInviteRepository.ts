@@ -48,6 +48,10 @@ export class S3CloudInviteRepository implements CloudInviteRepository {
     return `cloud-invites-shared-games/${hostUserId}/${memberUserId}.json`;
   }
 
+  private memberHostIndexKey(memberUserId: string, hostUserId: string): string {
+    return `cloud-invites-member-hosts/${memberUserId}/${hostUserId}.json`;
+  }
+
   private async getJsonOrNull<T>(key: string): Promise<T | null> {
     try {
       const res = await this.s3.send(new GetObjectCommand({ Bucket: this.bucketName, Key: key }));
@@ -214,6 +218,14 @@ export class S3CloudInviteRepository implements CloudInviteRepository {
     if (idx < 0) file.items.push(membership);
     else file.items[idx] = membership;
     await this.saveMembershipFile(membership.hostUserId, file);
+
+    await this.putJson(this.memberHostIndexKey(membership.memberUserId, membership.hostUserId), {
+      hostUserId: membership.hostUserId,
+      memberUserId: membership.memberUserId,
+      active: membership.active,
+      wsUrl: membership.wsUrl ?? null,
+      updatedAt: membership.updatedAt,
+    });
   }
 
   async getMembership(hostUserId: string, memberUserId: string): Promise<CloudMembership | null> {
@@ -222,20 +234,44 @@ export class S3CloudInviteRepository implements CloudInviteRepository {
   }
 
   async listMembershipsForMember(memberUserId: string): Promise<CloudMembership[]> {
-    const inviteeKeys = await this.listKeys(`cloud-invites/invitees/${memberUserId}/`);
-    if (inviteeKeys.length === 0) return [];
-
-    const markers = await Promise.all(inviteeKeys.map((idxKey) => this.getJsonOrNull<{ inviteId: string }>(idxKey)));
-    const inviteIds = markers.map((m) => m?.inviteId).filter((id): id is string => !!id);
-    if (inviteIds.length === 0) return [];
-
-    const invites = await Promise.all(inviteIds.map((id) => this.getInviteByIdIgnoreExpiry(id)));
+    const normalizedMemberId = memberUserId.trim();
     const hosts = new Map<string, string | null | undefined>();
-    for (const invite of invites) {
-      if (invite?.inviteeUserId === memberUserId) {
-        hosts.set(invite.hostUserId, invite.wsUrl);
+
+    const persistentKeys = await this.listKeys(`cloud-invites-member-hosts/${normalizedMemberId}/`);
+    for (const key of persistentKeys) {
+      const item = await this.getJsonOrNull<{ hostUserId: string; active?: boolean; wsUrl?: string | null }>(key);
+      if (item?.hostUserId && item.active !== false) {
+        hosts.set(item.hostUserId, item.wsUrl);
       }
     }
+
+    const legacyInviteeKeys = await this.listKeys(`cloud-invites/invitees/${normalizedMemberId}/`);
+    if (legacyInviteeKeys.length > 0) {
+      const markers = await Promise.all(
+        legacyInviteeKeys.map((idxKey) => this.getJsonOrNull<{ inviteId: string }>(idxKey))
+      );
+      const inviteIds = markers.map((m) => m?.inviteId).filter((id): id is string => !!id);
+
+      if (inviteIds.length > 0) {
+        const invites = await Promise.all(inviteIds.map((id) => this.getInviteByIdIgnoreExpiry(id)));
+        for (const invite of invites) {
+          if (invite?.inviteeUserId === normalizedMemberId && !hosts.has(invite.hostUserId)) {
+            hosts.set(invite.hostUserId, invite.wsUrl);
+
+            this.putJson(this.memberHostIndexKey(normalizedMemberId, invite.hostUserId), {
+              hostUserId: invite.hostUserId,
+              memberUserId: normalizedMemberId,
+              active: true,
+              wsUrl: invite.wsUrl ?? null,
+              updatedAt: invite.updatedAt || nowIso(),
+            }).catch((err) => {
+              console.error("[S3CloudInviteRepository] Auto-migration of member index failed", err);
+            });
+          }
+        }
+      }
+    }
+
     if (hosts.size === 0) return [];
 
     const hostEntries = [...hosts.entries()];
@@ -243,11 +279,11 @@ export class S3CloudInviteRepository implements CloudInviteRepository {
 
     const out: CloudMembership[] = [];
     for (let i = 0; i < hostEntries.length; i++) {
-      const [, wsUrl] = hostEntries[i] as [string, string | null | undefined];
+      const [hostUserId, wsUrl] = hostEntries[i] as [string, string | null | undefined];
       const file = membershipFiles[i];
       if (!file) continue;
-      const membership = file.items.find((x) => x.memberUserId === memberUserId);
-      if (!membership) continue;
+      const membership = file.items.find((x) => x.memberUserId === normalizedMemberId);
+      if (!membership || !membership.active) continue;
 
       // "Patch" en caliente si el archivo de membresía es viejo y no tenía wsUrl
       if (!membership.wsUrl && wsUrl) {
@@ -287,11 +323,20 @@ export class S3CloudInviteRepository implements CloudInviteRepository {
     const idx = file.items.findIndex((x) => x.memberUserId === memberUserId);
     if (idx < 0) return;
     const current = file.items[idx];
-    file.items[idx] = {
+    const updatedMembership: CloudMembership = {
       ...current,
       active: false,
       updatedAt: nowIso(),
     };
+    file.items[idx] = updatedMembership;
     await this.saveMembershipFile(hostUserId, file);
+
+    await this.putJson(this.memberHostIndexKey(memberUserId, hostUserId), {
+      hostUserId,
+      memberUserId,
+      active: false,
+      wsUrl: updatedMembership.wsUrl ?? null,
+      updatedAt: updatedMembership.updatedAt,
+    });
   }
 }
