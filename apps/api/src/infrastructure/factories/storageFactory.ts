@@ -1,4 +1,5 @@
 import { S3Client } from "@aws-sdk/client-s3";
+import { resolveAwsCredentials } from "./awsCredentials";
 
 /** Nombre del bucket de S3 por defecto en entorno de desarrollo */
 const DEFAULT_BUCKET_NAME = "savecloud-saves-dev";
@@ -29,15 +30,12 @@ export function createS3Client(endpointOverride?: string): S3Client {
   const isForcePathStyle = process.env.S3_FORCE_PATH_STYLE === "true" || Boolean(s3Endpoint);
   const useAccelerateEndpoint = process.env.USE_ACCELERATE_ENDPOINT === "true";
 
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim();
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim();
-
   return new S3Client({
     region: awsRegion,
     endpoint: s3Endpoint,
     forcePathStyle: isForcePathStyle,
     useAccelerateEndpoint: s3Endpoint ? false : useAccelerateEndpoint,
-    credentials: accessKeyId && secretAccessKey ? { accessKeyId, secretAccessKey } : undefined,
+    credentials: resolveAwsCredentials(),
   });
 }
 
