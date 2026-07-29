@@ -4,14 +4,20 @@ import type { SteamAppDetailsResult } from "@services/tauri";
 const SHORT_DESC_MIN_CHARS = 80;
 const EXCERPT_MAX_CHARS = 520;
 
+/** Elimina las etiquetas <script>...</script> del HTML devuelto por Steam para evitar advertencias de React 19. */
+export function stripScriptTags(html?: string): string {
+  if (!html) return "";
+  return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+}
+
 function steamPlainTextFromHtml(html: string): string {
   if (!html?.trim()) return "";
   try {
     const el = document.createElement("div");
-    el.innerHTML = html;
+    el.innerHTML = stripScriptTags(html);
     return (el.textContent ?? "").replace(/\s+/g, " ").trim();
   } catch {
-    return html
+    return stripScriptTags(html)
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
       .trim();

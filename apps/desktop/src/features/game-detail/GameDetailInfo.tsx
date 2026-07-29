@@ -3,7 +3,7 @@ import { Divider, ScrollShadow, Skeleton } from "@heroui/react";
 import { CalendarDays, Code2, FolderOpen, Tags, Users } from "lucide-react";
 import type { SteamAppDetailsResult } from "@services/tauri";
 import type { ConfiguredGame } from "@app-types/config";
-import { resolveSteamSummaryBlurb } from "@utils/steamText";
+import { resolveSteamSummaryBlurb, stripScriptTags } from "@utils/steamText";
 import { useRunCompatibility } from "@hooks/useRunCompatibility";
 import { GameDetailRunCompatibility } from "@features/game-detail/GameDetailRunCompatibility";
 
@@ -98,9 +98,9 @@ export function GameDetailSummaryPanel({ details }: { details: SteamAppDetailsRe
             <div className="space-y-2.5">
               <FieldLabel icon={<Tags size={14} className="opacity-80" />} label="Géneros" />
               <div className="flex flex-wrap gap-2">
-                {details.genres.map((genre) => (
+                {details.genres.map((genre, idx) => (
                   <span
-                    key={genre}
+                    key={`${genre}-${idx}`}
                     className="rounded-lg bg-default-100/90 px-2.5 py-1 text-xs font-medium text-default-700 ring-1 ring-default-200/80 dark:bg-default-100/20 dark:text-default-300 dark:ring-default-100/20">
                     {genre}
                   </span>
@@ -113,9 +113,9 @@ export function GameDetailSummaryPanel({ details }: { details: SteamAppDetailsRe
             <div className="space-y-2.5">
               <FieldLabel icon={<Code2 size={14} className="opacity-80" />} label="Categorías" />
               <div className="flex flex-wrap gap-2">
-                {details.categories.map((cat) => (
+                {details.categories.map((cat, idx) => (
                   <span
-                    key={cat}
+                    key={`${cat}-${idx}`}
                     className="rounded-lg bg-default-50/90 px-2.5 py-1 text-xs text-default-600 ring-1 ring-default-200/60 dark:bg-default-50/10 dark:text-default-400 dark:ring-default-100/15">
                     {cat}
                   </span>
@@ -176,7 +176,10 @@ export function GameDetailSteamDetailsPanel({ details }: { details: SteamAppDeta
           </div>
           <div className="overflow-hidden rounded-xl border border-default-200/60 bg-default-50/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] dark:border-default-100/20 dark:bg-default-50/5">
             <ScrollShadow className="max-h-[min(70vh,42rem)]" size={72}>
-              <div className={STEAM_EMBED_CLASSES} dangerouslySetInnerHTML={{ __html: details.detailedDescription }} />
+              <div
+                className={STEAM_EMBED_CLASSES}
+                dangerouslySetInnerHTML={{ __html: stripScriptTags(details.detailedDescription) }}
+              />
             </ScrollShadow>
           </div>
         </div>
@@ -226,7 +229,7 @@ export function GameDetailRequirementsPanel({ details }: { details: SteamAppDeta
             <div className="px-4 py-3">
               <div
                 className="text-xs leading-relaxed text-default-600 [&_strong]:text-default-800 dark:text-default-400 dark:[&_strong]:text-default-200"
-                dangerouslySetInnerHTML={{ __html: details.pcRequirementsMinimum }}
+                dangerouslySetInnerHTML={{ __html: stripScriptTags(details.pcRequirementsMinimum) }}
               />
             </div>
           </div>
@@ -241,7 +244,7 @@ export function GameDetailRequirementsPanel({ details }: { details: SteamAppDeta
             <div className="px-4 py-3">
               <div
                 className="text-xs leading-relaxed text-default-600 [&_strong]:text-default-800 dark:text-default-400 dark:[&_strong]:text-default-200"
-                dangerouslySetInnerHTML={{ __html: details.pcRequirementsRecommended }}
+                dangerouslySetInnerHTML={{ __html: stripScriptTags(details.pcRequirementsRecommended) }}
               />
             </div>
           </div>
