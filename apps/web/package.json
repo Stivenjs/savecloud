@@ -10,7 +10,7 @@
     "preview": "bun run --bun vite preview"
   },
   "dependencies": {
-    "@heroui/react": "^2.8.9",
+    "@heroui/react": "v3",
     "@tailwindcss/vite": "^4.2.1",
     "framer-motion": "^12.34.3",
     "lucide-react": "^0.575.0",

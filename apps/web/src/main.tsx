@@ -1,7 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { ThemeProvider } from "next-themes";
-import { HeroUIProvider } from "@heroui/react";
 import App from "./App";
 import "./styles/index.css";
 
@@ -20,9 +19,7 @@ if (!rootElement) {
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <ThemeProvider {...THEME_CONFIG}>
-      <HeroUIProvider>
-        <App />
-      </HeroUIProvider>
+      <App />
     </ThemeProvider>
   </React.StrictMode>
 );
