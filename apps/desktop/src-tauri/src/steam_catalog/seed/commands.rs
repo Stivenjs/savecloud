@@ -316,7 +316,11 @@ pub async fn sync_import_cloud_seed_run_until_done(
         .await
         .unwrap_or(0);
 
+    crate::steam_catalog::commands::listing::invalidate_facets_cache();
+    let _ = app.emit("steam-catalog-updated", ());
+
     Ok(SteamSeedImportRunResultDto {
+
         rounds: round,
         batches_processed: total_batches,
         rows_updated: total_rows,

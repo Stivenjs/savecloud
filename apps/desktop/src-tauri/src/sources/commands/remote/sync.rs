@@ -351,9 +351,8 @@ pub async fn sync_remote_sources(
         }
     }
 
-    if counters.updated > 0 {
-        invalidate_index();
-    }
+    invalidate_index();
+    crate::sources::events::emit_catalog_updated(&app);
 
     store::save_remote_sources(&remote_sources)?;
 

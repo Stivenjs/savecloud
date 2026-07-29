@@ -84,18 +84,36 @@ pub fn fnv1a(s: &str) -> u64 {
     hash
 }
 
+fn convert_roman_numeral(token: &str) -> Option<&'static str> {
+    match token {
+        "i" => Some("1"),
+        "ii" => Some("2"),
+        "iii" => Some("3"),
+        "iv" => Some("4"),
+        "v" => Some("5"),
+        "vi" => Some("6"),
+        "vii" => Some("7"),
+        "viii" => Some("8"),
+        "ix" => Some("9"),
+        "x" => Some("10"),
+        "xi" => Some("11"),
+        "xii" => Some("12"),
+        "xiii" => Some("13"),
+        "xiv" => Some("14"),
+        "xv" => Some("15"),
+        "xvi" => Some("16"),
+        "xvii" => Some("17"),
+        "xviii" => Some("18"),
+        "xix" => Some("19"),
+        "xx" => Some("20"),
+        _ => None,
+    }
+}
+
 /// Normaliza un título para facilitar una comparación robusta y consistente.
 ///
-/// Convierte caracteres a minúsculas, elimina los que no sean alfanuméricos
-/// y comprime los espacios múltiples en uno solo.
-///
-/// # Arguments
-///
-/// * `input` - Título original en bruto.
-///
-/// # Returns
-///
-/// Cadena `String` normalizada.
+/// Convierte caracteres a minúsculas, elimina los que no sean alfanuméricos,
+/// convierte números romanos aislados a dígitos y comprime los espacios múltiples.
 pub fn normalize_title(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut last_space = false;
@@ -108,8 +126,12 @@ pub fn normalize_title(input: &str) -> String {
             last_space = true;
         }
     }
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
+    out.split_whitespace()
+        .map(|token| convert_roman_numeral(token).unwrap_or(token))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
+
 
 /// Genera una lista de hashes FNV-1a a partir de un título normalizado, descartando palabras vacías.
 ///
@@ -332,50 +354,65 @@ fn best_specific<'a>(
     candidates: &[RawCandidate<'a>],
     query_number: Option<u32>,
 ) -> Option<&'a IndexEntry> {
+    let has_non_sequel_candidate = query_number.is_none()
+        && candidates
+            .iter()
+            .any(|c| extract_sequel_number(&c.entry.normalized_title).is_none());
+
     candidates
         .iter()
         .filter(|c| {
-            // Si el query tiene número, descartar candidatos con número diferente
+            let cn = extract_sequel_number(&c.entry.normalized_title);
             if let Some(qn) = query_number {
-                let cn = extract_sequel_number(&c.entry.normalized_title);
                 match cn {
                     Some(n) => n == qn,
-                    // Si el candidato no tiene número pero el query sí, solo
-                    // aceptarlo si tiene score exacto (probable alias)
                     None => c.score >= 1.0,
                 }
+            } else if has_non_sequel_candidate {
+                // Si el query NO busca una secuela numérica (ej: "Dark Souls") y existe
+                // un candidato sin secuela, descartar los que sean secuelas (ej: "Dark Souls 2")
+                cn.is_none() || c.score >= 1.0
             } else {
                 true
             }
         })
         .max_by(|a, b| {
-            // 1. Exacto primero
+            // 1. Coincidencia exacta de texto primero (score >= 1.0)
             let ea = (a.score >= 1.0) as u8;
             let eb = (b.score >= 1.0) as u8;
             if ea != eb {
                 return eb.cmp(&ea);
             }
 
-            // 2. Coincidencia de número
+            // 2. Coincidencia estricta de número de secuela con la consulta
+            let na = extract_sequel_number(&a.entry.normalized_title);
+            let nb = extract_sequel_number(&b.entry.normalized_title);
             if let Some(qn) = query_number {
-                let na = extract_sequel_number(&a.entry.normalized_title) == Some(qn);
-                let nb = extract_sequel_number(&b.entry.normalized_title) == Some(qn);
-                if na != nb {
-                    return nb.cmp(&na);
+                let match_a = na == Some(qn);
+                let match_b = nb == Some(qn);
+                if match_a != match_b {
+                    return match_b.cmp(&match_a);
+                }
+            } else {
+                let no_num_a = na.is_none();
+                let no_num_b = nb.is_none();
+                if no_num_a != no_num_b {
+                    return no_num_b.cmp(&no_num_a);
                 }
             }
 
-            // 3. Mayor score
+            // 3. Mayor coeficiente de similitud (score de Jaccard)
             let sc = a.score.total_cmp(&b.score);
             if sc != std::cmp::Ordering::Equal {
                 return sc;
             }
 
-            // 4. Título más corto
+            // 4. Menor diferencia de longitud del título con el query
             b.entry.item_title.len().cmp(&a.entry.item_title.len())
         })
         .map(|c| c.entry)
 }
+
 
 /// Selecciona el candidato óptimo para resoluciones de una búsqueda **genérica** (franquicia principal).
 ///

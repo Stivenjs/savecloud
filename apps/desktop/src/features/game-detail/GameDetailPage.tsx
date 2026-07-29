@@ -299,7 +299,7 @@ export function GameDetailPage() {
     enabled: !!nameForMatch,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
-    refetchOnMount: false,
+    refetchOnMount: true,
     refetchOnWindowFocus: false,
   });
 

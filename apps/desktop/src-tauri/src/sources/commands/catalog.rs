@@ -2,6 +2,7 @@
 
 use super::fetch::{fetch_catalog_for_import, sync_metadata_from_fetch};
 use super::match_index::invalidate_index;
+use super::super::events::emit_catalog_updated;
 use super::super::domain::{
     BatchImportItemResult, BatchImportResult, ImportMode, SourceCatalogSummary, SourceItemsPage,
 };
@@ -65,15 +66,17 @@ pub async fn list_source_items_page(
 
 /// Elimina un catálogo por ID.
 #[tauri::command]
-pub async fn remove_source(source_id: String) -> Result<(), String> {
+pub async fn remove_source(app: tauri::AppHandle, source_id: String) -> Result<(), String> {
     let result = store::remove_catalog(&source_id);
     invalidate_index();
+    emit_catalog_updated(&app);
     result
 }
 
 /// Importa una fuente desde un archivo JSON local.
 #[tauri::command]
 pub async fn import_source_from_file(
+    app: tauri::AppHandle,
     path: String,
     mode: ImportMode,
 ) -> Result<super::super::domain::SourceCatalog, String> {
@@ -83,12 +86,14 @@ pub async fn import_source_from_file(
     let catalog = parse_catalog(&raw, Some(format!("file://{path}")))?;
     let result = store::upsert_catalog(catalog, mode)?;
     invalidate_index();
+    emit_catalog_updated(&app);
     Ok(result)
 }
 
 /// Importa varios archivos JSON en paralelo.
 #[tauri::command]
 pub async fn import_sources_from_files_batch(
+    app: tauri::AppHandle,
     paths: Vec<String>,
     mode: ImportMode,
 ) -> Result<BatchImportResult, String> {
@@ -184,6 +189,7 @@ pub async fn import_sources_from_files_batch(
 
     if succeeded > 0 {
         invalidate_index();
+        emit_catalog_updated(&app);
     }
 
     Ok(BatchImportResult {
@@ -211,5 +217,7 @@ pub async fn import_source_from_url(
     ));
     let result = store::upsert_catalog(catalog, mode)?;
     invalidate_index();
+    emit_catalog_updated(&app);
     Ok(result)
 }
+
