@@ -622,6 +622,10 @@ export function useSettingsPage() {
         })
       );
       queryClient.invalidateQueries({ queryKey: ["config"] });
+      queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
+      queryClient.invalidateQueries({ queryKey: ["steamCatalogFacets"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-matches"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-match-detail"] });
     } catch (e) {
       toastError(i18n.t("settings.toast.steamListUpdateError"), e instanceof Error ? e.message : String(e));
     } finally {
@@ -646,6 +650,11 @@ export function useSettingsPage() {
       await resetSteamCatalogSync();
       toastSuccess(i18n.t("settings.toast.catalogResetSuccess"), i18n.t("settings.toast.catalogResetSuccessDesc"));
       dispatch({ type: "SET_RESET_STEAM_CATALOG_CONFIRM_OPEN", payload: false });
+      queryClient.invalidateQueries({ queryKey: ["config"] });
+      queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
+      queryClient.invalidateQueries({ queryKey: ["steamCatalogFacets"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-matches"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-match-detail"] });
     } catch (e) {
       toastError(i18n.t("settings.toast.catalogResetError"), e instanceof Error ? e.message : String(e));
     } finally {
@@ -722,6 +731,9 @@ export function useSettingsPage() {
         })
       );
       queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
+      queryClient.invalidateQueries({ queryKey: ["steamCatalogFacets"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-matches"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-match-detail"] });
       queryClient.invalidateQueries({ queryKey: STEAM_SEED_FRESHNESS_QUERY_KEY });
     } catch (e) {
       toastError(i18n.t("settings.toast.cannotDownloadInfo"), e instanceof Error ? e.message : String(e));
@@ -744,6 +756,8 @@ export function useSettingsPage() {
       );
       dispatch({ type: "SET_SOURCE_URL", payload: "" });
       queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-matches"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-match-detail"] });
     } catch (e) {
       toastError(i18n.t("settings.toast.importError"), e instanceof Error ? e.message : String(e));
     } finally {
@@ -767,6 +781,8 @@ export function useSettingsPage() {
         i18n.t("settings.toast.sourceImportFileSuccessDesc")
       );
       queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-matches"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-match-detail"] });
     } catch (e) {
       toastError(i18n.t("settings.toast.importError"), e instanceof Error ? e.message : String(e));
     } finally {
@@ -807,6 +823,8 @@ export function useSettingsPage() {
       }
 
       queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-matches"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-match-detail"] });
     } catch (e) {
       toastError(i18n.t("settings.toast.importError"), e instanceof Error ? e.message : String(e));
     } finally {
@@ -859,6 +877,8 @@ export function useSettingsPage() {
       await removeSource(sourceId);
       toastSuccess(i18n.t("settings.toast.sourceDeleted"), i18n.t("settings.toast.sourceDeletedDesc"));
       queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-matches"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-match-detail"] });
     } catch (e) {
       toastError(i18n.t("settings.toast.sourceDeleteError"), e instanceof Error ? e.message : String(e));
     } finally {
@@ -934,6 +954,8 @@ export function useSettingsPage() {
       );
       queryClient.invalidateQueries({ queryKey: ["remote-sources"] });
       queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-matches"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-match-detail"] });
     } catch (e) {
       toastError(i18n.t("settings.toast.syncFinishedError"), e instanceof Error ? e.message : String(e));
     } finally {

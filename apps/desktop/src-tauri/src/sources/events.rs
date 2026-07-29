@@ -11,6 +11,8 @@ use super::domain::{DownloadProtocol, SourceDownloadJob, SourceJobStatus};
 pub const SOURCES_PROGRESS_EVENT: &str = "sources-download-progress";
 /// Nombre del evento terminal de un job.
 pub const SOURCES_TERMINAL_EVENT: &str = "sources-download-terminal";
+/// Nombre del evento emitido al actualizar o modificar catálogos de fuentes.
+pub const SOURCES_CATALOG_UPDATED_EVENT: &str = "sources-catalog-updated";
 
 /// Payload serializable para progreso/terminal.
 #[derive(Debug, Clone, Serialize)]
@@ -61,4 +63,9 @@ pub fn emit_terminal(app: &AppHandle, job: &SourceDownloadJob) {
     };
     let _ = app.emit(SOURCES_TERMINAL_EVENT, payload);
     writer::try_record_source_download_terminal(app, job);
+}
+
+/// Emite notificación al frontend cuando la colección de fuentes de juegos cambia o se sincroniza.
+pub fn emit_catalog_updated(app: &AppHandle) {
+    let _ = app.emit(SOURCES_CATALOG_UPDATED_EVENT, ());
 }

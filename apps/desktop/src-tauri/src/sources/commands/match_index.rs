@@ -79,7 +79,9 @@ fn get_or_build_index() -> Result<Arc<Vec<IndexedSourceItem>>, String> {
             .read()
             .map_err(|_| "Index cache read lock poisoned".to_string())?;
         if let Some(ref idx) = *guard {
-            return Ok(Arc::clone(idx));
+            if !idx.is_empty() {
+                return Ok(Arc::clone(idx));
+            }
         }
     }
 
@@ -89,9 +91,7 @@ fn get_or_build_index() -> Result<Arc<Vec<IndexedSourceItem>>, String> {
         let mut guard = INDEX_CACHE
             .write()
             .map_err(|_| "Index cache write lock poisoned".to_string())?;
-        if guard.is_none() {
-            *guard = Some(Arc::clone(&new_index));
-        }
+        *guard = Some(Arc::clone(&new_index));
         Ok(Arc::clone(guard.as_ref().unwrap()))
     }
 }

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { listen } from "@tauri-apps/api/event";
 import type { CatalogListItem } from "@services/tauri";
+
 import { mapBatchMatchesToRecord } from "@utils/sourceMatch";
 import {
   getSteamAppdetailsMediaBatch,
@@ -154,11 +156,30 @@ export function useSteamCatalogQueries() {
   /** Cachea el total de la primera página para reutizarlo al paginar (mismos filtros). */
   const browseCountCache = useRef<{ key: string; total: number } | null>(null);
 
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen("steam-catalog-updated", () => {
+      browseCountCache.current = null;
+      void queryClient.invalidateQueries({ queryKey: ["steamCatalog"] });
+      void queryClient.invalidateQueries({ queryKey: ["steamCatalogFacets"] });
+      void queryClient.invalidateQueries({ queryKey: ["sources-matches"] });
+      void queryClient.invalidateQueries({ queryKey: ["sources-match-detail"] });
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, [queryClient]);
+
   const browseQuery = useQuery({
     queryKey: ["steamCatalog", "browse", page, genresKey, tagsKey, pageSize],
     queryFn: () => {
-      // Si los filtros cambiaron, invalidar el caché del total
+      // Si estamos en la página 1 o los filtros cambiaron, refrescar el total
       const filterKey = `${genresKey}|${tagsKey}`;
+      if (page === 1) {
+        browseCountCache.current = null;
+      }
       const cached = browseCountCache.current;
       const cachedTotal = cached && cached.key === filterKey ? cached.total : null;
 
@@ -258,7 +279,7 @@ export function useSteamCatalogQueries() {
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    refetchOnMount: true,
     placeholderData: keepPreviousData,
   });
   const matchByGameName = useMemo(() => {
