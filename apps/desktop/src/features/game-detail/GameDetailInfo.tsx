@@ -98,9 +98,9 @@ export function GameDetailSummaryPanel({ details }: { details: SteamAppDetailsRe
             <div className="space-y-2.5">
               <FieldLabel icon={<Tags size={14} className="opacity-80" />} label="Géneros" />
               <div className="flex flex-wrap gap-2">
-                {details.genres.map((genre) => (
+                {details.genres.map((genre, idx) => (
                   <span
-                    key={genre}
+                    key={`${genre}-${idx}`}
                     className="rounded-lg bg-default-100/90 px-2.5 py-1 text-xs font-medium text-default-700 ring-1 ring-default-200/80 dark:bg-default-100/20 dark:text-default-300 dark:ring-default-100/20">
                     {genre}
                   </span>
@@ -113,9 +113,9 @@ export function GameDetailSummaryPanel({ details }: { details: SteamAppDetailsRe
             <div className="space-y-2.5">
               <FieldLabel icon={<Code2 size={14} className="opacity-80" />} label="Categorías" />
               <div className="flex flex-wrap gap-2">
-                {details.categories.map((cat) => (
+                {details.categories.map((cat, idx) => (
                   <span
-                    key={cat}
+                    key={`${cat}-${idx}`}
                     className="rounded-lg bg-default-50/90 px-2.5 py-1 text-xs text-default-600 ring-1 ring-default-200/60 dark:bg-default-50/10 dark:text-default-400 dark:ring-default-100/15">
                     {cat}
                   </span>

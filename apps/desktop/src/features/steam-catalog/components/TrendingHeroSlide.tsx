@@ -237,7 +237,7 @@ export function TrendingHeroSlide({ featured, relatedItems, mediaBySteamAppId, o
         </div>
       </article>
 
-      <aside className="relative flex flex-col border-t border-default-200/80 bg-[radial-gradient(circle_at_top,#0f2a4b_0%,#0b1a2d_42%,#0a1422_100%)] p-5 text-white lg:border-l lg:border-t-0 lg:border-default-100/15">
+      <aside className="relative flex flex-col border-t border-default-200/80 bg-linear-to-b from-default-100/90 via-content1 to-default-900/95 p-5 text-white dark:from-default-100/10 dark:via-content1 dark:to-default-50/5 lg:border-l lg:border-t-0 lg:border-default-100/15">
         <div className="flex flex-col flex-1 justify-between gap-4">
           <div className="space-y-1.5">
             <p className="text-3xl font-semibold leading-none tracking-tight">{featured.name}</p>

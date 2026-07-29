@@ -46,12 +46,12 @@ function cn(...inputs: (string | boolean | undefined | null)[]): string {
 const COLOR_CLASSES: Record<string, string> = {
   current: "text-current",
   white: "text-white",
-  default: "text-neutral-400 dark:text-neutral-400",
-  primary: "text-sky-500 dark:text-sky-400",
-  secondary: "text-purple-500 dark:text-purple-400",
-  success: "text-emerald-500 dark:text-emerald-400",
-  warning: "text-amber-500 dark:text-amber-400",
-  danger: "text-rose-500 dark:text-rose-400",
+  default: "text-default-500 text-[var(--heroui-default-500,#a1a1aa)]",
+  primary: "text-primary text-[var(--heroui-primary,#006fee)]",
+  secondary: "text-secondary text-[var(--heroui-secondary,#9353d3)]",
+  success: "text-success text-[var(--heroui-success,#17c964)]",
+  warning: "text-warning text-[var(--heroui-warning,#f5a524)]",
+  danger: "text-danger text-[var(--heroui-danger,#f31260)]",
 };
 
 /** Mapeo de variantes de tamaño a dimensiones de Tailwind CSS. */

@@ -4,7 +4,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
-import { herouiSpinnerV3Plugin } from "./plugins/heroui-spinner-v3";
+import { herouiV3ComponentsPlugin } from "./plugins/heroui-v3-components.plugin";
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -41,7 +41,7 @@ const ReactCompilerConfig = {
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [
-    herouiSpinnerV3Plugin(),
+    herouiV3ComponentsPlugin(),
     react({
       babel: {
         plugins: [["babel-plugin-react-compiler", ReactCompilerConfig]],
