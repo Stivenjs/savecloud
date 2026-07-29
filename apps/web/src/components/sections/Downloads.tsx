@@ -50,18 +50,20 @@ export default function Downloads() {
             <div className="flex flex-col gap-3 mb-8">
               {loading ? (
                 <div className="py-4 flex justify-center">
-                  <Spinner size="sm" color="default" />
+                  <Spinner size="sm" />
                 </div>
               ) : (
                 <>
                   <Link
-                    isExternal
+                    target="_blank"
+                    rel="noopener noreferrer"
                     href={macOSDmgUrl || RELEASES_PAGE}
                     className="w-full justify-center bg-zinc-900 text-white dark:bg-white dark:text-black hover:opacity-90 active:scale-[0.98] transition-all rounded-full py-3 text-sm font-semibold">
                     Descargar para Apple Silicon
                   </Link>
                   <Link
-                    isExternal
+                    target="_blank"
+                    rel="noopener noreferrer"
                     href={macOSDmgUrl || RELEASES_PAGE}
                     className="w-full justify-center bg-zinc-100 text-zinc-900 dark:bg-zinc-800/60 dark:text-zinc-100 hover:bg-zinc-200 dark:hover:bg-zinc-800 active:scale-[0.98] transition-all rounded-full py-3 text-sm font-semibold">
                     Descargar para Intel
@@ -92,18 +94,20 @@ export default function Downloads() {
             <div className="flex flex-col gap-3 mb-8">
               {loading ? (
                 <div className="py-4 flex justify-center">
-                  <Spinner size="sm" color="default" />
+                  <Spinner size="sm" />
                 </div>
               ) : (
                 <>
                   <Link
-                    isExternal
+                    target="_blank"
+                    rel="noopener noreferrer"
                     href={windowsExeUrl || RELEASES_PAGE}
                     className="w-full justify-center bg-zinc-900 text-white dark:bg-white dark:text-black hover:opacity-90 active:scale-[0.98] transition-all rounded-full py-3 text-sm font-semibold">
                     Descargar para x64 (.exe)
                   </Link>
                   <Link
-                    isExternal
+                    target="_blank"
+                    rel="noopener noreferrer"
                     href={windowsMsiUrl || RELEASES_PAGE}
                     className="w-full justify-center bg-zinc-100 text-zinc-900 dark:bg-zinc-800/60 dark:text-zinc-100 hover:bg-zinc-200 dark:hover:bg-zinc-800 active:scale-[0.98] transition-all rounded-full py-3 text-sm font-semibold">
                     Descargar para x64 (.msi)
@@ -134,18 +138,20 @@ export default function Downloads() {
             <div className="flex flex-col gap-3 mb-8">
               {loading ? (
                 <div className="py-4 flex justify-center">
-                  <Spinner size="sm" color="default" />
+                  <Spinner size="sm" />
                 </div>
               ) : (
                 <>
                   <Link
-                    isExternal
+                    target="_blank"
+                    rel="noopener noreferrer"
                     href={linuxDebUrl || RELEASES_PAGE}
                     className="w-full justify-center bg-zinc-900 text-white dark:bg-white dark:text-black hover:opacity-90 active:scale-[0.98] transition-all rounded-full py-3 text-sm font-semibold">
                     Descargar para x64 (.deb)
                   </Link>
                   <Link
-                    isExternal
+                    target="_blank"
+                    rel="noopener noreferrer"
                     href={linuxAppImageUrl || RELEASES_PAGE}
                     className="w-full justify-center bg-zinc-100 text-zinc-900 dark:bg-zinc-800/60 dark:text-zinc-100 hover:bg-zinc-200 dark:hover:bg-zinc-800 active:scale-[0.98] transition-all rounded-full py-3 text-sm font-semibold">
                     Descargar para x64 (.AppImage)
