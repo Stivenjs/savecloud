@@ -40,6 +40,11 @@ const DEFAULT_OVERRIDES: Record<string, ComponentOverrideConfig> = {
     targetModule: "@/components/ui/HeroUISpinnerV3",
     getImportSpecifier: () => "HeroUISpinnerV3 as Spinner",
   },
+  Button: {
+    exports: ["Button"],
+    targetModule: "@/components/ui/HeroUIButtonV3",
+    getImportSpecifier: () => "HeroUIButtonV3 as Button",
+  },
 };
 
 /**
