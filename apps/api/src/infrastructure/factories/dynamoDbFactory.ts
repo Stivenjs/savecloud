@@ -5,6 +5,7 @@ import {
   ResourceNotFoundException,
   type CreateTableCommandInput,
 } from "@aws-sdk/client-dynamodb";
+import { resolveAwsCredentials } from "./awsCredentials";
 
 /** Región por defecto para la infraestructura de AWS */
 const DEFAULT_AWS_REGION = "us-east-2";
@@ -34,14 +35,11 @@ export function createDynamoDbClient(): DynamoDBClient {
   const awsRegion = process.env.AWS_REGION?.trim() || DEFAULT_AWS_REGION;
   const dynamoEndpoint = process.env.DYNAMODB_ENDPOINT?.trim() || undefined;
 
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID?.trim() || (dynamoEndpoint ? "local" : undefined);
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY?.trim() || (dynamoEndpoint ? "local" : undefined);
-
   return new DynamoDBClient({
     region: awsRegion,
     endpoint: dynamoEndpoint,
     maxAttempts: DEFAULT_MAX_ATTEMPTS,
-    credentials: accessKeyId && secretAccessKey ? { accessKeyId, secretAccessKey } : undefined,
+    credentials: resolveAwsCredentials(dynamoEndpoint ? "local" : undefined),
   });
 }
 

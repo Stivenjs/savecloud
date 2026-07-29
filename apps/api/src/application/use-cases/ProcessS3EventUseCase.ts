@@ -17,6 +17,7 @@ const IGNORED_KEYS = new Set([
   "steam-seed",
   "cloud-invites-memberships",
   "cloud-invites-shared-games",
+  "cloud-invites-member-hosts",
   "game-inventory",
 ]);
 
