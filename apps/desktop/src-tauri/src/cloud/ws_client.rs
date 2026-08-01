@@ -174,6 +174,16 @@ pub struct WsRuntimeMetrics {
     pub total_successful_connections: u64,
 }
 
+use rand::Rng;
+
+/// Aplica un Jitter aleatorio (±20%) a la duración del backoff para evitar colisiones de reconexión.
+fn apply_backoff_jitter(backoff: Duration) -> Duration {
+    let mut rng = rand::thread_rng();
+    let jitter_factor: f64 = rng.gen_range(0.8..=1.2);
+    let millis = (backoff.as_millis() as f64 * jitter_factor).max(100.0);
+    Duration::from_millis(millis as u64)
+}
+
 /// Devuelve el timestamp Unix actual en milisegundos en UTC.
 fn utc_now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
@@ -182,7 +192,8 @@ fn utc_now_ms() -> i64 {
 /// Inicia el bucle principal del cliente WebSocket en un hilo de fondo.
 ///
 /// Gestiona las reconexiones automáticas, el envío periódico de tramas *Ping* de Keep-Alive,
-/// el parsing de payloads entrantes y el despacho de mensajes salientes.
+/// la detección de suspensión del sistema (Sleep/Resume), el parsing de payloads entrantes
+/// y el despacho de mensajes salientes.
 ///
 /// # Argumentos
 ///
@@ -247,9 +258,30 @@ pub async fn start_ws_loop(
                 ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 ping_interval.tick().await;
 
+                let mut last_tick_instant = tokio::time::Instant::now();
+
                 loop {
                     tokio::select! {
                         _ = ping_interval.tick() => {
+                            let now = tokio::time::Instant::now();
+                            let elapsed = now.duration_since(last_tick_instant);
+                            last_tick_instant = now;
+
+                            // Detección de suspensión del sistema (Sleep/Resume PC):
+                            // Si el tiempo transcurrido entre ticks supera significativamente el intervalo (ej. > 40s),
+                            // el sistema estuvo suspendido. Se fuerza un reinicio limpio del socket.
+                            if elapsed > Duration::from_secs(PING_INTERVAL_SECS + 15) {
+                                log_cloud(
+                                    &app_handle,
+                                    &logs,
+                                    "warn",
+                                    "Detección de suspensión/reanudación del sistema (Sleep/Resume). Reiniciando socket...",
+                                )
+                                .await;
+                                record_disconnect_metric(&metrics).await;
+                                break;
+                            }
+
                             if let Err(e) = ws_sender.send(Message::Ping(Vec::new().into())).await {
                                 log_cloud(
                                     &app_handle,
@@ -324,7 +356,8 @@ pub async fn start_ws_loop(
             }
         }
 
-        tokio::time::sleep(backoff).await;
+        let sleep_duration = apply_backoff_jitter(backoff);
+        tokio::time::sleep(sleep_duration).await;
         backoff = std::cmp::min(backoff * 2, Duration::from_secs(MAX_BACKOFF_SECS));
     }
 }

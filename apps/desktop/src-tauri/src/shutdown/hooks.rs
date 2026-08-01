@@ -48,47 +48,78 @@ use super::splash::{
     arm_shutdown_splash_mount_ack, show_shutdown_splash_window, signal_shutdown_splash_mounted,
 };
 
-/// Tiempo mínimo visible del splash antes de lanzar el coordinador de cierre y `exit`.
-const MIN_TRAY_SPLASH_VISIBLE: Duration = Duration::from_secs(3);
+use super::coordinator::ShutdownPhase;
 
-/// Salida desde el ícono de bandeja: muestra la ventana informativa en el **hilo principal**
-/// (necesario en Windows/WebView2), espera a que el frontend confirme el montaje o un timeout,
-/// **mantiene el splash visible al menos** [`MIN_TRAY_SPLASH_VISIBLE`], y recién después inicia el cierre.
+/// Indica si hay operaciones pesadas de red, torrents o sincronización en ejecución.
+pub async fn has_active_heavy_work(app: &AppHandle) -> bool {
+    if let Some(torrent_state) = app.try_state::<crate::torrent::state::TorrentState>() {
+        let active_count = torrent_state.engine.lock().await.active_hashes().len();
+        if active_count > 0 {
+            return true;
+        }
+    }
+
+    if let Some(coordinator) = app.try_state::<ShutdownCoordinator>() {
+        if coordinator
+            .has_active_phase_work(ShutdownPhase::NetworkUploads)
+            .await
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Salida desde el ícono de bandeja / menú.
+///
+/// Si existen tareas pesadas activas en segundo plano (ej. subidas S3 o torrents),
+/// muestra el splash informativo durante el tiempo necesario para la limpieza.
+/// Si la aplicación está inactiva, ejecuta el cierre ultra-rápido al instante.
 pub async fn quit_from_tray_with_splash(app: AppHandle) {
-    log::info!("[Tray] Flujo Salir con ventana de cierre…");
+    log::info!("[Tray] Flujo Salir solicitado...");
 
-    let splash_clock = Instant::now();
-    let mount_rx = arm_shutdown_splash_mount_ack();
+    let is_heavy = has_active_heavy_work(&app).await;
 
-    let app_for_main = app.clone();
-    let schedule = app.run_on_main_thread(move || {
-        if let Err(e) = show_shutdown_splash_window(&app_for_main) {
-            log::warn!(
-                "[Tray] No se pudo mostrar ventana de cierre desde hilo principal: {}. ",
-                e
-            );
+    if is_heavy {
+        log::info!(
+            "[Tray] Operaciones activas detectadas. Mostrando ventana informativa de cierre..."
+        );
+        let splash_clock = Instant::now();
+        let mount_rx = arm_shutdown_splash_mount_ack();
+
+        let app_for_main = app.clone();
+        let schedule = app.run_on_main_thread(move || {
+            if let Err(e) = show_shutdown_splash_window(&app_for_main) {
+                log::warn!(
+                    "[Tray] No se pudo mostrar ventana de cierre desde hilo principal: {}",
+                    e
+                );
+                signal_shutdown_splash_mounted();
+            }
+        });
+
+        if let Err(e) = schedule {
+            log::warn!("[Tray] run_on_main_thread falló ({e}); creando ventana directamente.");
+            let _ = show_shutdown_splash_window(&app);
             signal_shutdown_splash_mounted();
         }
-    });
 
-    if let Err(e) = schedule {
-        log::warn!("[Tray] run_on_main_thread falló ({e}); intentando crear ventana igualmente.");
-        let _ = show_shutdown_splash_window(&app);
-        signal_shutdown_splash_mounted();
-    }
-
-    tokio::select! {
-        _ = mount_rx => {
-            log::debug!("[Tray] Splash de cierre lista (front ACK).");
+        tokio::select! {
+            _ = mount_rx => {
+                log::debug!("[Tray] Splash de cierre lista (front ACK).");
+            }
+            _ = tokio::time::sleep(Duration::from_millis(1200)) => {
+                log::warn!("[Tray] Timeout esperando splash; continuando con shutdown.");
+            }
         }
-        _ = tokio::time::sleep(std::time::Duration::from_millis(2800)) => {
-            log::warn!("[Tray] Timeout esperando splash; continuando con shutdown igualmente.");
-        }
-    }
 
-    let pending = MIN_TRAY_SPLASH_VISIBLE.saturating_sub(splash_clock.elapsed());
-    if !pending.is_zero() {
-        tokio::time::sleep(pending).await;
+        let pending = Duration::from_millis(1200).saturating_sub(splash_clock.elapsed());
+        if !pending.is_zero() {
+            tokio::time::sleep(pending).await;
+        }
+    } else {
+        log::info!("[Tray] Sin operaciones activas. Ejecutando cierre ultra-rápido al instante...");
     }
 
     execute_graceful_shutdown(app).await;
@@ -156,6 +187,18 @@ async fn execute_graceful_shutdown(app: AppHandle) {
                 "[Shutdown] ERROR: ShutdownCoordinator no está registrado en el estado de Tauri. \
                  Verifica que main.rs llame a .manage(coordinator). Forzando salida de emergencia."
             );
+        }
+    }
+
+    // Ejecutar checkpoint TRUNCATE del WAL de SQLite para compactar el archivo en disco al salir
+    if let Some(db) = app.try_state::<crate::sqlite::AppDb>() {
+        if let Err(e) = db.checkpoint_truncate() {
+            log::warn!(
+                "[Shutdown] No se pudo hacer checkpoint del WAL de SQLite al cerrar: {}",
+                e
+            );
+        } else {
+            log::info!("[Shutdown] Checkpoint WAL TRUNCATE de SQLite completado limpiamente.");
         }
     }
 
