@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { Button, Spinner } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
@@ -100,6 +100,8 @@ export function GamesPage() {
     /* handleDismissOperationError, */
     /* handleRetryOperationError, */
   } = useGamesPage();
+
+  const deferredFilteredGames = useDeferredValue(filteredGames);
 
   const { statsByGameId } = useGameStats(!!config?.games?.length);
 
@@ -447,7 +449,7 @@ export function GamesPage() {
               {t("library.menu.gamesTitle")}
             </h2>
             <GamesList
-              games={filteredGames}
+              games={deferredFilteredGames}
               consoleMode={bigPictureConsole}
               animationKey={`${originFilter}|${debouncedSearchTerm}`}
               emptyFilterMessage={emptyFilterMessage}
