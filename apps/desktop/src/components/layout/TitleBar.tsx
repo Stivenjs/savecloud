@@ -125,7 +125,9 @@ const WindowsControls = ({
   maximize,
   isMaximized,
   labels,
-}: Omit<WindowControls, "platform"> & { labels: WindowControlLabels }) => (
+}: Omit<WindowControls, "platform"> & {
+  labels: WindowControlLabels;
+}) => (
   <>
     <div data-tauri-drag-region className="flex-1 h-full flex items-center px-4">
       <span className="text-sm font-medium text-foreground/80 pointer-events-none">SaveCloud</span>

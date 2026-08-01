@@ -1,7 +1,8 @@
-//! Comandos de Tauri para la integración con servicios en la nube de SaveCloud.
+//! Comandos IPC de Tauri para la gestión del servicio WebSocket de SaveCloud.
 //!
-//! Este archivo expone las funciones `#[tauri::command]` que el frontend de React
-//! invoca para controlar las comunicaciones remotas.
+//! Este módulo expone las funciones anotadas con `#[tauri::command]` consumidas
+//! por la interfaz de usuario en React para conectar, desconectar y transmitir eventos
+//! de presencia y streaming en tiempo real.
 
 use super::ws_client::{CloudBroadcastPayload, CloudStreamSignalPayload};
 use super::ws_manager::CloudWsState;
@@ -11,15 +12,9 @@ use crate::plugins::log_buffer::AppLogs;
 use serde_json::Value;
 use tauri::{command, AppHandle, State};
 
-/// Inicia la conexión WebSocket segura con la infraestructura de la nube.
+/// Adjunta parámetros de consulta URL (query string) a una URL base de WebSocket de forma segura.
 ///
-/// Resuelve las credenciales desde el almacén seguro (keyring) y levanta la
-/// conexión en segundo plano. Los mensajes enviados antes de que el WS esté
-/// listo se guardan en la cola del manager y se envían automáticamente en
-/// cuanto el handshake termina (cold-start buffer).
-
-/// Garantiza que la URL de WebSocket mantenga una ruta HTTP válida (mínimo `/`)
-/// antes de añadir los parámetros de consulta (query string).
+/// Garantiza la preservación del esquema, host, puerto y ruta válida (mínimo `/`).
 fn append_ws_query(ws_base: &str, query: &str) -> String {
     let trimmed = ws_base.trim();
     if let Ok(parsed) = url::Url::parse(trimmed) {
@@ -27,7 +22,7 @@ fn append_ws_query(ws_base: &str, query: &str) -> String {
         let host = parsed.host_str().unwrap_or("");
         let port_part = match parsed.port() {
             Some(p) => format!(":{}", p),
-            None => "".to_string(),
+            None => String::new(),
         };
         let path = parsed.path();
         let effective_path = if path.is_empty() { "/" } else { path };
@@ -40,6 +35,18 @@ fn append_ws_query(ws_base: &str, query: &str) -> String {
     }
 }
 
+/// Inicia la conexión WebSocket remota con la nube de SaveCloud.
+///
+/// Resuelve la autenticación y parámetros según el modo de operación (Host propio o Invitado/Guest),
+/// construye la URL autenticada y delega la ejecución al [`CloudWsState`].
+///
+/// # Argumentos
+/// * `app_handle` - Handle de la aplicación Tauri.
+/// * `cloud_state` - Estado global inyectado del administrador de WebSocket.
+/// * `logs` - Búfer de registros de observabilidad inyectado.
+///
+/// # Errores
+/// Retorna un `Err(String)` si falta la configuración de usuario, token, API Key o credenciales.
 #[command]
 pub async fn start_cloud_ws(
     app_handle: AppHandle,
@@ -48,7 +55,6 @@ pub async fn start_cloud_ws(
 ) -> Result<(), String> {
     let settings = config::load_settings();
 
-    // 1. Obtener UserID del usuario local.
     let user_id = settings
         .user_id
         .as_deref()
@@ -57,7 +63,6 @@ pub async fn start_cloud_ws(
         .ok_or("userID no configurado")?
         .to_string();
 
-    // 2. Determinar si estamos en modo Invitado u Host propio.
     let active_host = settings
         .active_cloud_host_user_id
         .as_deref()
@@ -65,26 +70,25 @@ pub async fn start_cloud_ws(
         .filter(|s| !s.is_empty())
         .map(str::to_string);
 
-    // 2.5 Obtener el deviceID local.
     let device_id = crate::peer_inventory::resolve_device_id()?;
 
-    let final_url = if let Some(host) = active_host {
+    let final_url = if let Some(ref host) = active_host {
         let ws_base_raw = settings
             .cloud_host_ws_base_urls
-            .get(&host)
+            .get(host)
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
             .or_else(|| {
                 settings
                     .cloud_host_api_base_urls
-                    .get(&host)
+                    .get(host)
                     .map(|s| s.trim())
                     .filter(|s| !s.is_empty())
             })
             .ok_or("No hay URL de nube para este host.")?;
         let ws_base = crate::commands::share::invites::normalize_ws_url(ws_base_raw);
 
-        let token = config::get_secure_api_key_for_cloud_host(&host)
+        let token = config::get_secure_api_key_for_cloud_host(host)
             .ok_or("No tienes credenciales (token) para este host.")?;
 
         let query = format!(
@@ -129,20 +133,9 @@ pub async fn start_cloud_ws(
     let ws_endpoint_preview = final_url
         .split('?')
         .next()
-        .map(str::to_string)
-        .unwrap_or_else(|| "unknown".to_string());
+        .unwrap_or("unknown");
 
-    let mode = if settings
-        .active_cloud_host_user_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .is_some()
-    {
-        "guest"
-    } else {
-        "host"
-    };
+    let mode = if active_host.is_some() { "guest" } else { "host" };
 
     sync_logger::log_operation(
         "cloud_ws_start",
@@ -152,7 +145,6 @@ pub async fn start_cloud_ws(
         ),
     );
 
-    // 3. Delegar el inicio al gestor de estado.
     cloud_state
         .start(app_handle, final_url, logs.inner().clone())
         .await;
@@ -160,17 +152,25 @@ pub async fn start_cloud_ws(
     Ok(())
 }
 
-/// Detiene manualmente la conexión activa con la nube.
+/// Detiene manualmente la conexión activa con el servidor WebSocket.
+///
+/// # Argumentos
+/// * `cloud_state` - Estado global inyectado del administrador de WebSocket.
 #[command]
 pub async fn stop_cloud_ws(cloud_state: State<'_, CloudWsState>) -> Result<(), String> {
     cloud_state.stop().await;
     Ok(())
 }
 
-/// Envía una notificación de actividad de juego al servidor cloud.
+/// Transmite una actualización de difusión de juego (presencia) hacia la nube.
 ///
-/// Si el WS todavía no está listo (cold start), el mensaje se encola
-/// automáticamente y se envía en cuanto la conexión se establece.
+/// Si la conexión aún no ha completado el arranque en frío, el mensaje se guarda en la cola
+/// temporal y se transmitirá automáticamente al conectar.
+///
+/// # Argumentos
+/// * `game_id` - ID único del juego activo (o cadena vacía si se cerró).
+/// * `game_name` - Nombre descriptivo del juego (o cadena vacía si se cerró).
+/// * `cloud_state` - Estado global inyectado del administrador de WebSocket.
 #[command]
 pub async fn send_cloud_broadcast(
     game_id: String,
@@ -193,6 +193,14 @@ pub async fn send_cloud_broadcast(
     cloud_state.send_broadcast(payload).await
 }
 
+/// Envía una señal de control de streaming WebRTC entre pares a través del WebSocket.
+///
+/// # Argumentos
+/// * `event` - Nombre del evento de transmisión (ej. "offer", "answer", "candidate").
+/// * `stream_id` - ID único de la sesión de streaming.
+/// * `target_user_id` - ID del usuario destino de la señal (opcional).
+/// * `payload` - Datos arbitrarios en formato JSON (opcional).
+/// * `cloud_state` - Estado global inyectado del administrador de WebSocket.
 #[command]
 pub async fn send_cloud_stream_signal(
     event: String,

@@ -118,6 +118,8 @@ const menuItemsFromNav = (navItems: NavItem[], currentPath: string, t: (key: str
  * </AppLayout>
  * ```
  */
+import { CommandPaletteModal } from "@components/layout/CommandPaletteModal";
+
 export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitleBar = false }: AppLayoutProps) {
   const { t } = useTranslation();
   const { resolvedTheme, setTheme } = useTheme();
@@ -125,6 +127,20 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
   const location = useLocation();
   const isDark = resolvedTheme === "dark";
   const setSideMenuOpen = useShellUiStore((s) => s.setSideMenuOpen);
+
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const { config, loading: configLoading } = useConfig();
   const { activeProfile } = useProfileSession();
@@ -310,6 +326,8 @@ export function AppLayout({ navItems, children, games, onMenuGameClick, hideTitl
           bpReserveGlobalTopChromeSlot={hideTitleBar && !profileDrawerOpen}
         />
       </Suspense>
+
+      <CommandPaletteModal isOpen={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} />
     </div>
   );
 }

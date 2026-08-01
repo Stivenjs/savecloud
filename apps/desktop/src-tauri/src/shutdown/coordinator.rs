@@ -154,6 +154,16 @@ impl ShutdownCoordinator {
         reg.entry(phase).or_default().push(handle);
     }
 
+    /// Verifica si hay subsistemas registrados en una fase específica.
+    pub async fn has_active_phase_work(&self, phase: ShutdownPhase) -> bool {
+        let reg = self.registry.lock().await;
+        if let Some(handles) = reg.get(&phase) {
+            !handles.is_empty()
+        } else {
+            false
+        }
+    }
+
     /// Ejecuta el cierre completo en fases ordenadas.
     ///
     /// Este método:
