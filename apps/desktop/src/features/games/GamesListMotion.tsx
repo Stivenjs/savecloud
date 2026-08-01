@@ -46,5 +46,11 @@ export interface GamesListMotionItemProps {
 }
 
 export function GamesListMotionItem({ children }: GamesListMotionItemProps) {
-  return <motion.div variants={gamesListItemVariants}>{children}</motion.div>;
+  return (
+    <motion.div
+      variants={gamesListItemVariants}
+      style={{ contentVisibility: "auto", containIntrinsicSize: "260px 320px" }}>
+      {children}
+    </motion.div>
+  );
 }
