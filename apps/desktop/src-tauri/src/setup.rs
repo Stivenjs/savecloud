@@ -121,9 +121,6 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
         });
     }
 
-    // 4.5 Ventana abstracta Overlay para notificaciones
-    let _ = crate::overlay::setup_overlay_window(app.handle());
-
     // 5. Buffer de logs y plugin manager
     let logs = new_log_buffer();
     app.manage(logs.clone());
