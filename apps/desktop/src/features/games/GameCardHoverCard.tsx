@@ -213,23 +213,6 @@ export function GameCardHoverCard({
     setFailedUrls((prev) => new Set(prev).add(url));
   }, []);
 
-  /** Cierra inmediatamente el hovercard cancelando todos los temporizadores en curso. */
-  const forceCloseHovercard = useCallback(() => {
-    isHoveringRef.current = false;
-
-    if (hoverOpenRef.current) {
-      clearTimeout(hoverOpenRef.current);
-      hoverOpenRef.current = null;
-    }
-
-    if (hoverCloseRef.current) {
-      clearTimeout(hoverCloseRef.current);
-      hoverCloseRef.current = null;
-    }
-
-    setShowHovercard(false);
-  }, []);
-
   const openHovercard = useCallback(() => {
     isHoveringRef.current = true;
 
@@ -256,46 +239,18 @@ export function GameCardHoverCard({
       hoverOpenRef.current = null;
     }
 
-    if (hoverCloseRef.current) {
-      clearTimeout(hoverCloseRef.current);
-    }
+    if (hoverCloseRef.current) return;
 
     hoverCloseRef.current = setTimeout(() => {
       hoverCloseRef.current = null;
-      if (!isHoveringRef.current) {
-        setShowHovercard(false);
-      }
+      setShowHovercard(false);
     }, HOVER_CLOSE_DELAY_MS);
   }, []);
-
-  /** Cierra automáticamente el popover si la ventana pierde el foco, si se hace scroll o rescala la pantalla. */
-  useEffect(() => {
-    if (!showHovercard) return;
-
-    const handleGlobalDismiss = () => {
-      forceCloseHovercard();
-    };
-
-    window.addEventListener("scroll", handleGlobalDismiss, true);
-    window.addEventListener("blur", handleGlobalDismiss);
-    window.addEventListener("resize", handleGlobalDismiss);
-
-    return () => {
-      window.removeEventListener("scroll", handleGlobalDismiss, true);
-      window.removeEventListener("blur", handleGlobalDismiss);
-      window.removeEventListener("resize", handleGlobalDismiss);
-    };
-  }, [showHovercard, forceCloseHovercard]);
 
   return (
     <>
       <Popover
         isOpen={showHovercard}
-        onOpenChange={(open) => {
-          if (!open) {
-            forceCloseHovercard();
-          }
-        }}
         placement="right"
         showArrow
         offset={12}
@@ -305,11 +260,7 @@ export function GameCardHoverCard({
             "max-w-[20rem] w-[20rem] p-0 overflow-hidden rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-zinc-800/80 bg-[#0e0f14]/98 backdrop-blur-md",
         }}>
         <PopoverTrigger>
-          <div
-            className="outline-none"
-            onMouseEnter={openHovercard}
-            onMouseLeave={closeHovercard}
-            onPointerDown={forceCloseHovercard}>
+          <div className="outline-none" onMouseEnter={openHovercard} onMouseLeave={closeHovercard}>
             {children}
           </div>
         </PopoverTrigger>
