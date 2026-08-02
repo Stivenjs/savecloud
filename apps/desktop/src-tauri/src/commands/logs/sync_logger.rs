@@ -26,7 +26,7 @@ const MAX_LOG_SIZE: u64 = 5 * 1024 * 1024; // 5MB
 const MAX_LOG_FILES: usize = 3;
 
 fn log_path() -> Option<std::path::PathBuf> {
-    crate::config::config_dir().map(|d| d.join(LOG_FILE_NAME))
+    crate::config::config_dir().map(|d| d.join("logs").join(LOG_FILE_NAME))
 }
 
 static LOG_LOCK: Mutex<()> = Mutex::new(());
@@ -36,6 +36,10 @@ fn do_write_line(path: std::path::PathBuf, full: String) {
         Ok(g) => g,
         Err(_) => return,
     };
+
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
 
     rotate_log_if_needed(&path);
 

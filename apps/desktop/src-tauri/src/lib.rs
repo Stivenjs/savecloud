@@ -35,10 +35,7 @@ fn load_dotenv() {
 }
 
 fn init_logging() {
-    let filter = "warn,librqbit=off,rqbit=off,savecloud_desktop_lib=info";
-    let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(filter))
-        .format_timestamp_millis()
-        .try_init();
+    commands::logs::file_logger::init_logging();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
