@@ -44,27 +44,25 @@ const ANIMATION_CONFIG: {
 
 const NotificationCard: React.FC<OverlayNotification> = ({ id, title, body, avatar }) => (
   <motion.div key={id} {...ANIMATION_CONFIG} className="pointer-events-auto">
-    {/* Contenedor principal */}
-    <div className="flex bg-[#1a1a1a] rounded-sm overflow-hidden shadow-[0_3px_12px_rgba(0,0,0,0.55)]">
-      {/* Barra verde lateral */}
+    {/* Contenedor principal estilo Steam Toast */}
+    <div className="flex bg-[#171a21]/95 border border-white/10 rounded-sm overflow-hidden shadow-[0_8px_28px_rgba(0,0,0,0.7)] backdrop-blur-md">
+      {/* Barra verde lateral de acento */}
       <div className="w-1 bg-[#5c7e10] shrink-0" />
 
       {/* Contenido de la notificación */}
       <div className="flex items-center gap-3 py-3 px-3.5">
-        {/* Avatar cuadrado con esquinas ligeramente redondeadas */}
-        <div className="w-9 h-9 rounded-[3px] bg-[#3d3d3d] overflow-hidden shrink-0 flex items-center justify-center">
+        {/* Avatar / Icono */}
+        <div className="w-9 h-9 rounded-[3px] bg-[#2a2e38] overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
           {avatar ? (
             <img src={avatar} alt="" className="w-full h-full object-cover" />
           ) : (
-            <Gamepad2 className="w-5 h-5 text-[#67707b]" />
+            <Gamepad2 className="w-5 h-5 text-[#8f98a0]" />
           )}
         </div>
 
         {/* Texto */}
         <div className="flex flex-col min-w-0">
-          {/* Nombre del amigo */}
-          <span className="text-[#c6d4df] text-[14px] font-normal leading-[1.2] truncate max-w-55">{title}</span>
-          {/* Estado */}
+          <span className="text-[#c6d4df] text-[14px] font-medium leading-[1.2] truncate max-w-55">{title}</span>
           <span className="text-[#5c7e10] text-[13px] font-normal leading-[1.3] truncate max-w-55">{body}</span>
         </div>
       </div>
@@ -202,9 +200,9 @@ export function OverlayApp() {
 
   return (
     <div className="fixed inset-0 m-0 p-0 pointer-events-none bg-transparent overflow-hidden">
-      {/* Contenedor de notificaciones - esquina inferior derecha */}
+      {/* Contenedor de notificaciones - posicionado sobre la barra de tareas estilo Steam */}
       <div
-        className="absolute bottom-4 right-4 flex flex-col items-end gap-2 pointer-events-none"
+        className="absolute bottom-17 right-4 flex flex-col items-end gap-2.5 pointer-events-none"
         role="region"
         aria-label="Notificaciones de overlay"
         aria-live="polite">

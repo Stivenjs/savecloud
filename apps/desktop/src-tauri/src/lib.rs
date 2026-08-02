@@ -35,10 +35,7 @@ fn load_dotenv() {
 }
 
 fn init_logging() {
-    let filter = "warn,librqbit=off,rqbit=off,savecloud_desktop_lib=info";
-    let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(filter))
-        .format_timestamp_millis()
-        .try_init();
+    commands::logs::file_logger::init_logging();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -49,7 +46,10 @@ pub fn run() {
     let settings = config::load_settings();
     if settings.disable_hardware_acceleration {
         log::info!("Disabling hardware acceleration (GPU) by user preference");
-        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--disable-gpu --disable-gpu-rasterization");
+        std::env::set_var(
+            "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+            "--disable-gpu --disable-gpu-rasterization",
+        );
         std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
     }
 

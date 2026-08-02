@@ -2,21 +2,21 @@
   view-transition-name: none;
 }
 
-::view-transition-old(.page-slide),
-::view-transition-new(.page-slide) {
-  animation-duration: 180ms;
+::view-transition-old(.page-scale-lift),
+::view-transition-new(.page-scale-lift) {
+  animation-duration: 240ms;
   animation-fill-mode: both;
-  will-change: transform, opacity;
+  will-change: transform, opacity, filter;
 }
 
-::view-transition-old(.page-slide) {
-  animation-name: fade-out, slide-out-left;
-  animation-timing-function: ease-in, cubic-bezier(0.4, 0, 1, 1);
+::view-transition-old(.page-scale-lift) {
+  animation-name: page-scale-out, fade-out;
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
 }
 
-::view-transition-new(.page-slide) {
-  animation-name: fade-in, slide-in-right;
-  animation-timing-function: ease-out, cubic-bezier(0.2, 0, 0, 1);
+::view-transition-new(.page-scale-lift) {
+  animation-name: page-scale-in, fade-in;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 ::view-transition-group(.hero-morph) {
@@ -54,20 +54,250 @@
   }
 }
 
-@keyframes slide-in-right {
+@keyframes page-scale-out {
   from {
-    transform: translate3d(16px, 0, 0);
+    transform: scale(1) translateY(0);
+    filter: blur(0px);
   }
   to {
-    transform: translate3d(0, 0, 0);
+    transform: scale(0.97) translateY(-6px);
+    filter: blur(4px);
   }
 }
 
-@keyframes slide-out-left {
+@keyframes page-scale-in {
   from {
-    transform: translate3d(0, 0, 0);
+    transform: scale(0.97) translateY(10px);
+    filter: blur(4px);
   }
   to {
-    transform: translate3d(-16px, 0, 0);
+    transform: scale(1) translateY(0);
+    filter: blur(0px);
+  }
+}
+
+/* Opción 2: page-perspective-flip (3D Gaming Console Flip) */
+::view-transition-old(.page-perspective-flip),
+::view-transition-new(.page-perspective-flip) {
+  animation-duration: 240ms;
+  animation-fill-mode: both;
+  will-change: transform, opacity;
+}
+
+::view-transition-old(.page-perspective-flip) {
+  animation-name: page-flip-out, fade-out;
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+
+::view-transition-new(.page-perspective-flip) {
+  animation-name: page-flip-in, fade-in;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes page-flip-out {
+  from {
+    transform: perspective(1200px) rotateY(0deg) scale(1);
+  }
+  to {
+    transform: perspective(1200px) rotateY(-5deg) scale(0.96) translateX(-15px);
+  }
+}
+
+@keyframes page-flip-in {
+  from {
+    transform: perspective(1200px) rotateY(5deg) scale(0.96) translateX(15px);
+  }
+  to {
+    transform: perspective(1200px) rotateY(0deg) scale(1) translateX(0);
+  }
+}
+
+/* Opción 3: page-snappy-zoom (Ultra-responsive Studio Zoom) */
+::view-transition-old(.page-snappy-zoom),
+::view-transition-new(.page-snappy-zoom) {
+  animation-duration: 200ms;
+  animation-fill-mode: both;
+  will-change: transform, opacity;
+}
+
+::view-transition-old(.page-snappy-zoom) {
+  animation-name: page-zoom-out, fade-out;
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+
+::view-transition-new(.page-snappy-zoom) {
+  animation-name: page-zoom-in, fade-in;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes page-zoom-out {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.03);
+  }
+}
+
+@keyframes page-zoom-in {
+  from {
+    transform: scale(0.97);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* Transiciones específicas para la entrada al detalle de juego */
+
+/* Opción 1: game-detail-ps5 (PS5/Xbox Console Unfold) */
+::view-transition-old(.game-detail-ps5),
+::view-transition-new(.game-detail-ps5) {
+  animation-duration: 280ms;
+  animation-fill-mode: both;
+  will-change: transform, opacity, filter;
+}
+
+::view-transition-old(.game-detail-ps5) {
+  animation-name: detail-ps5-out, fade-out;
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+
+::view-transition-new(.game-detail-ps5) {
+  animation-name: detail-ps5-in, fade-in;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes detail-ps5-out {
+  from {
+    transform: scale(1) translateY(0);
+    filter: blur(0px);
+  }
+  to {
+    transform: scale(0.96) translateY(-12px);
+    filter: blur(6px);
+  }
+}
+
+@keyframes detail-ps5-in {
+  from {
+    transform: translateY(28px) scale(0.98);
+    filter: blur(8px);
+  }
+  to {
+    transform: translateY(0) scale(1);
+    filter: blur(0px);
+  }
+}
+
+/* Opción 2: game-detail-cinema (Steam Big Picture Cinema Darken) */
+::view-transition-old(.game-detail-cinema),
+::view-transition-new(.game-detail-cinema) {
+  animation-duration: 300ms;
+  animation-fill-mode: both;
+  will-change: transform, opacity;
+}
+
+::view-transition-old(.game-detail-cinema) {
+  animation-name: detail-cinema-out, fade-out;
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+
+::view-transition-new(.game-detail-cinema) {
+  animation-name: detail-cinema-in, fade-in;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes detail-cinema-out {
+  from {
+    transform: scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+}
+
+@keyframes detail-cinema-in {
+  from {
+    transform: scale(1.04) translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Opción 3: game-detail-parallax (Spatial UI Multicapa) */
+::view-transition-old(.game-detail-parallax),
+::view-transition-new(.game-detail-parallax) {
+  animation-duration: 260ms;
+  animation-fill-mode: both;
+  will-change: transform, opacity;
+}
+
+::view-transition-old(.game-detail-parallax) {
+  animation-name: detail-parallax-out, fade-out;
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+
+::view-transition-new(.game-detail-parallax) {
+  animation-name: detail-parallax-in, fade-in;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes detail-parallax-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-30px);
+  }
+}
+
+@keyframes detail-parallax-in {
+  from {
+    transform: translateX(30px) scale(0.97);
+  }
+  to {
+    transform: translateX(0) scale(1);
+  }
+}
+
+/* Opción 4: game-detail-arcade (Apple Arcade Spring Bounce) */
+::view-transition-old(.game-detail-arcade),
+::view-transition-new(.game-detail-arcade) {
+  animation-duration: 320ms;
+  animation-fill-mode: both;
+  will-change: transform, opacity;
+}
+
+::view-transition-old(.game-detail-arcade) {
+  animation-name: detail-arcade-out, fade-out;
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+
+::view-transition-new(.game-detail-arcade) {
+  animation-name: detail-arcade-in, fade-in;
+  animation-timing-function: cubic-bezier(0.34, 1.35, 0.64, 1);
+}
+
+@keyframes detail-arcade-out {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(0.92);
+  }
+}
+
+@keyframes detail-arcade-in {
+  from {
+    transform: scale(0.9) translateY(20px);
+  }
+  to {
+    transform: scale(1) translateY(0);
   }
 }

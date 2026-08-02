@@ -14,8 +14,8 @@ export function AnimatedPage({ children }: AnimatedPageProps) {
 
   return (
     <ViewTransition
-      enter={{ "game-detail": "none", default: "page-slide" }}
-      exit={{ "game-detail": "none", default: "page-slide" }}
+      enter={{ "game-detail": "game-detail-ps5", default: "page-scale-lift" }}
+      exit={{ "game-detail": "game-detail-ps5", default: "page-scale-lift" }}
       default="none">
       {children}
     </ViewTransition>
