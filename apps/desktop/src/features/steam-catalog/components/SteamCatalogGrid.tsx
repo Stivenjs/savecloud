@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CatalogListItem } from "@services/tauri";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
@@ -337,6 +337,16 @@ export function SteamCatalogGrid({
     [installingGame, peerOffersHook.gameKey]
   );
 
+  const libraryGamesMap = useMemo(() => {
+    const map = new Map<string, ConfiguredGame>();
+    if (!config?.games) return map;
+    for (const g of config.games) {
+      if (g.steamAppId) map.set(String(g.steamAppId), g);
+      map.set(g.id.toLowerCase(), g);
+    }
+    return map;
+  }, [config?.games]);
+
   return (
     <>
       <GamesListMotionContainer
@@ -348,9 +358,9 @@ export function SteamCatalogGrid({
         )}
         listKey={listKey}>
         {items.map((item) => {
-          const libraryGame = config?.games?.find(
-            (g) => (g.steamAppId && g.steamAppId === item.steamAppId) || g.id.toLowerCase() === item.name.toLowerCase()
-          );
+          const libraryGame =
+            (item.steamAppId ? libraryGamesMap.get(String(item.steamAppId)) : undefined) ??
+            libraryGamesMap.get(item.name.toLowerCase());
 
           return (
             <CatalogGridItem

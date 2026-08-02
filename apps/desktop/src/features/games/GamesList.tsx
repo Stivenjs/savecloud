@@ -120,22 +120,22 @@ export function GamesList({
     [setSortBy, setSortDir]
   );
 
+  const gameIds = useMemo(() => games.map((g) => g.id), [games]);
+
   const resolvedSteamAppIds = useResolvedSteamAppIds(games);
   const isResolvingIds = getIsResolvingIds(games, resolvedSteamAppIds);
   const { mediaBySteamAppId } = useGameMediaBatch({ games, resolvedSteamAppIds, isResolvingIds });
   const { statsByGameId } = useGameStats(games.length > 0);
-  const { countByGameId: cloudBackupCountByGameId } = useCloudBackupCounts(
-    games.map((g) => g.id),
-    hasSyncConfig && games.length > 0
-  );
-  const gameRunningStatus = useGameRunningStatus(games.map((g) => g.id));
+  const { countByGameId: cloudBackupCountByGameId } = useCloudBackupCounts(gameIds, hasSyncConfig && games.length > 0);
+  const gameRunningStatus = useGameRunningStatus(gameIds);
 
   const sortedGames = useGamesSorter(games, statsByGameId as unknown as Map<string, GameStats>, sortBy, sortDir);
 
+  const sortedGamesIds = useMemo(() => sortedGames.map((g) => g.id).join(","), [sortedGames]);
+
   const stableListKey = useMemo(
-    () => [animationKey ?? "", layout, sortBy, sortDir, sortedGames.map((g) => g.id).join(",")].join("|"),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [animationKey, layout, sortBy, sortDir, sortedGames.map((g) => g.id).join(",")]
+    () => [animationKey ?? "", layout, sortBy, sortDir, sortedGamesIds].join("|"),
+    [animationKey, layout, sortBy, sortDir, sortedGamesIds]
   );
 
   const [openActionsGameId, setOpenActionsGameId] = useState<string | null>(null);

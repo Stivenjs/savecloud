@@ -2,21 +2,21 @@
   view-transition-name: none;
 }
 
-::view-transition-old(.page-slide),
-::view-transition-new(.page-slide) {
-  animation-duration: 180ms;
+::view-transition-old(.page-scale-lift),
+::view-transition-new(.page-scale-lift) {
+  animation-duration: 240ms;
   animation-fill-mode: both;
-  will-change: transform, opacity;
+  will-change: transform, opacity, filter;
 }
 
-::view-transition-old(.page-slide) {
-  animation-name: fade-out, slide-out-left;
-  animation-timing-function: ease-in, cubic-bezier(0.4, 0, 1, 1);
+::view-transition-old(.page-scale-lift) {
+  animation-name: page-scale-out, fade-out;
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
 }
 
-::view-transition-new(.page-slide) {
-  animation-name: fade-in, slide-in-right;
-  animation-timing-function: ease-out, cubic-bezier(0.2, 0, 0, 1);
+::view-transition-new(.page-scale-lift) {
+  animation-name: page-scale-in, fade-in;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 ::view-transition-group(.hero-morph) {
@@ -54,20 +54,96 @@
   }
 }
 
-@keyframes slide-in-right {
+@keyframes page-scale-out {
   from {
-    transform: translate3d(16px, 0, 0);
+    transform: scale(1) translateY(0);
+    filter: blur(0px);
   }
   to {
-    transform: translate3d(0, 0, 0);
+    transform: scale(0.97) translateY(-6px);
+    filter: blur(4px);
   }
 }
 
-@keyframes slide-out-left {
+@keyframes page-scale-in {
   from {
-    transform: translate3d(0, 0, 0);
+    transform: scale(0.97) translateY(10px);
+    filter: blur(4px);
   }
   to {
-    transform: translate3d(-16px, 0, 0);
+    transform: scale(1) translateY(0);
+    filter: blur(0px);
+  }
+}
+
+/* Opción 2: page-perspective-flip (3D Gaming Console Flip) */
+::view-transition-old(.page-perspective-flip),
+::view-transition-new(.page-perspective-flip) {
+  animation-duration: 240ms;
+  animation-fill-mode: both;
+  will-change: transform, opacity;
+}
+
+::view-transition-old(.page-perspective-flip) {
+  animation-name: page-flip-out, fade-out;
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+
+::view-transition-new(.page-perspective-flip) {
+  animation-name: page-flip-in, fade-in;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes page-flip-out {
+  from {
+    transform: perspective(1200px) rotateY(0deg) scale(1);
+  }
+  to {
+    transform: perspective(1200px) rotateY(-5deg) scale(0.96) translateX(-15px);
+  }
+}
+
+@keyframes page-flip-in {
+  from {
+    transform: perspective(1200px) rotateY(5deg) scale(0.96) translateX(15px);
+  }
+  to {
+    transform: perspective(1200px) rotateY(0deg) scale(1) translateX(0);
+  }
+}
+
+/* Opción 3: page-snappy-zoom (Ultra-responsive Studio Zoom) */
+::view-transition-old(.page-snappy-zoom),
+::view-transition-new(.page-snappy-zoom) {
+  animation-duration: 200ms;
+  animation-fill-mode: both;
+  will-change: transform, opacity;
+}
+
+::view-transition-old(.page-snappy-zoom) {
+  animation-name: page-zoom-out, fade-out;
+  animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+}
+
+::view-transition-new(.page-snappy-zoom) {
+  animation-name: page-zoom-in, fade-in;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes page-zoom-out {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.03);
+  }
+}
+
+@keyframes page-zoom-in {
+  from {
+    transform: scale(0.97);
+  }
+  to {
+    transform: scale(1);
   }
 }
