@@ -25,6 +25,20 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
     let ws: WebSocket | null = null;
     let decoder: VideoDecoder | null = null;
     let frameCount = 0;
+    let retryCount = 0;
+    const MAX_RETRIES = 20;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanupWs = () => {
+      if (ws) {
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
+        ws.close();
+        ws = null;
+      }
+    };
 
     const initDecoder = () => {
       decoder = new VideoDecoder({
@@ -34,6 +48,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
             return;
           }
           if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
+            console.log("Canvas Resized to:", frame.displayWidth, "x", frame.displayHeight);
             canvas.width = frame.displayWidth;
             canvas.height = frame.displayHeight;
           }
@@ -56,50 +71,79 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
     };
 
     const connectWs = () => {
-      ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
-      ws.binaryType = "arraybuffer";
+      if (isUnmounted) return;
+      cleanupWs();
 
-      ws.onopen = () => {
-        if (isUnmounted) return;
-        console.log("Video WS Connected");
-        setError(null);
-      };
+      try {
+        ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
+        ws.binaryType = "arraybuffer";
 
-      ws.onmessage = (event) => {
-        if (isUnmounted) return;
-        if (!decoder || decoder.state !== "configured") return;
+        ws.onopen = () => {
+          if (isUnmounted) return;
+          console.log("Video WS Connected");
+          retryCount = 0;
+          setError(null);
+        };
 
-        const buffer = event.data;
-        if (buffer.byteLength <= 1) return;
+        ws.onmessage = (event) => {
+          if (isUnmounted) return;
+          if (!decoder || decoder.state !== "configured") return;
 
-        const view = new DataView(buffer);
-        const isKeyFrame = view.getUint8(0) === 1;
-        const data = new Uint8Array(buffer, 1);
+          const buffer = event.data;
+          if (buffer.byteLength <= 1) return;
 
-        try {
-          const chunk = new EncodedVideoChunk({
-            timestamp: performance.now() * 1000,
-            type: isKeyFrame ? "key" : "delta",
-            data: data,
-          });
+          const view = new DataView(buffer);
+          const isKeyFrame = view.getUint8(0) === 1;
+          const data = new Uint8Array(buffer, 1);
 
-          decoder.decode(chunk);
-          frameCount++;
-        } catch (e) {
-          console.error("Decode chunk error:", e);
+          if (frameCount < 10 || isKeyFrame) {
+            console.log(
+              `[VideoPlayer] Recibida trama #${frameCount} (bytes: ${data.byteLength}, keyframe: ${isKeyFrame})`
+            );
+          }
+
+          try {
+            const chunk = new EncodedVideoChunk({
+              timestamp: performance.now() * 1000,
+              type: isKeyFrame ? "key" : "delta",
+              data: data,
+            });
+
+            decoder.decode(chunk);
+            frameCount++;
+          } catch (e) {
+            console.error("Decode chunk error:", e);
+          }
+        };
+
+        const scheduleReconnect = () => {
+          if (isUnmounted) return;
+          if (retryCount < MAX_RETRIES) {
+            retryCount++;
+            console.log(`Reintentando conexión WebSocket (${retryCount}/${MAX_RETRIES})...`);
+            reconnectTimeout = setTimeout(() => {
+              if (!isUnmounted) connectWs();
+            }, 1500);
+          } else {
+            setError(t("remotePlay.wsVideoError"));
+          }
+        };
+
+        ws.onclose = () => {
+          if (isUnmounted) return;
+          console.log("Video WS Closed");
+          scheduleReconnect();
+        };
+
+        ws.onerror = (e) => {
+          if (isUnmounted) return;
+          console.warn("Video WS Error (esperando inicio de stream):", e);
+        };
+      } catch (e: any) {
+        if (!isUnmounted) {
+          setError(`Init error: ${e.message}`);
         }
-      };
-
-      ws.onclose = () => {
-        if (isUnmounted) return;
-        console.log("Video WS Closed");
-      };
-
-      ws.onerror = (e) => {
-        if (isUnmounted) return;
-        console.error("Video WS Error:", e);
-        setError(t("remotePlay.wsVideoError"));
-      };
+      }
     };
 
     try {
@@ -113,9 +157,10 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
 
     return () => {
       isUnmounted = true;
-      if (ws) {
-        ws.close();
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
       }
+      cleanupWs();
       if (decoder && decoder.state !== "closed") {
         decoder.close();
       }

@@ -251,7 +251,11 @@ pub unsafe extern "C" fn cl_stage_complete(stage: c_int) {
 }
 
 pub unsafe extern "C" fn cl_stage_failed(stage: c_int, error_code: c_int) {
-    log::error!("Moonlight Stage Failed: stage={}, error_code={}", stage, error_code);
+    log::error!(
+        "Moonlight Stage Failed: stage={}, error_code={}",
+        stage,
+        error_code
+    );
 }
 
 pub unsafe extern "C" fn cl_connection_started() {
@@ -280,16 +284,22 @@ pub unsafe extern "C" fn dr_setup(
     DR_OK
 }
 
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+pub static FIRST_FRAME_RECEIVED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
+
 pub unsafe extern "C" fn dr_start() {
     log::info!("Video Decoder Start");
+    FIRST_FRAME_RECEIVED.store(false, Ordering::Relaxed);
 }
 
 pub unsafe extern "C" fn dr_stop() {
     log::info!("Video Decoder Stop");
+    FIRST_FRAME_RECEIVED.store(false, Ordering::Relaxed);
 }
 
 pub unsafe extern "C" fn dr_cleanup() {
     log::info!("Video Decoder Cleanup");
+    FIRST_FRAME_RECEIVED.store(false, Ordering::Relaxed);
 }
 
 pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> c_int {
@@ -298,8 +308,10 @@ pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> 
     }
 
     let du = &*decodeUnit;
+    let is_idr = du.frameType == FRAME_TYPE_IDR;
+
     let mut payload = Vec::with_capacity(du.fullLength as usize + 1);
-    payload.push(if du.frameType == FRAME_TYPE_IDR { 1 } else { 0 });
+    payload.push(if is_idr { 1 } else { 0 });
 
     let mut current = du.bufferList;
     while !current.is_null() {
@@ -309,6 +321,17 @@ pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> 
             payload.extend_from_slice(slice);
         }
         current = entry.next;
+    }
+
+    static FRAME_COUNT: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
+    let count = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
+    if count < 10 || is_idr {
+        log::info!(
+            "Video frame #{} submit: {} bytes, IDR: {}",
+            count,
+            payload.len(),
+            is_idr
+        );
     }
 
     if let Ok(guard) = VIDEO_CHANNEL.lock() {

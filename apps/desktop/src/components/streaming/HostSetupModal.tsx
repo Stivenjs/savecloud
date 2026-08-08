@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Spinner } from "@heroui/react";
 import { useTranslation } from "react-i18next";
@@ -13,6 +13,7 @@ export const HostSetupModal = ({ isOpen, onClose }: HostSetupModalProps) => {
   const [pin, setPin] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const startHostCalledRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -32,8 +33,16 @@ export const HostSetupModal = ({ isOpen, onClose }: HostSetupModalProps) => {
       }
     };
 
-    if (isOpen) {
+    if (isOpen && !startHostCalledRef.current) {
+      startHostCalledRef.current = true;
       startHost();
+    }
+
+    if (!isOpen) {
+      startHostCalledRef.current = false;
+      setPin(null);
+      setError(null);
+      setIsLoading(false);
     }
 
     return () => {

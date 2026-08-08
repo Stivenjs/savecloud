@@ -39,5 +39,8 @@
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "[dockerfile]": {
     "editor.defaultFormatter": "ms-azuretools.vscode-containers"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
   }
 }

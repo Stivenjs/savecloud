@@ -1,29 +1,8 @@
-import { useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { StreamingState } from "@components/streaming/StreamingPanel";
+import { useStreamingState } from "@hooks/queries/useStreamingQueries";
 import { Chip } from "@heroui/react";
 
 export const StreamingOverlay = () => {
-  const queryClient = useQueryClient();
-  const { data: state } = useQuery<StreamingState>({
-    queryKey: ["streaming_get_state"],
-    queryFn: () => invoke("streaming_get_state"),
-  });
-
-  useEffect(() => {
-    let unlisten: (() => void) | null = null;
-    void listen("streaming-state-changed", () => {
-      void queryClient.invalidateQueries({ queryKey: ["streaming_get_state"] });
-    }).then((fn) => {
-      unlisten = fn;
-    });
-
-    return () => {
-      unlisten?.();
-    };
-  }, [queryClient]);
+  const { data: state } = useStreamingState();
 
   const isPlaying = typeof state === "object" && state !== null && "Playing" in state;
 

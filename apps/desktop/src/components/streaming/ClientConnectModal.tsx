@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Spinner } from "@heroui/react";
 import { useTranslation } from "react-i18next";
@@ -14,6 +14,7 @@ export const ClientConnectModal = ({ host, isOpen, onClose }: ClientConnectModal
   const { t } = useTranslation();
   const [error, setError] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const hasConnectedRef = useRef(false);
 
   const handleConnect = async () => {
     setIsConnecting(true);
@@ -33,8 +34,12 @@ export const ClientConnectModal = ({ host, isOpen, onClose }: ClientConnectModal
   };
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !hasConnectedRef.current) {
+      hasConnectedRef.current = true;
       void handleConnect();
+    }
+    if (!isOpen) {
+      hasConnectedRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- connect once when modal opens
   }, [isOpen]);

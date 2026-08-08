@@ -135,18 +135,21 @@ impl MoonlightClient {
             success: false,
         };
 
-        // 1. Obtener certificado del cliente
         let (cert_pem, _) = self.get_or_create_certificate()?;
         let unique_id = self.get_or_create_unique_id()?;
 
-        // 2. Enviar cert al Host via SaveCloud LAN HTTP API
-        let url = format!("http://{}:{}/streaming/pair", host_ip, savecloud_port);
+        let url = format!("https://{}:{}/streaming/pair", host_ip, savecloud_port);
         let payload = serde_json::json!({
             "client_cert": cert_pem,
             "unique_id": unique_id
         });
 
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(|e| format!("Error creando cliente HTTP para emparejamiento: {}", e))?;
+
         let res = client
             .post(&url)
             .json(&payload)
@@ -158,7 +161,6 @@ impl MoonlightClient {
             return Err(format!("Host rechazó emparejamiento: {}", res.status()));
         }
 
-        // 3. Configurar stream y WebSocket
         let _config = default_lan_stream_config(width, height, fps);
 
         let (tx, rx) = mpsc::channel(120);

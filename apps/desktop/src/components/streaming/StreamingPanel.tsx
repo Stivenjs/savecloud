@@ -1,44 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, CardHeader, CardBody } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { HostSetupModal } from "@components/streaming/HostSetupModal";
 import { LanHostList } from "@components/streaming/LanHostList";
+import { useStreamingState, StreamingState } from "@hooks/queries/useStreamingQueries";
 
-export type StreamingState =
-  | "NotInstalled"
-  | "Stopped"
-  | "Running"
-  | { Hosting: { pin: string; clients: string[] } }
-  | { Playing: { host_ip: string; ws_port: number } }
-  | { Error: string }
-  | "Idle";
+export type { StreamingState };
 
 export const StreamingPanel = () => {
   const { t } = useTranslation();
   const [isHostModalOpen, setIsHostModalOpen] = useState(false);
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
-  const queryClient = useQueryClient();
 
-  const { data: state } = useQuery<StreamingState>({
-    queryKey: ["streaming_get_state"],
-    queryFn: () => invoke("streaming_get_state"),
-  });
-
-  useEffect(() => {
-    let unlisten: (() => void) | null = null;
-    void listen("streaming-state-changed", () => {
-      void queryClient.invalidateQueries({ queryKey: ["streaming_get_state"] });
-    }).then((fn) => {
-      unlisten = fn;
-    });
-
-    return () => {
-      unlisten?.();
-    };
-  }, [queryClient]);
+  const { data: state } = useStreamingState();
 
   const isHosting = typeof state === "object" && state !== null && "Hosting" in state;
   const isPlaying = typeof state === "object" && state !== null && "Playing" in state;
@@ -46,7 +21,6 @@ export const StreamingPanel = () => {
 
   const handleStop = async () => {
     await invoke("streaming_stop");
-    await queryClient.invalidateQueries({ queryKey: ["streaming_get_state"] });
   };
 
   const playingHostIp =
@@ -107,25 +81,9 @@ export const StreamingPanel = () => {
           </div>
         ) : null}
 
-        {isHostModalOpen ? (
-          <HostSetupModal
-            isOpen={isHostModalOpen}
-            onClose={() => {
-              setIsHostModalOpen(false);
-              queryClient.invalidateQueries({ queryKey: ["streaming_get_state"] });
-            }}
-          />
-        ) : null}
+        {isHostModalOpen ? <HostSetupModal isOpen={isHostModalOpen} onClose={() => setIsHostModalOpen(false)} /> : null}
 
-        {isBrowserOpen ? (
-          <LanHostList
-            isOpen={isBrowserOpen}
-            onClose={() => {
-              setIsBrowserOpen(false);
-              queryClient.invalidateQueries({ queryKey: ["streaming_get_state"] });
-            }}
-          />
-        ) : null}
+        {isBrowserOpen ? <LanHostList isOpen={isBrowserOpen} onClose={() => setIsBrowserOpen(false)} /> : null}
       </CardBody>
     </Card>
   );
