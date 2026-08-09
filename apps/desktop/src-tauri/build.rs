@@ -70,6 +70,19 @@ fn build_moonlight(base_dir: &Path) {
         .flag_if_supported("-w")
         .define("LC_STATIC", None);
 
+    let target = std::env::var("TARGET").unwrap_or_default();
+    if target.contains("apple") || target.contains("darwin") {
+        if let Ok(out_dir) = std::env::var("OUT_DIR") {
+            let stub_file = PathBuf::from(out_dir).join("gcc_cpu_stubs.c");
+            if std::fs::write(
+                &stub_file,
+                "int __cpu_indicator_init(void) { return 0; }\nunsigned int __cpu_features2[1] = {0};\n",
+            ).is_ok() {
+                build.file(stub_file);
+            }
+        }
+    }
+
     let sources = [
         "AudioStream.c",
         "ByteBuffer.c",
