@@ -55,16 +55,15 @@ pub fn detect_best_active_sink(sunshine_bin_dir: &Path) -> Option<String> {
                 if trimmed.contains("Active") {
                     current_dev.is_active = true;
                 }
-            } else if trimmed.starts_with("===== Device =====")
-                || trimmed.starts_with("====== Found")
+            } else if (trimmed.starts_with("===== Device =====")
+                || trimmed.starts_with("====== Found"))
+                && !current_dev.name.is_empty()
             {
-                if !current_dev.name.is_empty() {
-                    devices.push(current_dev);
-                    current_dev = AudioDevice {
-                        name: String::new(),
-                        is_active: false,
-                    };
-                }
+                devices.push(current_dev);
+                current_dev = AudioDevice {
+                    name: String::new(),
+                    is_active: false,
+                };
             }
         }
         if !current_dev.name.is_empty() {

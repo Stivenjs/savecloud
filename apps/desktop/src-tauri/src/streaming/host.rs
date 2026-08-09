@@ -48,7 +48,7 @@ impl SunshineHost {
 
         #[cfg(not(target_os = "windows"))]
         {
-            return Err(StreamingError::HostError(
+            return Err(StreamingError::Host(
                 "Descarga automática de Sunshine solo soportada en Windows por ahora".into(),
             ));
         }
@@ -59,7 +59,7 @@ impl SunshineHost {
 
             if !self.bin_dir.exists() {
                 std::fs::create_dir_all(&self.bin_dir)
-                    .map_err(|e| StreamingError::HostError(format!("Fallo al crear directorio bin: {}", e)))?;
+                    .map_err(|e| StreamingError::Host(format!("Fallo al crear directorio bin: {}", e)))?;
             }
 
             let url = format!(
@@ -68,26 +68,26 @@ impl SunshineHost {
             );
             let response = reqwest::get(&url)
                 .await
-                .map_err(|e| StreamingError::HostError(format!("Fallo al descargar Sunshine: {}", e)))?;
+                .map_err(|e| StreamingError::Host(format!("Fallo al descargar Sunshine: {}", e)))?;
 
             let bytes = response
                 .bytes()
                 .await
-                .map_err(|e| StreamingError::HostError(format!("Error leyendo bytes de la descarga: {}", e)))?;
+                .map_err(|e| StreamingError::Host(format!("Error leyendo bytes de la descarga: {}", e)))?;
 
             std::fs::write(&zip_path, bytes)
-                .map_err(|e| StreamingError::HostError(format!("Fallo al guardar el zip: {}", e)))?;
+                .map_err(|e| StreamingError::Host(format!("Fallo al guardar el zip: {}", e)))?;
 
             let file = std::fs::File::open(&zip_path)
-                .map_err(|e| StreamingError::HostError(format!("No se pudo abrir ZIP: {}", e)))?;
+                .map_err(|e| StreamingError::Host(format!("No se pudo abrir ZIP: {}", e)))?;
 
             let mut archive = zip::ZipArchive::new(file)
-                .map_err(|e| StreamingError::HostError(format!("Formato ZIP inválido: {}", e)))?;
+                .map_err(|e| StreamingError::Host(format!("Formato ZIP inválido: {}", e)))?;
 
             for i in 0..archive.len() {
                 let mut entry = archive
                     .by_index(i)
-                    .map_err(|e| StreamingError::HostError(format!("Error leyendo entrada ZIP: {}", e)))?;
+                    .map_err(|e| StreamingError::Host(format!("Error leyendo entrada ZIP: {}", e)))?;
                 let outpath = match entry.enclosed_name() {
                     Some(path) => self.bin_dir.join(path),
                     None => continue,
@@ -102,9 +102,9 @@ impl SunshineHost {
                         }
                     }
                     let mut outfile = std::fs::File::create(&outpath)
-                        .map_err(|e| StreamingError::HostError(format!("Error creando archivo extraído: {}", e)))?;
+                        .map_err(|e| StreamingError::Host(format!("Error creando archivo extraído: {}", e)))?;
                     std::io::copy(&mut entry, &mut outfile)
-                        .map_err(|e| StreamingError::HostError(format!("Error escribiendo archivo extraído: {}", e)))?;
+                        .map_err(|e| StreamingError::Host(format!("Error escribiendo archivo extraído: {}", e)))?;
                 }
             }
 
@@ -176,7 +176,7 @@ impl SunshineHost {
 
         let child = command
             .spawn()
-            .map_err(|e| StreamingError::HostError(format!("Fallo al ejecutar Sunshine: {}", e)))?;
+            .map_err(|e| StreamingError::Host(format!("Fallo al ejecutar Sunshine: {}", e)))?;
 
         *process_guard = Some(child);
         Ok(())
@@ -193,7 +193,7 @@ impl SunshineHost {
         if let Some(parent) = state_path.parent() {
             if !parent.exists() {
                 std::fs::create_dir_all(parent)
-                    .map_err(|e| StreamingError::ConfigError(format!("Fallo al crear config dir: {}", e)))?;
+                    .map_err(|e| StreamingError::Config(format!("Fallo al crear config dir: {}", e)))?;
             }
         }
 
@@ -219,7 +219,7 @@ impl SunshineHost {
         let devices = state
             .pointer_mut("/root/devices")
             .and_then(|v| v.as_array_mut())
-            .ok_or_else(|| StreamingError::ConfigError("No se pudo acceder a root.devices".into()))?;
+            .ok_or_else(|| StreamingError::Config("No se pudo acceder a root.devices".into()))?;
 
         if !devices
             .iter()
@@ -231,9 +231,9 @@ impl SunshineHost {
             }));
 
             let new_json = serde_json::to_string_pretty(&state)
-                .map_err(|e| StreamingError::ConfigError(e.to_string()))?;
+                .map_err(|e| StreamingError::Config(e.to_string()))?;
             std::fs::write(&state_path, new_json)
-                .map_err(|e| StreamingError::ConfigError(format!("Fallo al guardar state: {}", e)))?;
+                .map_err(|e| StreamingError::Config(format!("Fallo al guardar state: {}", e)))?;
             log::info!(
                 "Cliente {} inyectado en sunshine_state.json (formato root.devices[].certs[])",
                 unique_id
@@ -251,13 +251,13 @@ impl SunshineHost {
             if let Some(mut stdin) = child.stdin.take() {
                 let pin_str = format!("{}\n", pin);
                 if let Err(e) = stdin.write_all(pin_str.as_bytes()) {
-                    return Err(StreamingError::HostError(format!("Fallo al escribir PIN en stdin: {}", e)));
+                    return Err(StreamingError::Host(format!("Fallo al escribir PIN en stdin: {}", e)));
                 }
                 child.stdin = Some(stdin);
                 return Ok(());
             }
         }
-        Err(StreamingError::HostError(
+        Err(StreamingError::Host(
             "Sunshine no está corriendo o no tiene stdin disponible".into(),
         ))
     }
@@ -270,6 +270,16 @@ impl SunshineHost {
             let _ = child.wait();
         }
 
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            let _ = std::process::Command::new("taskkill")
+                .args(["/F", "/IM", "sunshine.exe"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+        }
+
         Ok(())
     }
 
@@ -277,7 +287,7 @@ impl SunshineHost {
         let config_dir = self.bin_dir.join("Sunshine").join("config");
         if !config_dir.exists() {
             std::fs::create_dir_all(&config_dir)
-                .map_err(|e| StreamingError::ConfigError(format!("Fallo al crear config dir: {}", e)))?;
+                .map_err(|e| StreamingError::Config(format!("Fallo al crear config dir: {}", e)))?;
         }
 
         let conf_path = config_dir.join("sunshine.conf");
@@ -312,7 +322,7 @@ impl SunshineHost {
         );
 
         std::fs::write(&conf_path, config_content)
-            .map_err(|e| StreamingError::ConfigError(format!("Fallo al escribir sunshine.conf: {}", e)))?;
+            .map_err(|e| StreamingError::Config(format!("Fallo al escribir sunshine.conf: {}", e)))?;
 
         // Generar apps.json asegurando que Desktop use un comando persistente (ping -t)
         // para evitar la terminación inmediata del proceso y del stream.
@@ -339,10 +349,10 @@ impl SunshineHost {
         });
 
         let apps_content = serde_json::to_string_pretty(&apps_json)
-            .map_err(|e| StreamingError::ConfigError(e.to_string()))?;
+            .map_err(|e| StreamingError::Config(e.to_string()))?;
 
         std::fs::write(&apps_path, apps_content)
-            .map_err(|e| StreamingError::ConfigError(format!("Fallo al escribir apps.json: {}", e)))?;
+            .map_err(|e| StreamingError::Config(format!("Fallo al escribir apps.json: {}", e)))?;
 
         log::info!("sunshine.conf y apps.json generados exitosamente en {:?}", config_dir);
 

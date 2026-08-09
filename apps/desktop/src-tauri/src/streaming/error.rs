@@ -7,25 +7,25 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum StreamingError {
     #[error("Error del Host Sunshine: {0}")]
-    HostError(String),
+    Host(String),
 
     #[error("Error del Cliente Moonlight: {0}")]
-    ClientError(String),
+    Client(String),
 
     #[error("Fallo de red o servidor HTTP/RTSP: {0}")]
-    NetworkError(String),
+    Network(String),
 
     #[error("Fallo al generar certificados o claves criptográficas: {0}")]
-    CryptoError(String),
+    Crypto(String),
 
     #[error("Error de configuración I/O: {0}")]
-    ConfigError(String),
+    Config(String),
 
     #[error("Fallo FFI en libmoonlight: {0}")]
-    FfiError(String),
+    Ffi(String),
 
     #[error("Servidor WebSocket de video error: {0}")]
-    WebSocketError(String),
+    WebSocket(String),
 }
 
 pub type StreamingResult<T> = Result<T, StreamingError>;

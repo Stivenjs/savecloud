@@ -26,5 +26,6 @@ pub mod commands;
 pub mod audio;
 pub mod crypto;
 pub mod error;
+pub mod tls_override;
 pub mod video_server;
 

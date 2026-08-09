@@ -19,12 +19,13 @@ impl VideoServer {
     }
 
     pub async fn start(&self, mut rx: mpsc::Receiver<Vec<u8>>) -> StreamingResult<u16> {
+        self.cancel.store(false, Ordering::SeqCst);
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
-            .map_err(|e| StreamingError::WebSocketError(format!("Failed to bind TCP: {}", e)))?;
+            .map_err(|e| StreamingError::WebSocket(format!("Failed to bind TCP: {}", e)))?;
         let port = listener
             .local_addr()
-            .map_err(|e| StreamingError::WebSocketError(e.to_string()))?
+            .map_err(|e| StreamingError::WebSocket(e.to_string()))?
             .port();
 
         log::info!("Video WS Server started on port {}", port);
