@@ -1,10 +1,4 @@
 //! Subsistema de Audio Nativo (CPAL + libopus)
-//!
-//! Decodifica tramas Opus (mono o estéreo) mediante la librería oficial `libopus` (`audiopus`)
-//! y reproduce PCM 16-bit a 48kHz en hardware local a través de CPAL con latencia <5ms.
-//!
-//! Diseñado con un RingBuffer circular SPSC sin bloqueos y un Jitter Buffer de 30ms para
-//! eliminar cortes, ruido de sierra (PWM) o degradación de audio durante la transmisión de juegos.
 
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::Path;
@@ -12,9 +6,9 @@ use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 
-use opus::{Channels, Decoder as OpusDecoder};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use once_cell::sync::Lazy;
+use opus::{Channels, Decoder as OpusDecoder};
 use ringbuf::traits::{Consumer, Observer, Producer, Split};
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 
