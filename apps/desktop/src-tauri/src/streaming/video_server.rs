@@ -1,77 +1,98 @@
+//! Servidor WebSocket para la transmisión de video con latencia ultra baja (0-Lag).
+
 use super::error::{StreamingError, StreamingResult};
 use futures_util::{SinkExt, StreamExt};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::Message;
 
+/// Servidor local WebSocket de alta eficiencia para entregar tramas H.264/H.265 al reproductor.
 pub struct VideoServer {
-    pub cancel: Arc<AtomicBool>,
+    stop_tx: watch::Sender<bool>,
+    stop_rx: watch::Receiver<bool>,
 }
 
 impl VideoServer {
+    #[must_use]
     pub fn new() -> Self {
-        Self {
-            cancel: Arc::new(AtomicBool::new(false)),
-        }
+        let (stop_tx, stop_rx) = watch::channel(false);
+        Self { stop_tx, stop_rx }
     }
 
+    /// Inicia el servidor TCP/WebSocket en un puerto dinámico disponible de 127.0.0.1.
     pub async fn start(&self, mut rx: mpsc::Receiver<Vec<u8>>) -> StreamingResult<u16> {
-        self.cancel.store(false, Ordering::SeqCst);
+        let _ = self.stop_tx.send(false);
+
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
-            .map_err(|e| StreamingError::WebSocket(format!("Failed to bind TCP: {}", e)))?;
+            .map_err(|e| StreamingError::WebSocket(format!("Fallo al vincular TCP: {e}")))?;
+
         let port = listener
             .local_addr()
             .map_err(|e| StreamingError::WebSocket(e.to_string()))?
             .port();
 
-        log::info!("Video WS Server started on port {}", port);
+        log::info!(
+            "[VideoServer] Servidor WebSocket activo en 127.0.0.1:{}",
+            port
+        );
 
-        let cancel = self.cancel.clone();
+        let mut stop_rx = self.stop_rx.clone();
 
         tokio::spawn(async move {
             loop {
-                if cancel.load(Ordering::Relaxed) {
-                    break;
-                }
-                if let Ok((stream, _addr)) = listener.accept().await {
-                    if let Ok(mut ws_stream) = accept_async(stream).await {
-                        log::info!("Video WS Client connected");
-                        super::bindings::FIRST_FRAME_RECEIVED.store(false, Ordering::Relaxed);
+                let (stream, _addr) = tokio::select! {
+                    res = listener.accept() => match res {
+                        Ok(conn) => conn,
+                        Err(e) => {
+                            log::error!("[VideoServer] Error aceptando conexión TCP: {e}");
+                            break;
+                        }
+                    },
+                    _ = stop_rx.changed() => {
+                        if *stop_rx.borrow() {
+                            log::info!("[VideoServer] Señal de parada recibida");
+                            break;
+                        }
+                        continue;
+                    }
+                };
 
-                        loop {
-                            tokio::select! {
-                                _ = async {
-                                    while !cancel.load(Ordering::Relaxed) {
-                                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                                    }
-                                } => break,
-                                frame = rx.recv() => {
-                                    match frame {
-                                        Some(data) => {
-                                            if let Err(e) = ws_stream.send(Message::Binary(data.into())).await {
-                                                log::error!("WS send error: {}", e);
-                                                break;
-                                            }
-                                        }
-                                        None => {
-                                            log::info!("Video channel closed");
-                                            return;
-                                        }
-                                    }
-                                }
-                                msg = ws_stream.next() => {
-                                    if let Some(Ok(Message::Close(_))) = msg {
-                                        log::info!("Video WS Client closed");
-                                        break;
-                                    } else if msg.is_none() {
-                                        log::info!("Video WS connection dropped");
-                                        break;
-                                    }
-                                }
+                let Ok(mut ws_stream) = accept_async(stream).await else {
+                    log::warn!("[VideoServer] Fallo en handshake WebSocket");
+                    continue;
+                };
+
+                log::info!("[VideoServer] Cliente de video WebSocket conectado");
+                super::bindings::FIRST_FRAME_RECEIVED
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
+
+                loop {
+                    tokio::select! {
+                        _ = stop_rx.changed() => {
+                            if *stop_rx.borrow() {
+                                break;
+                            }
+                        }
+                        frame = rx.recv() => {
+                            let Some(data) = frame else {
+                                log::info!("[VideoServer] Canal de video cerrado");
+                                return;
+                            };
+                            if let Err(e) = ws_stream.send(Message::Binary(data.into())).await {
+                                log::error!("[VideoServer] Error al enviar trama por WebSocket: {e}");
+                                break;
+                            }
+                        }
+                        msg = ws_stream.next() => {
+                            let Some(msg_result) = msg else {
+                                log::info!("[VideoServer] Conexión WebSocket finalizada");
+                                break;
+                            };
+                            if matches!(msg_result, Ok(Message::Close(_))) {
+                                log::info!("[VideoServer] Cliente WebSocket envió Close");
+                                break;
                             }
                         }
                     }
@@ -82,7 +103,14 @@ impl VideoServer {
         Ok(port)
     }
 
+    /// Cancela inmediatamente el servidor WebSocket y cierra la escucha de red.
     pub fn stop(&self) {
-        self.cancel.store(true, Ordering::Relaxed);
+        let _ = self.stop_tx.send(true);
+    }
+}
+
+impl Default for VideoServer {
+    fn default() -> Self {
+        Self::new()
     }
 }

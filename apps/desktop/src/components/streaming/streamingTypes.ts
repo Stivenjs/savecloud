@@ -41,6 +41,8 @@ export interface StreamingConfig {
   audioEnabled: boolean;
   /** Activa optimizaciones adicionales para reducir la latencia de entrada y procesamiento */
   lowLatencyMode: boolean;
+  /** Sincronización vertical (V-Sync) para Enhanced Frame Pacing en Sunshine */
+  enableVsync: boolean;
 }
 
 /**
@@ -109,6 +111,7 @@ export const DEFAULT_STREAMING_CONFIG: StreamingConfig = {
   codec: "h265",
   audioEnabled: true,
   lowLatencyMode: true,
+  enableVsync: true,
 };
 
 /** Clave en localStorage para guardar la configuración de Remote Play */
