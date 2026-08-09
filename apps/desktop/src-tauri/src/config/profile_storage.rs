@@ -420,6 +420,7 @@ pub fn initialize_profile_storage(profile: &super::profiles::Profile) -> Result<
         language: None,
         ryujinx_path: None,
         shadps4_path: None,
+        audio_output_device: None,
     };
 
     save_settings_for_profile(&profile.id, &settings)?;

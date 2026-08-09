@@ -84,6 +84,8 @@ pub fn run() {
             None,
         ))
         .on_window_event(|window, event| {
+            crate::streaming::input_listener::handle_window_event(window, event);
+
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let label = window.label();
                 if label == "main" {

@@ -712,11 +712,9 @@ fn base_scan_jobs(cfg: &config::Config, env: &EnvContext) -> Vec<(String, String
                 expand_path("~/.local/share/shadps4/user/savedata", env),
             ]
         };
-        for path_opt in shadps4_paths {
-            if let Some(path) = path_opt {
-                if Path::new(&path).exists() {
-                    jobs.push((path, "ShadPS4 (PS4)".to_string()));
-                }
+        for path in shadps4_paths.into_iter().flatten() {
+            if Path::new(&path).exists() {
+                jobs.push((path, "ShadPS4 (PS4)".to_string()));
             }
         }
     }

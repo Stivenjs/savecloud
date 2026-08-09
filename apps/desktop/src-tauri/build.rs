@@ -91,13 +91,14 @@ fn build_moonlight(base_dir: &Path) {
         "SimpleStun.c",
         "VideoDepacketizer.c",
         "VideoStream.c",
-        "rswrapper.c",
     ];
 
     for source in &sources {
         build.file(src_dir.join(source));
     }
 
+    build.file(nanors_dir.join("rs.c"));
+    build.file(obl_dir.join("oblas_common.c"));
     build.file(obl_dir.join("oblas_lite.c"));
 
     build.compile("moonlight_common");

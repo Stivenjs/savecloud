@@ -378,5 +378,20 @@ impl Drop for SunshineHost {
                 let _ = child.wait();
             }
         }
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            let _ = std::process::Command::new("taskkill")
+                .args(["/F", "/IM", "sunshine.exe"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = std::process::Command::new("pkill")
+                .args(["-9", "sunshine"])
+                .output();
+        }
     }
 }

@@ -19,12 +19,12 @@ use crate::sources::commands;
 use crate::sources::queue;
 use crate::sqlite::AppDb;
 use crate::steam_catalog::commands::listing::preload_facets_background;
+use crate::steam_catalog::trending::sync_store_trending;
 use crate::streaming::session::{StreamingState, SunshineShutdownGuard};
 use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray::tray_state::TrayState;
 use crate::voice::VoiceState;
-use crate::steam_catalog::trending::sync_store_trending;
 use std::sync::Arc;
 use tauri::{App, Manager};
 use tokio::sync::Mutex;
@@ -79,8 +79,14 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     tauri::async_runtime::spawn(async move {
         log::info!("[TrendingPreload] Sincronizando tendencias de Steam en segundo plano...");
         match sync_store_trending(&db_trending).await {
-            Ok(count) => log::info!("[TrendingPreload] Tendencias sincronizadas con éxito ({} juegos)", count),
-            Err(e) => log::warn!("[TrendingPreload] Falló la sincronización de tendencias: {}", e),
+            Ok(count) => log::info!(
+                "[TrendingPreload] Tendencias sincronizadas con éxito ({} juegos)",
+                count
+            ),
+            Err(e) => log::warn!(
+                "[TrendingPreload] Falló la sincronización de tendencias: {}",
+                e
+            ),
         }
     });
 
@@ -244,11 +250,14 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
             coord.register(ShutdownPhase::BackgroundTasks, handle).await;
         });
 
-        let sunshine_guard = SunshineShutdownGuard::new(streaming_state.host.clone());
+        let host = streaming_state.host.clone();
+        let sunshine_guard = SunshineShutdownGuard::new(host.clone());
         let token = guard.token();
         tauri::async_runtime::spawn(async move {
             let _sg = sunshine_guard;
             token.cancelled().await;
+            log::info!("[Shutdown] Deteniendo Sunshine Host en cierre de aplicación...");
+            let _ = host.stop().await;
             guard.complete();
         });
     }
@@ -257,8 +266,9 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     app.manage(shutdown_bus);
     app.manage(coordinator);
 
-    // 8. Controlador de gamepads (no necesita guard: es stateless)
+    // 8. Controlador de gamepads y entrada nativa de streaming (no necesita guard: es stateless)
     start_gamepad_loop(app.handle().clone());
+    crate::streaming::input_listener::start_native_input_listener();
 
     spawn_pending_session_poller();
     spawn_lan_presence_advertiser();

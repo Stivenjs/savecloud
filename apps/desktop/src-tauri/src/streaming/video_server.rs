@@ -64,9 +64,23 @@ impl VideoServer {
                     continue;
                 };
 
-                log::info!("[VideoServer] Cliente de video WebSocket conectado");
+                let negotiated_codec = super::bindings::get_negotiated_video_codec_name();
+                log::info!(
+                    "[VideoServer] Cliente de video WebSocket conectado. Códec negociado: {}",
+                    negotiated_codec
+                );
                 super::bindings::FIRST_FRAME_RECEIVED
                     .store(false, std::sync::atomic::Ordering::Relaxed);
+
+                let init_payload = serde_json::json!({
+                    "type": "codec_init",
+                    "codec": negotiated_codec
+                })
+                .to_string();
+
+                if let Err(e) = ws_stream.send(Message::Text(init_payload.into())).await {
+                    log::error!("[VideoServer] Error al enviar mensaje codec_init: {e}");
+                }
 
                 loop {
                     tokio::select! {
