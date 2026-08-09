@@ -304,6 +304,7 @@ impl SunshineHost {
                 controller = disabled
                 min_log_level = debug
                 file_log_level = debug
+                file_apps = apps.json
                 file_state = sunshine_state.json
                 {}
             "#,
@@ -322,7 +323,7 @@ impl SunshineHost {
             "apps": [
                 {
                     "name": "Desktop",
-                    "cmd": "cmd.exe /c ping -t 127.0.0.1",
+                    "cmd": "ping 127.0.0.1 -t",
                     "image-path": "desktop.png"
                 },
                 {

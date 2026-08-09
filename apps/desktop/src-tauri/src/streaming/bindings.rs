@@ -32,7 +32,7 @@ pub const AUDIO_CONFIGURATION_STEREO: i32 = 0x000302CA;
 pub const ENCFLG_NONE: i32 = 0x00000000;
 pub const ENCFLG_AUDIO: i32 = 0x00000001;
 pub const ENCFLG_VIDEO: i32 = 0x00000002;
-pub const ENCFLG_ALL: i32 = -1; // 0xFFFFFFFF en C
+pub const ENCFLG_ALL: i32 = ENCFLG_AUDIO | ENCFLG_VIDEO; // 0x00000003
 
 // 2. Estructuras C
 
@@ -266,6 +266,13 @@ pub unsafe extern "C" fn cl_connection_terminated(error_code: c_int) {
     log::warn!("Moonlight Connection Terminated: error_code={}", error_code);
 }
 
+pub unsafe extern "C" fn cl_log_message(msg: *const c_char) {
+    if !msg.is_null() {
+        let s = std::ffi::CStr::from_ptr(msg).to_string_lossy();
+        log::info!("[Moonlight-C] {}", s.trim_end());
+    }
+}
+
 pub unsafe extern "C" fn dr_setup(
     videoFormat: c_int,
     width: c_int,
@@ -309,6 +316,17 @@ pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> 
 
     let du = &*decodeUnit;
     let is_idr = du.frameType == FRAME_TYPE_IDR;
+
+    if !FIRST_FRAME_RECEIVED.load(Ordering::Relaxed) {
+        if !is_idr {
+            log::info!(
+                "Frame is not IDR and FIRST_FRAME_RECEIVED is false. Requesting IDR keyframe..."
+            );
+            return DR_NEED_IDR;
+        }
+        FIRST_FRAME_RECEIVED.store(true, Ordering::Relaxed);
+        log::info!("Received first IDR keyframe! Video decoder active.");
+    }
 
     let mut payload = Vec::with_capacity(du.fullLength as usize + 1);
     payload.push(if is_idr { 1 } else { 0 });

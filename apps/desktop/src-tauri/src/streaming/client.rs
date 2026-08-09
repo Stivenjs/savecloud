@@ -333,6 +333,7 @@ impl MoonlightClient {
             cl_callbacks.stageFailed = cl_stage_failed as *mut std::ffi::c_void;
             cl_callbacks.connectionStarted = cl_connection_started as *mut std::ffi::c_void;
             cl_callbacks.connectionTerminated = cl_connection_terminated as *mut std::ffi::c_void;
+            cl_callbacks.logMessage = cl_log_message as *mut std::ffi::c_void;
 
             let dr_callbacks = DECODER_RENDERER_CALLBACKS {
                 setup: Some(dr_setup),

@@ -8,6 +8,9 @@ interface VideoPlayerProps {
 
 export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
   const { t } = useTranslation();
+  const tRef = useRef(t);
+  tRef.current = t;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,7 +20,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
 
     const ctx = canvas.getContext("2d");
     if (!ctx) {
-      setError(t("remotePlay.canvasContextError"));
+      setError(tRef.current("remotePlay.canvasContextError"));
       return;
     }
 
@@ -135,7 +138,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
               if (!isUnmounted) connectWs();
             }, 1500);
           } else {
-            setError(t("remotePlay.wsVideoError"));
+            setError(tRef.current("remotePlay.wsVideoError"));
           }
         };
 
@@ -175,7 +178,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
         decoder.close();
       }
     };
-  }, [wsPort, t]);
+  }, [wsPort]);
 
   return (
     <Card className="w-full h-full bg-black flex items-center justify-center overflow-hidden border-none rounded-none absolute inset-0 z-50">

@@ -39,6 +39,7 @@ impl VideoServer {
                 if let Ok((stream, _addr)) = listener.accept().await {
                     if let Ok(mut ws_stream) = accept_async(stream).await {
                         log::info!("Video WS Client connected");
+                        super::bindings::FIRST_FRAME_RECEIVED.store(false, Ordering::Relaxed);
 
                         loop {
                             tokio::select! {
