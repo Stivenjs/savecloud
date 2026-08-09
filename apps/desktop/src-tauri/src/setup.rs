@@ -257,8 +257,9 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     app.manage(shutdown_bus);
     app.manage(coordinator);
 
-    // 8. Controlador de gamepads (no necesita guard: es stateless)
+    // 8. Controlador de gamepads y entrada nativa de streaming (no necesita guard: es stateless)
     start_gamepad_loop(app.handle().clone());
+    crate::streaming::input_listener::start_native_input_listener();
 
     spawn_pending_session_poller();
     spawn_lan_presence_advertiser();

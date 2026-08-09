@@ -162,6 +162,28 @@ pub struct CONNECTION_LISTENER_CALLBACKS {
 
 // 3. Declaraciones de funciones C (Importadas de Limelight)
 
+// Constantes de Teclado y Mouse
+pub const KEY_ACTION_DOWN: i8 = 0x03;
+pub const KEY_ACTION_UP: i8 = 0x04;
+pub const MODIFIER_SHIFT: i8 = 0x01;
+pub const MODIFIER_CTRL: i8 = 0x02;
+pub const MODIFIER_ALT: i8 = 0x04;
+pub const MODIFIER_META: i8 = 0x08;
+
+pub const BUTTON_ACTION_PRESS: i8 = 0x07;
+pub const BUTTON_ACTION_RELEASE: i8 = 0x08;
+pub const MOUSE_BUTTON_LEFT: i32 = 0x01;
+pub const MOUSE_BUTTON_MIDDLE: i32 = 0x02;
+pub const MOUSE_BUTTON_RIGHT: i32 = 0x03;
+pub const MOUSE_BUTTON_X1: i32 = 0x04;
+pub const MOUSE_BUTTON_X2: i32 = 0x05;
+
+pub const LI_CTYPE_XBOX: u8 = 0x01;
+pub const LI_CTYPE_PS: u8 = 0x02;
+pub const LI_CTYPE_NINTENDO: u8 = 0x03;
+pub const LI_CCAP_ANALOG_TRIGGERS: u16 = 0x01;
+pub const LI_CCAP_RUMBLE: u16 = 0x02;
+
 extern "C" {
     pub fn LiInitializeStreamConfiguration(streamConfig: *mut STREAM_CONFIGURATION);
     pub fn LiInitializeVideoCallbacks(drCallbacks: *mut DECODER_RENDERER_CALLBACKS);
@@ -192,10 +214,75 @@ extern "C" {
         rightStickX: i16,
         rightStickY: i16,
     ) -> i32;
+    pub fn LiSendControllerArrivalEvent(
+        controllerNumber: u8,
+        activeGamepadMask: u16,
+        type_: u8,
+        supportedButtonFlags: u32,
+        capabilities: u16,
+    ) -> i32;
+    pub fn LiSendKeyboardEvent(keyCode: i16, keyAction: i8, modifiers: i8) -> i32;
+    pub fn LiSendMouseMoveEvent(deltaX: i16, deltaY: i16) -> i32;
+    pub fn LiSendMousePositionEvent(x: i16, y: i16, referenceWidth: i16, referenceHeight: i16) -> i32;
+    pub fn LiSendMouseButtonEvent(action: i8, button: i32) -> i32;
+    pub fn LiSendScrollEvent(scrollClicks: i8) -> i32;
+    pub fn LiSendHighResScrollEvent(scrollAmount: i16) -> i32;
     pub fn LiGetLaunchUrlQueryParameters() -> *const c_char;
 }
 
 // 4. Wrappers Safe de Rust
+
+/// Envió seguro de evento de teclado a la sesión activa de Moonlight.
+#[inline]
+pub fn send_keyboard_event(key_code: i16, key_action: i8, modifiers: i8) -> i32 {
+    unsafe { LiSendKeyboardEvent(key_code, key_action, modifiers) }
+}
+
+/// Envío seguro de evento de movimiento relativo del ratón.
+#[inline]
+pub fn send_mouse_move_event(delta_x: i16, delta_y: i16) -> i32 {
+    unsafe { LiSendMouseMoveEvent(delta_x, delta_y) }
+}
+
+/// Envío seguro de evento de posición absoluta del ratón.
+#[allow(dead_code)]
+#[inline]
+pub fn send_mouse_position_event(x: i16, y: i16, ref_w: i16, ref_h: i16) -> i32 {
+    unsafe { LiSendMousePositionEvent(x, y, ref_w, ref_h) }
+}
+
+/// Envío seguro de evento de botón del ratón (Pulsar / Liberar).
+#[inline]
+pub fn send_mouse_button_event(action: i8, button: i32) -> i32 {
+    unsafe { LiSendMouseButtonEvent(action, button) }
+}
+
+/// Envío seguro de evento de desplazamiento de rueda del ratón.
+#[allow(dead_code)]
+#[inline]
+pub fn send_scroll_event(clicks: i8) -> i32 {
+    unsafe { LiSendScrollEvent(clicks) }
+}
+
+/// Notifica el registro o llegada de un controlador virtual a Sunshine.
+#[inline]
+pub fn send_controller_arrival_event(
+    controller_number: u8,
+    active_gamepad_mask: u16,
+    ctype: u8,
+    supported_buttons: u32,
+    capabilities: u16,
+) -> i32 {
+    unsafe {
+        LiSendControllerArrivalEvent(
+            controller_number,
+            active_gamepad_mask,
+            ctype,
+            supported_buttons,
+            capabilities,
+        )
+    }
+}
 
 /// Inicializa una `STREAM_CONFIGURATION` con valores por defecto (ceros y defaults de Moonlight).
 pub fn initialize_stream_config(config: &mut STREAM_CONFIGURATION) {
