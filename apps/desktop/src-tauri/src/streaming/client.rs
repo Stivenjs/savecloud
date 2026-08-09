@@ -62,7 +62,9 @@ impl MoonlightClient {
         let cert = rcgen::generate_simple_self_signed(subject_alt_names)
             .map_err(|e| StreamingError::Crypto(format!("Fallo al generar cert: {}", e)))?;
 
-        let mut cert_pem = cert.serialize_pem().map_err(|e| StreamingError::Crypto(e.to_string()))?;
+        let mut cert_pem = cert
+            .serialize_pem()
+            .map_err(|e| StreamingError::Crypto(e.to_string()))?;
         let mut key_pem = cert.serialize_private_key_pem();
 
         cert_pem = cert_pem.replace("\r\n", "\n");
@@ -70,8 +72,9 @@ impl MoonlightClient {
 
         if let Some(parent) = self.cert_path.parent() {
             if !parent.exists() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| StreamingError::Config(format!("Fallo al crear directorio de certs: {}", e)))?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    StreamingError::Config(format!("Fallo al crear directorio de certs: {}", e))
+                })?;
             }
         }
 
@@ -99,11 +102,11 @@ impl MoonlightClient {
             let new_id = hex::encode_upper(bytes);
 
             if !parent.exists() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| StreamingError::Config(format!("Fallo al crear directorio: {}", e)))?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    StreamingError::Config(format!("Fallo al crear directorio: {}", e))
+                })?;
             }
-            std::fs::write(&id_path, &new_id)
-                .map_err(|e| StreamingError::Config(e.to_string()))?;
+            std::fs::write(&id_path, &new_id).map_err(|e| StreamingError::Config(e.to_string()))?;
             return Ok(new_id);
         }
         Ok("0123456789ABCDEF".to_string())
@@ -162,14 +165,16 @@ impl MoonlightClient {
             .danger_accept_invalid_certs(true)
             .timeout(std::time::Duration::from_secs(10))
             .build()
-            .map_err(|e| StreamingError::Network(format!("Error creando cliente HTTP para emparejamiento: {}", e)))?;
+            .map_err(|e| {
+                StreamingError::Network(format!(
+                    "Error creando cliente HTTP para emparejamiento: {}",
+                    e
+                ))
+            })?;
 
-        let res = client
-            .post(&url)
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| StreamingError::Network(format!("Error conectando a SaveCloud Host: {}", e)))?;
+        let res = client.post(&url).json(&payload).send().await.map_err(|e| {
+            StreamingError::Network(format!("Error conectando a SaveCloud Host: {}", e))
+        })?;
 
         if !res.status().is_success() {
             return Err(StreamingError::Network(format!(
