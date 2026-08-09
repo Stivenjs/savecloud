@@ -36,8 +36,8 @@ export interface StreamingSocketInstance {
 export interface StreamingSocketOptions {
   /** Puerto del servidor WebSocket local (Rust). */
   wsPort: number;
-  /** Instancia del reproductor de audio WebAudio. */
-  audioPlayer: WebAudioPlayerInstance;
+  /** Instancia del reproductor de audio WebAudio (opcional). */
+  audioPlayer?: WebAudioPlayerInstance;
   /** Instancia del decodificador de video WebCodecs. */
   videoDecoder: VideoDecoderInstance;
   /** Callback invocado cuando ocurre un error irrecuperable. */
@@ -131,7 +131,7 @@ export function createStreamingSocket(options: StreamingSocketOptions): Streamin
         const msgType = new DataView(buffer).getUint8(0);
 
         if (msgType === 2) {
-          audioPlayer.processAudioMessage(buffer);
+          audioPlayer?.processAudioMessage(buffer);
         } else {
           videoDecoder.processVideoFrame(buffer, msgType);
         }

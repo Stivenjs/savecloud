@@ -397,7 +397,13 @@ impl MoonlightClient {
                 rikey_c[i] = rikey_bytes[i] as i8;
             }
             stream_config.remoteInputAesKey = rikey_c;
-            stream_config.remoteInputAesIv = [0i8; 16];
+
+            let mut iv_c = [0i8; 16];
+            let rikey_id_bytes = rikey_id.to_be_bytes();
+            for i in 0..4 {
+                iv_c[i] = rikey_id_bytes[i] as i8;
+            }
+            stream_config.remoteInputAesIv = iv_c;
 
             let mut cl_callbacks: CONNECTION_LISTENER_CALLBACKS = unsafe { std::mem::zeroed() };
             initialize_connection_callbacks(&mut cl_callbacks);

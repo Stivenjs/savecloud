@@ -16,7 +16,7 @@ const MIN_BLOCK_SAMPLES = 960;
 const SAMPLE_RATE = 48000;
 
 /** Margen de programación para evitar clics por underflow (en segundos). */
-const SCHEDULING_MARGIN = 0.01;
+const SCHEDULING_MARGIN = 0.002;
 
 /**
  * Instancia del reproductor de audio WebAudio.

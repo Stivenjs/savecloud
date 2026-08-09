@@ -11,7 +11,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Card } from "@heroui/react";
 import { useTranslation } from "react-i18next";
-import { createWebAudioPlayer } from "./WebAudioPlayer";
 import { createVideoStreamDecoder } from "./VideoStreamDecoder";
 import { createStreamingSocket } from "./StreamingSocket";
 
@@ -37,8 +36,6 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
       return;
     }
 
-    const audioPlayer = createWebAudioPlayer();
-
     const videoDecoder = createVideoStreamDecoder({
       canvas,
       ctx,
@@ -47,7 +44,6 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
 
     const streamingSocket = createStreamingSocket({
       wsPort,
-      audioPlayer,
       videoDecoder,
       onError: setError,
       onConnected: () => setError(null),
@@ -57,7 +53,6 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
     return () => {
       streamingSocket.destroy();
       videoDecoder.destroy();
-      audioPlayer.destroy();
     };
   }, [wsPort]);
 
