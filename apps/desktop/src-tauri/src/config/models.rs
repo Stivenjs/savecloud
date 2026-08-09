@@ -52,6 +52,8 @@ pub struct AppSettings {
     pub full_backup_packaged_compression_level: Option<i32>,
     #[serde(default)]
     pub preferred_gamepad_layout: Option<String>,
+    #[serde(default)]
+    pub audio_output_device: Option<String>,
     /// `normal` | `big_picture` — cómo mostrar la ventana principal al iniciar.
     #[serde(default)]
     pub startup_window_mode: Option<String>,

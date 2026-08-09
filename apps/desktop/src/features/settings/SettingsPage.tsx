@@ -32,6 +32,7 @@ import { GameModeCard } from "@features/settings/GameModeCard";
 import { LowPerformanceModeCard } from "@features/settings/LowPerformanceModeCard";
 import { DisableHardwareAccelerationCard } from "@features/settings/DisableHardwareAccelerationCard";
 import { LanguageSettingsCard } from "@features/settings/LanguageSettingsCard";
+import { AudioOutputSettingsCard } from "@features/settings/AudioOutputSettingsCard";
 import { HealthObservabilityCard } from "@features/settings/HealthObservabilityCard";
 import { CloudDashboardPanel } from "@features/settings/CloudDashboardPanel";
 import { SettingsSidebarAnimatedPanel } from "@features/settings/SettingsSidebarAnimatedPanel";
@@ -309,6 +310,7 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
 
             {/* Columna 2: Dispositivo e Integraciones de Sistema */}
             <div className="space-y-4">
+              <AudioOutputSettingsCard />
               <NotificationsCard
                 testingNotification={testingNotification}
                 onTestNotification={handleTestNotification}

@@ -134,10 +134,50 @@ static AUDIO_FRAME_COUNT: AtomicU64 = AtomicU64::new(0);
 static IS_PLAYING: AtomicBool = AtomicBool::new(false);
 static PREBUFFER_READY: AtomicBool = AtomicBool::new(false);
 
-/// Inicializa el reproductor de audio nativo CPAL para la plataforma actual.
-fn init_cpal_player(sample_rate: u32, channels: u16) -> Option<(cpal::Stream, HeapProd<i16>)> {
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct AudioOutputDeviceItem {
+    pub name: String,
+    pub is_default: bool,
+}
+
+/// Enumeración de todos los dispositivos de salida de sonido físicos disponibles en Windows, macOS o Linux.
+pub fn enumerate_audio_output_devices() -> Vec<AudioOutputDeviceItem> {
     let host = cpal::default_host();
-    let device = match host.default_output_device() {
+    let default_name = host.default_output_device().and_then(|d| d.name().ok());
+    let mut items = Vec::new();
+
+    if let Ok(devices) = host.output_devices() {
+        for device in devices {
+            if let Ok(name) = device.name() {
+                let is_default = default_name.as_deref() == Some(&name);
+                items.push(AudioOutputDeviceItem { name, is_default });
+            }
+        }
+    }
+
+    items
+}
+
+/// Inicializa el reproductor de audio nativo CPAL para la plataforma actual (usando el dispositivo configurado o el predeterminado).
+fn init_cpal_player(
+    sample_rate: u32,
+    channels: u16,
+    preferred_device_name: Option<&str>,
+) -> Option<(cpal::Stream, HeapProd<i16>)> {
+    let host = cpal::default_host();
+
+    let device = if let Some(target_name) = preferred_device_name {
+        if let Ok(mut devices) = host.output_devices() {
+            devices.find(|d| d.name().map(|n| n == target_name).unwrap_or(false))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+    .or_else(|| host.default_output_device());
+
+    let device = match device {
         Some(d) => d,
         None => {
             log::warn!(
@@ -381,7 +421,11 @@ pub unsafe extern "C" fn ar_init(
         }
     };
 
-    let (stream_opt, producer_opt) = match init_cpal_player(sample_rate, 2) {
+    let settings = crate::config::load_settings();
+    let preferred_audio_device = settings.audio_output_device.as_deref();
+
+    let (stream_opt, producer_opt) = match init_cpal_player(sample_rate, 2, preferred_audio_device)
+    {
         Some((st, pr)) => (Some(st), Some(pr)),
         None => (None, None),
     };
@@ -450,13 +494,15 @@ fn strip_pkcs7_padding(data: &[u8]) -> &[u8] {
         return data;
     };
     let pad_len = last_byte as usize;
-    if pad_len > 0 && pad_len <= 16 && pad_len <= data.len()
+    if pad_len > 0
+        && pad_len <= 16
+        && pad_len <= data.len()
         && data[data.len() - pad_len..]
             .iter()
             .all(|&b| b as usize == pad_len)
-        {
-            return &data[..data.len() - pad_len];
-        }
+    {
+        return &data[..data.len() - pad_len];
+    }
     data
 }
 

@@ -163,3 +163,26 @@ pub fn streaming_get_state(state: State<'_, StreamingState>) -> Result<HostState
     let session = state.session.lock().unwrap();
     Ok(session.clone())
 }
+
+/// Retorna la lista de todos los dispositivos de salida de sonido físicos disponibles.
+#[command]
+pub fn list_audio_output_devices() -> Result<Vec<super::audio::AudioOutputDeviceItem>, String> {
+    Ok(super::audio::enumerate_audio_output_devices())
+}
+
+/// Guarda la preferencia de dispositivo de salida de sonido en settings.json.
+#[command]
+pub fn set_audio_output_device(device_name: Option<String>) -> Result<(), String> {
+    let mut settings = crate::config::load_settings();
+    settings.audio_output_device = device_name.clone();
+    crate::config::save_settings(&settings).map_err(|e| e.to_string())?;
+    log::info!("[Audio] Dispositivo de salida configurado a: {:?}", device_name);
+    Ok(())
+}
+
+/// Obtiene el dispositivo de salida de sonido preferido guardado.
+#[command]
+pub fn get_audio_output_device() -> Result<Option<String>, String> {
+    let settings = crate::config::load_settings();
+    Ok(settings.audio_output_device)
+}
