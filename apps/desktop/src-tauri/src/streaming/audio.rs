@@ -12,8 +12,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 
-use audiopus::coder::Decoder as OpusDecoder;
-use audiopus::{Channels, SampleRate};
+use opus::{Channels, Decoder as OpusDecoder};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use once_cell::sync::Lazy;
 use ringbuf::traits::{Consumer, Observer, Producer, Split};
@@ -366,15 +365,7 @@ pub unsafe extern "C" fn ar_init(
     IS_PLAYING.store(true, Ordering::SeqCst);
     PREBUFFER_READY.store(false, Ordering::SeqCst);
 
-    let sr_enum = match sample_rate {
-        8000 => SampleRate::Hz8000,
-        12000 => SampleRate::Hz12000,
-        16000 => SampleRate::Hz16000,
-        24000 => SampleRate::Hz24000,
-        _ => SampleRate::Hz48000,
-    };
-
-    let stereo_decoder = match OpusDecoder::new(sr_enum, Channels::Stereo) {
+    let stereo_decoder = match OpusDecoder::new(sample_rate, Channels::Stereo) {
         Ok(dec) => dec,
         Err(e) => {
             log::error!(
@@ -385,7 +376,7 @@ pub unsafe extern "C" fn ar_init(
         }
     };
 
-    let mono_decoder = match OpusDecoder::new(sr_enum, Channels::Mono) {
+    let mono_decoder = match OpusDecoder::new(sample_rate, Channels::Mono) {
         Ok(dec) => dec,
         Err(e) => {
             log::error!(
@@ -488,7 +479,7 @@ fn decode_opus_frame(
         let mut mono_buf = [0i16; MAX_FRAME_SAMPLES];
         if let Ok(samples) = state
             .mono_decoder
-            .decode(Some(clean_bytes), &mut mono_buf[..], false)
+            .decode(clean_bytes, &mut mono_buf[..], false)
         {
             for i in 0..samples {
                 let sample = mono_buf[i];
@@ -502,12 +493,12 @@ fn decode_opus_frame(
         // Fallback a decodificador estéreo
         state
             .stereo_decoder
-            .decode(Some(clean_bytes), &mut pcm_buf[..], false)
+            .decode(clean_bytes, &mut pcm_buf[..], false)
             .ok()
     } else {
         if let Ok(samples) = state
             .stereo_decoder
-            .decode(Some(clean_bytes), &mut pcm_buf[..], false)
+            .decode(clean_bytes, &mut pcm_buf[..], false)
         {
             return Some(samples);
         }
@@ -515,7 +506,7 @@ fn decode_opus_frame(
         let mut mono_buf = [0i16; MAX_FRAME_SAMPLES];
         let samples = state
             .mono_decoder
-            .decode(Some(clean_bytes), &mut mono_buf[..], false)
+            .decode(clean_bytes, &mut mono_buf[..], false)
             .ok()?;
         for i in 0..samples {
             let sample = mono_buf[i];
@@ -544,7 +535,7 @@ pub unsafe extern "C" fn ar_decode_and_play_sample(sample_data: *mut c_char, sam
     let decoded_samples = if sample_data.is_null() || sample_length <= 0 {
         state
             .stereo_decoder
-            .decode(None::<&[u8]>, &mut stack_pcm_buf[..], false)
+            .decode(&[], &mut stack_pcm_buf[..], false)
             .ok()
     } else {
         let raw_bytes =
