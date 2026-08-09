@@ -450,14 +450,13 @@ fn strip_pkcs7_padding(data: &[u8]) -> &[u8] {
         return data;
     };
     let pad_len = last_byte as usize;
-    if pad_len > 0 && pad_len <= 16 && pad_len <= data.len() {
-        if data[data.len() - pad_len..]
+    if pad_len > 0 && pad_len <= 16 && pad_len <= data.len()
+        && data[data.len() - pad_len..]
             .iter()
             .all(|&b| b as usize == pad_len)
         {
             return &data[..data.len() - pad_len];
         }
-    }
     data
 }
 
@@ -579,7 +578,7 @@ pub unsafe extern "C" fn ar_decode_and_play_sample(sample_data: *mut c_char, sam
             sample_length,
             decoded_samples_per_channel
         );
-    } else if count % 1000 == 0 {
+    } else if count.is_multiple_of(1000) {
         log::info!(
             "[Audio] Trama #{}: Transmisión continua activa en hardware nativo ({} Hz, {} ch)",
             count,

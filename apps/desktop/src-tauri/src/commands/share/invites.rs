@@ -567,25 +567,22 @@ pub async fn list_cloud_memberships() -> Result<CloudMembershipsResponseDto, Str
             .send()
             .await;
 
-        match response_result {
-            Ok(response) => {
-                let status = response.status();
-                if status.is_success() {
-                    if let Ok(parsed) = response.json::<CloudMembershipsResponseDto>().await {
-                        let is_active = parsed.member_memberships.iter().any(|m| {
-                            m.host_user_id == host && m.member_user_id == user_id && m.active
-                        });
-                        if is_active {
-                            member_memberships.extend(parsed.member_memberships);
-                        } else {
-                            let _ = config::clean_up_cloud_host(&host);
-                        }
+        if let Ok(response) = response_result {
+            let status = response.status();
+            if status.is_success() {
+                if let Ok(parsed) = response.json::<CloudMembershipsResponseDto>().await {
+                    let is_active = parsed.member_memberships.iter().any(|m| {
+                        m.host_user_id == host && m.member_user_id == user_id && m.active
+                    });
+                    if is_active {
+                        member_memberships.extend(parsed.member_memberships);
+                    } else {
+                        let _ = config::clean_up_cloud_host(&host);
                     }
-                } else if status.as_u16() == 401 || status.as_u16() == 403 {
-                    let _ = config::clean_up_cloud_host(&host);
                 }
+            } else if status.as_u16() == 401 || status.as_u16() == 403 {
+                let _ = config::clean_up_cloud_host(&host);
             }
-            Err(_) => {}
         }
     }
 
