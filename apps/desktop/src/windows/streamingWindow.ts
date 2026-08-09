@@ -25,12 +25,14 @@ export async function openOrFocusStreamingWindow(wsPort: number): Promise<void> 
     resizable: true,
     decorations: false,
     transparent: true,
+    maximized: true,
     visible: false,
     center: true,
     fullscreen: false,
   });
 
   streamingWindow.once("tauri://created", async () => {
+    await streamingWindow.maximize();
     await streamingWindow.show();
     await streamingWindow.setFocus();
   });
