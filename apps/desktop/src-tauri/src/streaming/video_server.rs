@@ -69,8 +69,6 @@ impl VideoServer {
                     "[VideoServer] Cliente de video WebSocket conectado. Códec negociado: {}",
                     negotiated_codec
                 );
-                super::bindings::FIRST_FRAME_RECEIVED
-                    .store(false, std::sync::atomic::Ordering::Relaxed);
 
                 let init_payload = serde_json::json!({
                     "type": "codec_init",
@@ -80,6 +78,21 @@ impl VideoServer {
 
                 if let Err(e) = ws_stream.send(Message::Text(init_payload.into())).await {
                     log::error!("[VideoServer] Error al enviar mensaje codec_init: {e}");
+                }
+
+                let cached_idr = super::bindings::LAST_IDR_FRAME
+                    .lock()
+                    .ok()
+                    .and_then(|guard| guard.clone());
+
+                if let Some(idr_payload) = cached_idr {
+                    log::info!(
+                        "[VideoServer] Enviando IDR Keyframe en caché ({} bytes) al nuevo cliente WebSocket",
+                        idr_payload.len()
+                    );
+                    if let Err(e) = ws_stream.send(Message::Binary(idr_payload.into())).await {
+                        log::error!("[VideoServer] Error al enviar IDR Keyframe en caché: {e}");
+                    }
                 }
 
                 loop {

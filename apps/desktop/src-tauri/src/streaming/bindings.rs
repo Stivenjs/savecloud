@@ -223,7 +223,12 @@ extern "C" {
     ) -> i32;
     pub fn LiSendKeyboardEvent(keyCode: i16, keyAction: i8, modifiers: i8) -> i32;
     pub fn LiSendMouseMoveEvent(deltaX: i16, deltaY: i16) -> i32;
-    pub fn LiSendMousePositionEvent(x: i16, y: i16, referenceWidth: i16, referenceHeight: i16) -> i32;
+    pub fn LiSendMousePositionEvent(
+        x: i16,
+        y: i16,
+        referenceWidth: i16,
+        referenceHeight: i16,
+    ) -> i32;
     pub fn LiSendMouseButtonEvent(action: i8, button: i32) -> i32;
     pub fn LiSendScrollEvent(scrollClicks: i8) -> i32;
     pub fn LiSendHighResScrollEvent(scrollAmount: i16) -> i32;
@@ -459,20 +464,30 @@ pub unsafe extern "C" fn dr_setup(
 }
 
 pub static FIRST_FRAME_RECEIVED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
+pub static LAST_IDR_FRAME: Lazy<Mutex<Option<Vec<u8>>>> = Lazy::new(|| Mutex::new(None));
 
 pub unsafe extern "C" fn dr_start() {
     log::info!("Video Decoder Start");
     FIRST_FRAME_RECEIVED.store(false, Ordering::Relaxed);
+    if let Ok(mut guard) = LAST_IDR_FRAME.lock() {
+        *guard = None;
+    }
 }
 
 pub unsafe extern "C" fn dr_stop() {
     log::info!("Video Decoder Stop");
     FIRST_FRAME_RECEIVED.store(false, Ordering::Relaxed);
+    if let Ok(mut guard) = LAST_IDR_FRAME.lock() {
+        *guard = None;
+    }
 }
 
 pub unsafe extern "C" fn dr_cleanup() {
     log::info!("Video Decoder Cleanup");
     FIRST_FRAME_RECEIVED.store(false, Ordering::Relaxed);
+    if let Ok(mut guard) = LAST_IDR_FRAME.lock() {
+        *guard = None;
+    }
 }
 
 pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> c_int {
@@ -505,6 +520,12 @@ pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> 
             payload.extend_from_slice(slice);
         }
         current = entry.next;
+    }
+
+    if is_idr {
+        if let Ok(mut idr_guard) = LAST_IDR_FRAME.lock() {
+            *idr_guard = Some(payload.clone());
+        }
     }
 
     static FRAME_COUNT: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
