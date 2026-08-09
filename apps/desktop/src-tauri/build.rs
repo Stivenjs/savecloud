@@ -1,9 +1,6 @@
 use std::path::{Path, PathBuf};
 
 fn main() {
-    std::env::set_var("CMAKE_POLICY_VERSION_MINIMUM", "3.5");
-    println!("cargo:rustc-env=CMAKE_POLICY_VERSION_MINIMUM=3.5");
-    println!("cargo:rerun-if-env-changed=CMAKE_POLICY_VERSION_MINIMUM");
     println!("cargo:rerun-if-changed=third_party/moonlight-common-c");
     println!("cargo:rerun-if-changed=build.rs");
 
