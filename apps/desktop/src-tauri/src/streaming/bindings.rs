@@ -332,6 +332,19 @@ pub unsafe extern "C" fn cl_log_message(msg: *const c_char) {
     }
 }
 
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
+
+pub static NEGOTIATED_VIDEO_FORMAT: Lazy<AtomicI32> = Lazy::new(|| AtomicI32::new(0));
+
+/// Retorna el identificador en cadena de texto del códec negociado por Moonlight-C ("h264", "h265", "av1").
+pub fn get_negotiated_video_codec_name() -> &'static str {
+    match NEGOTIATED_VIDEO_FORMAT.load(Ordering::Relaxed) {
+        VIDEO_FORMAT_H265 => "h265",
+        VIDEO_FORMAT_AV1_MAIN8 => "av1",
+        _ => "h264",
+    }
+}
+
 pub unsafe extern "C" fn dr_setup(
     videoFormat: c_int,
     width: c_int,
@@ -340,6 +353,8 @@ pub unsafe extern "C" fn dr_setup(
     _context: *mut c_void,
     _drFlags: c_int,
 ) -> c_int {
+    NEGOTIATED_VIDEO_FORMAT.store(videoFormat, Ordering::Relaxed);
+
     let format_str = match videoFormat {
         VIDEO_FORMAT_H264 => "H.264",
         VIDEO_FORMAT_H265 => "H.265 (HEVC)",
@@ -356,7 +371,6 @@ pub unsafe extern "C" fn dr_setup(
     DR_OK
 }
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 pub static FIRST_FRAME_RECEIVED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
 
 pub unsafe extern "C" fn dr_start() {

@@ -13,11 +13,13 @@ import { getSavedStreamingConfig, StreamingCodec } from "./streamingTypes";
 
 /**
  * Instancia del decodificador de video.
- * Expone métodos para procesar tramas, verificar estado y liberar recursos.
+ * Expone métodos para procesar tramas, reconfigurar el códec, verificar estado y liberar recursos.
  */
 export interface VideoDecoderInstance {
   /** Procesa una trama de video codificada recibida del WebSocket. */
   processVideoFrame: (buffer: ArrayBuffer, msgType: number) => void;
+  /** Reconfigura dinámicamente el decodificador WebCodecs cuando el backend reporta un cambio de códec. */
+  setCodec: (codec: StreamingCodec) => void;
   /** Libera los recursos del VideoDecoder. */
   destroy: () => void;
 }
@@ -26,7 +28,7 @@ export interface VideoDecoderInstance {
  * Opciones de configuración para el decodificador de video.
  */
 export interface VideoDecoderOptions {
-  /** Elemento canvas donde se renderizarán los fotogramas. */
+  /** Elemento canvas donde se renderización los fotogramas. */
   canvas: HTMLCanvasElement;
   /** Contexto 2D del canvas. */
   ctx: CanvasRenderingContext2D;
@@ -37,19 +39,55 @@ export interface VideoDecoderOptions {
 }
 
 /**
- * Mapeo de identificadores de códec de SaveCloud a cadenas MIME de WebCodecs.
+ * Mapeo de identificadores de códec de SaveCloud a cadenas MIME estrictas de WebCodecs.
+ * No incluye fallbacks entre códecs distintos (ej. H.264 no puede decodificar fotogramas H.265).
  */
 const CODEC_STRINGS: Record<StreamingCodec, string[]> = {
-  h265: ["hev1.1.6.L150.90", "hev1.1.6.L120.90", "hvc1.1.6.L150.90", "avc1.4d002a"],
-  av1: ["av01.0.08M.08", "av01.0.04M.08", "avc1.4d002a"],
+  h265: ["hev1.1.6.L150.90", "hev1.1.6.L120.90", "hvc1.1.6.L150.90", "hev1.1.6.L93.90"],
+  av1: ["av01.0.08M.08", "av01.0.04M.08"],
   h264: ["avc1.4d002a", "avc1.42E01E", "avc1.64002A"],
 };
 
 /**
+ * Comprueba el soporte de aceleración por hardware para los códecs de video en la GPU cliente.
+ *
+ * @param {StreamingCodec} [preferredCodec="h265"] Códec preferido por el usuario ('h265' | 'av1' | 'h264')
+ * @returns {Promise<StreamingCodec>} El mejor códec soportado por hardware en el cliente
+ */
+export async function getBestSupportedCodec(preferredCodec: StreamingCodec = "h265"): Promise<StreamingCodec> {
+  if (typeof VideoDecoder === "undefined") return "h264";
+
+  const testCodec = async (codecStr: string): Promise<boolean> => {
+    try {
+      const res = await VideoDecoder.isConfigSupported({
+        codec: codecStr,
+        hardwareAcceleration: "prefer-hardware",
+      });
+      return !!res.supported;
+    } catch {
+      return false;
+    }
+  };
+
+  if (preferredCodec === "h265") {
+    for (const str of CODEC_STRINGS.h265) {
+      if (await testCodec(str)) return "h265";
+    }
+  } else if (preferredCodec === "av1") {
+    for (const str of CODEC_STRINGS.av1) {
+      if (await testCodec(str)) return "av1";
+    }
+  }
+
+  return "h264";
+}
+
+/**
  * Configura WebCodecs VideoDecoder buscando la primera cadena de códec compatible con la GPU local.
  *
- * @param decoder Instancia de VideoDecoder
- * @param targetCodec Códec de la sesión (h264, h265, av1)
+ * @param {VideoDecoder} decoder Instancia de VideoDecoder
+ * @param {StreamingCodec} targetCodec Códec de la sesión (h264, h265, av1)
+ * @returns {string} Cadena MIME configurada exitosamente
  */
 function configureDecoderWithFallback(decoder: VideoDecoder, targetCodec: StreamingCodec): string {
   const candidates = CODEC_STRINGS[targetCodec] ?? CODEC_STRINGS.h264;
@@ -76,14 +114,14 @@ function configureDecoderWithFallback(decoder: VideoDecoder, targetCodec: Stream
 /**
  * Crea una nueva instancia del decodificador de video multicódec con WebCodecs.
  *
- * @param options - Configuración del decodificador (canvas, contexto 2D, callback de error, códec).
- * @returns {VideoDecoderInstance} Instancia con métodos para procesar y destruir el decodificador.
+ * @param {VideoDecoderOptions} options Configuración del decodificador (canvas, contexto 2D, callback de error, códec).
+ * @returns {VideoDecoderInstance} Instancia con métodos para procesar, reconfigurar y destruir el decodificador.
  */
 export function createVideoStreamDecoder(options: VideoDecoderOptions): VideoDecoderInstance {
   const { canvas, ctx, onError } = options;
   const savedConfig = getSavedStreamingConfig();
-  const activeCodec: StreamingCodec = options.codec ?? savedConfig.codec;
 
+  let activeCodec: StreamingCodec = options.codec ?? savedConfig.codec;
   let frameCount = 0;
   let hasReceivedKeyFrame = false;
   let isDestroyed = false;
@@ -134,14 +172,33 @@ export function createVideoStreamDecoder(options: VideoDecoderOptions): VideoDec
     },
   });
 
-  const configuredCodecStr = configureDecoderWithFallback(decoder, activeCodec);
+  let configuredCodecStr = configureDecoderWithFallback(decoder, activeCodec);
+
+  /**
+   * Reconfigura dinámicamente el decodificador WebCodecs cuando el servidor notifica el códec negociado.
+   *
+   * @param {StreamingCodec} newCodec Nuevo códec negociado por Rust ('h264' | 'h265' | 'av1')
+   */
+  const setCodec = (newCodec: StreamingCodec): void => {
+    if (isDestroyed || activeCodec === newCodec) return;
+
+    console.log(`[VideoDecoder] Reconfigurando decodificador WebCodecs de ${activeCodec} a ${newCodec}`);
+    activeCodec = newCodec;
+    hasReceivedKeyFrame = false;
+
+    try {
+      configuredCodecStr = configureDecoderWithFallback(decoder, newCodec);
+    } catch (e) {
+      console.error(`[VideoDecoder] Error al reconfigurar códec a ${newCodec}:`, e);
+    }
+  };
 
   /**
    * Procesa una trama de video codificada recibida del WebSocket.
    * El byte de encabezado (msgType) indica si es un KeyFrame (1) o Delta (0).
    *
-   * @param buffer - ArrayBuffer completo del mensaje WebSocket.
-   * @param msgType - Tipo de mensaje: 1 = KeyFrame IDR, 0 = Delta frame.
+   * @param {ArrayBuffer} buffer ArrayBuffer completo del mensaje WebSocket.
+   * @param {number} msgType Tipo de mensaje: 1 = KeyFrame IDR, 0 = Delta frame.
    */
   const processVideoFrame = (buffer: ArrayBuffer, msgType: number): void => {
     if (isDestroyed || decoder.state !== "configured") return;
@@ -185,5 +242,5 @@ export function createVideoStreamDecoder(options: VideoDecoderOptions): VideoDec
     }
   };
 
-  return { processVideoFrame, destroy };
+  return { processVideoFrame, setCodec, destroy };
 }

@@ -12,6 +12,7 @@
  * - Byte 0 = 0x02: Trama de audio PCM 16-bit 48kHz stereo
  */
 
+import type { StreamingCodec } from "./streamingTypes";
 import type { WebAudioPlayerInstance } from "./WebAudioPlayer";
 import type { VideoDecoderInstance } from "./VideoStreamDecoder";
 
@@ -53,23 +54,8 @@ export interface StreamingSocketOptions {
  * Establece la conexión WebSocket y enruta los mensajes binarios
  * al reproductor de audio o al decodificador de video según el tipo.
  *
- * @param options - Configuración del socket (puerto, módulos, callbacks).
+ * @param {StreamingSocketOptions} options Configuración del socket (puerto, módulos, callbacks).
  * @returns {StreamingSocketInstance} Instancia con método `destroy`.
- *
- * @example
- * ```ts
- * const socket = createStreamingSocket({
- *   wsPort: 12345,
- *   audioPlayer,
- *   videoDecoder,
- *   onError: setError,
- *   onConnected: () => setError(null),
- *   getReconnectErrorMessage: () => t("remotePlay.wsVideoError"),
- * });
- *
- * // Al desmontar:
- * socket.destroy();
- * ```
  */
 export function createStreamingSocket(options: StreamingSocketOptions): StreamingSocketInstance {
   const { wsPort, audioPlayer, videoDecoder, onError, onConnected, getReconnectErrorMessage } = options;
@@ -125,8 +111,21 @@ export function createStreamingSocket(options: StreamingSocketOptions): Streamin
       ws.onmessage = (event) => {
         if (isDestroyed) return;
 
+        if (typeof event.data === "string") {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "codec_init" && data.codec) {
+              console.log(`[StreamingSocket] Notificación de códec negociado recibida de Rust: ${data.codec}`);
+              videoDecoder.setCodec(data.codec as StreamingCodec);
+            }
+          } catch (e) {
+            console.warn("[StreamingSocket] Error procesando mensaje de texto JSON:", e);
+          }
+          return;
+        }
+
         const buffer: ArrayBuffer = event.data;
-        if (buffer.byteLength <= 1) return;
+        if (!buffer || buffer.byteLength <= 1) return;
 
         const msgType = new DataView(buffer).getUint8(0);
 

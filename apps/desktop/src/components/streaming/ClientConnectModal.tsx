@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { Monitor, AlertCircle, RefreshCw } from "lucide-react";
 import { openOrFocusStreamingWindow } from "@/windows/streamingWindow";
 import { getSavedStreamingConfig, RESOLUTION_OPTIONS, StreamingConfig } from "@components/streaming/streamingTypes";
+import { getBestSupportedCodec } from "./VideoStreamDecoder";
 
 /**
  * Propiedades para el modal de conexión a anfitrión.
@@ -45,6 +46,7 @@ export const ClientConnectModal = ({ host, isOpen, onClose, config }: ClientConn
     setIsConnecting(true);
     setError(null);
     try {
+      const bestSupportedCodec = await getBestSupportedCodec(activeConfig.codec);
       const wsPort = await invoke<number>("streaming_connect_lan", {
         ipAddress: host.ip,
         savecloudPort: host.savecloud_port,
@@ -52,7 +54,7 @@ export const ClientConnectModal = ({ host, isOpen, onClose, config }: ClientConn
         height: resDetails.height,
         fps: activeConfig.fps,
         bitrateKbps: Math.round(activeConfig.bitrateMbps * 1000),
-        codec: activeConfig.codec,
+        codec: bestSupportedCodec,
         enableVsync: activeConfig.enableVsync,
         refreshRateX100: activeConfig.fps * 100,
       });
