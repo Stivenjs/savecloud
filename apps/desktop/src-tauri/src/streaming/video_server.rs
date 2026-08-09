@@ -1,3 +1,4 @@
+use super::error::{StreamingError, StreamingResult};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -17,11 +18,14 @@ impl VideoServer {
         }
     }
 
-    pub async fn start(&self, mut rx: mpsc::Receiver<Vec<u8>>) -> Result<u16, String> {
+    pub async fn start(&self, mut rx: mpsc::Receiver<Vec<u8>>) -> StreamingResult<u16> {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
-            .map_err(|e| format!("Failed to bind TCP: {}", e))?;
-        let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+            .map_err(|e| StreamingError::WebSocketError(format!("Failed to bind TCP: {}", e)))?;
+        let port = listener
+            .local_addr()
+            .map_err(|e| StreamingError::WebSocketError(e.to_string()))?
+            .port();
 
         log::info!("Video WS Server started on port {}", port);
 
@@ -53,7 +57,7 @@ impl VideoServer {
                                         }
                                         None => {
                                             log::info!("Video channel closed");
-                                            return; 
+                                            return;
                                         }
                                     }
                                 }

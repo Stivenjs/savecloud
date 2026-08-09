@@ -32,7 +32,7 @@ pub async fn streaming_start_host(
     let savecloud_port =
         crate::peer_lan::server::ensure_lan_http_server(Some(state.host.clone())).await?;
 
-    state.host.start().await?;
+    state.host.start().await.map_err(|e| e.to_string())?;
 
     // 2. Publicar en mDNS que somos un Host, pasando también el puerto de nuestra API LAN
     super::discovery::publish_stream_service(&device_id, &user_id, 47989, savecloud_port)?;
@@ -70,7 +70,7 @@ pub async fn streaming_connect_lan(
     if ip_address == "127.0.0.1" && savecloud_port == 0 {
         savecloud_port =
             crate::peer_lan::server::ensure_lan_http_server(Some(state.host.clone())).await?;
-        state.host.start().await?;
+        state.host.start().await.map_err(|e| e.to_string())?;
         tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
     }
 
@@ -82,11 +82,12 @@ pub async fn streaming_connect_lan(
     let ws_port = state
         .client
         .connect_lan(&ip_address, savecloud_port, 1920, 1080, 60)
-        .await?;
+        .await
+        .map_err(|e| e.to_string())?;
 
     if let Err(e) = state.client.start_stream(&ip_address).await {
         state.client.disconnect();
-        return Err(e);
+        return Err(e.to_string());
     }
 
     *state.session.lock().unwrap() = HostState::Playing {
@@ -108,7 +109,7 @@ pub async fn streaming_stop(
 
     state.client.disconnect();
 
-    state.host.stop().await?;
+    state.host.stop().await.map_err(|e| e.to_string())?;
     withdraw_stream_service();
 
     *state.session.lock().unwrap() = HostState::Idle;

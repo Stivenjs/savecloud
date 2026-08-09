@@ -25,6 +25,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
     let ws: WebSocket | null = null;
     let decoder: VideoDecoder | null = null;
     let frameCount = 0;
+    let hasReceivedKeyFrame = false;
     let retryCount = 0;
     const MAX_RETRIES = 20;
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -48,7 +49,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
             return;
           }
           if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
-            console.log("Canvas Resized to:", frame.displayWidth, "x", frame.displayHeight);
+            console.log("[VideoPlayer] Canvas Resized to:", frame.displayWidth, "x", frame.displayHeight);
             canvas.width = frame.displayWidth;
             canvas.height = frame.displayHeight;
           }
@@ -58,7 +59,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
         },
         error: (e) => {
           if (isUnmounted) return;
-          console.error("VideoDecoder error:", e);
+          console.error("[VideoPlayer] VideoDecoder error:", e);
           setError(`Decoder Error: ${e.message}`);
         },
       });
@@ -80,8 +81,9 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
 
         ws.onopen = () => {
           if (isUnmounted) return;
-          console.log("Video WS Connected");
+          console.log("[VideoPlayer] Video WS Connected");
           retryCount = 0;
+          hasReceivedKeyFrame = false;
           setError(null);
         };
 
@@ -95,6 +97,14 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
           const view = new DataView(buffer);
           const isKeyFrame = view.getUint8(0) === 1;
           const data = new Uint8Array(buffer, 1);
+
+          if (!hasReceivedKeyFrame) {
+            if (!isKeyFrame) {
+              return; // Esperar al primer keyframe antes de enviar delta frames al decodificador
+            }
+            hasReceivedKeyFrame = true;
+            console.log("[VideoPlayer] Primer KeyFrame recibido exitosamente. Iniciando decodificación.");
+          }
 
           if (frameCount < 10 || isKeyFrame) {
             console.log(
@@ -112,7 +122,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
             decoder.decode(chunk);
             frameCount++;
           } catch (e) {
-            console.error("Decode chunk error:", e);
+            console.error("[VideoPlayer] Decode chunk error:", e);
           }
         };
 
@@ -120,7 +130,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
           if (isUnmounted) return;
           if (retryCount < MAX_RETRIES) {
             retryCount++;
-            console.log(`Reintentando conexión WebSocket (${retryCount}/${MAX_RETRIES})...`);
+            console.log(`[VideoPlayer] Reintentando conexión WebSocket (${retryCount}/${MAX_RETRIES})...`);
             reconnectTimeout = setTimeout(() => {
               if (!isUnmounted) connectWs();
             }, 1500);
@@ -131,13 +141,13 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
 
         ws.onclose = () => {
           if (isUnmounted) return;
-          console.log("Video WS Closed");
+          console.log("[VideoPlayer] Video WS Closed");
           scheduleReconnect();
         };
 
         ws.onerror = (e) => {
           if (isUnmounted) return;
-          console.warn("Video WS Error (esperando inicio de stream):", e);
+          console.warn("[VideoPlayer] Video WS Error (esperando inicio de stream):", e);
         };
       } catch (e: any) {
         if (!isUnmounted) {

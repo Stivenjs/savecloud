@@ -4,8 +4,9 @@
 //! conectar, negociar la sesión y gestionar el ciclo de vida del stream de video/audio.
 
 use super::bindings::*;
+use super::error::{StreamingError, StreamingResult};
 use crate::streaming::video_server::VideoServer;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -24,7 +25,7 @@ pub struct MoonlightClient {
 }
 
 impl MoonlightClient {
-    pub fn new(app_data_dir: &std::path::Path) -> Self {
+    pub fn new(app_data_dir: &Path) -> Self {
         let cert_path = app_data_dir.join("moonlight_client.pem");
         let key_path = app_data_dir.join("moonlight_client.key");
 
@@ -38,7 +39,7 @@ impl MoonlightClient {
     }
 
     /// Genera y retorna el certificado PEM del cliente. Si no existe, lo crea.
-    pub fn get_or_create_certificate(&self) -> Result<(String, String), String> {
+    pub fn get_or_create_certificate(&self) -> StreamingResult<(String, String)> {
         if self.cert_path.exists() && self.key_path.exists() {
             let mut cert = std::fs::read_to_string(&self.cert_path).unwrap_or_default();
             let mut key = std::fs::read_to_string(&self.key_path).unwrap_or_default();
@@ -53,9 +54,9 @@ impl MoonlightClient {
 
         let subject_alt_names = vec!["savecloud-client".to_string()];
         let cert = rcgen::generate_simple_self_signed(subject_alt_names)
-            .map_err(|e| format!("Fallo al generar cert: {}", e))?;
+            .map_err(|e| StreamingError::CryptoError(format!("Fallo al generar cert: {}", e)))?;
 
-        let mut cert_pem = cert.serialize_pem().map_err(|e| e.to_string())?;
+        let mut cert_pem = cert.serialize_pem().map_err(|e| StreamingError::CryptoError(e.to_string()))?;
         let mut key_pem = cert.serialize_private_key_pem();
 
         cert_pem = cert_pem.replace("\r\n", "\n");
@@ -64,17 +65,19 @@ impl MoonlightClient {
         if let Some(parent) = self.cert_path.parent() {
             if !parent.exists() {
                 std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("Fallo al crear directorio de certs: {}", e))?;
+                    .map_err(|e| StreamingError::ConfigError(format!("Fallo al crear directorio de certs: {}", e)))?;
             }
         }
 
-        std::fs::write(&self.cert_path, &cert_pem).map_err(|e| e.to_string())?;
-        std::fs::write(&self.key_path, &key_pem).map_err(|e| e.to_string())?;
+        std::fs::write(&self.cert_path, &cert_pem)
+            .map_err(|e| StreamingError::ConfigError(e.to_string()))?;
+        std::fs::write(&self.key_path, &key_pem)
+            .map_err(|e| StreamingError::ConfigError(e.to_string()))?;
 
         Ok((cert_pem, key_pem))
     }
 
-    fn get_or_create_unique_id(&self) -> Result<String, String> {
+    fn get_or_create_unique_id(&self) -> StreamingResult<String> {
         if let Some(parent) = self.cert_path.parent() {
             let id_path = parent.join("client_id.txt");
             if id_path.exists() {
@@ -91,9 +94,10 @@ impl MoonlightClient {
 
             if !parent.exists() {
                 std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("Fallo al crear directorio: {}", e))?;
+                    .map_err(|e| StreamingError::ConfigError(format!("Fallo al crear directorio: {}", e)))?;
             }
-            std::fs::write(&id_path, &new_id).map_err(|e| e.to_string())?;
+            std::fs::write(&id_path, &new_id)
+                .map_err(|e| StreamingError::ConfigError(e.to_string()))?;
             return Ok(new_id);
         }
         Ok("0123456789ABCDEF".to_string())
@@ -106,9 +110,11 @@ impl MoonlightClient {
         width: i32,
         height: i32,
         fps: i32,
-    ) -> Result<u16, String> {
+    ) -> StreamingResult<u16> {
         if self.is_connected.load(Ordering::SeqCst) {
-            return Err("Ya hay una conexión de streaming activa".into());
+            return Err(StreamingError::ClientError(
+                "Ya hay una conexión de streaming activa".into(),
+            ));
         }
 
         if self
@@ -116,7 +122,9 @@ impl MoonlightClient {
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .is_err()
         {
-            return Err("La conexión ya está en proceso".into());
+            return Err(StreamingError::ClientError(
+                "La conexión ya está en proceso".into(),
+            ));
         }
 
         struct ConnectingGuard<'a> {
@@ -148,17 +156,20 @@ impl MoonlightClient {
             .danger_accept_invalid_certs(true)
             .timeout(std::time::Duration::from_secs(10))
             .build()
-            .map_err(|e| format!("Error creando cliente HTTP para emparejamiento: {}", e))?;
+            .map_err(|e| StreamingError::NetworkError(format!("Error creando cliente HTTP para emparejamiento: {}", e)))?;
 
         let res = client
             .post(&url)
             .json(&payload)
             .send()
             .await
-            .map_err(|e| format!("Error conectando a SaveCloud Host: {}", e))?;
+            .map_err(|e| StreamingError::NetworkError(format!("Error conectando a SaveCloud Host: {}", e)))?;
 
         if !res.status().is_success() {
-            return Err(format!("Host rechazó emparejamiento: {}", res.status()));
+            return Err(StreamingError::NetworkError(format!(
+                "Host rechazó emparejamiento: {}",
+                res.status()
+            )));
         }
 
         let _config = default_lan_stream_config(width, height, fps);
@@ -185,9 +196,11 @@ impl MoonlightClient {
         Ok(ws_port)
     }
 
-    pub async fn start_stream(&self, host_ip: &str) -> Result<(), String> {
+    pub async fn start_stream(&self, host_ip: &str) -> StreamingResult<()> {
         if !self.is_connected.load(Ordering::SeqCst) {
-            return Err("No se puede iniciar el stream sin conexión previa".into());
+            return Err(StreamingError::ClientError(
+                "No se puede iniciar el stream sin conexión previa".into(),
+            ));
         }
 
         let (cert_pem, key_pem) = self.get_or_create_certificate()?;
@@ -196,15 +209,15 @@ impl MoonlightClient {
         let mut cert_reader = std::io::BufReader::new(cert_pem.as_bytes());
         let certs = rustls_pemfile::certs(&mut cert_reader)
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Error leyendo cert: {}", e))?;
+            .map_err(|e| StreamingError::CryptoError(format!("Error leyendo cert: {}", e)))?;
 
         let mut key_reader = std::io::BufReader::new(key_pem.as_bytes());
         let key = rustls_pemfile::private_key(&mut key_reader)
-            .map_err(|e| format!("Error leyendo key: {}", e))?
-            .ok_or("No se encontró private key")?;
+            .map_err(|e| StreamingError::CryptoError(format!("Error leyendo key: {}", e)))?
+            .ok_or_else(|| StreamingError::CryptoError("No se encontró private key".into()))?;
 
         let private_key = rustls::crypto::aws_lc_rs::sign::any_supported_type(&key)
-            .map_err(|e| format!("Key no soportada: {}", e))?;
+            .map_err(|e| StreamingError::CryptoError(format!("Key no soportada: {}", e)))?;
 
         let certified_key = Arc::new(rustls::sign::CertifiedKey::new(certs, private_key));
 
@@ -214,7 +227,7 @@ impl MoonlightClient {
         let provider = rustls::crypto::aws_lc_rs::default_provider();
         let config = rustls::ClientConfig::builder_with_provider(provider.into())
             .with_safe_default_protocol_versions()
-            .map_err(|e| format!("Error TLS protocol: {}", e))?
+            .map_err(|e| StreamingError::CryptoError(format!("Error TLS protocol: {}", e)))?
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(tls_override::NoCertificateVerification))
             .with_client_cert_resolver(client_cert_resolver);
@@ -228,7 +241,7 @@ impl MoonlightClient {
                 if let Some(source) = std::error::Error::source(&e) {
                     msg.push_str(&format!(" (Causa raíz: {})", source));
                 }
-                msg
+                StreamingError::CryptoError(msg)
             })?;
 
         let rikey_bytes: [u8; 16] = rand::random();
@@ -281,10 +294,10 @@ impl MoonlightClient {
         }
 
         if session_url.is_empty() {
-            return Err(format!(
+            return Err(StreamingError::NetworkError(format!(
                 "Error en /launch tras múltiples intentos: {}",
                 last_error
-            ));
+            )));
         }
 
         log::info!("RTSP Session URL obtenido: {}", session_url);
@@ -337,7 +350,7 @@ impl MoonlightClient {
                     &mut stream_config,
                     &mut cl_callbacks,
                     &dr_callbacks as *const _ as *mut _,
-                    std::ptr::null_mut(), // Audio callbacks (null por ahora)
+                    std::ptr::null_mut(), // Audio callbacks
                     std::ptr::null_mut(),
                     0,
                     std::ptr::null_mut(),
