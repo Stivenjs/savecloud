@@ -59,7 +59,11 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
   return (
     <Card className="w-full h-full bg-black flex items-center justify-center overflow-hidden border-none rounded-none absolute inset-0 z-50">
       {error && <div className="absolute top-4 left-4 bg-red-500/80 text-white px-4 py-2 rounded">{error}</div>}
-      <canvas ref={canvasRef} className="w-full h-full object-contain" />
+      <canvas
+        ref={canvasRef}
+        onContextMenu={(e) => e.preventDefault()}
+        className="w-full h-full object-contain cursor-none"
+      />
     </Card>
   );
 };
