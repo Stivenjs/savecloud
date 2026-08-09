@@ -107,6 +107,31 @@ pub struct DECODER_RENDERER_CALLBACKS {
     pub capabilities: c_int,
 }
 
+pub type AudioRendererInit = Option<
+    unsafe extern "C" fn(
+        audioConfiguration: c_int,
+        opusConfig: *const c_void,
+        context: *mut c_void,
+        arFlags: c_int,
+    ) -> c_int,
+>;
+pub type AudioRendererStart = Option<unsafe extern "C" fn()>;
+pub type AudioRendererStop = Option<unsafe extern "C" fn()>;
+pub type AudioRendererCleanup = Option<unsafe extern "C" fn()>;
+pub type AudioRendererDecodeAndPlaySample =
+    Option<unsafe extern "C" fn(sampleData: *mut c_char, sampleLength: c_int)>;
+
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct AUDIO_RENDERER_CALLBACKS {
+    pub init: AudioRendererInit,
+    pub start: AudioRendererStart,
+    pub stop: AudioRendererStop,
+    pub cleanup: AudioRendererCleanup,
+    pub decodeAndPlaySample: AudioRendererDecodeAndPlaySample,
+    pub capabilities: c_int,
+}
+
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct SERVER_INFORMATION {
@@ -140,6 +165,7 @@ pub struct CONNECTION_LISTENER_CALLBACKS {
 extern "C" {
     pub fn LiInitializeStreamConfiguration(streamConfig: *mut STREAM_CONFIGURATION);
     pub fn LiInitializeVideoCallbacks(drCallbacks: *mut DECODER_RENDERER_CALLBACKS);
+    pub fn LiInitializeAudioCallbacks(arCallbacks: *mut AUDIO_RENDERER_CALLBACKS);
     pub fn LiInitializeServerInformation(serverInfo: *mut SERVER_INFORMATION);
     pub fn LiInitializeConnectionCallbacks(clCallbacks: *mut CONNECTION_LISTENER_CALLBACKS);
     pub fn LiStartConnection(
@@ -147,7 +173,7 @@ extern "C" {
         streamConfig: *mut STREAM_CONFIGURATION,
         clCallbacks: *mut CONNECTION_LISTENER_CALLBACKS,
         drCallbacks: *mut DECODER_RENDERER_CALLBACKS,
-        arCallbacks: *mut c_void, // Audio callbacks (null por ahora)
+        arCallbacks: *mut AUDIO_RENDERER_CALLBACKS,
         renderContext: *mut c_void,
         drFlags: c_int,
         audioContext: *mut c_void,
@@ -182,6 +208,12 @@ pub fn initialize_stream_config(config: &mut STREAM_CONFIGURATION) {
 pub fn initialize_video_callbacks(callbacks: &mut DECODER_RENDERER_CALLBACKS) {
     unsafe {
         LiInitializeVideoCallbacks(callbacks as *mut _);
+    }
+}
+
+pub fn initialize_audio_callbacks(callbacks: &mut AUDIO_RENDERER_CALLBACKS) {
+    unsafe {
+        LiInitializeAudioCallbacks(callbacks as *mut _);
     }
 }
 

@@ -1,6 +1,19 @@
+/**
+ * @module VideoPlayer
+ * @description Componente React de streaming de video y audio en tiempo real.
+ *
+ * Orquesta los módulos WebAudioPlayer, VideoStreamDecoder y StreamingSocket
+ * para renderizar video H.264 decodificado por GPU y reproducir audio PCM
+ * mediante WebAudio API. Todo el procesamiento pesado está delegado a módulos
+ * independientes para mantener este componente limpio y enfocado en la UI.
+ */
+
 import { useEffect, useRef, useState } from "react";
 import { Card } from "@heroui/react";
 import { useTranslation } from "react-i18next";
+import { createWebAudioPlayer } from "./WebAudioPlayer";
+import { createVideoStreamDecoder } from "./VideoStreamDecoder";
+import { createStreamingSocket } from "./StreamingSocket";
 
 interface VideoPlayerProps {
   wsPort: number;
@@ -24,159 +37,27 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
       return;
     }
 
-    let isUnmounted = false;
-    let ws: WebSocket | null = null;
-    let decoder: VideoDecoder | null = null;
-    let frameCount = 0;
-    let hasReceivedKeyFrame = false;
-    let retryCount = 0;
-    const MAX_RETRIES = 20;
-    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    const audioPlayer = createWebAudioPlayer();
 
-    const cleanupWs = () => {
-      if (ws) {
-        ws.onopen = null;
-        ws.onmessage = null;
-        ws.onerror = null;
-        ws.onclose = null;
-        ws.close();
-        ws = null;
-      }
-    };
+    const videoDecoder = createVideoStreamDecoder({
+      canvas,
+      ctx,
+      onError: setError,
+    });
 
-    const initDecoder = () => {
-      decoder = new VideoDecoder({
-        output: (frame: VideoFrame) => {
-          if (isUnmounted) {
-            frame.close();
-            return;
-          }
-          if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
-            console.log("[VideoPlayer] Canvas Resized to:", frame.displayWidth, "x", frame.displayHeight);
-            canvas.width = frame.displayWidth;
-            canvas.height = frame.displayHeight;
-          }
-
-          ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
-          frame.close();
-        },
-        error: (e) => {
-          if (isUnmounted) return;
-          console.error("[VideoPlayer] VideoDecoder error:", e);
-          setError(`Decoder Error: ${e.message}`);
-        },
-      });
-
-      decoder.configure({
-        codec: "avc1.4d002a",
-        hardwareAcceleration: "prefer-hardware",
-        optimizeForLatency: true,
-      });
-    };
-
-    const connectWs = () => {
-      if (isUnmounted) return;
-      cleanupWs();
-
-      try {
-        ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
-        ws.binaryType = "arraybuffer";
-
-        ws.onopen = () => {
-          if (isUnmounted) return;
-          console.log("[VideoPlayer] Video WS Connected");
-          retryCount = 0;
-          hasReceivedKeyFrame = false;
-          setError(null);
-        };
-
-        ws.onmessage = (event) => {
-          if (isUnmounted) return;
-          if (!decoder || decoder.state !== "configured") return;
-
-          const buffer = event.data;
-          if (buffer.byteLength <= 1) return;
-
-          const view = new DataView(buffer);
-          const isKeyFrame = view.getUint8(0) === 1;
-          const data = new Uint8Array(buffer, 1);
-
-          if (!hasReceivedKeyFrame) {
-            if (!isKeyFrame) {
-              return; // Esperar al primer keyframe antes de enviar delta frames al decodificador
-            }
-            hasReceivedKeyFrame = true;
-            console.log("[VideoPlayer] Primer KeyFrame recibido exitosamente. Iniciando decodificación.");
-          }
-
-          if (frameCount < 10 || isKeyFrame) {
-            console.log(
-              `[VideoPlayer] Recibida trama #${frameCount} (bytes: ${data.byteLength}, keyframe: ${isKeyFrame})`
-            );
-          }
-
-          try {
-            const chunk = new EncodedVideoChunk({
-              timestamp: performance.now() * 1000,
-              type: isKeyFrame ? "key" : "delta",
-              data: data,
-            });
-
-            decoder.decode(chunk);
-            frameCount++;
-          } catch (e) {
-            console.error("[VideoPlayer] Decode chunk error:", e);
-          }
-        };
-
-        const scheduleReconnect = () => {
-          if (isUnmounted) return;
-          if (retryCount < MAX_RETRIES) {
-            retryCount++;
-            console.log(`[VideoPlayer] Reintentando conexión WebSocket (${retryCount}/${MAX_RETRIES})...`);
-            reconnectTimeout = setTimeout(() => {
-              if (!isUnmounted) connectWs();
-            }, 1500);
-          } else {
-            setError(tRef.current("remotePlay.wsVideoError"));
-          }
-        };
-
-        ws.onclose = () => {
-          if (isUnmounted) return;
-          console.log("[VideoPlayer] Video WS Closed");
-          scheduleReconnect();
-        };
-
-        ws.onerror = (e) => {
-          if (isUnmounted) return;
-          console.warn("[VideoPlayer] Video WS Error (esperando inicio de stream):", e);
-        };
-      } catch (e: any) {
-        if (!isUnmounted) {
-          setError(`Init error: ${e.message}`);
-        }
-      }
-    };
-
-    try {
-      initDecoder();
-      connectWs();
-    } catch (e: any) {
-      if (!isUnmounted) {
-        setError(`Init error: ${e.message}`);
-      }
-    }
+    const streamingSocket = createStreamingSocket({
+      wsPort,
+      audioPlayer,
+      videoDecoder,
+      onError: setError,
+      onConnected: () => setError(null),
+      getReconnectErrorMessage: () => tRef.current("remotePlay.wsVideoError"),
+    });
 
     return () => {
-      isUnmounted = true;
-      if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-      }
-      cleanupWs();
-      if (decoder && decoder.state !== "closed") {
-        decoder.close();
-      }
+      streamingSocket.destroy();
+      videoDecoder.destroy();
+      audioPlayer.destroy();
     };
   }, [wsPort]);
 

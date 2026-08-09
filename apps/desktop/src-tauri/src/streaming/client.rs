@@ -180,7 +180,7 @@ impl MoonlightClient {
 
         let _config = default_lan_stream_config(width, height, fps);
 
-        let (tx, rx) = mpsc::channel(120);
+        let (tx, rx) = mpsc::channel(1024);
         set_video_channel(tx);
 
         let ws_port = self.video_server.start(rx).await?;
@@ -363,6 +363,15 @@ impl MoonlightClient {
                 capabilities: 0x01, // CAPABILITY_DIRECT_SUBMIT
             };
 
+            let mut ar_callbacks: AUDIO_RENDERER_CALLBACKS = unsafe { std::mem::zeroed() };
+            initialize_audio_callbacks(&mut ar_callbacks);
+            ar_callbacks.init = Some(super::audio::ar_init);
+            ar_callbacks.start = Some(super::audio::ar_start);
+            ar_callbacks.stop = Some(super::audio::ar_stop);
+            ar_callbacks.cleanup = Some(super::audio::ar_cleanup);
+            ar_callbacks.decodeAndPlaySample = Some(super::audio::ar_decode_and_play_sample);
+            ar_callbacks.capabilities = 0x00; // 0 = Permitir a Moonlight decodificar Opus a PCM 16-bit 48kHz
+
             log::info!("Llamando a LiStartConnection en hilo de fondo...");
             let result = unsafe {
                 LiStartConnection(
@@ -370,7 +379,7 @@ impl MoonlightClient {
                     &mut stream_config,
                     &mut cl_callbacks,
                     &dr_callbacks as *const _ as *mut _,
-                    std::ptr::null_mut(), // Audio callbacks
+                    &mut ar_callbacks as *mut _,
                     std::ptr::null_mut(),
                     0,
                     std::ptr::null_mut(),
