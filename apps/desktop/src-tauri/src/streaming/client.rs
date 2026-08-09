@@ -327,6 +327,10 @@ impl MoonlightClient {
             "https://{}:47984/launch?uniqueid={}&uuid={}&appversion=7.1.431.0&appid={}&appname=Desktop&mode={}&rikey={}&rikeyid={}&localAudioPlayMode=0",
             target_ip, unique_id, uuid, app_id, mode_str, rikey_hex, rikey_id
         );
+        let resume_url = format!(
+            "https://{}:47984/resume?uniqueid={}&uuid={}&appversion=7.1.431.0&rikey={}&rikeyid={}",
+            target_ip, unique_id, uuid, rikey_hex, rikey_id
+        );
 
         let mut retries = 10;
         let mut last_error = String::new();
@@ -339,6 +343,23 @@ impl MoonlightClient {
                         if let Some(caps) = SESSION_URL_REGEX.captures(&xml) {
                             session_url = caps[1].to_string();
                             break;
+                        } else if xml.contains("already running") || xml.contains("400") {
+                            log::info!("Sunshine reporta sesión activa. Intentando /resume...");
+                            if let Ok(resume_res) = client.get(&resume_url).send().await {
+                                if let Ok(resume_xml) = resume_res.text().await {
+                                    if let Some(caps) = SESSION_URL_REGEX.captures(&resume_xml) {
+                                        session_url = caps[1].to_string();
+                                        log::info!("Sesión reanudada exitosamente vía /resume");
+                                        break;
+                                    }
+                                }
+                            }
+                            log::warn!(
+                                "Fallo al reanudar vía /resume. Cancelando sesión previa..."
+                            );
+                            let _ = client.get(&cancel_url).send().await;
+                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                            last_error = format!("Sunshine tenía sesión activa. Se envió /cancel para reintentar /launch. XML: {}", xml);
                         } else {
                             last_error = format!("Respuesta /launch sin sessionUrl0. XML: {}", xml);
                             log::warn!("Reintentando /launch: {}", last_error);
@@ -357,7 +378,7 @@ impl MoonlightClient {
                     );
                 }
             }
-            tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
             retries -= 1;
         }
 
