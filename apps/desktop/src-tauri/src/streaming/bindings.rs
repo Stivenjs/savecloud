@@ -256,6 +256,7 @@ pub fn custom_lan_stream_config(
     fps: i32,
     bitrate_kbps: i32,
     video_format: i32,
+    refresh_rate_x100: i32,
 ) -> STREAM_CONFIGURATION {
     let mut config: STREAM_CONFIGURATION = unsafe { std::mem::zeroed() };
     initialize_stream_config(&mut config);
@@ -269,14 +270,22 @@ pub fn custom_lan_stream_config(
     config.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
     config.supportedVideoFormats = video_format;
     config.encryptionFlags = ENCFLG_ALL;
-    config.clientRefreshRateX100 = (fps * 100) as c_int;
+
+    // Configuración de V-Sync y Enhanced Frame Pacing en Sunshine
+    config.clientRefreshRateX100 = if refresh_rate_x100 > 0 {
+        refresh_rate_x100 as c_int
+    } else {
+        (fps * 100) as c_int
+    };
 
     config
 }
 
 /// Configuración de stream con valores razonables por defecto para LAN.
 pub fn default_lan_stream_config(width: i32, height: i32, fps: i32) -> STREAM_CONFIGURATION {
-    custom_lan_stream_config(width, height, fps, 50_000, VIDEO_FORMAT_H264)
+    // Negociación automática: H.265 (HEVC), H.264 y AV1 Main 8-bit
+    let supported_formats = VIDEO_FORMAT_H265 | VIDEO_FORMAT_H264 | VIDEO_FORMAT_AV1_MAIN8;
+    custom_lan_stream_config(width, height, fps, 50_000, supported_formats, fps * 100)
 }
 
 use once_cell::sync::Lazy;
@@ -331,9 +340,15 @@ pub unsafe extern "C" fn dr_setup(
     _context: *mut c_void,
     _drFlags: c_int,
 ) -> c_int {
+    let format_str = match videoFormat {
+        VIDEO_FORMAT_H264 => "H.264",
+        VIDEO_FORMAT_H265 => "H.265 (HEVC)",
+        VIDEO_FORMAT_AV1_MAIN8 => "AV1 Main 8-bit",
+        _ => "Desconocido",
+    };
     log::info!(
-        "Video Decoder Setup: format={} {}x{}@{}fps",
-        videoFormat,
+        "[Decoder] Negociación de Video Exitosa: {} {}x{}@{}fps",
+        format_str,
         width,
         height,
         redrawRate
@@ -370,12 +385,12 @@ pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> 
     if !FIRST_FRAME_RECEIVED.load(Ordering::Relaxed) {
         if !is_idr {
             log::info!(
-                "Frame is not IDR and FIRST_FRAME_RECEIVED is false. Requesting IDR keyframe..."
+                "[Decoder] Esperando primer IDR keyframe (trama actual P-frame)... Solicitando IDR..."
             );
             return DR_NEED_IDR;
         }
         FIRST_FRAME_RECEIVED.store(true, Ordering::Relaxed);
-        log::info!("Received first IDR keyframe! Video decoder active.");
+        log::info!("[Decoder] ¡Primer IDR Keyframe recibido! Decodificador activado.");
     }
 
     let mut payload = Vec::with_capacity(du.fullLength as usize + 1);
@@ -395,7 +410,7 @@ pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> 
     let count = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
     if count < 10 || is_idr {
         log::info!(
-            "Video frame #{} submit: {} bytes, IDR: {}",
+            "[Video] Frame #{} submit: {} bytes, IDR Keyframe: {}",
             count,
             payload.len(),
             is_idr
@@ -404,7 +419,12 @@ pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> 
 
     if let Ok(guard) = VIDEO_CHANNEL.lock() {
         if let Some(sender) = guard.as_ref() {
-            let _ = sender.try_send(payload);
+            if let Err(mpsc::error::TrySendError::Full(data)) = sender.try_send(payload) {
+                if is_idr {
+                    log::warn!("[Video] Canal lleno al recibir IDR Keyframe. Vaciando cola obsoleta para recuperar sin latencia.");
+                    let _ = sender.try_send(data);
+                }
+            }
         }
     }
 
@@ -427,11 +447,12 @@ mod tests {
 
     #[test]
     fn test_custom_stream_config() {
-        let config = custom_lan_stream_config(2560, 1440, 120, 60_000, VIDEO_FORMAT_H265);
+        let config = custom_lan_stream_config(2560, 1440, 120, 60_000, VIDEO_FORMAT_H265, 12000);
         assert_eq!(config.width, 2560);
         assert_eq!(config.height, 1440);
         assert_eq!(config.fps, 120);
         assert_eq!(config.bitrate, 60_000);
         assert_eq!(config.supportedVideoFormats, VIDEO_FORMAT_H265);
+        assert_eq!(config.clientRefreshRateX100, 12000);
     }
 }

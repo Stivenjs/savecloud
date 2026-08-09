@@ -69,6 +69,8 @@ pub async fn streaming_connect_lan(
     fps: Option<i32>,
     bitrate_kbps: Option<i32>,
     codec: Option<String>,
+    enable_vsync: Option<bool>,
+    refresh_rate_x100: Option<i32>,
     state: tauri::State<'_, StreamingState>,
     app: tauri::AppHandle,
 ) -> Result<u16, String> {
@@ -82,15 +84,23 @@ pub async fn streaming_connect_lan(
     let video_format = match codec.as_deref() {
         Some("h265") | Some("hevc") => super::bindings::VIDEO_FORMAT_H265,
         Some("av1") => super::bindings::VIDEO_FORMAT_AV1_MAIN8,
-        _ => super::bindings::VIDEO_FORMAT_H264,
+        _ => {
+            super::bindings::VIDEO_FORMAT_H265
+                | super::bindings::VIDEO_FORMAT_H264
+                | super::bindings::VIDEO_FORMAT_AV1_MAIN8
+        }
     };
+
+    let target_fps = fps.unwrap_or(60);
 
     let stream_options = super::client::StreamOptions {
         width: width.unwrap_or(1920),
         height: height.unwrap_or(1080),
-        fps: fps.unwrap_or(60),
+        fps: target_fps,
         bitrate_kbps: bitrate_kbps.unwrap_or(50_000),
         video_format,
+        enable_vsync: enable_vsync.unwrap_or(true),
+        refresh_rate_x100: refresh_rate_x100.unwrap_or(target_fps * 100),
     };
 
     log::info!(
@@ -110,7 +120,11 @@ pub async fn streaming_connect_lan(
         .await
         .map_err(|e| e.to_string())?;
 
-    if let Err(e) = state.client.start_stream(&ip_address, &stream_options).await {
+    if let Err(e) = state
+        .client
+        .start_stream(&ip_address, &stream_options)
+        .await
+    {
         state.client.disconnect();
         return Err(e.to_string());
     }

@@ -34,6 +34,10 @@ pub struct StreamOptions {
     pub bitrate_kbps: i32,
     /// Códec de video soportado (`VIDEO_FORMAT_H264`, `VIDEO_FORMAT_H265`, `VIDEO_FORMAT_AV1_MAIN8`)
     pub video_format: i32,
+    /// Sincronización vertical (V-Sync) activa en el cliente
+    pub enable_vsync: bool,
+    /// Tasa de refresco del monitor local en Hz x 100 (ej. 6000 para 60Hz, 14400 para 144Hz, 24000 para 240Hz)
+    pub refresh_rate_x100: i32,
 }
 
 impl Default for StreamOptions {
@@ -43,7 +47,9 @@ impl Default for StreamOptions {
             height: 1080,
             fps: 60,
             bitrate_kbps: 50_000,
-            video_format: VIDEO_FORMAT_H264,
+            video_format: VIDEO_FORMAT_H265 | VIDEO_FORMAT_H264 | VIDEO_FORMAT_AV1_MAIN8,
+            enable_vsync: true,
+            refresh_rate_x100: 6000,
         }
     }
 }
@@ -221,13 +227,15 @@ impl MoonlightClient {
         self.is_connecting.store(false, Ordering::SeqCst);
 
         log::info!(
-            "MoonlightClient: Conectado a host {} ({}x{}@{}fps, {} kbps, codec: {})",
+            "MoonlightClient: Conectado a host {} ({}x{}@{}fps, {} kbps, codec: {}, vsync: {}, refresh_rate: {}Hz)",
             host_ip,
             options.width,
             options.height,
             options.fps,
             options.bitrate_kbps,
-            options.video_format
+            options.video_format,
+            options.enable_vsync,
+            options.refresh_rate_x100 as f32 / 100.0
         );
 
         Ok(ws_port)
@@ -390,6 +398,7 @@ impl MoonlightClient {
                 options_clone.fps,
                 options_clone.bitrate_kbps,
                 options_clone.video_format,
+                options_clone.refresh_rate_x100,
             );
 
             let mut rikey_c = [0i8; 16];

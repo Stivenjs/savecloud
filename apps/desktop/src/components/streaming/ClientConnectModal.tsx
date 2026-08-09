@@ -53,6 +53,8 @@ export const ClientConnectModal = ({ host, isOpen, onClose, config }: ClientConn
         fps: activeConfig.fps,
         bitrateKbps: Math.round(activeConfig.bitrateMbps * 1000),
         codec: activeConfig.codec,
+        enableVsync: activeConfig.enableVsync,
+        refreshRateX100: activeConfig.fps * 100,
       });
       await openOrFocusStreamingWindow(wsPort);
       onClose();

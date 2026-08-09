@@ -374,8 +374,8 @@ export const StreamingPanel = () => {
             />
           </div>
 
-          {/* Toggles de Latencia y Audio */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-default-200/40 dark:border-default-100/10">
+          {/* Toggles de Latencia, V-Sync y Audio */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-default-200/40 dark:border-default-100/10">
             <div className="flex items-center justify-between p-3.5 bg-default-100/40 rounded-xl border border-default-200/40 dark:border-default-100/10">
               <div className="flex flex-col gap-0.5">
                 <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
@@ -389,6 +389,22 @@ export const StreamingPanel = () => {
                 color="primary"
                 isSelected={config.lowLatencyMode}
                 onValueChange={(val) => updateConfig((c) => ({ ...c, lowLatencyMode: val, preset: "custom" }))}
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3.5 bg-default-100/40 rounded-xl border border-default-200/40 dark:border-default-100/10">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                  <Monitor size={16} className="text-primary" />
+                  V-Sync
+                </span>
+                <span className="text-xs text-default-500">Sincroniza cuadros con tu monitor</span>
+              </div>
+              <Switch
+                size="sm"
+                color="primary"
+                isSelected={config.enableVsync}
+                onValueChange={(val) => updateConfig((c) => ({ ...c, enableVsync: val, preset: "custom" }))}
               />
             </div>
 
