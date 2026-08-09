@@ -32,7 +32,7 @@ pub const AUDIO_CONFIGURATION_STEREO: i32 = 0x000302CA;
 pub const ENCFLG_NONE: i32 = 0x00000000;
 pub const ENCFLG_AUDIO: i32 = 0x00000001;
 pub const ENCFLG_VIDEO: i32 = 0x00000002;
-pub const ENCFLG_ALL: i32 = -1; // 0xFFFFFFFF en C
+pub const ENCFLG_ALL: i32 = ENCFLG_AUDIO | ENCFLG_VIDEO; // 0x00000003
 
 // 2. Estructuras C
 
@@ -107,6 +107,31 @@ pub struct DECODER_RENDERER_CALLBACKS {
     pub capabilities: c_int,
 }
 
+pub type AudioRendererInit = Option<
+    unsafe extern "C" fn(
+        audioConfiguration: c_int,
+        opusConfig: *const c_void,
+        context: *mut c_void,
+        arFlags: c_int,
+    ) -> c_int,
+>;
+pub type AudioRendererStart = Option<unsafe extern "C" fn()>;
+pub type AudioRendererStop = Option<unsafe extern "C" fn()>;
+pub type AudioRendererCleanup = Option<unsafe extern "C" fn()>;
+pub type AudioRendererDecodeAndPlaySample =
+    Option<unsafe extern "C" fn(sampleData: *mut c_char, sampleLength: c_int)>;
+
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct AUDIO_RENDERER_CALLBACKS {
+    pub init: AudioRendererInit,
+    pub start: AudioRendererStart,
+    pub stop: AudioRendererStop,
+    pub cleanup: AudioRendererCleanup,
+    pub decodeAndPlaySample: AudioRendererDecodeAndPlaySample,
+    pub capabilities: c_int,
+}
+
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct SERVER_INFORMATION {
@@ -140,6 +165,7 @@ pub struct CONNECTION_LISTENER_CALLBACKS {
 extern "C" {
     pub fn LiInitializeStreamConfiguration(streamConfig: *mut STREAM_CONFIGURATION);
     pub fn LiInitializeVideoCallbacks(drCallbacks: *mut DECODER_RENDERER_CALLBACKS);
+    pub fn LiInitializeAudioCallbacks(arCallbacks: *mut AUDIO_RENDERER_CALLBACKS);
     pub fn LiInitializeServerInformation(serverInfo: *mut SERVER_INFORMATION);
     pub fn LiInitializeConnectionCallbacks(clCallbacks: *mut CONNECTION_LISTENER_CALLBACKS);
     pub fn LiStartConnection(
@@ -147,7 +173,7 @@ extern "C" {
         streamConfig: *mut STREAM_CONFIGURATION,
         clCallbacks: *mut CONNECTION_LISTENER_CALLBACKS,
         drCallbacks: *mut DECODER_RENDERER_CALLBACKS,
-        arCallbacks: *mut c_void, // Audio callbacks (null por ahora)
+        arCallbacks: *mut AUDIO_RENDERER_CALLBACKS,
         renderContext: *mut c_void,
         drFlags: c_int,
         audioContext: *mut c_void,
@@ -185,6 +211,12 @@ pub fn initialize_video_callbacks(callbacks: &mut DECODER_RENDERER_CALLBACKS) {
     }
 }
 
+pub fn initialize_audio_callbacks(callbacks: &mut AUDIO_RENDERER_CALLBACKS) {
+    unsafe {
+        LiInitializeAudioCallbacks(callbacks as *mut _);
+    }
+}
+
 pub fn initialize_server_information(server_info: &mut SERVER_INFORMATION) {
     unsafe {
         LiInitializeServerInformation(server_info as *mut _);
@@ -210,23 +242,41 @@ pub fn get_launch_url_query_parameters() -> String {
     }
 }
 
-/// Configuración de stream con valores razonables para LAN.
-pub fn default_lan_stream_config(width: i32, height: i32, fps: i32) -> STREAM_CONFIGURATION {
+/// Configuración de stream personalizada para LAN con resolución, FPS, bitrate y formato de video dinámico.
+///
+/// # Parámetros
+/// - `width`: Ancho en píxeles (ej. 1920, 2560, 3840).
+/// - `height`: Alto en píxeles (ej. 1080, 1440, 2160).
+/// - `fps`: Tasa de cuadros por segundo (ej. 30, 60, 90, 120).
+/// - `bitrate_kbps`: Tasa de bits en kilobits por segundo (ej. 50000 para 50 Mbps).
+/// - `video_format`: Máscara de formatos de video soportados (`VIDEO_FORMAT_H264`, `VIDEO_FORMAT_H265`, `VIDEO_FORMAT_AV1_MAIN8`).
+pub fn custom_lan_stream_config(
+    width: i32,
+    height: i32,
+    fps: i32,
+    bitrate_kbps: i32,
+    video_format: i32,
+) -> STREAM_CONFIGURATION {
     let mut config: STREAM_CONFIGURATION = unsafe { std::mem::zeroed() };
     initialize_stream_config(&mut config);
 
     config.width = width as c_int;
     config.height = height as c_int;
     config.fps = fps as c_int;
-    config.bitrate = 50_000; // 50 Mbps
+    config.bitrate = bitrate_kbps.max(1_000).min(150_000) as c_int;
     config.packetSize = 1392;
     config.streamingRemotely = STREAM_CFG_LOCAL;
     config.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
-    config.supportedVideoFormats = VIDEO_FORMAT_H264;
+    config.supportedVideoFormats = video_format;
     config.encryptionFlags = ENCFLG_ALL;
     config.clientRefreshRateX100 = (fps * 100) as c_int;
 
     config
+}
+
+/// Configuración de stream con valores razonables por defecto para LAN.
+pub fn default_lan_stream_config(width: i32, height: i32, fps: i32) -> STREAM_CONFIGURATION {
+    custom_lan_stream_config(width, height, fps, 50_000, VIDEO_FORMAT_H264)
 }
 
 use once_cell::sync::Lazy;
@@ -251,7 +301,11 @@ pub unsafe extern "C" fn cl_stage_complete(stage: c_int) {
 }
 
 pub unsafe extern "C" fn cl_stage_failed(stage: c_int, error_code: c_int) {
-    log::error!("Moonlight Stage Failed: stage={}, error_code={}", stage, error_code);
+    log::error!(
+        "Moonlight Stage Failed: stage={}, error_code={}",
+        stage,
+        error_code
+    );
 }
 
 pub unsafe extern "C" fn cl_connection_started() {
@@ -260,6 +314,13 @@ pub unsafe extern "C" fn cl_connection_started() {
 
 pub unsafe extern "C" fn cl_connection_terminated(error_code: c_int) {
     log::warn!("Moonlight Connection Terminated: error_code={}", error_code);
+}
+
+pub unsafe extern "C" fn cl_log_message(msg: *const c_char) {
+    if !msg.is_null() {
+        let s = std::ffi::CStr::from_ptr(msg).to_string_lossy();
+        log::info!("[Moonlight-C] {}", s.trim_end());
+    }
 }
 
 pub unsafe extern "C" fn dr_setup(
@@ -280,16 +341,22 @@ pub unsafe extern "C" fn dr_setup(
     DR_OK
 }
 
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+pub static FIRST_FRAME_RECEIVED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
+
 pub unsafe extern "C" fn dr_start() {
     log::info!("Video Decoder Start");
+    FIRST_FRAME_RECEIVED.store(false, Ordering::Relaxed);
 }
 
 pub unsafe extern "C" fn dr_stop() {
     log::info!("Video Decoder Stop");
+    FIRST_FRAME_RECEIVED.store(false, Ordering::Relaxed);
 }
 
 pub unsafe extern "C" fn dr_cleanup() {
     log::info!("Video Decoder Cleanup");
+    FIRST_FRAME_RECEIVED.store(false, Ordering::Relaxed);
 }
 
 pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> c_int {
@@ -298,8 +365,21 @@ pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> 
     }
 
     let du = &*decodeUnit;
+    let is_idr = du.frameType == FRAME_TYPE_IDR;
+
+    if !FIRST_FRAME_RECEIVED.load(Ordering::Relaxed) {
+        if !is_idr {
+            log::info!(
+                "Frame is not IDR and FIRST_FRAME_RECEIVED is false. Requesting IDR keyframe..."
+            );
+            return DR_NEED_IDR;
+        }
+        FIRST_FRAME_RECEIVED.store(true, Ordering::Relaxed);
+        log::info!("Received first IDR keyframe! Video decoder active.");
+    }
+
     let mut payload = Vec::with_capacity(du.fullLength as usize + 1);
-    payload.push(if du.frameType == FRAME_TYPE_IDR { 1 } else { 0 });
+    payload.push(if is_idr { 1 } else { 0 });
 
     let mut current = du.bufferList;
     while !current.is_null() {
@@ -309,6 +389,17 @@ pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> 
             payload.extend_from_slice(slice);
         }
         current = entry.next;
+    }
+
+    static FRAME_COUNT: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
+    let count = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
+    if count < 10 || is_idr {
+        log::info!(
+            "Video frame #{} submit: {} bytes, IDR: {}",
+            count,
+            payload.len(),
+            is_idr
+        );
     }
 
     if let Ok(guard) = VIDEO_CHANNEL.lock() {
@@ -332,5 +423,15 @@ mod tests {
         assert_eq!(config.fps, 60);
         assert_eq!(config.bitrate, 50_000);
         assert_eq!(config.streamingRemotely, STREAM_CFG_LOCAL);
+    }
+
+    #[test]
+    fn test_custom_stream_config() {
+        let config = custom_lan_stream_config(2560, 1440, 120, 60_000, VIDEO_FORMAT_H265);
+        assert_eq!(config.width, 2560);
+        assert_eq!(config.height, 1440);
+        assert_eq!(config.fps, 120);
+        assert_eq!(config.bitrate, 60_000);
+        assert_eq!(config.supportedVideoFormats, VIDEO_FORMAT_H265);
     }
 }

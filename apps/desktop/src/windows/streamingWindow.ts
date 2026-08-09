@@ -6,8 +6,11 @@ export const STREAMING_WINDOW_LABEL = "streaming-window";
 export async function openOrFocusStreamingWindow(wsPort: number): Promise<void> {
   const existing = await resolveExistingWebviewWindow(STREAMING_WINDOW_LABEL);
   if (existing) {
-    await showCenteredAndFocus(existing);
-    return;
+    try {
+      await existing.destroy();
+    } catch {
+      // ignore
+    }
   }
 
   const windowUrl = `/?streamingWindow=true&wsPort=${wsPort}`;

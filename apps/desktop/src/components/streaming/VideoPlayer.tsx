@@ -1,6 +1,18 @@
+/**
+ * @module VideoPlayer
+ * @description Componente React de streaming de video y audio en tiempo real.
+ *
+ * Orquesta los módulos WebAudioPlayer, VideoStreamDecoder y StreamingSocket
+ * para renderizar video H.264 decodificado por GPU y reproducir audio PCM
+ * mediante WebAudio API. Todo el procesamiento pesado está delegado a módulos
+ * independientes para mantener este componente limpio y enfocado en la UI.
+ */
+
 import { useEffect, useRef, useState } from "react";
 import { Card } from "@heroui/react";
 import { useTranslation } from "react-i18next";
+import { createVideoStreamDecoder } from "./VideoStreamDecoder";
+import { createStreamingSocket } from "./StreamingSocket";
 
 interface VideoPlayerProps {
   wsPort: number;
@@ -8,6 +20,9 @@ interface VideoPlayerProps {
 
 export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
   const { t } = useTranslation();
+  const tRef = useRef(t);
+  tRef.current = t;
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,110 +32,29 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
 
     const ctx = canvas.getContext("2d");
     if (!ctx) {
-      setError(t("remotePlay.canvasContextError"));
+      setError(tRef.current("remotePlay.canvasContextError"));
       return;
     }
 
-    let isUnmounted = false;
-    let ws: WebSocket | null = null;
-    let decoder: VideoDecoder | null = null;
-    let frameCount = 0;
+    const videoDecoder = createVideoStreamDecoder({
+      canvas,
+      ctx,
+      onError: setError,
+    });
 
-    const initDecoder = () => {
-      decoder = new VideoDecoder({
-        output: (frame: VideoFrame) => {
-          if (isUnmounted) {
-            frame.close();
-            return;
-          }
-          if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
-            canvas.width = frame.displayWidth;
-            canvas.height = frame.displayHeight;
-          }
-
-          ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
-          frame.close();
-        },
-        error: (e) => {
-          if (isUnmounted) return;
-          console.error("VideoDecoder error:", e);
-          setError(`Decoder Error: ${e.message}`);
-        },
-      });
-
-      decoder.configure({
-        codec: "avc1.4d002a",
-        hardwareAcceleration: "prefer-hardware",
-        optimizeForLatency: true,
-      });
-    };
-
-    const connectWs = () => {
-      ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
-      ws.binaryType = "arraybuffer";
-
-      ws.onopen = () => {
-        if (isUnmounted) return;
-        console.log("Video WS Connected");
-        setError(null);
-      };
-
-      ws.onmessage = (event) => {
-        if (isUnmounted) return;
-        if (!decoder || decoder.state !== "configured") return;
-
-        const buffer = event.data;
-        if (buffer.byteLength <= 1) return;
-
-        const view = new DataView(buffer);
-        const isKeyFrame = view.getUint8(0) === 1;
-        const data = new Uint8Array(buffer, 1);
-
-        try {
-          const chunk = new EncodedVideoChunk({
-            timestamp: performance.now() * 1000,
-            type: isKeyFrame ? "key" : "delta",
-            data: data,
-          });
-
-          decoder.decode(chunk);
-          frameCount++;
-        } catch (e) {
-          console.error("Decode chunk error:", e);
-        }
-      };
-
-      ws.onclose = () => {
-        if (isUnmounted) return;
-        console.log("Video WS Closed");
-      };
-
-      ws.onerror = (e) => {
-        if (isUnmounted) return;
-        console.error("Video WS Error:", e);
-        setError(t("remotePlay.wsVideoError"));
-      };
-    };
-
-    try {
-      initDecoder();
-      connectWs();
-    } catch (e: any) {
-      if (!isUnmounted) {
-        setError(`Init error: ${e.message}`);
-      }
-    }
+    const streamingSocket = createStreamingSocket({
+      wsPort,
+      videoDecoder,
+      onError: setError,
+      onConnected: () => setError(null),
+      getReconnectErrorMessage: () => tRef.current("remotePlay.wsVideoError"),
+    });
 
     return () => {
-      isUnmounted = true;
-      if (ws) {
-        ws.close();
-      }
-      if (decoder && decoder.state !== "closed") {
-        decoder.close();
-      }
+      streamingSocket.destroy();
+      videoDecoder.destroy();
     };
-  }, [wsPort, t]);
+  }, [wsPort]);
 
   return (
     <Card className="w-full h-full bg-black flex items-center justify-center overflow-hidden border-none rounded-none absolute inset-0 z-50">

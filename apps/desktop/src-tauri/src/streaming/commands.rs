@@ -32,7 +32,7 @@ pub async fn streaming_start_host(
     let savecloud_port =
         crate::peer_lan::server::ensure_lan_http_server(Some(state.host.clone())).await?;
 
-    state.host.start().await?;
+    state.host.start().await.map_err(|e| e.to_string())?;
 
     // 2. Publicar en mDNS que somos un Host, pasando también el puerto de nuestra API LAN
     super::discovery::publish_stream_service(&device_id, &user_id, 47989, savecloud_port)?;
@@ -59,34 +59,60 @@ pub async fn streaming_start_host(
     Ok(simulated_pin)
 }
 
-/// Conecta este cliente a un Host descubierto en la LAN usando su IP y PIN.
+/// Conecta este cliente a un Host descubierto en la LAN usando su IP y configuraciones avanzadas de transmisión.
 #[tauri::command]
 pub async fn streaming_connect_lan(
     ip_address: String,
     mut savecloud_port: u16,
+    width: Option<i32>,
+    height: Option<i32>,
+    fps: Option<i32>,
+    bitrate_kbps: Option<i32>,
+    codec: Option<String>,
     state: tauri::State<'_, StreamingState>,
     app: tauri::AppHandle,
 ) -> Result<u16, String> {
     if ip_address == "127.0.0.1" && savecloud_port == 0 {
         savecloud_port =
             crate::peer_lan::server::ensure_lan_http_server(Some(state.host.clone())).await?;
-        state.host.start().await?;
+        state.host.start().await.map_err(|e| e.to_string())?;
         tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
     }
 
+    let video_format = match codec.as_deref() {
+        Some("h265") | Some("hevc") => super::bindings::VIDEO_FORMAT_H265,
+        Some("av1") => super::bindings::VIDEO_FORMAT_AV1_MAIN8,
+        _ => super::bindings::VIDEO_FORMAT_H264,
+    };
+
+    let stream_options = super::client::StreamOptions {
+        width: width.unwrap_or(1920),
+        height: height.unwrap_or(1080),
+        fps: fps.unwrap_or(60),
+        bitrate_kbps: bitrate_kbps.unwrap_or(50_000),
+        video_format,
+    };
+
     log::info!(
-        "Comando: Conectando a host en {} (SaveCloud: {})",
+        "Comando: Conectando a host en {} (SaveCloud: {}) con opciones: {}x{}@{}fps, {} kbps, codec: {}",
         ip_address,
-        savecloud_port
+        savecloud_port,
+        stream_options.width,
+        stream_options.height,
+        stream_options.fps,
+        stream_options.bitrate_kbps,
+        stream_options.video_format
     );
+
     let ws_port = state
         .client
-        .connect_lan(&ip_address, savecloud_port, 1920, 1080, 60)
-        .await?;
+        .connect_lan(&ip_address, savecloud_port, &stream_options)
+        .await
+        .map_err(|e| e.to_string())?;
 
-    if let Err(e) = state.client.start_stream(&ip_address).await {
+    if let Err(e) = state.client.start_stream(&ip_address, &stream_options).await {
         state.client.disconnect();
-        return Err(e);
+        return Err(e.to_string());
     }
 
     *state.session.lock().unwrap() = HostState::Playing {
@@ -108,7 +134,7 @@ pub async fn streaming_stop(
 
     state.client.disconnect();
 
-    state.host.stop().await?;
+    state.host.stop().await.map_err(|e| e.to_string())?;
     withdraw_stream_service();
 
     *state.session.lock().unwrap() = HostState::Idle;

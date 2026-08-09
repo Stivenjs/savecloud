@@ -23,7 +23,9 @@ pub mod session;
 pub mod client;
 pub mod input_relay;
 pub mod commands;
-pub mod crypto;
-pub mod video_server;
 pub mod audio;
+pub mod crypto;
+pub mod error;
+pub mod tls_override;
+pub mod video_server;
 

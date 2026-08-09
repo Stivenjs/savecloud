@@ -1550,6 +1550,25 @@
       "close": "Cerrar",
       "retry": "Reintentar"
     },
+    "settings": {
+      "title": "Calidad y Calibración de Transmisión",
+      "subtitle": "Personaliza los parámetros de rendimiento, latencia y compresión de video",
+      "presetTitle": "Modo de Rendimiento",
+      "presets": {
+        "ultra_low_latency": "Ultra Baja Latencia",
+        "balanced": "Equilibrado (1080p60)",
+        "high_fps": "Alto Rendimiento (120 FPS)",
+        "custom": "Personalizado"
+      },
+      "resolution": "Resolución de Pantalla",
+      "fps": "Fotogramas por Segundo (FPS)",
+      "codec": "Codificador de Video",
+      "bitrate": "Tasa de Bits (Mbps)",
+      "lowLatency": "Modo Latencia Cero",
+      "lowLatencyDesc": "Prioriza el tiempo de respuesta sobre la suavidad extrema de movimiento",
+      "audio": "Audio Stereo Remoto",
+      "audioDesc": "Transmitir sonido del anfitrión con decodificación PCM de alta fidelidad"
+    },
     "canvasContextError": "No se pudo obtener el contexto 2D del canvas",
     "wsVideoError": "Error en la conexión WebSocket de video",
     "startingStream": "Iniciando conexión de streaming..."
