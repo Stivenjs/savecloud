@@ -141,18 +141,6 @@ static AUDIO_FRAME_COUNT: AtomicU64 = AtomicU64::new(0);
 static IS_PLAYING: AtomicBool = AtomicBool::new(false);
 static PREBUFFER_READY: AtomicBool = AtomicBool::new(false);
 
-/// Helper: Convierte entero de frecuencia a enum de SampleRate de `audiopus`.
-#[inline]
-fn map_sample_rate(sr: u32) -> SampleRate {
-    match sr {
-        8000 => SampleRate::Hz8000,
-        12000 => SampleRate::Hz12000,
-        16000 => SampleRate::Hz16000,
-        24000 => SampleRate::Hz24000,
-        _ => SampleRate::Hz48000,
-    }
-}
-
 /// Inicializa el reproductor de audio nativo CPAL para la plataforma actual.
 fn init_cpal_player(sample_rate: u32, channels: u16) -> Option<(cpal::Stream, HeapProd<i16>)> {
     let host = cpal::default_host();
@@ -378,7 +366,13 @@ pub unsafe extern "C" fn ar_init(
     IS_PLAYING.store(true, Ordering::SeqCst);
     PREBUFFER_READY.store(false, Ordering::SeqCst);
 
-    let sr_enum = map_sample_rate(sample_rate);
+    let sr_enum = match sample_rate {
+        8000 => SampleRate::Hz8000,
+        12000 => SampleRate::Hz12000,
+        16000 => SampleRate::Hz16000,
+        24000 => SampleRate::Hz24000,
+        _ => SampleRate::Hz48000,
+    };
 
     let stereo_decoder = match OpusDecoder::new(sr_enum, Channels::Stereo) {
         Ok(dec) => dec,
