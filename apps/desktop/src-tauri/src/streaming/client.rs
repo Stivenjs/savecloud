@@ -253,9 +253,25 @@ impl MoonlightClient {
         if target_ip == "127.0.0.1" {
             target_ip = "localhost".to_string();
         }
+
+        // Obtener el App ID real de "Desktop" desde Sunshine /applist
+        let applist_url = format!("https://{}:47984/applist?uniqueid={}", target_ip, unique_id);
+        let mut app_id = "1".to_string();
+
+        if let Ok(res) = client.get(&applist_url).send().await {
+            if let Ok(xml) = res.text().await {
+                log::info!("Respuesta /applist de Sunshine: {}", xml);
+                let app_regex = regex::Regex::new(r"(?s)<App>.*?<AppTitle>Desktop</AppTitle>.*?<ID>(.*?)</ID>.*?<\/App>").unwrap();
+                if let Some(caps) = app_regex.captures(&xml) {
+                    app_id = caps[1].trim().to_string();
+                    log::info!("App ID para 'Desktop' detectado en Sunshine: {}", app_id);
+                }
+            }
+        }
+
         let url = format!(
-            "https://{}:47984/launch?uniqueid={}&uuid={}&appversion=7.1.431.0&appid=0&appname=Desktop&mode=1920x1080x60&rikey={}&rikeyid={}&localAudioPlayMode=0",
-            target_ip, unique_id, uuid, rikey_hex, rikey_id
+            "https://{}:47984/launch?uniqueid={}&uuid={}&appversion=7.1.431.0&appid={}&appname=Desktop&mode=1920x1080x60&rikey={}&rikeyid={}&localAudioPlayMode=0",
+            target_ip, unique_id, uuid, app_id, rikey_hex, rikey_id
         );
 
         let mut retries = 10;

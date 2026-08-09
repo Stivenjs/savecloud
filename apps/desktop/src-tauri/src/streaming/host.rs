@@ -323,13 +323,17 @@ impl SunshineHost {
             "apps": [
                 {
                     "name": "Desktop",
-                    "cmd": "ping 127.0.0.1 -t",
-                    "image-path": "desktop.png"
+                    "image-path": "desktop.png",
+                    "detached": [
+                        "cmd.exe /c echo SaveCloud Desktop Streaming"
+                    ]
                 },
                 {
                     "name": "Steam Big Picture",
-                    "cmd": "steam://open/bigpicture",
-                    "image-path": "steam.png"
+                    "image-path": "steam.png",
+                    "detached": [
+                        "steam://open/bigpicture"
+                    ]
                 }
             ]
         });
