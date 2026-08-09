@@ -21,6 +21,33 @@ static DESKTOP_APP_ID_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
         .unwrap()
 });
 
+/// Opciones configurables para la sesión de streaming de video/audio.
+#[derive(Debug, Clone)]
+pub struct StreamOptions {
+    /// Ancho en píxeles de la pantalla remota (ej. 1280, 1920, 2560, 3840)
+    pub width: i32,
+    /// Alto en píxeles de la pantalla remota (ej. 720, 1080, 1440, 2160)
+    pub height: i32,
+    /// Cuadros por segundo deseados (ej. 30, 60, 90, 120)
+    pub fps: i32,
+    /// Tasa de bits en kilobits por segundo (ej. 50000 para 50 Mbps)
+    pub bitrate_kbps: i32,
+    /// Códec de video soportado (`VIDEO_FORMAT_H264`, `VIDEO_FORMAT_H265`, `VIDEO_FORMAT_AV1_MAIN8`)
+    pub video_format: i32,
+}
+
+impl Default for StreamOptions {
+    fn default() -> Self {
+        Self {
+            width: 1920,
+            height: 1080,
+            fps: 60,
+            bitrate_kbps: 50_000,
+            video_format: VIDEO_FORMAT_H264,
+        }
+    }
+}
+
 /// Cliente para conectarse a un host de Sunshine y recibir un stream.
 pub struct MoonlightClient {
     is_connected: Arc<AtomicBool>,
@@ -112,13 +139,12 @@ impl MoonlightClient {
         Ok("0123456789ABCDEF".to_string())
     }
 
+    /// Realiza el handshake de emparejamiento e inicia el servidor WebSocket local de video.
     pub async fn connect_lan(
         &self,
         host_ip: &str,
         savecloud_port: u16,
-        width: i32,
-        height: i32,
-        fps: i32,
+        options: &StreamOptions,
     ) -> StreamingResult<u16> {
         if self.is_connected.load(Ordering::SeqCst) {
             return Err(StreamingError::Client(
@@ -183,8 +209,6 @@ impl MoonlightClient {
             )));
         }
 
-        let _config = default_lan_stream_config(width, height, fps);
-
         let (tx, rx) = mpsc::channel(1024);
         set_video_channel(tx);
 
@@ -197,17 +221,24 @@ impl MoonlightClient {
         self.is_connecting.store(false, Ordering::SeqCst);
 
         log::info!(
-            "MoonlightClient: Conectado a host {} ({}x{}@{}fps)",
+            "MoonlightClient: Conectado a host {} ({}x{}@{}fps, {} kbps, codec: {})",
             host_ip,
-            width,
-            height,
-            fps
+            options.width,
+            options.height,
+            options.fps,
+            options.bitrate_kbps,
+            options.video_format
         );
 
         Ok(ws_port)
     }
 
-    pub async fn start_stream(&self, host_ip: &str) -> StreamingResult<()> {
+    /// Inicia la sesión de transmisión RTSP contra el servidor Sunshine y activa Moonlight-common-c.
+    pub async fn start_stream(
+        &self,
+        host_ip: &str,
+        options: &StreamOptions,
+    ) -> StreamingResult<()> {
         if !self.is_connected.load(Ordering::SeqCst) {
             return Err(StreamingError::Client(
                 "No se puede iniciar el stream sin conexión previa".into(),
@@ -279,9 +310,14 @@ impl MoonlightClient {
             }
         }
 
+        // Cancelar cualquier sesión de transmisión activa en Sunshine para aplicar la nueva resolución
+        let cancel_url = format!("https://{}:47984/cancel?uniqueid={}", target_ip, unique_id);
+        let _ = client.get(&cancel_url).send().await;
+
+        let mode_str = format!("{}x{}x{}", options.width, options.height, options.fps);
         let url = format!(
-            "https://{}:47984/launch?uniqueid={}&uuid={}&appversion=7.1.431.0&appid={}&appname=Desktop&mode=1920x1080x60&rikey={}&rikeyid={}&localAudioPlayMode=0",
-            target_ip, unique_id, uuid, app_id, rikey_hex, rikey_id
+            "https://{}:47984/launch?uniqueid={}&uuid={}&appversion=7.1.431.0&appid={}&appname=Desktop&mode={}&rikey={}&rikeyid={}&localAudioPlayMode=0",
+            target_ip, unique_id, uuid, app_id, mode_str, rikey_hex, rikey_id
         );
 
         let mut retries = 10;
@@ -329,6 +365,8 @@ impl MoonlightClient {
         let ip_cstr = std::ffi::CString::new(host_ip).unwrap();
         let session_url_cstr = std::ffi::CString::new(session_url).unwrap();
 
+        let options_clone = options.clone();
+
         std::thread::spawn(move || {
             let app_version = std::ffi::CString::new("7.1.431.0").unwrap();
             let gfe_version = std::ffi::CString::new("3.23.0.74").unwrap();
@@ -338,10 +376,21 @@ impl MoonlightClient {
             server_info.address = ip_cstr.as_ptr();
             server_info.serverInfoAppVersion = app_version.as_ptr();
             server_info.serverInfoGfeVersion = gfe_version.as_ptr();
-            server_info.serverCodecModeSupport = 0x0101;
+            server_info.serverCodecModeSupport = 0x0101
+                | (if options_clone.video_format == VIDEO_FORMAT_AV1_MAIN8 {
+                    0x1000
+                } else {
+                    0
+                });
             server_info.rtspSessionUrl = session_url_cstr.as_ptr();
 
-            let mut stream_config = default_lan_stream_config(1920, 1080, 60);
+            let mut stream_config = custom_lan_stream_config(
+                options_clone.width,
+                options_clone.height,
+                options_clone.fps,
+                options_clone.bitrate_kbps,
+                options_clone.video_format,
+            );
 
             let mut rikey_c = [0i8; 16];
             for i in 0..16 {

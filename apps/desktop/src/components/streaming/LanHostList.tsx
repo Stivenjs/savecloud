@@ -1,9 +1,18 @@
-import { useState, useEffect } from "react";
+/**
+ * @file LanHostList.tsx
+ * @description Modal de descubrimiento mDNS de anfitriones de Remote Play en la red local.
+ */
+
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Spinner } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { ClientConnectModal } from "@components/streaming/ClientConnectModal";
+import { StreamingConfig } from "@components/streaming/streamingTypes";
 
+/**
+ * Estructura de anfitrión descubierto vía mDNS.
+ */
 interface DiscoveredStreamHost {
   device_id: string;
   user_id: string;
@@ -13,12 +22,25 @@ interface DiscoveredStreamHost {
   hostname: string;
 }
 
+/**
+ * Propiedades del componente LanHostList.
+ */
 interface LanHostListProps {
+  /** Estado de apertura del modal */
   isOpen: boolean;
+  /** Callback para cerrar el modal */
   onClose: () => void;
+  /** Configuración opcional de streaming */
+  config?: StreamingConfig;
 }
 
-export const LanHostList = ({ isOpen, onClose }: LanHostListProps) => {
+/**
+ * Componente que busca y muestra los equipos de la red local emitiendo Remote Play.
+ *
+ * @param {LanHostListProps} props Propiedades del componente
+ * @returns {JSX.Element} Lista modal de anfitriones LAN
+ */
+export const LanHostList = ({ isOpen, onClose, config }: LanHostListProps) => {
   const { t } = useTranslation();
   const [hosts, setHosts] = useState<DiscoveredStreamHost[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -26,23 +48,23 @@ export const LanHostList = ({ isOpen, onClose }: LanHostListProps) => {
 
   const mirrorHostLabel = t("remotePlay.lanHosts.mirrorHost");
 
-  const searchHosts = async () => {
+  const searchHosts = useCallback(async () => {
     setIsSearching(true);
     try {
       const found = await invoke<DiscoveredStreamHost[]>("streaming_discover_lan", { timeoutSecs: 3 });
       setHosts(found);
     } catch (err) {
-      console.error(err);
+      console.error("Error buscando hosts LAN:", err);
     } finally {
       setIsSearching(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
-      searchHosts();
+      void searchHosts();
     }
-  }, [isOpen]);
+  }, [isOpen, searchHosts]);
 
   const selectMirrorHost = () =>
     setSelectedHost({
@@ -58,7 +80,7 @@ export const LanHostList = ({ isOpen, onClose }: LanHostListProps) => {
     <>
       <Modal isOpen={isOpen && !selectedHost} onClose={onClose} backdrop="blur" scrollBehavior="inside">
         <ModalContent>
-          {(onClose) => (
+          {(onCloseModal) => (
             <>
               <ModalHeader className="flex justify-between items-center pr-12">
                 <span>{t("remotePlay.lanHosts.title")}</span>
@@ -67,7 +89,7 @@ export const LanHostList = ({ isOpen, onClose }: LanHostListProps) => {
                 </Button>
               </ModalHeader>
               <ModalBody>
-                <div className="space-y-3 min-h-[200px]">
+                <div className="space-y-3 min-h-50">
                   {hosts.length === 0 && !isSearching ? (
                     <div className="text-default-400 text-center flex flex-col items-center justify-center h-full py-10">
                       {t("remotePlay.lanHosts.empty")}
@@ -81,11 +103,11 @@ export const LanHostList = ({ isOpen, onClose }: LanHostListProps) => {
                   ) : null}
 
                   <div
-                    className="p-4 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-xl flex justify-between items-center transition-colors cursor-pointer"
+                    className="p-4 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 border border-primary-200 dark:border-primary-800 rounded-xl flex justify-between items-center transition-colors cursor-pointer"
                     onClick={selectMirrorHost}>
                     <div>
-                      <p className="font-bold text-primary-600 text-lg">{mirrorHostLabel}</p>
-                      <p className="text-primary-400 text-sm">127.0.0.1:47989</p>
+                      <p className="font-bold text-primary-600 dark:text-primary-400 text-lg">{mirrorHostLabel}</p>
+                      <p className="text-primary-500 dark:text-primary-300 text-sm font-mono">127.0.0.1:47989</p>
                     </div>
                     <Button color="primary" variant="flat" size="sm" onPress={selectMirrorHost}>
                       {t("remotePlay.lanHosts.connect")}
@@ -95,7 +117,7 @@ export const LanHostList = ({ isOpen, onClose }: LanHostListProps) => {
                   {hosts.map((host) => (
                     <div
                       key={host.device_id}
-                      className="p-4 bg-content2 hover:bg-content3 border border-default-200 rounded-xl flex justify-between items-center transition-colors cursor-pointer"
+                      className="p-4 bg-content2 hover:bg-content3 border border-default-200 dark:border-default-700 rounded-xl flex justify-between items-center transition-colors cursor-pointer"
                       onClick={() => setSelectedHost(host)}>
                       <div>
                         <p className="font-bold text-foreground text-lg">{host.hostname}</p>
@@ -111,7 +133,7 @@ export const LanHostList = ({ isOpen, onClose }: LanHostListProps) => {
                 </div>
               </ModalBody>
               <ModalFooter>
-                <Button variant="light" onPress={onClose}>
+                <Button variant="light" onPress={onCloseModal}>
                   {t("remotePlay.lanHosts.close")}
                 </Button>
               </ModalFooter>
@@ -123,6 +145,7 @@ export const LanHostList = ({ isOpen, onClose }: LanHostListProps) => {
       {selectedHost ? (
         <ClientConnectModal
           host={selectedHost}
+          config={config}
           isOpen={true}
           onClose={() => {
             setSelectedHost(null);

@@ -1,13 +1,15 @@
 /**
  * @module VideoStreamDecoder
- * @description Decodificador de video H.264 en tiempo real mediante WebCodecs API.
+ * @description Decodificador de video multicódec (H.264, H.265/HEVC, AV1) mediante WebCodecs API.
  *
- * Recibe tramas de video codificadas (H.264 Annex B) del WebSocket,
+ * Recibe tramas de video codificadas (Annex B) del WebSocket,
  * las decodifica usando aceleración por hardware (GPU) y renderiza
  * cada fotograma en un HTMLCanvasElement.
  *
  * Optimizado para baja latencia en streaming de juegos remotos.
  */
+
+import { getSavedStreamingConfig, StreamingCodec } from "./streamingTypes";
 
 /**
  * Instancia del decodificador de video.
@@ -30,31 +32,57 @@ export interface VideoDecoderOptions {
   ctx: CanvasRenderingContext2D;
   /** Callback invocado cuando ocurre un error de decodificación. */
   onError: (message: string) => void;
+  /** Códec de video preferido ('h264' | 'h265' | 'av1'). Si no se especifica, se lee de localStorage */
+  codec?: StreamingCodec;
 }
 
 /**
- * Crea una nueva instancia del decodificador de video H.264 con WebCodecs.
+ * Mapeo de identificadores de códec de SaveCloud a cadenas MIME de WebCodecs.
+ */
+const CODEC_STRINGS: Record<StreamingCodec, string[]> = {
+  h265: ["hev1.1.6.L150.90", "hev1.1.6.L120.90", "hvc1.1.6.L150.90", "avc1.4d002a"],
+  av1: ["av01.0.08M.08", "av01.0.04M.08", "avc1.4d002a"],
+  h264: ["avc1.4d002a", "avc1.42E01E", "avc1.64002A"],
+};
+
+/**
+ * Configura WebCodecs VideoDecoder buscando la primera cadena de códec compatible con la GPU local.
  *
- * @param options - Configuración del decodificador (canvas, contexto 2D, callback de error).
+ * @param decoder Instancia de VideoDecoder
+ * @param targetCodec Códec de la sesión (h264, h265, av1)
+ */
+function configureDecoderWithFallback(decoder: VideoDecoder, targetCodec: StreamingCodec): string {
+  const candidates = CODEC_STRINGS[targetCodec] ?? CODEC_STRINGS.h264;
+  let selectedCodecString = candidates[0];
+
+  for (const str of candidates) {
+    try {
+      decoder.configure({
+        codec: str,
+        hardwareAcceleration: "prefer-hardware",
+        optimizeForLatency: true,
+      });
+      selectedCodecString = str;
+      console.log(`[VideoDecoder] WebCodecs configurado exitosamente con códec: ${str} (${targetCodec})`);
+      break;
+    } catch (e) {
+      console.warn(`[VideoDecoder] No se pudo configurar códec ${str}:`, e);
+    }
+  }
+
+  return selectedCodecString;
+}
+
+/**
+ * Crea una nueva instancia del decodificador de video multicódec con WebCodecs.
+ *
+ * @param options - Configuración del decodificador (canvas, contexto 2D, callback de error, códec).
  * @returns {VideoDecoderInstance} Instancia con métodos para procesar y destruir el decodificador.
- *
- * @example
- * ```ts
- * const videoDecoder = createVideoStreamDecoder({
- *   canvas: canvasElement,
- *   ctx: canvasElement.getContext("2d")!,
- *   onError: (msg) => console.error(msg),
- * });
- *
- * // En el onmessage del WebSocket:
- * videoDecoder.processVideoFrame(buffer, msgType);
- *
- * // Al desmontar:
- * videoDecoder.destroy();
- * ```
  */
 export function createVideoStreamDecoder(options: VideoDecoderOptions): VideoDecoderInstance {
   const { canvas, ctx, onError } = options;
+  const savedConfig = getSavedStreamingConfig();
+  const activeCodec: StreamingCodec = options.codec ?? savedConfig.codec;
 
   let frameCount = 0;
   let hasReceivedKeyFrame = false;
@@ -67,27 +95,46 @@ export function createVideoStreamDecoder(options: VideoDecoderOptions): VideoDec
         return;
       }
 
-      if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
-        console.log("[VideoDecoder] Canvas redimensionado:", frame.displayWidth, "x", frame.displayHeight);
-        canvas.width = frame.displayWidth;
-        canvas.height = frame.displayHeight;
+      const codedW = frame.codedWidth && frame.codedWidth > 0 ? frame.codedWidth : frame.displayWidth;
+      const codedH = frame.codedHeight && frame.codedHeight > 0 ? frame.codedHeight : frame.displayHeight;
+
+      let frameToDraw: VideoFrame = frame;
+      let customFrame: VideoFrame | null = null;
+
+      if (frame.visibleRect && (frame.visibleRect.width < codedW || frame.visibleRect.height < codedH)) {
+        try {
+          customFrame = new VideoFrame(frame, {
+            visibleRect: { x: 0, y: 0, width: codedW, height: codedH },
+          });
+          frameToDraw = customFrame;
+        } catch (e) {
+          console.warn("[VideoDecoder] No se pudo expandir visibleRect:", e);
+        }
       }
 
-      ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
+      if (canvas.width !== codedW || canvas.height !== codedH) {
+        console.log(
+          `[VideoDecoder] Canvas dimensionado a textura completa: ${codedW}x${codedH} (original visibleRect: ${frame.visibleRect?.width}x${frame.visibleRect?.height})`
+        );
+        canvas.width = codedW;
+        canvas.height = codedH;
+      }
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(frameToDraw, 0, 0, codedW, codedH);
+
+      if (customFrame) customFrame.close();
       frame.close();
     },
     error: (e) => {
       if (isDestroyed) return;
-      console.error("[VideoDecoder] Error:", e);
-      onError(`Decoder Error: ${e.message}`);
+      console.error("[VideoDecoder] Error en WebCodecs VideoDecoder:", e);
+      onError(`Error de decodificación WebCodecs (${activeCodec.toUpperCase()}): ${e.message}`);
     },
   });
 
-  decoder.configure({
-    codec: "avc1.4d002a",
-    hardwareAcceleration: "prefer-hardware",
-    optimizeForLatency: true,
-  });
+  const configuredCodecStr = configureDecoderWithFallback(decoder, activeCodec);
 
   /**
    * Procesa una trama de video codificada recibida del WebSocket.
@@ -105,11 +152,15 @@ export function createVideoStreamDecoder(options: VideoDecoderOptions): VideoDec
     if (!hasReceivedKeyFrame) {
       if (!isKeyFrame) return;
       hasReceivedKeyFrame = true;
-      console.log("[VideoDecoder] Primer KeyFrame recibido. Iniciando decodificación.");
+      console.log(
+        `[VideoDecoder] Primer KeyFrame IDR recibido. Decodificando con ${configuredCodecStr} (${activeCodec}).`
+      );
     }
 
     if (frameCount < 10 || isKeyFrame) {
-      console.log(`[VideoDecoder] Trama #${frameCount} (bytes: ${data.byteLength}, keyframe: ${isKeyFrame})`);
+      console.log(
+        `[VideoDecoder] Trama #${frameCount} (${data.byteLength} bytes, keyframe: ${isKeyFrame}, codec: ${activeCodec})`
+      );
     }
 
     try {

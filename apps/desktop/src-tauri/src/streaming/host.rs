@@ -58,8 +58,9 @@ impl SunshineHost {
             let zip_path = self.bin_dir.join("sunshine.zip");
 
             if !self.bin_dir.exists() {
-                std::fs::create_dir_all(&self.bin_dir)
-                    .map_err(|e| StreamingError::Host(format!("Fallo al crear directorio bin: {}", e)))?;
+                std::fs::create_dir_all(&self.bin_dir).map_err(|e| {
+                    StreamingError::Host(format!("Fallo al crear directorio bin: {}", e))
+                })?;
             }
 
             let url = format!(
@@ -70,10 +71,9 @@ impl SunshineHost {
                 .await
                 .map_err(|e| StreamingError::Host(format!("Fallo al descargar Sunshine: {}", e)))?;
 
-            let bytes = response
-                .bytes()
-                .await
-                .map_err(|e| StreamingError::Host(format!("Error leyendo bytes de la descarga: {}", e)))?;
+            let bytes = response.bytes().await.map_err(|e| {
+                StreamingError::Host(format!("Error leyendo bytes de la descarga: {}", e))
+            })?;
 
             std::fs::write(&zip_path, bytes)
                 .map_err(|e| StreamingError::Host(format!("Fallo al guardar el zip: {}", e)))?;
@@ -85,9 +85,9 @@ impl SunshineHost {
                 .map_err(|e| StreamingError::Host(format!("Formato ZIP inválido: {}", e)))?;
 
             for i in 0..archive.len() {
-                let mut entry = archive
-                    .by_index(i)
-                    .map_err(|e| StreamingError::Host(format!("Error leyendo entrada ZIP: {}", e)))?;
+                let mut entry = archive.by_index(i).map_err(|e| {
+                    StreamingError::Host(format!("Error leyendo entrada ZIP: {}", e))
+                })?;
                 let outpath = match entry.enclosed_name() {
                     Some(path) => self.bin_dir.join(path),
                     None => continue,
@@ -101,10 +101,12 @@ impl SunshineHost {
                             std::fs::create_dir_all(p).ok();
                         }
                     }
-                    let mut outfile = std::fs::File::create(&outpath)
-                        .map_err(|e| StreamingError::Host(format!("Error creando archivo extraído: {}", e)))?;
-                    std::io::copy(&mut entry, &mut outfile)
-                        .map_err(|e| StreamingError::Host(format!("Error escribiendo archivo extraído: {}", e)))?;
+                    let mut outfile = std::fs::File::create(&outpath).map_err(|e| {
+                        StreamingError::Host(format!("Error creando archivo extraído: {}", e))
+                    })?;
+                    std::io::copy(&mut entry, &mut outfile).map_err(|e| {
+                        StreamingError::Host(format!("Error escribiendo archivo extraído: {}", e))
+                    })?;
                 }
             }
 
@@ -192,8 +194,9 @@ impl SunshineHost {
 
         if let Some(parent) = state_path.parent() {
             if !parent.exists() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| StreamingError::Config(format!("Fallo al crear config dir: {}", e)))?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    StreamingError::Config(format!("Fallo al crear config dir: {}", e))
+                })?;
             }
         }
 
@@ -251,7 +254,10 @@ impl SunshineHost {
             if let Some(mut stdin) = child.stdin.take() {
                 let pin_str = format!("{}\n", pin);
                 if let Err(e) = stdin.write_all(pin_str.as_bytes()) {
-                    return Err(StreamingError::Host(format!("Fallo al escribir PIN en stdin: {}", e)));
+                    return Err(StreamingError::Host(format!(
+                        "Fallo al escribir PIN en stdin: {}",
+                        e
+                    )));
                 }
                 child.stdin = Some(stdin);
                 return Ok(());
@@ -321,8 +327,9 @@ impl SunshineHost {
             audio_sink_line
         );
 
-        std::fs::write(&conf_path, config_content)
-            .map_err(|e| StreamingError::Config(format!("Fallo al escribir sunshine.conf: {}", e)))?;
+        std::fs::write(&conf_path, config_content).map_err(|e| {
+            StreamingError::Config(format!("Fallo al escribir sunshine.conf: {}", e))
+        })?;
 
         // Generar apps.json asegurando que Desktop use un comando persistente (ping -t)
         // para evitar la terminación inmediata del proceso y del stream.
@@ -354,7 +361,10 @@ impl SunshineHost {
         std::fs::write(&apps_path, apps_content)
             .map_err(|e| StreamingError::Config(format!("Fallo al escribir apps.json: {}", e)))?;
 
-        log::info!("sunshine.conf y apps.json generados exitosamente en {:?}", config_dir);
+        log::info!(
+            "sunshine.conf y apps.json generados exitosamente en {:?}",
+            config_dir
+        );
 
         Ok(())
     }

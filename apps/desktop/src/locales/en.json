@@ -1550,6 +1550,25 @@
       "close": "Close",
       "retry": "Retry"
     },
+    "settings": {
+      "title": "Streaming Quality & Calibration",
+      "subtitle": "Customize performance, latency, and video compression parameters",
+      "presetTitle": "Performance Mode",
+      "presets": {
+        "ultra_low_latency": "Ultra Low Latency",
+        "balanced": "Balanced (1080p60)",
+        "high_fps": "High Performance (120 FPS)",
+        "custom": "Custom"
+      },
+      "resolution": "Display Resolution",
+      "fps": "Frames Per Second (FPS)",
+      "codec": "Video Encoder",
+      "bitrate": "Bitrate (Mbps)",
+      "lowLatency": "Zero Latency Mode",
+      "lowLatencyDesc": "Prioritizes response time over extreme motion smoothness",
+      "audio": "Remote Stereo Audio",
+      "audioDesc": "Stream host audio with high-fidelity PCM decoding"
+    },
     "canvasContextError": "Could not obtain 2D canvas context",
     "wsVideoError": "Error in video WebSocket connection",
     "startingStream": "Starting streaming connection..."

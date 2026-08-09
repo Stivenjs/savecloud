@@ -242,23 +242,41 @@ pub fn get_launch_url_query_parameters() -> String {
     }
 }
 
-/// Configuración de stream con valores razonables para LAN.
-pub fn default_lan_stream_config(width: i32, height: i32, fps: i32) -> STREAM_CONFIGURATION {
+/// Configuración de stream personalizada para LAN con resolución, FPS, bitrate y formato de video dinámico.
+///
+/// # Parámetros
+/// - `width`: Ancho en píxeles (ej. 1920, 2560, 3840).
+/// - `height`: Alto en píxeles (ej. 1080, 1440, 2160).
+/// - `fps`: Tasa de cuadros por segundo (ej. 30, 60, 90, 120).
+/// - `bitrate_kbps`: Tasa de bits en kilobits por segundo (ej. 50000 para 50 Mbps).
+/// - `video_format`: Máscara de formatos de video soportados (`VIDEO_FORMAT_H264`, `VIDEO_FORMAT_H265`, `VIDEO_FORMAT_AV1_MAIN8`).
+pub fn custom_lan_stream_config(
+    width: i32,
+    height: i32,
+    fps: i32,
+    bitrate_kbps: i32,
+    video_format: i32,
+) -> STREAM_CONFIGURATION {
     let mut config: STREAM_CONFIGURATION = unsafe { std::mem::zeroed() };
     initialize_stream_config(&mut config);
 
     config.width = width as c_int;
     config.height = height as c_int;
     config.fps = fps as c_int;
-    config.bitrate = 50_000; // 50 Mbps
+    config.bitrate = bitrate_kbps.max(1_000).min(150_000) as c_int;
     config.packetSize = 1392;
     config.streamingRemotely = STREAM_CFG_LOCAL;
     config.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
-    config.supportedVideoFormats = VIDEO_FORMAT_H264;
+    config.supportedVideoFormats = video_format;
     config.encryptionFlags = ENCFLG_ALL;
     config.clientRefreshRateX100 = (fps * 100) as c_int;
 
     config
+}
+
+/// Configuración de stream con valores razonables por defecto para LAN.
+pub fn default_lan_stream_config(width: i32, height: i32, fps: i32) -> STREAM_CONFIGURATION {
+    custom_lan_stream_config(width, height, fps, 50_000, VIDEO_FORMAT_H264)
 }
 
 use once_cell::sync::Lazy;
@@ -405,5 +423,15 @@ mod tests {
         assert_eq!(config.fps, 60);
         assert_eq!(config.bitrate, 50_000);
         assert_eq!(config.streamingRemotely, STREAM_CFG_LOCAL);
+    }
+
+    #[test]
+    fn test_custom_stream_config() {
+        let config = custom_lan_stream_config(2560, 1440, 120, 60_000, VIDEO_FORMAT_H265);
+        assert_eq!(config.width, 2560);
+        assert_eq!(config.height, 1440);
+        assert_eq!(config.fps, 120);
+        assert_eq!(config.bitrate, 60_000);
+        assert_eq!(config.supportedVideoFormats, VIDEO_FORMAT_H265);
     }
 }
