@@ -113,6 +113,8 @@ jobs:
       SYNC_GAMES_API_KEY: ${{ secrets.SYNC_GAMES_API_KEY }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+      CMAKEFLAGS: "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -143,6 +145,10 @@ jobs:
         run: bun run scripts/sync-version.ts
         env:
           GITHUB_REF: ${{ github.ref }}
+
+      - name: Install dependencies (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: brew install opus pkg-config
 
       # Build deps on Ubuntu; runtime deps for installers live in tauri.conf.json:
       # bundle.linux.deb.depends (apt/dpkg), bundle.linux.rpm.depends (dnf/rpm).
