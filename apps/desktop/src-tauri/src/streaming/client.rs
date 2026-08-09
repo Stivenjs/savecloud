@@ -61,6 +61,7 @@ pub struct MoonlightClient {
     cert_path: PathBuf,
     key_path: PathBuf,
     video_server: Arc<VideoServer>,
+    last_host_ip: Arc<std::sync::Mutex<Option<String>>>,
 }
 
 impl MoonlightClient {
@@ -74,6 +75,7 @@ impl MoonlightClient {
             cert_path,
             key_path,
             video_server: Arc::new(VideoServer::new()),
+            last_host_ip: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
@@ -222,6 +224,10 @@ impl MoonlightClient {
 
         log::info!("Video WebSocket Server listo en puerto {}", ws_port);
 
+        if let Ok(mut guard) = self.last_host_ip.lock() {
+            *guard = Some(host_ip.to_string());
+        }
+
         self.is_connected.store(true, Ordering::SeqCst);
         guard.success = true;
         self.is_connecting.store(false, Ordering::SeqCst);
@@ -321,8 +327,10 @@ impl MoonlightClient {
         // Cancelar cualquier sesión de transmisión activa en Sunshine para aplicar la nueva resolución
         let cancel_url = format!("https://{}:47984/cancel?uniqueid={}", target_ip, unique_id);
         let _ = client.get(&cancel_url).send().await;
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
         let mode_str = format!("{}x{}x{}", options.width, options.height, options.fps);
+
         let url = format!(
             "https://{}:47984/launch?uniqueid={}&uuid={}&appversion=7.1.431.0&appid={}&appname=Desktop&mode={}&rikey={}&rikeyid={}&localAudioPlayMode=0",
             target_ip, unique_id, uuid, app_id, mode_str, rikey_hex, rikey_id
@@ -486,15 +494,38 @@ impl MoonlightClient {
 
     pub fn disconnect(&self) {
         self.is_connecting.store(false, Ordering::SeqCst);
-        if self
-            .is_connected
-            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok()
-        {
-            unsafe { LiStopConnection() };
-            self.video_server.stop();
-            log::info!("MoonlightClient: Desconectado del host y WS detenido");
+        let was_connected = self.is_connected.swap(false, Ordering::SeqCst);
+
+        let host_ip = self.last_host_ip.lock().ok().and_then(|mut g| g.take());
+        let unique_id = self.get_or_create_unique_id().ok();
+
+        if let (Some(target_ip), Some(id)) = (host_ip, unique_id) {
+            let cancel_url = format!("https://{}:47984/cancel?uniqueid={}", target_ip, id);
+            log::info!(
+                "[MoonlightClient] Notificando /cancel al host Sunshine ({})",
+                target_ip
+            );
+            tokio::spawn(async move {
+                let client = reqwest::Client::builder()
+                    .danger_accept_invalid_certs(true)
+                    .timeout(std::time::Duration::from_secs(3))
+                    .build();
+                if let Ok(client) = client {
+                    let _ = client.get(&cancel_url).send().await;
+                }
+            });
         }
+
+        if was_connected {
+            unsafe { LiStopConnection() };
+            log::info!("[MoonlightClient] LiStopConnection ejecutado");
+        }
+
+        self.video_server.stop();
+        reset_bindings_state();
+        super::input_relay::reset_input_relay_state();
+
+        log::info!("[MoonlightClient] Desconectado completamente y estados reseteados");
     }
 }
 

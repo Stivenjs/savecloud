@@ -119,8 +119,12 @@ impl SunshineHost {
     pub async fn start(&self) -> StreamingResult<()> {
         let mut process_guard = self.process.lock().await;
 
-        if process_guard.is_some() {
-            return Ok(());
+        if let Some(child) = process_guard.as_mut() {
+            if let Ok(None) = child.try_wait() {
+                return Ok(());
+            }
+
+            *process_guard = None;
         }
 
         if !self.is_installed() {

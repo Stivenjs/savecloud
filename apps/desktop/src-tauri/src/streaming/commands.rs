@@ -149,12 +149,15 @@ pub async fn streaming_stop(
     state.client.disconnect();
 
     state.host.stop().await.map_err(|e| e.to_string())?;
+    super::bindings::reset_bindings_state();
+    super::input_relay::reset_input_relay_state();
     withdraw_stream_service();
 
     *state.session.lock().unwrap() = HostState::Idle;
     let _ = app.emit("streaming-state-changed", ());
 
     Ok(())
+
 }
 
 /// Obtiene el estado actual del motor de streaming.

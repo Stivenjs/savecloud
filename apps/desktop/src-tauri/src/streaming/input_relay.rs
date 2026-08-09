@@ -181,6 +181,17 @@ impl ControllerState {
             );
         }
     }
+
+    /// Resetea el estado atómico del controlador a valores iniciales.
+    fn reset(&self) {
+        self.buttons.store(0, Ordering::Relaxed);
+        self.left_trigger.store(0, Ordering::Relaxed);
+        self.right_trigger.store(0, Ordering::Relaxed);
+        self.left_stick_x.store(0, Ordering::Relaxed);
+        self.left_stick_y.store(0, Ordering::Relaxed);
+        self.right_stick_x.store(0, Ordering::Relaxed);
+        self.right_stick_y.store(0, Ordering::Relaxed);
+    }
 }
 
 static GAMEPADS: LazyLock<[ControllerState; MAX_GAMEPADS]> = LazyLock::new(|| {
@@ -200,6 +211,17 @@ static REGISTERED_GAMEPADS: LazyLock<[AtomicBool; MAX_GAMEPADS]> = LazyLock::new
         AtomicBool::new(false),
     ]
 });
+
+/// Resetea todo el estado retenido de controladores (para nuevas conexiones / re-conexiones).
+pub fn reset_input_relay_state() {
+    for registered in REGISTERED_GAMEPADS.iter() {
+        registered.store(false, Ordering::Relaxed);
+    }
+    for gamepad in GAMEPADS.iter() {
+        gamepad.reset();
+    }
+    log::info!("[InputRelay] Estado de gamepads reseteado para nueva sesión");
+}
 
 /// Registra la presencia de un mando virtual en Sunshine Host si no se ha notificado aún.
 pub fn register_controller_arrival(player_id: usize) {

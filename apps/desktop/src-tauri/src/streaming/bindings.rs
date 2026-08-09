@@ -490,6 +490,20 @@ pub unsafe extern "C" fn dr_cleanup() {
     }
 }
 
+/// Resetea completamente las variables estáticas y canales globales de Moonlight-C
+/// para garantizar que una re-conexión o nueva sesión inicie limpia.
+pub fn reset_bindings_state() {
+    FIRST_FRAME_RECEIVED.store(false, Ordering::SeqCst);
+    NEGOTIATED_VIDEO_FORMAT.store(0, Ordering::SeqCst);
+    if let Ok(mut guard) = LAST_IDR_FRAME.lock() {
+        *guard = None;
+    }
+    if let Ok(mut guard) = VIDEO_CHANNEL.lock() {
+        *guard = None;
+    }
+    log::info!("[Bindings] Estado de decodificador y canal de video limpiados");
+}
+
 pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> c_int {
     if decodeUnit.is_null() {
         return DR_OK;
