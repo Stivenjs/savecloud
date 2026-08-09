@@ -128,18 +128,33 @@ pub fn handle_window_event(window: &Window, event: &WindowEvent) {
                         .hwnd
                         .store(hwnd.0 as isize, Ordering::Relaxed);
                 }
+                if *focused {
+                    windows_listener::confine_mouse_to_window();
+                } else {
+                    windows_listener::release_mouse_confinement();
+                }
             }
 
             log::info!("[InputListener] Foco de ventana de streaming: {}", focused);
         }
         WindowEvent::Moved(pos) => {
             STREAMING_WINDOW.update_position(pos.x, pos.y);
+            #[cfg(target_os = "windows")]
+            if STREAMING_WINDOW.is_focused() {
+                windows_listener::confine_mouse_to_window();
+            }
         }
         WindowEvent::Resized(size) => {
             STREAMING_WINDOW.update_size(size.width as i32, size.height as i32);
+            #[cfg(target_os = "windows")]
+            if STREAMING_WINDOW.is_focused() {
+                windows_listener::confine_mouse_to_window();
+            }
         }
         WindowEvent::Destroyed => {
             STREAMING_WINDOW.reset();
+            #[cfg(target_os = "windows")]
+            windows_listener::release_mouse_confinement();
             log::info!("[InputListener] Ventana de streaming destruida");
         }
         _ => {}
@@ -152,6 +167,71 @@ mod windows_listener {
     use windows_sys::Win32::Foundation::{POINT, RECT};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
     use windows_sys::Win32::UI::WindowsAndMessaging::*;
+
+    /// Confina el cursor del ratón exclusivamente dentro del área de la ventana de streaming.
+    pub fn confine_mouse_to_window() {
+        let hwnd =
+            STREAMING_WINDOW.hwnd.load(Ordering::Relaxed) as windows_sys::Win32::Foundation::HWND;
+        if hwnd.is_null() {
+            return;
+        }
+
+        let mut rect = RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
+        // SAFETY: GetWindowRect y ClipCursor son invocaciones seguras de la Win32 API.
+        unsafe {
+            if GetWindowRect(hwnd, &mut rect) != 0 {
+                ClipCursor(&rect);
+            }
+        }
+    }
+
+    /// Libera el confinamiento del cursor para navegación libre fuera de la ventana de streaming.
+    pub fn release_mouse_confinement() {
+        // SAFETY: ClipCursor(null) restablece los límites del puntero a toda la pantalla.
+        unsafe {
+            ClipCursor(std::ptr::null());
+        }
+    }
+
+    /// Hook de bajo nivel para interceptar la tecla Windows (VK_LWIN / VK_RWIN) y atajos de liberación.
+    ///
+    /// # Safety
+    /// Callback invocado por el sistema operativo Windows para el hook `WH_KEYBOARD_LL`.
+    pub(super) unsafe extern "system" fn keyboard_hook_proc(
+        n_code: i32,
+        w_param: usize,
+        l_param: isize,
+    ) -> isize {
+        if n_code >= 0 && STREAMING_WINDOW.is_focused() {
+            // SAFETY: l_param apunta a un KBDLLHOOKSTRUCT válido cuando n_code >= 0.
+            let kb = unsafe { *(l_param as *const KBDLLHOOKSTRUCT) };
+            let vk = kb.vkCode as u16;
+
+            // Interceptación de la tecla Windows (VK_LWIN = 0x5B, VK_RWIN = 0x5C)
+            if vk == 0x5B || vk == 0x5C {
+                let is_down = (w_param as u32 == WM_KEYDOWN) || (w_param as u32 == WM_SYSKEYDOWN);
+                let modifiers = build_modifier_flags();
+
+                relay_keyboard_event(vk, is_down, modifiers);
+
+                // Retornar 1 suprime la tecla localmente (evita abrir el Menú Inicio en el cliente)
+                return 1;
+            }
+
+            // Atajo de liberación del mouse: Ctrl + Shift + Alt + Esc (vk = 0x1B) o Q (vk = 0x51)
+            if (vk == 0x1B || vk == 0x51) && (build_modifier_flags() == 0x07) {
+                release_mouse_confinement();
+                log::info!("[InputListener] Atajo de liberación activado: Mouse desconfinado");
+            }
+        }
+
+        unsafe { CallNextHookEx(std::ptr::null_mut(), n_code, w_param, l_param) }
+    }
 
     /// Hook de bajo nivel para interceptar eventos de scroll del ratón.
     ///
@@ -204,16 +284,24 @@ mod windows_listener {
         flags
     }
 
-    /// Hilo del hook de scroll del ratón (WH_MOUSE_LL).
+    /// Hilo del hook de scroll del ratón y teclado (WH_MOUSE_LL y WH_KEYBOARD_LL).
     pub(super) fn spawn_mouse_hook_thread() {
         std::thread::spawn(move || {
-            // SAFETY: Instalamos un hook global de ratón de bajo nivel.
-            let hook = unsafe {
+            // SAFETY: Instalamos un hook global de ratón y teclado de bajo nivel.
+            let mouse_hook = unsafe {
                 SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), std::ptr::null_mut(), 0)
             };
+            let kb_hook = unsafe {
+                SetWindowsHookExW(
+                    WH_KEYBOARD_LL,
+                    Some(keyboard_hook_proc),
+                    std::ptr::null_mut(),
+                    0,
+                )
+            };
 
-            if hook.is_null() {
-                log::error!("[InputListener] No se pudo instalar hook de ratón WH_MOUSE_LL");
+            if mouse_hook.is_null() || kb_hook.is_null() {
+                log::error!("[InputListener] No se pudo instalar hook de ratón o teclado WH_MOUSE_LL / WH_KEYBOARD_LL");
                 return;
             }
 
@@ -226,7 +314,12 @@ mod windows_listener {
                     TranslateMessage(&msg);
                     DispatchMessageW(&msg);
                 }
-                UnhookWindowsHookEx(hook);
+                if !mouse_hook.is_null() {
+                    UnhookWindowsHookEx(mouse_hook);
+                }
+                if !kb_hook.is_null() {
+                    UnhookWindowsHookEx(kb_hook);
+                }
             }
         });
     }
@@ -290,6 +383,11 @@ mod windows_listener {
         let modifiers = build_modifier_flags();
 
         for vk in 1u16..=255 {
+            // Tecla Windows (0x5B y 0x5C) es procesada por el hook WH_KEYBOARD_LL para evitar duplicación
+            if vk == 0x5B || vk == 0x5C {
+                continue;
+            }
+
             // SAFETY: GetAsyncKeyState es thread-safe para lectura de estado global.
             let state = unsafe { GetAsyncKeyState(vk as i32) };
             let is_down = (state as u16 & 0x8000) != 0;
