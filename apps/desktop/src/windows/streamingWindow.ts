@@ -24,7 +24,7 @@ export async function openOrFocusStreamingWindow(wsPort: number): Promise<void> 
     url: windowUrl,
     resizable: true,
     decorations: false,
-    transparent: true,
+    transparent: false,
     maximized: true,
     visible: false,
     center: true,

@@ -133,36 +133,17 @@ export function createVideoStreamDecoder(options: VideoDecoderOptions): VideoDec
         return;
       }
 
-      const codedW = frame.codedWidth && frame.codedWidth > 0 ? frame.codedWidth : frame.displayWidth;
-      const codedH = frame.codedHeight && frame.codedHeight > 0 ? frame.codedHeight : frame.displayHeight;
+      const displayW = frame.displayWidth && frame.displayWidth > 0 ? frame.displayWidth : frame.codedWidth || 1920;
+      const displayH = frame.displayHeight && frame.displayHeight > 0 ? frame.displayHeight : frame.codedHeight || 1080;
 
-      let frameToDraw: VideoFrame = frame;
-      let customFrame: VideoFrame | null = null;
-
-      if (frame.visibleRect && (frame.visibleRect.width < codedW || frame.visibleRect.height < codedH)) {
-        try {
-          customFrame = new VideoFrame(frame, {
-            visibleRect: { x: 0, y: 0, width: codedW, height: codedH },
-          });
-          frameToDraw = customFrame;
-        } catch (e) {
-          console.warn("[VideoDecoder] No se pudo expandir visibleRect:", e);
-        }
-      }
-
-      if (canvas.width !== codedW || canvas.height !== codedH) {
-        console.log(
-          `[VideoDecoder] Canvas dimensionado a textura completa: ${codedW}x${codedH} (original visibleRect: ${frame.visibleRect?.width}x${frame.visibleRect?.height})`
-        );
-        canvas.width = codedW;
-        canvas.height = codedH;
+      if (canvas.width !== displayW || canvas.height !== displayH) {
+        canvas.width = displayW;
+        canvas.height = displayH;
       }
 
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(frameToDraw, 0, 0, codedW, codedH);
-
-      if (customFrame) customFrame.close();
+      ctx.drawImage(frame, 0, 0, displayW, displayH);
       frame.close();
     },
     error: (e) => {
