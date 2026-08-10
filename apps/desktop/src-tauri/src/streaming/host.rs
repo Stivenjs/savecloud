@@ -275,13 +275,14 @@ impl SunshineHost {
     pub async fn stop(&self) -> StreamingResult<()> {
         let mut process_guard = self.process.lock().await;
 
+        let had_process = process_guard.is_some();
         if let Some(mut child) = process_guard.take() {
             let _ = child.kill();
             let _ = child.wait();
         }
 
         #[cfg(target_os = "windows")]
-        {
+        if had_process {
             use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             let _ = std::process::Command::new("taskkill")
@@ -292,6 +293,7 @@ impl SunshineHost {
 
         Ok(())
     }
+
 
     fn generate_config(&self) -> StreamingResult<()> {
         let config_dir = self.bin_dir.join("Sunshine").join("config");

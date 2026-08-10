@@ -5,8 +5,6 @@
 //! el motor de descargas P2P (Torrent), la vigilancia de procesos y los
 //! demonios de sincronización automática.
 
-use crate::system::game_exit_sync;
-//use crate::system::watch_sync;
 use crate::cloud;
 use crate::config::storage_layout::ensure_storage_layout;
 use crate::controller::start_gamepad_loop;
@@ -21,6 +19,7 @@ use crate::sqlite::AppDb;
 use crate::steam_catalog::commands::listing::preload_facets_background;
 use crate::steam_catalog::trending::sync_store_trending;
 use crate::streaming::session::{StreamingState, SunshineShutdownGuard};
+use crate::system::game_exit_sync;
 use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray::tray_state::TrayState;
@@ -263,12 +262,28 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     }
     app.manage(streaming_state);
 
-    app.manage(shutdown_bus);
-    app.manage(coordinator);
-
-    // 8. Controlador de gamepads y entrada nativa de streaming (no necesita guard: es stateless)
+    // 8. Controlador de gamepads y entrada nativa de streaming
     start_gamepad_loop(app.handle().clone());
     crate::streaming::input_listener::start_native_input_listener();
+
+    {
+        let (guard, handle) = ShutdownGuard::new("input_listener", &shutdown_bus.token());
+        let coord = coordinator.clone();
+        tauri::async_runtime::block_on(async move {
+            coord.register(ShutdownPhase::UiAndWatchers, handle).await;
+        });
+
+        let token = guard.token();
+        tauri::async_runtime::spawn(async move {
+            token.cancelled().await;
+            log::info!("[Shutdown] Desinstalando inmediatamente hooks nativos de entrada...");
+            crate::streaming::input_listener::stop_native_input_listener();
+            guard.complete();
+        });
+    }
+
+    app.manage(shutdown_bus);
+    app.manage(coordinator);
 
     spawn_pending_session_poller();
     spawn_lan_presence_advertiser();

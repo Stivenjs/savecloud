@@ -1,14 +1,11 @@
-/**
- * @file StreamingWindowPage.tsx
- * @description Página contenedora de la ventana flotante dedicada de Remote Play.
- * Renderiza el reproductor de video en pantalla completa (100% área) con TitleBar flotante.
- */
-
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { VideoPlayer } from "@components/streaming/VideoPlayer";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { TitleBar } from "@components/layout/TitleBar";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
+import { Maximize2, Minimize2, RefreshCw, X } from "lucide-react";
+import { Button, Tooltip } from "@heroui/react";
 
 /**
  * Vista de ventana independiente de streaming de juego.
@@ -18,6 +15,34 @@ import { useTranslation } from "react-i18next";
 export const StreamingWindowPage = () => {
   const { t } = useTranslation();
   const [wsPort, setWsPort] = useState<number | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(true);
+  const [showToolbar, setShowToolbar] = useState(false);
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      const nextState = await invoke<boolean>("streaming_toggle_fullscreen");
+      setIsFullscreen(nextState);
+    } catch (err) {
+      console.error("Error al alternar pantalla completa:", err);
+    }
+  }, []);
+
+  const releaseInputs = useCallback(async () => {
+    try {
+      await invoke("streaming_release_inputs");
+    } catch (err) {
+      console.error("Error liberando entradas:", err);
+    }
+  }, []);
+
+  const closeWindow = useCallback(async () => {
+    try {
+      const appWindow = getCurrentWebviewWindow();
+      await appWindow.close();
+    } catch (err) {
+      console.error("Error al cerrar ventana de stream:", err);
+    }
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -28,7 +53,25 @@ export const StreamingWindowPage = () => {
 
     const appWindow = getCurrentWebviewWindow();
     appWindow.setTitle(t("remotePlay.windowTitle")).catch(console.error);
-  }, [t]);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // F11: Alternar Pantalla Completa
+      if (e.key === "F11") {
+        e.preventDefault();
+        void toggleFullscreen();
+      }
+      // Ctrl + Shift + Alt + R: Liberación forzada de teclas pegadas
+      if (e.ctrlKey && e.shiftKey && e.altKey && (e.key === "r" || e.key === "R")) {
+        e.preventDefault();
+        void releaseInputs();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [t, toggleFullscreen, releaseInputs]);
 
   if (!wsPort) {
     return (
@@ -43,14 +86,46 @@ export const StreamingWindowPage = () => {
   }
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-black group">
-      {/* Barra de título flotante sutil que se revela al pasar el cursor */}
-      <div className="absolute top-0 inset-x-0 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-linear-to-b from-black/80 via-black/40 to-transparent pb-4">
-        <TitleBar />
-      </div>
+    <div className="relative w-screen h-screen overflow-hidden bg-black select-none">
+      {/* Barra de control flotante superior discreta (Solo visible al activar hover o en modo ventana) */}
+      {!isFullscreen ? (
+        <div className="absolute top-0 inset-x-0 z-50 bg-black/90 border-b border-white/10">
+          <TitleBar />
+        </div>
+      ) : (
+        <div
+          className="absolute top-0 inset-x-0 z-50 flex justify-center pt-1 pb-4 group"
+          onMouseEnter={() => setShowToolbar(true)}
+          onMouseLeave={() => setShowToolbar(false)}>
+          <div
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/80 backdrop-blur-md border border-white/15 shadow-2xl transition-all duration-300 ${
+              showToolbar ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
+            }`}>
+            <Tooltip content="Alternar Pantalla Completa (F11)">
+              <Button size="sm" isIconOnly variant="flat" color="primary" onPress={toggleFullscreen}>
+                {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              </Button>
+            </Tooltip>
+
+            <Tooltip content="Liberar Teclas Pegadas (Ctrl+Shift+Alt+R)">
+              <Button size="sm" isIconOnly variant="flat" color="warning" onPress={releaseInputs}>
+                <RefreshCw size={15} />
+              </Button>
+            </Tooltip>
+
+            <div className="w-px h-4 bg-white/20 my-auto" />
+
+            <Tooltip content="Salir de Streaming">
+              <Button size="sm" isIconOnly variant="flat" color="danger" onPress={closeWindow}>
+                <X size={15} />
+              </Button>
+            </Tooltip>
+          </div>
+        </div>
+      )}
 
       {/* Reproductor de video ocupando el 100% de la ventana sin paddings ni bordes */}
-      <div className="absolute inset-0 z-10 w-full h-full">
+      <div className={`absolute inset-0 z-10 w-full h-full ${!isFullscreen ? "pt-8" : ""}`}>
         <VideoPlayer wsPort={wsPort} />
       </div>
     </div>

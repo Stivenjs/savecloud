@@ -7,19 +7,19 @@ use super::bindings::*;
 use super::error::{StreamingError, StreamingResult};
 use super::tls_override;
 use crate::streaming::video_server::VideoServer;
-use once_cell::sync::Lazy;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use tokio::sync::mpsc;
 
-static SESSION_URL_REGEX: Lazy<regex::Regex> =
-    Lazy::new(|| regex::Regex::new(r"<sessionUrl0>(.*?)</sessionUrl0>").unwrap());
+static SESSION_URL_REGEX: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"<sessionUrl0>(.*?)</sessionUrl0>").unwrap());
 
-static DESKTOP_APP_ID_REGEX: Lazy<regex::Regex> = Lazy::new(|| {
+static DESKTOP_APP_ID_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(r"(?s)<App>.*?<AppTitle>Desktop</AppTitle>.*?<ID>(.*?)</ID>.*?<\/App>")
         .unwrap()
 });
+
 
 /// Opciones configurables para la sesión de streaming de video/audio.
 #[derive(Debug, Clone)]

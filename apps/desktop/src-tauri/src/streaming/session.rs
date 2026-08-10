@@ -68,8 +68,15 @@ impl Drop for SunshineShutdownGuard {
     fn drop(&mut self) {
         log::info!("Apagando Sunshine debido a cierre de la aplicación...");
         let host = self.host.clone();
-        tauri::async_runtime::block_on(async move {
-            let _ = host.stop().await;
-        });
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn(async move {
+                let _ = host.stop().await;
+            });
+        } else {
+            tauri::async_runtime::block_on(async move {
+                let _ = host.stop().await;
+            });
+        }
     }
 }
+

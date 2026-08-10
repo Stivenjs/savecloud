@@ -5,7 +5,7 @@
 
 use super::discovery::{discover_stream_hosts, withdraw_stream_service, DiscoveredStreamHost};
 use super::session::{HostState, StreamingState};
-use tauri::{command, AppHandle, Emitter, State};
+use tauri::{command, AppHandle, Emitter, Manager, State};
 
 /// Busca otros hosts de SaveCloud en la red local que estén emitiendo un juego.
 #[command]
@@ -189,3 +189,28 @@ pub fn get_audio_output_device() -> Result<Option<String>, String> {
     let settings = crate::config::load_settings();
     Ok(settings.audio_output_device)
 }
+
+/// Libera inmediatamente todas las teclas de teclado y ratón pegadas en el host remoto.
+#[command]
+pub fn streaming_release_inputs() -> Result<(), String> {
+    super::input_relay::release_all_keyboard_keys();
+    #[cfg(target_os = "windows")]
+    super::input_listener::release_all_active_keys();
+    log::info!("Comando: Liberación forzada de teclas ejecutada");
+    Ok(())
+}
+
+/// Alterna el estado de Pantalla Completa de la ventana de streaming.
+#[command]
+pub async fn streaming_toggle_fullscreen(app: AppHandle) -> Result<bool, String> {
+    if let Some(window) = app.get_webview_window("streaming-window") {
+        let is_fullscreen = window.is_fullscreen().map_err(|e| e.to_string())?;
+        let next_state = !is_fullscreen;
+        window.set_fullscreen(next_state).map_err(|e| e.to_string())?;
+        log::info!("Comando: Pantalla completa alternada a: {}", next_state);
+        Ok(next_state)
+    } else {
+        Err("Ventana de streaming no encontrada".into())
+    }
+}
+

@@ -5,15 +5,14 @@
 //! encontrar otros miembros de SaveCloud que estén transmitiendo un juego.
 
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
-use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
-use std::sync::Mutex;
+use std::sync::{LazyLock, Mutex};
 
 const STREAM_SERVICE_TYPE: &str = "_sc-stream._tcp.local.";
 
-static MDNS_DAEMON: Lazy<Mutex<Option<ServiceDaemon>>> = Lazy::new(|| Mutex::new(None));
-static LAST_PUBLISHED: Lazy<Mutex<Option<(String, u16)>>> = Lazy::new(|| Mutex::new(None));
+static MDNS_DAEMON: LazyLock<Mutex<Option<ServiceDaemon>>> = LazyLock::new(|| Mutex::new(None));
+static LAST_PUBLISHED: LazyLock<Mutex<Option<(String, u16)>>> = LazyLock::new(|| Mutex::new(None));
 
 fn daemon() -> Result<std::sync::MutexGuard<'static, Option<ServiceDaemon>>, String> {
     MDNS_DAEMON.lock().map_err(|e| format!("mDNS lock: {}", e))
@@ -63,7 +62,10 @@ pub fn publish_stream_service(
     if guard.is_none() {
         *guard = Some(ServiceDaemon::new().map_err(|e| format!("mDNS daemon: {}", e))?);
     }
-    let daemon = guard.as_ref().expect("daemon just set");
+    let daemon = match guard.as_ref() {
+        Some(d) => d,
+        None => return Err("Fallo al acceder al daemon mDNS".into()),
+    };
 
     let host = gethostname::gethostname().to_string_lossy().into_owned();
     let instance = format!("stream-{device_id}");
@@ -121,20 +123,19 @@ pub fn withdraw_stream_service() {
     log::info!("Host de streaming retirado");
 }
 
-/// Busca hosts de streaming en la LAN durante `timeout_secs` segundos.
+/// Busca hosts de streaming en la LAN durante `timeout_secs` segundos deduplicando por device_id.
 pub async fn discover_stream_hosts(timeout_secs: u64) -> Result<Vec<DiscoveredStreamHost>, String> {
     let d = ServiceDaemon::new().map_err(|e| format!("Fallo al iniciar mDNS: {}", e))?;
     let receiver = d
         .browse(STREAM_SERVICE_TYPE)
         .map_err(|e| format!("mDNS browse: {}", e))?;
 
-    let mut hosts = Vec::new();
+    let mut host_map: HashMap<String, DiscoveredStreamHost> = HashMap::new();
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(timeout_secs);
 
     while start.elapsed() < timeout {
-        if let Ok(event) = receiver.recv_timeout(std::time::Duration::from_millis(500)) {
-            log::info!("mDNS Event: {:?}", event);
+        if let Ok(event) = receiver.recv_timeout(std::time::Duration::from_millis(300)) {
             if let ServiceEvent::ServiceResolved(info) = event {
                 let properties = info.get_properties();
 
@@ -167,22 +168,38 @@ pub async fn discover_stream_hosts(timeout_secs: u64) -> Result<Vec<DiscoveredSt
                         .unwrap_or_default();
                 }
 
-                log::info!("mDNS Host resuelto: hostname={}, ip={}, device_id={}", info.get_hostname(), ip, device_id);
+                if !ip.is_empty() {
+                    let key = if !device_id.is_empty() {
+                        device_id.clone()
+                    } else {
+                        format!("{}:{}", ip, info.get_port())
+                    };
 
-                if !device_id.is_empty() && !ip.is_empty() {
-                    hosts.push(DiscoveredStreamHost {
-                        device_id,
-                        user_id,
+                    log::info!(
+                        "mDNS Host resuelto (dedup key={}): hostname={}, ip={}, device_id={}",
+                        key,
+                        info.get_hostname(),
                         ip,
-                        port: info.get_port(),
-                        savecloud_port,
-                        hostname: info.get_hostname().to_string(),
-                    });
+                        device_id
+                    );
+
+                    host_map.insert(
+                        key,
+                        DiscoveredStreamHost {
+                            device_id,
+                            user_id,
+                            ip,
+                            port: info.get_port(),
+                            savecloud_port,
+                            hostname: info.get_hostname().to_string(),
+                        },
+                    );
                 }
             }
         }
     }
 
     let _ = d.shutdown();
-    Ok(hosts)
+    Ok(host_map.into_values().collect())
 }
+
