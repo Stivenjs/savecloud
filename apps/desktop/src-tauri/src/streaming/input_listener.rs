@@ -8,7 +8,7 @@
 //! - **Windows** — Hooks de bajo nivel (`WH_MOUSE_LL`) + polling `GetAsyncKeyState`.
 //! - **macOS / Linux** — Librería `rdev` con escucha global de eventos.
 
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicU32, Ordering};
 use std::time::Duration;
 
 use tauri::{Window, WindowEvent};
@@ -22,6 +22,9 @@ const POLL_INTERVAL: Duration = Duration::from_millis(4);
 
 /// Etiqueta de la ventana de streaming en Tauri.
 const STREAMING_WINDOW_LABEL: &str = "streaming-window";
+
+/// Estado de ejecución global del listener nativo.
+static IS_LISTENER_RUNNING: AtomicBool = AtomicBool::new(true);
 
 /// Métricas globales de la ventana de streaming, agrupadas en un solo struct
 /// para mantener la cohesión y evitar atomics dispersos.
@@ -89,7 +92,6 @@ impl WindowMetrics {
 pub static STREAMING_WINDOW: WindowMetrics = WindowMetrics::new();
 
 // Aliases estáticos para compatibilidad con módulos que referencian los nombres anteriores.
-// En futuras iteraciones estos pueden eliminarse en favor de `STREAMING_WINDOW.field`.
 #[expect(
     dead_code,
     reason = "Aliases de compatibilidad para módulos que usen los nombres anteriores"
@@ -131,6 +133,7 @@ pub fn handle_window_event(window: &Window, event: &WindowEvent) {
                 if *focused {
                     windows_listener::confine_mouse_to_window();
                 } else {
+                    windows_listener::release_all_active_keys();
                     windows_listener::release_mouse_confinement();
                 }
             }
@@ -154,7 +157,10 @@ pub fn handle_window_event(window: &Window, event: &WindowEvent) {
         WindowEvent::Destroyed => {
             STREAMING_WINDOW.reset();
             #[cfg(target_os = "windows")]
-            windows_listener::release_mouse_confinement();
+            {
+                windows_listener::release_all_active_keys();
+                windows_listener::release_mouse_confinement();
+            }
             log::info!("[InputListener] Ventana de streaming destruida");
         }
         _ => {}
@@ -162,13 +168,22 @@ pub fn handle_window_event(window: &Window, event: &WindowEvent) {
 }
 
 #[cfg(target_os = "windows")]
-mod windows_listener {
+pub mod windows_listener {
     use super::*;
     use windows_sys::Win32::Foundation::{POINT, RECT};
+    use windows_sys::Win32::Graphics::Gdi::{ClientToScreen, ScreenToClient};
+    use windows_sys::Win32::System::Threading::GetCurrentThreadId;
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
     use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
-    /// Confina el cursor del ratón exclusivamente dentro del área de la ventana de streaming.
+    static HOOK_THREAD_ID: AtomicU32 = AtomicU32::new(0);
+
+    /// Libera todas las teclas de teclado activas enviando eventos KEY_ACTION_UP hacia el host.
+    pub fn release_all_active_keys() {
+        super::super::input_relay::release_all_keyboard_keys();
+    }
+
+    /// Confina el cursor del ratón exclusivamente dentro del área cliente real de la ventana.
     pub fn confine_mouse_to_window() {
         let hwnd =
             STREAMING_WINDOW.hwnd.load(Ordering::Relaxed) as windows_sys::Win32::Foundation::HWND;
@@ -176,16 +191,34 @@ mod windows_listener {
             return;
         }
 
-        let mut rect = RECT {
+        let mut client_rect = RECT {
             left: 0,
             top: 0,
             right: 0,
             bottom: 0,
         };
-        // SAFETY: GetWindowRect y ClipCursor son invocaciones seguras de la Win32 API.
+        // SAFETY: GetClientRect y ClientToScreen mapean de manera precisa el área interna.
         unsafe {
-            if GetWindowRect(hwnd, &mut rect) != 0 {
-                ClipCursor(&rect);
+            if GetClientRect(hwnd, &mut client_rect) != 0 {
+                let mut top_left = POINT {
+                    x: client_rect.left,
+                    y: client_rect.top,
+                };
+                let mut bottom_right = POINT {
+                    x: client_rect.right,
+                    y: client_rect.bottom,
+                };
+                if ClientToScreen(hwnd, &mut top_left) != 0
+                    && ClientToScreen(hwnd, &mut bottom_right) != 0
+                {
+                    let screen_rect = RECT {
+                        left: top_left.x,
+                        top: top_left.y,
+                        right: bottom_right.x,
+                        bottom: bottom_right.y,
+                    };
+                    ClipCursor(&screen_rect);
+                }
             }
         }
     }
@@ -198,6 +231,20 @@ mod windows_listener {
         }
     }
 
+    /// Desinstala inmediatamente los hooks nativos de Windows en el cierre de la app.
+    pub fn stop_hooks_thread() {
+        release_mouse_confinement();
+        release_all_active_keys();
+
+        let thread_id = HOOK_THREAD_ID.swap(0, Ordering::Relaxed);
+        if thread_id != 0 {
+            // SAFETY: PostThreadMessageW envía WM_QUIT al hilo del hook para terminar el loop GetMessageW limpiamente.
+            unsafe {
+                PostThreadMessageW(thread_id, WM_QUIT, 0, 0);
+            }
+        }
+    }
+
     /// Hook de bajo nivel para interceptar la tecla Windows (VK_LWIN / VK_RWIN) y atajos de liberación.
     ///
     /// # Safety
@@ -207,6 +254,10 @@ mod windows_listener {
         w_param: usize,
         l_param: isize,
     ) -> isize {
+        if !IS_LISTENER_RUNNING.load(Ordering::Relaxed) {
+            return unsafe { CallNextHookEx(std::ptr::null_mut(), n_code, w_param, l_param) };
+        }
+
         if n_code >= 0 && STREAMING_WINDOW.is_focused() {
             // SAFETY: l_param apunta a un KBDLLHOOKSTRUCT válido cuando n_code >= 0.
             let kb = unsafe { *(l_param as *const KBDLLHOOKSTRUCT) };
@@ -244,6 +295,10 @@ mod windows_listener {
         w_param: usize,
         l_param: isize,
     ) -> isize {
+        if !IS_LISTENER_RUNNING.load(Ordering::Relaxed) {
+            return unsafe { CallNextHookEx(std::ptr::null_mut(), n_code, w_param, l_param) };
+        }
+
         if n_code >= 0 && STREAMING_WINDOW.is_focused() && w_param as u32 == WM_MOUSEWHEEL {
             // SAFETY: l_param apunta a un MSLLHOOKSTRUCT válido cuando n_code >= 0.
             let ms = unsafe { *(l_param as *const MSLLHOOKSTRUCT) };
@@ -287,6 +342,9 @@ mod windows_listener {
     /// Hilo del hook de scroll del ratón y teclado (WH_MOUSE_LL y WH_KEYBOARD_LL).
     pub(super) fn spawn_mouse_hook_thread() {
         std::thread::spawn(move || {
+            let tid = unsafe { GetCurrentThreadId() };
+            HOOK_THREAD_ID.store(tid, Ordering::Relaxed);
+
             // SAFETY: Instalamos un hook global de ratón y teclado de bajo nivel.
             let mouse_hook = unsafe {
                 SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), std::ptr::null_mut(), 0)
@@ -306,11 +364,12 @@ mod windows_listener {
             }
 
             // Bomba de mensajes requerida para que el hook funcione.
-            // SAFETY: MSG es un struct POD sin invariantes; zeroed es válido.
             let mut msg = unsafe { std::mem::zeroed::<MSG>() };
-            // SAFETY: GetMessageW bloquea hasta recibir un mensaje. Loop estándar de Windows.
+            // SAFETY: GetMessageW bloquea hasta recibir un mensaje.
             unsafe {
-                while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                while IS_LISTENER_RUNNING.load(Ordering::Relaxed)
+                    && GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0
+                {
                     TranslateMessage(&msg);
                     DispatchMessageW(&msg);
                 }
@@ -321,6 +380,7 @@ mod windows_listener {
                     UnhookWindowsHookEx(kb_hook);
                 }
             }
+            log::info!("[InputListener] Hilo Win32 Hook desinstalado exitosamente");
         });
     }
 
@@ -330,8 +390,12 @@ mod windows_listener {
             let mut prev_keys = [false; 256];
 
             loop {
+                if !IS_LISTENER_RUNNING.load(Ordering::Relaxed) {
+                    break;
+                }
+
                 if !STREAMING_WINDOW.is_focused() {
-                    prev_keys.fill(false);
+                    release_keys_if_needed(&mut prev_keys);
                     std::thread::sleep(POLL_INTERVAL);
                     continue;
                 }
@@ -343,7 +407,27 @@ mod windows_listener {
         });
     }
 
-    /// Lee la posición del cursor y la convierte a coordenadas relativas de la ventana.
+    /// Si hay teclas guardadas como presionadas al perder foco, se envía liberación a Sunshine.
+    fn release_keys_if_needed(prev_keys: &mut [bool; 256]) {
+        let has_any_down = prev_keys.iter().any(|&down| down);
+        if has_any_down {
+            for vk in 1u16..=255 {
+                if prev_keys[vk as usize] {
+                    prev_keys[vk as usize] = false;
+                    if (0x01..=0x06).contains(&vk) {
+                        if let Some(btn) = vk_to_mouse_button(vk) {
+                            relay_mouse_button(btn, false);
+                        }
+                    } else {
+                        relay_keyboard_event(vk, false, 0);
+                    }
+                }
+            }
+            release_all_active_keys();
+        }
+    }
+
+    /// Lee la posición del cursor usando el área cliente interna 1:1 de la ventana.
     fn poll_cursor_position() {
         let hwnd =
             STREAMING_WINDOW.hwnd.load(Ordering::Relaxed) as windows_sys::Win32::Foundation::HWND;
@@ -353,27 +437,28 @@ mod windows_listener {
         }
 
         let mut cursor_pos = POINT { x: 0, y: 0 };
-        let mut window_rect = RECT {
+        let mut client_rect = RECT {
             left: 0,
             top: 0,
             right: 0,
             bottom: 0,
         };
 
-        // SAFETY: Ambas funciones son thread-safe para lectura de estado.
+        // SAFETY: ScreenToClient y GetClientRect obtienen las coordenadas exactas de la superficie de renderizado.
         let cursor_ok = unsafe { GetCursorPos(&mut cursor_pos) } != 0;
-        let rect_ok = unsafe { GetWindowRect(hwnd, &mut window_rect) } != 0;
+        let client_ok = unsafe { GetClientRect(hwnd, &mut client_rect) } != 0;
+        let screen_to_client_ok = unsafe { ScreenToClient(hwnd, &mut cursor_pos) } != 0;
 
-        if !cursor_ok || !rect_ok {
+        if !cursor_ok || !client_ok || !screen_to_client_ok {
             return;
         }
 
-        let width = (window_rect.right - window_rect.left) as i16;
-        let height = (window_rect.bottom - window_rect.top) as i16;
+        let width = (client_rect.right - client_rect.left) as i16;
+        let height = (client_rect.bottom - client_rect.top) as i16;
 
         if width > 0 && height > 0 {
-            let rel_x = (cursor_pos.x - window_rect.left).clamp(0, width as i32) as i16;
-            let rel_y = (cursor_pos.y - window_rect.top).clamp(0, height as i32) as i16;
+            let rel_x = cursor_pos.x.clamp(0, width as i32) as i16;
+            let rel_y = cursor_pos.y.clamp(0, height as i32) as i16;
             relay_mouse_position(rel_x, rel_y, width, height);
         }
     }
@@ -680,6 +765,7 @@ mod posix_listener {
 /// Inicia el hilo nativo de Rust para capturar entradas físicas de Teclado y Ratón
 /// cuando la ventana de streaming está enfocada.
 pub fn start_native_input_listener() {
+    IS_LISTENER_RUNNING.store(true, Ordering::SeqCst);
     #[cfg(target_os = "windows")]
     {
         windows_listener::spawn_mouse_hook_thread();
@@ -690,4 +776,20 @@ pub fn start_native_input_listener() {
     {
         posix_listener::spawn_rdev_listener();
     }
+}
+
+/// Detiene y desinstala inmediatamente los escuchadores nativos de entrada al cerrar la app o destruir la ventana.
+pub fn stop_native_input_listener() {
+    IS_LISTENER_RUNNING.store(false, Ordering::SeqCst);
+    #[cfg(target_os = "windows")]
+    {
+        windows_listener::stop_hooks_thread();
+    }
+    log::info!("[InputListener] Escuchadores nativos de entrada detenidos limpiamente");
+}
+
+/// Libera todas las teclas de teclado activas enviando eventos KEY_ACTION_UP hacia el host.
+pub fn release_all_active_keys() {
+    #[cfg(target_os = "windows")]
+    windows_listener::release_all_active_keys();
 }

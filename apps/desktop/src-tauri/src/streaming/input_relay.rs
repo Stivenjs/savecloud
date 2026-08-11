@@ -307,6 +307,23 @@ pub fn relay_keyboard_event(vk_code: u16, is_down: bool, modifiers: u8) {
     send_keyboard_event(vk_code as i16, action, modifiers as i8);
 }
 
+/// Envía eventos de liberación (KEY_ACTION_UP) para todas las teclas modificadoras y especiales hacia el host.
+pub fn release_all_keyboard_keys() {
+    let modifier_vks: [u16; 12] = [
+        0xA0, 0xA1, // LShift, RShift
+        0xA2, 0xA3, // LControl, RControl
+        0xA4, 0xA5, // LAlt, RAlt
+        0x5B, 0x5C, // LWin, RWin
+        0x09, 0x1B, // Tab, Esc
+        0x12, 0x11, // Alt, Ctrl (generic)
+    ];
+    for vk in modifier_vks {
+        send_keyboard_event(vk as i16, KEY_ACTION_UP, 0);
+    }
+    log::info!("[InputRelay] Teclas modificadoras liberadas en el Host Sunshine");
+}
+
+
 /// Transmite un movimiento relativo de ratón (ideal para FPS / Juegos 3D).
 #[expect(
     dead_code,

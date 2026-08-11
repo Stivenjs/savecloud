@@ -53,7 +53,8 @@ export const LanHostList = ({ isOpen, onClose, config }: LanHostListProps) => {
     setIsSearching(true);
     try {
       const found = await invoke<DiscoveredStreamHost[]>("streaming_discover_lan", { timeoutSecs: 3 });
-      setHosts(found);
+      const uniqueHosts = Array.from(new Map(found.map((h) => [h.device_id || `${h.ip}:${h.port}`, h])).values());
+      setHosts(uniqueHosts);
     } catch (err) {
       console.error("Error buscando hosts LAN:", err);
     } finally {
