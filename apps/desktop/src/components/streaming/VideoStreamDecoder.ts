@@ -6,6 +6,9 @@
  * las decodifica usando aceleración por hardware (GPU) y renderiza
  * cada fotograma en un HTMLCanvasElement.
  *
+ * Incluye corrección dinámica de metadatos NAL (sobrescritura de visibleRect) para evitar
+ * recortes cuando la GPU entrega resoluciones codificadas con alineación de macrobloques.
+ *
  * Optimizado para baja latencia en streaming de juegos remotos.
  */
 
@@ -28,7 +31,7 @@ export interface VideoDecoderInstance {
  * Opciones de configuración para el decodificador de video.
  */
 export interface VideoDecoderOptions {
-  /** Elemento canvas donde se renderización los fotogramas. */
+  /** Elemento canvas donde se renderizan los fotogramas. */
   canvas: HTMLCanvasElement;
   /** Contexto 2D del canvas. */
   ctx: CanvasRenderingContext2D;
@@ -40,7 +43,6 @@ export interface VideoDecoderOptions {
 
 /**
  * Mapeo de identificadores de códec de SaveCloud a cadenas MIME estrictas de WebCodecs.
- * No incluye fallbacks entre códecs distintos (ej. H.264 no puede decodificar fotogramas H.265).
  */
 const CODEC_STRINGS: Record<StreamingCodec, string[]> = {
   h265: ["hev1.1.6.L150.90", "hev1.1.6.L120.90", "hvc1.1.6.L150.90", "hev1.1.6.L93.90"],
@@ -112,7 +114,61 @@ function configureDecoderWithFallback(decoder: VideoDecoder, targetCodec: Stream
 }
 
 /**
- * Crea una nueva instancia del decodificador de video multicódec con WebCodecs.
+ * Calcula de forma 100% dinámica las dimensiones visibles reales de un fotograma,
+ * ajustando automáticamente los márgenes de alineación por macrobloques (16x16) de la GPU.
+ *
+ * @param {VideoFrame} frame Fotograma decodificado recibido de WebCodecs
+ * @returns {{ width: number, height: number }} Dimensiones reales del área de video activa
+ */
+function calculateDynamicDimensions(frame: VideoFrame): { width: number; height: number } {
+  const width = frame.codedWidth && frame.codedWidth > 0 ? frame.codedWidth : frame.displayWidth || 1920;
+
+  let height: number;
+  if (frame.codedHeight && frame.codedHeight > 0) {
+    // Si la altura codificada incluye padding de alineación de macrobloques (ej. 1088 = 1080 + 8)
+    if (frame.codedHeight % 16 === 8) {
+      height = frame.codedHeight - 8;
+    } else if (frame.displayHeight && frame.displayHeight > 0 && frame.codedHeight - frame.displayHeight <= 16) {
+      height = frame.displayHeight;
+    } else {
+      height = frame.codedHeight;
+    }
+  } else {
+    height = frame.displayHeight || 1080;
+  }
+
+  return { width, height };
+}
+
+/**
+ * Inspecciona los metadatos del fotograma decodificado y, de ser necesario, genera un wrapper
+ * de VideoFrame con la región visible (visibleRect) corregida dinámicamente de borde a borde.
+ *
+ * @param {VideoFrame} frame Fotograma decodificado original
+ * @returns {{ renderFrame: VideoFrame; isCloned: boolean }} Objeto renderizable y bandera de clonación para liberar memoria
+ */
+function getCorrectedVideoFrame(frame: VideoFrame): { renderFrame: VideoFrame; isCloned: boolean } {
+  if (frame.codedWidth && frame.displayWidth && frame.codedWidth > frame.displayWidth) {
+    const { width, height } = calculateDynamicDimensions(frame);
+    try {
+      const renderFrame = new VideoFrame(frame, {
+        visibleRect: {
+          x: 0,
+          y: 0,
+          width,
+          height,
+        },
+      });
+      return { renderFrame, isCloned: true };
+    } catch (e) {
+      console.warn("[VideoDecoder] No se pudo sobrescribir visibleRect dinámico:", e);
+    }
+  }
+  return { renderFrame: frame, isCloned: false };
+}
+
+/**
+ * Crea una nueva instancia del decodificador de video multicódec con WebCodecs API.
  *
  * @param {VideoDecoderOptions} options Configuración del decodificador (canvas, contexto 2D, callback de error, códec).
  * @returns {VideoDecoderInstance} Instancia con métodos para procesar, reconfigurar y destruir el decodificador.
@@ -133,17 +189,27 @@ export function createVideoStreamDecoder(options: VideoDecoderOptions): VideoDec
         return;
       }
 
-      const displayW = frame.displayWidth && frame.displayWidth > 0 ? frame.displayWidth : frame.codedWidth || 1920;
-      const displayH = frame.displayHeight && frame.displayHeight > 0 ? frame.displayHeight : frame.codedHeight || 1080;
+      frameCount++;
 
-      if (canvas.width !== displayW || canvas.height !== displayH) {
-        canvas.width = displayW;
-        canvas.height = displayH;
+      const { renderFrame, isCloned } = getCorrectedVideoFrame(frame);
+      const { width: dynamicW, height: dynamicH } = calculateDynamicDimensions(frame);
+
+      // Sincronización 1-a-1 de la resolución del canvas con el layout físico de la ventana o el fotograma dinámico
+      const targetW = canvas.clientWidth && canvas.clientWidth > 0 ? canvas.clientWidth : dynamicW;
+      const targetH = canvas.clientHeight && canvas.clientHeight > 0 ? canvas.clientHeight : dynamicH;
+
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
       }
 
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(frame, 0, 0, displayW, displayH);
+      ctx.drawImage(renderFrame, 0, 0, canvas.width, canvas.height);
+
+      if (isCloned) {
+        renderFrame.close();
+      }
       frame.close();
     },
     error: (e) => {
@@ -195,12 +261,6 @@ export function createVideoStreamDecoder(options: VideoDecoderOptions): VideoDec
       );
     }
 
-    if (frameCount < 10 || isKeyFrame) {
-      console.log(
-        `[VideoDecoder] Trama #${frameCount} (${data.byteLength} bytes, keyframe: ${isKeyFrame}, codec: ${activeCodec})`
-      );
-    }
-
     try {
       const chunk = new EncodedVideoChunk({
         timestamp: performance.now() * 1000,
@@ -209,7 +269,6 @@ export function createVideoStreamDecoder(options: VideoDecoderOptions): VideoDec
       });
 
       decoder.decode(chunk);
-      frameCount++;
     } catch (e) {
       console.error("[VideoDecoder] Error al decodificar chunk:", e);
     }

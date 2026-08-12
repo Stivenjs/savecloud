@@ -435,7 +435,7 @@ async fn handle_streaming_pair(
         if let Some(host) = host_to_restart {
             log::info!("Reiniciando Sunshine para aplicar el nuevo cliente emparejado...");
             let _ = host.stop().await;
-            let _ = host.start().await;
+            let _ = host.start(None).await;
             tokio::time::sleep(std::time::Duration::from_millis(3000)).await;
         }
 

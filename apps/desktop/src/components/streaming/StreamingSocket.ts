@@ -45,6 +45,8 @@ export interface StreamingSocketOptions {
   onError: (message: string) => void;
   /** Callback invocado cuando la conexión se establece exitosamente. */
   onConnected: () => void;
+  /** Callback invocado cuando la recepción de cuadros de video se congela o reanuda. */
+  onStalled?: (isStalled: boolean) => void;
   /** Callback para obtener el texto de error de reconexión (i18n). */
   getReconnectErrorMessage: () => string;
 }
@@ -58,12 +60,15 @@ export interface StreamingSocketOptions {
  * @returns {StreamingSocketInstance} Instancia con método `destroy`.
  */
 export function createStreamingSocket(options: StreamingSocketOptions): StreamingSocketInstance {
-  const { wsPort, audioPlayer, videoDecoder, onError, onConnected, getReconnectErrorMessage } = options;
+  const { wsPort, audioPlayer, videoDecoder, onError, onConnected, onStalled, getReconnectErrorMessage } = options;
 
   let ws: WebSocket | null = null;
   let retryCount = 0;
   let isDestroyed = false;
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  let lastVideoFrameTime = Date.now();
+  let isStalledState = false;
+  let stallCheckInterval: ReturnType<typeof setInterval> | null = null;
 
   /** Limpia todos los handlers y cierra el WebSocket actual. */
   const cleanupWs = (): void => {
@@ -105,7 +110,18 @@ export function createStreamingSocket(options: StreamingSocketOptions): Streamin
         if (isDestroyed) return;
         console.log("[StreamingSocket] Conectado al servidor de streaming");
         retryCount = 0;
+        lastVideoFrameTime = Date.now();
         onConnected();
+
+        if (stallCheckInterval) clearInterval(stallCheckInterval);
+        stallCheckInterval = setInterval(() => {
+          if (isDestroyed || !ws || ws.readyState !== WebSocket.OPEN) return;
+          const diff = Date.now() - lastVideoFrameTime;
+          if (diff > 3500 && !isStalledState) {
+            isStalledState = true;
+            onStalled?.(true);
+          }
+        }, 1000);
       };
 
       ws.onmessage = (event) => {
@@ -132,6 +148,11 @@ export function createStreamingSocket(options: StreamingSocketOptions): Streamin
         if (msgType === 2) {
           audioPlayer?.processAudioMessage(buffer);
         } else {
+          lastVideoFrameTime = Date.now();
+          if (isStalledState) {
+            isStalledState = false;
+            onStalled?.(false);
+          }
           videoDecoder.processVideoFrame(buffer, msgType);
         }
       };
@@ -139,6 +160,10 @@ export function createStreamingSocket(options: StreamingSocketOptions): Streamin
       ws.onclose = () => {
         if (isDestroyed) return;
         console.log("[StreamingSocket] Conexión cerrada");
+        if (isStalledState) {
+          isStalledState = false;
+          onStalled?.(false);
+        }
         scheduleReconnect();
       };
 
@@ -161,6 +186,10 @@ export function createStreamingSocket(options: StreamingSocketOptions): Streamin
     if (reconnectTimeout) {
       clearTimeout(reconnectTimeout);
       reconnectTimeout = null;
+    }
+    if (stallCheckInterval) {
+      clearInterval(stallCheckInterval);
+      stallCheckInterval = null;
     }
     cleanupWs();
   };

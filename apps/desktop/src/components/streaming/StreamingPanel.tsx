@@ -8,7 +8,7 @@ import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button, Card, CardHeader, CardBody, Slider, Switch, Chip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
-import { Video, Monitor, Gamepad2, Sliders, ShieldCheck, Zap, Layers } from "lucide-react";
+import { Video, Monitor, Gamepad2, Sliders, ShieldCheck, Zap, Layers, Radio, UserX } from "lucide-react";
 import { HostSetupModal } from "@components/streaming/HostSetupModal";
 import { LanHostList } from "@components/streaming/LanHostList";
 import { ClientConnectModal } from "@components/streaming/ClientConnectModal";
@@ -55,6 +55,17 @@ export const StreamingPanel = () => {
     isPlaying && typeof state === "object" && state !== null && "Playing" in state ? state.Playing.host_ip : "";
   const hostingPin =
     isHosting && typeof state === "object" && state !== null && "Hosting" in state ? state.Hosting.pin : "";
+  const hostingClients =
+    isHosting && typeof state === "object" && state !== null && "Hosting" in state ? state.Hosting.clients || [] : [];
+  const hasActiveViewer = hostingClients.length > 0;
+
+  const handleCancelActiveSession = async () => {
+    try {
+      await invoke("streaming_cancel_active_session");
+    } catch (err) {
+      console.error("Error al desconectar espectador:", err);
+    }
+  };
 
   /** Actualiza la configuración local y persistida. */
   const updateConfig = useCallback((updater: (prev: StreamingConfig) => StreamingConfig) => {
@@ -122,24 +133,57 @@ export const StreamingPanel = () => {
     <div className="flex flex-col gap-6 w-full max-w-5xl">
       {/* Banner de Estado de Sesión Activa */}
       {isHosting ? (
-        <Card className="bg-success-500/10 border border-success-500/30 shadow-xs overflow-hidden">
+        <Card
+          className={`transition-all duration-300 shadow-xs overflow-hidden ${
+            hasActiveViewer
+              ? "bg-emerald-500/15 border border-emerald-500/40 dark:bg-emerald-900/20"
+              : "bg-success-500/10 border border-success-500/30"
+          }`}>
           <CardBody className="p-5 flex flex-row items-center justify-between gap-4 overflow-hidden">
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-2">
-                <Chip color="success" variant="flat" size="sm" className="font-semibold border border-success-500/20">
-                  {t("remotePlay.hostingActive")}
-                </Chip>
+                {hasActiveViewer ? (
+                  <Chip
+                    color="success"
+                    variant="flat"
+                    size="sm"
+                    startContent={<Radio size={14} className="animate-pulse text-success-500 ml-1" />}
+                    className="font-bold border border-emerald-500/30">
+                    {t("remotePlay.viewerConnected")}
+                  </Chip>
+                ) : (
+                  <Chip color="success" variant="flat" size="sm" className="font-semibold border border-success-500/20">
+                    {t("remotePlay.hostingActive")}
+                  </Chip>
+                )}
                 {hostingPin ? (
                   <span className="text-xs font-mono bg-default-100 px-2 py-0.5 rounded border border-default-200/50">
                     PIN: <strong className="text-success-500">{hostingPin}</strong>
                   </span>
                 ) : null}
               </div>
-              <p className="text-xs text-default-500 max-w-xl">{t("remotePlay.hostingDesc")}</p>
+              <p className="text-xs text-default-500 max-w-xl">
+                {hasActiveViewer
+                  ? t("remotePlay.viewerConnectedDesc", { count: hostingClients.length })
+                  : t("remotePlay.hostingDesc")}
+              </p>
             </div>
-            <Button color="danger" variant="flat" size="sm" onPress={handleStop} className="font-medium">
-              {t("remotePlay.stopHost")}
-            </Button>
+            <div className="flex items-center gap-2">
+              {hasActiveViewer ? (
+                <Button
+                  color="warning"
+                  variant="flat"
+                  size="sm"
+                  startContent={<UserX size={14} />}
+                  onPress={handleCancelActiveSession}
+                  className="font-medium">
+                  {t("remotePlay.disconnectViewer")}
+                </Button>
+              ) : null}
+              <Button color="danger" variant="flat" size="sm" onPress={handleStop} className="font-medium">
+                {t("remotePlay.stopHost")}
+              </Button>
+            </div>
           </CardBody>
         </Card>
       ) : null}
