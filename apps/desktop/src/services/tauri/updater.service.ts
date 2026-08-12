@@ -67,15 +67,24 @@ export async function checkForUpdatesWithPrompt(silentWhenUpToDate = false): Pro
       return;
     }
 
-    let notes = update.body?.trim();
+    let notes: string | undefined;
+
+    try {
+      const releases = await fetchGitHubReleaseNotes(5);
+      const matchedRelease =
+        releases.find(
+          (r) => r.tagName === `v${update.version}` || r.tagName === update.version || r.name.includes(update.version)
+        ) || releases[0];
+
+      if (matchedRelease?.body) {
+        notes = matchedRelease.body.trim();
+      }
+    } catch {
+      notes = undefined;
+    }
 
     if (!notes) {
-      try {
-        const [latestRelease] = await fetchGitHubReleaseNotes(1);
-        notes = latestRelease?.body.trim();
-      } catch {
-        notes = undefined;
-      }
+      notes = update.body?.trim();
     }
 
     const releaseNotes = notes || i18n.t("updater.notesDefault");
