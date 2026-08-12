@@ -77,8 +77,8 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
       <canvas
         ref={canvasRef}
         onContextMenu={(e) => e.preventDefault()}
-        className="w-full h-full object-contain cursor-none bg-black"
-        style={{ backgroundColor: "#000000" }}
+        className="w-full h-full block cursor-none bg-black"
+        style={{ width: "100%", height: "100%", backgroundColor: "#000000" }}
       />
     </Card>
   );

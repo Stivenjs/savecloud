@@ -122,19 +122,10 @@ impl SunshineHost {
     ) -> StreamingResult<()> {
         let mut process_guard = self.process.lock().await;
 
-        if let Some(child) = process_guard.as_mut() {
-            if let Ok(None) = child.try_wait() {
-                return Ok(());
-            }
-
-            *process_guard = None;
+        if let Some(mut child) = process_guard.take() {
+            let _ = child.kill();
+            let _ = child.wait();
         }
-
-        if !self.is_installed() {
-            self.download_and_extract().await?;
-        }
-
-        self.generate_config()?;
 
         #[cfg(target_os = "windows")]
         {
@@ -146,6 +137,12 @@ impl SunshineHost {
                 .output();
             std::thread::sleep(std::time::Duration::from_millis(500));
         }
+
+        if !self.is_installed() {
+            self.download_and_extract().await?;
+        }
+
+        self.generate_config()?;
 
         #[cfg(target_os = "windows")]
         let bin_path = self.bin_dir.join("Sunshine").join("sunshine.exe");
