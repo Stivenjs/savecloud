@@ -251,6 +251,10 @@ pub fn register_controller_arrival(player_id: usize) {
 ///
 /// Se recibe por referencia porque el call-site reutiliza `evt` después.
 pub fn relay_event(player_id: usize, event: &EventType) {
+    if crate::streaming::is_mirror_mode() {
+        return;
+    }
+
     if player_id >= MAX_GAMEPADS {
         return;
     }
@@ -299,6 +303,10 @@ pub fn relay_event(player_id: usize, event: &EventType) {
 /// (Shift=0x01, Ctrl=0x02, Alt=0x04, Meta=0x08).
 #[inline]
 pub fn relay_keyboard_event(vk_code: u16, is_down: bool, modifiers: u8) {
+    if crate::streaming::is_mirror_mode() {
+        return;
+    }
+
     let action = if is_down {
         KEY_ACTION_DOWN
     } else {
@@ -309,6 +317,10 @@ pub fn relay_keyboard_event(vk_code: u16, is_down: bool, modifiers: u8) {
 
 /// Envía eventos de liberación (KEY_ACTION_UP) para todas las teclas modificadoras y especiales hacia el host.
 pub fn release_all_keyboard_keys() {
+    if crate::streaming::is_mirror_mode() {
+        return;
+    }
+
     let modifier_vks: [u16; 12] = [
         0xA0, 0xA1, // LShift, RShift
         0xA2, 0xA3, // LControl, RControl
@@ -331,6 +343,10 @@ pub fn release_all_keyboard_keys() {
 )]
 #[inline]
 pub fn relay_mouse_move(delta_x: i16, delta_y: i16) {
+    if crate::streaming::is_mirror_mode() {
+        return;
+    }
+
     send_mouse_move_event(delta_x, delta_y);
 }
 
@@ -339,12 +355,20 @@ pub fn relay_mouse_move(delta_x: i16, delta_y: i16) {
 /// Modo Escritorio: sin desfasamiento, mapeo directo a coordenadas del host.
 #[inline]
 pub fn relay_mouse_position(x: i16, y: i16, width: i16, height: i16) {
+    if crate::streaming::is_mirror_mode() {
+        return;
+    }
+
     send_mouse_position_event(x, y, width, height);
 }
 
 /// Transmite una pulsación o liberación de botón de ratón tipado.
 #[inline]
 pub fn relay_mouse_button(button: MouseButton, is_down: bool) {
+    if crate::streaming::is_mirror_mode() {
+        return;
+    }
+
     let action = if is_down {
         BUTTON_ACTION_PRESS
     } else {
@@ -356,6 +380,10 @@ pub fn relay_mouse_button(button: MouseButton, is_down: bool) {
 /// Transmite evento de rueda de desplazamiento del ratón (resolución estándar, ±1 click).
 #[inline]
 pub fn relay_scroll(clicks: i8) {
+    if crate::streaming::is_mirror_mode() {
+        return;
+    }
+
     send_scroll_event(clicks);
 }
 
@@ -369,8 +397,13 @@ pub fn relay_scroll(clicks: i8) {
 )]
 #[inline]
 pub fn relay_high_res_scroll(amount: i16) {
+    if crate::streaming::is_mirror_mode() {
+        return;
+    }
+
     // SAFETY: LiSendHighResScrollEvent es thread-safe según la API de moonlight-common-c.
     unsafe {
         LiSendHighResScrollEvent(amount);
     }
 }
+

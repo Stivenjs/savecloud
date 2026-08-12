@@ -74,6 +74,9 @@ pub async fn streaming_connect_lan(
     state: tauri::State<'_, StreamingState>,
     app: tauri::AppHandle,
 ) -> Result<u16, String> {
+    let is_loopback = ip_address == "127.0.0.1" || ip_address == "localhost" || ip_address == "::1";
+    super::set_mirror_mode(is_loopback);
+
     if ip_address == "127.0.0.1" && savecloud_port == 0 {
         savecloud_port =
             crate::peer_lan::server::ensure_lan_http_server(Some(state.host.clone())).await?;
@@ -118,7 +121,10 @@ pub async fn streaming_connect_lan(
         .client
         .connect_lan(&ip_address, savecloud_port, &stream_options)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            super::set_mirror_mode(false);
+            e.to_string()
+        })?;
 
     if let Err(e) = state
         .client
@@ -126,6 +132,7 @@ pub async fn streaming_connect_lan(
         .await
     {
         state.client.disconnect();
+        super::set_mirror_mode(false);
         return Err(e.to_string());
     }
 
@@ -147,6 +154,7 @@ pub async fn streaming_stop(
     log::info!("Comando: Deteniendo servicios de streaming");
 
     state.client.disconnect();
+    super::set_mirror_mode(false);
 
     state.host.stop().await.map_err(|e| e.to_string())?;
     super::bindings::reset_bindings_state();
@@ -157,6 +165,7 @@ pub async fn streaming_stop(
     let _ = app.emit("streaming-state-changed", ());
 
     Ok(())
+
 
 }
 

@@ -58,7 +58,8 @@ export const ClientConnectModal = ({ host, isOpen, onClose, config }: ClientConn
         enableVsync: activeConfig.enableVsync,
         refreshRateX100: activeConfig.fps * 100,
       });
-      await openOrFocusStreamingWindow(wsPort);
+      const isMirror = host.ip === "127.0.0.1" || host.ip === "localhost";
+      await openOrFocusStreamingWindow(wsPort, isMirror);
       onClose();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));

@@ -561,6 +561,10 @@ fn decode_opus_frame(
 /// # Safety
 /// Callback FFI invocado por Moonlight-common-c para decodificar y reproducir cada paquete de audio.
 pub unsafe extern "C" fn ar_decode_and_play_sample(sample_data: *mut c_char, sample_length: c_int) {
+    if crate::streaming::is_mirror_mode() {
+        return;
+    }
+
     let count = AUDIO_FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
     let mut stack_pcm_buf = [0i16; MAX_FRAME_SAMPLES];
 

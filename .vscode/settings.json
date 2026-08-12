@@ -2,9 +2,7 @@
   "editor.formatOnSave": true,
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "rust-analyzer.linkedProjects": ["apps/desktop/src-tauri/Cargo.toml"],
-  "[rust]": {
-    "editor.defaultFormatter": "rust-lang.rust-analyzer"
-  },
+  "rust-analyzer.server.path": "rust-analyzer",
   "[typescript]": {
     "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.codeActionsOnSave": {

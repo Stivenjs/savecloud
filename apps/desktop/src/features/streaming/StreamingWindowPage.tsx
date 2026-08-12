@@ -5,7 +5,7 @@ import { TitleBar } from "@components/layout/TitleBar";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { Maximize2, Minimize2, RefreshCw, X } from "lucide-react";
-import { Button, Tooltip } from "@heroui/react";
+import { Button, Chip, Tooltip } from "@heroui/react";
 
 /**
  * Vista de ventana independiente de streaming de juego.
@@ -17,6 +17,7 @@ export const StreamingWindowPage = () => {
   const [wsPort, setWsPort] = useState<number | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(true);
   const [showToolbar, setShowToolbar] = useState(false);
+  const [isMirror, setIsMirror] = useState(false);
 
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -49,6 +50,9 @@ export const StreamingWindowPage = () => {
     const portStr = params.get("wsPort");
     if (portStr) {
       setWsPort(parseInt(portStr, 10));
+    }
+    if (params.get("isMirror") === "true") {
+      setIsMirror(true);
     }
 
     const appWindow = getCurrentWebviewWindow();
@@ -101,6 +105,16 @@ export const StreamingWindowPage = () => {
             className={`flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/80 backdrop-blur-md border border-white/15 shadow-2xl transition-all duration-300 ${
               showToolbar ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
             }`}>
+            {isMirror ? (
+              <Chip
+                size="sm"
+                color="secondary"
+                variant="flat"
+                className="font-semibold text-xs border border-secondary-500/30">
+                {t("remotePlay.lanHosts.mirrorHost")}
+              </Chip>
+            ) : null}
+
             <Tooltip content="Alternar Pantalla Completa (F11)">
               <Button size="sm" isIconOnly variant="flat" color="primary" onPress={toggleFullscreen}>
                 {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}

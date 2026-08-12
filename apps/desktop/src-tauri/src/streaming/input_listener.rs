@@ -185,6 +185,10 @@ pub mod windows_listener {
 
     /// Confina el cursor del ratón exclusivamente dentro del área cliente real de la ventana.
     pub fn confine_mouse_to_window() {
+        if crate::streaming::is_mirror_mode() {
+            return;
+        }
+
         let hwnd =
             STREAMING_WINDOW.hwnd.load(Ordering::Relaxed) as windows_sys::Win32::Foundation::HWND;
         if hwnd.is_null() {
@@ -254,7 +258,7 @@ pub mod windows_listener {
         w_param: usize,
         l_param: isize,
     ) -> isize {
-        if !IS_LISTENER_RUNNING.load(Ordering::Relaxed) {
+        if !IS_LISTENER_RUNNING.load(Ordering::Relaxed) || crate::streaming::is_mirror_mode() {
             return unsafe { CallNextHookEx(std::ptr::null_mut(), n_code, w_param, l_param) };
         }
 
@@ -295,7 +299,7 @@ pub mod windows_listener {
         w_param: usize,
         l_param: isize,
     ) -> isize {
-        if !IS_LISTENER_RUNNING.load(Ordering::Relaxed) {
+        if !IS_LISTENER_RUNNING.load(Ordering::Relaxed) || crate::streaming::is_mirror_mode() {
             return unsafe { CallNextHookEx(std::ptr::null_mut(), n_code, w_param, l_param) };
         }
 
@@ -394,7 +398,7 @@ pub mod windows_listener {
                     break;
                 }
 
-                if !STREAMING_WINDOW.is_focused() {
+                if !STREAMING_WINDOW.is_focused() || crate::streaming::is_mirror_mode() {
                     release_keys_if_needed(&mut prev_keys);
                     std::thread::sleep(POLL_INTERVAL);
                     continue;
@@ -518,7 +522,7 @@ mod posix_listener {
             );
 
             if let Err(error) = rdev::listen(move |event: rdev::Event| {
-                if !STREAMING_WINDOW.is_focused() {
+                if !STREAMING_WINDOW.is_focused() || crate::streaming::is_mirror_mode() {
                     return;
                 }
                 dispatch_rdev_event(event);
