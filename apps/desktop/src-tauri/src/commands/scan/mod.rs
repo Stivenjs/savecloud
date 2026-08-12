@@ -343,6 +343,7 @@ mod windows_scanners {
     static VDF_PATH_REGEX: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r#""path"\s+"([^"]+)""#).unwrap());
 
+    #[cfg(target_os = "windows")]
     const MAX_SCAN_DEPTH: usize = 5;
 
     /// Devuelve todas las unidades lógicas disponibles (A:\ … Z:\).
@@ -552,6 +553,7 @@ mod windows_scanners {
         candidate_list.extend(lib_candidates);
     }
 
+    #[cfg(target_os = "windows")]
     fn contains_saves_at_any_depth(dir_path: &Path, depth: usize) -> bool {
         if depth > MAX_SCAN_DEPTH || !dir_path.exists() || !dir_path.is_dir() {
             return false;
@@ -838,11 +840,14 @@ pub fn scan_path_candidates_sync(
             .filter_map(|entry| {
                 let mut valid_game_paths = Vec::new();
 
-                let mut install_dir_cache: Option<String> = None;
                 #[cfg(target_os = "windows")]
-                if let Some(reg_path) = &entry.registry_path {
-                    install_dir_cache = read_registry_install_dir(reg_path);
-                }
+                let install_dir_cache = entry
+                    .registry_path()
+                    .and_then(|reg_path| read_registry_install_dir(reg_path))
+                    .or_else(|| entry.install_dirs().first().cloned());
+
+                #[cfg(not(target_os = "windows"))]
+                let install_dir_cache: Option<String> = None;
 
                 for template in &entry.save_paths {
                     let expanded_path_opt = match template {

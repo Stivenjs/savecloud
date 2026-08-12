@@ -293,8 +293,9 @@ impl MoonlightClient {
         let wt_info = self.webtransport_server.start(bcast_tx).await?;
 
         log::info!(
-            "[Client] Servidores de streaming activos: WebSocket TCP (puerto {ws_port}) y WebTransport UDP (puerto {})",
-            wt_info.port
+            "[Client] Servidores de streaming activos: WebSocket TCP (puerto {ws_port}) y WebTransport UDP (puerto {}, cert hash len: {} bytes)",
+            wt_info.port,
+            wt_info.cert_hash().len()
         );
 
         if let Ok(mut host_guard) = self.last_host_ip.lock() {

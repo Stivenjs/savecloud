@@ -55,6 +55,7 @@ export async function fetchGitHubReleaseNotes(
     {
       headers: {
         Accept: "application/vnd.github+json",
+        "User-Agent": "SaveCloud-DesktopApp",
       },
       signal,
     }

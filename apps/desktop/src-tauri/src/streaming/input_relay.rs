@@ -338,6 +338,7 @@ pub fn release_all_keyboard_keys() {
 
 /// Transmite un movimiento relativo de ratón (esencial para juegos DirectInput/RawInput como League of Legends o FPS).
 #[inline]
+#[cfg(target_os = "windows")]
 pub fn relay_mouse_move(delta_x: i16, delta_y: i16) {
     if crate::streaming::is_mirror_mode() {
         return;

@@ -13,6 +13,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
 
 /// Versión oficial de Sunshine portable empaquetada y soportada.
+#[cfg(target_os = "windows")]
 const SUNSHINE_VERSION: &str = "v0.23.1";
 
 /// Administrador del servidor local Sunshine para la transmisión de pantalla.
@@ -347,14 +348,15 @@ impl SunshineHost {
     pub async fn stop(&self) -> StreamingResult<()> {
         let mut process_guard = self.process.lock().await;
 
-        let had_process = process_guard.is_some();
+        #[cfg(target_os = "windows")]
+        let _had_process = process_guard.is_some();
         if let Some(mut child) = process_guard.take() {
             let _ = child.kill();
             let _ = child.wait();
         }
 
         #[cfg(target_os = "windows")]
-        if had_process {
+        if _had_process {
             use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             let _ = std::process::Command::new("taskkill")
@@ -447,6 +449,7 @@ impl SunshineHost {
 }
 
 /// Extrae el archivo comprimido ZIP de Sunshine portable.
+#[cfg(target_os = "windows")]
 fn extract_zip_archive(zip_path: &Path, bin_dir: &Path) -> StreamingResult<()> {
     let file = std::fs::File::open(zip_path)
         .map_err(|err| StreamingError::Host(format!("No se pudo abrir ZIP: {err}")))?;

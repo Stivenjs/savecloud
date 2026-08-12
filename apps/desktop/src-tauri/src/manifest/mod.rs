@@ -26,8 +26,19 @@ pub struct GameManifestEntry {
     pub save_paths: Vec<PathTemplate>,
     pub registry_path: Option<String>,
     pub steam_app_id: Option<String>,
-    #[allow(dead_code)]
     pub install_dirs: Vec<String>,
+}
+
+impl GameManifestEntry {
+    /// Ruta del Registro de Windows asociada al juego, si está definida.
+    pub fn registry_path(&self) -> Option<&str> {
+        self.registry_path.as_deref()
+    }
+
+    /// Nombres de carpetas de instalación conocidas asociadas al juego.
+    pub fn install_dirs(&self) -> &[String] {
+        &self.install_dirs
+    }
 }
 
 #[derive(Clone, Debug)]

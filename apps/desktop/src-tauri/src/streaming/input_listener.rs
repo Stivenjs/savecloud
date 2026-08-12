@@ -8,17 +8,22 @@
 //! - **Windows** — Hooks de bajo nivel (`WH_MOUSE_LL`) + polling `GetAsyncKeyState`.
 //! - **macOS / Linux** — Librería `rdev` con escucha global de eventos.
 
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, AtomicU32, Ordering};
+#[cfg(target_os = "windows")]
+use std::sync::atomic::{AtomicIsize, AtomicU32};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::time::Duration;
 
 use tauri::{Window, WindowEvent};
 
 use super::input_relay::{
-    relay_keyboard_event, relay_mouse_button, relay_mouse_move, relay_mouse_position,
+    relay_keyboard_event, relay_mouse_button, relay_mouse_position,
     relay_scroll, MouseButton,
 };
+#[cfg(target_os = "windows")]
+use super::input_relay::relay_mouse_move;
 
 /// Intervalo de polling para lectura de teclado/ratón en Windows (250 Hz).
+#[cfg(target_os = "windows")]
 const POLL_INTERVAL: Duration = Duration::from_millis(4);
 
 /// Etiqueta de la ventana de streaming en Tauri.
@@ -661,130 +666,129 @@ mod posix_listener {
     ///
     /// Cobertura completa: letras, números, F-keys, navegación, numpad, puntuación, locks y system.
     fn map_rdev_key_to_vk(key: rdev::Key) -> u16 {
-        use rdev::Key::*;
         match key {
             // ── Letras A–Z ──
-            KeyA => 0x41,
-            KeyB => 0x42,
-            KeyC => 0x43,
-            KeyD => 0x44,
-            KeyE => 0x45,
-            KeyF => 0x46,
-            KeyG => 0x47,
-            KeyH => 0x48,
-            KeyI => 0x49,
-            KeyJ => 0x4A,
-            KeyK => 0x4B,
-            KeyL => 0x4C,
-            KeyM => 0x4D,
-            KeyN => 0x4E,
-            KeyO => 0x4F,
-            KeyP => 0x50,
-            KeyQ => 0x51,
-            KeyR => 0x52,
-            KeyS => 0x53,
-            KeyT => 0x54,
-            KeyU => 0x55,
-            KeyV => 0x56,
-            KeyW => 0x57,
-            KeyX => 0x58,
-            KeyY => 0x59,
-            KeyZ => 0x5A,
+            rdev::Key::KeyA => 0x41,
+            rdev::Key::KeyB => 0x42,
+            rdev::Key::KeyC => 0x43,
+            rdev::Key::KeyD => 0x44,
+            rdev::Key::KeyE => 0x45,
+            rdev::Key::KeyF => 0x46,
+            rdev::Key::KeyG => 0x47,
+            rdev::Key::KeyH => 0x48,
+            rdev::Key::KeyI => 0x49,
+            rdev::Key::KeyJ => 0x4A,
+            rdev::Key::KeyK => 0x4B,
+            rdev::Key::KeyL => 0x4C,
+            rdev::Key::KeyM => 0x4D,
+            rdev::Key::KeyN => 0x4E,
+            rdev::Key::KeyO => 0x4F,
+            rdev::Key::KeyP => 0x50,
+            rdev::Key::KeyQ => 0x51,
+            rdev::Key::KeyR => 0x52,
+            rdev::Key::KeyS => 0x53,
+            rdev::Key::KeyT => 0x54,
+            rdev::Key::KeyU => 0x55,
+            rdev::Key::KeyV => 0x56,
+            rdev::Key::KeyW => 0x57,
+            rdev::Key::KeyX => 0x58,
+            rdev::Key::KeyY => 0x59,
+            rdev::Key::KeyZ => 0x5A,
 
             // ── Números 0–9 ──
-            Num0 => 0x30,
-            Num1 => 0x31,
-            Num2 => 0x32,
-            Num3 => 0x33,
-            Num4 => 0x34,
-            Num5 => 0x35,
-            Num6 => 0x36,
-            Num7 => 0x37,
-            Num8 => 0x38,
-            Num9 => 0x39,
+            rdev::Key::Num0 => 0x30,
+            rdev::Key::Num1 => 0x31,
+            rdev::Key::Num2 => 0x32,
+            rdev::Key::Num3 => 0x33,
+            rdev::Key::Num4 => 0x34,
+            rdev::Key::Num5 => 0x35,
+            rdev::Key::Num6 => 0x36,
+            rdev::Key::Num7 => 0x37,
+            rdev::Key::Num8 => 0x38,
+            rdev::Key::Num9 => 0x39,
 
             // ── Teclas de función F1–F12 ──
-            F1 => 0x70,
-            F2 => 0x71,
-            F3 => 0x72,
-            F4 => 0x73,
-            F5 => 0x74,
-            F6 => 0x75,
-            F7 => 0x76,
-            F8 => 0x77,
-            F9 => 0x78,
-            F10 => 0x79,
-            F11 => 0x7A,
-            F12 => 0x7B,
+            rdev::Key::F1 => 0x70,
+            rdev::Key::F2 => 0x71,
+            rdev::Key::F3 => 0x72,
+            rdev::Key::F4 => 0x73,
+            rdev::Key::F5 => 0x74,
+            rdev::Key::F6 => 0x75,
+            rdev::Key::F7 => 0x76,
+            rdev::Key::F8 => 0x77,
+            rdev::Key::F9 => 0x78,
+            rdev::Key::F10 => 0x79,
+            rdev::Key::F11 => 0x7A,
+            rdev::Key::F12 => 0x7B,
 
             // ── Teclas especiales ──
-            Space => 0x20,
-            Return => 0x0D,
-            Escape => 0x1B,
-            Tab => 0x09,
-            BackSpace => 0x08,
+            rdev::Key::Space => 0x20,
+            rdev::Key::Return => 0x0D,
+            rdev::Key::Escape => 0x1B,
+            rdev::Key::Tab => 0x09,
+            rdev::Key::Backspace => 0x08,
 
             // ── Modificadores ──
-            ShiftLeft => 0xA0,
-            ShiftRight => 0xA1,
-            ControlLeft => 0xA2,
-            ControlRight => 0xA3,
-            Alt => 0xA4,       // VK_LMENU
-            AltGr => 0xA5,     // VK_RMENU
-            MetaLeft => 0x5B,  // VK_LWIN
-            MetaRight => 0x5C, // VK_RWIN
+            rdev::Key::ShiftLeft => 0xA0,
+            rdev::Key::ShiftRight => 0xA1,
+            rdev::Key::ControlLeft => 0xA2,
+            rdev::Key::ControlRight => 0xA3,
+            rdev::Key::Alt => 0xA4,       // VK_LMENU
+            rdev::Key::AltGr => 0xA5,     // VK_RMENU
+            rdev::Key::MetaLeft => 0x5B,  // VK_LWIN
+            rdev::Key::MetaRight => 0x5C, // VK_RWIN
 
             // ── Navegación ──
-            UpArrow => 0x26,
-            DownArrow => 0x28,
-            LeftArrow => 0x25,
-            RightArrow => 0x27,
-            Home => 0x24,
-            End => 0x23,
-            PageUp => 0x21,
-            PageDown => 0x22,
-            Insert => 0x2D,
-            Delete => 0x2E,
+            rdev::Key::UpArrow => 0x26,
+            rdev::Key::DownArrow => 0x28,
+            rdev::Key::LeftArrow => 0x25,
+            rdev::Key::RightArrow => 0x27,
+            rdev::Key::Home => 0x24,
+            rdev::Key::End => 0x23,
+            rdev::Key::PageUp => 0x21,
+            rdev::Key::PageDown => 0x22,
+            rdev::Key::Insert => 0x2D,
+            rdev::Key::Delete => 0x2E,
 
             // ── Locks ──
-            CapsLock => 0x14,
-            NumLock => 0x90,
-            ScrollLock => 0x91,
+            rdev::Key::CapsLock => 0x14,
+            rdev::Key::NumLock => 0x90,
+            rdev::Key::ScrollLock => 0x91,
 
             // ── System ──
-            PrintScreen => 0x2C,
-            Pause => 0x13,
+            rdev::Key::PrintScreen => 0x2C,
+            rdev::Key::Pause => 0x13,
 
             // ── Numpad ──
-            Kp0 => 0x60,
-            Kp1 => 0x61,
-            Kp2 => 0x62,
-            Kp3 => 0x63,
-            Kp4 => 0x64,
-            Kp5 => 0x65,
-            Kp6 => 0x66,
-            Kp7 => 0x67,
-            Kp8 => 0x68,
-            Kp9 => 0x69,
-            KpMultiply => 0x6A,
-            KpPlus => 0x6B,
-            KpMinus => 0x6D,
-            KpDecimal => 0x6E,
-            KpDivide => 0x6F,
-            KpReturn => 0x0D, // VK_RETURN (mismo que Enter principal)
+            rdev::Key::Kp0 => 0x60,
+            rdev::Key::Kp1 => 0x61,
+            rdev::Key::Kp2 => 0x62,
+            rdev::Key::Kp3 => 0x63,
+            rdev::Key::Kp4 => 0x64,
+            rdev::Key::Kp5 => 0x65,
+            rdev::Key::Kp6 => 0x66,
+            rdev::Key::Kp7 => 0x67,
+            rdev::Key::Kp8 => 0x68,
+            rdev::Key::Kp9 => 0x69,
+            rdev::Key::KpMultiply => 0x6A,
+            rdev::Key::KpPlus => 0x6B,
+            rdev::Key::KpMinus => 0x6D,
+            rdev::Key::KpDelete => 0x6E,
+            rdev::Key::KpDivide => 0x6F,
+            rdev::Key::KpReturn => 0x0D, // VK_RETURN (mismo que Enter principal)
 
             // ── Puntuación y símbolos ──
-            SemiColon => 0xBA,    // VK_OEM_1 ( ;: )
-            Equal => 0xBB,        // VK_OEM_PLUS ( =+ )
-            Comma => 0xBC,        // VK_OEM_COMMA ( ,< )
-            Minus => 0xBD,        // VK_OEM_MINUS ( -_ )
-            Dot => 0xBE,          // VK_OEM_PERIOD ( .> )
-            Slash => 0xBF,        // VK_OEM_2 ( /? )
-            BackQuote => 0xC0,    // VK_OEM_3 ( `~ )
-            LeftBracket => 0xDB,  // VK_OEM_4 ( [{ )
-            BackSlash => 0xDC,    // VK_OEM_5 ( \| )
-            RightBracket => 0xDD, // VK_OEM_6 ( ]} )
-            Quote => 0xDE,        // VK_OEM_7 ( '" )
+            rdev::Key::SemiColon => 0xBA,    // VK_OEM_1 ( ;: )
+            rdev::Key::Equal => 0xBB,        // VK_OEM_PLUS ( =+ )
+            rdev::Key::Comma => 0xBC,        // VK_OEM_COMMA ( ,< )
+            rdev::Key::Minus => 0xBD,        // VK_OEM_MINUS ( -_ )
+            rdev::Key::Dot => 0xBE,          // VK_OEM_PERIOD ( .> )
+            rdev::Key::Slash => 0xBF,        // VK_OEM_2 ( /? )
+            rdev::Key::BackQuote => 0xC0,    // VK_OEM_3 ( `~ )
+            rdev::Key::LeftBracket => 0xDB,  // VK_OEM_4 ( [{ )
+            rdev::Key::BackSlash => 0xDC,    // VK_OEM_5 ( \| )
+            rdev::Key::RightBracket => 0xDD, // VK_OEM_6 ( ]} )
+            rdev::Key::Quote => 0xDE,        // VK_OEM_7 ( '" )
 
             _ => 0,
         }
@@ -810,6 +814,7 @@ pub fn start_native_input_listener() {
 /// Detiene y desinstala inmediatamente los escuchadores nativos de entrada al cerrar la app o destruir la ventana.
 pub fn stop_native_input_listener() {
     IS_LISTENER_RUNNING.store(false, Ordering::SeqCst);
+    release_all_active_keys();
     #[cfg(target_os = "windows")]
     {
         windows_listener::stop_hooks_thread();

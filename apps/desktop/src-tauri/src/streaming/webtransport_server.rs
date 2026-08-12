@@ -16,7 +16,6 @@ use wtransport::{Endpoint, Identity};
 /// Información sobre el punto de enlace de WebTransport iniciado.
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct WebTransportServerInfo {
     /// Puerto UDP asignado dinámicamente.
     pub port: u16,
@@ -24,6 +23,13 @@ pub struct WebTransportServerInfo {
     pub cert_hash: Vec<u8>,
     /// Representación hexadecimal de la huella digital SHA-256.
     pub cert_hash_hex: String,
+}
+
+impl WebTransportServerInfo {
+    /// Devuelve los bytes de la huella digital SHA-256 del certificado TLS.
+    pub fn cert_hash(&self) -> &[u8] {
+        &self.cert_hash
+    }
 }
 
 /// Servidor WebTransport sobre QUIC UDP para streaming sin bloqueo de cabecera.
