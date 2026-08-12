@@ -1,7 +1,7 @@
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { fetchGitHubReleaseNotes } from "@services/github/release-notes.service";
+import { fetchGitHubReleaseNotes, cleanMarkdownForPlainText } from "@services/github/release-notes.service";
 import { toastError, toastInfo, toastSuccess } from "@utils/toast";
 import i18n from "@lib/i18n";
 
@@ -87,7 +87,8 @@ export async function checkForUpdatesWithPrompt(silentWhenUpToDate = false): Pro
       notes = update.body?.trim();
     }
 
-    const releaseNotes = notes || i18n.t("updater.notesDefault");
+    const rawNotes = notes || i18n.t("updater.notesDefault");
+    const releaseNotes = cleanMarkdownForPlainText(rawNotes);
     const message = i18n.t("updater.promptMessage", { version: update.version, notes: releaseNotes });
 
     const shouldUpdate = await ask(message, {
