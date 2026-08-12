@@ -90,19 +90,19 @@ export const StreamingWindowPage = () => {
   }
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-black select-none">
+    <div className="relative w-screen h-screen overflow-hidden bg-black select-none cursor-none">
       {/* Barra de control flotante superior discreta (Solo visible al activar hover o en modo ventana) */}
       {!isFullscreen ? (
-        <div className="absolute top-0 inset-x-0 z-50 bg-black/90 border-b border-white/10">
-          <TitleBar />
+        <div className="absolute top-0 inset-x-0 z-50 bg-black/90 border-b border-white/10 cursor-none">
+          <TitleBar className="cursor-none" />
         </div>
       ) : (
         <div
-          className="absolute top-0 inset-x-0 z-50 flex justify-center pt-1 pb-4 group"
+          className="absolute top-0 inset-x-0 z-50 flex justify-center pt-1 pb-4 group cursor-none"
           onMouseEnter={() => setShowToolbar(true)}
           onMouseLeave={() => setShowToolbar(false)}>
           <div
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/80 backdrop-blur-md border border-white/15 shadow-2xl transition-all duration-300 ${
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/80 backdrop-blur-md border border-white/15 shadow-2xl transition-all duration-300 cursor-none ${
               showToolbar ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4 pointer-events-none"
             }`}>
             {isMirror ? (
@@ -110,19 +110,31 @@ export const StreamingWindowPage = () => {
                 size="sm"
                 color="secondary"
                 variant="flat"
-                className="font-semibold text-xs border border-secondary-500/30">
+                className="font-semibold text-xs border border-secondary-500/30 cursor-none">
                 {t("remotePlay.lanHosts.mirrorHost")}
               </Chip>
             ) : null}
 
             <Tooltip content="Alternar Pantalla Completa (F11)">
-              <Button size="sm" isIconOnly variant="flat" color="primary" onPress={toggleFullscreen}>
+              <Button
+                size="sm"
+                isIconOnly
+                variant="flat"
+                color="primary"
+                onPress={toggleFullscreen}
+                className="cursor-none">
                 {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
               </Button>
             </Tooltip>
 
             <Tooltip content="Liberar Teclas Pegadas (Ctrl+Shift+Alt+R)">
-              <Button size="sm" isIconOnly variant="flat" color="warning" onPress={releaseInputs}>
+              <Button
+                size="sm"
+                isIconOnly
+                variant="flat"
+                color="warning"
+                onPress={releaseInputs}
+                className="cursor-none">
                 <RefreshCw size={15} />
               </Button>
             </Tooltip>
@@ -130,7 +142,7 @@ export const StreamingWindowPage = () => {
             <div className="w-px h-4 bg-white/20 my-auto" />
 
             <Tooltip content="Salir de Streaming">
-              <Button size="sm" isIconOnly variant="flat" color="danger" onPress={closeWindow}>
+              <Button size="sm" isIconOnly variant="flat" color="danger" onPress={closeWindow} className="cursor-none">
                 <X size={15} />
               </Button>
             </Tooltip>
@@ -139,7 +151,7 @@ export const StreamingWindowPage = () => {
       )}
 
       {/* Reproductor de video ocupando el 100% de la ventana sin paddings ni bordes */}
-      <div className={`absolute inset-0 z-10 w-full h-full ${!isFullscreen ? "pt-8" : ""}`}>
+      <div className={`absolute inset-0 z-10 w-full h-full cursor-none ${!isFullscreen ? "pt-8" : ""}`}>
         <VideoPlayer wsPort={wsPort} />
       </div>
     </div>

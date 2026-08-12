@@ -125,17 +125,21 @@ const WindowsControls = ({
   maximize,
   isMaximized,
   labels,
+  className,
 }: Omit<WindowControls, "platform"> & {
   labels: WindowControlLabels;
+  className?: string;
 }) => (
   <>
-    <div data-tauri-drag-region className="flex-1 h-full flex items-center px-4">
+    <div data-tauri-drag-region className={`flex-1 h-full flex items-center px-4 ${className ?? ""}`}>
       <span className="text-sm font-medium text-foreground/80 pointer-events-none">SaveCloud</span>
     </div>
-    <div className="flex items-center h-full">
+    <div className={`flex items-center h-full ${className ?? ""}`}>
       <button
         onClick={minimize}
-        className="w-12 h-full flex items-center justify-center hover:bg-white/10 transition-colors"
+        className={`w-12 h-full flex items-center justify-center hover:bg-white/10 transition-colors ${
+          className ?? ""
+        }`}
         aria-label={labels.minimize}>
         <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
           <rect y="5" width="12" height="2" />
@@ -143,7 +147,9 @@ const WindowsControls = ({
       </button>
       <button
         onClick={maximize}
-        className="w-12 h-full flex items-center justify-center hover:bg-white/10 transition-colors"
+        className={`w-12 h-full flex items-center justify-center hover:bg-white/10 transition-colors ${
+          className ?? ""
+        }`}
         aria-label={isMaximized ? labels.restore : labels.maximize}>
         {isMaximized ? (
           <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
@@ -158,7 +164,9 @@ const WindowsControls = ({
       </button>
       <button
         onClick={close}
-        className="w-12 h-full flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors"
+        className={`w-12 h-full flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors ${
+          className ?? ""
+        }`}
         aria-label={labels.close}>
         <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
           <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.5" />
@@ -172,7 +180,7 @@ const WindowsControls = ({
  * Barra de título personalizada para la aplicación Tauri.
  * Se adapta automáticamente al sistema operativo anfitrión (macOS o Windows).
  */
-export function TitleBar() {
+export function TitleBar({ className }: { className?: string } = {}) {
   const { t } = useTranslation();
   const { isMaximized, platform, minimize, maximize, close } = useTauriWindow();
   const isMac = platform === "macos";
@@ -186,7 +194,9 @@ export function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="fixed top-0 left-0 right-0 z-50 h-10 bg-transparent flex items-center justify-between select-none">
+      className={`fixed top-0 left-0 right-0 z-50 h-10 bg-transparent flex items-center justify-between select-none ${
+        className ?? ""
+      }`}>
       {isMac ? (
         <MacControls close={close} minimize={minimize} maximize={maximize} labels={labels} />
       ) : (
@@ -196,6 +206,7 @@ export function TitleBar() {
           maximize={maximize}
           isMaximized={isMaximized}
           labels={labels}
+          className={className}
         />
       )}
     </div>
