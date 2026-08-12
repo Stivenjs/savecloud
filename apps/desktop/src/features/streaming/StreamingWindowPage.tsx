@@ -99,7 +99,11 @@ export const StreamingWindowPage = () => {
       ) : (
         <div
           className="absolute top-0 inset-x-0 z-50 flex justify-center pt-1 pb-4 group cursor-none"
-          onMouseEnter={() => setShowToolbar(true)}
+          onMouseEnter={() => {
+            if (!document.pointerLockElement) {
+              setShowToolbar(true);
+            }
+          }}
           onMouseLeave={() => setShowToolbar(false)}>
           <div
             className={`flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/80 backdrop-blur-md border border-white/15 shadow-2xl transition-all duration-300 cursor-none ${
