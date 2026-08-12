@@ -336,11 +336,7 @@ pub fn release_all_keyboard_keys() {
 }
 
 
-/// Transmite un movimiento relativo de ratón (ideal para FPS / Juegos 3D).
-#[expect(
-    dead_code,
-    reason = "Reservado para modo de captura relativa del ratón"
-)]
+/// Transmite un movimiento relativo de ratón (esencial para juegos DirectInput/RawInput como League of Legends o FPS).
 #[inline]
 pub fn relay_mouse_move(delta_x: i16, delta_y: i16) {
     if crate::streaming::is_mirror_mode() {

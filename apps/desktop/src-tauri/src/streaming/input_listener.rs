@@ -14,7 +14,8 @@ use std::time::Duration;
 use tauri::{Window, WindowEvent};
 
 use super::input_relay::{
-    relay_keyboard_event, relay_mouse_button, relay_mouse_position, relay_scroll, MouseButton,
+    relay_keyboard_event, relay_mouse_button, relay_mouse_move, relay_mouse_position,
+    relay_scroll, MouseButton,
 };
 
 /// Intervalo de polling para lectura de teclado/ratón en Windows (250 Hz).
@@ -432,7 +433,13 @@ pub mod windows_listener {
     }
 
     /// Lee la posición del cursor usando el área cliente interna 1:1 de la ventana.
+    /// Emite la posición absoluta (para escritorio) y los deltas de movimiento relativo
+    /// (esenciales para juegos como League of Legends, Valorant o FPS 3D).
     fn poll_cursor_position() {
+        use std::sync::Mutex;
+        static LAST_CURSOR_POS: std::sync::LazyLock<Mutex<Option<(i32, i32)>>> =
+            std::sync::LazyLock::new(|| Mutex::new(None));
+
         let hwnd =
             STREAMING_WINDOW.hwnd.load(Ordering::Relaxed) as windows_sys::Win32::Foundation::HWND;
 
@@ -460,10 +467,28 @@ pub mod windows_listener {
         let width = (client_rect.right - client_rect.left) as i16;
         let height = (client_rect.bottom - client_rect.top) as i16;
 
+        let curr_x = cursor_pos.x;
+        let curr_y = cursor_pos.y;
+
+        let mut delta_x = 0i16;
+        let mut delta_y = 0i16;
+
+        if let Ok(mut last_guard) = LAST_CURSOR_POS.lock() {
+            if let Some((last_x, last_y)) = *last_guard {
+                delta_x = (curr_x - last_x).clamp(-32767, 32767) as i16;
+                delta_y = (curr_y - last_y).clamp(-32767, 32767) as i16;
+            }
+            *last_guard = Some((curr_x, curr_y));
+        }
+
         if width > 0 && height > 0 {
-            let rel_x = cursor_pos.x.clamp(0, width as i32) as i16;
-            let rel_y = cursor_pos.y.clamp(0, height as i32) as i16;
+            let rel_x = curr_x.clamp(0, width as i32) as i16;
+            let rel_y = curr_y.clamp(0, height as i32) as i16;
             relay_mouse_position(rel_x, rel_y, width, height);
+
+            if delta_x != 0 || delta_y != 0 {
+                relay_mouse_move(delta_x, delta_y);
+            }
         }
     }
 
