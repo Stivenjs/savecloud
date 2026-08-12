@@ -178,6 +178,11 @@ impl SunshineHost {
 
         #[cfg(target_os = "windows")]
         {
+            if is_current_process_elevated() {
+                log::info!("[SunshineHost] Proceso elevado como Administrador. Sunshine capturará avisos UAC / Escritorio Seguro sin congelarse.");
+            } else {
+                log::info!("[SunshineHost] Proceso en modo estándar. Para capturar avisos UAC sin congelar video, ejecute SaveCloud como Administrador.");
+            }
             use std::os::windows::process::CommandExt;
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             command.creation_flags(CREATE_NO_WINDOW);
@@ -500,5 +505,33 @@ fn process_sunshine_log_line(
             }
         }
     }
+}
+
+/// Comprueba si el proceso actual posee privilegios elevados de Administrador en Windows.
+#[cfg(target_os = "windows")]
+fn is_current_process_elevated() -> bool {
+    use windows_sys::Win32::Foundation::HANDLE;
+    use windows_sys::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+    unsafe {
+        let mut token: HANDLE = std::ptr::null_mut();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) != 0 {
+            let mut elevation: TOKEN_ELEVATION = std::mem::zeroed();
+            let mut size = std::mem::size_of::<TOKEN_ELEVATION>() as u32;
+            let res = GetTokenInformation(
+                token,
+                TokenElevation,
+                &mut elevation as *mut _ as *mut _,
+                size,
+                &mut size,
+            );
+            windows_sys::Win32::Foundation::CloseHandle(token);
+            if res != 0 {
+                return elevation.TokenIsElevated != 0;
+            }
+        }
+    }
+    false
 }
 

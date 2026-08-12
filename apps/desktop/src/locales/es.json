@@ -1520,6 +1520,7 @@
     "viewerConnected": "Transmisión en Vivo",
     "viewerConnectedDesc": "Hay {{count}} espectador(es) viendo tu pantalla en tiempo real.",
     "disconnectViewer": "Desconectar Espectador",
+    "uacNotice": "Transmisión pausada: Esperando respuesta a solicitud de Administrador (UAC) en el equipo Host...",
     "stopHost": "Detener Host",
     "connectedToHost": "Conectado al Host",
     "connectedDesc": "Recibiendo transmisión desde {{hostIp}}",

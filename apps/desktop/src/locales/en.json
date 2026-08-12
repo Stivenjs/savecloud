@@ -1520,6 +1520,7 @@
     "viewerConnected": "Live Stream Active",
     "viewerConnectedDesc": "There are {{count}} viewer(s) watching your screen in real time.",
     "disconnectViewer": "Disconnect Viewer",
+    "uacNotice": "Stream paused: Waiting for Administrator permission (UAC) response on the Host screen...",
     "stopHost": "Stop Host",
     "connectedToHost": "Connected to Host",
     "connectedDesc": "Receiving stream from {{hostIp}}",
