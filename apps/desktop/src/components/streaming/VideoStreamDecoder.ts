@@ -13,6 +13,7 @@
  */
 
 import { getSavedStreamingConfig, StreamingCodec } from "./streamingTypes";
+import { VideoRenderer } from "./VideoRenderer";
 
 /**
  * Instancia del decodificador de video.
@@ -33,8 +34,8 @@ export interface VideoDecoderInstance {
 export interface VideoDecoderOptions {
   /** Elemento canvas donde se renderizan los fotogramas. */
   canvas: HTMLCanvasElement;
-  /** Contexto 2D del canvas. */
-  ctx: CanvasRenderingContext2D;
+  /** Instancia del renderizador unificado (WebGPU / WebGL2 / Canvas2D). */
+  renderer: VideoRenderer;
   /** Callback invocado cuando ocurre un error de decodificación. */
   onError: (message: string) => void;
   /** Códec de video preferido ('h264' | 'h265' | 'av1'). Si no se especifica, se lee de localStorage */
@@ -174,7 +175,7 @@ function getCorrectedVideoFrame(frame: VideoFrame): { renderFrame: VideoFrame; i
  * @returns {VideoDecoderInstance} Instancia con métodos para procesar, reconfigurar y destruir el decodificador.
  */
 export function createVideoStreamDecoder(options: VideoDecoderOptions): VideoDecoderInstance {
-  const { canvas, ctx, onError } = options;
+  const { canvas, renderer, onError } = options;
   const savedConfig = getSavedStreamingConfig();
 
   let activeCodec: StreamingCodec = options.codec ?? savedConfig.codec;
@@ -198,14 +199,8 @@ export function createVideoStreamDecoder(options: VideoDecoderOptions): VideoDec
       const targetW = canvas.clientWidth && canvas.clientWidth > 0 ? canvas.clientWidth : dynamicW;
       const targetH = canvas.clientHeight && canvas.clientHeight > 0 ? canvas.clientHeight : dynamicH;
 
-      if (canvas.width !== targetW || canvas.height !== targetH) {
-        canvas.width = targetW;
-        canvas.height = targetH;
-      }
-
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(renderFrame, 0, 0, canvas.width, canvas.height);
+      renderer.resize(targetW, targetH);
+      renderer.render(renderFrame);
 
       if (isCloned) {
         renderFrame.close();
