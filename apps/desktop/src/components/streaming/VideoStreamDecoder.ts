@@ -224,6 +224,11 @@ export function createVideoStreamDecoder(options: VideoDecoderOptions): VideoDec
   const setCodec = (newCodec: StreamingCodec): void => {
     if (isDestroyed) return;
 
+    if (activeCodec === newCodec && hasReceivedKeyFrame) {
+      console.log(`[VideoDecoder] Códec negociado ya activo: ${newCodec}. Manteniendo estado del KeyFrame.`);
+      return;
+    }
+
     console.log(`[VideoDecoder] Notificación de códec negociado recibida: ${newCodec}`);
     activeCodec = newCodec;
     hasReceivedKeyFrame = false;

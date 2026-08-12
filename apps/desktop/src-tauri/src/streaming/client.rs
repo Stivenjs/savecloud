@@ -8,6 +8,7 @@ use super::bindings::*;
 use super::error::{StreamingError, StreamingResult};
 use super::tls_override;
 use crate::streaming::video_server::VideoServer;
+use crate::streaming::webtransport_server::WebTransportServer;
 use std::ffi::CString;
 use std::fmt::Debug;
 use std::mem::MaybeUninit;
@@ -26,6 +27,13 @@ static DESKTOP_APP_ID_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
         .unwrap()
 });
 
+/// Resultados de puertos y credenciales de transporte entregados al cliente.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ConnectResult {
+    pub ws_port: u16,
+    pub webtransport_port: u16,
+    pub cert_hash: String,
+}
 /// Opciones configurables para la sesión de transmisión de video y audio.
 #[derive(Debug, Clone)]
 pub struct StreamOptions {
@@ -33,9 +41,9 @@ pub struct StreamOptions {
     pub width: i32,
     /// Alto en píxeles de la pantalla remota (ej. 720, 1080, 1440, 2160).
     pub height: i32,
-    /// Cuadros por segundo deseados (ej. 30, 60, 90, 120).
+    /// Tasa de refresco objetivo en FPS (ej. 30, 60, 90, 120).
     pub fps: i32,
-    /// Tasa de bits en kilobits por segundo (ej. 50000 para 50 Mbps).
+    /// Tasa de bits en Kilobits por segundo (ej. 5000 a 100000 kbps).
     pub bitrate_kbps: i32,
     /// Códec de video soportado (`VIDEO_FORMAT_H264`, `VIDEO_FORMAT_H265`, `VIDEO_FORMAT_AV1_MAIN8`).
     pub video_format: i32,
@@ -66,6 +74,7 @@ pub struct MoonlightClient {
     cert_path: PathBuf,
     key_path: PathBuf,
     video_server: Arc<VideoServer>,
+    webtransport_server: Arc<WebTransportServer>,
     last_host_ip: Arc<Mutex<Option<String>>>,
 }
 
@@ -104,6 +113,7 @@ impl MoonlightClient {
             cert_path,
             key_path,
             video_server: Arc::new(VideoServer::new()),
+            webtransport_server: Arc::new(WebTransportServer::new()),
             last_host_ip: Arc::new(Mutex::new(None)),
         }
     }
@@ -204,7 +214,7 @@ impl MoonlightClient {
         host_ip: &str,
         savecloud_port: u16,
         options: &StreamOptions,
-    ) -> StreamingResult<u16> {
+    ) -> StreamingResult<ConnectResult> {
         if self.is_connected.load(Ordering::SeqCst) {
             return Err(StreamingError::Client(
                 "Ya hay una conexión de streaming activa".into(),
@@ -267,12 +277,25 @@ impl MoonlightClient {
             )));
         }
 
-        let (tx, rx) = mpsc::channel(1024);
-        set_video_channel(tx);
+        let (tx_main, mut rx_main) = mpsc::channel::<Vec<u8>>(1024);
+        let (bcast_tx, _bcast_rx) = tokio::sync::broadcast::channel::<Vec<u8>>(1024);
 
-        let ws_port = self.video_server.start(rx).await?;
+        let bcast_tx_clone = bcast_tx.clone();
+        tokio::spawn(async move {
+            while let Some(frame) = rx_main.recv().await {
+                let _ = bcast_tx_clone.send(frame);
+            }
+        });
 
-        log::info!("Video WebSocket Server listo en puerto {ws_port}");
+        set_video_channel(tx_main);
+
+        let ws_port = self.video_server.start(bcast_tx.clone()).await?;
+        let wt_info = self.webtransport_server.start(bcast_tx).await?;
+
+        log::info!(
+            "[Client] Servidores de streaming activos: WebSocket TCP (puerto {ws_port}) y WebTransport UDP (puerto {})",
+            wt_info.port
+        );
 
         if let Ok(mut host_guard) = self.last_host_ip.lock() {
             *host_guard = Some(host_ip.to_string());
@@ -294,7 +317,11 @@ impl MoonlightClient {
             options.refresh_rate_x100 as f32 / 100.0
         );
 
-        Ok(ws_port)
+        Ok(ConnectResult {
+            ws_port,
+            webtransport_port: wt_info.port,
+            cert_hash: wt_info.cert_hash_hex,
+        })
     }
 
     /// Inicia la sesión de transmisión RTSP contra el servidor Sunshine e invoca el motor FFI Moonlight-C.
@@ -582,6 +609,7 @@ impl MoonlightClient {
         }
 
         self.video_server.stop();
+        self.webtransport_server.stop();
         reset_bindings_state();
         super::input_relay::reset_input_relay_state();
 

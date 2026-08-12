@@ -3,7 +3,16 @@ import { resolveExistingWebviewWindow, showCenteredAndFocus } from "@/windows/we
 
 export const STREAMING_WINDOW_LABEL = "streaming-window";
 
-export async function openOrFocusStreamingWindow(wsPort: number, isMirror?: boolean): Promise<void> {
+export interface StreamingConnectInfo {
+  ws_port: number;
+  webtransport_port?: number;
+  cert_hash?: string;
+}
+
+export async function openOrFocusStreamingWindow(
+  info: StreamingConnectInfo | number,
+  isMirror?: boolean
+): Promise<void> {
   const existing = await resolveExistingWebviewWindow(STREAMING_WINDOW_LABEL);
   if (existing) {
     try {
@@ -13,7 +22,11 @@ export async function openOrFocusStreamingWindow(wsPort: number, isMirror?: bool
     }
   }
 
-  const windowUrl = `/?streamingWindow=true&wsPort=${wsPort}${isMirror ? "&isMirror=true" : ""}`;
+  const wsPort = typeof info === "number" ? info : info.ws_port;
+  const webTransportPort = typeof info === "number" ? undefined : info.webtransport_port;
+  const certHash = typeof info === "number" ? undefined : info.cert_hash;
+
+  const windowUrl = `/?streamingWindow=true&wsPort=${wsPort}${webTransportPort ? `&webTransportPort=${webTransportPort}` : ""}${certHash ? `&certHash=${certHash}` : ""}${isMirror ? "&isMirror=true" : ""}`;
 
   const streamingWindow = new WebviewWindow(STREAMING_WINDOW_LABEL, {
     title: "SaveCloud Stream",

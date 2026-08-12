@@ -8,7 +8,7 @@ use super::error::{StreamingError, StreamingResult};
 use futures_util::{SinkExt, StreamExt};
 use std::fmt::Debug;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{accept_async, WebSocketStream};
 
@@ -66,7 +66,10 @@ impl VideoServer {
     /// - Activa `TCP_NODELAY` en cada conexión TCP aceptada para eliminar el algoritmo de Nagle.
     /// - Purga tramas obsoletas acumuladas en `rx` mediante [`drain_stale_frames`] antes de procesar el primer IDR.
     /// - Transmite en segundo plano mediante un hilo ejecutor de Tokio de baja sobrecarga.
-    pub async fn start(&self, rx: mpsc::Receiver<Vec<u8>>) -> StreamingResult<u16> {
+    pub async fn start(
+        &self,
+        bcast_tx: tokio::sync::broadcast::Sender<Vec<u8>>,
+    ) -> StreamingResult<u16> {
         // Resetear la señal de parada a false para permitir múltiples inicios si se reutiliza la instancia.
         let _ = self.stop_tx.send(false);
 
@@ -88,7 +91,7 @@ impl VideoServer {
         let mut stop_rx = self.stop_rx.clone();
 
         tokio::spawn(async move {
-            run_server_loop(listener, rx, &mut stop_rx).await;
+            run_server_loop(listener, bcast_tx, &mut stop_rx).await;
         });
 
         Ok(port)
@@ -125,14 +128,14 @@ impl Default for VideoServer {
 ///
 /// # Arguments
 /// * `listener` - Instancia de [`TcpListener`] vinculada al puerto dinámico local.
-/// * `rx` - Receptor [`mpsc::Receiver<Vec<u8>>`] con el flujo de fotogramas de video.
+/// * `bcast_tx` - Transmisor [`broadcast::Sender<Vec<u8>>`] con el flujo de fotogramas de video.
 /// * `stop_rx` - Receptor del canal `watch` para detectar la señal de parada del servidor.
 ///
 /// # Latency & Performance Notes
 /// Aplica `set_nodelay(true)` a cada socket entrante para garantizar la entrega inmediata de cada frame.
 async fn run_server_loop(
     listener: TcpListener,
-    mut rx: mpsc::Receiver<Vec<u8>>,
+    bcast_tx: tokio::sync::broadcast::Sender<Vec<u8>>,
     stop_rx: &mut watch::Receiver<bool>,
 ) {
     loop {
@@ -156,7 +159,6 @@ async fn run_server_loop(
             }
         };
 
-      
         if let Err(err) = stream.set_nodelay(true) {
             log::warn!("[VideoServer] No se pudo establecer TCP_NODELAY en el socket: {err}");
         }
@@ -174,6 +176,8 @@ async fn run_server_loop(
             "[VideoServer] Cliente WebSocket de video conectado. Códec negociado: {}",
             negotiated_codec
         );
+
+        let mut rx = bcast_tx.subscribe();
 
         // Forzar la solicitud de un IDR Keyframe fresco a Sunshine para el cliente recién conectado o recargado
         super::bindings::request_idr_frame();
@@ -214,17 +218,17 @@ async fn send_codec_init(
     ws_stream.send(Message::Text(payload.into())).await
 }
 
-/// Purga de manera no bloqueante las tramas de video atascadas en la cola `mpsc`.
+/// Purga de manera no bloqueante las tramas de video atascadas en el canal.
 ///
 /// # Arguments
-/// * `rx` - Referencia mutable al receptor del canal `mpsc`.
+/// * `rx` - Referencia mutable al receptor del canal broadcast.
 ///
 /// # Returns
 /// Retorna la cantidad de tramas purgadas.
 ///
 /// # Latency & Performance Notes
 /// Previene la acumulación de retraso (*buffer bloat*) cuando el reproductor local se conecta o reconecta.
-fn drain_stale_frames(rx: &mut mpsc::Receiver<Vec<u8>>) -> usize {
+fn drain_stale_frames(rx: &mut tokio::sync::broadcast::Receiver<Vec<u8>>) -> usize {
     let mut count = 0;
     while rx.try_recv().is_ok() {
         count += 1;
@@ -260,11 +264,11 @@ async fn send_cached_idr(ws_stream: &mut WebSocketStream<TcpStream>) {
 ///
 /// # Arguments
 /// * `ws_stream` - Referencia mutable al flujo WebSocket activo.
-/// * `rx` - Referencia mutable al receptor del canal `mpsc` de tramas de video.
+/// * `rx` - Referencia mutable al receptor del canal de tramas de video.
 /// * `stop_rx` - Referencia mutable al receptor de la señal de parada del servidor.
 async fn handle_client_stream(
     ws_stream: &mut WebSocketStream<TcpStream>,
-    rx: &mut mpsc::Receiver<Vec<u8>>,
+    rx: &mut tokio::sync::broadcast::Receiver<Vec<u8>>,
     stop_rx: &mut watch::Receiver<bool>,
 ) {
     loop {
@@ -275,14 +279,21 @@ async fn handle_client_stream(
                     break;
                 }
             }
-            frame_opt = rx.recv() => {
-                let Some(data) = frame_opt else {
-                    log::info!("[VideoServer] Canal de video de entrada cerrado");
-                    return;
-                };
-                if let Err(err) = ws_stream.send(Message::Binary(data.into())).await {
-                    log::error!("[VideoServer] Error al transmitir trama de video por WebSocket: {err}");
-                    break;
+            frame_res = rx.recv() => {
+                match frame_res {
+                    Ok(data) => {
+                        if let Err(err) = ws_stream.send(Message::Binary(data.into())).await {
+                            log::error!("[VideoServer] Error al transmitir trama de video por WebSocket: {err}");
+                            break;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(count)) => {
+                        log::debug!("[VideoServer] Cliente WebSocket atrasado {count} tramas");
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        log::info!("[VideoServer] Canal de video de entrada cerrado");
+                        return;
+                    }
                 }
             }
             msg_opt = ws_stream.next() => {

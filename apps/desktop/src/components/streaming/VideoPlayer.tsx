@@ -13,14 +13,16 @@ import { Card, Chip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { ShieldAlert, Cpu } from "lucide-react";
 import { createVideoStreamDecoder, VideoDecoderInstance } from "./VideoStreamDecoder";
-import { createStreamingSocket, StreamingSocketInstance } from "./StreamingSocket";
+import { createStreamingSocket, StreamingSocketInstance, StreamingTransportType } from "./StreamingSocket";
 import { createVideoRenderer, VideoRenderer, VideoRendererBackend } from "./VideoRenderer";
 
 interface VideoPlayerProps {
   wsPort: number;
+  webTransportPort?: number;
+  certHash?: string;
 }
 
-export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
+export const VideoPlayer = ({ wsPort, webTransportPort, certHash }: VideoPlayerProps) => {
   const { t } = useTranslation();
   const tRef = useRef(t);
   tRef.current = t;
@@ -29,6 +31,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
   const [error, setError] = useState<string | null>(null);
   const [isStalled, setIsStalled] = useState(false);
   const [activeBackend, setActiveBackend] = useState<VideoRendererBackend | null>(null);
+  const [activeTransport, setActiveTransport] = useState<StreamingTransportType>("websocket");
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -59,12 +62,17 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
 
         streamingSocket = createStreamingSocket({
           wsPort,
+          webTransportPort,
+          certHash,
           videoDecoder,
           onError: (msg) => {
             if (!isCancelled) setError(msg);
           },
-          onConnected: () => {
-            if (!isCancelled) setError(null);
+          onConnected: (transportType) => {
+            if (!isCancelled) {
+              setError(null);
+              setActiveTransport(transportType);
+            }
           },
           onStalled: (stalled) => {
             if (!isCancelled) setIsStalled(stalled);
@@ -87,7 +95,7 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
       videoDecoder?.destroy();
       renderer?.destroy();
     };
-  }, [wsPort]);
+  }, [wsPort, webTransportPort, certHash]);
 
   return (
     <Card
@@ -109,7 +117,8 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
               ? "WebGPU 0-Copy VRAM"
               : activeBackend === "webgl2"
                 ? "WebGL2 GPU"
-                : "Canvas 2D"}
+                : "Canvas 2D"}{" "}
+            • {activeTransport === "webtransport" ? "WebTransport (UDP)" : "WebSocket (TCP)"}
           </Chip>
         </div>
       )}

@@ -28,6 +28,7 @@ pub mod crypto;
 pub mod error;
 pub mod tls_override;
 pub mod video_server;
+pub mod webtransport_server;
 pub mod input_listener;
 
 use std::sync::atomic::{AtomicBool, Ordering};
