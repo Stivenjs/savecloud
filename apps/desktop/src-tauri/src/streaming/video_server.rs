@@ -244,7 +244,10 @@ async fn send_cached_idr(ws_stream: &mut WebSocketStream<TcpStream>) {
             "[VideoServer] Enviando IDR Keyframe en caché ({} bytes) al cliente WebSocket",
             idr_payload.len()
         );
-        if let Err(err) = ws_stream.send(Message::Binary(idr_payload.into())).await {
+        if let Err(err) = ws_stream
+            .send(Message::Binary((*idr_payload).clone().into()))
+            .await
+        {
             log::error!("[VideoServer] Error al enviar IDR Keyframe en caché: {err}");
         }
     }

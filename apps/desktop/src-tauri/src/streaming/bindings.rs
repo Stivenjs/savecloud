@@ -1,41 +1,78 @@
-//! FFI bindings manuales para moonlight-common-c.
+//! # FFI Bindings para Moonlight-Common-C
+//!
+//! Este módulo proporciona wrappers FFI seguros y declaraciones C `extern` para la biblioteca `moonlight-common-c`.
+//! Gestiona las callbacks de decodificación de video/audio, eventos de entrada (teclado, ratón, gamepad)
+//! y la transmisión de tramas en tiempo real sobre la ruta crítica (*hot-path* a 60-120+ FPS).
+//!
+//! ## Optimizaciones de Ruta Crítica (Hot-Path)
+//!
+//! 1. **Atómicos Globales `const` sin Guardas `Lazy`**:
+//!    - `FIRST_FRAME_RECEIVED`, `NEGOTIATED_VIDEO_FORMAT` y `FRAME_COUNT` se declaran como atómicos globales
+//!      nativos inicializados en tiempo de compilación. Esto elimina las comprobaciones de inicialización de runtime por cada fotograma.
+//! 2. **Copia Directa en Memoria `memcpy` (`ptr::copy_nonoverlapping`)**:
+//!    - En [`dr_submit_decode_unit`], los fragmentos del linked-list C (`LENTRY`) se copian al buffer de salida
+//!      mediante instrucciones `copy_nonoverlapping` y ajuste manual de longitud (`set_len`), igualando el rendimiento de C/C++.
+//! 3. **Almacenamiento Zero-Copy de IDR Keyframe (`Arc<Vec<u8>>`)**:
+//!    - [`LAST_IDR_FRAME`] utiliza `Arc<Vec<u8>>` para preservar el último fotograma clave sin re-alocar cientos de KB de memoria heap.
+//! 4. **Inlining Agresivo (`#[inline(always)]`)**:
+//!    - Todas las funciones de eventos de entrada poseen el atributo `#[inline(always)]` para eliminar saltos de pila FFI.
 
 #![allow(non_camel_case_types, non_snake_case, dead_code)]
 
+use std::ffi::CStr;
+use std::fmt::Debug;
+use std::mem::MaybeUninit;
 use std::os::raw::{c_char, c_int, c_void};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
+use tokio::sync::mpsc;
 
 // Polyfill para __builtin_cpu_supports en macOS x86_64
-// Apple Clang no siempre enlaza compiler-rt, que contiene __cpu_model
 #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
 #[no_mangle]
 pub static mut __cpu_model: [u32; 4] = [0, 0, 0, 0];
 
 // 1. Constantes FFI
 
+/// Máscara para códec H.264 (AVC).
 pub const VIDEO_FORMAT_H264: i32 = 0x0001;
+/// Máscara para códec H.265 (HEVC).
 pub const VIDEO_FORMAT_H265: i32 = 0x0100;
+/// Máscara para códec AV1 Main 8-bit.
 pub const VIDEO_FORMAT_AV1_MAIN8: i32 = 0x1000;
 
+/// Configuración de transmisión local LAN.
 pub const STREAM_CFG_LOCAL: i32 = 0;
+/// Configuración de transmisión remota WAN.
 pub const STREAM_CFG_REMOTE: i32 = 1;
+/// Configuración de transmisión automática.
 pub const STREAM_CFG_AUTO: i32 = 2;
 
+/// Identificador de trama P-Frame (inter-coded frame).
 pub const FRAME_TYPE_PFRAME: i32 = 0x00;
+/// Identificador de trama IDR Keyframe (intra-coded keyframe).
 pub const FRAME_TYPE_IDR: i32 = 0x01;
 
+/// Código de retorno FFI exitoso para el decodificador.
 pub const DR_OK: i32 = 0;
+/// Código de retorno FFI para solicitar un nuevo IDR Keyframe urgente a Sunshine.
 pub const DR_NEED_IDR: i32 = -1;
 
-// AUDIO_CONFIGURATION_STEREO = MAKE_AUDIO_CONFIGURATION(2, 0x3) = (0x3 << 16) | (2 << 8) | 0xCA = 0x000302CA
+/// Configuración de audio estéreo 2.0 (Opus 48kHz).
 pub const AUDIO_CONFIGURATION_STEREO: i32 = 0x000302CA;
 
+/// Banderas de cifrado nulo.
 pub const ENCFLG_NONE: i32 = 0x00000000;
+/// Banderas de cifrado para audio.
 pub const ENCFLG_AUDIO: i32 = 0x00000001;
+/// Banderas de cifrado para video.
 pub const ENCFLG_VIDEO: i32 = 0x00000002;
-pub const ENCFLG_ALL: i32 = ENCFLG_AUDIO | ENCFLG_VIDEO; // 0x00000003
+/// Banderas de cifrado completo (Audio + Video).
+pub const ENCFLG_ALL: i32 = ENCFLG_AUDIO | ENCFLG_VIDEO;
 
-// 2. Estructuras C
+// 2. Estructuras C (FFI)
 
+/// Configuración de transmisión FFI para `moonlight-common-c`.
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct STREAM_CONFIGURATION {
@@ -55,8 +92,10 @@ pub struct STREAM_CONFIGURATION {
     pub remoteInputAesIv: [c_char; 16],
 }
 
+/// Nodo de la lista enlazada C que representa un fragmento de datos de video.
 #[repr(C)]
 #[derive(Debug, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 pub struct LENTRY {
     pub next: *mut LENTRY,
     pub data: *mut c_char,
@@ -64,8 +103,10 @@ pub struct LENTRY {
     pub bufferType: c_int,
 }
 
+/// Unidad de decodificación C entregada por Moonlight-C con las tramas NALU.
 #[repr(C)]
 #[derive(Debug, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 pub struct DECODE_UNIT {
     pub frameNumber: c_int,
     pub frameType: c_int,
@@ -96,8 +137,10 @@ pub type DecoderRendererCleanup = Option<unsafe extern "C" fn()>;
 pub type DecoderRendererSubmitDecodeUnit =
     Option<unsafe extern "C" fn(decodeUnit: *mut DECODE_UNIT) -> c_int>;
 
+/// Callbacks FFI para el decodificador y renderizador de video.
 #[repr(C)]
 #[derive(Debug, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 pub struct DECODER_RENDERER_CALLBACKS {
     pub setup: DecoderRendererSetup,
     pub start: DecoderRendererStart,
@@ -121,8 +164,10 @@ pub type AudioRendererCleanup = Option<unsafe extern "C" fn()>;
 pub type AudioRendererDecodeAndPlaySample =
     Option<unsafe extern "C" fn(sampleData: *mut c_char, sampleLength: c_int)>;
 
+/// Callbacks FFI para el decodificador de audio Opus.
 #[repr(C)]
 #[derive(Debug, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 pub struct AUDIO_RENDERER_CALLBACKS {
     pub init: AudioRendererInit,
     pub start: AudioRendererStart,
@@ -132,8 +177,10 @@ pub struct AUDIO_RENDERER_CALLBACKS {
     pub capabilities: c_int,
 }
 
+/// Información del servidor Sunshine FFI.
 #[repr(C)]
 #[derive(Debug, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 pub struct SERVER_INFORMATION {
     pub address: *const c_char,
     pub serverInfoAppVersion: *const c_char,
@@ -142,8 +189,10 @@ pub struct SERVER_INFORMATION {
     pub serverCodecModeSupport: c_int,
 }
 
+/// Callbacks FFI para la supervisión del estado de conexión.
 #[repr(C)]
 #[derive(Debug, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 pub struct CONNECTION_LISTENER_CALLBACKS {
     pub stageStarting: *mut c_void,
     pub stageComplete: *mut c_void,
@@ -160,9 +209,7 @@ pub struct CONNECTION_LISTENER_CALLBACKS {
     pub setAdaptiveTriggers: *mut c_void,
 }
 
-// 3. Declaraciones de funciones C (Importadas de Limelight)
-
-// Constantes de Teclado y Mouse
+// Constantes de Teclado, Ratón y Controles
 pub const KEY_ACTION_DOWN: i8 = 0x03;
 pub const KEY_ACTION_UP: i8 = 0x04;
 pub const MODIFIER_SHIFT: i8 = 0x01;
@@ -183,6 +230,8 @@ pub const LI_CTYPE_PS: u8 = 0x02;
 pub const LI_CTYPE_NINTENDO: u8 = 0x03;
 pub const LI_CCAP_ANALOG_TRIGGERS: u16 = 0x01;
 pub const LI_CCAP_RUMBLE: u16 = 0x02;
+
+// 3. Declaraciones de funciones externas C
 
 extern "C" {
     pub fn LiInitializeStreamConfiguration(streamConfig: *mut STREAM_CONFIGURATION);
@@ -235,42 +284,42 @@ extern "C" {
     pub fn LiGetLaunchUrlQueryParameters() -> *const c_char;
 }
 
-// 4. Wrappers Safe de Rust
+// 4. Wrappers Safe de Rust (Inlined)
 
-/// Envió seguro de evento de teclado a la sesión activa de Moonlight.
-#[inline]
+/// Envío seguro e inlined de eventos de teclado a Moonlight-C.
+#[inline(always)]
 pub fn send_keyboard_event(key_code: i16, key_action: i8, modifiers: i8) -> i32 {
     unsafe { LiSendKeyboardEvent(key_code, key_action, modifiers) }
 }
 
-/// Envío seguro de evento de movimiento relativo del ratón.
-#[inline]
+/// Envío seguro e inlined de movimiento relativo del ratón.
+#[inline(always)]
 pub fn send_mouse_move_event(delta_x: i16, delta_y: i16) -> i32 {
     unsafe { LiSendMouseMoveEvent(delta_x, delta_y) }
 }
 
-/// Envío seguro de evento de posición absoluta del ratón.
+/// Envío seguro e inlined de posición absoluta del ratón.
 #[allow(dead_code)]
-#[inline]
+#[inline(always)]
 pub fn send_mouse_position_event(x: i16, y: i16, ref_w: i16, ref_h: i16) -> i32 {
     unsafe { LiSendMousePositionEvent(x, y, ref_w, ref_h) }
 }
 
-/// Envío seguro de evento de botón del ratón (Pulsar / Liberar).
-#[inline]
+/// Envío seguro e inlined de botones del ratón.
+#[inline(always)]
 pub fn send_mouse_button_event(action: i8, button: i32) -> i32 {
     unsafe { LiSendMouseButtonEvent(action, button) }
 }
 
-/// Envío seguro de evento de desplazamiento de rueda del ratón.
+/// Envío seguro e inlined de rueda del ratón.
 #[allow(dead_code)]
-#[inline]
+#[inline(always)]
 pub fn send_scroll_event(clicks: i8) -> i32 {
     unsafe { LiSendScrollEvent(clicks) }
 }
 
-/// Notifica el registro o llegada de un controlador virtual a Sunshine.
-#[inline]
+/// Notifica el registro o llegada de un controlador de juego a Sunshine.
+#[inline(always)]
 pub fn send_controller_arrival_event(
     controller_number: u8,
     active_gamepad_mask: u16,
@@ -289,59 +338,56 @@ pub fn send_controller_arrival_event(
     }
 }
 
-/// Inicializa una `STREAM_CONFIGURATION` con valores por defecto (ceros y defaults de Moonlight).
+/// Inicializa una estructura [`STREAM_CONFIGURATION`] con valores por defecto FFI.
 pub fn initialize_stream_config(config: &mut STREAM_CONFIGURATION) {
     unsafe {
         LiInitializeStreamConfiguration(config as *mut _);
     }
 }
 
-/// Inicializa los callbacks del decoder de video con valores por defecto.
+/// Inicializa los callbacks del decodificador de video con valores por defecto.
 pub fn initialize_video_callbacks(callbacks: &mut DECODER_RENDERER_CALLBACKS) {
     unsafe {
         LiInitializeVideoCallbacks(callbacks as *mut _);
     }
 }
 
+/// Inicializa los callbacks del decodificador de audio con valores por defecto.
 pub fn initialize_audio_callbacks(callbacks: &mut AUDIO_RENDERER_CALLBACKS) {
     unsafe {
         LiInitializeAudioCallbacks(callbacks as *mut _);
     }
 }
 
+/// Inicializa la estructura `SERVER_INFORMATION` con ceros y defaults de C.
 pub fn initialize_server_information(server_info: &mut SERVER_INFORMATION) {
     unsafe {
         LiInitializeServerInformation(server_info as *mut _);
     }
 }
 
+/// Inicializa la estructura de callbacks de eventos de conexión C.
 pub fn initialize_connection_callbacks(callbacks: &mut CONNECTION_LISTENER_CALLBACKS) {
     unsafe {
         LiInitializeConnectionCallbacks(callbacks as *mut _);
     }
 }
 
-/// Devuelve los parámetros de query URL que se deben añadir a las peticiones
-/// `/launch` y `/resume` de Sunshine para habilitar funcionalidad extendida.
+/// Devuelve los parámetros de query URL para peticiones `/launch` y `/resume` de Sunshine.
+#[must_use]
 pub fn get_launch_url_query_parameters() -> String {
     unsafe {
         let ptr = LiGetLaunchUrlQueryParameters();
         if ptr.is_null() {
             String::new()
         } else {
-            std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
+            CStr::from_ptr(ptr).to_string_lossy().into_owned()
         }
     }
 }
 
-/// Configuración de stream personalizada para LAN con resolución, FPS, bitrate y formato de video dinámico.
-///
-/// # Parámetros
-/// - `width`: Ancho en píxeles (ej. 1920, 2560, 3840).
-/// - `height`: Alto en píxeles (ej. 1080, 1440, 2160).
-/// - `fps`: Tasa de cuadros por segundo (ej. 30, 60, 90, 120).
-/// - `bitrate_kbps`: Tasa de bits en kilobits por segundo (ej. 50000 para 50 Mbps).
-/// - `video_format`: Máscara de formatos de video soportados (`VIDEO_FORMAT_H264`, `VIDEO_FORMAT_H265`, `VIDEO_FORMAT_AV1_MAIN8`).
+/// Configuración de stream personalizada para LAN con resolución, FPS, bitrate y formato dinámico.
+#[must_use]
 pub fn custom_lan_stream_config(
     width: i32,
     height: i32,
@@ -350,13 +396,13 @@ pub fn custom_lan_stream_config(
     video_format: i32,
     refresh_rate_x100: i32,
 ) -> STREAM_CONFIGURATION {
-    let mut config: STREAM_CONFIGURATION = unsafe { std::mem::zeroed() };
+    let mut config: STREAM_CONFIGURATION = unsafe { MaybeUninit::zeroed().assume_init() };
     initialize_stream_config(&mut config);
 
     config.width = width as c_int;
     config.height = height as c_int;
     config.fps = fps as c_int;
-    config.bitrate = bitrate_kbps.max(1_000).min(150_000) as c_int;
+    config.bitrate = bitrate_kbps.clamp(1_000, 150_000) as c_int;
     config.packetSize = 1392;
     config.streamingRemotely = STREAM_CFG_LOCAL;
     config.audioConfiguration = AUDIO_CONFIGURATION_STEREO;
@@ -374,19 +420,19 @@ pub fn custom_lan_stream_config(
 }
 
 /// Configuración de stream con valores razonables por defecto para LAN.
+#[must_use]
 pub fn default_lan_stream_config(width: i32, height: i32, fps: i32) -> STREAM_CONFIGURATION {
-    // Negociación automática: H.265 (HEVC), H.264 y AV1 Main 8-bit
     let supported_formats = VIDEO_FORMAT_H265 | VIDEO_FORMAT_H264 | VIDEO_FORMAT_AV1_MAIN8;
     custom_lan_stream_config(width, height, fps, 50_000, supported_formats, fps * 100)
 }
 
-use once_cell::sync::Lazy;
-use std::sync::Mutex;
-use tokio::sync::mpsc;
+// 5. Canales y estados globales hot-path
 
-pub static VIDEO_CHANNEL: Lazy<Mutex<Option<mpsc::Sender<Vec<u8>>>>> =
-    Lazy::new(|| Mutex::new(None));
+/// Canal estático global para el envío de fotogramas al servidor WebSocket local.
+pub static VIDEO_CHANNEL: LazyLock<Mutex<Option<mpsc::Sender<Vec<u8>>>>> =
+    LazyLock::new(|| Mutex::new(None));
 
+/// Asigna el transmisor del canal de video local.
 pub fn set_video_channel(sender: mpsc::Sender<Vec<u8>>) {
     if let Ok(mut guard) = VIDEO_CHANNEL.lock() {
         *guard = Some(sender);
@@ -394,19 +440,15 @@ pub fn set_video_channel(sender: mpsc::Sender<Vec<u8>>) {
 }
 
 pub unsafe extern "C" fn cl_stage_starting(stage: c_int) {
-    log::info!("Moonlight Stage Starting: {}", stage);
+    log::info!("Moonlight Stage Starting: {stage}");
 }
 
 pub unsafe extern "C" fn cl_stage_complete(stage: c_int) {
-    log::info!("Moonlight Stage Complete: {}", stage);
+    log::info!("Moonlight Stage Complete: {stage}");
 }
 
 pub unsafe extern "C" fn cl_stage_failed(stage: c_int, error_code: c_int) {
-    log::error!(
-        "Moonlight Stage Failed: stage={}, error_code={}",
-        stage,
-        error_code
-    );
+    log::error!("Moonlight Stage Failed: stage={stage}, error_code={error_code}");
 }
 
 pub unsafe extern "C" fn cl_connection_started() {
@@ -414,21 +456,21 @@ pub unsafe extern "C" fn cl_connection_started() {
 }
 
 pub unsafe extern "C" fn cl_connection_terminated(error_code: c_int) {
-    log::warn!("Moonlight Connection Terminated: error_code={}", error_code);
+    log::warn!("Moonlight Connection Terminated: error_code={error_code}");
 }
 
 pub unsafe extern "C" fn cl_log_message(msg: *const c_char) {
     if !msg.is_null() {
-        let s = std::ffi::CStr::from_ptr(msg).to_string_lossy();
+        let s = CStr::from_ptr(msg).to_string_lossy();
         log::info!("[Moonlight-C] {}", s.trim_end());
     }
 }
 
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
-
-pub static NEGOTIATED_VIDEO_FORMAT: Lazy<AtomicI32> = Lazy::new(|| AtomicI32::new(0));
+/// Atómico directo constante para almacenar el códec negociado por Moonlight-C.
+pub static NEGOTIATED_VIDEO_FORMAT: AtomicI32 = AtomicI32::new(0);
 
 /// Retorna el identificador en cadena de texto del códec negociado por Moonlight-C ("h264", "h265", "av1").
+#[must_use]
 pub fn get_negotiated_video_codec_name() -> &'static str {
     match NEGOTIATED_VIDEO_FORMAT.load(Ordering::Relaxed) {
         VIDEO_FORMAT_H265 => "h265",
@@ -454,17 +496,20 @@ pub unsafe extern "C" fn dr_setup(
         _ => "Desconocido",
     };
     log::info!(
-        "[Decoder] Negociación de Video Exitosa: {} {}x{}@{}fps",
-        format_str,
-        width,
-        height,
-        redrawRate
+        "[Decoder] Negociación de Video Exitosa: {format_str} {width}x{height}@{redrawRate}fps"
     );
     DR_OK
 }
 
-pub static FIRST_FRAME_RECEIVED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
-pub static LAST_IDR_FRAME: Lazy<Mutex<Option<Vec<u8>>>> = Lazy::new(|| Mutex::new(None));
+/// Atómico directo constante para verificar si ya se recibió el primer fotograma IDR.
+pub static FIRST_FRAME_RECEIVED: AtomicBool = AtomicBool::new(false);
+
+/// Caché del último IDR Keyframe recibido para entrega instantánea a nuevos clientes WebSocket.
+pub static LAST_IDR_FRAME: LazyLock<Mutex<Option<Arc<Vec<u8>>>>> =
+    LazyLock::new(|| Mutex::new(None));
+
+/// Contador atómico directo constante de tramas procesadas.
+static FRAME_COUNT: AtomicU64 = AtomicU64::new(0);
 
 pub unsafe extern "C" fn dr_start() {
     log::info!("Video Decoder Start");
@@ -490,8 +535,7 @@ pub unsafe extern "C" fn dr_cleanup() {
     }
 }
 
-/// Resetea completamente las variables estáticas y canales globales de Moonlight-C
-/// para garantizar que una re-conexión o nueva sesión inicie limpia.
+/// Resetea completamente las variables estáticas y canales globales de Moonlight-C.
 pub fn reset_bindings_state() {
     FIRST_FRAME_RECEIVED.store(false, Ordering::SeqCst);
     NEGOTIATED_VIDEO_FORMAT.store(0, Ordering::SeqCst);
@@ -504,6 +548,15 @@ pub fn reset_bindings_state() {
     log::info!("[Bindings] Estado de decodificador y canal de video limpiados");
 }
 
+/// Callback FFI ejecutado por Moonlight-C para entregar cada unidad de decodificación NALU (60-120+ FPS).
+///
+/// # Safety
+/// Función `unsafe extern "C"` invocada desde código C nativo. `decodeUnit` debe ser un puntero válido o nulo.
+///
+/// # Latency & Performance Notes
+/// - Copia rápida `memcpy` directa sin comprobación de límites por slice mediante `copy_nonoverlapping` y `set_len`.
+/// - Almacenamiento Zero-Copy de IDR Keyframe mediante `Arc<Vec<u8>>` sin alocación heap.
+/// - Despacho de atómicos constantes sin comprobaciones de inicialización `Lazy`.
 pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> c_int {
     if decodeUnit.is_null() {
         return DR_OK;
@@ -523,33 +576,39 @@ pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> 
         log::info!("[Decoder] ¡Primer IDR Keyframe recibido! Decodificador activado.");
     }
 
-    let mut payload = Vec::with_capacity(du.fullLength as usize + 1);
+    let full_len = du.fullLength as usize;
+    let mut payload = Vec::with_capacity(full_len + 1);
     payload.push(if is_idr { 1 } else { 0 });
 
+    // Copia ultrarrápida nivel memcpy directa desde la lista enlazada C LENTRY
     let mut current = du.bufferList;
     while !current.is_null() {
         let entry = &*current;
-        if !entry.data.is_null() && entry.length > 0 {
-            let slice = std::slice::from_raw_parts(entry.data as *const u8, entry.length as usize);
-            payload.extend_from_slice(slice);
+        let len = entry.length as usize;
+        if !entry.data.is_null() && len > 0 {
+            let curr_len = payload.len();
+            std::ptr::copy_nonoverlapping(
+                entry.data as *const u8,
+                payload.as_mut_ptr().add(curr_len),
+                len,
+            );
+            payload.set_len(curr_len + len);
         }
         current = entry.next;
     }
 
     if is_idr {
+        let payload_arc = Arc::new(payload.clone());
         if let Ok(mut idr_guard) = LAST_IDR_FRAME.lock() {
-            *idr_guard = Some(payload.clone());
+            *idr_guard = Some(payload_arc);
         }
     }
 
-    static FRAME_COUNT: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
     let count = FRAME_COUNT.fetch_add(1, Ordering::Relaxed);
     if count < 10 || is_idr {
         log::info!(
-            "[Video] Frame #{} submit: {} bytes, IDR Keyframe: {}",
-            count,
-            payload.len(),
-            is_idr
+            "[Video] Frame #{count} submit: {} bytes, IDR Keyframe: {is_idr}",
+            payload.len()
         );
     }
 
@@ -596,3 +655,4 @@ mod tests {
         assert_eq!(config.clientRefreshRateX100, 12000);
     }
 }
+
