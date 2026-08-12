@@ -227,9 +227,9 @@ export function createVideoStreamDecoder(options: VideoDecoderOptions): VideoDec
    * @param {StreamingCodec} newCodec Nuevo códec negociado por Rust ('h264' | 'h265' | 'av1')
    */
   const setCodec = (newCodec: StreamingCodec): void => {
-    if (isDestroyed || activeCodec === newCodec) return;
+    if (isDestroyed) return;
 
-    console.log(`[VideoDecoder] Reconfigurando decodificador WebCodecs de ${activeCodec} a ${newCodec}`);
+    console.log(`[VideoDecoder] Notificación de códec negociado recibida: ${newCodec}`);
     activeCodec = newCodec;
     hasReceivedKeyFrame = false;
 

@@ -175,6 +175,9 @@ async fn run_server_loop(
             negotiated_codec
         );
 
+        // Forzar la solicitud de un IDR Keyframe fresco a Sunshine para el cliente recién conectado o recargado
+        super::bindings::request_idr_frame();
+
         // Envío de mensaje de inicialización de códec
         if let Err(err) = send_codec_init(&mut ws_stream, negotiated_codec).await {
             log::error!("[VideoServer] Fallo al enviar mensaje codec_init: {err}");
