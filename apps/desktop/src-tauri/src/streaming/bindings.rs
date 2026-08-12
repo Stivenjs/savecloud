@@ -504,6 +504,12 @@ pub unsafe extern "C" fn dr_setup(
 /// Atómico directo constante para verificar si ya se recibió el primer fotograma IDR.
 pub static FIRST_FRAME_RECEIVED: AtomicBool = AtomicBool::new(false);
 
+/// Solicita a Sunshine el envío inmediato de un nuevo fotograma clave IDR.
+pub fn request_idr_frame() {
+    FIRST_FRAME_RECEIVED.store(false, Ordering::Relaxed);
+    log::info!("[Bindings] Solicitud de fotograma IDR fresco enviada a Sunshine por reconexión");
+}
+
 /// Caché del último IDR Keyframe recibido para entrega instantánea a nuevos clientes WebSocket.
 pub static LAST_IDR_FRAME: LazyLock<Mutex<Option<Arc<Vec<u8>>>>> =
     LazyLock::new(|| Mutex::new(None));
