@@ -47,19 +47,22 @@ export const ClientConnectModal = ({ host, isOpen, onClose, config }: ClientConn
     setError(null);
     try {
       const bestSupportedCodec = await getBestSupportedCodec(activeConfig.codec);
-      const wsPort = await invoke<number>("streaming_connect_lan", {
-        ipAddress: host.ip,
-        savecloudPort: host.savecloud_port,
-        width: resDetails.width,
-        height: resDetails.height,
-        fps: activeConfig.fps,
-        bitrateKbps: Math.round(activeConfig.bitrateMbps * 1000),
-        codec: bestSupportedCodec,
-        enableVsync: activeConfig.enableVsync,
-        refreshRateX100: activeConfig.fps * 100,
-      });
+      const connectRes = await invoke<{ ws_port: number; webtransport_port: number; cert_hash: string }>(
+        "streaming_connect_lan",
+        {
+          ipAddress: host.ip,
+          savecloudPort: host.savecloud_port,
+          width: resDetails.width,
+          height: resDetails.height,
+          fps: activeConfig.fps,
+          bitrateKbps: Math.round(activeConfig.bitrateMbps * 1000),
+          codec: bestSupportedCodec,
+          enableVsync: activeConfig.enableVsync,
+          refreshRateX100: activeConfig.fps * 100,
+        }
+      );
       const isMirror = host.ip === "127.0.0.1" || host.ip === "localhost";
-      await openOrFocusStreamingWindow(wsPort, isMirror);
+      await openOrFocusStreamingWindow(connectRes, isMirror);
       onClose();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));

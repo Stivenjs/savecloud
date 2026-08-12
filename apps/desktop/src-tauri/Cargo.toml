@@ -87,6 +87,7 @@ opus = "0.3.0"
 ringbuf = "0.4"
 half = "=2.3.1"
 aes-gcm = "0.10.3"
+wtransport = "0.6"
 rustls = { version = "0.23", features = ["ring"] }
 rustls-pemfile = "2.2.0"
 rustls-pki-types = "1.14.1"

@@ -1,20 +1,16 @@
 /**
  * @module StreamingSocket
- * @description Gestión del WebSocket de streaming para video y audio.
+ * @description Orquestador y capa de transporte unificada para el streaming de video y audio en tiempo real.
  *
- * Establece y mantiene una conexión WebSocket con el servidor local de Rust,
- * discrimina los tipos de mensaje (video, audio) y los enruta a los módulos
- * correspondientes. Implementa reconexión automática con reintentos limitados.
- *
- * Protocolo de mensajes binarios:
- * - Byte 0 = 0x00: Trama delta de video (H.264 P-frame)
- * - Byte 0 = 0x01: KeyFrame de video (H.264 IDR)
- * - Byte 0 = 0x02: Trama de audio PCM 16-bit 48kHz stereo
+ * Selecciona e inicializa de forma fluida el mejor protocolo de transporte disponible:
+ * 1. **WebTransport (HTTP/3 QUIC UDP Datagrams)**: Cero bloqueo de cabecera (*Head-of-Line Blocking*), ideal para Wi-Fi o WAN.
+ * 2. **WebSocket (WSS TCP)**: Protocolo de respaldo confiable para red local o cuando UDP está bloqueado por firewall.
  */
 
 import type { StreamingCodec } from "./streamingTypes";
 import type { WebAudioPlayerInstance } from "./WebAudioPlayer";
 import type { VideoDecoderInstance } from "./VideoStreamDecoder";
+import { createWebTransportSocket, isWebTransportSupported, WebTransportSocketInstance } from "./WebTransportSocket";
 
 /** Número máximo de reintentos de reconexión antes de reportar error. */
 const MAX_RETRIES = 20;
@@ -22,29 +18,37 @@ const MAX_RETRIES = 20;
 /** Intervalo entre reintentos de reconexión (ms). */
 const RETRY_INTERVAL_MS = 1500;
 
+/** Tipo de transporte de red activo. */
+export type StreamingTransportType = "webtransport" | "websocket";
+
 /**
- * Instancia del socket de streaming.
- * Expone un método para destruir la conexión y liberar recursos.
+ * Instancia del socket de streaming unificado.
  */
 export interface StreamingSocketInstance {
-  /** Cierra el WebSocket y cancela cualquier reconexión pendiente. */
+  /** Tipo de transporte de red activo actualmente ("webtransport" | "websocket"). */
+  transportType: StreamingTransportType;
+  /** Cierra la conexión de transporte y libera recursos. */
   destroy: () => void;
 }
 
 /**
- * Opciones de configuración para el socket de streaming.
+ * Opciones de configuración para el socket de streaming unificado.
  */
 export interface StreamingSocketOptions {
-  /** Puerto del servidor WebSocket local (Rust). */
+  /** Puerto del servidor WebSocket local (Rust TCP). */
   wsPort: number;
+  /** Puerto opcional del servidor WebTransport local (Rust UDP). */
+  webTransportPort?: number;
+  /** Huella digital SHA-256 opcional del certificado TLS para WebTransport. */
+  certHash?: string;
   /** Instancia del reproductor de audio WebAudio (opcional). */
   audioPlayer?: WebAudioPlayerInstance;
   /** Instancia del decodificador de video WebCodecs. */
   videoDecoder: VideoDecoderInstance;
   /** Callback invocado cuando ocurre un error irrecuperable. */
   onError: (message: string) => void;
-  /** Callback invocado cuando la conexión se establece exitosamente. */
-  onConnected: () => void;
+  /** Callback invocado al conectarse exitosamente notificando el protocolo activo. */
+  onConnected: (transportType: StreamingTransportType) => void;
   /** Callback invocado cuando la recepción de cuadros de video se congela o reanuda. */
   onStalled?: (isStalled: boolean) => void;
   /** Callback para obtener el texto de error de reconexión (i18n). */
@@ -52,16 +56,28 @@ export interface StreamingSocketOptions {
 }
 
 /**
- * Crea una nueva instancia del socket de streaming.
- * Establece la conexión WebSocket y enruta los mensajes binarios
- * al reproductor de audio o al decodificador de video según el tipo.
+ * Crea una nueva instancia del socket de streaming unificado.
+ * Intenta establecer primero una conexión WebTransport sobre UDP.
+ * Si falla o no está disponible, realiza un fallback transparente a WebSocket sobre TCP.
  *
- * @param {StreamingSocketOptions} options Configuración del socket (puerto, módulos, callbacks).
- * @returns {StreamingSocketInstance} Instancia con método `destroy`.
+ * @param {StreamingSocketOptions} options Configuración del socket (puertos, decodificadores, callbacks).
+ * @returns {StreamingSocketInstance} Instancia con tipo de transporte activo y método `destroy`.
  */
 export function createStreamingSocket(options: StreamingSocketOptions): StreamingSocketInstance {
-  const { wsPort, audioPlayer, videoDecoder, onError, onConnected, onStalled, getReconnectErrorMessage } = options;
+  const {
+    wsPort,
+    webTransportPort,
+    certHash,
+    audioPlayer,
+    videoDecoder,
+    onError,
+    onConnected,
+    onStalled,
+    getReconnectErrorMessage,
+  } = options;
 
+  let activeTransport: { destroy: () => void } | null = null;
+  let activeType: StreamingTransportType = "websocket";
   let ws: WebSocket | null = null;
   let retryCount = 0;
   let isDestroyed = false;
@@ -70,7 +86,7 @@ export function createStreamingSocket(options: StreamingSocketOptions): Streamin
   let isStalledState = false;
   let stallCheckInterval: ReturnType<typeof setInterval> | null = null;
 
-  /** Limpia todos los handlers y cierra el WebSocket actual. */
+  /** Limpia la conexión WebSocket de respaldo si existe. */
   const cleanupWs = (): void => {
     if (ws) {
       ws.onopen = null;
@@ -82,23 +98,23 @@ export function createStreamingSocket(options: StreamingSocketOptions): Streamin
     }
   };
 
-  /** Programa un reintento de reconexión con backoff fijo. */
+  /** Programa un reintento de reconexión WebSocket con backoff fijo. */
   const scheduleReconnect = (): void => {
     if (isDestroyed) return;
 
     if (retryCount < MAX_RETRIES) {
       retryCount++;
-      console.log(`[StreamingSocket] Reintentando conexión (${retryCount}/${MAX_RETRIES})...`);
+      console.log(`[StreamingSocket] Reintentando conexión WebSocket (${retryCount}/${MAX_RETRIES})...`);
       reconnectTimeout = setTimeout(() => {
-        if (!isDestroyed) connect();
+        if (!isDestroyed) connectWebSocket();
       }, RETRY_INTERVAL_MS);
     } else {
       onError(getReconnectErrorMessage());
     }
   };
 
-  /** Establece una nueva conexión WebSocket con el servidor local. */
-  const connect = (): void => {
+  /** Inicia la conexión WebSocket TCP de respaldo. */
+  const connectWebSocket = (): void => {
     if (isDestroyed) return;
     cleanupWs();
 
@@ -108,10 +124,11 @@ export function createStreamingSocket(options: StreamingSocketOptions): Streamin
 
       ws.onopen = () => {
         if (isDestroyed) return;
-        console.log("[StreamingSocket] Conectado al servidor de streaming");
+        console.log("[StreamingSocket] Conectado al servidor de streaming mediante WebSocket TCP");
+        activeType = "websocket";
         retryCount = 0;
         lastVideoFrameTime = Date.now();
-        onConnected();
+        onConnected("websocket");
 
         if (stallCheckInterval) clearInterval(stallCheckInterval);
         stallCheckInterval = setInterval(() => {
@@ -159,7 +176,7 @@ export function createStreamingSocket(options: StreamingSocketOptions): Streamin
 
       ws.onclose = () => {
         if (isDestroyed) return;
-        console.log("[StreamingSocket] Conexión cerrada");
+        console.log("[StreamingSocket] Conexión WebSocket cerrada");
         if (isStalledState) {
           isStalledState = false;
           onStalled?.(false);
@@ -169,7 +186,7 @@ export function createStreamingSocket(options: StreamingSocketOptions): Streamin
 
       ws.onerror = (e) => {
         if (isDestroyed) return;
-        console.warn("[StreamingSocket] Error de WebSocket (esperando inicio de stream):", e);
+        console.warn("[StreamingSocket] Error de WebSocket TCP (esperando transmisión):", e);
       };
     } catch (e: any) {
       if (!isDestroyed) {
@@ -178,9 +195,49 @@ export function createStreamingSocket(options: StreamingSocketOptions): Streamin
     }
   };
 
-  connect();
+  /** Intenta primero conectar vía WebTransport QUIC (UDP), con fallback a WebSocket. */
+  const initTransport = async () => {
+    if (webTransportPort && isWebTransportSupported()) {
+      try {
+        console.log("[StreamingSocket] Intentando conectar transporte primario: WebTransport HTTP/3 (UDP)...");
+        const wtSocket: WebTransportSocketInstance = await createWebTransportSocket({
+          port: webTransportPort,
+          certHash,
+          audioPlayer,
+          videoDecoder,
+          onConnected: () => {
+            if (!isDestroyed) {
+              activeType = "webtransport";
+              onConnected("webtransport");
+            }
+          },
+          onError: (msg) => {
+            console.warn("[StreamingSocket] Error en WebTransport, ejecutando fallback a WebSocket TCP:", msg);
+            if (!isDestroyed) connectWebSocket();
+          },
+          onStalled,
+        });
 
-  /** Destruye la conexión y cancela cualquier reconexión pendiente. */
+        if (isDestroyed) {
+          wtSocket.destroy();
+          return;
+        }
+
+        activeTransport = wtSocket;
+        activeType = "webtransport";
+        return;
+      } catch (err) {
+        console.warn("[StreamingSocket] Fallo al iniciar WebTransport UDP, utilizando fallback a WebSocket TCP:", err);
+      }
+    }
+
+    // Fallback directo a WebSocket
+    connectWebSocket();
+  };
+
+  initTransport();
+
+  /** Destruye el socket de transporte y libera recursos. */
   const destroy = (): void => {
     isDestroyed = true;
     if (reconnectTimeout) {
@@ -191,8 +248,17 @@ export function createStreamingSocket(options: StreamingSocketOptions): Streamin
       clearInterval(stallCheckInterval);
       stallCheckInterval = null;
     }
+    if (activeTransport) {
+      activeTransport.destroy();
+      activeTransport = null;
+    }
     cleanupWs();
   };
 
-  return { destroy };
+  return {
+    get transportType() {
+      return activeType;
+    },
+    destroy,
+  };
 }

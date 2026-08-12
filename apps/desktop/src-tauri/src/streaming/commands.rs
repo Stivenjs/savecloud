@@ -77,7 +77,7 @@ pub async fn streaming_connect_lan(
     refresh_rate_x100: Option<i32>,
     state: tauri::State<'_, StreamingState>,
     app: tauri::AppHandle,
-) -> Result<u16, String> {
+) -> Result<super::client::ConnectResult, String> {
     let is_loopback = ip_address == "127.0.0.1" || ip_address == "localhost" || ip_address == "::1";
     super::set_mirror_mode(is_loopback);
 
@@ -125,7 +125,7 @@ pub async fn streaming_connect_lan(
         stream_options.video_format
     );
 
-    let ws_port = state
+    let connect_res = state
         .client
         .connect_lan(&ip_address, savecloud_port, &stream_options)
         .await
@@ -146,11 +146,11 @@ pub async fn streaming_connect_lan(
 
     *state.session.lock().unwrap() = HostState::Playing {
         host_ip: ip_address.clone(),
-        ws_port,
+        ws_port: connect_res.ws_port,
     };
     let _ = app.emit("streaming-state-changed", ());
 
-    Ok(ws_port)
+    Ok(connect_res)
 }
 
 /// Detiene cualquier sesión activa de streaming (como Host o Cliente).

@@ -9,17 +9,20 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Card } from "@heroui/react";
+import { Card, Chip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
-import { ShieldAlert } from "lucide-react";
-import { createVideoStreamDecoder } from "./VideoStreamDecoder";
-import { createStreamingSocket } from "./StreamingSocket";
+import { ShieldAlert, Cpu } from "lucide-react";
+import { createVideoStreamDecoder, VideoDecoderInstance } from "./VideoStreamDecoder";
+import { createStreamingSocket, StreamingSocketInstance, StreamingTransportType } from "./StreamingSocket";
+import { createVideoRenderer, VideoRenderer, VideoRendererBackend } from "./VideoRenderer";
 
 interface VideoPlayerProps {
   wsPort: number;
+  webTransportPort?: number;
+  certHash?: string;
 }
 
-export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
+export const VideoPlayer = ({ wsPort, webTransportPort, certHash }: VideoPlayerProps) => {
   const { t } = useTranslation();
   const tRef = useRef(t);
   tRef.current = t;
@@ -27,43 +30,98 @@ export const VideoPlayer = ({ wsPort }: VideoPlayerProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [isStalled, setIsStalled] = useState(false);
+  const [activeBackend, setActiveBackend] = useState<VideoRendererBackend | null>(null);
+  const [activeTransport, setActiveTransport] = useState<StreamingTransportType>("websocket");
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      setError(tRef.current("remotePlay.canvasContextError"));
-      return;
-    }
+    let isCancelled = false;
+    let videoDecoder: VideoDecoderInstance | null = null;
+    let streamingSocket: StreamingSocketInstance | null = null;
+    let renderer: VideoRenderer | null = null;
 
-    const videoDecoder = createVideoStreamDecoder({
-      canvas,
-      ctx,
-      onError: setError,
-    });
+    const initStreaming = async () => {
+      try {
+        renderer = await createVideoRenderer(canvas);
+        if (isCancelled) {
+          renderer.destroy();
+          return;
+        }
 
-    const streamingSocket = createStreamingSocket({
-      wsPort,
-      videoDecoder,
-      onError: setError,
-      onConnected: () => setError(null),
-      onStalled: (stalled) => setIsStalled(stalled),
-      getReconnectErrorMessage: () => tRef.current("remotePlay.wsVideoError"),
-    });
+        setActiveBackend(renderer.backend);
+
+        videoDecoder = createVideoStreamDecoder({
+          canvas,
+          renderer,
+          onError: (msg) => {
+            if (!isCancelled) setError(msg);
+          },
+        });
+
+        streamingSocket = createStreamingSocket({
+          wsPort,
+          webTransportPort,
+          certHash,
+          videoDecoder,
+          onError: (msg) => {
+            if (!isCancelled) setError(msg);
+          },
+          onConnected: (transportType) => {
+            if (!isCancelled) {
+              setError(null);
+              setActiveTransport(transportType);
+            }
+          },
+          onStalled: (stalled) => {
+            if (!isCancelled) setIsStalled(stalled);
+          },
+          getReconnectErrorMessage: () => tRef.current("remotePlay.wsVideoError"),
+        });
+      } catch (err: any) {
+        if (!isCancelled) {
+          console.error("[VideoPlayer] Error al inicializar el sistema de renderizado:", err);
+          setError(err?.message || tRef.current("remotePlay.canvasContextError"));
+        }
+      }
+    };
+
+    initStreaming();
 
     return () => {
-      streamingSocket.destroy();
-      videoDecoder.destroy();
+      isCancelled = true;
+      streamingSocket?.destroy();
+      videoDecoder?.destroy();
+      renderer?.destroy();
     };
-  }, [wsPort]);
+  }, [wsPort, webTransportPort, certHash]);
 
   return (
     <Card
       className="w-full h-full bg-black flex items-center justify-center overflow-hidden border-none rounded-none absolute inset-0 z-50 select-none"
       style={{ backgroundColor: "#000000" }}>
       {error && <div className="absolute top-4 left-4 bg-red-500/80 text-white px-4 py-2 rounded z-50">{error}</div>}
+
+      {activeBackend && (
+        <div className="absolute top-4 right-4 z-50 pointer-events-none opacity-80 hover:opacity-100 transition-opacity">
+          <Chip
+            size="sm"
+            variant="flat"
+            color={
+              activeBackend === "webgpu" ? ("emerald" as any) : activeBackend === "webgl2" ? "secondary" : "warning"
+            }
+            startContent={<Cpu size={12} className="ml-1" />}
+            className="text-[10px] font-semibold tracking-wide uppercase bg-black/60 backdrop-blur-md border border-white/10 text-white shadow-lg">
+            {activeBackend === "webgpu"
+              ? "WebGPU 0-Copy VRAM"
+              : activeBackend === "webgl2"
+                ? "WebGL2 GPU"
+                : "Canvas 2D"}{" "}
+            • {activeTransport === "webtransport" ? "WebTransport (UDP)" : "WebSocket (TCP)"}
+          </Chip>
+        </div>
+      )}
 
       {isStalled && (
         <div className="absolute top-6 inset-x-0 flex justify-center z-50 pointer-events-none px-4">

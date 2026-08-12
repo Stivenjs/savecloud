@@ -15,6 +15,8 @@ import { Button, Chip, Tooltip } from "@heroui/react";
 export const StreamingWindowPage = () => {
   const { t } = useTranslation();
   const [wsPort, setWsPort] = useState<number | null>(null);
+  const [webTransportPort, setWebTransportPort] = useState<number | undefined>(undefined);
+  const [certHash, setCertHash] = useState<string | undefined>(undefined);
   const [isFullscreen, setIsFullscreen] = useState(true);
   const [showToolbar, setShowToolbar] = useState(false);
   const [isMirror, setIsMirror] = useState(false);
@@ -50,6 +52,14 @@ export const StreamingWindowPage = () => {
     const portStr = params.get("wsPort");
     if (portStr) {
       setWsPort(parseInt(portStr, 10));
+    }
+    const wtPortStr = params.get("webTransportPort");
+    if (wtPortStr) {
+      setWebTransportPort(parseInt(wtPortStr, 10));
+    }
+    const cert = params.get("certHash");
+    if (cert) {
+      setCertHash(cert);
     }
     if (params.get("isMirror") === "true") {
       setIsMirror(true);
@@ -156,7 +166,7 @@ export const StreamingWindowPage = () => {
 
       {/* Reproductor de video ocupando el 100% de la ventana sin paddings ni bordes */}
       <div className={`absolute inset-0 z-10 w-full h-full cursor-none ${!isFullscreen ? "pt-8" : ""}`}>
-        <VideoPlayer wsPort={wsPort} />
+        <VideoPlayer wsPort={wsPort} webTransportPort={webTransportPort} certHash={certHash} />
       </div>
     </div>
   );
