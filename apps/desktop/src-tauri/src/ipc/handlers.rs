@@ -221,6 +221,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::streaming::commands::streaming_start_host,
         crate::streaming::commands::streaming_connect_lan,
         crate::streaming::commands::streaming_stop,
+        crate::streaming::commands::streaming_cancel_active_session,
         crate::streaming::commands::streaming_get_state,
         crate::streaming::commands::streaming_release_inputs,
         crate::streaming::commands::streaming_toggle_fullscreen,

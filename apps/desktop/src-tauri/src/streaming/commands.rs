@@ -32,7 +32,11 @@ pub async fn streaming_start_host(
     let savecloud_port =
         crate::peer_lan::server::ensure_lan_http_server(Some(state.host.clone())).await?;
 
-    state.host.start().await.map_err(|e| e.to_string())?;
+    state
+        .host
+        .start(Some(state.session.clone()))
+        .await
+        .map_err(|e| e.to_string())?;
 
     // 2. Publicar en mDNS que somos un Host, pasando también el puerto de nuestra API LAN
     super::discovery::publish_stream_service(&device_id, &user_id, 47989, savecloud_port)?;
@@ -80,7 +84,11 @@ pub async fn streaming_connect_lan(
     if ip_address == "127.0.0.1" && savecloud_port == 0 {
         savecloud_port =
             crate::peer_lan::server::ensure_lan_http_server(Some(state.host.clone())).await?;
-        state.host.start().await.map_err(|e| e.to_string())?;
+        state
+            .host
+            .start(Some(state.session.clone()))
+            .await
+            .map_err(|e| e.to_string())?;
         tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
     }
 
@@ -165,8 +173,35 @@ pub async fn streaming_stop(
     let _ = app.emit("streaming-state-changed", ());
 
     Ok(())
+}
 
+/// Cancela la sesión activa de streaming en Sunshine Host (desconecta al cliente) sin apagar el host.
+#[command]
+pub async fn streaming_cancel_active_session(
+    state: State<'_, StreamingState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    log::info!("Comando: Cancelando sesión de cliente activo en Sunshine Host");
 
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let _ = client.get("https://127.0.0.1:47989/cancel").send().await;
+    let _ = client.get("https://127.0.0.1:47984/cancel").send().await;
+    let _ = client.get("https://localhost:47989/cancel").send().await;
+    let _ = client.get("https://localhost:47984/cancel").send().await;
+
+    if let Ok(mut session) = state.session.lock() {
+        if let HostState::Hosting { ref mut clients, .. } = *session {
+            clients.clear();
+        }
+    }
+    let _ = app.emit("streaming-state-changed", ());
+
+    Ok(())
 }
 
 /// Obtiene el estado actual del motor de streaming.

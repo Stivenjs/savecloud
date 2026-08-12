@@ -14,7 +14,7 @@ use tokio::sync::Mutex;
 const SUNSHINE_VERSION: &str = "v0.23.1";
 
 pub struct SunshineHost {
-    _app_handle: AppHandle,
+    app_handle: AppHandle,
     process: Arc<Mutex<Option<Child>>>,
     bin_dir: PathBuf,
 }
@@ -26,7 +26,7 @@ impl SunshineHost {
         let bin_dir = data_dir.join("SaveCloud").join("sunshine_bin");
 
         Self {
-            _app_handle: app_handle,
+            app_handle,
             process: Arc::new(Mutex::new(None)),
             bin_dir,
         }
@@ -116,7 +116,10 @@ impl SunshineHost {
         }
     }
 
-    pub async fn start(&self) -> StreamingResult<()> {
+    pub async fn start(
+        &self,
+        session_state: Option<Arc<std::sync::Mutex<super::session::HostState>>>,
+    ) -> StreamingResult<()> {
         let mut process_guard = self.process.lock().await;
 
         if let Some(child) = process_guard.as_mut() {
@@ -170,8 +173,8 @@ impl SunshineHost {
             .current_dir(self.bin_dir.join("Sunshine"))
             .arg("-0")
             .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
 
         #[cfg(target_os = "windows")]
         {
@@ -180,12 +183,56 @@ impl SunshineHost {
             command.creation_flags(CREATE_NO_WINDOW);
         }
 
-        let child = command
+        let mut child = command
             .spawn()
             .map_err(|e| StreamingError::Host(format!("Fallo al ejecutar Sunshine: {}", e)))?;
 
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+
+        if let (Some(stdout), Some(stderr), Some(session_state)) = (stdout, stderr, session_state) {
+            self.spawn_log_monitor(stdout, stderr, session_state);
+        }
+
         *process_guard = Some(child);
         Ok(())
+    }
+
+    /// Lector de logs asíncrono basado en eventos (Zero Polling).
+    ///
+    /// Intercepta las líneas producidas por el proceso Sunshine en stdout/stderr
+    /// para actualizar instantáneamente si hay clientes conectados al stream.
+    fn spawn_log_monitor(
+        &self,
+        stdout: std::process::ChildStdout,
+        stderr: std::process::ChildStderr,
+        session_state: Arc<std::sync::Mutex<super::session::HostState>>,
+    ) {
+        let app_handle = self.app_handle.clone();
+
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader};
+
+            let session_stdout = session_state.clone();
+            let app_stdout = app_handle.clone();
+
+            let stdout_handle = std::thread::spawn(move || {
+                let reader = BufReader::new(stdout);
+                for line in reader.lines().map_while(Result::ok) {
+                    process_sunshine_log_line(&line, &session_stdout, &app_stdout);
+                }
+            });
+
+            let stderr_handle = std::thread::spawn(move || {
+                let reader = BufReader::new(stderr);
+                for line in reader.lines().map_while(Result::ok) {
+                    process_sunshine_log_line(&line, &session_state, &app_handle);
+                }
+            });
+
+            let _ = stdout_handle.join();
+            let _ = stderr_handle.join();
+        });
     }
 
     #[allow(dead_code)]
@@ -401,3 +448,57 @@ impl Drop for SunshineHost {
         }
     }
 }
+
+/// Procesa las líneas de registro de Sunshine para actualizar el estado del Host en tiempo real sin polling.
+fn process_sunshine_log_line(
+    line: &str,
+    session_state: &Arc<std::sync::Mutex<super::session::HostState>>,
+    app_handle: &AppHandle,
+) {
+    use super::session::HostState;
+    use tauri::Emitter;
+
+    let lower = line.to_lowercase();
+
+    let is_connected = lower.contains("client connected")
+        || lower.contains("rtsp: connected")
+        || lower.contains("rtsp/1.0 setup")
+        || lower.contains("session started")
+        || (lower.contains("rtsp") && lower.contains("setup"));
+
+    let is_disconnected = lower.contains("client disconnected")
+        || lower.contains("rtsp: disconnected")
+        || lower.contains("rtsp/1.0 teardown")
+        || lower.contains("session ended")
+        || lower.contains("session stopped")
+        || (lower.contains("rtsp") && lower.contains("teardown"));
+
+    if is_connected || is_disconnected {
+        if let Ok(mut session) = session_state.lock() {
+            if let HostState::Hosting { ref mut clients, .. } = *session {
+                let updated = if is_connected {
+                    if clients.is_empty() {
+                        clients.push("Cliente Conectado".to_string());
+                        log::info!("[SunshineHost] Evento en tiempo real: Cliente conectado al stream");
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    if !clients.is_empty() {
+                        clients.clear();
+                        log::info!("[SunshineHost] Evento en tiempo real: Cliente desconectado del stream");
+                        true
+                    } else {
+                        false
+                    }
+                };
+
+                if updated {
+                    let _ = app_handle.emit("streaming-state-changed", ());
+                }
+            }
+        }
+    }
+}
+

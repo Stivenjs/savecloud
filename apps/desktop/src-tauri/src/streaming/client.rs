@@ -310,7 +310,7 @@ impl MoonlightClient {
             target_ip = "localhost".to_string();
         }
 
-        // Obtener el App ID real de "Desktop" desde Sunshine /applist
+        // Obtener el App ID real de "Desktop" desde Sunshine /applist (puerto 47984 HTTPS)
         let applist_url = format!("https://{}:47984/applist?uniqueid={}", target_ip, unique_id);
         let mut app_id = "1".to_string();
 
@@ -324,9 +324,8 @@ impl MoonlightClient {
             }
         }
 
-        // Cancelar cualquier sesión de transmisión activa en Sunshine para aplicar la nueva resolución
-        let cancel_url = format!("https://{}:47984/cancel?uniqueid={}", target_ip, unique_id);
-        let _ = client.get(&cancel_url).send().await;
+        // Cancelar cualquier sesión de transmisión previa en Sunshine para aplicar la nueva resolución
+        cancel_sunshine_session(&client, &target_ip, &unique_id).await;
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
         let mode_str = format!("{}x{}x{}", options.width, options.height, options.fps);
@@ -363,11 +362,11 @@ impl MoonlightClient {
                                 }
                             }
                             log::warn!(
-                                "Fallo al reanudar vía /resume. Cancelando sesión previa..."
+                                "Fallo al reanudar vía /resume. Cancelando sesión previa en Sunshine..."
                             );
-                            let _ = client.get(&cancel_url).send().await;
+                            cancel_sunshine_session(&client, &target_ip, &unique_id).await;
                             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                            last_error = format!("Sunshine tenía sesión activa. Se envió /cancel para reintentar /launch. XML: {}", xml);
+                            last_error = format!("Sunshine tenía sesión activa. Se envió /cancel en puerto 47984 para reintentar /launch. XML: {}", xml);
                         } else {
                             last_error = format!("Respuesta /launch sin sessionUrl0. XML: {}", xml);
                             log::warn!("Reintentando /launch: {}", last_error);
@@ -499,10 +498,12 @@ impl MoonlightClient {
         let host_ip = self.last_host_ip.lock().ok().and_then(|mut g| g.take());
         let unique_id = self.get_or_create_unique_id().ok();
 
-        if let (Some(target_ip), Some(id)) = (host_ip, unique_id) {
-            let cancel_url = format!("https://{}:47984/cancel?uniqueid={}", target_ip, id);
+        if let (Some(mut target_ip), Some(id)) = (host_ip, unique_id) {
+            if target_ip == "127.0.0.1" {
+                target_ip = "localhost".to_string();
+            }
             log::info!(
-                "[MoonlightClient] Notificando /cancel al host Sunshine ({})",
+                "[MoonlightClient] Notificando /cancel al host Sunshine ({}:47984)",
                 target_ip
             );
             tokio::spawn(async move {
@@ -511,7 +512,7 @@ impl MoonlightClient {
                     .timeout(std::time::Duration::from_secs(3))
                     .build();
                 if let Ok(client) = client {
-                    let _ = client.get(&cancel_url).send().await;
+                    cancel_sunshine_session(&client, &target_ip, &id).await;
                 }
             });
         }
@@ -527,6 +528,14 @@ impl MoonlightClient {
 
         log::info!("[MoonlightClient] Desconectado completamente y estados reseteados");
     }
+}
+
+/// Cancela cualquier sesión activa en el servidor HTTPS de Sunshine (puerto 47984).
+async fn cancel_sunshine_session(client: &reqwest::Client, target_ip: &str, unique_id: &str) {
+    let cancel_with_id = format!("https://{}:47984/cancel?uniqueid={}", target_ip, unique_id);
+    let cancel_raw = format!("https://{}:47984/cancel", target_ip);
+    let _ = client.get(&cancel_with_id).send().await;
+    let _ = client.get(&cancel_raw).send().await;
 }
 
 impl Drop for MoonlightClient {
