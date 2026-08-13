@@ -247,6 +247,10 @@ async fn multipart_abort(ctx: &UploadCtx<'_>) -> Result<(), String> {
     Ok(())
 }
 
+type PrefetchTaskOutput = Result<Vec<(u32, String)>, String>;
+type PartTaskOutput = Result<(u32, String, u64, u128, tokio::sync::OwnedSemaphorePermit), String>;
+type UploadJoinSet = tokio::task::JoinSet<PartTaskOutput>;
+
 /// Estado del prefetch de URLs en background.
 ///
 /// Encapsula la tarea Tokio que fetcha el siguiente batch de URLs mientras el
@@ -255,7 +259,7 @@ async fn multipart_abort(ctx: &UploadCtx<'_>) -> Result<(), String> {
 struct PrefetchState {
     /// Tarea en vuelo que resuelve el siguiente batch de URLs, o `None` si no hay
     /// ningún prefetch en curso.
-    task: Option<tokio::task::JoinHandle<Result<Vec<(u32, String)>, String>>>,
+    task: Option<tokio::task::JoinHandle<PrefetchTaskOutput>>,
 }
 
 impl PrefetchState {
@@ -386,7 +390,7 @@ enum TaskResult {
 /// Normaliza el resultado de `JoinSet::join_next` absorbiendo panics del runtime.
 fn normalize_join_result(
     res: Result<
-        Result<(u32, String, u64, u128, tokio::sync::OwnedSemaphorePermit), String>,
+        PartTaskOutput,
         tokio::task::JoinError,
     >,
 ) -> TaskResult {
@@ -406,9 +410,7 @@ fn normalize_join_result(
 /// Drena todas las tareas pendientes del JoinSet esperando su finalización.
 /// En caso de error cancela el resto y llama a `multipart_abort`.
 async fn drain_upload_tasks(
-    tasks: &mut tokio::task::JoinSet<
-        Result<(u32, String, u64, u128, tokio::sync::OwnedSemaphorePermit), String>,
-    >,
+    tasks: &mut UploadJoinSet,
     ctx: &UploadCtx<'_>,
 ) -> Result<Vec<(u32, String, u64, u128)>, String> {
     let mut collected = Vec::new();
@@ -437,9 +439,7 @@ async fn drain_upload_tasks(
 /// Actualiza `completed_parts`, `uploaded_bytes` y alimenta el `ConcurrencyController`.
 /// Devuelve los bytes recién completados (comprimidos) para métricas.
 async fn collect_finished_tasks(
-    tasks: &mut tokio::task::JoinSet<
-        Result<(u32, String, u64, u128, tokio::sync::OwnedSemaphorePermit), String>,
-    >,
+    tasks: &mut UploadJoinSet,
     ctx: &UploadCtx<'_>,
     completed_parts: &mut Vec<(u32, String)>,
     uploaded_bytes: &mut u64,
@@ -472,9 +472,7 @@ async fn collect_finished_tasks(
 
 /// Espera a que un slot de concurrencia se libere cuando el JoinSet está lleno.
 async fn wait_for_one_slot(
-    tasks: &mut tokio::task::JoinSet<
-        Result<(u32, String, u64, u128, tokio::sync::OwnedSemaphorePermit), String>,
-    >,
+    tasks: &mut UploadJoinSet,
     ctx: &UploadCtx<'_>,
     completed_parts: &mut Vec<(u32, String)>,
     uploaded_bytes: &mut u64,
@@ -521,11 +519,9 @@ fn maybe_emit_progress(
     last_pct: &mut u8,
     force: bool,
 ) {
-    let pct = if total > 0 {
-        ((loaded * 100) / total).min(100) as u8
-    } else {
-        0
-    };
+    let pct = (loaded * 100)
+        .checked_div(total)
+        .map_or(0, |v| v.min(100) as u8);
     if force || pct > *last_pct {
         *last_pct = pct;
         emit_sync_upload_progress(
@@ -557,9 +553,7 @@ fn maybe_emit_progress(
 /// Esto garantiza que el número de partes en vuelo × `part_size` nunca supera
 /// `strategy.max_inflight_bytes` independientemente de la concurrencia del JoinSet.
 async fn spawn_part_upload(
-    tasks: &mut tokio::task::JoinSet<
-        Result<(u32, String, u64, u128, tokio::sync::OwnedSemaphorePermit), String>,
-    >,
+    tasks: &mut UploadJoinSet,
     semaphore: &std::sync::Arc<Semaphore>,
     url: String,
     part_number: u32,
@@ -595,6 +589,10 @@ async fn spawn_part_upload(
 /// ajusta automáticamente según el throughput medido por `ConcurrencyController`.
 /// Un semáforo de memoria impide que el número de partes en vuelo supere
 /// `strategy.max_inflight_bytes`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Parámetros de streaming, backend API, handles de Tauri y tokens de cancelación"
+)]
 pub(crate) async fn upload_tar_stream_multipart(
     mut rx: tokio::sync::mpsc::Receiver<TarStreamMsg>,
     game_id: &str,
@@ -648,9 +646,7 @@ pub(crate) async fn upload_tar_stream_multipart(
     let mut uploaded_bytes: u64 = 0;
     let mut last_pct: u8 = 0;
 
-    let mut upload_tasks: tokio::task::JoinSet<
-        Result<(u32, String, u64, u128, tokio::sync::OwnedSemaphorePermit), String>,
-    > = tokio::task::JoinSet::new();
+    let mut upload_tasks: UploadJoinSet = tokio::task::JoinSet::new();
 
     maybe_emit_progress(
         &app,

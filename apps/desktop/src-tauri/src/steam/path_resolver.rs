@@ -15,8 +15,8 @@ static ENV_VAR_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"%([^%]+)%"
 /// Limpia el prefijo UNC (\\?\) que añade `canonicalize` en Windows.
 fn clean_unc_path(path: &Path) -> PathBuf {
     let s = path.to_string_lossy();
-    if s.starts_with(r"\\?\") {
-        PathBuf::from(s[4..].to_string())
+    if let Some(stripped) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(stripped)
     } else {
         path.to_path_buf()
     }

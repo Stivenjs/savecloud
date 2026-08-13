@@ -115,7 +115,7 @@ fn write_line(line: String) {
     };
 
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
-        let _ = handle.spawn_blocking(move || do_write_line(path, line));
+        drop(handle.spawn_blocking(move || do_write_line(path, line)));
     } else {
         do_write_line(path, line);
     }

@@ -64,6 +64,10 @@ pub async fn streaming_start_host(
 }
 
 /// Conecta este cliente a un Host descubierto en la LAN usando su IP y configuraciones avanzadas de transmisión.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Comando IPC de Tauri expuesto al frontend con opciones de streaming"
+)]
 #[tauri::command]
 pub async fn streaming_connect_lan(
     ip_address: String,

@@ -4,7 +4,7 @@ use crate::network::DATA_CLIENT;
 use crate::utils::launch_exe;
 use std::fs::File;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const DIRECTX_DETAILS_URL: &str = "https://www.microsoft.com/en-us/download/details.aspx?id=35";
 
@@ -65,7 +65,7 @@ async fn download_installer(url: &str) -> Result<PathBuf, String> {
     Ok(target)
 }
 
-fn run_installer(installer_path: &PathBuf) -> Result<(), String> {
+fn run_installer(installer_path: &Path) -> Result<(), String> {
     let path = installer_path.to_string_lossy().to_string();
     launch_exe::launch_game_executable(&path).map_err(|e| {
         format!(

@@ -191,9 +191,10 @@ pub async fn discover_stream_hosts(timeout_secs: u64) -> Result<Vec<DiscoveredSt
         let mut last_resolved_at: Option<Instant> = None;
 
         while start.elapsed() < timeout {
-            if let Ok(event) = receiver.recv_timeout(Duration::from_millis(50)) {
-                if let ServiceEvent::ServiceResolved(info) = event {
-                    let properties = info.get_properties();
+            if let Ok(ServiceEvent::ServiceResolved(info)) =
+                receiver.recv_timeout(Duration::from_millis(50))
+            {
+                let properties = info.get_properties();
 
                     let device_id = properties
                         .get("deviceId")
@@ -251,7 +252,6 @@ pub async fn discover_stream_hosts(timeout_secs: u64) -> Result<Vec<DiscoveredSt
                         last_resolved_at = Some(Instant::now());
                     }
                 }
-            }
 
 
             if let Some(t) = last_resolved_at {

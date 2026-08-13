@@ -132,7 +132,7 @@ pub async fn list_steam_catalog_trending_hero(
     db: State<'_, AppDb>,
     limit: Option<u32>,
 ) -> Result<Vec<CatalogListItem>, String> {
-    let cap = limit.unwrap_or(10).max(1).min(20);
+    let cap = limit.unwrap_or(10).clamp(1, 20);
     let db = db.deref().clone();
     tokio::task::spawn_blocking(move || {
         db.with_conn(|c| catalog_query::list_catalog_trending_hero(c, cap))
