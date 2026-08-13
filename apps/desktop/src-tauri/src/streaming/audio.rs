@@ -2,6 +2,7 @@
 
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::Path;
+#[cfg(target_os = "windows")]
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -23,6 +24,7 @@ const RING_BUFFER_CAPACITY: usize = 96000;
 /// Muestras mínimas en el buffer circular antes de iniciar reproducción (~30ms a 48kHz estéreo).
 const PREBUFFER_MIN_SAMPLES: usize = 2880;
 
+#[cfg(target_os = "windows")]
 #[derive(Debug)]
 struct AudioDevice {
     name: String,

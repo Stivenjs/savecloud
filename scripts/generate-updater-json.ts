@@ -30,7 +30,9 @@ const glob = new Glob("**/*.sig");
 for (const [artifact, tauriPlatforms] of Object.entries(ARTIFACT_PLATFORM)) {
   const artifactDir = resolve(cwd, artifact);
 
-  const [sigPath] = Array.from(glob.scanSync({ cwd: artifactDir, absolute: true }));
+  const sigPaths = Array.from(glob.scanSync({ cwd: artifactDir, absolute: true }));
+  const sigPath =
+    artifact === "desktop-windows" ? sigPaths.find((p) => p.includes("nsis")) || sigPaths[0] : sigPaths[0];
 
   if (sigPath) {
     const signature = (await Bun.file(sigPath).text()).trim();

@@ -55,6 +55,7 @@ export async function fetchGitHubReleaseNotes(
     {
       headers: {
         Accept: "application/vnd.github+json",
+        "User-Agent": "SaveCloud-DesktopApp",
       },
       signal,
     }
@@ -91,6 +92,22 @@ export function linkifyReleaseMarkdown(markdown: string): string {
     const { url, suffix } = splitTrailingPunctuation(rawUrl);
     return `[${url}](${url})${suffix}`;
   });
+}
+
+export function cleanMarkdownForPlainText(markdown: string): string {
+  if (!markdown) return "";
+
+  return markdown
+    .replace(/^#{1,6}\s*(.+)$/gm, "$1:")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/_(.*?)_/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^\s*[\*\-]\s+/gm, "• ")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export function getReleaseNotesFallbackMarkdown(): string {

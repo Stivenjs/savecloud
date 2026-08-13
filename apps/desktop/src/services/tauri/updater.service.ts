@@ -1,7 +1,7 @@
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { fetchGitHubReleaseNotes } from "@services/github/release-notes.service";
+import { fetchGitHubReleaseNotes, cleanMarkdownForPlainText } from "@services/github/release-notes.service";
 import { toastError, toastInfo, toastSuccess } from "@utils/toast";
 import i18n from "@lib/i18n";
 
@@ -67,18 +67,28 @@ export async function checkForUpdatesWithPrompt(silentWhenUpToDate = false): Pro
       return;
     }
 
-    let notes = update.body?.trim();
+    let notes: string | undefined;
 
-    if (!notes) {
-      try {
-        const [latestRelease] = await fetchGitHubReleaseNotes(1);
-        notes = latestRelease?.body.trim();
-      } catch {
-        notes = undefined;
+    try {
+      const releases = await fetchGitHubReleaseNotes(5);
+      const matchedRelease =
+        releases.find(
+          (r) => r.tagName === `v${update.version}` || r.tagName === update.version || r.name.includes(update.version)
+        ) || releases[0];
+
+      if (matchedRelease?.body) {
+        notes = matchedRelease.body.trim();
       }
+    } catch {
+      notes = undefined;
     }
 
-    const releaseNotes = notes || i18n.t("updater.notesDefault");
+    if (!notes) {
+      notes = update.body?.trim();
+    }
+
+    const rawNotes = notes || i18n.t("updater.notesDefault");
+    const releaseNotes = cleanMarkdownForPlainText(rawNotes);
     const message = i18n.t("updater.promptMessage", { version: update.version, notes: releaseNotes });
 
     const shouldUpdate = await ask(message, {

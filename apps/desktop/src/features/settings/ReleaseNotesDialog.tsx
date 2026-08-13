@@ -21,8 +21,8 @@ export function ReleaseNotesDialog({ isOpen, onClose }: ReleaseNotesDialogProps)
     queryKey: ["github-release-notes"],
     queryFn: ({ signal }) => fetchGitHubReleaseNotes(10, signal),
     enabled: isOpen,
-    staleTime: 24 * 60 * 60 * 1000,
-    gcTime: 7 * 24 * 60 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
     retry: 1,
   });
 
