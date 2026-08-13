@@ -6,7 +6,9 @@
 
 use super::error::{StreamingError, StreamingResult};
 use std::fmt::Debug;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+#[cfg(target_os = "windows")]
+use std::path::Path;
 use std::process::{Child, Command};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};

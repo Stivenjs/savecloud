@@ -8,9 +8,10 @@
 //! - **Windows** — Hooks de bajo nivel (`WH_MOUSE_LL`) + polling `GetAsyncKeyState`.
 //! - **macOS / Linux** — Librería `rdev` con escucha global de eventos.
 
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, Ordering};
 #[cfg(target_os = "windows")]
-use std::sync::atomic::{AtomicIsize, AtomicU32};
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::atomic::AtomicU32;
+#[cfg(target_os = "windows")]
 use std::time::Duration;
 
 use tauri::{Window, WindowEvent};
@@ -598,7 +599,6 @@ mod posix_listener {
                     relay_mouse_button(btn, false);
                 }
             }
-            _ => {}
         }
     }
 

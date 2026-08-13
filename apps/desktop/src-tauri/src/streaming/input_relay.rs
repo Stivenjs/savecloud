@@ -15,9 +15,11 @@ use std::sync::LazyLock;
 
 use gilrs::{Axis, Button, EventType};
 
+#[cfg(target_os = "windows")]
+use crate::streaming::bindings::send_mouse_move_event;
 use crate::streaming::bindings::{
     send_controller_arrival_event, send_keyboard_event, send_mouse_button_event,
-    send_mouse_move_event, send_mouse_position_event, send_scroll_event, LiSendHighResScrollEvent,
+    send_mouse_position_event, send_scroll_event, LiSendHighResScrollEvent,
     BUTTON_ACTION_PRESS, BUTTON_ACTION_RELEASE, KEY_ACTION_DOWN, KEY_ACTION_UP,
     LI_CCAP_ANALOG_TRIGGERS, LI_CCAP_RUMBLE, LI_CTYPE_XBOX, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_MIDDLE,
     MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_X1, MOUSE_BUTTON_X2,
