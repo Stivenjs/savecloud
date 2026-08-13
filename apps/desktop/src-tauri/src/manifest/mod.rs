@@ -24,6 +24,7 @@ const MANIFEST_URL: &str =
 pub struct GameManifestEntry {
     pub name: String,
     pub save_paths: Vec<PathTemplate>,
+    #[cfg(target_os = "windows")]
     pub registry_path: Option<String>,
     pub steam_app_id: Option<String>,
     pub install_dirs: Vec<String>,
@@ -31,6 +32,7 @@ pub struct GameManifestEntry {
 
 impl GameManifestEntry {
     /// Ruta del Registro de Windows asociada al juego, si está definida.
+    #[cfg(target_os = "windows")]
     pub fn registry_path(&self) -> Option<&str> {
         self.registry_path.as_deref()
     }
@@ -257,6 +259,7 @@ fn parse_manifest_yaml(content: &str) -> Result<ManifestIndex, String> {
             }
         }
 
+        #[cfg(target_os = "windows")]
         let registry_path = game_data
             .registry
             .and_then(|reg| reg.keys().next().cloned());
@@ -266,6 +269,7 @@ fn parse_manifest_yaml(content: &str) -> Result<ManifestIndex, String> {
         let entry = GameManifestEntry {
             name: game_name.clone(),
             save_paths,
+            #[cfg(target_os = "windows")]
             registry_path,
             steam_app_id,
             install_dirs,
