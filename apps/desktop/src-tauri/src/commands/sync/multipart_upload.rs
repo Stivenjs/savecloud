@@ -326,8 +326,10 @@ async fn multipart_abort(
     Ok(())
 }
 
-/// Función de ayuda que encapsula el hilo "Productor".
-/// Genera URLs en lotes y las inyecta en el canal (tx) para que los workers las consuman.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Parámetros individuales requeridos para la tarea asíncrona prefetcher"
+)]
 fn spawn_url_prefetcher(
     api_base: String,
     user_id: String,
@@ -374,6 +376,10 @@ fn spawn_url_prefetcher(
 }
 
 /// Sube un archivo mediante multipart. Emite progreso y respeta cancelación entre partes.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Parámetros requeridos para transferencia multipart y contexto Tauri"
+)]
 pub(crate) async fn upload_one_file_multipart(
     absolute_path: &Path,
     relative_filename: &str,

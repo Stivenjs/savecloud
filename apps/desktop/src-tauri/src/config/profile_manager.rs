@@ -92,6 +92,7 @@ impl ProfileManager {
     /// * `index` - Índice de perfiles (mutable)
     /// * `name` - Nombre amigable del perfil
     /// * `profile_avatar_url` - Avatar inicial del perfil (opcional)
+    ///
     /// La configuración cloud (user_id, urls, api_key) se completa después.
     ///
     /// # Errors

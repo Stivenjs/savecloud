@@ -843,11 +843,11 @@ pub fn scan_path_candidates_sync(
                 #[cfg(target_os = "windows")]
                 let install_dir_cache = entry
                     .registry_path()
-                    .and_then(|reg_path| read_registry_install_dir(reg_path))
+                    .and_then(read_registry_install_dir)
                     .or_else(|| entry.install_dirs().first().cloned());
 
                 #[cfg(not(target_os = "windows"))]
-                let install_dir_cache: Option<String> = None;
+                let install_dir_cache: Option<String> = entry.install_dirs().first().cloned();
 
                 for template in &entry.save_paths {
                     let expanded_path_opt = match template {

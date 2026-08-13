@@ -30,6 +30,10 @@ pub struct GlobalDownloadProgress {
     pub total_bytes: u64,
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Parámetros requeridos para descarga de stream con trackers y callbacks de progreso"
+)]
 pub async fn stream_url_to_file(
     client: &reqwest::Client,
     uri: &str,

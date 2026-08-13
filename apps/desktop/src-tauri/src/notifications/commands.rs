@@ -29,7 +29,7 @@ pub fn list_notifications(
         db::list_notifications(
             conn,
             &user_id,
-            params.limit.max(1).min(200),
+            params.limit.clamp(1, 200),
             params.offset.max(0),
             params.unread_only,
         )
@@ -240,7 +240,7 @@ pub async fn sync_notifications_full(
         db::list_notifications(
             conn,
             &user_id,
-            params.limit.max(1).min(200),
+            params.limit.clamp(1, 200),
             params.offset.max(0),
             params.unread_only,
         )

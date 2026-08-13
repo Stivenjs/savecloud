@@ -13,8 +13,9 @@ use super::super::matcher::{
 use super::super::store;
 
 type IndexedSourceItem = IndexEntry;
+type IndexCacheStore = Option<Arc<Vec<IndexedSourceItem>>>;
 
-static INDEX_CACHE: Lazy<Arc<RwLock<Option<Arc<Vec<IndexedSourceItem>>>>>> =
+static INDEX_CACHE: Lazy<Arc<RwLock<IndexCacheStore>>> =
     Lazy::new(|| Arc::new(RwLock::new(None)));
 
 static MATCH_CONFIG: Lazy<Arc<RwLock<Option<MatchConfig>>>> =

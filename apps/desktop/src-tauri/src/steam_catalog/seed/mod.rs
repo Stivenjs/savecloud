@@ -48,8 +48,7 @@ pub fn compute_steam_seed_freshness_status(
     local_max: Option<&str>,
 ) -> &'static str {
     let cloud = match cloud_last {
-        None => return "no_cloud_batches",
-        Some(s) if s.is_empty() => return "no_cloud_batches",
+        None | Some("") => return "no_cloud_batches",
         Some(s) => s,
     };
     match local_max {
@@ -74,6 +73,10 @@ pub fn parse_import_strategy(s: Option<&str>) -> Result<String, String> {
 
 /// Ejecuta una única ronda de importación de batches del seed en la nube.
 /// Los batches se descargan y procesan en paralelo según `concurrency`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Parámetros requeridos para sincronización incremental por lotes de catálogo"
+)]
 pub async fn import_cloud_seed_one_round(
     app: Option<&tauri::AppHandle>,
     db: &AppDb,
@@ -161,7 +164,6 @@ pub async fn import_cloud_seed_one_round(
     )
     .map(|(idx, key)| {
         let url = url_map.get(&key).cloned();
-        let key = key;
         let db = db.clone();
         let app = app.cloned();
         let rows_updated = Arc::clone(&rows_updated);
@@ -257,6 +259,10 @@ pub async fn import_cloud_seed_one_round(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Parámetros requeridos para sincronización incremental de reseñas"
+)]
 async fn import_cloud_seed_reviews_one_round(
     app: Option<&tauri::AppHandle>,
     db: &AppDb,

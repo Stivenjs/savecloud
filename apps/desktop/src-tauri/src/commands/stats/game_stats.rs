@@ -313,7 +313,7 @@ fn expand_path(raw: &str) -> Option<PathBuf> {
 }
 
 /// Recorre directorios para sumar tamaños y encontrar la fecha más reciente.
-fn collect_files_with_meta(dir: &Path, base: &Path, out: &mut Vec<(u64, std::time::SystemTime)>) {
+fn collect_files_with_meta(dir: &Path, out: &mut Vec<(u64, std::time::SystemTime)>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -332,7 +332,7 @@ fn collect_files_with_meta(dir: &Path, base: &Path, out: &mut Vec<(u64, std::tim
 
         let full = e.path();
         if meta.is_dir() {
-            collect_files_with_meta(&full, base, out);
+            collect_files_with_meta(&full, out);
         } else if meta.is_file() {
             let size = meta.len();
             let mtime = meta.modified().unwrap_or(UNIX_EPOCH);
@@ -369,7 +369,7 @@ fn local_stats_for_paths(paths: &[String]) -> (u64, Option<std::time::SystemTime
             }
         } else if meta.is_dir() {
             let mut files = Vec::new();
-            collect_files_with_meta(&expanded, &expanded, &mut files);
+            collect_files_with_meta(&expanded, &mut files);
             for (size, mtime) in files {
                 total_size += size;
                 max_mtime = Some(match max_mtime {

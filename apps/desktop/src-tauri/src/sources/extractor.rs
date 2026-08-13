@@ -180,7 +180,7 @@ fn extract_7z(
     let mut last_update = std::time::Instant::now();
     let throttle = std::time::Duration::from_millis(250);
 
-    for line in reader.lines().flatten() {
+    for line in reader.lines().map_while(Result::ok) {
         let trimmed = line.trim_start();
         if let Some(pct_str) = trimmed.split('%').next() {
             if let Ok(pct) = pct_str.trim().parse::<u64>() {
@@ -233,7 +233,7 @@ fn extract_unrar(
     let mut last_update = std::time::Instant::now();
     let throttle = std::time::Duration::from_millis(250);
 
-    for line in reader.lines().flatten() {
+    for line in reader.lines().map_while(Result::ok) {
         if line.trim_start().starts_with("Extracting") {
             extracted += 1;
             let now = std::time::Instant::now();
@@ -294,7 +294,7 @@ fn extract_tar(
     let mut last_update = std::time::Instant::now();
     let throttle = std::time::Duration::from_millis(250);
 
-    for line in reader.lines().flatten() {
+    for line in reader.lines().map_while(Result::ok) {
         if let Some(num_str) = line.strip_prefix('#') {
             if let Ok(checkpoint) = num_str.trim().parse::<u64>() {
                 let now = std::time::Instant::now();
