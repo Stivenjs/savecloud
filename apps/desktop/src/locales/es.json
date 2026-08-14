@@ -521,6 +521,7 @@
     "syncAll": "Sincronizar Todo",
     "downloadAll": "Descargar Todo",
     "launch": "Jugar",
+    "starting": "Iniciando...",
     "stop": "Detener",
     "lastSync": "Última sincronización",
     "neverSync": "Nunca sincronizado",
@@ -1899,6 +1900,13 @@
     "pageXofY": "Página {{page}} de {{total}}",
     "searchPlaceholder": "Varias palabras; mín. {{min}} caracteres…",
     "searchAriaLabel": "Buscar en catálogo",
+    "sort": {
+      "label": "Ordenar por",
+      "trending": "Más Populares / Tendencia",
+      "titleAsc": "Nombre (A - Z)",
+      "titleDesc": "Nombre (Z - A)",
+      "newest": "Nuevos Agregados"
+    },
     "filters": {
       "title": "Filtros",
       "clearButton": "Quitar filtros",

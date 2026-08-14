@@ -1,25 +1,19 @@
-import { Card, CardBody, Chip } from "@heroui/react";
-import { Clock, HardDrive, Calendar, CloudCheck, AlertTriangle } from "lucide-react";
+import { Card, CardBody } from "@heroui/react";
+import { Clock, HardDrive, Calendar, CloudCheck } from "lucide-react";
 import { formatBytes, formatPlaytime, formatRelativeDate } from "@utils/format";
 import type { GameStats } from "@services/tauri";
 
 interface GameDetailStatsProps {
   stats: GameStats | null;
-  isGameRunning: boolean;
+  isGameRunning?: boolean;
 }
 
-export function GameDetailStats({ stats, isGameRunning }: GameDetailStatsProps) {
-  if (!stats && !isGameRunning) return null;
+export function GameDetailStats({ stats }: GameDetailStatsProps) {
+  if (!stats) return null;
 
   return (
     <Card className="border border-default-200/60 shadow-sm">
       <CardBody className="flex flex-row flex-wrap items-center gap-4 px-5 py-3">
-        {isGameRunning && (
-          <Chip startContent={<AlertTriangle size={14} />} color="success" variant="flat" size="sm">
-            En ejecución
-          </Chip>
-        )}
-
         {stats && (
           <>
             <div className="flex items-center gap-2 text-sm text-default-600">

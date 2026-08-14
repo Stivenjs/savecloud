@@ -134,7 +134,8 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "apps/desktop/src-tauri -> target"
+          workspaces: "apps/desktop/src-tauri"
+          shared-key: "desktop-release-cache"
 
       - name: Setup Python
         uses: actions/setup-python@v5

@@ -1,6 +1,20 @@
 import type { ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { Divider, ScrollShadow, Skeleton } from "@heroui/react";
-import { CalendarDays, Code2, FolderOpen, Tags, Users } from "lucide-react";
+import {
+  Building2,
+  CalendarDays,
+  Cloud,
+  Code2,
+  FolderOpen,
+  Gamepad2,
+  Layers,
+  Search,
+  Tags,
+  Trophy,
+  User,
+  Users,
+} from "lucide-react";
 import type { SteamAppDetailsResult } from "@services/tauri";
 import type { ConfiguredGame } from "@app-types/config";
 import { resolveSteamSummaryBlurb, stripScriptTags } from "@utils/steamText";
@@ -46,85 +60,147 @@ function FieldLabel({ icon, label }: { icon: ReactNode; label: string }) {
   );
 }
 
+/** Devuelve un icono temático según el nombre de la categoría de Steam. */
+function getCategoryIcon(cat: string): ReactNode {
+  const lower = cat.toLowerCase();
+  if (lower.includes("mando") || lower.includes("controller") || lower.includes("joystick")) {
+    return <Gamepad2 size={13} className="shrink-0 text-primary opacity-90" />;
+  }
+  if (lower.includes("logro") || lower.includes("achievement")) {
+    return <Trophy size={13} className="shrink-0 text-amber-500 opacity-90" />;
+  }
+  if (lower.includes("nube") || lower.includes("cloud")) {
+    return <Cloud size={13} className="shrink-0 text-sky-400 opacity-90" />;
+  }
+  if (lower.includes("cromo") || lower.includes("card")) {
+    return <Layers size={13} className="shrink-0 text-indigo-400 opacity-90" />;
+  }
+  if (
+    lower.includes("multijugador") ||
+    lower.includes("multi-player") ||
+    lower.includes("cooperativo") ||
+    lower.includes("co-op") ||
+    lower.includes("en línea") ||
+    lower.includes("online")
+  ) {
+    return <Users size={13} className="shrink-0 text-emerald-500 opacity-90" />;
+  }
+  if (lower.includes("un jugador") || lower.includes("single-player")) {
+    return <User size={13} className="shrink-0 text-secondary opacity-90" />;
+  }
+  return <Code2 size={13} className="shrink-0 opacity-70" />;
+}
+
 interface GameDetailInfoProps {
   details: SteamAppDetailsResult | null;
   isLoading: boolean;
 }
 
-/** Contenido de la pestaña Resumen: descripción corta, géneros y categorías. */
+/** Contenido de la pestaña Resumen: descripción corta, ficha técnica, géneros y categorías. */
 export function GameDetailSummaryPanel({ details }: { details: SteamAppDetailsResult }) {
-  const genreCount = details.genres.length;
-  const categoryCount = details.categories.length;
+  const navigate = useNavigate();
   const blurb = resolveSteamSummaryBlurb(details);
 
-  const metaBits: string[] = [];
-  if (details.releaseDate) metaBits.push(details.releaseDate);
-  if (genreCount > 0) metaBits.push(`${genreCount} género${genreCount === 1 ? "" : "s"}`);
-  if (categoryCount > 0) metaBits.push(`${categoryCount} categoría${categoryCount === 1 ? "" : "s"}`);
+  const handleGenreClick = (genre: string) => {
+    navigate(`/catalog?genre=${encodeURIComponent(genre)}`);
+  };
+
+  const hasTechSpecs = details.developers.length > 0 || details.publishers.length > 0 || !!details.releaseDate;
 
   return (
-    <div className="space-y-8">
-      {metaBits.length > 0 ? (
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-default-600 dark:text-default-400">
-          {details.releaseDate ? <CalendarDays size={14} className="shrink-0 opacity-70" aria-hidden /> : null}
-          <span>{metaBits.join(" · ")}</span>
-        </p>
-      ) : null}
-
-      {blurb ? (
-        <div>
-          <div className="mb-3 flex flex-col gap-0.5">
-            <h3 className="text-lg font-semibold tracking-tight text-foreground">Sinopsis</h3>
-            {blurb.subtitle ? <p className="text-xs text-default-500">{blurb.subtitle}</p> : null}
-          </div>
-          <div className="border-l-2 border-primary/35 pl-5">
-            <p className="whitespace-pre-line text-[15px] leading-[1.65] text-default-700 dark:text-default-300">
-              {blurb.text}
-            </p>
-          </div>
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-8 items-start lg:grid-cols-12">
+        {/* Columna izquierda: Sinopsis */}
+        <div className="space-y-4 lg:col-span-7">
+          {blurb ? (
+            <div>
+              <div className="mb-3 flex flex-col gap-0.5">
+                <h3 className="text-lg font-bold tracking-tight text-foreground">Sinopsis</h3>
+                {blurb.subtitle ? <p className="text-xs text-default-500">{blurb.subtitle}</p> : null}
+              </div>
+              <div className="border-l-2 border-primary/40 pl-5">
+                <p className="whitespace-pre-line text-[15px] leading-[1.7] text-default-700 dark:text-default-300">
+                  {blurb.text}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-default-300/70 bg-default-100/20 px-4 py-3.5 dark:border-default-100/25 dark:bg-default-50/10">
+              <p className="text-sm leading-relaxed text-default-600 dark:text-default-400">
+                No hay texto breve en la ficha de Steam. La descripción completa está en la pestaña{" "}
+                <span className="font-medium text-foreground">Detalles</span>.
+              </p>
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="rounded-xl border border-dashed border-default-300/70 bg-default-100/20 px-4 py-3.5 dark:border-default-100/25 dark:bg-default-50/10">
-          <p className="text-sm leading-relaxed text-default-600 dark:text-default-400">
-            No hay texto breve en la ficha de Steam. La descripción completa está en la pestaña{" "}
-            <span className="font-medium text-foreground">Detalles</span>.
-          </p>
-        </div>
-      )}
 
-      {(details.genres.length > 0 || details.categories.length > 0) && (
-        <div className="space-y-5 border-t border-default-200/60 pt-8 dark:border-default-100/15">
+        {/* Columna derecha: Ficha técnica, Géneros y Categorías */}
+        <div className="space-y-6 lg:col-span-5">
+          {/* 1. Ficha Técnica */}
+          {hasTechSpecs && (
+            <div className="space-y-2.5">
+              <FieldLabel icon={<Building2 size={14} className="text-primary opacity-90" />} label="Ficha técnica" />
+              <div className="space-y-2 rounded-xl border border-default-200/50 bg-default-100/30 p-3.5 text-xs dark:border-default-100/10 dark:bg-default-50/5">
+                {details.releaseDate && (
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-default-400 font-medium">Lanzamiento</span>
+                    <span className="font-semibold text-foreground text-right">{details.releaseDate}</span>
+                  </div>
+                )}
+                {details.developers.length > 0 && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-default-400 font-medium shrink-0">Desarrollador</span>
+                    <span className="font-semibold text-foreground text-right">{details.developers.join(", ")}</span>
+                  </div>
+                )}
+                {details.publishers.length > 0 && (
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-default-400 font-medium shrink-0">Editor</span>
+                    <span className="font-semibold text-foreground text-right">{details.publishers.join(", ")}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 2. Géneros clicables -> Catálogo */}
           {details.genres.length > 0 && (
             <div className="space-y-2.5">
-              <FieldLabel icon={<Tags size={14} className="opacity-80" />} label="Géneros" />
+              <FieldLabel icon={<Tags size={14} className="text-primary opacity-90" />} label="Géneros" />
               <div className="flex flex-wrap gap-2">
                 {details.genres.map((genre, idx) => (
-                  <span
+                  <button
                     key={`${genre}-${idx}`}
-                    className="rounded-lg bg-default-100/90 px-2.5 py-1 text-xs font-medium text-default-700 ring-1 ring-default-200/80 dark:bg-default-100/20 dark:text-default-300 dark:ring-default-100/20">
-                    {genre}
-                  </span>
+                    type="button"
+                    onClick={() => handleGenreClick(genre)}
+                    title={`Buscar juegos de ${genre} en el catálogo`}
+                    className="group inline-flex items-center gap-1.5 rounded-lg bg-default-200/70 px-3 py-1.5 text-xs font-medium text-foreground ring-1 ring-default-300/50 transition-all hover:bg-primary/15 hover:text-primary hover:ring-primary/40 dark:bg-default-100/25 dark:text-default-200 dark:ring-default-100/20 active:scale-95 cursor-pointer">
+                    <span>{genre}</span>
+                    <Search size={11} className="opacity-40 transition-opacity group-hover:opacity-100" />
+                  </button>
                 ))}
               </div>
             </div>
           )}
 
+          {/* 3. Categorías con iconos contextuales */}
           {details.categories.length > 0 && (
             <div className="space-y-2.5">
-              <FieldLabel icon={<Code2 size={14} className="opacity-80" />} label="Categorías" />
-              <div className="flex flex-wrap gap-2">
+              <FieldLabel icon={<Code2 size={14} className="text-primary opacity-90" />} label="Categorías" />
+              <div className="flex flex-wrap gap-1.5">
                 {details.categories.map((cat, idx) => (
                   <span
                     key={`${cat}-${idx}`}
-                    className="rounded-lg bg-default-50/90 px-2.5 py-1 text-xs text-default-600 ring-1 ring-default-200/60 dark:bg-default-50/10 dark:text-default-400 dark:ring-default-100/15">
-                    {cat}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-default-100/80 px-2.5 py-1 text-xs text-default-700 ring-1 ring-default-200/60 dark:bg-default-50/20 dark:text-default-300 dark:ring-default-100/15">
+                    {getCategoryIcon(cat)}
+                    <span>{cat}</span>
                   </span>
                 ))}
               </div>
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
