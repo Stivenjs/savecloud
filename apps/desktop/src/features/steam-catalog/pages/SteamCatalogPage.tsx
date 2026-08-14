@@ -19,7 +19,7 @@ import { useSteamCatalogTrendingHero } from "@features/steam-catalog/hooks/useSt
 import { useSteamCatalogGamepadPagination } from "@features/steam-catalog/hooks/useSteamCatalogGamepadPagination";
 import { useShellUiStore } from "@store/ShellUiStore";
 import { STEAM_CATALOG_PAGE_SIZE } from "@/constants/constants";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
 
 export function SteamCatalogPage() {
   const { t } = useTranslation();
@@ -114,12 +114,14 @@ export function SteamCatalogPage() {
   const activeIsLoading = isInfiniteMode ? infiniteQuery.isLoading : isLoading;
   const activeTotalForRange = isInfiniteMode ? infiniteQuery.totalCount : totalForRange;
 
+  const deferredActiveItems = useDeferredValue(activeItems);
+
   const {
     mediaBySteamAppId: activeMediaBySteamAppId,
     isMediaBatchPending: activeIsMediaBatchPending,
     matchByGameName: activeMatchByGameName,
     isMatchingPending: activeIsMatchingPending,
-  } = useSteamCatalogMediaAndMatches(activeItems, pageSize);
+  } = useSteamCatalogMediaAndMatches(deferredActiveItems, pageSize);
 
   useRegisterGlobalBack(() => {
     navigate("/");
@@ -149,7 +151,7 @@ export function SteamCatalogPage() {
   });
 
   const isReady = !activeIsLoading && activeItems.length > 0;
-  const showTrendingHero = true;
+  const showTrendingHero = !bigPictureConsole;
 
   const {
     items: heroItems,
@@ -160,34 +162,64 @@ export function SteamCatalogPage() {
     error: heroError,
   } = useSteamCatalogTrendingHero(showTrendingHero);
 
-  useLayoutEffect(() => {
-    if (!isReady || hasRestored.current) return;
+  const isRestoringRef = useRef(false);
+  const prevFiltersRef = useRef({ debouncedSearch, filterSignature, sortOption });
 
-    requestAnimationFrame(() => {
+  useLayoutEffect(() => {
+    if (catalogScrollPosition > 0 && isReady && !hasRestored.current) {
+      void document.body.offsetHeight;
+
+      isRestoringRef.current = true;
       window.scrollTo({ top: catalogScrollPosition, behavior: "instant" });
-      hasRestored.current = true;
-    });
-  }, [isReady, catalogScrollPosition]);
+
+      const timer = setTimeout(() => {
+        void document.body.offsetHeight;
+        window.scrollTo({ top: catalogScrollPosition, behavior: "instant" });
+        hasRestored.current = true;
+        isRestoringRef.current = false;
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isReady, catalogScrollPosition, activeItems.length]);
+
+  useEffect(() => {
+    const prev = prevFiltersRef.current;
+    const hasChanged =
+      prev.debouncedSearch !== debouncedSearch ||
+      prev.filterSignature !== filterSignature ||
+      prev.sortOption !== sortOption;
+
+    prevFiltersRef.current = { debouncedSearch, filterSignature, sortOption };
+
+    if (hasChanged && hasRestored.current) {
+      setCatalogScrollPosition(0);
+    }
+  }, [debouncedSearch, filterSignature, sortOption, setCatalogScrollPosition]);
 
   useEffect(() => {
     let scrollTimeout: ReturnType<typeof setTimeout>;
-    const handleScroll = () => {
-      if (!isReady || !hasRestored.current) return;
 
+    const handleScroll = () => {
+      if (isRestoringRef.current) return;
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
         const currentY = window.scrollY || document.documentElement.scrollTop;
-        setCatalogScrollPosition(currentY);
-      }, 150);
+        if (currentY > 0) {
+          setCatalogScrollPosition(currentY);
+        }
+      }, 200);
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
-
     return () => {
       window.removeEventListener("scroll", handleScroll);
       clearTimeout(scrollTimeout);
+      const currentY = window.scrollY || document.documentElement.scrollTop;
+      if (currentY > 0 && !isRestoringRef.current) {
+        setCatalogScrollPosition(currentY);
+      }
     };
-  }, [isReady, setCatalogScrollPosition]);
+  }, [setCatalogScrollPosition]);
 
   const totalSelectedFilters = selectedGenres.length + selectedTags.length;
 
