@@ -18,6 +18,7 @@ import { useSteamCatalogMediaAndMatches } from "@features/steam-catalog/hooks/us
 import { useSteamCatalogTrendingHero } from "@features/steam-catalog/hooks/useSteamCatalogTrendingHero";
 import { useSteamCatalogGamepadPagination } from "@features/steam-catalog/hooks/useSteamCatalogGamepadPagination";
 import { useShellUiStore } from "@store/ShellUiStore";
+import { STEAM_CATALOG_PAGE_SIZE } from "@/constants/constants";
 import { useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
 
 export function SteamCatalogPage() {
@@ -68,7 +69,7 @@ export function SteamCatalogPage() {
   const [paginationMode, setPaginationMode] = useState<CatalogPaginationMode>("infinite");
   const isInfiniteMode = paginationMode === "infinite" && !bigPictureConsole;
 
-  const pageSize = bigPictureConsole ? 25 : 24;
+  const pageSize = STEAM_CATALOG_PAGE_SIZE;
 
   const infiniteQuery = useSteamCatalogInfiniteQuery({
     pageSize,
