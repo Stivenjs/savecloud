@@ -20,7 +20,12 @@ const version = rawVersion.replace(/^v/, "");
 
 const root = process.cwd();
 
-const jsonFiles = ["package.json", "apps/desktop/package.json", "apps/desktop/src-tauri/tauri.conf.json"];
+const jsonFiles = [
+  "package.json",
+  "apps/desktop/package.json",
+  "apps/desktop/src-tauri/tauri.conf.json",
+  "apps/web/package.json",
+];
 
 const tomlFiles = ["apps/desktop/src-tauri/Cargo.toml"];
 
