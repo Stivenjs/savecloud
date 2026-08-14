@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import {
   Button,
+  Chip,
   Divider,
   Input,
   Modal,
@@ -12,7 +14,18 @@ import {
   Tab,
   Tabs,
 } from "@heroui/react";
-import { Cloud, CloudDownload, FolderArchive, FolderOpen, History, Pencil, Trash2 } from "lucide-react";
+import {
+  Cloud,
+  CloudDownload,
+  FolderArchive,
+  FolderOpen,
+  HardDrive,
+  History,
+  Pencil,
+  Plus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   listBackups,
@@ -32,6 +45,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 import { useSyncStore } from "@store/SyncStore";
 import { ask } from "@tauri-apps/plugin-dialog";
+import { useGameMedia } from "@hooks/useGameMedia";
 import type { ConfiguredGame } from "@app-types/config";
 
 interface RestoreBackupModalProps {
@@ -46,6 +60,30 @@ interface RestoreBackupModalProps {
   hasCloudIntegration?: boolean;
 }
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.04,
+      delayChildren: 0.05,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 6 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring" as const,
+      stiffness: 300,
+      damping: 25,
+    },
+  },
+};
+
 export function RestoreBackupModal({
   isOpen,
   onClose,
@@ -59,6 +97,11 @@ export function RestoreBackupModal({
   const gameId = game?.id ?? "";
   const queryClient = useQueryClient();
   const setSyncOperation = useSyncStore((state) => state.setSyncOperation);
+
+  const dummyGame: ConfiguredGame = game ?? { id: "", paths: [] };
+  const { capsuleImage } = useGameMedia({
+    game: dummyGame,
+  });
 
   const { data: backups, isLoading } = useQuery({
     queryKey: ["backups", gameId],
@@ -212,70 +255,83 @@ export function RestoreBackupModal({
       <Spinner size="lg" color="primary" />
     </div>
   ) : !backups?.length ? (
-    <div className="rounded-xl border border-dashed border-default-300 bg-default-50/40 px-4 py-6 text-center dark:border-default-100/25 dark:bg-default-100/10">
+    <div className="rounded-xl border border-dashed border-default-300 bg-default-50/50 p-6 text-center dark:border-default-100/20 dark:bg-default-100/10">
       <FolderArchive className="mx-auto mb-2 size-10 text-default-400" aria-hidden strokeWidth={1.25} />
-      <p className="text-sm font-medium text-default-700 dark:text-default-300">
-        {t("library.restoreBackup.noLocalBackupsTitle")}
-      </p>
-      <p className="mt-1 max-w-[52ch] text-xs leading-relaxed text-default-500">
+      <p className="text-sm font-semibold text-foreground">{t("library.restoreBackup.noLocalBackupsTitle")}</p>
+      <p className="mt-1 max-w-[50ch] mx-auto text-xs leading-relaxed text-default-500">
         {t("library.restoreBackup.noLocalBackupsDesc")}
       </p>
     </div>
   ) : (
-    <ul className="max-h-[min(16rem,50vh)] space-y-2 overflow-y-auto pr-1">
+    <motion.ul
+      variants={containerVariants}
+      initial="hidden"
+      animate="show"
+      className="max-h-[min(16rem,50vh)] space-y-2 overflow-y-auto pr-1">
       {backups.map((b: BackupInfo) => (
-        <li
+        <motion.li
           key={b.id}
-          className="flex items-center justify-between gap-4 rounded-xl border border-divider bg-content2 px-4 py-3 shadow-sm transition-colors hover:bg-content3/60">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold tabular-nums text-foreground">{b.createdAt}</p>
-            <p className="text-xs font-medium uppercase tracking-wide text-default-400">
-              {t("library.restoreBackup.fileCount", { count: b.fileCount })}
-            </p>
+          variants={itemVariants}
+          className="flex items-center justify-between gap-4 rounded-xl border border-divider bg-content2 px-4 py-3 shadow-xs transition-colors hover:bg-content3/60">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-default-100 text-default-600 dark:bg-default-50/10">
+              <HardDrive size={18} strokeWidth={1.75} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold tabular-nums text-foreground">{b.createdAt}</p>
+              <p className="text-xs text-default-500 font-medium">
+                {t("library.restoreBackup.fileCount", { count: b.fileCount })}
+              </p>
+            </div>
           </div>
           <Button
             size="sm"
             color="primary"
             variant="flat"
-            className="shrink-0"
+            className="shrink-0 font-semibold"
             onPress={() => handleRestore(b)}
             isLoading={restoring === b.id}
             isDisabled={!!restoring || isDownloadingFromCloud}>
             {t("library.restoreBackup.apply")}
           </Button>
-        </li>
+        </motion.li>
       ))}
-    </ul>
+    </motion.ul>
   );
 
   const primaryBlock =
     onDownloadFromCloud && hasCloudIntegration ? (
       <section
-        className="rounded-lg border border-default-300 bg-default-50 p-4 dark:border-default-100/35 dark:bg-default-100/20"
-        aria-labelledby="recover-primary-heading">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-          <div className="min-w-0 flex-1 space-y-2">
+        aria-labelledby="recover-primary-heading"
+        className="rounded-xl border border-primary/30 bg-primary-50/40 dark:bg-primary-500/10 p-4 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex items-center gap-2">
-              <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-primary">
+              <Chip
+                size="sm"
+                color="primary"
+                variant="flat"
+                className="font-semibold text-[10px] tracking-wider uppercase">
                 {t("library.restoreBackup.recommended")}
-              </span>
+              </Chip>
             </div>
-            <h3 id="recover-primary-heading" className="text-base font-semibold tracking-tight text-foreground">
+            <h3 id="recover-primary-heading" className="text-base font-bold tracking-tight text-foreground">
               {t("library.restoreBackup.cloudFilesTitle")}
             </h3>
-            <p className="max-w-[65ch] text-sm leading-relaxed text-default-600 dark:text-default-400">
+            <p className="max-w-[65ch] text-xs leading-relaxed text-default-600 dark:text-default-400">
               {t("library.restoreBackup.cloudFilesDesc")}
             </p>
           </div>
+
           <Button
             color="primary"
             variant="solid"
-            className="mt-1 w-full shrink-0 sm:mt-0 sm:w-auto sm:min-w-44"
+            className="font-semibold shrink-0 w-full sm:w-auto sm:min-w-44 shadow-xs"
             startContent={
               isDownloadingFromCloud ? (
                 <Spinner color="current" size="sm" />
               ) : (
-                <CloudDownload className="size-4 shrink-0" />
+                <CloudDownload size={18} className="shrink-0" />
               )
             }
             onPress={() => void Promise.resolve(onDownloadFromCloud?.())}
@@ -292,36 +348,55 @@ export function RestoreBackupModal({
 
   return (
     <>
-      <Modal isOpen={isOpen} onOpenChange={(o) => !o && onClose()} size="2xl" scrollBehavior="inside">
+      <Modal
+        isOpen={isOpen}
+        onOpenChange={(o) => !o && onClose()}
+        size="2xl"
+        scrollBehavior="inside"
+        backdrop="blur"
+        classNames={{
+          header: "border-b border-divider pb-4",
+          footer: "border-t border-divider pt-3 pb-3",
+        }}>
         <ModalContent>
-          <ModalHeader className="flex-col items-stretch gap-3 border-b border-default-200/80 pb-4 dark:border-default-100/15">
-            <p className="text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-default-400">
+          <ModalHeader className="flex flex-col gap-1">
+            <span className="text-[0.65rem] font-bold uppercase tracking-[0.14em] text-default-400">
               {t("library.restoreBackup.sectionLabel")}
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary dark:bg-primary/20">
-                <CloudDownload className="size-6" aria-hidden strokeWidth={1.75} />
-              </div>
-              <div className="min-w-0 flex-1 space-y-1">
-                <h2 className="text-xl font-semibold tracking-tight text-balance text-foreground sm:text-2xl">
-                  {t("library.restoreBackup.modalTitle")}
-                </h2>
-                <p className="text-sm leading-relaxed text-default-500">{t("library.restoreBackup.modalDesc")}</p>
-              </div>
-            </div>
+            </span>
+            <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+              {t("library.restoreBackup.modalTitle")}
+            </h2>
+            <p className="text-xs text-default-500 font-normal">{t("library.restoreBackup.modalDesc")}</p>
+          </ModalHeader>
+
+          <ModalBody className="gap-6 py-5">
             {game && (
-              <div className="flex items-center gap-2 rounded-lg border border-default-200/90 bg-default-50/70 px-3 py-2 dark:border-default-100/18 dark:bg-default-100/20">
-                <FolderOpen className="size-4 shrink-0 text-default-500" aria-hidden />
-                <span className="min-w-0 truncate text-sm font-semibold">{formatGameDisplayName(game.id)}</span>
-                <span className="truncate font-mono text-[11px] text-default-400 tabular-nums">{game.id}</span>
+              <div className="flex items-center gap-4 rounded-xl border border-divider bg-content2 p-3.5 shadow-xs">
+                <div className="h-14 w-24 shrink-0 overflow-hidden rounded-lg bg-default-100 border border-default-200/80 dark:border-default-100/10 relative">
+                  {capsuleImage ? (
+                    <img src={capsuleImage} alt="" className="w-full h-full object-cover object-center" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-default-400">
+                      <FolderOpen size={22} strokeWidth={1.5} />
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold text-base text-foreground truncate">{formatGameDisplayName(game.id)}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="font-mono text-[11px] text-default-500 bg-default-100 dark:bg-default-50/10 px-2 py-0.5 rounded border border-default-200/60 dark:border-default-100/10 tabular-nums">
+                      {game.id}
+                    </span>
+                  </div>
+                </div>
               </div>
             )}
-          </ModalHeader>
-          <ModalBody className="gap-8 py-6">
+
             {!hasCloudIntegration && (
-              <p className="rounded-xl border border-default-200 bg-default-50/50 px-4 py-3 text-sm text-default-600 dark:border-default-100/20 dark:bg-default-100/10 dark:text-default-400">
-                {t("library.restoreBackup.noCloudHint")}
-              </p>
+              <div className="rounded-xl border border-warning-200/80 bg-warning-50/50 dark:border-warning-500/30 dark:bg-warning-500/10 px-4 py-3 text-xs text-warning-700 dark:text-warning-300 flex items-center gap-2">
+                <Sparkles size={16} className="shrink-0 text-warning" />
+                <span>{t("library.restoreBackup.noCloudHint")}</span>
+              </div>
             )}
 
             {primaryBlock}
@@ -330,25 +405,36 @@ export function RestoreBackupModal({
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   <Divider className="flex-1" />
-                  <span className="shrink-0 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-default-400">
+                  <span className="shrink-0 text-[0.65rem] font-bold uppercase tracking-[0.14em] text-default-400">
                     {t("library.restoreBackup.otherRecovery")}
                   </span>
                   <Divider className="flex-1" />
                 </div>
+
                 <Tabs
                   aria-label={t("library.restoreBackup.tabsAriaLabel")}
                   fullWidth
+                  variant="solid"
                   classNames={{
-                    tabList: "w-full gap-1 rounded-lg bg-default-100 p-1 dark:bg-default-100/40",
-                    cursor: "bg-content1 shadow-sm dark:bg-content1/90",
-                    tab: "h-10 data-[selected=true]:font-semibold",
+                    tabList: "w-full gap-1 rounded-xl bg-default-100 dark:bg-default-100/50 border border-divider p-1",
+                    cursor: "bg-background dark:bg-content1 shadow-xs rounded-lg",
+                    tab: "h-10 text-xs font-semibold data-[selected=true]:text-foreground text-default-500 transition-colors",
                   }}>
                   <Tab
                     key="local"
                     title={
                       <span className="flex items-center justify-center gap-2">
-                        <FolderArchive size={17} aria-hidden strokeWidth={1.75} />
+                        <FolderArchive size={16} strokeWidth={1.75} />
                         <span>{t("library.restoreBackup.localCopiesTab")}</span>
+                        {backups && backups.length > 0 && (
+                          <Chip
+                            size="sm"
+                            variant="flat"
+                            color="default"
+                            className="h-5 px-1.5 min-w-5 text-[10px] font-mono">
+                            {backups.length}
+                          </Chip>
+                        )}
                       </span>
                     }>
                     <div className="pt-4">{localBackupList}</div>
@@ -357,50 +443,78 @@ export function RestoreBackupModal({
                     key="tar"
                     title={
                       <span className="flex items-center justify-center gap-2">
-                        <History size={17} aria-hidden strokeWidth={1.75} />
+                        <History size={16} strokeWidth={1.75} />
                         <span className="hidden xs:inline">{t("library.restoreBackup.remoteSnapshotsTab")}</span>
                         <span className="xs:hidden">{t("library.restoreBackup.remoteSnapshotsShort")}</span>
+                        {cloudBackups && cloudBackups.length > 0 && (
+                          <Chip
+                            size="sm"
+                            variant="flat"
+                            color="primary"
+                            className="h-5 px-1.5 min-w-5 text-[10px] font-mono">
+                            {cloudBackups.length}
+                          </Chip>
+                        )}
                       </span>
                     }>
                     <div className="space-y-4 pt-4">
-                      <p className="text-sm leading-relaxed text-default-600 dark:text-default-400">
+                      <p className="text-xs leading-relaxed text-default-600 dark:text-default-400">
                         {t("library.restoreBackup.snapshotsDesc")}
                       </p>
+
                       <Button
                         color="primary"
                         variant="flat"
-                        startContent={<Cloud className="size-4 shrink-0 text-primary" />}
+                        size="sm"
+                        className="font-semibold"
+                        startContent={<Plus size={16} />}
                         onPress={handleCreateFullBackup}
                         isLoading={creatingFullBackup}
                         isDisabled={creatingFullBackup || isDownloadingFromCloud}>
                         {t("library.restoreBackup.createSnapshot")}
                       </Button>
+
                       {cloudLoading ? (
                         <div className="flex items-center justify-center py-8">
                           <Spinner size="lg" color="primary" />
                         </div>
                       ) : !cloudBackups?.length ? (
-                        <div className="rounded-xl border border-dashed border-default-300 px-4 py-6 text-center text-sm text-default-500 dark:border-default-100/25">
-                          {t("library.restoreBackup.noCloudSnapshots")}
+                        <div className="rounded-xl border border-dashed border-default-300 bg-default-50/50 p-6 text-center dark:border-default-100/20 dark:bg-default-100/10">
+                          <History className="mx-auto mb-2 size-8 text-default-400" strokeWidth={1.25} />
+                          <p className="text-xs font-semibold text-foreground">
+                            {t("library.restoreBackup.noCloudSnapshots")}
+                          </p>
                         </div>
                       ) : (
-                        <ul className="max-h-[min(14rem,45vh)] space-y-2 overflow-y-auto pr-1">
+                        <motion.ul
+                          variants={containerVariants}
+                          initial="hidden"
+                          animate="show"
+                          className="max-h-[min(15rem,45vh)] space-y-2 overflow-y-auto pr-1">
                           {cloudBackups.map((b: CloudBackupInfo) => (
-                            <li
+                            <motion.li
                               key={b.key}
-                              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-divider bg-content2 px-4 py-3 shadow-sm transition-colors hover:bg-content3/60">
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-semibold">{b.filename}</p>
-                                <p className="text-xs tabular-nums text-default-500">
-                                  {b.lastModified}
-                                  {b.size != null ? ` • ${formatBytes(b.size)}` : ""}
-                                </p>
+                              variants={itemVariants}
+                              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-divider bg-content2 px-4 py-3 shadow-xs transition-colors hover:bg-content3/60">
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                  <Cloud size={18} strokeWidth={1.75} />
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-semibold text-foreground">{b.filename}</p>
+                                  <p className="text-xs tabular-nums text-default-500">
+                                    {b.lastModified}
+                                    {b.size != null ? ` • ${formatBytes(b.size)}` : ""}
+                                  </p>
+                                </div>
                               </div>
+
                               <div className="flex items-center gap-1">
                                 <Button
                                   size="sm"
                                   color="primary"
                                   variant="flat"
+                                  className="font-semibold"
                                   onPress={() => handleRestoreCloud(b)}
                                   isLoading={restoringCloudKey === b.key}
                                   isDisabled={!!restoringCloudKey || !!deletingCloudKey}>
@@ -429,9 +543,9 @@ export function RestoreBackupModal({
                                   <Trash2 size={16} />
                                 </Button>
                               </div>
-                            </li>
+                            </motion.li>
                           ))}
-                        </ul>
+                        </motion.ul>
                       )}
                     </div>
                   </Tab>
@@ -441,14 +555,15 @@ export function RestoreBackupModal({
 
             {!hasCloudIntegration && (
               <div className="space-y-3">
-                <h3 className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-default-400">
+                <h3 className="text-[0.65rem] font-bold uppercase tracking-[0.14em] text-default-400">
                   {t("library.restoreBackup.localCopiesHeading")}
                 </h3>
                 {localBackupList}
               </div>
             )}
           </ModalBody>
-          <ModalFooter className="border-t border-default-200 dark:border-default-100/15">
+
+          <ModalFooter>
             <Button variant="flat" onPress={onClose}>
               {t("common.close")}
             </Button>
@@ -456,12 +571,18 @@ export function RestoreBackupModal({
         </ModalContent>
       </Modal>
 
-      <Modal isOpen={!!renamingBackup} onOpenChange={(open) => !open && setRenamingBackup(null)} size="md">
+      <Modal
+        isOpen={!!renamingBackup}
+        onOpenChange={(open) => !open && setRenamingBackup(null)}
+        size="md"
+        backdrop="blur">
         <ModalContent>
-          <ModalHeader>{t("library.restoreBackup.renameModalTitle")}</ModalHeader>
-          <ModalBody>
+          <ModalHeader className="border-b border-divider pb-3">
+            {t("library.restoreBackup.renameModalTitle")}
+          </ModalHeader>
+          <ModalBody className="py-4 space-y-3">
             <p
-              className="text-sm text-default-500"
+              className="text-xs text-default-500 leading-relaxed"
               dangerouslySetInnerHTML={{ __html: t("library.restoreBackup.renameModalHint") }}
             />
             <Input
@@ -471,7 +592,7 @@ export function RestoreBackupModal({
               placeholder={t("library.restoreBackup.newNamePlaceholder")}
             />
           </ModalBody>
-          <ModalFooter>
+          <ModalFooter className="border-t border-divider pt-3">
             <Button variant="flat" onPress={() => setRenamingBackup(null)} isDisabled={isRenaming}>
               {t("common.cancel")}
             </Button>
