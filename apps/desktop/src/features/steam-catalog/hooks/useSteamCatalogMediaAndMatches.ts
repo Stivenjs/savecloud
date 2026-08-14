@@ -7,13 +7,16 @@ import { mapBatchMatchesToRecord } from "@utils/sourceMatch";
 const MEDIA_CACHE_KEY = ["steam-catalog-global-media-cache"];
 const MATCHES_CACHE_KEY = ["steam-catalog-global-matches-cache"];
 
+const EMPTY_MEDIA_OBJECT: Record<string, SteamAppdetailsMediaResult> = {};
+const EMPTY_MATCHES_OBJECT: Record<string, SourceBestMatch[]> = {};
+
 export function useSteamCatalogMediaAndMatches(items: CatalogListItem[], pageSize: number) {
   const queryClient = useQueryClient();
 
-  const cachedMedia = (queryClient.getQueryData<Record<string, SteamAppdetailsMediaResult>>(MEDIA_CACHE_KEY) ??
-    {}) as Record<string, SteamAppdetailsMediaResult>;
-  const cachedMatches = (queryClient.getQueryData<Record<string, SourceBestMatch[]>>(MATCHES_CACHE_KEY) ??
-    {}) as Record<string, SourceBestMatch[]>;
+  const cachedMedia =
+    queryClient.getQueryData<Record<string, SteamAppdetailsMediaResult>>(MEDIA_CACHE_KEY) ?? EMPTY_MEDIA_OBJECT;
+  const cachedMatches =
+    queryClient.getQueryData<Record<string, SourceBestMatch[]>>(MATCHES_CACHE_KEY) ?? EMPTY_MATCHES_OBJECT;
 
   const unmappedAppIds = useMemo(() => {
     const ids = items.map((i) => i.steamAppId).filter((id): id is string => Boolean(id && !cachedMedia[id]));

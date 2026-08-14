@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@heroui/react";
 import type { CatalogListItem, SteamAppdetailsMediaResult, SourceBestMatch } from "@services/tauri";
@@ -17,7 +17,7 @@ export type SteamCatalogVirtualizedGridProps = {
   consoleMode?: boolean;
 };
 
-export function SteamCatalogVirtualizedGrid({
+export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualizedGrid({
   items,
   mediaBySteamAppId,
   matchByGameName,
@@ -53,8 +53,9 @@ export function SteamCatalogVirtualizedGrid({
 
   const virtualizer = useWindowVirtualizer({
     count: rowCount,
-    estimateSize: () => (consoleMode ? 310 : 256),
-    overscan: 4,
+    estimateSize: () => (consoleMode ? 320 : 266),
+    getItemKey: (index) => index,
+    overscan: 6,
     scrollMargin: containerRef.current?.offsetTop ?? 0,
   });
 
@@ -78,7 +79,6 @@ export function SteamCatalogVirtualizedGrid({
             <div
               key={virtualRow.key}
               data-index={virtualRow.index}
-              ref={virtualizer.measureElement}
               className="absolute left-0 top-0 w-full pb-5"
               style={{
                 transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
@@ -120,4 +120,4 @@ export function SteamCatalogVirtualizedGrid({
       </div>
     </div>
   );
-}
+});

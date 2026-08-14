@@ -56,10 +56,7 @@ export const CatalogGridItem = memo(function CatalogGridItem({
   const best = candidates.length > 0 ? candidates[0] : undefined;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.15 }}>
       <div className="space-y-2">
         <div
           className="overflow-hidden rounded-xl ring-1 ring-transparent 

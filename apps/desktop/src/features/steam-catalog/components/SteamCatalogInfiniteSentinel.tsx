@@ -27,7 +27,7 @@ export function SteamCatalogInfiniteSentinel({
           onFetchNextPage();
         }
       },
-      { rootMargin: "300px" }
+      { rootMargin: "500px" }
     );
 
     observer.observe(sentinel);
