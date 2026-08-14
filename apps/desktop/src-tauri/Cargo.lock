@@ -6548,7 +6548,7 @@ dependencies = [
 
 [[package]]
 name = "savecloud-desktop"
-version = "1.24.2"
+version = "26.8.23"
 dependencies = [
  "aes",
  "aes-gcm",

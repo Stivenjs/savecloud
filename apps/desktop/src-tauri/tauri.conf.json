@@ -46,7 +46,13 @@
     ],
     "longDescription": "SaveCloud es una aplicación de escritorio para administrar tu almacenamiento en la nube. Permite subir, descargar y gestionar tus archivos en la nube. Es una aplicación simple y fácil de usar que te permite administrar tu almacenamiento en la nube en unos pocos clicks.",
     "shortDescription": "SaveCloud es una aplicación de escritorio para administrar tu almacenamiento en la nube.",
-    "targets": ["nsis", "deb", "rpm", "dmg", "app"],
+    "targets": [
+      "nsis",
+      "deb",
+      "rpm",
+      "dmg",
+      "app"
+    ],
     "linux": {
       "deb": {
         "depends": [
@@ -109,5 +115,5 @@
     }
   },
   "productName": "SaveCloud",
-  "version": "1.24.2"
+  "version": "26.8.23"
 }
