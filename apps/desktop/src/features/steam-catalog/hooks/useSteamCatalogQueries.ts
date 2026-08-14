@@ -270,11 +270,17 @@ export function useSteamCatalogQueries() {
   );
 
   const rawItems: CatalogListItem[] = useMemo(() => {
-    if (searchMode) {
-      const start = (page - 1) * pageSize;
-      return searchResultsAll.slice(start, start + pageSize);
-    }
-    return browseQuery.data?.items ?? [];
+    const list = searchMode
+      ? searchResultsAll.slice((page - 1) * pageSize, page * pageSize)
+      : (browseQuery.data?.items ?? []);
+
+    const seen = new Set<string>();
+    return list.filter((item) => {
+      const id = item.steamAppId || item.name;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
   }, [searchMode, searchResultsAll, browseQuery.data?.items, page, pageSize]);
 
   const items: CatalogListItem[] = useMemo(() => {

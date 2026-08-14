@@ -7,8 +7,14 @@ import { SteamCatalogFilters } from "@features/steam-catalog/components/SteamCat
 import { SteamCatalogGrid } from "@features/steam-catalog/components/SteamCatalogGrid";
 import { SteamCatalogPagination } from "@features/steam-catalog/components/SteamCatalogPagination";
 import { SteamCatalogTrendingHero } from "@features/steam-catalog/components/SteamCatalogTrendingHero";
-import { SteamCatalogToolbar } from "@features/steam-catalog/components/SteamCatalogToolbar";
+import {
+  SteamCatalogToolbar,
+  type CatalogPaginationMode,
+} from "@features/steam-catalog/components/SteamCatalogToolbar";
+import { SteamCatalogInfiniteSentinel } from "@features/steam-catalog/components/SteamCatalogInfiniteSentinel";
 import { useSteamCatalogQueries } from "@features/steam-catalog/hooks/useSteamCatalogQueries";
+import { useSteamCatalogInfiniteQuery } from "@features/steam-catalog/hooks/useSteamCatalogInfiniteQuery";
+import { useSteamCatalogMediaAndMatches } from "@features/steam-catalog/hooks/useSteamCatalogMediaAndMatches";
 import { useSteamCatalogTrendingHero } from "@features/steam-catalog/hooks/useSteamCatalogTrendingHero";
 import { useSteamCatalogGamepadPagination } from "@features/steam-catalog/hooks/useSteamCatalogGamepadPagination";
 import { useShellUiStore } from "@store/ShellUiStore";
@@ -45,10 +51,6 @@ export function SteamCatalogPage() {
     totalForRange,
     items,
     totalBrowse,
-    mediaBySteamAppId,
-    matchByGameName,
-    isMediaBatchPending,
-    isMatchingPending,
     isLoading,
     isError,
     errorMsg,
@@ -62,6 +64,32 @@ export function SteamCatalogPage() {
     toggleTag,
     clearFilters,
   } = useSteamCatalogQueries();
+
+  const [paginationMode, setPaginationMode] = useState<CatalogPaginationMode>("infinite");
+  const isInfiniteMode = paginationMode === "infinite" && !bigPictureConsole;
+
+  const pageSize = bigPictureConsole ? 25 : 24;
+
+  const infiniteQuery = useSteamCatalogInfiniteQuery({
+    pageSize,
+    selectedGenres,
+    selectedTags,
+    searchMode,
+    debouncedSearch,
+    sortOption,
+    trendingReady: true,
+  });
+
+  const activeItems = isInfiniteMode ? infiniteQuery.items : items;
+  const activeIsLoading = isInfiniteMode ? infiniteQuery.isLoading : isLoading;
+  const activeTotalForRange = isInfiniteMode ? infiniteQuery.totalCount : totalForRange;
+
+  const {
+    mediaBySteamAppId: activeMediaBySteamAppId,
+    isMediaBatchPending: activeIsMediaBatchPending,
+    matchByGameName: activeMatchByGameName,
+    isMatchingPending: activeIsMatchingPending,
+  } = useSteamCatalogMediaAndMatches(activeItems, pageSize);
 
   useRegisterGlobalBack(() => {
     navigate("/");
@@ -90,7 +118,7 @@ export function SteamCatalogPage() {
     setPage,
   });
 
-  const isReady = !isLoading && items.length > 0;
+  const isReady = !activeIsLoading && activeItems.length > 0;
   const showTrendingHero = true;
 
   const {
@@ -151,7 +179,7 @@ export function SteamCatalogPage() {
               {t("steamCatalog.title")}
             </h1>
             <p className="text-xs text-default-400 mt-0.5">
-              {totalBrowse > 0 ? t("steamCatalog.indexedGames", { count: totalBrowse }) : ""}
+              {activeTotalForRange > 0 ? t("steamCatalog.indexedGames", { count: activeTotalForRange }) : ""}
             </p>
           </div>
         </div>
@@ -210,16 +238,18 @@ export function SteamCatalogPage() {
               onSearchTermChange={setSearchTerm}
               sortOption={sortOption}
               onSortOptionChange={setSortOption}
+              paginationMode={paginationMode}
+              onPaginationModeChange={setPaginationMode}
             />
           )}
 
-          {isLoading ? (
+          {activeIsLoading ? (
             <div className="flex min-h-[40vh] items-center justify-center">
               <Spinner size="lg" color="primary" label={t("steamCatalog.loadingCatalog")} />
             </div>
           ) : isError ? (
             <p className="text-sm text-danger">{errorMsg?.message ?? t("steamCatalog.errorLoading")}</p>
-          ) : items.length === 0 ? (
+          ) : activeItems.length === 0 ? (
             <p className="text-sm text-default-500">
               {searchMode
                 ? t("steamCatalog.noSearchResults")
@@ -232,23 +262,36 @@ export function SteamCatalogPage() {
           ) : (
             <>
               <p className="text-xs text-default-500 tabular-nums">
-                <span className="font-semibold text-default-700 dark:text-default-300">
-                  {rangeStart}–{rangeEnd}
-                </span>{" "}
-                {t("steamCatalog.rangeOf")}{" "}
-                <span className="font-semibold text-default-700 dark:text-default-300">
-                  {totalForRange.toLocaleString()}
-                </span>{" "}
-                {t("steamCatalog.result", { count: totalForRange })}
+                {isInfiniteMode ? (
+                  <>
+                    <span className="font-semibold text-default-700 dark:text-default-300">1–{activeItems.length}</span>{" "}
+                    {t("steamCatalog.rangeOf")}{" "}
+                    <span className="font-semibold text-default-700 dark:text-default-300">
+                      {activeTotalForRange.toLocaleString()}
+                    </span>{" "}
+                    {t("steamCatalog.result", { count: activeTotalForRange })}
+                  </>
+                ) : (
+                  <>
+                    <span className="font-semibold text-default-700 dark:text-default-300">
+                      {rangeStart}–{rangeEnd}
+                    </span>{" "}
+                    {t("steamCatalog.rangeOf")}{" "}
+                    <span className="font-semibold text-default-700 dark:text-default-300">
+                      {totalForRange.toLocaleString()}
+                    </span>{" "}
+                    {t("steamCatalog.result", { count: totalForRange })}
+                  </>
+                )}
               </p>
 
-              {isMediaBatchPending ? (
+              {activeIsMediaBatchPending ? (
                 <div className="flex min-h-[40vh] items-center justify-center">
                   <Spinner size="lg" color="primary" label={t("steamCatalog.loadingCovers")} />
                 </div>
               ) : (
                 <>
-                  {isMatchingPending ? (
+                  {activeIsMatchingPending ? (
                     <p className="text-xs text-default-400">{t("steamCatalog.validatingSources")}</p>
                   ) : null}
                   <div className="relative">
@@ -261,20 +304,28 @@ export function SteamCatalogPage() {
                       </div>
                     ) : null}
                     <SteamCatalogGrid
-                      items={items}
+                      items={activeItems}
                       listKey={
-                        searchMode
-                          ? `search-${debouncedSearch}-${filterSignature}-p${page}`
-                          : `browse-${filterSignature}-p${page}`
+                        isInfiniteMode
+                          ? `infinite-${filterSignature}-${sortOption}`
+                          : searchMode
+                            ? `search-${debouncedSearch}-${filterSignature}-p${page}`
+                            : `browse-${filterSignature}-p${page}`
                       }
-                      mediaBySteamAppId={mediaBySteamAppId}
-                      matchByGameName={matchByGameName}
-                      isMatchingPending={isMatchingPending}
+                      mediaBySteamAppId={activeMediaBySteamAppId}
+                      matchByGameName={activeMatchByGameName}
+                      isMatchingPending={activeIsMatchingPending}
                       consoleMode={bigPictureConsole}
                     />
                   </div>
 
-                  {bigPictureConsole ? (
+                  {isInfiniteMode ? (
+                    <SteamCatalogInfiniteSentinel
+                      hasNextPage={infiniteQuery.hasNextPage}
+                      isFetchingNextPage={infiniteQuery.isFetchingNextPage}
+                      onFetchNextPage={infiniteQuery.fetchNextPage}
+                    />
+                  ) : bigPictureConsole ? (
                     <div className="flex items-center justify-center gap-10 pt-10 pb-4 text-white/80 font-bold text-xl md:text-2xl select-none">
                       <span className="flex items-center gap-3">
                         {triggerUrls.left ? (

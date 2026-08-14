@@ -1,12 +1,13 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import type { CatalogListItem } from "@services/tauri";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
 import type { SourceBestMatch } from "@services/tauri";
 import { GameCard } from "@features/games/GameCard";
-import { GamesListMotionContainer, GamesListMotionItem } from "@features/games/GamesListMotion";
+import { GamesListMotionContainer } from "@features/games/GamesListMotion";
 import { catalogListItemToConfiguredGame } from "@features/steam-catalog/model/catalogConfiguredGame";
-import { Button, Select, SelectItem, cn } from "@heroui/react";
+import { Button, Select, SelectItem, Skeleton, cn } from "@heroui/react";
 import { startPeerGameDownload, startSourceDownload } from "@services/tauri";
 import type { PeerInstallOffer } from "@services/tauri/inventory.service";
 import { usePeerInstallOffers } from "@hooks/usePeerInstallOffers";
@@ -75,7 +76,10 @@ const CatalogGridItem = memo(function CatalogGridItem({
   const best = candidates.length > 0 ? candidates[0] : undefined;
 
   return (
-    <GamesListMotionItem key={game.id}>
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: "easeOut" }}>
       <div className="space-y-2">
         <div
           className="overflow-hidden rounded-xl ring-1 ring-transparent 
@@ -87,6 +91,7 @@ const CatalogGridItem = memo(function CatalogGridItem({
             variant="catalog"
             game={game}
             cardTitle={item.name}
+            resolvedSteamAppId={item.steamAppId}
             mediaBySteamAppId={mediaBySteamAppId ?? null}
             mediaFromBatch
             onCardNavigate={() => {
@@ -122,12 +127,7 @@ const CatalogGridItem = memo(function CatalogGridItem({
         </div>
         <div className="min-h-8 space-y-2">
           {isMatchingPending ? (
-            <div
-              className={cn(
-                "w-full rounded-medium bg-linear-to-r from-default-200/70 via-default-100/50 to-default-200/70 bg-size-[200%_100%] animate-[shimmer_1.5s_ease-in-out_infinite]",
-                consoleMode ? "h-11 rounded-xl" : "h-8"
-              )}
-            />
+            <Skeleton className={cn("w-full", consoleMode ? "h-11 rounded-xl" : "h-8 rounded-medium")} />
           ) : libraryGame ? (
             <Button
               size={consoleMode ? "md" : "sm"}
@@ -194,7 +194,7 @@ const CatalogGridItem = memo(function CatalogGridItem({
           )}
         </div>
       </div>
-    </GamesListMotionItem>
+    </motion.div>
   );
 });
 
@@ -357,20 +357,22 @@ export function SteamCatalogGrid({
             : "grid-cols-[repeat(auto-fill,minmax(280px,1fr))]"
         )}
         listKey={listKey}>
-        {items.map((item) => {
+        {items.map((item, idx) => {
           const libraryGame =
             (item.steamAppId ? libraryGamesMap.get(String(item.steamAppId)) : undefined) ??
             libraryGamesMap.get(item.name.toLowerCase());
 
+          const uniqueKey = item.steamAppId ? `steam-${item.steamAppId}` : `${item.name}-${idx}`;
+
           return (
             <CatalogGridItem
-              key={item.name}
+              key={uniqueKey}
               item={item}
               libraryGame={libraryGame}
               mediaBySteamAppId={mediaBySteamAppId}
               match={matchByGameName[item.name]}
               selectKey={pickByGame[item.name]}
-              isMatchingPending={isMatchingPending}
+              isMatchingPending={isMatchingPending && !(item.name in matchByGameName)}
               onPickChange={handlePickChange}
               onInstall={handleInstall}
               consoleMode={consoleMode}
