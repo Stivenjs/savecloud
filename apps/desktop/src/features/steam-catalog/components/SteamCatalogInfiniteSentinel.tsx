@@ -46,7 +46,7 @@ export function SteamCatalogInfiniteSentinel({
   }
 
   return (
-    <div ref={sentinelRef} className="flex min-h-24 items-center justify-center py-6">
+    <div ref={sentinelRef} className="flex h-16 items-center justify-center py-2">
       {isFetchingNextPage ? (
         <Spinner size="md" color="primary" label={t("steamCatalog.loadingMore", "Cargando más juegos...")} />
       ) : null}
