@@ -81,6 +81,26 @@ export function SteamCatalogPage() {
     trendingReady: true,
   });
 
+  const [showStickyToolbar, setShowStickyToolbar] = useState(false);
+  const [isPastHeader, setIsPastHeader] = useState(false);
+  const lastScrollY = useRef(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      const isScrollingUp = currentScrollY < lastScrollY.current;
+      const pastThreshold = currentScrollY > 300;
+
+      setIsPastHeader(pastThreshold);
+      setShowStickyToolbar(pastThreshold && isScrollingUp);
+
+      lastScrollY.current = currentScrollY;
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
   const activeItems = isInfiniteMode ? infiniteQuery.items : items;
   const activeIsLoading = isInfiniteMode ? infiniteQuery.isLoading : isLoading;
   const activeTotalForRange = isInfiniteMode ? infiniteQuery.totalCount : totalForRange;
@@ -234,14 +254,25 @@ export function SteamCatalogPage() {
 
         <div className="min-w-0 flex-1 space-y-4">
           {!bigPictureConsole && (
-            <SteamCatalogToolbar
-              searchTerm={searchTerm}
-              onSearchTermChange={setSearchTerm}
-              sortOption={sortOption}
-              onSortOptionChange={setSortOption}
-              paginationMode={paginationMode}
-              onPaginationModeChange={setPaginationMode}
-            />
+            <div
+              className={cn(
+                "transition-all duration-300 ease-out z-30",
+                isPastHeader
+                  ? "sticky top-26 backdrop-blur-xl bg-background/90 shadow-2xl border border-default-200/50 dark:border-default-100/20 p-2.5 rounded-2xl"
+                  : "",
+                isPastHeader && !showStickyToolbar
+                  ? "-translate-y-28 opacity-0 pointer-events-none"
+                  : "translate-y-0 opacity-100"
+              )}>
+              <SteamCatalogToolbar
+                searchTerm={searchTerm}
+                onSearchTermChange={setSearchTerm}
+                sortOption={sortOption}
+                onSortOptionChange={setSortOption}
+                paginationMode={paginationMode}
+                onPaginationModeChange={setPaginationMode}
+              />
+            </div>
           )}
 
           {activeIsLoading ? (
