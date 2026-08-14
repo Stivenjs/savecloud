@@ -167,13 +167,17 @@ export function SteamCatalogPage() {
 
   useLayoutEffect(() => {
     if (catalogScrollPosition > 0 && isReady && !hasRestored.current) {
+      void document.body.offsetHeight;
+
       isRestoringRef.current = true;
       window.scrollTo({ top: catalogScrollPosition, behavior: "instant" });
+
       const timer = setTimeout(() => {
+        void document.body.offsetHeight;
         window.scrollTo({ top: catalogScrollPosition, behavior: "instant" });
         hasRestored.current = true;
         isRestoringRef.current = false;
-      }, 150);
+      }, 100);
       return () => clearTimeout(timer);
     }
   }, [isReady, catalogScrollPosition, activeItems.length]);
@@ -200,8 +204,10 @@ export function SteamCatalogPage() {
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
         const currentY = window.scrollY || document.documentElement.scrollTop;
-        setCatalogScrollPosition(currentY);
-      }, 250);
+        if (currentY > 0) {
+          setCatalogScrollPosition(currentY);
+        }
+      }, 200);
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
@@ -209,7 +215,7 @@ export function SteamCatalogPage() {
       window.removeEventListener("scroll", handleScroll);
       clearTimeout(scrollTimeout);
       const currentY = window.scrollY || document.documentElement.scrollTop;
-      if (!isRestoringRef.current) {
+      if (currentY > 0 && !isRestoringRef.current) {
         setCatalogScrollPosition(currentY);
       }
     };
