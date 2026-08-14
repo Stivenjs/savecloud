@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 import type { CatalogListItem } from "@services/tauri";
+import type { CatalogSortOption } from "@features/steam-catalog/components/SteamCatalogToolbar";
 
 import { mapBatchMatchesToRecord } from "@utils/sourceMatch";
 import {
@@ -242,13 +243,56 @@ export function useSteamCatalogQueries() {
     }
   }, [page, totalPages, setSearchParams]);
 
-  const items: CatalogListItem[] = useMemo(() => {
+  const sortOption: CatalogSortOption = useMemo(() => {
+    const raw = searchParams.get("sort") as CatalogSortOption | null;
+    if (raw === "title_asc" || raw === "title_desc" || raw === "newest") {
+      return raw;
+    }
+    return "trending";
+  }, [searchParams]);
+
+  const setSortOption = useCallback(
+    (option: CatalogSortOption) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (option === "trending") {
+            next.delete("sort");
+          } else {
+            next.set("sort", option);
+          }
+          return next;
+        },
+        { replace: true }
+      );
+    },
+    [setSearchParams]
+  );
+
+  const rawItems: CatalogListItem[] = useMemo(() => {
     if (searchMode) {
       const start = (page - 1) * pageSize;
       return searchResultsAll.slice(start, start + pageSize);
     }
     return browseQuery.data?.items ?? [];
   }, [searchMode, searchResultsAll, browseQuery.data?.items, page, pageSize]);
+
+  const items: CatalogListItem[] = useMemo(() => {
+    if (sortOption === "trending") {
+      return rawItems;
+    }
+    const copy = [...rawItems];
+    if (sortOption === "title_asc") {
+      return copy.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    }
+    if (sortOption === "title_desc") {
+      return copy.sort((a, b) => b.name.localeCompare(a.name, undefined, { sensitivity: "base" }));
+    }
+    if (sortOption === "newest") {
+      return copy.sort((a, b) => (Number(b.steamAppId) || 0) - (Number(a.steamAppId) || 0));
+    }
+    return rawItems;
+  }, [rawItems, sortOption]);
 
   const steamAppIdsForBatch = useMemo(() => {
     const ids = items.map((i) => i.steamAppId).filter(Boolean);
@@ -388,6 +432,8 @@ export function useSteamCatalogQueries() {
   return {
     searchTerm: searchInput,
     setSearchTerm,
+    sortOption,
+    setSortOption,
     debouncedSearch: debounced,
     searchMode,
     filterSignature,

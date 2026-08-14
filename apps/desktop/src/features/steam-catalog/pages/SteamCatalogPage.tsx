@@ -32,6 +32,8 @@ export function SteamCatalogPage() {
   const {
     searchTerm,
     setSearchTerm,
+    sortOption,
+    setSortOption,
     debouncedSearch,
     searchMode,
     filterSignature,
@@ -202,7 +204,14 @@ export function SteamCatalogPage() {
         )}
 
         <div className="min-w-0 flex-1 space-y-4">
-          {!bigPictureConsole && <SteamCatalogToolbar searchTerm={searchTerm} onSearchTermChange={setSearchTerm} />}
+          {!bigPictureConsole && (
+            <SteamCatalogToolbar
+              searchTerm={searchTerm}
+              onSearchTermChange={setSearchTerm}
+              sortOption={sortOption}
+              onSortOptionChange={setSortOption}
+            />
+          )}
 
           {isLoading ? (
             <div className="flex min-h-[40vh] items-center justify-center">

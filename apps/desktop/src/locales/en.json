@@ -1900,6 +1900,13 @@
     "pageXofY": "Page {{page}} of {{total}}",
     "searchPlaceholder": "Multiple words; min. {{min}} characters…",
     "searchAriaLabel": "Search catalog",
+    "sort": {
+      "label": "Sort by",
+      "trending": "Most Popular / Trending",
+      "titleAsc": "Name (A - Z)",
+      "titleDesc": "Name (Z - A)",
+      "newest": "Newly Added"
+    },
     "filters": {
       "title": "Filters",
       "clearButton": "Clear filters",
