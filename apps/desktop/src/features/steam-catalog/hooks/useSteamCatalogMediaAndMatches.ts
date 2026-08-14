@@ -1,64 +1,71 @@
-import { useMemo, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CatalogListItem, SteamAppdetailsMediaResult, SourceBestMatch } from "@services/tauri";
 import { getSteamAppdetailsMediaBatch, sourcesFindMatchesBatch } from "@services/tauri";
 import { mapBatchMatchesToRecord } from "@utils/sourceMatch";
 
+const MEDIA_CACHE_KEY = ["steam-catalog-global-media-cache"];
+const MATCHES_CACHE_KEY = ["steam-catalog-global-matches-cache"];
+
 export function useSteamCatalogMediaAndMatches(items: CatalogListItem[], pageSize: number) {
-  const mediaCacheRef = useRef<Record<string, SteamAppdetailsMediaResult>>({});
-  const matchesCacheRef = useRef<Record<string, SourceBestMatch[]>>({});
+  const queryClient = useQueryClient();
+
+  const cachedMedia = (queryClient.getQueryData<Record<string, SteamAppdetailsMediaResult>>(MEDIA_CACHE_KEY) ??
+    {}) as Record<string, SteamAppdetailsMediaResult>;
+  const cachedMatches = (queryClient.getQueryData<Record<string, SourceBestMatch[]>>(MATCHES_CACHE_KEY) ??
+    {}) as Record<string, SourceBestMatch[]>;
 
   const unmappedAppIds = useMemo(() => {
-    const ids = items.map((i) => i.steamAppId).filter((id): id is string => Boolean(id && !mediaCacheRef.current[id]));
+    const ids = items.map((i) => i.steamAppId).filter((id): id is string => Boolean(id && !cachedMedia[id]));
     return [...new Set(ids)].sort();
-  }, [items]);
+  }, [items, cachedMedia]);
 
   const unmappedAppIdsKey = useMemo(() => unmappedAppIds.join(","), [unmappedAppIds]);
 
   const unmappedNames = useMemo(() => {
-    const names = items.map((i) => i.name).filter((name) => Boolean(name && !(name in matchesCacheRef.current)));
+    const names = items.map((i) => i.name).filter((name) => Boolean(name && !(name in cachedMatches)));
     return [...new Set(names)].sort();
-  }, [items]);
+  }, [items, cachedMatches]);
 
   const unmappedNamesKey = useMemo(() => unmappedNames.join("|"), [unmappedNames]);
 
-  const batchQueryKey = `${unmappedAppIdsKey}||${unmappedNamesKey}`;
+  const batchQueryKey = ["steam-catalog-media-matches-fetch", unmappedAppIdsKey, unmappedNamesKey];
 
   const batchQuery = useQuery({
-    queryKey: ["steam-catalog-media-matches-batch", batchQueryKey],
+    queryKey: batchQueryKey,
     queryFn: async () => {
       const [mediaRes, matchesRaw] = await Promise.all([
         unmappedAppIds.length > 0 ? getSteamAppdetailsMediaBatch(unmappedAppIds) : Promise.resolve({}),
         unmappedNames.length > 0 ? sourcesFindMatchesBatch(unmappedNames) : Promise.resolve([]),
       ]);
 
+      let updatedMedia = cachedMedia;
+      let updatedMatches = cachedMatches;
+
       if (mediaRes && Object.keys(mediaRes).length > 0) {
-        Object.assign(mediaCacheRef.current, mediaRes);
+        updatedMedia = { ...cachedMedia, ...mediaRes };
+        queryClient.setQueryData(MEDIA_CACHE_KEY, updatedMedia);
       }
       if (matchesRaw && Array.isArray(matchesRaw) && matchesRaw.length > 0) {
         const mapped = mapBatchMatchesToRecord(matchesRaw);
-        Object.assign(matchesCacheRef.current, mapped);
+        updatedMatches = { ...cachedMatches, ...mapped };
+        queryClient.setQueryData(MATCHES_CACHE_KEY, updatedMatches);
       }
 
       return {
-        media: mediaCacheRef.current,
-        matches: matchesCacheRef.current,
+        media: updatedMedia,
+        matches: updatedMatches,
       };
     },
     enabled: unmappedAppIds.length > 0 || unmappedNames.length > 0,
-    staleTime: 10 * 60 * 1000,
-    gcTime: 15 * 60 * 1000,
+    staleTime: Infinity,
+    gcTime: 1000 * 60 * 60 * 24,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
 
-  const mediaBySteamAppId = useMemo(() => {
-    return { ...mediaCacheRef.current };
-  }, [batchQuery.data, items]);
-
-  const matchByGameName = useMemo(() => {
-    return { ...matchesCacheRef.current };
-  }, [batchQuery.data, items]);
+  const mediaBySteamAppId = batchQuery.data?.media ?? cachedMedia;
+  const matchByGameName = batchQuery.data?.matches ?? cachedMatches;
 
   const isMediaBatchPending = unmappedAppIds.length > 0 && batchQuery.isPending && items.length <= pageSize;
   const isMatchingPending = unmappedNames.length > 0 && batchQuery.isPending;
