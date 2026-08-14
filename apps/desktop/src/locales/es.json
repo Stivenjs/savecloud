@@ -521,6 +521,7 @@
     "syncAll": "Sincronizar Todo",
     "downloadAll": "Descargar Todo",
     "launch": "Jugar",
+    "starting": "Iniciando...",
     "stop": "Detener",
     "lastSync": "Última sincronización",
     "neverSync": "Nunca sincronizado",

@@ -1,4 +1,4 @@
-import { AlertTriangle, Archive, Check, CloudDownload, CloudUpload } from "lucide-react";
+import { Archive, Check, CloudDownload, CloudUpload } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 export type SyncStatusType = "pending_upload" | "pending_download" | "in_sync" | null;
@@ -22,7 +22,12 @@ export function GameCardStatusBar({ isGameRunning, syncStatus, cloudBackupCount 
 
   if (isGameRunning) {
     parts.push({
-      icon: <AlertTriangle size={12} className="shrink-0" />,
+      icon: (
+        <span className="relative flex h-2 w-2 shrink-0">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+        </span>
+      ),
       text: t("library.statusBar.running"),
       title: t("library.statusBar.runningTitle"),
     });

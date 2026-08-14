@@ -521,6 +521,7 @@
     "syncAll": "Sync All",
     "downloadAll": "Download All",
     "launch": "Play",
+    "starting": "Starting...",
     "stop": "Stop",
     "lastSync": "Last synced",
     "neverSync": "Never synced",

@@ -19,6 +19,7 @@ import { Button, Select, SelectItem, Spinner, Tab, Tabs, Skeleton } from "@herou
 import { ArrowLeft, Cpu, Gamepad2, LayoutList, ScrollText } from "lucide-react";
 import { formatGameDisplayName } from "@utils/gameImage";
 import {
+  checkGamesRunning,
   forceRefreshSteamAppDetails,
   launchGame,
   openSaveFolder,
@@ -33,6 +34,7 @@ import { usePeerInstallOffers } from "@hooks/usePeerInstallOffers";
 import { createShareLink } from "@/services/tauri/share.service";
 import { toastError, toastSuccess } from "@utils/toast";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
+import { RUNNING_STATUS_KEY } from "@hooks/useGameRunningStatus";
 import { LAST_SYNC_QUERY_KEY } from "@hooks/useLastSyncInfo";
 import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";
 import { GameDrawer } from "@features/games/GameDrawer";
@@ -104,6 +106,7 @@ export function GameDetailPage() {
     size?: string | null;
     protocols?: string[];
   } | null>(null);
+  const [isStartingPlay, setIsStartingPlay] = useState(false);
 
   const peerOffersHook = usePeerInstallOffers(
     steamAppId ?? game?.steamAppId,
@@ -205,15 +208,57 @@ export function GameDetailPage() {
     [t]
   );
 
+  useEffect(() => {
+    if (isGameRunning) {
+      setIsStartingPlay(false);
+    }
+  }, [isGameRunning]);
+
+  useEffect(() => {
+    setIsStartingPlay(false);
+  }, [gameId]);
+
+  const pollForGameRunning = useCallback(
+    async (targetGameId: string) => {
+      const startTime = Date.now();
+      const maxDuration = 15000;
+      const interval = 300;
+
+      while (Date.now() - startTime < maxDuration) {
+        try {
+          const status = await checkGamesRunning([targetGameId]);
+          if (status[targetGameId]) {
+            queryClient.setQueryData(RUNNING_STATUS_KEY, (old: Record<string, boolean> | undefined) => ({
+              ...(old ?? {}),
+              [targetGameId]: true,
+            }));
+            return true;
+          }
+        } catch {
+          // Ignorar errores de red/escaneo durante el sondeo
+        }
+        await new Promise((resolve) => setTimeout(resolve, interval));
+      }
+      return false;
+    },
+    [queryClient]
+  );
+
   const handlePlay = useCallback(
     async (g: ConfiguredGame) => {
+      setIsStartingPlay(true);
       try {
         await launchGame(g.id);
+        const detected = await pollForGameRunning(g.id);
+        if (!detected) {
+          setIsStartingPlay(false);
+        }
       } catch (e) {
+        setIsStartingPlay(false);
         toastError(t("library.toast.cannotPlay"), e instanceof Error ? e.message : t("library.toast.unexpectedError"));
       }
     },
-    [t]
+    [pollForGameRunning, t]
   );
 
   const handleShare = useCallback(
@@ -435,6 +480,7 @@ export function GameDetailPage() {
         game={game}
         stats={stats}
         isGameRunning={isGameRunning}
+        isStartingPlay={isStartingPlay}
         isUploadTooLarge={isUploadTooLarge}
         isSyncing={isSyncing}
         isDownloading={isDownloading}

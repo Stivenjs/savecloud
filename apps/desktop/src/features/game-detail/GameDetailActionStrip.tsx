@@ -1,5 +1,4 @@
-import { Chip } from "@heroui/react";
-import { AlertTriangle, Calendar, CloudCheck } from "lucide-react";
+import { Calendar, CloudCheck } from "lucide-react";
 import { formatBytes, formatPlaytime, formatRelativeDate } from "@utils/format";
 import type { GameStats } from "@services/tauri";
 import { GameDetailActions, type GameDetailActionsProps } from "./GameDetailActions";
@@ -20,7 +19,7 @@ export interface GameDetailActionStripProps extends GameDetailActionsProps {
 
 export function GameDetailActionStrip({ stats, isGameRunning, ...actionsProps }: GameDetailActionStripProps) {
   const { t } = useTranslation();
-  const hasMeta = isGameRunning || !!stats;
+  const hasMeta = !!stats;
   const hasActions = Boolean(
     actionsProps.onPlay || actionsProps.onOpenGraph || actionsProps.onEdit || actionsProps.onRemove
   );
@@ -37,12 +36,6 @@ export function GameDetailActionStrip({ stats, isGameRunning, ...actionsProps }:
 
       {hasMeta && (
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-default-200/60 pt-3 lg:border-t-0 lg:pt-0 dark:border-default-100/15">
-          {isGameRunning && (
-            <Chip startContent={<AlertTriangle size={14} />} color="success" variant="flat" size="sm">
-              {t("library.running")}
-            </Chip>
-          )}
-
           {stats && (
             <>
               <StatBlock label={t("library.localSize")} value={formatBytes(stats.localSizeBytes)} />

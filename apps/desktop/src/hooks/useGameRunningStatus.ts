@@ -10,7 +10,7 @@ import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
  * de eventos siempre actualiza el mismo entry del cache que useQuery lee,
  * independientemente de qué instancia del hook registró el listener.
  */
-const RUNNING_STATUS_KEY = ["game-running-status"] as const;
+export const RUNNING_STATUS_KEY = ["game-running-status"] as const;
 const GAME_STATS_QUERY_KEY = ["game-stats"] as const;
 
 interface PlaytimePayload {
