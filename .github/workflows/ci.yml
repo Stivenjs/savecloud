@@ -59,6 +59,11 @@ jobs:
           - platform: macos-latest
             rustTargets: "aarch64-apple-darwin x86_64-apple-darwin"
     runs-on: ${{ matrix.platform }}
+    
+    env:
+      CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+      CMAKEFLAGS: "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
