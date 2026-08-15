@@ -5,8 +5,8 @@ export function SteamCatalogTrendingHeroSkeleton() {
     <section className="space-y-3" aria-label="Destacados cargando">
       <div className="relative">
         <div className="overflow-hidden rounded-2xl border border-default-200/70 bg-content1 shadow-sm dark:border-default-100/15">
-          <div className="grid min-h-80 grid-cols-1 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
-            <div className="relative min-h-72 overflow-hidden">
+          <div className="grid min-h-95 grid-cols-1 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
+            <div className="relative min-h-95 overflow-hidden">
               <Skeleton className="absolute inset-0" />
               <div className="absolute inset-0 bg-linear-to-r from-zinc-950/30 via-zinc-900/10 to-transparent" />
               <div className="relative z-10 flex h-full flex-col justify-between p-5 sm:p-6">

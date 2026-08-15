@@ -2,7 +2,6 @@ import { memo, useCallback, useMemo, startTransition, addTransitionType, ViewTra
 import { useLocation, useNavigate } from "react-router-dom";
 import { Skeleton } from "@heroui/react";
 import { GameCardHoverMotion } from "@features/games/GameCardHoverMotion";
-import { Gamepad2 } from "lucide-react";
 import { formatGameDisplayName, getSteamAppId } from "@utils/gameImage";
 import { GameCardHoverCard } from "@features/games/GameCardHoverCard";
 import { GameCardSyncProgress } from "@features/games/GameCardSyncProgress";
@@ -10,6 +9,7 @@ import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";
 import { GameCardActions } from "@features/games/GameCardActions";
 import { GameCardSyncBadge } from "@features/games/GameCardSyncBadge";
 import { GameCardStatsPanel } from "@features/games/GameCardStatsPanel";
+import { CatalogCoverImage } from "@features/steam-catalog/components/CatalogCoverImage";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { useGameMedia } from "@hooks/useGameMedia";
 import { useSyncStore } from "@store/SyncStore";
@@ -118,18 +118,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     return null;
   });
 
-  const {
-    displayImageUrl,
-    mediaUrls,
-    videoUrl,
-    genres,
-    steamStoreName,
-    isEffectivelyLoading,
-    imgLoaded,
-    imgError,
-    handleImgLoad,
-    handleImgError,
-  } = useGameMedia({
+  const { mediaUrls, videoUrl, genres, steamStoreName, isEffectivelyLoading, coverCandidates } = useGameMedia({
     game,
     resolvedSteamAppId,
     externalLoading,
@@ -203,36 +192,16 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
 
         <MaybeViewTransition name={`game-hero-${game.id}`} share="hero-morph" disabled={isLowPerf || isCatalog}>
           <div className="relative size-full overflow-hidden bg-zinc-950 rounded-xl">
-            {(isEffectivelyLoading || (!isCatalog && displayImageUrl && !imgLoaded && !imgError)) && (
+            {isEffectivelyLoading ? (
               <Skeleton className="absolute inset-0 z-10 size-full rounded-xl" />
-            )}
-
-            {displayImageUrl && !imgError ? (
-              <img
-                key={displayImageUrl}
-                src={displayImageUrl}
-                loading={isCatalog ? "eager" : "lazy"}
-                decoding="async"
-                fetchPriority={isCatalog ? "high" : "auto"}
-                draggable={false}
-                alt={game.id}
-                className={`size-full object-cover object-center transition-[transform,opacity] ${
-                  isCatalog ? "duration-150" : "duration-500"
-                } ease-out group-hover:scale-[1.02] subpixel-antialiased transform-gpu rounded-xl ${
-                  imgLoaded || isCatalog ? "opacity-100" : "opacity-0"
-                }`}
-                onLoad={handleImgLoad}
-                onError={handleImgError}
-              />
             ) : (
-              !isEffectivelyLoading && (
-                <div className="flex size-full flex-col items-center justify-center p-4 bg-[#0e0f14] text-center gap-1.5 rounded-xl border border-zinc-800/20">
-                  <Gamepad2 size={32} className="text-zinc-600" strokeWidth={1.5} />
-                  <span className="text-[10px] font-bold text-zinc-400 select-none line-clamp-2 px-1">
-                    {cardTitle ?? formatGameDisplayName(game.id)}
-                  </span>
-                </div>
-              )
+              <CatalogCoverImage
+                alt={game.id}
+                candidates={coverCandidates}
+                fallbackTitle={cardTitle ?? formatGameDisplayName(game.id)}
+                className="size-full object-cover object-center transition-[transform,opacity] duration-200 ease-out group-hover:scale-[1.02] subpixel-antialiased transform-gpu rounded-xl"
+                showSkeleton={!isCatalog}
+              />
             )}
             {/* Soft bottom shading to integrate image with card background */}
             <div className="absolute inset-0 bg-linear-to-t from-[#0e0f14]/90 via-transparent to-transparent pointer-events-none z-10" />

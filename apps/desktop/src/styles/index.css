@@ -256,3 +256,16 @@ html.low-perf *::after {
   transform-origin: left center;
   animation: sg-thumb-progress var(--sg-thumb-duration, 5.5s) linear forwards;
 }
+
+/* Supresión de bordes e icono nativo de imagen rota del navegador */
+img {
+  text-indent: -9999px;
+  color: transparent;
+}
+
+/* Aislamiento estricto de layout y aceleración por GPU para tarjetas */
+.sg-card-containment {
+  contain: layout paint style;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}

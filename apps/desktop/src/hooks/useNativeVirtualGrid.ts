@@ -35,7 +35,7 @@ export function useNativeVirtualGrid<T>({
   minItemWidth,
   gap = 20,
   estimatedRowHeight = 235,
-  overscan = 4,
+  overscan = 8,
   initialScrollY = 0,
 }: UseNativeVirtualGridOptions<T>): UseNativeVirtualGridResult<T> {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -77,9 +77,9 @@ export function useNativeVirtualGrid<T>({
     }
     const columnWidth = (containerWidth - (columns - 1) * gap) / columns;
     const imageHeight = Math.round(columnWidth * (215 / 460));
-    // imageHeight + 8px card gap + 72px/104px actions slot + 2px border + 20px grid gap
-    const extraContentHeight = minItemWidth >= 320 ? 114 : 82;
-    const computed = imageHeight + extraContentHeight + gap;
+    const bottomActionHeight = minItemWidth >= 320 ? 104 : 72;
+    const cardGap = 8;
+    const computed = imageHeight + cardGap + bottomActionHeight + gap;
     return computed > 100 ? computed : estimatedRowHeight;
   }, [containerWidth, columns, gap, minItemWidth, estimatedRowHeight]);
 
@@ -88,7 +88,8 @@ export function useNativeVirtualGrid<T>({
     return Math.ceil(items.length / columns);
   }, [items.length, columns]);
 
-  // Inicializar directamente en el rango de scroll objetivo para evitar saltos al volver del detalle
+  const pendingRestoreYRef = useRef<number>(initialScrollY > 0 ? initialScrollY : 0);
+
   const [rowRange, setRowRange] = useState<{ startRow: number; endRow: number }>(() => {
     const targetY =
       initialScrollY > 0
@@ -98,14 +99,15 @@ export function useNativeVirtualGrid<T>({
           : 0;
 
     if (targetY > 0) {
-      const relativeScrollY = Math.max(0, targetY - 450);
+      const estimatedContainerTop = minItemWidth >= 320 ? 120 : 450;
+      const relativeScrollY = Math.max(0, targetY - estimatedContainerTop);
       const start = Math.max(0, Math.floor(relativeScrollY / estimatedRowHeight) - overscan);
-      const end = start + 12 + overscan * 2;
+      const end = start + 16 + overscan * 2;
       return { startRow: start, endRow: end };
     }
     return {
       startRow: 0,
-      endRow: Math.min(totalRows > 0 ? totalRows : 16, 16),
+      endRow: Math.min(totalRows > 0 ? totalRows : 24, 24),
     };
   });
 
@@ -122,8 +124,17 @@ export function useNativeVirtualGrid<T>({
     }
 
     const rect = container.getBoundingClientRect();
-    const windowScrollY = window.scrollY || document.documentElement.scrollTop;
-    const containerTop = rect.top + windowScrollY;
+    let windowScrollY = window.scrollY || document.documentElement.scrollTop;
+
+    if (pendingRestoreYRef.current > 0) {
+      if (windowScrollY === 0) {
+        windowScrollY = pendingRestoreYRef.current;
+      } else {
+        pendingRestoreYRef.current = 0;
+      }
+    }
+
+    const containerTop = rect.top + (window.scrollY || document.documentElement.scrollTop);
     const viewportHeight = window.innerHeight || 800;
 
     const relativeScrollY = Math.max(0, windowScrollY - containerTop);
@@ -165,7 +176,6 @@ export function useNativeVirtualGrid<T>({
     };
   }, [updateRange]);
 
-  // Usar useLayoutEffect para actualizar filas ANTES de pintar en pantalla
   useLayoutEffect(() => {
     updateRange();
   }, [totalRows, columns, rowHeight, updateRange]);
