@@ -24,7 +24,6 @@ export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualized
   mediaBySteamAppId,
   matchByGameName,
   pickByGame,
-  isMatchingPending,
   libraryGamesMap,
   onPickChange,
   onInstall,
@@ -64,14 +63,14 @@ export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualized
           const uniqueKey = item.steamAppId ? `steam-${item.steamAppId}` : `${item.name}-${index}`;
 
           return (
-            <div key={uniqueKey} className="w-full">
+            <div key={uniqueKey} className="w-full sg-card-containment">
               <CatalogGridItem
                 item={item}
                 libraryGame={libraryGame}
                 mediaBySteamAppId={mediaBySteamAppId}
                 match={matchByGameName[item.name]}
                 selectKey={pickByGame[item.name]}
-                isMatchingPending={isMatchingPending && !(item.name in matchByGameName)}
+                isMatchingPending={!matchByGameName || !(item.name in matchByGameName)}
                 onPickChange={onPickChange}
                 onInstall={onInstall}
                 consoleMode={consoleMode}

@@ -56,7 +56,7 @@ export const CatalogGridItem = memo(function CatalogGridItem({
   const best = candidates.length > 0 ? candidates[0] : undefined;
 
   return (
-    <div>
+    <div className="w-full">
       <div className="space-y-2">
         <div
           className="overflow-hidden rounded-xl ring-1 ring-transparent 

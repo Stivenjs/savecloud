@@ -20,14 +20,14 @@ export function useSteamCatalogMediaAndMatches(items: CatalogListItem[], pageSiz
 
   const unmappedAppIds = useMemo(() => {
     const ids = items.map((i) => i.steamAppId).filter((id): id is string => Boolean(id && !cachedMedia[id]));
-    return [...new Set(ids)].slice(0, 50).sort();
+    return [...new Set(ids)].sort();
   }, [items, cachedMedia]);
 
   const unmappedAppIdsKey = useMemo(() => unmappedAppIds.join(","), [unmappedAppIds]);
 
   const unmappedNames = useMemo(() => {
     const names = items.map((i) => i.name).filter((name) => Boolean(name && !(name in cachedMatches)));
-    return [...new Set(names)].slice(0, 50).sort();
+    return [...new Set(names)].sort();
   }, [items, cachedMatches]);
 
   const unmappedNamesKey = useMemo(() => unmappedNames.join("|"), [unmappedNames]);
@@ -37,17 +37,55 @@ export function useSteamCatalogMediaAndMatches(items: CatalogListItem[], pageSiz
   const batchQuery = useQuery({
     queryKey: batchQueryKey,
     queryFn: async () => {
-      const [mediaRes, matchesRaw] = await Promise.all([
-        unmappedAppIds.length > 0 ? getSteamAppdetailsMediaBatch(unmappedAppIds) : Promise.resolve({}),
-        unmappedNames.length > 0 ? sourcesFindMatchesBatch(unmappedNames) : Promise.resolve([]),
+      const CHUNK_SIZE = 50;
+
+      const mediaChunks: string[][] = [];
+      for (let i = 0; i < unmappedAppIds.length; i += CHUNK_SIZE) {
+        mediaChunks.push(unmappedAppIds.slice(i, i + CHUNK_SIZE));
+      }
+
+      const namesChunks: string[][] = [];
+      for (let i = 0; i < unmappedNames.length; i += CHUNK_SIZE) {
+        namesChunks.push(unmappedNames.slice(i, i + CHUNK_SIZE));
+      }
+
+      const [mediaChunkResults, matchesChunkResults] = await Promise.all([
+        Promise.all(
+          mediaChunks.map(async (chunk) => {
+            try {
+              return await getSteamAppdetailsMediaBatch(chunk);
+            } catch {
+              return {};
+            }
+          })
+        ),
+        Promise.all(
+          namesChunks.map(async (chunk) => {
+            try {
+              return await sourcesFindMatchesBatch(chunk);
+            } catch {
+              return [];
+            }
+          })
+        ),
       ]);
 
-      let updatedMedia = { ...cachedMedia };
-      let updatedMatches = { ...cachedMatches };
-
-      if (mediaRes && Object.keys(mediaRes).length > 0) {
-        Object.assign(updatedMedia, mediaRes);
+      const mediaResults: Record<string, SteamAppdetailsMediaResult> = {};
+      for (const res of mediaChunkResults) {
+        if (res && Object.keys(res).length > 0) {
+          Object.assign(mediaResults, res);
+        }
       }
+
+      const matchesResults: Record<string, SourceBestMatch[]> = {};
+      for (const raw of matchesChunkResults) {
+        if (raw && Array.isArray(raw) && raw.length > 0) {
+          Object.assign(matchesResults, mapBatchMatchesToRecord(raw));
+        }
+      }
+
+      let updatedMedia = { ...cachedMedia, ...mediaResults };
+      let updatedMatches = { ...cachedMatches, ...matchesResults };
 
       for (const id of unmappedAppIds) {
         if (!updatedMedia[id]) {
@@ -56,10 +94,6 @@ export function useSteamCatalogMediaAndMatches(items: CatalogListItem[], pageSiz
       }
       queryClient.setQueryData(MEDIA_CACHE_KEY, updatedMedia);
 
-      if (matchesRaw && Array.isArray(matchesRaw) && matchesRaw.length > 0) {
-        const mapped = mapBatchMatchesToRecord(matchesRaw);
-        Object.assign(updatedMatches, mapped);
-      }
       for (const name of unmappedNames) {
         if (!(name in updatedMatches)) {
           updatedMatches[name] = [];

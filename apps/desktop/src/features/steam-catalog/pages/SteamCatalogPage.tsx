@@ -121,7 +121,6 @@ export function SteamCatalogPage() {
 
   const {
     mediaBySteamAppId: activeMediaBySteamAppId,
-    isMediaBatchPending: activeIsMediaBatchPending,
     matchByGameName: activeMatchByGameName,
     isMatchingPending: activeIsMatchingPending,
   } = useSteamCatalogMediaAndMatches(deferredActiveItems, pageSize);
@@ -182,13 +181,18 @@ export function SteamCatalogPage() {
       window.scrollTo({ top: targetY, behavior: "instant" });
       hasRestored.current = true;
 
-      requestAnimationFrame(() => {
+      const raf1 = requestAnimationFrame(() => {
         window.scrollTo({ top: targetY, behavior: "instant" });
-        const timer = setTimeout(() => {
-          isRestoringRef.current = false;
-        }, 200);
-        return () => clearTimeout(timer);
+        const raf2 = requestAnimationFrame(() => {
+          window.scrollTo({ top: targetY, behavior: "instant" });
+          const timer = setTimeout(() => {
+            isRestoringRef.current = false;
+          }, 150);
+          return () => clearTimeout(timer);
+        });
+        return () => cancelAnimationFrame(raf2);
       });
+      return () => cancelAnimationFrame(raf1);
     } else {
       hasRestored.current = true;
     }
@@ -375,83 +379,75 @@ export function SteamCatalogPage() {
                 )}
               </p>
 
-              {activeIsMediaBatchPending ? (
-                <div className="flex min-h-[40vh] items-center justify-center">
-                  <Spinner size="lg" color="primary" label={t("steamCatalog.loadingCovers")} />
+              <div className="relative">
+                {isListRefetching ? (
+                  <div
+                    className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-large bg-background/60 pt-8 backdrop-blur-[1px]"
+                    aria-busy="true"
+                    aria-label={t("steamCatalog.updatingList")}>
+                    <Spinner size="md" color="primary" />
+                  </div>
+                ) : null}
+                <SteamCatalogGrid
+                  items={activeItems}
+                  listKey={
+                    isInfiniteMode
+                      ? `infinite-${filterSignature}-${sortOption}`
+                      : searchMode
+                        ? `search-${debouncedSearch}-${filterSignature}-p${page}`
+                        : `browse-${filterSignature}-p${page}`
+                  }
+                  mediaBySteamAppId={activeMediaBySteamAppId}
+                  matchByGameName={activeMatchByGameName}
+                  isMatchingPending={activeIsMatchingPending}
+                  consoleMode={bigPictureConsole}
+                />
+              </div>
+
+              {isInfiniteMode ? (
+                <SteamCatalogInfiniteSentinel
+                  hasNextPage={infiniteQuery.hasNextPage}
+                  isFetchingNextPage={infiniteQuery.isFetchingNextPage}
+                  onFetchNextPage={infiniteQuery.fetchNextPage}
+                />
+              ) : bigPictureConsole ? (
+                <div className="flex items-center justify-center gap-10 pt-10 pb-4 text-white/80 font-bold text-xl md:text-2xl select-none">
+                  <span className="flex items-center gap-3">
+                    {triggerUrls.left ? (
+                      <img
+                        src={triggerUrls.left}
+                        alt={triggerLabels.left}
+                        className="size-11 object-contain brightness-100 filter invert dark:invert-0 transition-transform active:scale-90"
+                      />
+                    ) : (
+                      <span className="text-sm bg-default-100/50 px-3 py-1 rounded font-bold text-default-600 border border-default-200/60">
+                        {triggerLabels.left}
+                      </span>
+                    )}
+                  </span>
+                  <span className="tracking-wide">{t("steamCatalog.pageXofY", { page, total: totalPages })}</span>
+                  <span className="flex items-center gap-3">
+                    {triggerUrls.right ? (
+                      <img
+                        src={triggerUrls.right}
+                        alt={triggerLabels.right}
+                        className="size-11 object-contain brightness-100 filter invert dark:invert-0 transition-transform active:scale-90"
+                      />
+                    ) : (
+                      <span className="text-sm bg-default-100/50 px-3 py-1 rounded font-bold text-default-600 border border-default-200/60">
+                        {triggerLabels.right}
+                      </span>
+                    )}
+                  </span>
                 </div>
               ) : (
-                <>
-                  <div className="relative">
-                    {isListRefetching ? (
-                      <div
-                        className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center rounded-large bg-background/60 pt-8 backdrop-blur-[1px]"
-                        aria-busy="true"
-                        aria-label={t("steamCatalog.updatingList")}>
-                        <Spinner size="md" color="primary" />
-                      </div>
-                    ) : null}
-                    <SteamCatalogGrid
-                      items={activeItems}
-                      listKey={
-                        isInfiniteMode
-                          ? `infinite-${filterSignature}-${sortOption}`
-                          : searchMode
-                            ? `search-${debouncedSearch}-${filterSignature}-p${page}`
-                            : `browse-${filterSignature}-p${page}`
-                      }
-                      mediaBySteamAppId={activeMediaBySteamAppId}
-                      matchByGameName={activeMatchByGameName}
-                      isMatchingPending={activeIsMatchingPending}
-                      consoleMode={bigPictureConsole}
-                    />
-                  </div>
-
-                  {isInfiniteMode ? (
-                    <SteamCatalogInfiniteSentinel
-                      hasNextPage={infiniteQuery.hasNextPage}
-                      isFetchingNextPage={infiniteQuery.isFetchingNextPage}
-                      onFetchNextPage={infiniteQuery.fetchNextPage}
-                    />
-                  ) : bigPictureConsole ? (
-                    <div className="flex items-center justify-center gap-10 pt-10 pb-4 text-white/80 font-bold text-xl md:text-2xl select-none">
-                      <span className="flex items-center gap-3">
-                        {triggerUrls.left ? (
-                          <img
-                            src={triggerUrls.left}
-                            alt={triggerLabels.left}
-                            className="size-11 object-contain brightness-100 filter invert dark:invert-0 transition-transform active:scale-90"
-                          />
-                        ) : (
-                          <span className="text-sm bg-default-100/50 px-3 py-1 rounded font-bold text-default-600 border border-default-200/60">
-                            {triggerLabels.left}
-                          </span>
-                        )}
-                      </span>
-                      <span className="tracking-wide">{t("steamCatalog.pageXofY", { page, total: totalPages })}</span>
-                      <span className="flex items-center gap-3">
-                        {triggerUrls.right ? (
-                          <img
-                            src={triggerUrls.right}
-                            alt={triggerLabels.right}
-                            className="size-11 object-contain brightness-100 filter invert dark:invert-0 transition-transform active:scale-90"
-                          />
-                        ) : (
-                          <span className="text-sm bg-default-100/50 px-3 py-1 rounded font-bold text-default-600 border border-default-200/60">
-                            {triggerLabels.right}
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  ) : (
-                    <SteamCatalogPagination
-                      totalPages={totalPages}
-                      page={page}
-                      onChange={setPage}
-                      isDisabled={isPageTransition}
-                      consoleMode={bigPictureConsole}
-                    />
-                  )}
-                </>
+                <SteamCatalogPagination
+                  totalPages={totalPages}
+                  page={page}
+                  onChange={setPage}
+                  isDisabled={isPageTransition}
+                  consoleMode={bigPictureConsole}
+                />
               )}
             </>
           )}

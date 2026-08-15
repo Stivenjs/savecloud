@@ -262,3 +262,10 @@ img {
   text-indent: -9999px;
   color: transparent;
 }
+
+/* Aislamiento estricto de layout y aceleración por GPU para tarjetas */
+.sg-card-containment {
+  contain: layout paint style;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
