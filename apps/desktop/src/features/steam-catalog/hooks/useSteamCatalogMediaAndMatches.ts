@@ -42,18 +42,30 @@ export function useSteamCatalogMediaAndMatches(items: CatalogListItem[], pageSiz
         unmappedNames.length > 0 ? sourcesFindMatchesBatch(unmappedNames) : Promise.resolve([]),
       ]);
 
-      let updatedMedia = cachedMedia;
-      let updatedMatches = cachedMatches;
+      let updatedMedia = { ...cachedMedia };
+      let updatedMatches = { ...cachedMatches };
 
       if (mediaRes && Object.keys(mediaRes).length > 0) {
-        updatedMedia = { ...cachedMedia, ...mediaRes };
-        queryClient.setQueryData(MEDIA_CACHE_KEY, updatedMedia);
+        Object.assign(updatedMedia, mediaRes);
       }
+
+      for (const id of unmappedAppIds) {
+        if (!updatedMedia[id]) {
+          updatedMedia[id] = { name: "", genres: [], mediaUrls: [], videoUrl: null, capsuleImage: null };
+        }
+      }
+      queryClient.setQueryData(MEDIA_CACHE_KEY, updatedMedia);
+
       if (matchesRaw && Array.isArray(matchesRaw) && matchesRaw.length > 0) {
         const mapped = mapBatchMatchesToRecord(matchesRaw);
-        updatedMatches = { ...cachedMatches, ...mapped };
-        queryClient.setQueryData(MATCHES_CACHE_KEY, updatedMatches);
+        Object.assign(updatedMatches, mapped);
       }
+      for (const name of unmappedNames) {
+        if (!(name in updatedMatches)) {
+          updatedMatches[name] = [];
+        }
+      }
+      queryClient.setQueryData(MATCHES_CACHE_KEY, updatedMatches);
 
       return {
         media: updatedMedia,

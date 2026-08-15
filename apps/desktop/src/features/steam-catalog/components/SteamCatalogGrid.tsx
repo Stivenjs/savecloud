@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CatalogListItem, SteamAppdetailsMediaResult, SourceBestMatch } from "@services/tauri";
+import { startPeerGameDownload, startSourceDownload } from "@services/tauri";
 import { catalogListItemToConfiguredGame } from "@features/steam-catalog/model/catalogConfiguredGame";
 import { useDisclosure } from "@heroui/react";
-import { startPeerGameDownload, startSourceDownload } from "@services/tauri";
 import type { PeerInstallOffer } from "@services/tauri/inventory.service";
 import { usePeerInstallOffers } from "@hooks/usePeerInstallOffers";
-import { pickCandidate, sourceCandidateKey } from "@utils/sourceMatch";
+import { pickCandidate } from "@utils/sourceMatch";
 import { toastError, toastSuccess } from "@utils/toast";
 import { useConfig } from "@hooks/useConfig";
 import type { ConfiguredGame } from "@app-types/config";
@@ -53,34 +53,6 @@ export function SteamCatalogGrid({
   useEffect(() => {
     pickByGameRef.current = pickByGame;
   }, [pickByGame]);
-
-  useEffect(() => {
-    setPickByGame((prev) => {
-      const next = { ...prev };
-      for (const item of items) {
-        const match = matchByGameName[item.name];
-        const list = match ?? [];
-        const best = list.length > 0 ? list[0] : undefined;
-
-        if (best) {
-          const currentPick = next[item.name];
-          const isValidPick = currentPick && list.some((c) => sourceCandidateKey(c) === currentPick);
-
-          if (!isValidPick) {
-            next[item.name] = sourceCandidateKey(best);
-          }
-        } else {
-          delete next[item.name];
-        }
-      }
-      for (const k of Object.keys(next)) {
-        if (!items.some((i) => i.name === k)) {
-          delete next[k];
-        }
-      }
-      return next;
-    });
-  }, [items, matchByGameName]);
 
   const handlePickChange = useCallback((gameName: string, key: string) => {
     setPickByGame((p) => ({ ...p, [gameName]: key }));

@@ -52,7 +52,9 @@ export function useSteamCatalogInfiniteQuery({
     },
     enabled: !searchMode && trendingReady,
     placeholderData: keepPreviousData,
-    staleTime: 60 * 1000,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
 
@@ -67,7 +69,9 @@ export function useSteamCatalogInfiniteQuery({
       ),
     enabled: searchMode && trendingReady,
     placeholderData: keepPreviousData,
-    staleTime: 60 * 1000,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
 
