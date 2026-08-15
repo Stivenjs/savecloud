@@ -35,7 +35,7 @@ export function useNativeVirtualGrid<T>({
   minItemWidth,
   gap = 20,
   estimatedRowHeight = 235,
-  overscan = 4,
+  overscan = 8,
   initialScrollY = 0,
 }: UseNativeVirtualGridOptions<T>): UseNativeVirtualGridResult<T> {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -77,9 +77,10 @@ export function useNativeVirtualGrid<T>({
     }
     const columnWidth = (containerWidth - (columns - 1) * gap) / columns;
     const imageHeight = Math.round(columnWidth * (215 / 460));
-    // imageHeight + 8px card gap + 72px/104px actions slot + 2px border + 20px grid gap
-    const extraContentHeight = minItemWidth >= 320 ? 114 : 82;
-    const computed = imageHeight + extraContentHeight + gap;
+    // imageHeight + 8px card gap + 72px (o 104px en consola) acción + 20px grid gap
+    const bottomActionHeight = minItemWidth >= 320 ? 104 : 72;
+    const cardGap = 8;
+    const computed = imageHeight + cardGap + bottomActionHeight + gap;
     return computed > 100 ? computed : estimatedRowHeight;
   }, [containerWidth, columns, gap, minItemWidth, estimatedRowHeight]);
 

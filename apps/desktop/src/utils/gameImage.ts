@@ -1,6 +1,26 @@
 import type { ConfiguredGame } from "@app-types/config";
 
-const STEAM_CDN_BASE = "https://cdn.cloudflare.steamstatic.com/steam/apps";
+const STEAM_FASTLY_CDN_BASE = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps";
+const STEAM_AKAMAI_CDN_BASE = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps";
+const STEAM_CLOUDFLARE_CDN_BASE = "https://cdn.cloudflare.steamstatic.com/steam/apps";
+
+/**
+ * Devuelve la lista jerárquica de URLs candidatas para la portada de una aplicación de Steam.
+ */
+export function getSteamCdnCandidates(appId: string): string[] {
+  const cleanId = appId.trim();
+  if (!cleanId) return [];
+  return [
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/header.jpg`,
+    `${STEAM_AKAMAI_CDN_BASE}/${cleanId}/header.jpg`,
+    `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/header.jpg`,
+    `https://cdn.akamai.steamstatic.com/steam/apps/${cleanId}/header.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_616x353.jpg`,
+    `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/capsule_616x353.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/library_hero.jpg`,
+    `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/library_hero.jpg`,
+  ];
+}
 
 /**
  * Obtiene la URL de la imagen del juego.
@@ -22,7 +42,7 @@ export function getGameImageUrl(game: ConfiguredGame, resolvedSteamAppId?: strin
   const appId = getSteamAppId(game, resolvedSteamAppId);
 
   if (appId) {
-    return `${STEAM_CDN_BASE}/${appId}/header.jpg`;
+    return `${STEAM_FASTLY_CDN_BASE}/${appId}/header.jpg`;
   }
 
   return null;
@@ -43,12 +63,11 @@ export function getSteamAppId(game: ConfiguredGame, resolvedSteamAppId?: string 
 
 /**
  * URL de imagen extra para hovercard (library hero de Steam).
- * Igual que header.jpg, para juegos nuevos dará 404 si no se usa el hash obtenido por API.
  */
 export function getGameLibraryHeroUrl(game: ConfiguredGame, resolvedSteamAppId?: string | null): string | null {
   const appId = getSteamAppId(game, resolvedSteamAppId);
   if (!appId) return null;
-  return `${STEAM_CDN_BASE}/${appId}/library_hero.jpg`;
+  return `${STEAM_FASTLY_CDN_BASE}/${appId}/library_hero.jpg`;
 }
 
 /**

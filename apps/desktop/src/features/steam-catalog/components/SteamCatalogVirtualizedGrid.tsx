@@ -39,7 +39,7 @@ export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualized
     minItemWidth,
     gap: 20,
     estimatedRowHeight,
-    overscan: 4,
+    overscan: 8,
     initialScrollY: catalogScrollPosition,
   });
 

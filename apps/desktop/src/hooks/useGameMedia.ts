@@ -1,12 +1,21 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getSteamAppdetailsMedia, getSteamAppdetailsMediaBatch } from "@services/tauri";
-import { getGameImageUrl, getGameLibraryHeroUrl, getSteamAppId, needsSteamSearch } from "@utils/gameImage";
+import {
+  getGameImageUrl,
+  getGameLibraryHeroUrl,
+  getSteamAppId,
+  getSteamCdnCandidates,
+  needsSteamSearch,
+} from "@utils/gameImage";
 import type { ConfiguredGame } from "@app-types/config";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
 
 /** Caché global de imágenes ya cargadas en esta sesión, evita re-spinner. */
-const globalLoadedImages = new Set<string>();
+export const globalLoadedImages = new Set<string>();
+
+/** Caché global de imágenes fallidas (404/red), evita reintentar URLs rotas. */
+export const globalFailedImages = new Set<string>();
 
 /**
  * Opciones para {@link useGameMedia}.
@@ -83,11 +92,18 @@ export function buildGameMediaCoverCandidates(
   for (const url of mediaUrls) {
     if (url?.trim()) urls.push(url.trim());
   }
+
+  const appId = getSteamAppId(game, resolvedSteamAppId);
+  if (appId) {
+    urls.push(...getSteamCdnCandidates(appId));
+  }
+
   const legacyHeader = getGameImageUrl(game, resolvedSteamAppId);
   const libraryHero = getGameLibraryHeroUrl(game, resolvedSteamAppId);
   if (legacyHeader) urls.push(legacyHeader);
   if (libraryHero) urls.push(libraryHero);
-  return [...new Set(urls)];
+
+  return [...new Set(urls.filter(Boolean))];
 }
 
 /**
