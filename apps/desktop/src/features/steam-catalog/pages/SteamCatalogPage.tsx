@@ -29,6 +29,7 @@ export function SteamCatalogPage() {
   const setCatalogScrollPosition = useShellUiStore((state) => state.setCatalogScrollPosition);
 
   const initialScrollTargetRef = useRef(catalogScrollPosition);
+  const currentScrollYRef = useRef(catalogScrollPosition);
   const hasRestored = useRef(false);
   const isRestoringRef = useRef(false);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
@@ -173,12 +174,11 @@ export function SteamCatalogPage() {
     if (targetY > 0) {
       isRestoringRef.current = true;
       window.scrollTo({ top: targetY, behavior: "instant" });
+      hasRestored.current = true;
 
       const timer = setTimeout(() => {
-        window.scrollTo({ top: targetY, behavior: "instant" });
-        hasRestored.current = true;
         isRestoringRef.current = false;
-      }, 100);
+      }, 200);
       return () => clearTimeout(timer);
     } else {
       hasRestored.current = true;
@@ -197,6 +197,7 @@ export function SteamCatalogPage() {
     if (hasChanged) {
       setCatalogScrollPosition(0);
       initialScrollTargetRef.current = 0;
+      currentScrollYRef.current = 0;
       window.scrollTo({ top: 0, behavior: "instant" });
     }
   }, [debouncedSearch, filterSignature, sortOption, setCatalogScrollPosition]);
@@ -206,20 +207,24 @@ export function SteamCatalogPage() {
 
     const handleScroll = () => {
       if (!hasRestored.current || isRestoringRef.current) return;
+      const currentY = window.scrollY || document.documentElement.scrollTop;
+      if (currentY > 0) {
+        currentScrollYRef.current = currentY;
+      }
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
-        const currentY = window.scrollY || document.documentElement.scrollTop;
-        setCatalogScrollPosition(currentY);
-      }, 200);
+        if (currentScrollYRef.current > 0) {
+          setCatalogScrollPosition(currentScrollYRef.current);
+        }
+      }, 150);
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
       window.removeEventListener("scroll", handleScroll);
       clearTimeout(scrollTimeout);
-      const currentY = window.scrollY || document.documentElement.scrollTop;
-      if (hasRestored.current && !isRestoringRef.current) {
-        setCatalogScrollPosition(currentY);
+      if (hasRestored.current && !isRestoringRef.current && currentScrollYRef.current > 0) {
+        setCatalogScrollPosition(currentScrollYRef.current);
       }
     };
   }, [setCatalogScrollPosition]);

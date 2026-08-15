@@ -201,7 +201,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
 
         {!isCatalog && syncProgress && <GameCardSyncProgress progress={syncProgress} />}
 
-        <MaybeViewTransition name={`game-hero-${game.id}`} share="hero-morph" disabled={isLowPerf}>
+        <MaybeViewTransition name={`game-hero-${game.id}`} share="hero-morph" disabled={isLowPerf || isCatalog}>
           <div className="relative size-full overflow-hidden bg-zinc-950 rounded-xl">
             {(isEffectivelyLoading || (displayImageUrl && !imgLoaded && !imgError)) && (
               <Skeleton className="absolute inset-0 z-10 size-full rounded-xl" />

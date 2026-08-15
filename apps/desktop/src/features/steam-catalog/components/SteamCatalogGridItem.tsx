@@ -1,5 +1,4 @@
 import { memo, startTransition } from "react";
-import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { addTransitionType } from "react";
@@ -10,6 +9,7 @@ import { GameCard } from "@features/games/GameCard";
 import { catalogListItemToConfiguredGame } from "@features/steam-catalog/model/catalogConfiguredGame";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { sourceCandidateKey } from "@utils/sourceMatch";
+import { useShellUiStore } from "@store/ShellUiStore";
 
 export type CatalogGridItemProps = {
   item: CatalogListItem;
@@ -56,7 +56,7 @@ export const CatalogGridItem = memo(function CatalogGridItem({
   const best = candidates.length > 0 ? candidates[0] : undefined;
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.15 }}>
+    <div>
       <div className="space-y-2">
         <div
           className="overflow-hidden rounded-xl ring-1 ring-transparent 
@@ -72,6 +72,10 @@ export const CatalogGridItem = memo(function CatalogGridItem({
             mediaBySteamAppId={mediaBySteamAppId ?? null}
             mediaFromBatch
             onCardNavigate={() => {
+              const currentY = window.scrollY || document.documentElement.scrollTop;
+              if (currentY > 0) {
+                useShellUiStore.getState().setCatalogScrollPosition(currentY);
+              }
               const from = `${location.pathname}${location.search}`;
               if (libraryGame) {
                 navigate(`/games/${libraryGame.id}`, {
@@ -171,6 +175,6 @@ export const CatalogGridItem = memo(function CatalogGridItem({
           )}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 });

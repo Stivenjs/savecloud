@@ -4,9 +4,10 @@
 
 ::view-transition-old(.page-scale-lift),
 ::view-transition-new(.page-scale-lift) {
-  animation-duration: 240ms;
+  animation-duration: 220ms;
   animation-fill-mode: both;
-  will-change: transform, opacity, filter;
+  will-change: transform, opacity;
+  transform: translateZ(0);
 }
 
 ::view-transition-old(.page-scale-lift) {
@@ -57,22 +58,18 @@
 @keyframes page-scale-out {
   from {
     transform: scale(1) translateY(0);
-    filter: blur(0px);
   }
   to {
     transform: scale(0.97) translateY(-6px);
-    filter: blur(4px);
   }
 }
 
 @keyframes page-scale-in {
   from {
     transform: scale(0.97) translateY(10px);
-    filter: blur(4px);
   }
   to {
     transform: scale(1) translateY(0);
-    filter: blur(0px);
   }
 }
 
@@ -153,9 +150,10 @@
 /* Opción 1: game-detail-ps5 (PS5/Xbox Console Unfold) */
 ::view-transition-old(.game-detail-ps5),
 ::view-transition-new(.game-detail-ps5) {
-  animation-duration: 280ms;
+  animation-duration: 240ms;
   animation-fill-mode: both;
-  will-change: transform, opacity, filter;
+  will-change: transform, opacity;
+  transform: translateZ(0);
 }
 
 ::view-transition-old(.game-detail-ps5) {
@@ -171,22 +169,18 @@
 @keyframes detail-ps5-out {
   from {
     transform: scale(1) translateY(0);
-    filter: blur(0px);
   }
   to {
-    transform: scale(0.96) translateY(-12px);
-    filter: blur(6px);
+    transform: scale(0.96) translateY(-10px);
   }
 }
 
 @keyframes detail-ps5-in {
   from {
-    transform: translateY(28px) scale(0.98);
-    filter: blur(8px);
+    transform: translateY(20px) scale(0.98);
   }
   to {
     transform: translateY(0) scale(1);
-    filter: blur(0px);
   }
 }
 
