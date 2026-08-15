@@ -39,6 +39,8 @@ interface GameDetailHeroProps {
   editionLabel?: string | null;
   gameId: string;
   isLoading?: boolean;
+  /** Si viene del catálogo infinito, desactiva la animación morph pesada. */
+  isCatalog?: boolean;
   /** Vuelve a la lista anterior (misma lógica que atrás global / estado `from`). */
   onBack: () => void;
 }
@@ -53,9 +55,10 @@ export function GameDetailHero({
   editionLabel,
   gameId,
   isLoading,
+  isCatalog,
   onBack,
 }: GameDetailHeroProps) {
-  const isLowPerf = useLowPerformanceMode();
+  const isLowPerf = useLowPerformanceMode() || Boolean(isCatalog);
   const [swiper, setSwiper] = useState<SwiperType | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 

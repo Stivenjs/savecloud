@@ -1,4 +1,5 @@
 import { type ReactNode, ViewTransition } from "react";
+import { useLocation } from "react-router-dom";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 
 interface AnimatedPageProps {
@@ -7,8 +8,11 @@ interface AnimatedPageProps {
 
 export function AnimatedPage({ children }: AnimatedPageProps) {
   const isLowPerf = useLowPerformanceMode();
+  const location = useLocation();
 
-  if (isLowPerf) {
+  const isCatalog = location.pathname.startsWith("/catalog");
+
+  if (isLowPerf || isCatalog) {
     return <>{children}</>;
   }
 

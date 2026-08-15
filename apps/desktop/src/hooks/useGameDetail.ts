@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "react-router-dom";
 import {
   getConfig,
@@ -7,6 +7,7 @@ import {
   getSteamCatalogListingName,
   getGameStats,
   type SteamAppDetailsResult,
+  type SteamAppdetailsMediaResult,
   type GameStats,
 } from "@services/tauri";
 import { useProfileSession } from "@hooks/useProfileSession";
@@ -30,6 +31,7 @@ export function useGameDetail() {
   const location = useLocation();
   const navState = location.state as GameDetailLocationState | undefined;
   const { activeProfile } = useProfileSession();
+  const queryClient = useQueryClient();
 
   const { data: config, isLoading: isConfigLoading } = useQuery({
     queryKey: ["config"],
@@ -61,6 +63,14 @@ export function useGameDetail() {
     refetchOnWindowFocus: false,
   });
 
+  const catalogMedia = useMemo(() => {
+    if (!steamAppId) return null;
+    const cache = queryClient.getQueryData<Record<string, SteamAppdetailsMediaResult>>([
+      "steam-catalog-global-media-cache",
+    ]);
+    return cache?.[steamAppId] ?? null;
+  }, [queryClient, steamAppId]);
+
   const { data: catalogListingName } = useQuery({
     queryKey: ["steam-catalog-listing-name", steamAppId],
     queryFn: () => getSteamCatalogListingName(steamAppId!),
@@ -84,16 +94,20 @@ export function useGameDetail() {
 
   // Primera URL = header (~460px); se omite. Se excluyen pósters de trailers (baja calidad).
   const mediaUrls = useMemo(() => {
-    if (!steamDetails?.media.mediaUrls?.length) return [];
-    return steamDetails.media.mediaUrls.slice(1).filter((u) => !isSteamMoviePosterUrl(u));
-  }, [steamDetails]);
+    const raw = steamDetails?.media.mediaUrls?.length ? steamDetails.media.mediaUrls : catalogMedia?.mediaUrls;
+    if (!raw?.length) return [];
+    return raw.slice(1).filter((u) => !isSteamMoviePosterUrl(u));
+  }, [steamDetails, catalogMedia]);
+
+  const videoUrl = steamDetails?.media.videoUrl ?? catalogMedia?.videoUrl ?? null;
 
   const libraryHeroFallbackUrl = useMemo(() => {
     if (!game) return null;
     return getGameLibraryHeroUrl(game, navState?.resolvedSteamAppId);
   }, [game, navState?.resolvedSteamAppId]);
 
-  const isLoading = !gameId || (!isCatalogRoute && isConfigLoading) || (!!steamAppId && isSteamLoading);
+  const isLoading =
+    !gameId || (!isCatalogRoute && isConfigLoading) || (!!steamAppId && isSteamLoading && !catalogMedia);
 
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
 
@@ -106,7 +120,7 @@ export function useGameDetail() {
     isGameRunning,
     mediaUrls,
     libraryHeroFallbackUrl,
-    videoUrl: steamDetails?.media.videoUrl ?? null,
+    videoUrl,
     isLoading,
     hasSyncConfig: hasUsableCloudConnection(cloudConfig),
     isSteamCatalogOnly: isCatalogRoute,

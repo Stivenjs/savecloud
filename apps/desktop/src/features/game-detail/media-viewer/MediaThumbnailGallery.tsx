@@ -41,6 +41,17 @@ export function MediaThumbnailGallery({ items, activeIndex, onSelect }: MediaThu
 }
 
 /**
+ * Obtiene la versión optimizada para thumbnail de una captura de Steam (600x338 en vez de 1920x1080).
+ */
+export function getSteamThumbnailUrl(url?: string | null): string | undefined {
+  if (!url) return undefined;
+  if (url.includes(".1920x1080.")) {
+    return url.replace(".1920x1080.", ".600x338.");
+  }
+  return url;
+}
+
+/**
  * Utilidad para construir items de media a partir de URLs.
  */
 export function buildMediaItems(videoUrl: string | null | undefined, imageUrls: string[]): MediaItem[] {
@@ -52,8 +63,7 @@ export function buildMediaItems(videoUrl: string | null | undefined, imageUrls: 
       id: "video-0",
       type: "video" as MediaItemType,
       url: videoUrl,
-      // Para video, usamos la primera imagen como thumbnail si está disponible
-      thumbnailUrl: imageUrls[0],
+      thumbnailUrl: getSteamThumbnailUrl(imageUrls[0]),
       alt: "Trailer del juego",
     });
   }
@@ -64,7 +74,7 @@ export function buildMediaItems(videoUrl: string | null | undefined, imageUrls: 
       id: `image-${index}`,
       type: "image" as MediaItemType,
       url,
-      thumbnailUrl: url,
+      thumbnailUrl: getSteamThumbnailUrl(url),
       alt: `Captura ${index + 1}`,
     });
   });

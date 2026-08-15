@@ -43,6 +43,8 @@ export interface GameMediaViewerProps {
  * - Reutiliza la lógica de video existente (HLS.js)
  * - Mantiene 100% compatibilidad con la galería de imágenes actual
  */
+const GLOBAL_LOADED_MEDIA_URLS = new Set<string>();
+
 export function GameMediaViewer({
   imageUrls,
   videoUrl,
@@ -56,7 +58,7 @@ export function GameMediaViewer({
 }: GameMediaViewerProps) {
   const [swiperInstance, setSwiperInstance] = useState<SwiperType | null>(null);
   const [activeIndex, setActiveIndex] = useState(initialSlide);
-  const [loadedSlides, setLoadedSlides] = useState<Set<number>>(new Set());
+  const [, setLoadVersion] = useState(0);
 
   // Handler que combina el estado interno con el callback del padre
   const handleSwiperInit = useCallback(
@@ -84,8 +86,9 @@ export function GameMediaViewer({
   );
 
   // Manejar carga de slide
-  const handleSlideLoad = useCallback((index: number) => {
-    setLoadedSlides((prev) => new Set(prev).add(index));
+  const handleSlideLoad = useCallback((url: string) => {
+    GLOBAL_LOADED_MEDIA_URLS.add(url);
+    setLoadVersion((v) => v + 1);
   }, []);
 
   // Navegar a un slide específico desde thumbnails
@@ -96,13 +99,20 @@ export function GameMediaViewer({
     [swiperInstance]
   );
 
-  // Precargar siguiente imagen
+  // Precargar slides adyacentes (siguiente y anterior)
   useEffect(() => {
-    if (activeIndex < displayItems.length - 1) {
-      const nextItem = displayItems[activeIndex + 1];
-      if (nextItem?.type === "image") {
-        const img = new Image();
-        img.src = nextItem.url;
+    const indicesToPreload = [activeIndex + 1, activeIndex - 1, activeIndex + 2, activeIndex - 2];
+    for (const idx of indicesToPreload) {
+      if (idx >= 0 && idx < displayItems.length) {
+        const item = displayItems[idx];
+        if (item?.type === "image" && item.url && !GLOBAL_LOADED_MEDIA_URLS.has(item.url)) {
+          const img = new Image();
+          img.src = item.url;
+          img.onload = () => {
+            GLOBAL_LOADED_MEDIA_URLS.add(item.url);
+            setLoadVersion((v) => v + 1);
+          };
+        }
       }
     }
   }, [activeIndex, displayItems]);
@@ -143,39 +153,43 @@ export function GameMediaViewer({
           slidesPerView={1}
           className="aspect-21/9 w-full overflow-hidden rounded-b-lg"
           style={{ aspectRatio: "21/9" }}>
-          {displayItems.map((item, index) => (
-            <SwiperSlide key={item.id}>
-              {item.type === "video" ? (
-                // Video Slide
-                <div className="relative size-full bg-black">
-                  {!loadedSlides.has(index) && <Skeleton className="absolute inset-0 z-10 size-full" />}
-                  <VideoPlayer
-                    videoUrl={item.url}
-                    autoPlay={index === activeIndex}
-                    muted={true}
-                    loop={true}
-                    className="absolute inset-0"
-                    onReady={() => handleSlideLoad(index)}
-                    onError={() => handleSlideLoad(index)}
-                  />
-                </div>
-              ) : (
-                // Image Slide
-                <div className="relative size-full">
-                  {!loadedSlides.has(index) && <Skeleton className="absolute inset-0 z-10 size-full" />}
-                  <img
-                    src={item.url}
-                    alt={item.alt || `${gameName} captura ${index + 1}`}
-                    className="size-full object-cover object-center"
-                    loading={index === 0 ? "eager" : "lazy"}
-                    decoding="async"
-                    fetchPriority={index === 0 ? "high" : "auto"}
-                    onLoad={() => handleSlideLoad(index)}
-                  />
-                </div>
-              )}
-            </SwiperSlide>
-          ))}
+          {displayItems.map((item, index) => {
+            const isLoaded = GLOBAL_LOADED_MEDIA_URLS.has(item.url);
+            return (
+              <SwiperSlide key={item.id}>
+                {item.type === "video" ? (
+                  // Video Slide
+                  <div className="relative size-full bg-black">
+                    {!isLoaded && <Skeleton className="absolute inset-0 z-10 size-full" />}
+                    <VideoPlayer
+                      videoUrl={item.url}
+                      autoPlay={index === activeIndex}
+                      muted={true}
+                      loop={true}
+                      className="absolute inset-0"
+                      onReady={() => handleSlideLoad(item.url)}
+                      onError={() => handleSlideLoad(item.url)}
+                    />
+                  </div>
+                ) : (
+                  // Image Slide
+                  <div className="relative size-full bg-zinc-950">
+                    {!isLoaded && <Skeleton className="absolute inset-0 z-10 size-full" />}
+                    <img
+                      src={item.url}
+                      alt={item.alt || `${gameName} captura ${index + 1}`}
+                      className={`size-full object-cover object-center transition-opacity duration-200 ${
+                        isLoaded ? "opacity-100" : "opacity-0"
+                      }`}
+                      decoding="async"
+                      fetchPriority={index === 0 ? "high" : "auto"}
+                      onLoad={() => handleSlideLoad(item.url)}
+                    />
+                  </div>
+                )}
+              </SwiperSlide>
+            );
+          })}
         </Swiper>
       </div>
 

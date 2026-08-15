@@ -126,7 +126,7 @@ export function GameDetailPage() {
   }, [navigate, backToPath]);
 
   const handleBackWithTransition = useCallback(() => {
-    if (isLowPerf) {
+    if (isLowPerf || isSteamCatalogOnly) {
       goBackFromDetail();
       return;
     }
@@ -134,7 +134,7 @@ export function GameDetailPage() {
       addTransitionType("game-detail");
       goBackFromDetail();
     });
-  }, [goBackFromDetail, isLowPerf]);
+  }, [goBackFromDetail, isLowPerf, isSteamCatalogOnly]);
 
   const requestDownloadFromCloud = useCallback(
     async (target: ConfiguredGame) => {
@@ -471,6 +471,7 @@ export function GameDetailPage() {
         editionLabel={game.editionLabel}
         gameId={gameId}
         isLoading={isLoading}
+        isCatalog={isSteamCatalogOnly}
         onBack={handleBackWithTransition}
       />
 
