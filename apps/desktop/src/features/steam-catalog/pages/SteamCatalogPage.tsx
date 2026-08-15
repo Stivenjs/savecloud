@@ -168,6 +168,12 @@ export function SteamCatalogPage() {
   const prevFiltersRef = useRef({ debouncedSearch, filterSignature, sortOption });
 
   useLayoutEffect(() => {
+    if (typeof history !== "undefined" && "scrollRestoration" in history) {
+      history.scrollRestoration = "manual";
+    }
+  }, []);
+
+  useLayoutEffect(() => {
     if (hasRestored.current || !isReady) return;
 
     const targetY = initialScrollTargetRef.current;
@@ -176,10 +182,13 @@ export function SteamCatalogPage() {
       window.scrollTo({ top: targetY, behavior: "instant" });
       hasRestored.current = true;
 
-      const timer = setTimeout(() => {
-        isRestoringRef.current = false;
-      }, 200);
-      return () => clearTimeout(timer);
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: targetY, behavior: "instant" });
+        const timer = setTimeout(() => {
+          isRestoringRef.current = false;
+        }, 200);
+        return () => clearTimeout(timer);
+      });
     } else {
       hasRestored.current = true;
     }

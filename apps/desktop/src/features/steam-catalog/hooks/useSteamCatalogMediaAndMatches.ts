@@ -20,14 +20,14 @@ export function useSteamCatalogMediaAndMatches(items: CatalogListItem[], pageSiz
 
   const unmappedAppIds = useMemo(() => {
     const ids = items.map((i) => i.steamAppId).filter((id): id is string => Boolean(id && !cachedMedia[id]));
-    return [...new Set(ids)].sort();
+    return [...new Set(ids)].slice(0, 50).sort();
   }, [items, cachedMedia]);
 
   const unmappedAppIdsKey = useMemo(() => unmappedAppIds.join(","), [unmappedAppIds]);
 
   const unmappedNames = useMemo(() => {
     const names = items.map((i) => i.name).filter((name) => Boolean(name && !(name in cachedMatches)));
-    return [...new Set(names)].sort();
+    return [...new Set(names)].slice(0, 50).sort();
   }, [items, cachedMatches]);
 
   const unmappedNamesKey = useMemo(() => unmappedNames.join("|"), [unmappedNames]);

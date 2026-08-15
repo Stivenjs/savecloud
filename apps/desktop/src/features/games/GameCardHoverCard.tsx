@@ -269,131 +269,135 @@ export function GameCardHoverCard({
           onMouseEnter={openHovercard}
           onMouseLeave={closeHovercard}
           className="p-0 overflow-hidden rounded-2xl border-0 shadow-none bg-transparent">
-          <motion.div
-            className="relative w-full overflow-hidden bg-zinc-950/45 rounded-t-2xl"
-            variants={contentVariants}
-            initial="hidden"
-            animate="visible">
-            <div className="relative h-44 w-full overflow-hidden rounded-t-2xl">
-              {validUrls.length > 0 ? (
-                <div
-                  className={
-                    isVideoMode && hasVideo
-                      ? "pointer-events-none invisible absolute inset-0 z-0 opacity-0"
-                      : "absolute inset-0 z-0"
-                  }
-                  aria-hidden={isVideoMode && hasVideo}>
-                  <Swiper
-                    key={`${showHovercard}-${validUrls.join("|")}`}
-                    modules={[Autoplay, EffectFade]}
-                    onSwiper={(instance) => {
-                      swiperRef.current = instance;
-                    }}
-                    effect="coverflow"
-                    fadeEffect={{ crossFade: true }}
-                    speed={480}
-                    slidesPerView={1}
-                    loop={hasCarousel}
-                    allowTouchMove={hasCarousel}
-                    className="h-full w-full [&_.swiper-slide]:h-44 [&_.swiper-wrapper]:h-full"
-                    autoplay={
-                      hasCarousel && !isLowPerf
-                        ? {
-                            delay: CAROUSEL_INTERVAL_MS,
-                            disableOnInteraction: false,
-                            pauseOnMouseEnter: false,
-                          }
-                        : false
-                    }>
-                    {validUrls.map((url) => (
-                      <SwiperSlide key={url} className="flex! h-44 items-stretch justify-center bg-zinc-950">
-                        <img
-                          src={url}
-                          alt="Game image"
-                          className="h-full w-full object-cover object-center"
-                          loading="lazy"
-                          onError={() => reportImageError(url)}
-                        />
-                      </SwiperSlide>
-                    ))}
-                  </Swiper>
+          {showHovercard ? (
+            <>
+              <motion.div
+                className="relative w-full overflow-hidden bg-zinc-950/45 rounded-t-2xl"
+                variants={contentVariants}
+                initial="hidden"
+                animate="visible">
+                <div className="relative h-44 w-full overflow-hidden rounded-t-2xl">
+                  {validUrls.length > 0 ? (
+                    <div
+                      className={
+                        isVideoMode && hasVideo
+                          ? "pointer-events-none invisible absolute inset-0 z-0 opacity-0"
+                          : "absolute inset-0 z-0"
+                      }
+                      aria-hidden={isVideoMode && hasVideo}>
+                      <Swiper
+                        key={`${showHovercard}-${validUrls.join("|")}`}
+                        modules={[Autoplay, EffectFade]}
+                        onSwiper={(instance) => {
+                          swiperRef.current = instance;
+                        }}
+                        effect="coverflow"
+                        fadeEffect={{ crossFade: true }}
+                        speed={480}
+                        slidesPerView={1}
+                        loop={hasCarousel}
+                        allowTouchMove={hasCarousel}
+                        className="h-full w-full [&_.swiper-slide]:h-44 [&_.swiper-wrapper]:h-full"
+                        autoplay={
+                          hasCarousel && !isLowPerf
+                            ? {
+                                delay: CAROUSEL_INTERVAL_MS,
+                                disableOnInteraction: false,
+                                pauseOnMouseEnter: false,
+                              }
+                            : false
+                        }>
+                        {validUrls.map((url) => (
+                          <SwiperSlide key={url} className="flex! h-44 items-stretch justify-center bg-zinc-950">
+                            <img
+                              src={url}
+                              alt="Game image"
+                              className="h-full w-full object-cover object-center"
+                              loading="lazy"
+                              onError={() => reportImageError(url)}
+                            />
+                          </SwiperSlide>
+                        ))}
+                      </Swiper>
+                    </div>
+                  ) : null}
+
+                  {validUrls.length === 0 && !(isVideoMode && hasVideo) ? (
+                    <div className="h-44 w-full bg-zinc-950" />
+                  ) : null}
+
+                  {isVideoMode && hasVideo ? (
+                    <video
+                      ref={videoRef}
+                      src={useHls ? undefined : videoUrl!}
+                      className="absolute inset-0 z-5 h-full w-full object-cover object-center bg-zinc-950"
+                      muted
+                      loop
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : null}
                 </div>
-              ) : null}
 
-              {validUrls.length === 0 && !(isVideoMode && hasVideo) ? (
-                <div className="h-44 w-full bg-zinc-950" />
-              ) : null}
+                {hasVideo && (
+                  <div className="absolute right-2 top-2 z-20 flex gap-1.5">
+                    {isVideoMode && (
+                      <>
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="flat"
+                          className="min-w-8 w-8 h-8 rounded-full bg-zinc-950/70 text-white border border-white/5 backdrop-blur-md hover:bg-zinc-900/90"
+                          aria-label="Ver vídeo en grande"
+                          onPress={() => setShowVideoModal(true)}>
+                          <Maximize2 size={14} strokeWidth={2} />
+                        </Button>
 
-              {isVideoMode && hasVideo ? (
-                <video
-                  ref={videoRef}
-                  src={useHls ? undefined : videoUrl!}
-                  className="absolute inset-0 z-5 h-full w-full object-cover object-center bg-zinc-950"
-                  muted
-                  loop
-                  playsInline
-                  preload="metadata"
-                />
-              ) : null}
-            </div>
-
-            {hasVideo && (
-              <div className="absolute right-2 top-2 z-20 flex gap-1.5">
-                {isVideoMode && (
-                  <>
-                    <Button
-                      isIconOnly
-                      size="sm"
-                      variant="flat"
-                      className="min-w-8 w-8 h-8 rounded-full bg-zinc-950/70 text-white border border-white/5 backdrop-blur-md hover:bg-zinc-900/90"
-                      aria-label="Ver vídeo en grande"
-                      onPress={() => setShowVideoModal(true)}>
-                      <Maximize2 size={14} strokeWidth={2} />
-                    </Button>
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="flat"
+                          className="min-w-8 w-8 h-8 rounded-full bg-zinc-950/70 text-white border border-white/5 backdrop-blur-md hover:bg-zinc-900/90"
+                          aria-label={isMuted ? "Activar sonido" : "Silenciar"}
+                          onPress={() => setIsMuted((m) => !m)}>
+                          {isMuted ? <VolumeX size={14} strokeWidth={2} /> : <Volume2 size={14} strokeWidth={2} />}
+                        </Button>
+                      </>
+                    )}
 
                     <Button
                       isIconOnly
                       size="sm"
                       variant="flat"
                       className="min-w-8 w-8 h-8 rounded-full bg-zinc-950/70 text-white border border-white/5 backdrop-blur-md hover:bg-zinc-900/90"
-                      aria-label={isMuted ? "Activar sonido" : "Silenciar"}
-                      onPress={() => setIsMuted((m) => !m)}>
-                      {isMuted ? <VolumeX size={14} strokeWidth={2} /> : <Volume2 size={14} strokeWidth={2} />}
+                      aria-label={isVideoMode ? "Ver imágenes" : "Reproducir vídeo"}
+                      onPress={toggleVideoMode}>
+                      {isVideoMode ? <ImageIcon size={14} strokeWidth={2} /> : <Video size={14} strokeWidth={2} />}
                     </Button>
-                  </>
+                  </div>
                 )}
+              </motion.div>
 
-                <Button
-                  isIconOnly
-                  size="sm"
-                  variant="flat"
-                  className="min-w-8 w-8 h-8 rounded-full bg-zinc-950/70 text-white border border-white/5 backdrop-blur-md hover:bg-zinc-900/90"
-                  aria-label={isVideoMode ? "Ver imágenes" : "Reproducir vídeo"}
-                  onPress={toggleVideoMode}>
-                  {isVideoMode ? <ImageIcon size={14} strokeWidth={2} /> : <Video size={14} strokeWidth={2} />}
-                </Button>
+              <div className="relative z-10 w-full border-t border-zinc-800/50 bg-[#13151b]/98 px-4 py-3 rounded-b-2xl">
+                <p className="line-clamp-2 text-xs font-bold text-white tracking-tight leading-snug mb-1.5">
+                  {variant === "catalog"
+                    ? storeName?.trim() || formatGameDisplayName(game.id)
+                    : formatGameDisplayName(game.id)}
+                </p>
+                {genres.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {genres.slice(0, 5).map((g, i) => (
+                      <span
+                        key={`${g}-${i}`}
+                        className="text-[9px] font-medium px-2 py-0.5 rounded-md bg-zinc-800/40 border border-zinc-700/20 text-zinc-400 truncate tracking-wide">
+                        {g}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </motion.div>
-
-          <div className="relative z-10 w-full border-t border-zinc-800/50 bg-[#13151b]/98 px-4 py-3 rounded-b-2xl">
-            <p className="line-clamp-2 text-xs font-bold text-white tracking-tight leading-snug mb-1.5">
-              {variant === "catalog"
-                ? storeName?.trim() || formatGameDisplayName(game.id)
-                : formatGameDisplayName(game.id)}
-            </p>
-            {genres.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {genres.slice(0, 5).map((g, i) => (
-                  <span
-                    key={`${g}-${i}`}
-                    className="text-[9px] font-medium px-2 py-0.5 rounded-md bg-zinc-800/40 border border-zinc-700/20 text-zinc-400 truncate tracking-wide">
-                    {g}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+            </>
+          ) : null}
         </PopoverContent>
       </Popover>
 
