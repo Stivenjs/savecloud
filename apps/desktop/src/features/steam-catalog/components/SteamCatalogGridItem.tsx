@@ -1,13 +1,11 @@
-import { memo, startTransition } from "react";
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { addTransitionType } from "react";
 import { Button, Select, SelectItem, Skeleton, cn } from "@heroui/react";
 import type { CatalogListItem, SteamAppdetailsMediaResult, SourceBestMatch } from "@services/tauri";
 import type { ConfiguredGame } from "@app-types/config";
 import { GameCard } from "@features/games/GameCard";
 import { catalogListItemToConfiguredGame } from "@features/steam-catalog/model/catalogConfiguredGame";
-import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { sourceCandidateKey } from "@utils/sourceMatch";
 import { useShellUiStore } from "@store/ShellUiStore";
 
@@ -48,7 +46,6 @@ export const CatalogGridItem = memo(function CatalogGridItem({
   consoleMode = false,
 }: CatalogGridItemProps) {
   const { t } = useTranslation();
-  const isLowPerf = useLowPerformanceMode();
   const game = libraryGame ?? catalogListItemToConfiguredGame(item);
   const navigate = useNavigate();
   const location = useLocation();
@@ -77,31 +74,13 @@ export const CatalogGridItem = memo(function CatalogGridItem({
                 useShellUiStore.getState().setCatalogScrollPosition(currentY);
               }
               const from = `${location.pathname}${location.search}`;
-              if (libraryGame) {
-                navigate(`/games/${libraryGame.id}`, {
-                  state: { catalogDisplayName: item.name, from },
-                });
-                return;
-              }
-              if (isLowPerf) {
-                navigate(`/games/${game.id}`, {
-                  state: {
-                    resolvedSteamAppId: item.steamAppId,
-                    catalogDisplayName: item.name,
-                    from,
-                  },
-                });
-                return;
-              }
-              startTransition(() => {
-                addTransitionType("game-detail");
-                navigate(`/games/${game.id}`, {
-                  state: {
-                    resolvedSteamAppId: item.steamAppId,
-                    catalogDisplayName: item.name,
-                    from,
-                  },
-                });
+              const targetId = libraryGame ? libraryGame.id : game.id;
+              navigate(`/games/${targetId}`, {
+                state: {
+                  resolvedSteamAppId: item.steamAppId,
+                  catalogDisplayName: item.name,
+                  from,
+                },
               });
             }}
           />

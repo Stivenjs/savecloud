@@ -1,6 +1,5 @@
 import { Button } from "@heroui/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { addTransitionType, startTransition } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import type { CatalogListItem, SteamAppdetailsMediaResult } from "@services/tauri";
@@ -16,7 +15,6 @@ import {
 } from "@features/steam-catalog/components/steamCatalogTrendingHero.utils";
 import { TrendingHeroSlide } from "@features/steam-catalog/components/TrendingHeroSlide";
 import { visibilityManager } from "@hooks/useAppVisibility";
-import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { useShellUiStore } from "@store/ShellUiStore";
 
 type SteamCatalogTrendingHeroProps = {
@@ -36,7 +34,6 @@ export function SteamCatalogTrendingHero({
   errorMessage,
 }: SteamCatalogTrendingHeroProps) {
   const { t } = useTranslation();
-  const isLowPerf = useLowPerformanceMode();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -71,28 +68,15 @@ export function SteamCatalogTrendingHero({
       if (currentY > 0) {
         useShellUiStore.getState().setCatalogScrollPosition(currentY);
       }
-      if (isLowPerf) {
-        navigate(`/games/${toRouteGameId(item)}`, {
-          state: {
-            resolvedSteamAppId: item.steamAppId,
-            catalogDisplayName: item.name,
-            from: `${location.pathname}${location.search}`,
-          },
-        });
-        return;
-      }
-      startTransition(() => {
-        addTransitionType("game-detail");
-        navigate(`/games/${toRouteGameId(item)}`, {
-          state: {
-            resolvedSteamAppId: item.steamAppId,
-            catalogDisplayName: item.name,
-            from: `${location.pathname}${location.search}`,
-          },
-        });
+      navigate(`/games/${toRouteGameId(item)}`, {
+        state: {
+          resolvedSteamAppId: item.steamAppId,
+          catalogDisplayName: item.name,
+          from: `${location.pathname}${location.search}`,
+        },
       });
     },
-    [navigate, location.pathname, location.search, isLowPerf]
+    [navigate, location.pathname, location.search]
   );
 
   if (isLoading) {

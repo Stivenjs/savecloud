@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Play } from "lucide-react";
+import { Skeleton } from "@heroui/react";
 
 export type MediaItemType = "video" | "image";
 
@@ -23,12 +25,13 @@ interface MediaThumbnailProps {
  */
 export function MediaThumbnail({ item, isActive, index, onClick }: MediaThumbnailProps) {
   const isVideo = item.type === "video";
+  const [isLoaded, setIsLoaded] = useState(false);
 
   return (
     <button
       onClick={onClick}
       className={`
-        group relative aspect-video h-20 shrink-0 snap-start overflow-hidden rounded-xl
+        group relative aspect-video h-20 shrink-0 snap-start overflow-hidden rounded-xl bg-zinc-950
         cursor-pointer transition-all duration-200 ease-out
         focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background
         ${
@@ -39,18 +42,20 @@ export function MediaThumbnail({ item, isActive, index, onClick }: MediaThumbnai
       `}
       aria-label={isVideo ? `Video ${index + 1}` : `Imagen ${index + 1}`}
       aria-pressed={isActive}>
+      {!isLoaded && <Skeleton className="absolute inset-0 z-0 size-full rounded-xl" />}
       {/* Thumbnail image */}
       <img
         src={item.thumbnailUrl || item.url}
         alt={item.alt || (isVideo ? `Video thumbnail ${index + 1}` : `Imagen ${index + 1}`)}
-        className="size-full object-cover"
+        className={`size-full object-cover transition-opacity duration-200 ${isLoaded ? "opacity-100" : "opacity-0"}`}
         loading="lazy"
         decoding="async"
+        onLoad={() => setIsLoaded(true)}
       />
 
       {/* Video indicator overlay */}
       {isVideo && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 transition-colors group-hover:bg-black/50">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 transition-colors group-hover:bg-black/50">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/95 shadow-xl transition-all group-hover:scale-110 group-active:scale-95">
             <Play size={16} className="ml-0.5 text-black" fill="currentColor" />
           </div>
@@ -59,7 +64,7 @@ export function MediaThumbnail({ item, isActive, index, onClick }: MediaThumbnai
 
       {/* Active indicator */}
       {isActive && (
-        <div className="absolute inset-0 rounded-xl ring-2 ring-primary ring-offset-2 ring-offset-background" />
+        <div className="absolute inset-0 z-20 rounded-xl ring-2 ring-primary ring-offset-2 ring-offset-background pointer-events-none" />
       )}
     </button>
   );
