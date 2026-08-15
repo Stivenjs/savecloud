@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -134,8 +135,10 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "apps/desktop/src-tauri"
-          shared-key: "desktop-release-cache"
+          workspaces: "apps/desktop/src-tauri -> apps/desktop/src-tauri/target"
+          cache-all-crates: "true"
+          prefix-key: "v1-rust-${{ matrix.platform }}"
+          shared-key: "desktop-cache-${{ matrix.platform }}"
 
       - name: Setup Python
         uses: actions/setup-python@v5

@@ -17,6 +17,7 @@ import {
 import { TrendingHeroSlide } from "@features/steam-catalog/components/TrendingHeroSlide";
 import { visibilityManager } from "@hooks/useAppVisibility";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
+import { useShellUiStore } from "@store/ShellUiStore";
 
 type SteamCatalogTrendingHeroProps = {
   items: CatalogListItem[];
@@ -66,6 +67,10 @@ export function SteamCatalogTrendingHero({
 
   const openGame = useCallback(
     (item: CatalogListItem) => {
+      const currentY = window.scrollY || document.documentElement.scrollTop;
+      if (currentY > 0) {
+        useShellUiStore.getState().setCatalogScrollPosition(currentY);
+      }
       if (isLowPerf) {
         navigate(`/games/${toRouteGameId(item)}`, {
           state: {
@@ -140,7 +145,7 @@ export function SteamCatalogTrendingHero({
             pauseOnMouseEnter: true,
           }}
           speed={520}
-          className="sg-trending-swiper min-h-[380px] overflow-hidden rounded-2xl border border-default-200/70 shadow-sm dark:border-default-100/15">
+          className="sg-trending-swiper min-h-95 overflow-hidden rounded-2xl border border-default-200/70 shadow-sm dark:border-default-100/15">
           {slides.map((featured, slideIndex) => (
             <SwiperSlide key={featured.steamAppId} className="h-auto!">
               <TrendingHeroSlide
