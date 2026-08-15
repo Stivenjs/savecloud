@@ -203,7 +203,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
 
         <MaybeViewTransition name={`game-hero-${game.id}`} share="hero-morph" disabled={isLowPerf || isCatalog}>
           <div className="relative size-full overflow-hidden bg-zinc-950 rounded-xl">
-            {(isEffectivelyLoading || (displayImageUrl && !imgLoaded && !imgError)) && (
+            {(isEffectivelyLoading || (!isCatalog && displayImageUrl && !imgLoaded && !imgError)) && (
               <Skeleton className="absolute inset-0 z-10 size-full rounded-xl" />
             )}
 
@@ -211,13 +211,15 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
               <img
                 key={displayImageUrl}
                 src={displayImageUrl}
-                loading="lazy"
+                loading={isCatalog ? "eager" : "lazy"}
                 decoding="async"
-                fetchPriority="auto"
+                fetchPriority={isCatalog ? "high" : "auto"}
                 draggable={false}
                 alt={game.id}
-                className={`size-full object-cover object-center transition-[transform,opacity] duration-500 ease-out group-hover:scale-[1.02] subpixel-antialiased transform-gpu rounded-xl ${
-                  imgLoaded ? "opacity-100" : "opacity-0"
+                className={`size-full object-cover object-center transition-[transform,opacity] ${
+                  isCatalog ? "duration-150" : "duration-500"
+                } ease-out group-hover:scale-[1.02] subpixel-antialiased transform-gpu rounded-xl ${
+                  imgLoaded || isCatalog ? "opacity-100" : "opacity-0"
                 }`}
                 onLoad={handleImgLoad}
                 onError={handleImgError}

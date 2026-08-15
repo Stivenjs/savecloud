@@ -106,7 +106,7 @@ export const CatalogGridItem = memo(function CatalogGridItem({
             }}
           />
         </div>
-        <div className="min-h-8 space-y-2">
+        <div className={cn("flex flex-col justify-end gap-1.5", consoleMode ? "min-h-26" : "min-h-18")}>
           {isMatchingPending ? (
             <Skeleton className={cn("w-full", consoleMode ? "h-11 rounded-xl" : "h-8 rounded-medium")} />
           ) : libraryGame ? (
@@ -148,7 +148,10 @@ export const CatalogGridItem = memo(function CatalogGridItem({
                           listbox: "gap-0 p-0 text-base",
                           popoverContent: "min-w-[var(--trigger-width)] p-2 text-base",
                         }
-                      : undefined
+                      : {
+                          trigger: "h-8 min-h-8 rounded-medium text-xs",
+                          value: "text-xs font-medium",
+                        }
                   }>
                   {candidates.map((c) => (
                     <SelectItem key={sourceCandidateKey(c)} textValue={`${c.source_name} ${c.item_title}`}>
@@ -169,9 +172,11 @@ export const CatalogGridItem = memo(function CatalogGridItem({
               </Button>
             </>
           ) : (
-            <p className={cn("pt-2 text-center text-default-400 font-medium", consoleMode ? "text-sm" : "text-xs")}>
-              {t("steamCatalog.grid.notAvailable")}
-            </p>
+            <div className="flex flex-1 items-center justify-center py-2">
+              <p className={cn("text-center text-default-400 font-medium", consoleMode ? "text-sm" : "text-xs")}>
+                {t("steamCatalog.grid.notAvailable")}
+              </p>
+            </div>
           )}
         </div>
       </div>
