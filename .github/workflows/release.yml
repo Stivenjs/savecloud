@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -108,7 +107,9 @@ jobs:
             artifactName: desktop-macos-universal
             args: "--target universal-apple-darwin"
             rustTargets: "aarch64-apple-darwin x86_64-apple-darwin"
+
     runs-on: ${{ matrix.platform }}
+
     env:
       SYNC_GAMES_API_URL: ${{ secrets.SYNC_GAMES_API_URL }}
       SYNC_GAMES_API_KEY: ${{ secrets.SYNC_GAMES_API_KEY }}
@@ -116,6 +117,7 @@ jobs:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       CMAKE_POLICY_VERSION_MINIMUM: "3.5"
       CMAKEFLAGS: "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -131,14 +133,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rustTargets || '' }}
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: "apps/desktop/src-tauri -> apps/desktop/src-tauri/target"
-          cache-all-crates: "true"
-          prefix-key: "v1-rust-${{ matrix.platform }}"
-          shared-key: "desktop-cache-${{ matrix.platform }}"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -191,6 +185,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
