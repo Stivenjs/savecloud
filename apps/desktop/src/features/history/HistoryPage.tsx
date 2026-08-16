@@ -19,6 +19,7 @@ import {
 } from "@utils/operationHistory";
 import { useNavigationStore } from "@features/input/store";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
+import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
 
 type HistoryFilter = "all" | OperationLogEntry["kind"];
 
@@ -32,43 +33,58 @@ function HistoryEntryCard({ entry }: HistoryEntryCardProps) {
   const chipColor = OPERATION_LOG_KIND_CHIP_COLOR[entry.kind];
   const hasErrors = entry.errCount > 0;
   const relative = formatOperationLogRelativeTime(entry.timestamp);
+  const displayName = formatGameDisplayName(entry.gameId);
 
   return (
     <Card
-      className={
+      className={`transition-all duration-200 hover:border-default-400/60 ${
         hasErrors
           ? "border border-warning-300/80 bg-warning-50/40 dark:border-warning-500/40 dark:bg-warning-500/10"
-          : undefined
-      }>
-      <CardBody className="flex flex-col gap-2 text-sm">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-medium bg-default-100 text-default-600 dark:bg-default-50/10">
-              <Icon size={18} />
-            </span>
-            <Chip size="sm" color={chipColor} variant="flat">
-              {formatOperationLogKind(entry.kind)}
-            </Chip>
-            {hasErrors ? (
-              <Chip size="sm" color="warning" variant="flat">
-                {t("history.entry.errors", { count: entry.errCount })}
-              </Chip>
-            ) : null}
+          : "border border-default-200/60 bg-content1/80 shadow-xs backdrop-blur-xs"
+      }`}>
+      <CardBody className="flex flex-col gap-2 p-3 sm:p-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <PlayingGameThumbnail gameId={entry.gameId} size="md" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="truncate text-sm font-semibold text-foreground">{displayName}</h3>
+                {entry.gameId.toLowerCase() !== displayName.toLowerCase() && (
+                  <span className="hidden sm:inline-block truncate font-mono text-[10.5px] text-default-400">
+                    ({entry.gameId})
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                <Chip
+                  size="sm"
+                  color={chipColor}
+                  variant="flat"
+                  startContent={<Icon size={13} className="ml-1" />}
+                  className="h-5 gap-1 text-[11px] font-medium">
+                  {formatOperationLogKind(entry.kind)}
+                </Chip>
+                <span className="text-default-400">·</span>
+                <span className="text-default-500 text-[11.5px]">
+                  {t("history.entry.filesOk", { count: entry.fileCount })}
+                </span>
+                {hasErrors ? (
+                  <>
+                    <span className="text-default-400">·</span>
+                    <Chip size="sm" color="warning" variant="flat" className="h-5 text-[10.5px] font-semibold">
+                      {t("history.entry.errors", { count: entry.errCount })}
+                    </Chip>
+                  </>
+                ) : null}
+              </div>
+            </div>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
-            {relative ? <span className="text-xs font-medium text-foreground">{relative}</span> : null}
-            <span className="text-xs text-default-500">{formatOperationLogTimestamp(entry.timestamp)}</span>
+            {relative ? <span className="text-xs font-semibold text-foreground/90">{relative}</span> : null}
+            <span className="text-[11px] text-default-400 font-mono">
+              {formatOperationLogTimestamp(entry.timestamp)}
+            </span>
           </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-default-500">
-          <span>
-            {formatGameDisplayName(entry.gameId)}
-            <span className="ml-1 font-mono text-default-400">({entry.gameId})</span>
-          </span>
-          <span>
-            {t("history.entry.filesOk", { count: entry.fileCount })}
-            {entry.errCount > 0 ? t("history.entry.filesWithErrors", { count: entry.errCount }) : ""}
-          </span>
         </div>
       </CardBody>
     </Card>

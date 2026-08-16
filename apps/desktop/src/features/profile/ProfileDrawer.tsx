@@ -38,6 +38,9 @@ import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { ProfileHeroBackground } from "@features/profile/PublicProfileHero";
 import { buildNiceAvatarConfig, generateNiceAvatarSeed, serializeNiceAvatarConfig } from "@features/profile/niceAvatar";
 import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
+import { PlayingStatusBadge } from "@features/games/PlayingStatusBadge";
+import { useGameSessionStore } from "@store/GameSessionStore";
+import { formatGameDisplayName } from "@utils/gameImage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Config } from "@app-types/config";
 import type { GamificationState } from "@app-types/gamification";
@@ -143,7 +146,13 @@ export function ProfileDrawer({
   useCloudPresenceRealtimeInvalidation(isOpen);
 
   const ownPresence = userId ? cloudPresence.find((item) => item.userId === userId) : undefined;
-  const showPresenceChip = cloudPresenceLoading || ownPresence?.status !== "online";
+  const localRunningGames = useGameSessionStore((s) => s.localSessionStartTimes);
+  const activeLocalGameId = Object.keys(localRunningGames)[0];
+  const isPlayingNow = ownPresence?.status === "playing" || Boolean(activeLocalGameId);
+  const activeGameId = ownPresence?.gameId || activeLocalGameId || null;
+  const activeGameName = ownPresence?.gameName || (activeLocalGameId ? formatGameDisplayName(activeLocalGameId) : null);
+  const showPresenceChip =
+    !isPlayingNow && (cloudPresenceLoading || (ownPresence?.status && ownPresence.status !== "online"));
 
   const lp = gamification?.levelProgress;
   const fallbackLevel = useMemo(
@@ -285,7 +294,7 @@ export function ProfileDrawer({
                 variant="flat"
                 size="sm"
                 radius="full"
-                className="group min-w-0 w-9 h-9 p-0 backdrop-blur-md bg-black/40 border border-white/10 hover:bg-danger-500/15 hover:border-danger-500/30 text-white font-medium shadow-sm transition-all duration-300 ease-in-out hover:w-[128px] hover:pr-3 flex items-center justify-start overflow-hidden pl-[10px] active:scale-[0.95]"
+                className="group min-w-0 w-9 h-9 p-0 backdrop-blur-md bg-black/40 border border-white/10 hover:bg-danger-500/15 hover:border-danger-500/30 text-white font-medium shadow-sm transition-all duration-300 ease-in-out hover:w-32 hover:pr-3 flex items-center justify-start overflow-hidden pl-2.5 active:scale-[0.95]"
                 onPress={handleLogout}>
                 <LogOut size={14} className="text-danger-400 shrink-0" />
                 <span className="opacity-0 max-w-0 overflow-hidden transition-all duration-300 ease-in-out group-hover:opacity-100 group-hover:max-w-24 group-hover:ml-2 whitespace-nowrap text-xs text-danger-200 font-semibold select-none">
@@ -336,12 +345,12 @@ export function ProfileDrawer({
                     {conn.text}
                   </span>
                   {showPresenceChip ? (
-                    <span className="text-default-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">·</span>
-                  ) : null}
-                  {showPresenceChip ? (
-                    <span className="inline-flex items-center drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
-                      <PresenceStatusChip loading={cloudPresenceLoading} status={ownPresence?.status} />
-                    </span>
+                    <>
+                      <span className="text-default-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">·</span>
+                      <span className="inline-flex items-center drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+                        <PresenceStatusChip loading={cloudPresenceLoading} status={ownPresence?.status} />
+                      </span>
+                    </>
                   ) : null}
                   <span className="text-default-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">·</span>
                   <span className="text-default-500 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
@@ -352,10 +361,16 @@ export function ProfileDrawer({
                     {t("profile.drawer.gamesCount", { count: gamesCount })}
                   </span>
                 </div>
-                {ownPresence?.status === "playing" && ownPresence?.gameName ? (
-                  <p className={`mt-1 text-default-500 ${bp ? "text-sm" : "text-xs"}`}>
-                    {t("profile.drawer.playingLabel", { game: ownPresence.gameName })}
-                  </p>
+                {isPlayingNow && (activeGameName || activeGameId) ? (
+                  <div className="mt-2">
+                    <PlayingStatusBadge
+                      gameId={activeGameId}
+                      gameName={activeGameName}
+                      userId={userId}
+                      variant="inline"
+                      size={bp ? "md" : "sm"}
+                    />
+                  </div>
                 ) : null}
               </div>
 

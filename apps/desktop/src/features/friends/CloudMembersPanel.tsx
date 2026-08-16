@@ -4,7 +4,7 @@ import { Spinner, useDraggable } from "@heroui/react";
 import { motion } from "framer-motion";
 import { UserRound } from "lucide-react";
 import { getFriendsConfigs } from "@services/tauri";
-import { listCloudMemberships, listCloudPresence } from "@services/tauri/invites.service";
+import { listCloudMemberships, listCloudPresence, type CloudPresenceItem } from "@services/tauri/invites.service";
 import { CloudMembersHeader } from "@features/friends/CloudMembersHeader";
 import {
   CloudMembershipActionConfirmModal,
@@ -12,6 +12,10 @@ import {
 } from "@features/friends/CloudMembershipActionConfirmModal";
 import { CloudMembersSection } from "@features/friends/CloudMembersSection";
 import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
+import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
+import { useGameSessionStore, useGameSessionDuration } from "@store/GameSessionStore";
+import { formatGameDisplayName } from "@utils/gameImage";
+import { Clock } from "lucide-react";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
@@ -30,6 +34,62 @@ interface CloudMembersPanelProps {
   draggable?: boolean;
   onDetachToWindow?: () => void;
   showCloseButton?: boolean;
+}
+
+function LocalUserSection({
+  localUserId,
+  localRawAvatar,
+  localPresence,
+  cloudPresenceLoading,
+}: {
+  localUserId: string;
+  localRawAvatar?: string;
+  localPresence?: CloudPresenceItem;
+  cloudPresenceLoading: boolean;
+}) {
+  const { t } = useTranslation();
+  const localRunningGames = useGameSessionStore((s) => s.localSessionStartTimes);
+  const activeLocalGameId = Object.keys(localRunningGames)[0];
+  const isPlaying = localPresence?.status === "playing" || Boolean(activeLocalGameId);
+  const gameId = localPresence?.gameId || activeLocalGameId || null;
+  const gameName = localPresence?.gameName || (activeLocalGameId ? formatGameDisplayName(activeLocalGameId) : null);
+
+  const { formattedDuration, sessionSeconds } = useGameSessionDuration({
+    gameId,
+    userId: localUserId,
+    fallbackStartedAt: localPresence?.lastSeenAt,
+    isRunning: isPlaying,
+  });
+
+  return (
+    <section className="rounded-lg border border-default-200/70 bg-default-50/35 px-2.5 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <ProfileAvatar rawAvatar={localRawAvatar} userId={localUserId} size="md" />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-foreground">{localUserId}</p>
+            {isPlaying && (gameName || gameId) ? (
+              <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+                <PlayingGameThumbnail gameId={gameId} gameName={gameName} size="xs" />
+                <span className="truncate text-[11px] font-medium text-emerald-500 dark:text-emerald-400">
+                  {gameName || gameId}
+                </span>
+                {sessionSeconds > 0 && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-default-400">
+                    <Clock size={9} className="text-emerald-400" />
+                    <span>{formattedDuration}</span>
+                  </span>
+                )}
+              </div>
+            ) : (
+              <p className="truncate text-[11px] text-default-500">{t("friends.cloudMembersPanel.yourAccount")}</p>
+            )}
+          </div>
+        </div>
+        <PresenceStatusChip loading={cloudPresenceLoading} status={isPlaying ? "playing" : localPresence?.status} />
+      </div>
+    </section>
+  );
 }
 
 export function CloudMembersPanel({
@@ -241,22 +301,12 @@ export function CloudMembersPanel({
           {!membershipsLoading && !membershipsError && hasAnyMembers ? (
             <div className="space-y-3">
               {localUserId ? (
-                <section className="rounded-lg border border-default-200/70 bg-default-50/35 px-2.5 py-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <ProfileAvatar rawAvatar={localRawAvatar} userId={localUserId} size="md" />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-foreground">{localUserId}</p>
-                        <p className="truncate text-[11px] text-default-500">
-                          {localPresence?.status === "playing"
-                            ? `${t("friends.presence.playing")}${localPresence?.gameName ? ` · ${localPresence.gameName}` : ""}`
-                            : t("friends.cloudMembersPanel.yourAccount")}
-                        </p>
-                      </div>
-                    </div>
-                    <PresenceStatusChip loading={cloudPresenceLoading} status={localPresence?.status} />
-                  </div>
-                </section>
+                <LocalUserSection
+                  localUserId={localUserId}
+                  localRawAvatar={localRawAvatar}
+                  localPresence={localPresence}
+                  cloudPresenceLoading={cloudPresenceLoading}
+                />
               ) : null}
 
               <CloudMembersSection

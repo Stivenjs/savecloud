@@ -7,6 +7,7 @@ import {
   getSteamAppId,
   getSteamCdnCandidates,
   needsSteamSearch,
+  isSteamAppId,
 } from "@utils/gameImage";
 import type { ConfiguredGame } from "@app-types/config";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
@@ -138,7 +139,7 @@ export function useGameMedia({
   const { data: appdetailsMedia, isPending: isSteamQueryPending } = useQuery({
     queryKey: ["steam-appdetails-media", steamAppId ?? ""],
     queryFn: () => getSteamAppdetailsMedia(steamAppId!),
-    enabled: !!steamAppId && !mediaFromBatch && !hasUserCover,
+    enabled: !!steamAppId && isSteamAppId(steamAppId) && !mediaFromBatch && !hasUserCover,
     staleTime: 5 * 60 * 1000,
     gcTime: 1000 * 60 * 60 * 24,
     refetchOnWindowFocus: false,
@@ -295,7 +296,9 @@ export function useGameMediaBatch({
 }: UseGameMediaBatchOptions): UseGameMediaBatchResult {
   /** IDs únicos y ordenados para una query key estable. */
   const steamAppIdsForBatch = useMemo(() => {
-    const ids = games.map((g) => getSteamAppId(g, resolvedSteamAppIds[g.id])).filter((id): id is string => !!id);
+    const ids = games
+      .map((g) => getSteamAppId(g, resolvedSteamAppIds[g.id]))
+      .filter((id): id is string => !!id && isSteamAppId(id));
     return [...new Set(ids)].sort();
   }, [games, resolvedSteamAppIds]);
 

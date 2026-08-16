@@ -495,7 +495,7 @@ export function GameDetailPage() {
         onRecoverFromCloud={isSteamCatalogOnly ? undefined : (g) => setGameToRestoreBackup(g)}
         onShare={!isSteamCatalogOnly && hasSyncConfig ? handleShare : undefined}
         onRemove={isSteamCatalogOnly ? undefined : handleRemove}
-        onRefreshDetails={handleRefreshDetails}
+        onRefreshDetails={steamAppId ? handleRefreshDetails : undefined}
         onFullBackupUpload={!isSteamCatalogOnly && hasSyncConfig ? setGameToFullBackupConfirm : undefined}
       />
 

@@ -557,7 +557,36 @@
       "ariaLabelTabs": "Secciones del juego",
       "tabSummary": "Resumen",
       "tabDetails": "Detalles",
-      "tabRequirements": "Requisitos"
+      "tabRequirements": "Requisitos",
+      "synopsis": "Sinopsis",
+      "techSpecs": "Ficha técnica",
+      "techSpecsSubtitle": "Desarrollo, publicación y fecha",
+      "aboutGame": "Información sobre el juego",
+      "storeTextSubtitle": "Texto de la tienda (puede incluir imágenes)",
+      "releaseDate": "Lanzamiento",
+      "developers": "Desarrollador",
+      "publishers": "Editor",
+      "genres": "Géneros",
+      "categories": "Categorías",
+      "noShortDescription": "No hay texto breve en la ficha de Steam. La descripción completa está en la pestaña Detalles.",
+      "noRequirements": "No hay requisitos publicados en la tienda para este título.",
+      "noRequirementsDesc": "Sin requisitos en la ficha de Steam no podemos estimar si tu PC los cumple; consulta la web del desarrollador o la tienda donde compraste el juego.",
+      "requirementsStoreDisclaimer": "Especificaciones de la tienda; pueden no coincidir con el hardware desde el que uses SaveCloud.",
+      "requirementsMin": "Mínimos",
+      "requirementsRec": "Recomendados",
+      "local": {
+        "badge": "Juego Local / Fuera de Steam",
+        "description": "Este juego no utiliza Steam Store. Todas las funciones de guardado en la nube, copias de seguridad completas, historial de versiones, ejecución directa y enlaces compartidos funcionan con normalidad.",
+        "savePathsTitle": "Rutas de guardado ({{count}})",
+        "savePathsSubtitle": "Ubicaciones sincronizadas con la nube",
+        "noPathsConfigured": "Ninguna ruta de guardado configurada actualmente.",
+        "openFolder": "Abrir",
+        "executionTitle": "Ejecución",
+        "executableConfigured": "Ejecutable configurado",
+        "noExecutableConfigured": "Sin ejecutable directo configurado (puedes añadirlo en Editar).",
+        "editionTitle": "Edición / Origen",
+        "standardEdition": "Estándar / Sin etiqueta"
+      }
     },
     "toast": {
       "downloadSuccessTitle": "Descarga completada",
@@ -1277,6 +1306,8 @@
       "offline": "Desconectado",
       "noConnection": "Sin conexión",
       "playing": "Jugando",
+      "sessionTime": "{{time}} en sesión",
+      "inSession": "En sesión: {{time}}",
       "unknown": "Desconocido"
     },
     "actions": {
@@ -1640,6 +1671,8 @@
       "gamesCount_one": "{{count}} juego",
       "gamesCount_other": "{{count}} juegos",
       "playingLabel": "Jugando: {{game}}",
+      "sessionDuration": "En sesión: {{time}}",
+      "sessionDurationShort": "{{time}} en sesión",
       "levelLabel": "Nivel",
       "stats": {
         "games": "Juegos",

@@ -244,7 +244,9 @@ export function BigPictureFriendsPage() {
                 }
                 summaries={summaries}
                 presenceStatus={searchedFriendPresence?.status}
+                presenceGameId={searchedFriendPresence?.gameId ?? null}
                 presenceGameName={searchedFriendPresence?.gameName ?? null}
+                fallbackStartedAt={searchedFriendPresence?.lastSeenAt ?? null}
                 copyingGameId={copyingGameId}
                 onAddGamesPress={handleAddGamesPress}
                 onCopySaves={handleCopySaves}
@@ -312,6 +314,8 @@ export function BigPictureFriendsPage() {
         onClose={() => setCopyConfirmPreview(null)}
         gameId={copyConfirmPreview?.gameId ?? ""}
         gameDisplayName={copyConfirmPreview?.gameDisplayName}
+        imageUrl={copyConfirmPreview?.imageUrl}
+        steamAppId={copyConfirmPreview?.steamAppId}
         items={
           copyConfirmPreview?.plan.map((p) => ({
             filename: p.filename,

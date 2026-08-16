@@ -12,7 +12,7 @@ import {
 } from "@services/tauri";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { useGameRunningStatus } from "@hooks/useGameRunningStatus";
-import { getGameLibraryHeroUrl, getSteamAppId, isSteamMoviePosterUrl } from "@utils/gameImage";
+import { getGameLibraryHeroUrl, getSteamAppId, isSteamMoviePosterUrl, isSteamAppId } from "@utils/gameImage";
 import { configuredGameFromSteamCatalogRouteId, isSteamCatalogRouteGameId } from "@utils/steamCatalogGameId";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
@@ -57,14 +57,14 @@ export function useGameDetail() {
   const { data: steamDetails, isLoading: isSteamLoading } = useQuery<SteamAppDetailsResult>({
     queryKey: ["steam-app-details", steamAppId],
     queryFn: () => getSteamAppDetails(steamAppId!),
-    enabled: !!steamAppId,
+    enabled: !!steamAppId && isSteamAppId(steamAppId),
     staleTime: 10 * 60_000,
     gcTime: 60 * 60_000,
     refetchOnWindowFocus: false,
   });
 
   const catalogMedia = useMemo(() => {
-    if (!steamAppId) return null;
+    if (!steamAppId || !isSteamAppId(steamAppId)) return null;
     const cache = queryClient.getQueryData<Record<string, SteamAppdetailsMediaResult>>([
       "steam-catalog-global-media-cache",
     ]);
@@ -74,7 +74,7 @@ export function useGameDetail() {
   const { data: catalogListingName } = useQuery({
     queryKey: ["steam-catalog-listing-name", steamAppId],
     queryFn: () => getSteamCatalogListingName(steamAppId!),
-    enabled: isCatalogRoute && !!steamAppId,
+    enabled: isCatalogRoute && !!steamAppId && isSteamAppId(steamAppId),
     staleTime: 60 * 60_000,
     gcTime: 60 * 60_000,
     refetchOnWindowFocus: false,

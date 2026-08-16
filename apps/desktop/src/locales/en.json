@@ -557,7 +557,36 @@
       "ariaLabelTabs": "Game sections",
       "tabSummary": "Summary",
       "tabDetails": "Details",
-      "tabRequirements": "Requirements"
+      "tabRequirements": "Requirements",
+      "synopsis": "Synopsis",
+      "techSpecs": "Technical Specs",
+      "techSpecsSubtitle": "Development, publishing and release date",
+      "aboutGame": "About the game",
+      "storeTextSubtitle": "Store description (may include media)",
+      "releaseDate": "Release date",
+      "developers": "Developer",
+      "publishers": "Publisher",
+      "genres": "Genres",
+      "categories": "Categories",
+      "noShortDescription": "No short summary in the Steam store page. Full description is available in the Details tab.",
+      "noRequirements": "No system requirements published in the store for this title.",
+      "noRequirementsDesc": "Without Steam requirements we cannot estimate if your PC meets them; check the developer's website or the store where you bought the game.",
+      "requirementsStoreDisclaimer": "Store specifications; may differ from the hardware you use SaveCloud on.",
+      "requirementsMin": "Minimum",
+      "requirementsRec": "Recommended",
+      "local": {
+        "badge": "Local Game / Non-Steam",
+        "description": "This game does not use Steam Store. Cloud saves, full backups, version history, direct launch, and share links work normally.",
+        "savePathsTitle": "Save paths ({{count}})",
+        "savePathsSubtitle": "Locations synced with the cloud",
+        "noPathsConfigured": "No save paths currently configured.",
+        "openFolder": "Open",
+        "executionTitle": "Launch",
+        "executableConfigured": "Executable configured",
+        "noExecutableConfigured": "No direct executable configured (you can add one in Edit).",
+        "editionTitle": "Edition / Source",
+        "standardEdition": "Standard / Untagged"
+      }
     },
     "toast": {
       "downloadSuccessTitle": "Download completed",
@@ -1277,6 +1306,8 @@
       "offline": "Offline",
       "noConnection": "Offline",
       "playing": "Playing",
+      "sessionTime": "{{time}} in session",
+      "inSession": "In session: {{time}}",
       "unknown": "Unknown"
     },
     "actions": {
@@ -1640,6 +1671,8 @@
       "gamesCount_one": "{{count}} game",
       "gamesCount_other": "{{count}} games",
       "playingLabel": "Playing: {{game}}",
+      "sessionDuration": "In session: {{time}}",
+      "sessionDurationShort": "{{time}} in session",
       "levelLabel": "Level",
       "stats": {
         "games": "Games",

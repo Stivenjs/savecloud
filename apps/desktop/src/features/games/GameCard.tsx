@@ -206,6 +206,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
             {/* Soft bottom shading to integrate image with card background */}
             <div className="absolute inset-0 bg-linear-to-t from-[#0e0f14]/90 via-transparent to-transparent pointer-events-none z-10" />
             <GameCardSyncBadge
+              gameId={game.id}
               syncStatus={syncStatus}
               isGameRunning={isGameRunning}
               cloudBackupCount={cloudBackupCount}

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Badge, Button, Popover, PopoverContent, PopoverTrigger, ScrollShadow, Spinner } from "@heroui/react";
 import { AlertTriangle, Bell, CheckCheck, Download, ExternalLink, FolderOpen, Info, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -11,7 +11,9 @@ import type { NotificationRecord } from "@services/tauri/notifications.service";
 import { formatRelativeDate } from "@utils/format";
 import { formatDayGroupHeading, getLocalDayKey } from "@utils/operationHistory";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
-import { formatGameDisplayName } from "@utils/gameImage";
+import { formatGameDisplayName, detectGameFromText } from "@utils/gameImage";
+import { useConfig } from "@hooks/useConfig";
+import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
 
 function severityColor(severity: string): "default" | "primary" | "success" | "warning" | "danger" {
   switch (severity) {
@@ -68,16 +70,16 @@ async function openLink(url: string) {
   }
 }
 
-function SeverityIcon({ color, kind }: { color: string; kind: string }) {
-  if (kind === "source_download_terminal") return <Download size={15} />;
+function SeverityIcon({ color, kind, size = 15 }: { color: string; kind: string; size?: number }) {
+  if (kind === "source_download_terminal") return <Download size={size} />;
   switch (color) {
     case "success":
-      return <CheckCheck size={15} />;
+      return <CheckCheck size={size} />;
     case "warning":
     case "danger":
-      return <AlertTriangle size={15} />;
+      return <AlertTriangle size={size} />;
     default:
-      return <Info size={15} />;
+      return <Info size={size} />;
   }
 }
 
@@ -87,6 +89,14 @@ const iconBgMap: Record<string, string> = {
   danger: "bg-rose-500/12 text-rose-500",
   primary: "bg-blue-500/12 text-blue-500",
   default: "bg-default-500/12 text-default-400",
+};
+
+const textColorMap: Record<string, string> = {
+  success: "text-emerald-500 dark:text-emerald-400",
+  warning: "text-amber-500 dark:text-amber-400",
+  danger: "text-rose-500 dark:text-rose-400",
+  primary: "text-blue-500 dark:text-blue-400",
+  default: "text-default-400",
 };
 
 /** Fila de notificación */
@@ -100,11 +110,18 @@ function NotificationRow({
   onDismiss: (id: string) => void;
 }) {
   const { t } = useTranslation();
+  const { config } = useConfig();
   const unread = !n.readAt || !n.readAt.trim();
   const color = severityColor(n.severity);
   const iconBg = iconBgMap[color] ?? iconBgMap.default;
+  const iconText = textColorMap[color] ?? textColorMap.default;
   const downloadDir = getDownloadDir(n);
   const downloadUri = getDownloadUri(n);
+
+  const detectedGameId = useMemo(
+    () => detectGameFromText({ gameId: n.gameId, title: n.title, body: n.body, games: config?.games }),
+    [n.gameId, n.body, n.title, config?.games]
+  );
 
   let displayBody = n.body;
   if (n.gameId) {
@@ -115,26 +132,37 @@ function NotificationRow({
   }
 
   return (
-    <div
-      className={`
-        group relative flex gap-3 px-4 py-3 text-sm transition-all duration-200
-        hover:bg-default-100/60 rounded-xl
-        ${unread ? "bg-primary-50/30 dark:bg-primary-900/10" : ""}
-      `}>
-      {/* Barra de resaltado para notificaciones no leídas */}
-      {unread && <span className="absolute left-0 top-3 bottom-3 w-0.75 rounded-full bg-primary-400" />}
-
-      {/* Icono */}
-      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
-        <SeverityIcon color={color} kind={n.kind} />
+    <div className="group relative flex items-start gap-3 p-2.5 text-sm transition-all duration-200 hover:bg-default-100/50 dark:hover:bg-white/5 rounded-xl">
+      {/* Icono / Carátula limpia del juego */}
+      <div className="relative shrink-0 mt-0.5">
+        {detectedGameId ? (
+          <PlayingGameThumbnail
+            gameId={detectedGameId}
+            size="md"
+            className="h-11 w-18 rounded-lg shadow-xs object-cover"
+          />
+        ) : (
+          <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${iconBg} shadow-xs`}>
+            <SeverityIcon color={color} kind={n.kind} size={16} />
+          </div>
+        )}
       </div>
 
       {/* Contenido */}
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <p className={`font-medium leading-snug text-sm ${unread ? "text-foreground" : "text-default-700"}`}>
-            {n.title}
-          </p>
+          <div className="flex items-center gap-1.5 min-w-0">
+            {detectedGameId && (
+              <span className={`shrink-0 ${iconText}`}>
+                <SeverityIcon color={color} kind={n.kind} size={14} />
+              </span>
+            )}
+            <p
+              className={`font-medium leading-snug text-sm truncate ${unread ? "text-foreground font-semibold" : "text-default-700"}`}>
+              {n.title}
+            </p>
+            {unread && <span className="size-1.5 rounded-full bg-primary shrink-0" />}
+          </div>
           {/* Botón de descarte — visible al pasar el mouse */}
           <button
             onClick={() => onDismiss(n.id)}
@@ -144,10 +172,10 @@ function NotificationRow({
           </button>
         </div>
 
-        <p className="mt-0.5 text-xs text-default-500 leading-relaxed">{displayBody}</p>
+        <p className="mt-1 text-xs text-default-500 leading-relaxed">{displayBody}</p>
 
         {/* Fila de acciones */}
-        <div className="mt-2 flex items-center gap-2 flex-wrap">
+        <div className="mt-2.5 flex items-center gap-2 flex-wrap">
           <span className="text-[11px] text-default-400">{formatRelativeDate(n.createdAt)}</span>
 
           <div className="flex gap-1.5 ml-auto opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto">
@@ -261,7 +289,7 @@ export function NotificationCenter() {
       </PopoverTrigger>
 
       {/* Contenido */}
-      <PopoverContent className="w-[min(100vw-1rem,400px)] rounded-2xl p-0 shadow-xl overflow-hidden ">
+      <PopoverContent className="w-[min(100vw-1.5rem,460px)] rounded-2xl p-0 shadow-2xl overflow-hidden border border-default-200/50 dark:border-default-100/20">
         {/* Encabezado */}
         <div className="flex w-full items-center justify-between gap-2 px-4 py-3 border-b border-default-100 bg-default-50/80 backdrop-blur-sm">
           <div className="flex items-center gap-2">
@@ -299,7 +327,7 @@ export function NotificationCenter() {
         </div>
 
         {/* Cuerpo */}
-        <ScrollShadow className="max-h-[min(70vh,440px)]">
+        <ScrollShadow className="max-h-[min(70vh,460px)]">
           {loading ? (
             <div className="flex justify-center py-12">
               <Spinner size="md" />
@@ -310,16 +338,16 @@ export function NotificationCenter() {
               <p className="text-sm">{t("notifications.empty")}</p>
             </div>
           ) : (
-            <div className="px-2 py-2 flex flex-col gap-1">
+            <div className="p-2.5 flex flex-col gap-1.5">
               {groups.map((g) => (
-                <div key={g.key}>
+                <div key={g.key} className="space-y-1">
                   {/* Etiqueta de día */}
-                  <div className="px-2 pt-2 pb-1 text-[11px] font-semibold text-default-400 uppercase tracking-wider">
+                  <div className="px-2.5 pt-2 pb-1 text-[11px] font-semibold text-default-400 uppercase tracking-wider">
                     {g.label}
                   </div>
 
                   {/* Filas */}
-                  <div className="flex flex-col gap-0.5">
+                  <div className="flex flex-col gap-1.5">
                     {g.items.map((n) => (
                       <NotificationRow
                         key={n.id}

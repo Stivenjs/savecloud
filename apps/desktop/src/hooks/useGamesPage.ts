@@ -18,7 +18,7 @@ import {
   type UnsyncedGame,
 } from "@services/tauri";
 import type { ConfiguredGame } from "@app-types/config";
-import { formatGameDisplayName } from "@utils/gameImage";
+import { formatGameDisplayName, findConfiguredGame } from "@utils/gameImage";
 import {
   notifyBatchDownloadDone,
   notifyBatchUploadDone,
@@ -290,7 +290,7 @@ export function useGamesPage() {
 
   const handleRetryOperationError = (gameId: string, opType: "sync" | "download") => {
     dispatch({ type: "SET_OPERATION_RESULT", value: null });
-    const game = config?.games?.find((g: ConfiguredGame) => g.id === gameId);
+    const game = findConfiguredGame(config?.games, gameId);
     if (game) {
       dispatch({
         type: "SET_SYNC_PREVIEW",
@@ -537,7 +537,7 @@ export function useGamesPage() {
   };
 
   const restoreWizardTriggerDownload = (gameId: string) => {
-    const game = config?.games?.find((g: ConfiguredGame) => g.id.toLowerCase() === gameId.toLowerCase());
+    const game = findConfiguredGame(config?.games, gameId);
     if (!game) {
       toastError(i18n.t("library.toast.gameNotFoundAfterLink"), i18n.t("library.toast.gameNotFoundAfterLinkDesc"));
       return;

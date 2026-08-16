@@ -1,9 +1,12 @@
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { Divider, ScrollShadow, Skeleton } from "@heroui/react";
+import { useTranslation } from "react-i18next";
+import { Button, Divider, ScrollShadow, Skeleton } from "@heroui/react";
+import { openPath } from "@tauri-apps/plugin-opener";
 import {
   Building2,
   CalendarDays,
+  CheckCircle2,
   Cloud,
   Code2,
   FolderOpen,
@@ -98,6 +101,7 @@ interface GameDetailInfoProps {
 
 /** Contenido de la pestaña Resumen: descripción corta, ficha técnica, géneros y categorías. */
 export function GameDetailSummaryPanel({ details }: { details: SteamAppDetailsResult }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const blurb = resolveSteamSummaryBlurb(details);
 
@@ -115,7 +119,7 @@ export function GameDetailSummaryPanel({ details }: { details: SteamAppDetailsRe
           {blurb ? (
             <div>
               <div className="mb-3 flex flex-col gap-0.5">
-                <h3 className="text-lg font-bold tracking-tight text-foreground">Sinopsis</h3>
+                <h3 className="text-lg font-bold tracking-tight text-foreground">{t("library.detail.synopsis")}</h3>
                 {blurb.subtitle ? <p className="text-xs text-default-500">{blurb.subtitle}</p> : null}
               </div>
               <div className="border-l-2 border-primary/40 pl-5">
@@ -127,8 +131,7 @@ export function GameDetailSummaryPanel({ details }: { details: SteamAppDetailsRe
           ) : (
             <div className="rounded-xl border border-dashed border-default-300/70 bg-default-100/20 px-4 py-3.5 dark:border-default-100/25 dark:bg-default-50/10">
               <p className="text-sm leading-relaxed text-default-600 dark:text-default-400">
-                No hay texto breve en la ficha de Steam. La descripción completa está en la pestaña{" "}
-                <span className="font-medium text-foreground">Detalles</span>.
+                {t("library.detail.noShortDescription")}
               </p>
             </div>
           )}
@@ -139,23 +142,26 @@ export function GameDetailSummaryPanel({ details }: { details: SteamAppDetailsRe
           {/* 1. Ficha Técnica */}
           {hasTechSpecs && (
             <div className="space-y-2.5">
-              <FieldLabel icon={<Building2 size={14} className="text-primary opacity-90" />} label="Ficha técnica" />
+              <FieldLabel
+                icon={<Building2 size={14} className="text-primary opacity-90" />}
+                label={t("library.detail.techSpecs")}
+              />
               <div className="space-y-2 rounded-xl border border-default-200/50 bg-default-100/30 p-3.5 text-xs dark:border-default-100/10 dark:bg-default-50/5">
                 {details.releaseDate && (
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-default-400 font-medium">Lanzamiento</span>
+                    <span className="text-default-400 font-medium">{t("library.detail.releaseDate")}</span>
                     <span className="font-semibold text-foreground text-right">{details.releaseDate}</span>
                   </div>
                 )}
                 {details.developers.length > 0 && (
                   <div className="flex items-start justify-between gap-3">
-                    <span className="text-default-400 font-medium shrink-0">Desarrollador</span>
+                    <span className="text-default-400 font-medium shrink-0">{t("library.detail.developers")}</span>
                     <span className="font-semibold text-foreground text-right">{details.developers.join(", ")}</span>
                   </div>
                 )}
                 {details.publishers.length > 0 && (
                   <div className="flex items-start justify-between gap-3">
-                    <span className="text-default-400 font-medium shrink-0">Editor</span>
+                    <span className="text-default-400 font-medium shrink-0">{t("library.detail.publishers")}</span>
                     <span className="font-semibold text-foreground text-right">{details.publishers.join(", ")}</span>
                   </div>
                 )}
@@ -166,7 +172,10 @@ export function GameDetailSummaryPanel({ details }: { details: SteamAppDetailsRe
           {/* 2. Géneros clicables -> Catálogo */}
           {details.genres.length > 0 && (
             <div className="space-y-2.5">
-              <FieldLabel icon={<Tags size={14} className="text-primary opacity-90" />} label="Géneros" />
+              <FieldLabel
+                icon={<Tags size={14} className="text-primary opacity-90" />}
+                label={t("library.detail.genres")}
+              />
               <div className="flex flex-wrap gap-2">
                 {details.genres.map((genre, idx) => (
                   <button
@@ -186,7 +195,10 @@ export function GameDetailSummaryPanel({ details }: { details: SteamAppDetailsRe
           {/* 3. Categorías con iconos contextuales */}
           {details.categories.length > 0 && (
             <div className="space-y-2.5">
-              <FieldLabel icon={<Code2 size={14} className="text-primary opacity-90" />} label="Categorías" />
+              <FieldLabel
+                icon={<Code2 size={14} className="text-primary opacity-90" />}
+                label={t("library.detail.categories")}
+              />
               <div className="flex flex-wrap gap-1.5">
                 {details.categories.map((cat, idx) => (
                   <span
@@ -207,18 +219,19 @@ export function GameDetailSummaryPanel({ details }: { details: SteamAppDetailsRe
 
 /** Ficha técnica + descripción larga (HTML de Steam). */
 export function GameDetailSteamDetailsPanel({ details }: { details: SteamAppDetailsResult }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-8">
       <div className="rounded-xl border border-default-200/70 bg-default-50/30 dark:border-default-100/20 dark:bg-default-50/10">
         <div className="border-b border-default-200/60 px-4 py-3 dark:border-default-100/15">
-          <h3 className="text-sm font-semibold text-foreground">Ficha técnica</h3>
-          <p className="mt-0.5 text-xs text-default-500">Desarrollo, publicación y fecha</p>
+          <h3 className="text-sm font-semibold text-foreground">{t("library.detail.techSpecs")}</h3>
+          <p className="mt-0.5 text-xs text-default-500">{t("library.detail.techSpecsSubtitle")}</p>
         </div>
         <dl className="divide-y divide-default-200/50 dark:divide-default-100/20">
           {details.developers.length > 0 && (
             <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-6">
               <dt className="shrink-0 sm:w-36">
-                <FieldLabel icon={<Users size={14} className="opacity-80" />} label="Desarrollador" />
+                <FieldLabel icon={<Users size={14} className="opacity-80" />} label={t("library.detail.developers")} />
               </dt>
               <dd className="text-sm text-default-700 dark:text-default-300">{details.developers.join(", ")}</dd>
             </div>
@@ -227,7 +240,7 @@ export function GameDetailSteamDetailsPanel({ details }: { details: SteamAppDeta
           {details.publishers.length > 0 && (
             <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-6">
               <dt className="shrink-0 sm:w-36">
-                <FieldLabel icon={<Users size={14} className="opacity-80" />} label="Editor" />
+                <FieldLabel icon={<Users size={14} className="opacity-80" />} label={t("library.detail.publishers")} />
               </dt>
               <dd className="text-sm text-default-700 dark:text-default-300">{details.publishers.join(", ")}</dd>
             </div>
@@ -236,7 +249,10 @@ export function GameDetailSteamDetailsPanel({ details }: { details: SteamAppDeta
           {details.releaseDate && (
             <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:gap-6">
               <dt className="shrink-0 sm:w-36">
-                <FieldLabel icon={<CalendarDays size={14} className="opacity-80" />} label="Lanzamiento" />
+                <FieldLabel
+                  icon={<CalendarDays size={14} className="opacity-80" />}
+                  label={t("library.detail.releaseDate")}
+                />
               </dt>
               <dd className="text-sm text-default-700 dark:text-default-300">{details.releaseDate}</dd>
             </div>
@@ -247,8 +263,8 @@ export function GameDetailSteamDetailsPanel({ details }: { details: SteamAppDeta
       {details.detailedDescription ? (
         <div className="space-y-4">
           <div className="flex flex-col gap-1 border-b border-default-200/50 pb-4 dark:border-default-100/15">
-            <h3 className="text-lg font-semibold tracking-tight text-foreground">Información sobre el juego</h3>
-            <p className="text-xs text-default-500">Texto de la tienda (puede incluir imágenes)</p>
+            <h3 className="text-lg font-semibold tracking-tight text-foreground">{t("library.detail.aboutGame")}</h3>
+            <p className="text-xs text-default-500">{t("library.detail.storeTextSubtitle")}</p>
           </div>
           <div className="overflow-hidden rounded-xl border border-default-200/60 bg-default-50/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] dark:border-default-100/20 dark:bg-default-50/5">
             <ScrollShadow className="max-h-[min(70vh,42rem)]" size={72}>
@@ -265,6 +281,7 @@ export function GameDetailSteamDetailsPanel({ details }: { details: SteamAppDeta
 }
 
 export function GameDetailRequirementsPanel({ details }: { details: SteamAppDetailsResult }) {
+  const { t } = useTranslation();
   const hasStoreRequirements = !!(details.pcRequirementsMinimum || details.pcRequirementsRecommended);
   const compatibility = useRunCompatibility(
     details.pcRequirementsMinimum,
@@ -275,13 +292,8 @@ export function GameDetailRequirementsPanel({ details }: { details: SteamAppDeta
   if (!hasStoreRequirements) {
     return (
       <div className="space-y-3">
-        <p className="text-sm text-default-600 dark:text-default-400">
-          No hay requisitos publicados en la tienda para este título.
-        </p>
-        <p className="text-xs leading-relaxed text-default-500">
-          Sin requisitos en la ficha de Steam no podemos estimar si tu PC los cumple; consulta la web del desarrollador
-          o la tienda donde compraste el juego.
-        </p>
+        <p className="text-sm text-default-600 dark:text-default-400">{t("library.detail.noRequirements")}</p>
+        <p className="text-xs leading-relaxed text-default-500">{t("library.detail.noRequirementsDesc")}</p>
       </div>
     );
   }
@@ -293,14 +305,14 @@ export function GameDetailRequirementsPanel({ details }: { details: SteamAppDeta
         isLoading={compatibility.isLoading}
         isError={compatibility.isError}
       />
-      <p className="text-xs text-default-500">
-        Especificaciones de la tienda; pueden no coincidir con el hardware desde el que uses SaveCloud.
-      </p>
+      <p className="text-xs text-default-500">{t("library.detail.requirementsStoreDisclaimer")}</p>
       <div className="grid gap-4 md:grid-cols-2">
         {details.pcRequirementsMinimum && (
           <div className="overflow-hidden rounded-xl border border-default-200/70 bg-linear-to-b from-default-100/50 to-content1 dark:border-default-100/20 dark:from-default-100/15 dark:to-default-50/5">
             <div className="border-b border-default-200/60 px-4 py-2.5 dark:border-default-100/15">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-default-500">Mínimos</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-default-500">
+                {t("library.detail.requirementsMin")}
+              </p>
             </div>
             <div className="px-4 py-3">
               <div
@@ -314,7 +326,7 @@ export function GameDetailRequirementsPanel({ details }: { details: SteamAppDeta
           <div className="overflow-hidden rounded-xl border border-primary-200/40 bg-linear-to-b from-primary-50/40 to-content1 dark:border-primary-500/20 dark:from-primary-500/10 dark:to-default-50/5">
             <div className="border-b border-primary-200/35 px-4 py-2.5 dark:border-primary-500/20">
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary-700 dark:text-primary-400">
-                Recomendados
+                {t("library.detail.requirementsRec")}
               </p>
             </div>
             <div className="px-4 py-3">
@@ -336,41 +348,98 @@ export function hasSteamRequirements(details: SteamAppDetailsResult): boolean {
 
 /** Juegos sin ficha de Steam: rutas y metadatos locales. */
 export function GameDetailLocalSummary({ game }: { game: ConfiguredGame }) {
+  const { t } = useTranslation();
   const pathCount = game.paths?.length ?? 0;
+
+  const handleOpenFolder = async (path: string) => {
+    try {
+      await openPath(path);
+    } catch (err) {
+      console.error("Could not open folder:", err);
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <p className="text-sm leading-relaxed text-default-600 dark:text-default-400">
-        No hay datos de la tienda de Steam para este juego (sin App ID o ficha no disponible). Puedes seguir gestionando
-        guardados y backups con las acciones de arriba.
-      </p>
-      <div className="rounded-xl border border-default-200/70 bg-default-50/40 px-4 py-3 shadow-sm dark:border-default-100/20 dark:bg-default-50/10">
-        <p className="text-xs font-medium text-default-700 dark:text-default-300">Compatibilidad con tu PC</p>
-        <p className="mt-2 text-xs leading-relaxed text-default-500">
-          La comparación automática con tu equipo solo aparece cuando la app puede cargar la ficha de Steam. Para
-          títulos fuera de Steam, revisa la web del juego o la tienda donde lo compraste.
+      {/* Banner explicativo elegante */}
+      <div className="rounded-xl border border-default-200/60 bg-default-100/40 p-4 dark:border-default-100/15 dark:bg-default-50/5">
+        <div className="flex items-center gap-2 mb-1 text-xs font-semibold uppercase tracking-wider text-default-500">
+          <Gamepad2 size={15} className="text-primary" />
+          <span>{t("library.detail.local.badge")}</span>
+        </div>
+        <p className="text-sm leading-relaxed text-default-600 dark:text-default-400">
+          {t("library.detail.local.description")}
         </p>
       </div>
-      <div className="rounded-xl border border-default-200/70 bg-content1 dark:border-default-100/20">
-        <div className="flex items-start gap-3 border-b border-default-200/50 px-4 py-3 dark:border-default-100/15">
-          <FolderOpen size={18} className="mt-0.5 shrink-0 text-default-400" />
-          <div>
-            <p className="text-sm font-semibold text-foreground">Rutas de guardado</p>
-            <p className="mt-1 text-sm text-default-500">
-              {pathCount === 0
-                ? "Ninguna ruta configurada."
-                : `${pathCount} ruta${pathCount === 1 ? "" : "s"} registrada${pathCount === 1 ? "" : "s"}.`}
-            </p>
+
+      {/* Rutas de guardado configuradas */}
+      <div className="rounded-xl border border-default-200/70 bg-content1 shadow-xs dark:border-default-100/20">
+        <div className="flex items-center justify-between border-b border-default-200/50 px-4 py-3 dark:border-default-100/15">
+          <div className="flex items-center gap-2.5">
+            <FolderOpen size={18} className="text-primary" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                {t("library.detail.local.savePathsTitle", { count: pathCount })}
+              </p>
+              <p className="text-xs text-default-500">{t("library.detail.local.savePathsSubtitle")}</p>
+            </div>
           </div>
         </div>
-        {game.editionLabel ? (
-          <div className="px-4 py-3">
-            <p className="text-xs text-default-500">
-              <span className="font-medium text-default-700 dark:text-default-300">Origen / edición</span> —{" "}
-              {game.editionLabel}
-            </p>
+
+        {game.paths && game.paths.length > 0 ? (
+          <div className="divide-y divide-default-200/40 p-2 dark:divide-default-100/10">
+            {game.paths.map((p, idx) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg hover:bg-default-100/50 dark:hover:bg-white/5 transition-colors">
+                <span className="text-xs font-mono text-default-700 dark:text-default-300 truncate max-w-[80%]">
+                  {p}
+                </span>
+                <Button
+                  size="sm"
+                  variant="flat"
+                  className="h-7 px-2 text-[11px]"
+                  startContent={<FolderOpen size={13} />}
+                  onPress={() => void handleOpenFolder(p)}>
+                  {t("library.detail.local.openFolder")}
+                </Button>
+              </div>
+            ))}
           </div>
-        ) : null}
+        ) : (
+          <div className="px-4 py-3">
+            <p className="text-xs text-default-500">{t("library.detail.local.noPathsConfigured")}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Configuración de Ejecutable y Edición */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="rounded-xl border border-default-200/70 bg-content1 p-4 dark:border-default-100/20">
+          <p className="text-xs font-semibold text-default-400 uppercase tracking-wider mb-2">
+            {t("library.detail.local.executionTitle")}
+          </p>
+          {game.launchExecutablePath?.trim() ? (
+            <div className="space-y-1">
+              <span className="inline-flex items-center gap-1.5 text-xs text-emerald-500 font-medium">
+                <CheckCircle2 size={14} /> {t("library.detail.local.executableConfigured")}
+              </span>
+              <p className="text-xs font-mono text-default-500 truncate">{game.launchExecutablePath}</p>
+            </div>
+          ) : (
+            <p className="text-xs text-default-500">{t("library.detail.local.noExecutableConfigured")}</p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-default-200/70 bg-content1 p-4 dark:border-default-100/20">
+          <p className="text-xs font-semibold text-default-400 uppercase tracking-wider mb-2">
+            {t("library.detail.local.editionTitle")}
+          </p>
+          <p className="text-xs text-default-700 dark:text-default-300 font-medium">
+            {game.editionLabel?.trim() || t("library.detail.local.standardEdition")}
+          </p>
+          {game.sourceUrl ? <p className="text-xs text-primary truncate mt-1">{game.sourceUrl}</p> : null}
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { Card, CardBody } from "@heroui/react";
 import { Clock, HardDrive, Calendar, CloudCheck } from "lucide-react";
 import { formatBytes, formatPlaytime, formatRelativeDate } from "@utils/format";
+import { useGameSessionDuration } from "@store/GameSessionStore";
 import type { GameStats } from "@services/tauri";
 
 interface GameDetailStatsProps {
@@ -8,7 +9,12 @@ interface GameDetailStatsProps {
   isGameRunning?: boolean;
 }
 
-export function GameDetailStats({ stats }: GameDetailStatsProps) {
+export function GameDetailStats({ stats, isGameRunning }: GameDetailStatsProps) {
+  const { formattedDuration } = useGameSessionDuration({
+    gameId: stats?.gameId,
+    isRunning: isGameRunning,
+  });
+
   if (!stats) return null;
 
   return (
@@ -16,6 +22,16 @@ export function GameDetailStats({ stats }: GameDetailStatsProps) {
       <CardBody className="flex flex-row flex-wrap items-center gap-4 px-5 py-3">
         {stats && (
           <>
+            {isGameRunning && (
+              <div className="flex items-center gap-1.5 rounded-md bg-emerald-500/10 px-2.5 py-1 text-sm text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                <span className="relative flex size-2">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+                </span>
+                <span className="font-medium text-default-400">En sesión:</span>
+                <span className="font-semibold">{formattedDuration}</span>
+              </div>
+            )}
             <div className="flex items-center gap-2 text-sm text-default-600">
               <HardDrive size={16} className="text-primary" />
               <span className="font-medium">{formatBytes(stats.localSizeBytes)}</span>

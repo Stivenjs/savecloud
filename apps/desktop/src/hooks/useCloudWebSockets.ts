@@ -8,6 +8,7 @@ import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { getFriendConfig, setCloudHostWsUrl } from "@services/tauri/config.service";
+import { useGameSessionStore } from "@store/GameSessionStore";
 
 /**
  * Mensaje entrante desde el WebSocket de la nube (Rust → TS).
@@ -135,8 +136,12 @@ export function useCloudWebSockets() {
 
       if (isComponentMounted) {
         unlistenIncoming = await listen<CloudIncomingMessage>("cloud-ws-incoming", (event) => {
-          const { type } = event.payload;
-          if (type === "FRIEND_PLAYING" || type === "PRESENCE_UPDATE") {
+          const { type, data } = event.payload;
+          if (type === "FRIEND_PLAYING" && data.friendUserId) {
+            useGameSessionStore.getState().recordPresence(data.friendUserId, "playing", data.gameId, Date.now());
+            queryClient.invalidateQueries({ queryKey: ["cloud-presence"] });
+          } else if (type === "PRESENCE_UPDATE" && data.userId && data.status) {
+            useGameSessionStore.getState().recordPresence(data.userId, data.status, data.gameId, Date.now());
             queryClient.invalidateQueries({ queryKey: ["cloud-presence"] });
           }
         });

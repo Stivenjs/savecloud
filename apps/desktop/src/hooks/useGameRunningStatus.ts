@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { checkGamesRunning } from "@services/tauri";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
+import { useGameSessionStore } from "@store/GameSessionStore";
 
 /**
  * Key estático para el mapa global de juegos en ejecución.
@@ -27,6 +28,7 @@ export function useGameRunningStatus(gameIds: readonly string[]): Record<string,
     queryKey: [...RUNNING_STATUS_KEY, sortedIds.join(",")],
     queryFn: async () => {
       const fresh = await checkGamesRunning(sortedIds);
+      useGameSessionStore.getState().syncLocalRunningMap(fresh);
       queryClient.setQueryData(RUNNING_STATUS_KEY, (old: Record<string, boolean> | undefined) => ({
         ...(old ?? {}),
         ...fresh,
@@ -50,6 +52,7 @@ export function useGameRunningStatus(gameIds: readonly string[]): Record<string,
 
     async function setupListeners() {
       const unlistenStatus = await listen<Record<string, boolean>>("games-running-status", (event) => {
+        useGameSessionStore.getState().syncLocalRunningMap(event.payload);
         queryClient.setQueryData(RUNNING_STATUS_KEY, (old: Record<string, boolean> | undefined) => ({
           ...(old ?? {}),
           ...event.payload,
