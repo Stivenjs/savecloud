@@ -869,9 +869,42 @@ export interface CloudBackupInfo {
   filename: string;
 }
 
+export interface StreamingDryRunMetrics {
+  gameId: string;
+  filename: string;
+  originalBytes: number;
+  compressedBytes: number;
+  savedBytes: number;
+  savedRatio: number;
+  savedPercentage: number;
+  durationMs: number;
+  throughputMbS: number;
+  outputThroughputMbS: number;
+  zstdLevel: number;
+  threads: number;
+  totalFiles: number;
+  totalDirs: number;
+  totalSymlinks: number;
+  chunksCount: number;
+  simulatedPartSize: number;
+  simulatedPartsCount: number;
+  timestamp?: number;
+}
+
 /** Crea un .tar de la carpeta del juego y lo sube a la nube (recomendado para juegos grandes). */
 export async function createAndUploadFullBackup(gameId: string): Promise<string> {
   return invoke<string>("create_and_upload_full_backup", { gameId });
+}
+
+/** Ejecuta una prueba de compresión y empaquetado streaming TAR (dry-run) para un juego específico sin subir nada a la nube. */
+export async function testStreamingFullBackup(
+  gameId: string,
+  compressionLevel?: number | null
+): Promise<StreamingDryRunMetrics> {
+  return invoke<StreamingDryRunMetrics>("test_streaming_full_backup", {
+    gameId,
+    compressionLevel: compressionLevel ?? null,
+  });
 }
 
 /** Lista los backups completos en la nube para un juego. */

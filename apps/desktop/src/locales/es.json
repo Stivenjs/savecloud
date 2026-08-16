@@ -829,6 +829,15 @@
         "highLevels": "Niveles altos (aprox. 10–22):",
         "highLevelsDesc": "archivo más pequeño en la nube y menos ancho de banda; mucho más lento y puede calentar el equipo al empaquetar.",
         "gameDataHint": "Muchos juegos ya traen datos comprimidos (p. ej. <code>.pak</code>, texturas); en esos casos subir el nivel aporta poco tamaño extra a cambio de mucho tiempo."
+      },
+      "benchmark": {
+        "title": "Probar Compresión Streaming (Dry-Run)",
+        "desc": "Simula el empaquetado y compresión TAR en tiempo real para medir velocidad y ahorro de espacio exacto sin subir nada a la nube.",
+        "viewRecent": "Ver métricas recientes",
+        "selectGame": "Selecciona un juego",
+        "runButton": "Ejecutar prueba",
+        "testing": "Comprimiendo...",
+        "noGames": "Añade al menos un juego a tu biblioteca para probar la compresión."
       }
     },
     "sdk": {
@@ -2182,5 +2191,35 @@
     "stable": "Versión estable",
     "prerelease": "Versión preliminar",
     "noDate": "Fecha no disponible"
+  },
+  "streaming": {
+    "metrics": {
+      "title": "Métricas de Streaming TAR",
+      "dryRunBadge": "Modo Prueba",
+      "subtitle": "Resultados del empaquetado y compresión sin subida a la nube",
+      "originalSize": "Tamaño Original",
+      "compressedSize": "Comprimido (TAR.ZST)",
+      "filesLabel": "archivos",
+      "ratioLabel": "ratio",
+      "compressionRatioBar": "Reducción de espacio",
+      "spaceSavedLabel": "Ahorro",
+      "duration": "Tiempo",
+      "packagingTime": "Empaquetado y zstd",
+      "speed": "Velocidad",
+      "rawThroughput": "Entrada cruda",
+      "streamRate": "Stream",
+      "streamThroughput": "Salida comprimida",
+      "threads": "Hilos CPU",
+      "detailsHeader": "Detalles de Estructura y Simulación S3",
+      "files": "Archivos procesados",
+      "folders": "Directorios",
+      "s3Parts": "Partes S3 estimadas",
+      "copyReport": "Copiar reporte"
+    },
+    "benchmark": {
+      "successTitle": "Prueba de compresión completada",
+      "successDesc": "{{game}}: Ahorrado {{saved}} (-{{percent}}%)",
+      "errorTitle": "Error en la prueba de compresión"
+    }
   }
 }
