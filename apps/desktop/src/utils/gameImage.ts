@@ -64,17 +64,21 @@ export function getGameImageUrl(game: ConfiguredGame, resolvedSteamAppId?: strin
   return null;
 }
 
-/** Devuelve el Steam App ID si existe (config o resuelto o extraído del id). */
+/** Devuelve el Steam App ID si existe (config o resuelto o extraído del id). Solo devuelve IDs numéricos válidos. */
 export function getSteamAppId(game: ConfiguredGame, resolvedSteamAppId?: string | null): string | null {
   if (game.imageUrl?.trim() && !game.steamAppId?.trim() && !resolvedSteamAppId?.trim()) {
     return null;
   }
-  return (
+  const rawId =
     game.steamAppId?.trim() ??
     resolvedSteamAppId?.trim() ??
     extractAppIdFromId(game.id) ??
-    (isSteamAppId(game.id) ? game.id : null)
-  );
+    (isSteamAppId(game.id) ? game.id.trim() : null);
+
+  if (rawId && isSteamAppId(rawId)) {
+    return rawId;
+  }
+  return null;
 }
 
 /**
@@ -98,7 +102,7 @@ export function isSteamMoviePosterUrl(url: string): boolean {
  * Extrae Steam App ID del id cuando sigue convenciones de cracks (ej. -2050650).
  */
 export function extractAppIdFromId(id: string): string | null {
-  const match = id.trim().match(/-(\d{4,10})$/);
+  const match = id.trim().match(/-(\d{1,10})$/);
   return match ? match[1] : null;
 }
 
@@ -108,7 +112,7 @@ export function extractAppIdFromId(id: string): string | null {
  */
 export function extractAppIdFromFolderName(folderName: string): string | null {
   const trimmed = folderName.trim();
-  if (/^\d{4,10}$/.test(trimmed)) {
+  if (/^\d{1,10}$/.test(trimmed)) {
     return trimmed;
   }
   const match = trimmed.match(/\b(\d{4,10})\b/);
@@ -145,16 +149,15 @@ export function toGameId(folderName: string): string {
 }
 
 /** Comprueba si el id parece un Steam App ID (solo dígitos). */
-export function isSteamAppId(id: string): boolean {
-  return /^\d{4,10}$/.test(id.trim());
+export function isSteamAppId(id?: string | null): boolean {
+  if (!id) return false;
+  return /^\d{1,10}$/.test(id.trim());
 }
 
 /** Indica si el juego necesita búsqueda dinámica (no tiene imagen aún). */
 export function needsSteamSearch(game: ConfiguredGame): boolean {
   if (game.imageUrl?.trim()) return false;
-  if (game.steamAppId?.trim()) return false;
-  if (extractAppIdFromId(game.id)) return false;
-  if (isSteamAppId(game.id)) return false;
+  if (getSteamAppId(game)) return false;
   return true;
 }
 
