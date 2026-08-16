@@ -1,6 +1,7 @@
 import type { ConfiguredGame } from "@app-types/config";
 
 const STEAM_FASTLY_CDN_BASE = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps";
+const STEAM_AKAMAI_CDN_BASE = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps";
 const STEAM_CLOUDFLARE_CDN_BASE = "https://cdn.cloudflare.steamstatic.com/steam/apps";
 
 /**
@@ -11,27 +12,29 @@ export function getSteamCdnCandidates(appId: string): string[] {
   if (!cleanId) return [];
   return [
     `${STEAM_FASTLY_CDN_BASE}/${cleanId}/header.jpg`,
-    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_616x353.jpg`,
-    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_231x87.jpg`,
-    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/library_hero.jpg`,
+    `${STEAM_AKAMAI_CDN_BASE}/${cleanId}/header.jpg`,
     `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/header.jpg`,
     `https://cdn.akamai.steamstatic.com/steam/apps/${cleanId}/header.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_616x353.jpg`,
+    `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/capsule_616x353.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/library_hero.jpg`,
+    `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/library_hero.jpg`,
   ];
 }
 
 /**
- * Devuelve la lista jerárquica de URLs candidatas optimizadas para miniaturas pequeñas.
+ * Devuelve la lista jerárquica de URLs candidatas optimizadas para miniaturas pequeñas (capsule_sm_120, capsule_231x87, header).
  */
 export function getSteamThumbnailCandidates(appId: string): string[] {
   const cleanId = appId.trim();
   if (!cleanId) return [];
   return [
-    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/header.jpg`,
-    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_231x87.jpg`,
     `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_sm_120.jpg`,
-    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_616x353.jpg`,
-    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/library_hero.jpg`,
-    `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/header.jpg`,
+    `${STEAM_AKAMAI_CDN_BASE}/${cleanId}/capsule_sm_120.jpg`,
+    `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/capsule_sm_120.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_231x87.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/header.jpg`,
+    `${STEAM_AKAMAI_CDN_BASE}/${cleanId}/header.jpg`,
   ];
 }
 
