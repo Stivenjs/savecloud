@@ -24,7 +24,7 @@ import { useGameMedia, useGameMediaBatch, getIsResolvingIds } from "@hooks/useGa
 import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
-import { formatGameDisplayName } from "@utils/gameImage";
+import { formatGameDisplayName, findConfiguredGame } from "@utils/gameImage";
 import { formatLastSync, formatRelativeDate, formatSize } from "@utils/format";
 import type { ConfiguredGame } from "@app-types/config";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
@@ -92,7 +92,7 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
 
   const gamesForCloudTableMedia = useMemo((): ConfiguredGame[] => {
     return sortedGames.map((row) => {
-      const fromLibrary = config?.games?.find((g) => g.id.toLowerCase() === row.gameId.toLowerCase());
+      const fromLibrary = findConfiguredGame(config?.games, row.gameId);
       return fromLibrary ?? ({ id: row.gameId, paths: [] } as ConfiguredGame);
     });
   }, [sortedGames, config?.games]);
@@ -118,7 +118,7 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
 
   if (configLoading) {
     return (
-      <div className="flex min-h-[200px] items-center justify-center gap-3 text-default-500">
+      <div className="flex min-h-50 items-center justify-center gap-3 text-default-500">
         <Spinner size="md" color="default" />
         <span className="text-sm">Cargando configuración…</span>
       </div>

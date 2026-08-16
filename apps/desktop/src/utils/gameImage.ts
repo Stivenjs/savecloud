@@ -1,7 +1,6 @@
 import type { ConfiguredGame } from "@app-types/config";
 
 const STEAM_FASTLY_CDN_BASE = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps";
-const STEAM_AKAMAI_CDN_BASE = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps";
 const STEAM_CLOUDFLARE_CDN_BASE = "https://cdn.cloudflare.steamstatic.com/steam/apps";
 
 /**
@@ -12,29 +11,27 @@ export function getSteamCdnCandidates(appId: string): string[] {
   if (!cleanId) return [];
   return [
     `${STEAM_FASTLY_CDN_BASE}/${cleanId}/header.jpg`,
-    `${STEAM_AKAMAI_CDN_BASE}/${cleanId}/header.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_616x353.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_231x87.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/library_hero.jpg`,
     `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/header.jpg`,
     `https://cdn.akamai.steamstatic.com/steam/apps/${cleanId}/header.jpg`,
-    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_616x353.jpg`,
-    `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/capsule_616x353.jpg`,
-    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/library_hero.jpg`,
-    `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/library_hero.jpg`,
   ];
 }
 
 /**
- * Devuelve la lista jerárquica de URLs candidatas optimizadas para miniaturas pequeñas (capsule_sm_120, capsule_231x87, header).
+ * Devuelve la lista jerárquica de URLs candidatas optimizadas para miniaturas pequeñas.
  */
 export function getSteamThumbnailCandidates(appId: string): string[] {
   const cleanId = appId.trim();
   if (!cleanId) return [];
   return [
-    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_sm_120.jpg`,
-    `${STEAM_AKAMAI_CDN_BASE}/${cleanId}/capsule_sm_120.jpg`,
-    `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/capsule_sm_120.jpg`,
-    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_231x87.jpg`,
     `${STEAM_FASTLY_CDN_BASE}/${cleanId}/header.jpg`,
-    `${STEAM_AKAMAI_CDN_BASE}/${cleanId}/header.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_231x87.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_sm_120.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_616x353.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/library_hero.jpg`,
+    `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/header.jpg`,
   ];
 }
 
@@ -220,4 +217,95 @@ export function isSteamGame(game: ConfiguredGame): boolean {
   if (extractAppIdFromId(game.id)) return true;
   if (isSteamAppId(game.id)) return true;
   return false;
+}
+
+/**
+ * Normaliza un identificador o nombre de juego quitando guiones, espacios y caracteres especiales.
+ */
+export function normalizeGameIdentifier(str: string): string {
+  return str.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Busca un juego en una lista de ConfiguredGame por ID exacto, nombre formateado o identificador normalizado.
+ */
+export function findConfiguredGame(
+  games: readonly ConfiguredGame[] | undefined,
+  targetIdOrName?: string | null
+): ConfiguredGame | null {
+  if (!games?.length || !targetIdOrName?.trim()) return null;
+  const clean = targetIdOrName.trim().toLowerCase();
+  const norm = normalizeGameIdentifier(clean);
+
+  return (
+    games.find((g) => {
+      const gid = g.id.toLowerCase();
+      const gDisplay = formatGameDisplayName(g.id).toLowerCase();
+      if (gid === clean || gDisplay === clean) return true;
+      if (norm.length >= 3) {
+        const gNorm = normalizeGameIdentifier(g.id);
+        const gDisplayNorm = normalizeGameIdentifier(gDisplay);
+        if (gNorm === norm || gDisplayNorm === norm) return true;
+      }
+      return false;
+    }) ?? null
+  );
+}
+
+/**
+ * Detecta y extrae el identificador o nombre de un juego a partir de un objeto con gameId, título, cuerpo y lista de juegos configurados.
+ */
+export function detectGameFromText({
+  gameId,
+  title,
+  body,
+  games,
+}: {
+  gameId?: string | null;
+  title?: string | null;
+  body?: string | null;
+  games?: readonly ConfiguredGame[];
+}): string | null {
+  if (gameId?.trim()) return gameId.trim();
+
+  const titleStr = title?.trim() || "";
+  const bodyStr = body?.trim() || "";
+  const titleLower = titleStr.toLowerCase();
+  const bodyLower = bodyStr.toLowerCase();
+
+  // 1. Coincidencia contra la lista de juegos configurados
+  if (games?.length) {
+    for (const g of games) {
+      const dName = formatGameDisplayName(g.id).toLowerCase();
+      const gId = g.id.toLowerCase();
+      const normId = normalizeGameIdentifier(g.id);
+      const normName = normalizeGameIdentifier(dName);
+
+      if (
+        bodyLower.includes(dName) ||
+        bodyLower.includes(gId) ||
+        titleLower.includes(dName) ||
+        titleLower.includes(gId) ||
+        (normId.length >= 4 && normalizeGameIdentifier(bodyLower).includes(normId)) ||
+        (normName.length >= 4 && normalizeGameIdentifier(bodyLower).includes(normName))
+      ) {
+        return g.id;
+      }
+    }
+  }
+
+  // 2. Extracción por patrones de texto comunes (notificaciones, overlays, sync)
+  const startMatch = bodyStr.match(/iniciaste\s+(.+)$/i);
+  if (startMatch && startMatch[1].trim().length < 50) return startMatch[1].trim();
+
+  const friendMatch = bodyStr.match(/está jugando\s+(.+)$/i);
+  if (friendMatch && friendMatch[1].trim().length < 50) return friendMatch[1].trim();
+
+  const forMatch = bodyStr.match(/para\s+([^.]+)\.?$/i);
+  if (forMatch && forMatch[1].trim().length < 50) return forMatch[1].trim();
+
+  const colonMatch = bodyStr.match(/^([^:]{3,40}):/);
+  if (colonMatch) return colonMatch[1].trim();
+
+  return null;
 }

@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import type { ConfiguredGame } from "@app-types/config";
 import { GameCard } from "@features/games/GameCard";
 import { formatSize } from "@utils/format";
-import { formatGameDisplayName } from "@utils/gameImage";
+import { formatGameDisplayName, findConfiguredGame } from "@utils/gameImage";
 import type { FriendGameSummary } from "@hooks/useFriendsPage";
 import { PublicProfileHero } from "@features/profile/PublicProfileHero";
 import { STEAM_CATALOG_GAME_ID_PREFIX } from "@utils/steamCatalogGameId";
@@ -127,26 +127,11 @@ export function FriendGamesSection({
 
   const activePlayingSummary = useMemo(() => {
     if (presenceStatus !== "playing") return null;
-    const cleanId = presenceGameId?.trim().toLowerCase();
-    const cleanName = presenceGameName?.trim().toLowerCase();
-    if (!cleanId && !cleanName) return null;
-
-    return (
-      summaries.find((s) => {
-        const gid = s.game.id.toLowerCase();
-        const gDisplayName = formatGameDisplayName(s.game.id).toLowerCase();
-        const normId = gid.replace(/[-_ ]/g, "");
-        const normName = gDisplayName.replace(/[-_ ]/g, "");
-        const targetId = cleanId ? cleanId.replace(/[-_ ]/g, "") : "";
-        const targetName = cleanName ? cleanName.replace(/[-_ ]/g, "") : "";
-
-        return (
-          (targetId && (normId === targetId || normName === targetId)) ||
-          (targetName && (normId === targetName || normName === targetName))
-        );
-      }) ?? null
-    );
-  }, [summaries, presenceStatus, presenceGameId, presenceGameName]);
+    const matched =
+      findConfiguredGame(friendGames, presenceGameId) || findConfiguredGame(friendGames, presenceGameName);
+    if (!matched) return null;
+    return summaries.find((s) => s.game.id === matched.id) ?? null;
+  }, [summaries, friendGames, presenceStatus, presenceGameId, presenceGameName]);
 
   const activeGameId = presenceGameId || activePlayingSummary?.game.id || null;
   const activeGameName =

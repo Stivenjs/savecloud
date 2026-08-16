@@ -56,7 +56,11 @@ function getRootElement(): HTMLElement {
  * Componente wrapper para la aplicación en modo overlay
  */
 function OverlayWrapper({ children }: { children: React.ReactNode }) {
-  return <HeroUIProvider>{children}</HeroUIProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <HeroUIProvider>{children}</HeroUIProvider>
+    </QueryClientProvider>
+  );
 }
 
 /**

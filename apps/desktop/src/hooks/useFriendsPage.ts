@@ -28,7 +28,7 @@ import { toastError, toastInfo, toastSyncResult } from "@utils/toast";
 import { useConfig } from "@hooks/useConfig";
 import { useQueryClient } from "@tanstack/react-query";
 import { getUnknownErrorMessage } from "@utils/errorMessage";
-import { formatGameDisplayName } from "@utils/gameImage";
+import { formatGameDisplayName, findConfiguredGame } from "@utils/gameImage";
 import i18n from "@lib/i18n";
 
 export interface FriendGameSummary {
@@ -525,7 +525,7 @@ export function useFriendsPage() {
         syncListRemoteSavesForUser(userId),
       ]);
       const gameSaves = saves.filter((s) => s.gameId.toLowerCase() === gameId.toLowerCase());
-      const friendGame = friendCfg?.games?.find((g) => g.id.toLowerCase() === gameId.toLowerCase());
+      const friendGame = findConfiguredGame(friendCfg?.games, gameId);
       dispatch({
         type: "SET_SHARE_LINK_PREVIEW",
         payload: {
@@ -654,7 +654,7 @@ export function useFriendsPage() {
       return;
     }
 
-    const matchedGame = friendConfig?.games?.find((g) => g.id.toLowerCase() === gameId.toLowerCase());
+    const matchedGame = findConfiguredGame(friendConfig?.games, gameId);
     const gameDisplayName = matchedGame ? formatGameDisplayName(matchedGame.id) : formatGameDisplayName(gameId);
     dispatch({
       type: "SET_COPY_CONFIRM_PREVIEW",

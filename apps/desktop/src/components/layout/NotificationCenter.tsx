@@ -11,7 +11,7 @@ import type { NotificationRecord } from "@services/tauri/notifications.service";
 import { formatRelativeDate } from "@utils/format";
 import { formatDayGroupHeading, getLocalDayKey } from "@utils/operationHistory";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
-import { formatGameDisplayName } from "@utils/gameImage";
+import { formatGameDisplayName, detectGameFromText } from "@utils/gameImage";
 import { useConfig } from "@hooks/useConfig";
 import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
 
@@ -118,42 +118,10 @@ function NotificationRow({
   const downloadDir = getDownloadDir(n);
   const downloadUri = getDownloadUri(n);
 
-  const detectedGameId = useMemo(() => {
-    if (n.gameId?.trim()) return n.gameId.trim();
-
-    if (config?.games?.length) {
-      const bodyLower = n.body.toLowerCase();
-      const titleLower = n.title.toLowerCase();
-      for (const g of config.games) {
-        const dName = formatGameDisplayName(g.id).toLowerCase();
-        const gId = g.id.toLowerCase();
-        const normId = gId.replace(/[-_ ]/g, "");
-        const normName = dName.replace(/[-_ ]/g, "");
-
-        if (
-          bodyLower.includes(dName) ||
-          bodyLower.includes(gId) ||
-          titleLower.includes(dName) ||
-          titleLower.includes(gId) ||
-          (normId.length >= 4 && bodyLower.replace(/[-_ ]/g, "").includes(normId)) ||
-          (normName.length >= 4 && bodyLower.replace(/[-_ ]/g, "").includes(normName))
-        ) {
-          return g.id;
-        }
-      }
-    }
-
-    const colonMatch = n.body.match(/^([^:]{3,40}):/);
-    if (colonMatch) {
-      return colonMatch[1].trim();
-    }
-    const forMatch = n.body.match(/para\s+([^.]{3,40})\.?$/i);
-    if (forMatch) {
-      return forMatch[1].trim();
-    }
-
-    return null;
-  }, [n.gameId, n.body, n.title, config?.games]);
+  const detectedGameId = useMemo(
+    () => detectGameFromText({ gameId: n.gameId, title: n.title, body: n.body, games: config?.games }),
+    [n.gameId, n.body, n.title, config?.games]
+  );
 
   let displayBody = n.body;
   if (n.gameId) {
