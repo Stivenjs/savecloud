@@ -23,6 +23,22 @@ export function getSteamCdnCandidates(appId: string): string[] {
 }
 
 /**
+ * Devuelve la lista jerárquica de URLs candidatas optimizadas para miniaturas pequeñas (capsule_sm_120, capsule_231x87, header).
+ */
+export function getSteamThumbnailCandidates(appId: string): string[] {
+  const cleanId = appId.trim();
+  if (!cleanId) return [];
+  return [
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_sm_120.jpg`,
+    `${STEAM_AKAMAI_CDN_BASE}/${cleanId}/capsule_sm_120.jpg`,
+    `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/capsule_sm_120.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_231x87.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/header.jpg`,
+    `${STEAM_AKAMAI_CDN_BASE}/${cleanId}/header.jpg`,
+  ];
+}
+
+/**
  * Obtiene la URL de la imagen del juego.
  *
  * Prioridad:

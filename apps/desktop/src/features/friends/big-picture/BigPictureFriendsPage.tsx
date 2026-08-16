@@ -244,7 +244,9 @@ export function BigPictureFriendsPage() {
                 }
                 summaries={summaries}
                 presenceStatus={searchedFriendPresence?.status}
+                presenceGameId={searchedFriendPresence?.gameId ?? null}
                 presenceGameName={searchedFriendPresence?.gameName ?? null}
+                fallbackStartedAt={searchedFriendPresence?.lastSeenAt ?? null}
                 copyingGameId={copyingGameId}
                 onAddGamesPress={handleAddGamesPress}
                 onCopySaves={handleCopySaves}

@@ -2,10 +2,12 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Chip, Divider, Input, Skeleton, Tab, Tabs } from "@heroui/react";
 import { useTranslation } from "react-i18next";
-import { Check, Cloud, Copy, LogOut, Mail, Plus, RefreshCcw, Trash2, UserRound, Eye, X } from "lucide-react";
-import type { CloudInvite, CloudMembership } from "@services/tauri/invites.service";
+import { Check, Clock, Cloud, Copy, LogOut, Mail, Plus, RefreshCcw, Trash2, UserRound, Eye, X } from "lucide-react";
+import type { CloudInvite, CloudMembership, CloudPresenceItem } from "@services/tauri/invites.service";
 import { listCloudPresence } from "@services/tauri/invites.service";
 import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
+import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
+import { useGameSessionDuration } from "@store/GameSessionStore";
 import { getFriendsConfigs } from "@services/tauri";
 import { ProfileAvatar } from "@features/profile";
 import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
@@ -13,6 +15,45 @@ import {
   CloudMembershipActionConfirmModal,
   type CloudMembershipActionType,
 } from "@features/friends/CloudMembershipActionConfirmModal";
+
+function FriendPresenceSubtitle({
+  userId,
+  roleLabel,
+  presence,
+}: {
+  userId: string;
+  roleLabel: string;
+  presence?: CloudPresenceItem;
+}) {
+  const isPlaying = presence?.status === "playing" && Boolean(presence?.gameName || presence?.gameId);
+  const { formattedDuration, sessionSeconds } = useGameSessionDuration({
+    gameId: presence?.gameId,
+    userId,
+    fallbackStartedAt: presence?.lastSeenAt,
+    isRunning: isPlaying,
+  });
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+      <p className="text-[10px] text-default-400">{roleLabel}</p>
+      {isPlaying && (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-[10px] text-default-400">·</span>
+          <PlayingGameThumbnail gameId={presence?.gameId} gameName={presence?.gameName} size="xs" />
+          <span className="truncate text-[10px] font-medium text-emerald-500 dark:text-emerald-400">
+            {presence?.gameName || presence?.gameId}
+          </span>
+          {sessionSeconds > 0 && (
+            <span className="inline-flex items-center gap-0.5 text-[9.5px] text-default-400">
+              <Clock size={9} className="text-emerald-400" />
+              <span>{formattedDuration}</span>
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SectionCard({
   title,
@@ -428,12 +469,11 @@ export function FriendsInvitesTab({
                             />
                             <div className="min-w-0">
                               <p className="truncate text-xs font-medium">{m.hostUserId}</p>
-                              <p className="text-[10px] text-default-400">
-                                {t("friends.invitesTab.host")}
-                                {getPresence(m.hostUserId)?.status === "playing" && getPresence(m.hostUserId)?.gameName
-                                  ? ` · ${getPresence(m.hostUserId)?.gameName}`
-                                  : ""}
-                              </p>
+                              <FriendPresenceSubtitle
+                                userId={m.hostUserId}
+                                roleLabel={t("friends.invitesTab.host")}
+                                presence={getPresence(m.hostUserId)}
+                              />
                             </div>
                           </div>
                           <div className="flex shrink-0 flex-wrap justify-end gap-2">
@@ -498,13 +538,11 @@ export function FriendsInvitesTab({
                           />
                           <div className="min-w-0">
                             <p className="truncate text-xs font-medium">{m.memberUserId}</p>
-                            <p className="text-[10px] text-default-400">
-                              {t("friends.invitesTab.member")}
-                              {getPresence(m.memberUserId)?.status === "playing" &&
-                              getPresence(m.memberUserId)?.gameName
-                                ? ` · ${getPresence(m.memberUserId)?.gameName}`
-                                : ""}
-                            </p>
+                            <FriendPresenceSubtitle
+                              userId={m.memberUserId}
+                              roleLabel={t("friends.invitesTab.member")}
+                              presence={getPresence(m.memberUserId)}
+                            />
                           </div>
                         </div>
                         <div className="flex shrink-0 flex-wrap justify-end gap-2">

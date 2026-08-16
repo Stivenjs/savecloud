@@ -1268,6 +1268,8 @@
       "offline": "Offline",
       "noConnection": "Offline",
       "playing": "Playing",
+      "sessionTime": "{{time}} in session",
+      "inSession": "In session: {{time}}",
       "unknown": "Unknown"
     },
     "actions": {
@@ -1631,6 +1633,8 @@
       "gamesCount_one": "{{count}} game",
       "gamesCount_other": "{{count}} games",
       "playingLabel": "Playing: {{game}}",
+      "sessionDuration": "In session: {{time}}",
+      "sessionDurationShort": "{{time}} in session",
       "levelLabel": "Level",
       "stats": {
         "games": "Games",

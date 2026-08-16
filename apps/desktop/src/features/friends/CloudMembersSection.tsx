@@ -85,7 +85,9 @@ export function CloudMembersSection({
                       userId={userId}
                       userAvatar={avatarByUser?.get(userId) ?? null}
                       status={presence?.status}
+                      gameId={presence?.gameId}
                       gameName={presence?.gameName}
+                      lastSeenAt={presence?.lastSeenAt}
                       loadingPresence={loadingPresence}
                       isActionLoading={isActionLoading === userId}
                       onViewProfile={onViewProfile}

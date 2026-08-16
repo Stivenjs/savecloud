@@ -1,5 +1,6 @@
 import { Calendar, CloudCheck } from "lucide-react";
 import { formatBytes, formatPlaytime, formatRelativeDate } from "@utils/format";
+import { useGameSessionDuration } from "@store/GameSessionStore";
 import type { GameStats } from "@services/tauri";
 import { GameDetailActions, type GameDetailActionsProps } from "./GameDetailActions";
 import { useTranslation } from "react-i18next";
@@ -19,6 +20,11 @@ export interface GameDetailActionStripProps extends GameDetailActionsProps {
 
 export function GameDetailActionStrip({ stats, isGameRunning, ...actionsProps }: GameDetailActionStripProps) {
   const { t } = useTranslation();
+  const { formattedDuration } = useGameSessionDuration({
+    gameId: stats?.gameId,
+    isRunning: isGameRunning,
+  });
+
   const hasMeta = !!stats;
   const hasActions = Boolean(
     actionsProps.onPlay || actionsProps.onOpenGraph || actionsProps.onEdit || actionsProps.onRemove
@@ -38,6 +44,20 @@ export function GameDetailActionStrip({ stats, isGameRunning, ...actionsProps }:
         <div className="flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-default-200/60 pt-3 lg:border-t-0 lg:pt-0 dark:border-default-100/15">
           {stats && (
             <>
+              {isGameRunning && (
+                <div className="flex min-w-30 items-start gap-2 text-sm text-emerald-500 font-medium">
+                  <span className="relative flex size-2 mt-1 shrink-0">
+                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+                  </span>
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                      En sesión
+                    </span>
+                    <span className="font-semibold tabular-nums text-emerald-500">{formattedDuration}</span>
+                  </div>
+                </div>
+              )}
               <StatBlock label={t("library.localSize")} value={formatBytes(stats.localSizeBytes)} />
               <StatBlock label={t("library.playtime")} value={formatPlaytime(stats.playtimeSeconds)} />
               {stats.localLastModified && (

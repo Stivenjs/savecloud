@@ -9,18 +9,23 @@ import type { ConfiguredGame } from "@app-types/config";
 import { getSteamAppdetailsMediaBatch } from "@services/tauri";
 import { GameCard } from "@features/games/GameCard";
 import { formatSize } from "@utils/format";
-import { getSteamAppId } from "@utils/gameImage";
+import { getSteamAppId, formatGameDisplayName } from "@utils/gameImage";
 import type { FriendGameSummary } from "@hooks/useFriendsPage";
 import { PublicProfileHero } from "@features/profile/PublicProfileHero";
 import { STEAM_CATALOG_GAME_ID_PREFIX } from "@utils/steamCatalogGameId";
 import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
+import { PlayingStatusBadge } from "@features/games/PlayingStatusBadge";
 
 interface FriendProfileBannerProps {
   userIdDisplay: string;
   gameCount: number;
   onAddGamesPress: () => void;
   presenceStatus?: "offline" | "online" | "playing";
+  presenceGameId?: string | null;
   presenceGameName?: string | null;
+  presenceImageUrl?: string | null;
+  presenceSteamAppId?: string | null;
+  fallbackStartedAt?: number | null;
 }
 
 function FriendProfileBanner({
@@ -28,7 +33,11 @@ function FriendProfileBanner({
   gameCount,
   onAddGamesPress,
   presenceStatus,
+  presenceGameId,
   presenceGameName,
+  presenceImageUrl,
+  presenceSteamAppId,
+  fallbackStartedAt,
 }: FriendProfileBannerProps) {
   const { t } = useTranslation();
 
@@ -41,13 +50,22 @@ function FriendProfileBanner({
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-mono text-sm text-foreground">{userIdDisplay}</p>
-            <PresenceStatusChip status={presenceStatus} />
+            {presenceStatus !== "playing" && <PresenceStatusChip status={presenceStatus} />}
           </div>
           <p className="text-xs text-default-500">{t("friends.gamesSection.gamesInProfile", { count: gameCount })}</p>
-          {presenceStatus === "playing" && presenceGameName ? (
-            <p className="text-xs text-default-500">
-              {t("friends.gamesSection.playing", { gameName: presenceGameName })}
-            </p>
+          {presenceStatus === "playing" && (presenceGameName || presenceGameId) ? (
+            <div className="pt-1">
+              <PlayingStatusBadge
+                gameId={presenceGameId}
+                gameName={presenceGameName}
+                imageUrl={presenceImageUrl}
+                steamAppId={presenceSteamAppId}
+                fallbackStartedAt={fallbackStartedAt}
+                userId={userIdDisplay}
+                variant="inline"
+                size="sm"
+              />
+            </div>
           ) : null}
         </div>
         <Button variant="bordered" color="primary" startContent={<UserPlus size={18} />} onPress={onAddGamesPress}>
@@ -71,7 +89,9 @@ interface FriendGamesSectionProps {
   friendVisualProfile?: FriendVisualProfileProps | null;
   summaries: FriendGameSummary[];
   presenceStatus?: "offline" | "online" | "playing";
+  presenceGameId?: string | null;
   presenceGameName?: string | null;
+  fallbackStartedAt?: number | null;
   copyingGameId: string | null;
   onAddGamesPress: () => void;
   onCopySaves: (gameId: string) => void;
@@ -83,7 +103,9 @@ export function FriendGamesSection({
   friendVisualProfile,
   summaries,
   presenceStatus,
+  presenceGameId,
   presenceGameName,
+  fallbackStartedAt,
   copyingGameId,
   onAddGamesPress,
   onCopySaves,
@@ -93,6 +115,35 @@ export function FriendGamesSection({
   const isLowPerf = useLowPerformanceMode();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const activePlayingSummary = useMemo(() => {
+    if (presenceStatus !== "playing") return null;
+    const cleanId = presenceGameId?.trim().toLowerCase();
+    const cleanName = presenceGameName?.trim().toLowerCase();
+    if (!cleanId && !cleanName) return null;
+
+    return (
+      summaries.find((s) => {
+        const gid = s.game.id.toLowerCase();
+        const gDisplayName = formatGameDisplayName(s.game.id).toLowerCase();
+        const normId = gid.replace(/[-_ ]/g, "");
+        const normName = gDisplayName.replace(/[-_ ]/g, "");
+        const targetId = cleanId ? cleanId.replace(/[-_ ]/g, "") : "";
+        const targetName = cleanName ? cleanName.replace(/[-_ ]/g, "") : "";
+
+        return (
+          (targetId && (normId === targetId || normName === targetId)) ||
+          (targetName && (normId === targetName || normName === targetName))
+        );
+      }) ?? null
+    );
+  }, [summaries, presenceStatus, presenceGameId, presenceGameName]);
+
+  const activeGameId = presenceGameId || activePlayingSummary?.game.id || null;
+  const activeGameName =
+    presenceGameName || (activePlayingSummary ? formatGameDisplayName(activePlayingSummary.game.id) : null);
+  const activeImageUrl = activePlayingSummary?.game.imageUrl || null;
+  const activeSteamAppId = activePlayingSummary?.game.steamAppId || null;
 
   const steamAppIdsForBatch = useMemo(() => {
     const ids = summaries.map((s) => getSteamAppId(s.game, s.game.steamAppId)).filter((id): id is string => !!id);
@@ -144,11 +195,18 @@ export function FriendGamesSection({
           gamesCount={summaries.length}
           statusContent={
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <PresenceStatusChip status={presenceStatus} />
-              {presenceStatus === "playing" && presenceGameName ? (
-                <span className="text-xs text-default-500">
-                  {t("friends.gamesSection.playing", { gameName: presenceGameName })}
-                </span>
+              {presenceStatus !== "playing" && <PresenceStatusChip status={presenceStatus} />}
+              {presenceStatus === "playing" && (activeGameName || activeGameId) ? (
+                <PlayingStatusBadge
+                  gameId={activeGameId}
+                  gameName={activeGameName}
+                  imageUrl={activeImageUrl}
+                  steamAppId={activeSteamAppId}
+                  fallbackStartedAt={fallbackStartedAt}
+                  userId={userIdDisplay}
+                  variant="inline"
+                  size="sm"
+                />
               ) : null}
             </div>
           }
@@ -164,7 +222,11 @@ export function FriendGamesSection({
         userIdDisplay={userIdDisplay}
         gameCount={summaries.length}
         presenceStatus={presenceStatus}
-        presenceGameName={presenceGameName}
+        presenceGameId={activeGameId}
+        presenceGameName={activeGameName}
+        presenceImageUrl={activeImageUrl}
+        presenceSteamAppId={activeSteamAppId}
+        fallbackStartedAt={fallbackStartedAt}
         onAddGamesPress={onAddGamesPress}
       />
     );

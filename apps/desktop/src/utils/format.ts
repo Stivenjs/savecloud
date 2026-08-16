@@ -70,6 +70,20 @@ export function formatPlaytime(seconds: number): string {
 }
 
 /**
+ * Formatea la duración de una sesión activa de juego (ej. "45s", "12m", "1h 24m").
+ */
+export function formatSessionDuration(seconds: number): string {
+  if (!seconds || seconds <= 0) return "0s";
+  if (seconds < 60) return `${Math.floor(seconds)}s`;
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+  return `${minutes}m`;
+}
+
+/**
  * Formatea la fecha de sincronización a un formato relativo amigable.
  */
 export function formatLastSync(date: Date): string {
