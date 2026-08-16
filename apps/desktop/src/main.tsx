@@ -13,6 +13,7 @@ import { queryClient } from "@lib/queryClient";
 import { useShellUiStore } from "@store/ShellUiStore";
 import App from "@/App";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
+import { useDeveloperModeProtection } from "@hooks/useDeveloperModeProtection";
 import { useEffect } from "react";
 import { preloadHls } from "@utils/hls";
 import "@/styles/index.css";
@@ -56,6 +57,7 @@ function getRootElement(): HTMLElement {
  * Componente wrapper para la aplicación en modo overlay
  */
 function OverlayWrapper({ children }: { children: React.ReactNode }) {
+  useDeveloperModeProtection();
   return (
     <QueryClientProvider client={queryClient}>
       <HeroUIProvider>{children}</HeroUIProvider>
@@ -67,6 +69,7 @@ function OverlayWrapper({ children }: { children: React.ReactNode }) {
  * Componente wrapper para la aplicación principal
  */
 function AppConfigProvider({ children }: { children: React.ReactNode }) {
+  useDeveloperModeProtection();
   const lowPerf = useLowPerformanceMode();
 
   useEffect(() => {

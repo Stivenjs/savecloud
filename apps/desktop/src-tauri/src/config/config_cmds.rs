@@ -284,10 +284,13 @@ pub fn set_full_backup_packaged_compression_level(level: Option<i32>) -> Result<
 
 /// Activa o desactiva el modo desarrollador del **perfil activo** (`settings.json` bajo ese perfil).
 #[tauri::command]
-pub fn set_developer_mode(enabled: bool) -> Result<(), String> {
+pub fn set_developer_mode(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
     let mut settings = config::load_settings();
     settings.developer_mode = enabled;
-    config::save_settings(&settings)
+    config::save_settings(&settings)?;
+    let _ = app.emit("config-changed", ());
+    let _ = app.emit("developer-mode-changed", enabled);
+    Ok(())
 }
 
 /// Activa o desactiva el modo bajo rendimiento.

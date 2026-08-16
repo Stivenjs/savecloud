@@ -30,7 +30,6 @@ import { STEAM_CATALOG_PAGE_SIZE } from "@/constants/constants";
  * - Respaldar periódicamente la configuración del usuario en la nube.
  * - Comprobar actualizaciones de la aplicación (solo en producción).
  * - Escuchar eventos de sincronización automática emitidos desde el backend de Tauri.
- * - Bloquear acciones de desarrollo en producción salvo «Modo desarrollador» del perfil activo (sesión).
  *
  * Debe usarse una sola vez en el nivel raíz de la aplicación
  * (por ejemplo en `App.tsx`).
@@ -44,7 +43,6 @@ import { STEAM_CATALOG_PAGE_SIZE } from "@/constants/constants";
  * ```
  */
 export function useAppInitialization() {
-  const developerMode = useProfileSessionStore((s) => s.activeProfile?.developerMode ?? false);
   useLanguageInitialization();
   useInputManager();
   initSyncListeners();
@@ -231,46 +229,6 @@ export function useAppInitialization() {
       unsubErr.then((f) => f());
     };
   }, []);
-
-  /**
-   * Bloquea acciones de desarrollo en producción.
-   *
-   * Evita que el usuario pueda:
-   * - Recargar la app (F5 / Ctrl+R)
-   * - Abrir DevTools (F12 / Ctrl+Shift+I)
-   * - Abrir inspector (Ctrl+Shift+C)
-   * - Abrir menú contextual (click derecho)
-   */
-  useEffect(() => {
-    if (import.meta.env.DEV || developerMode) return;
-
-    const blockKeys = (e: KeyboardEvent) => {
-      const key = e.key.toLowerCase();
-
-      if (
-        e.key === "F5" ||
-        e.key === "F12" ||
-        (e.ctrlKey && key === "r") ||
-        (e.ctrlKey && e.shiftKey && key === "r") ||
-        (e.ctrlKey && e.shiftKey && key === "i") ||
-        (e.ctrlKey && e.shiftKey && key === "c")
-      ) {
-        e.preventDefault();
-      }
-    };
-
-    const blockContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-    };
-
-    window.addEventListener("keydown", blockKeys);
-    window.addEventListener("contextmenu", blockContextMenu);
-
-    return () => {
-      window.removeEventListener("keydown", blockKeys);
-      window.removeEventListener("contextmenu", blockContextMenu);
-    };
-  }, [developerMode]);
 
   /**
    * Prefetch de la primera página del catálogo de Steam 1 segundo después del inicio.
