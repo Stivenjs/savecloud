@@ -77,6 +77,7 @@ interface AppRuntimeProps {
 }
 
 import { StreamingOverlay } from "@components/streaming/StreamingOverlay";
+import { StreamingDryRunMetricsModal } from "@features/streaming";
 
 export function AppRuntime({ hideTitleBar = false }: AppRuntimeProps) {
   useProfileSessionHydration();
@@ -87,6 +88,7 @@ export function AppRuntime({ hideTitleBar = false }: AppRuntimeProps) {
       <TrayActionsListener />
       <UnsyncedSavesModalWithProgress />
       <StreamingOverlay />
+      <StreamingDryRunMetricsModal />
 
       <HashRouter>
         <AppContent hideTitleBar={hideTitleBar} />

@@ -79,6 +79,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::commands::sync::backup::cleanup_old_backups,
         crate::commands::sync::backup::delete_all_local_backups,
         crate::commands::sync::full_backup::create_and_upload_full_backup,
+        crate::commands::sync::full_backup::test_streaming_full_backup,
         crate::commands::sync::full_backup::list_full_backups,
         crate::commands::sync::full_backup::list_full_backups_batch,
         crate::commands::sync::full_backup::download_and_restore_full_backup,

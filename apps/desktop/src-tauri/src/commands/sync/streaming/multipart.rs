@@ -43,7 +43,7 @@ use crate::network::DATA_CLIENT;
 use super::super::api;
 use super::super::events::emit_sync_upload_progress;
 use super::super::models::{SyncOperationStrategy, SyncProgressPayload};
-use super::tar_stream::TarStreamMsg;
+use super::tar_stream::{TarStreamMsg, TarStreamStats};
 use super::upload_strategy::{ConcurrencyController, UploadStrategy};
 use crate::commands::logs::sync_logger;
 
@@ -757,7 +757,7 @@ pub(crate) async fn upload_tar_stream_multipart(
                 sync_logger::log_error("full_backup_streaming_error", &log_ctx, &e);
                 return Err(e);
             }
-            TarStreamMsg::Done => break,
+            TarStreamMsg::Done(_) => break,
         }
     }
 
@@ -826,28 +826,57 @@ pub(crate) async fn upload_tar_stream_multipart(
     Ok(())
 }
 
+/// Métricas detalladas recopiladas al finalizar una prueba de streaming TAR (dry-run).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StreamingDryRunMetrics {
+    pub game_id: String,
+    pub filename: String,
+    pub original_bytes: u64,
+    pub compressed_bytes: u64,
+    pub saved_bytes: u64,
+    pub saved_ratio: f64,
+    pub saved_percentage: f64,
+    pub duration_ms: u64,
+    pub throughput_mb_s: f64,
+    pub output_throughput_mb_s: f64,
+    pub zstd_level: i32,
+    pub threads: u32,
+    pub total_files: u64,
+    pub total_dirs: u64,
+    pub total_symlinks: u64,
+    pub chunks_count: u64,
+    pub simulated_part_size: usize,
+    pub simulated_parts_count: u32,
+}
+
 /// Ejecuta una simulación de subida sin tocar el API ni S3, midiendo el impacto comprimido.
 pub(crate) async fn upload_tar_stream_multipart_dry_run(
     mut rx: tokio::sync::mpsc::Receiver<TarStreamMsg>,
     game_id: &str,
     relative_filename: &str,
     estimated_total: u64,
+    zstd_compression_level: i32,
     app: tauri::AppHandle,
     cancel: Option<std::sync::Arc<crate::tray::tray_state::TrayStateInner>>,
     shutdown_token: Option<tokio_util::sync::CancellationToken>,
-) -> Result<(), String> {
+) -> Result<StreamingDryRunMetrics, String> {
     let strategy = UploadStrategy::for_file(estimated_total);
     let display_name = format!("{} (stream dry-run)", relative_filename);
     let log_ctx = format!(
-        "gameId={} filename={} (streaming dry-run) strategy=[{}]",
+        "gameId={} filename={} (streaming dry-run) strategy=[{}] zstd={}",
         game_id,
         relative_filename,
         strategy.describe(),
+        zstd_compression_level,
     );
     sync_logger::log_operation("full_backup_streaming_dry_run_start", &log_ctx);
 
+    let start_time = Instant::now();
     let mut uploaded_bytes: u64 = 0;
+    let mut chunks_count: u64 = 0;
     let mut last_pct: u8 = 0;
+    let mut stats = TarStreamStats::default();
 
     maybe_emit_progress(
         &app,
@@ -881,6 +910,7 @@ pub(crate) async fn upload_tar_stream_multipart_dry_run(
         match msg {
             TarStreamMsg::Chunk(bytes, original_processed) => {
                 uploaded_bytes += bytes.len() as u64;
+                chunks_count += 1;
 
                 maybe_emit_progress(
                     &app,
@@ -896,7 +926,10 @@ pub(crate) async fn upload_tar_stream_multipart_dry_run(
                 sync_logger::log_error("full_backup_streaming_dry_run_error", &log_ctx, &e);
                 return Err(e);
             }
-            TarStreamMsg::Done => break,
+            TarStreamMsg::Done(tar_stats) => {
+                stats = tar_stats;
+                break;
+            }
         }
     }
 
@@ -911,14 +944,76 @@ pub(crate) async fn upload_tar_stream_multipart_dry_run(
         true,
     );
 
+    let elapsed = start_time.elapsed();
+    let duration_ms = elapsed.as_millis() as u64;
+    let duration_secs = elapsed.as_secs_f64().max(0.001);
+
+    let original_bytes = if stats.uncompressed_bytes > 0 {
+        stats.uncompressed_bytes
+    } else {
+        estimated_total
+    };
+    let compressed_bytes = uploaded_bytes;
+    let saved_bytes = original_bytes.saturating_sub(compressed_bytes);
+    let saved_ratio = if compressed_bytes > 0 {
+        original_bytes as f64 / compressed_bytes as f64
+    } else {
+        1.0
+    };
+    let saved_percentage = if original_bytes > 0 {
+        ((saved_bytes as f64 / original_bytes as f64) * 100.0).clamp(0.0, 100.0)
+    } else {
+        0.0
+    };
+    let throughput_mb_s = (original_bytes as f64 / (1024.0 * 1024.0)) / duration_secs;
+    let output_throughput_mb_s = (compressed_bytes as f64 / (1024.0 * 1024.0)) / duration_secs;
+    let simulated_part_size = strategy.part_size;
+    let simulated_parts_count = if compressed_bytes == 0 {
+        1
+    } else {
+        ((compressed_bytes + simulated_part_size as u64 - 1) / simulated_part_size as u64) as u32
+    };
+    let threads = (num_cpus::get() - 1).max(1) as u32;
+
+    let metrics = StreamingDryRunMetrics {
+        game_id: game_id.to_string(),
+        filename: relative_filename.to_string(),
+        original_bytes,
+        compressed_bytes,
+        saved_bytes,
+        saved_ratio,
+        saved_percentage,
+        duration_ms,
+        throughput_mb_s,
+        output_throughput_mb_s,
+        zstd_level: zstd_compression_level,
+        threads,
+        total_files: stats.files_count,
+        total_dirs: stats.dirs_count,
+        total_symlinks: stats.symlinks_count,
+        chunks_count,
+        simulated_part_size,
+        simulated_parts_count,
+    };
+
+    // Emitir evento Tauri dedicado al frontend con las métricas completas
+    crate::commands::sync::events::emit_streaming_dry_run_completed(&app, &metrics);
+
     let final_ctx = format!(
-        "{} | original_mb={:.1} compressed_mb={:.1}",
+        "{} | original_mb={:.2} compressed_mb={:.2} saved_mb={:.2} ({:.1}%) ratio={:.2}x throughput={:.1}MB/s duration={}ms files={}",
         log_ctx,
-        estimated_total as f64 / (1024.0 * 1024.0),
-        uploaded_bytes as f64 / (1024.0 * 1024.0)
+        original_bytes as f64 / (1024.0 * 1024.0),
+        compressed_bytes as f64 / (1024.0 * 1024.0),
+        saved_bytes as f64 / (1024.0 * 1024.0),
+        saved_percentage,
+        saved_ratio,
+        throughput_mb_s,
+        duration_ms,
+        stats.files_count,
     );
     sync_logger::log_operation("full_backup_streaming_dry_run_complete", &final_ctx);
-    Ok(())
+
+    Ok(metrics)
 }
 
 /// Sube una parte a S3 mediante PUT y devuelve número de parte, ETag,

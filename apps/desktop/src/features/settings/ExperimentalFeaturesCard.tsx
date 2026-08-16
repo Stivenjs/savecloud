@@ -1,8 +1,14 @@
-import { Button, Card, CardBody, Switch } from "@heroui/react";
-import { Beaker } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Button, Card, CardBody, Select, SelectItem, Switch } from "@heroui/react";
+import { Beaker, Gauge, Play, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { useTranslation, Trans } from "react-i18next";
+import { useConfig } from "@hooks/useConfig";
+import { testStreamingFullBackup } from "@services/tauri";
+import { useStreamingMetricsStore } from "@store/StreamingMetricsStore";
+import { formatGameDisplayName } from "@utils/gameImage";
+import { formatBytes } from "@utils/format";
+import { toastError, toastSuccess } from "@utils/toast";
 
 /** Coincide con `FULL_BACKUP_PACKAGED_ZSTD_DEFAULT` en el backend (histórico antes de esta opción). */
 const PACKAGED_ZSTD_DEFAULT = 5;
@@ -36,10 +42,26 @@ export function ExperimentalFeaturesCard({
   onFullBackupPackagedCompressionLevelChange,
 }: ExperimentalFeaturesCardProps) {
   const { t } = useTranslation();
+  const { config } = useConfig();
+  const games = useMemo(() => config?.games ?? [], [config?.games]);
+
+  const currentMetrics = useStreamingMetricsStore((s) => s.currentMetrics);
+  const openMetricsModal = useStreamingMetricsStore((s) => s.openMetricsModal);
+
   const [localZstdLevel, setLocalZstdLevel] = useState(() => levelFromProp(fullBackupPackagedCompressionLevel));
   const debouncedZstdLevel = useDebouncedValue(localZstdLevel, ZSTD_SLIDER_DEBOUNCE_MS);
   const prevDebouncedZstd = useRef<number | undefined>(undefined);
   const skipNextDebouncedPersist = useRef(false);
+
+  const [selectedGameId, setSelectedGameId] = useState<string>("");
+  const [testing, setTesting] = useState(false);
+
+  // Inicializar selección con el primer juego disponible si no hay uno seleccionado
+  useEffect(() => {
+    if (!selectedGameId && games.length > 0) {
+      setSelectedGameId(games[0].id);
+    }
+  }, [games, selectedGameId]);
 
   useEffect(() => {
     if (prevDebouncedZstd.current === undefined) {
@@ -54,6 +76,27 @@ export function ExperimentalFeaturesCard({
     }
     void onFullBackupPackagedCompressionLevelChange(persistedPayload(debouncedZstdLevel));
   }, [debouncedZstdLevel, onFullBackupPackagedCompressionLevelChange]);
+
+  const handleRunBenchmark = useCallback(async () => {
+    if (!selectedGameId) return;
+    setTesting(true);
+    try {
+      const metrics = await testStreamingFullBackup(selectedGameId, localZstdLevel);
+      openMetricsModal(metrics);
+      toastSuccess(
+        t("streaming.benchmark.successTitle", "Prueba completada"),
+        t("streaming.benchmark.successDesc", {
+          game: formatGameDisplayName(selectedGameId),
+          saved: formatBytes(metrics.savedBytes),
+          percent: metrics.savedPercentage.toFixed(1),
+        })
+      );
+    } catch (e) {
+      toastError(t("streaming.benchmark.errorTitle", "Error en la prueba"), e instanceof Error ? e.message : String(e));
+    } finally {
+      setTesting(false);
+    }
+  }, [selectedGameId, localZstdLevel, openMetricsModal, t]);
 
   const hasCustomZstdLevel = typeof fullBackupPackagedCompressionLevel === "number";
 
@@ -175,6 +218,79 @@ export function ExperimentalFeaturesCard({
                 </li>
               </ul>
             </div>
+          </div>
+
+          {/* BENCHMARK / TESTER SECTION */}
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3.5 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Gauge size={16} className="text-primary" />
+                <p className="text-sm font-semibold text-foreground">
+                  {t("settings.experimental.benchmark.title", "Probar Compresión Streaming (Dry-Run)")}
+                </p>
+              </div>
+              {currentMetrics ? (
+                <Button
+                  size="sm"
+                  variant="flat"
+                  color="primary"
+                  className="h-7 text-xs font-medium"
+                  onPress={() => openMetricsModal(currentMetrics)}>
+                  <Sparkles size={13} className="mr-1" />
+                  {t("settings.experimental.benchmark.viewRecent", "Ver métricas recientes")}
+                </Button>
+              ) : null}
+            </div>
+
+            <p className="text-xs text-default-500">
+              {t(
+                "settings.experimental.benchmark.desc",
+                "Simula el empaquetado y compresión TAR en tiempo real para medir velocidad y ahorro de espacio exacto sin subir nada a la nube."
+              )}
+            </p>
+
+            {games.length > 0 ? (
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                <div className="flex-1 min-w-0">
+                  <Select
+                    size="sm"
+                    label={t("settings.experimental.benchmark.selectGame", "Selecciona un juego")}
+                    selectedKeys={selectedGameId ? [selectedGameId] : []}
+                    onSelectionChange={(keys) => {
+                      const selected = Array.from(keys)[0];
+                      if (selected) setSelectedGameId(String(selected));
+                    }}
+                    className="max-w-full">
+                    {games.map((g) => (
+                      <SelectItem key={g.id} textValue={formatGameDisplayName(g.id)}>
+                        {formatGameDisplayName(g.id)}
+                      </SelectItem>
+                    ))}
+                  </Select>
+                </div>
+
+                <Button
+                  size="md"
+                  color="primary"
+                  variant="solid"
+                  className="h-10 px-4 font-semibold text-xs shrink-0"
+                  isLoading={testing}
+                  isDisabled={!selectedGameId || testing}
+                  startContent={!testing ? <Play size={15} /> : undefined}
+                  onPress={handleRunBenchmark}>
+                  {testing
+                    ? t("settings.experimental.benchmark.testing", "Comprimiendo...")
+                    : t("settings.experimental.benchmark.runButton", "Ejecutar prueba")}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-xs text-default-400 italic">
+                {t(
+                  "settings.experimental.benchmark.noGames",
+                  "Añade al menos un juego a tu biblioteca para probar la compresión."
+                )}
+              </p>
+            )}
           </div>
         </div>
       </CardBody>
