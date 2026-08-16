@@ -28,6 +28,7 @@ import { toastError, toastInfo, toastSyncResult } from "@utils/toast";
 import { useConfig } from "@hooks/useConfig";
 import { useQueryClient } from "@tanstack/react-query";
 import { getUnknownErrorMessage } from "@utils/errorMessage";
+import { formatGameDisplayName } from "@utils/gameImage";
 import i18n from "@lib/i18n";
 
 export interface FriendGameSummary {
@@ -49,6 +50,8 @@ export type CopyFriendSavesPreview = {
   friendId: string;
   gameId: string;
   gameDisplayName?: string;
+  imageUrl?: string;
+  steamAppId?: string;
   plan: CopyFriendFilePlan[];
   newCount: number;
   conflictCount: number;
@@ -651,13 +654,16 @@ export function useFriendsPage() {
       return;
     }
 
-    const gameDisplayName = friendConfig?.games?.find((g) => g.id.toLowerCase() === gameId.toLowerCase())?.id ?? gameId;
+    const matchedGame = friendConfig?.games?.find((g) => g.id.toLowerCase() === gameId.toLowerCase());
+    const gameDisplayName = matchedGame ? formatGameDisplayName(matchedGame.id) : formatGameDisplayName(gameId);
     dispatch({
       type: "SET_COPY_CONFIRM_PREVIEW",
       payload: {
         friendId,
         gameId,
         gameDisplayName,
+        imageUrl: matchedGame?.imageUrl,
+        steamAppId: matchedGame?.steamAppId,
         plan,
         newCount: newFiles.length,
         conflictCount: conflictFiles.length,

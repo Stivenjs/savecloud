@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Button, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader, Textarea } from "@heroui/react";
-import { FolderOpen } from "lucide-react";
+import { Button, Input, Modal, ModalBody, ModalContent, ModalFooter, Textarea } from "@heroui/react";
+import { FolderOpen, Sparkles } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import type { ConfiguredGame } from "@app-types/config";
 import { addGame } from "@services/tauri";
+import { formatGameDisplayName } from "@utils/gameImage";
+import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
 import { toastError, toastSuccess } from "@utils/toast";
 
 interface FriendGameTemplateModalProps {
@@ -32,6 +34,8 @@ export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: Fr
       setSteamAppId(game.steamAppId ?? "");
     }
   }, [game, isOpen]);
+
+  const displayName = game ? formatGameDisplayName(game.id) : "";
 
   const handleBrowsePath = async () => {
     try {
@@ -79,18 +83,48 @@ export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: Fr
       }}
       placement="center"
       size="lg">
-      <ModalContent>
-        <ModalHeader>{t("friends.templateModal.title")}</ModalHeader>
-        <ModalBody className="gap-4">
+      <ModalContent className="overflow-hidden">
+        {/* Header Hero con carátula del juego */}
+        {game ? (
+          <div className="relative border-b border-default-200/60 bg-default-100/40 p-4 dark:bg-default-50/5">
+            <div className="flex items-center gap-3.5">
+              <PlayingGameThumbnail
+                gameId={game.id}
+                gameName={displayName}
+                imageUrl={game.imageUrl}
+                steamAppId={game.steamAppId}
+                size="lg"
+                className="h-13 w-22 shrink-0 rounded-lg shadow-md"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Sparkles size={14} />
+                  </span>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+                    {t("friends.templateModal.title")}
+                  </span>
+                </div>
+                <h2 className="mt-0.5 truncate text-lg font-bold text-foreground">{displayName}</h2>
+                {game.id.toLowerCase() !== displayName.toLowerCase() && (
+                  <p className="truncate font-mono text-[11px] text-default-400">{game.id}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <ModalBody className="gap-3.5 pt-4">
           {game ? (
             <>
-              <p className="text-sm text-default-500">{t("friends.templateModal.desc")}</p>
+              <p className="text-xs text-default-500">{t("friends.templateModal.desc")}</p>
               <Input
                 label={t("friends.templateModal.gameIdLabel")}
                 placeholder={t("friends.templateModal.placeholder")}
                 value={gameId}
                 onValueChange={setGameId}
                 variant="bordered"
+                size="sm"
               />
               <Input
                 label={t("friends.templateModal.pathLabel")}
@@ -98,6 +132,7 @@ export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: Fr
                 value={path}
                 onValueChange={setPath}
                 variant="bordered"
+                size="sm"
                 endContent={
                   <button
                     type="button"
@@ -108,13 +143,24 @@ export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: Fr
                   </button>
                 }
               />
-              <Input
-                label={t("friends.templateModal.editionLabel")}
-                placeholder={t("friends.templateModal.editionPlaceholder")}
-                value={editionLabel}
-                onValueChange={setEditionLabel}
-                variant="bordered"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input
+                  label={t("friends.templateModal.editionLabel")}
+                  placeholder={t("friends.templateModal.editionPlaceholder")}
+                  value={editionLabel}
+                  onValueChange={setEditionLabel}
+                  variant="bordered"
+                  size="sm"
+                />
+                <Input
+                  label={t("friends.templateModal.steamAppIdLabel")}
+                  placeholder={t("friends.templateModal.steamPlaceholder")}
+                  value={steamAppId}
+                  onValueChange={setSteamAppId}
+                  variant="bordered"
+                  size="sm"
+                />
+              </div>
               <Input
                 label={t("friends.templateModal.sourceUrlLabel")}
                 placeholder={t("friends.templateModal.sourcePlaceholder")}
@@ -122,19 +168,14 @@ export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: Fr
                 value={sourceUrl}
                 onValueChange={setSourceUrl}
                 variant="bordered"
-              />
-              <Input
-                label={t("friends.templateModal.steamAppIdLabel")}
-                placeholder={t("friends.templateModal.steamPlaceholder")}
-                value={steamAppId}
-                onValueChange={setSteamAppId}
-                variant="bordered"
+                size="sm"
               />
               <Textarea
                 label={t("friends.templateModal.summaryLabel")}
                 readOnly
                 variant="bordered"
                 minRows={2}
+                className="text-xs"
                 value={
                   `${t("friends.templateModal.friendGamePrefix")}: ${game.id}\n` +
                   `${t("friends.templateModal.friendPathsPrefix")}: ${game.paths.join(", ")}`
@@ -149,7 +190,12 @@ export function FriendGameTemplateModal({ isOpen, game, onClose, onCreated }: Fr
           <Button variant="flat" onPress={onClose}>
             {t("common.cancel")}
           </Button>
-          <Button color="primary" onPress={handleSubmit} isLoading={saving} isDisabled={!game}>
+          <Button
+            color="primary"
+            onPress={handleSubmit}
+            isLoading={saving}
+            isDisabled={!game}
+            className="font-semibold shadow-sm">
             {t("friends.templateModal.createButton")}
           </Button>
         </ModalFooter>

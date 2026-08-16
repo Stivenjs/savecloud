@@ -1,20 +1,20 @@
 import { addTransitionType, startTransition, useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
-import { useQuery } from "@tanstack/react-query";
 import { Button, Card, CardBody } from "@heroui/react";
 import { Download, Settings2, UserPlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ConfiguredGame } from "@app-types/config";
-import { getSteamAppdetailsMediaBatch } from "@services/tauri";
 import { GameCard } from "@features/games/GameCard";
 import { formatSize } from "@utils/format";
-import { getSteamAppId, formatGameDisplayName } from "@utils/gameImage";
+import { formatGameDisplayName } from "@utils/gameImage";
 import type { FriendGameSummary } from "@hooks/useFriendsPage";
 import { PublicProfileHero } from "@features/profile/PublicProfileHero";
 import { STEAM_CATALOG_GAME_ID_PREFIX } from "@utils/steamCatalogGameId";
 import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
 import { PlayingStatusBadge } from "@features/games/PlayingStatusBadge";
+import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
+import { useGameMediaBatch, getIsResolvingIds } from "@hooks/useGameMedia";
 
 interface FriendProfileBannerProps {
   userIdDisplay: string;
@@ -116,6 +116,15 @@ export function FriendGamesSection({
   const navigate = useNavigate();
   const location = useLocation();
 
+  const friendGames = useMemo(() => summaries.map((s) => s.game), [summaries]);
+  const resolvedSteamAppIds = useResolvedSteamAppIds(friendGames);
+  const isResolvingIds = getIsResolvingIds(friendGames, resolvedSteamAppIds);
+  const { mediaBySteamAppId } = useGameMediaBatch({
+    games: friendGames,
+    resolvedSteamAppIds,
+    isResolvingIds,
+  });
+
   const activePlayingSummary = useMemo(() => {
     if (presenceStatus !== "playing") return null;
     const cleanId = presenceGameId?.trim().toLowerCase();
@@ -143,19 +152,10 @@ export function FriendGamesSection({
   const activeGameName =
     presenceGameName || (activePlayingSummary ? formatGameDisplayName(activePlayingSummary.game.id) : null);
   const activeImageUrl = activePlayingSummary?.game.imageUrl || null;
-  const activeSteamAppId = activePlayingSummary?.game.steamAppId || null;
-
-  const steamAppIdsForBatch = useMemo(() => {
-    const ids = summaries.map((s) => getSteamAppId(s.game, s.game.steamAppId)).filter((id): id is string => !!id);
-    return [...new Set(ids)];
-  }, [summaries]);
-
-  const { data: mediaBySteamAppId } = useQuery({
-    queryKey: ["steam-appdetails-media-batch", [...steamAppIdsForBatch].sort().join(",")],
-    queryFn: () => getSteamAppdetailsMediaBatch(steamAppIdsForBatch),
-    enabled: steamAppIdsForBatch.length > 0,
-    staleTime: 5 * 60 * 1000,
-  });
+  const activeSteamAppId =
+    activePlayingSummary?.game.steamAppId ||
+    (activePlayingSummary ? resolvedSteamAppIds[activePlayingSummary.game.id] : null) ||
+    null;
 
   const [openActionsGameId, setOpenActionsGameId] = useState<string | null>(null);
 
@@ -255,8 +255,8 @@ export function FriendGamesSection({
             <div key={game.id} className="space-y-1">
               <GameCard
                 game={game}
-                resolvedSteamAppId={game.steamAppId}
-                isLoading={false}
+                resolvedSteamAppId={resolvedSteamAppIds[game.id] ?? game.steamAppId}
+                isLoading={isResolvingIds}
                 mediaBySteamAppId={mediaBySteamAppId ?? null}
                 mediaFromBatch
                 actionsMenuOpen={openActionsGameId === game.id}
