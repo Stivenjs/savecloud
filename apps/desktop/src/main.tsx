@@ -14,6 +14,7 @@ import { useShellUiStore } from "@store/ShellUiStore";
 import App from "@/App";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { useDeveloperModeProtection } from "@hooks/useDeveloperModeProtection";
+import { useBackgroundPause } from "@hooks/Usebackgroundpause";
 import { useEffect } from "react";
 import { preloadHls } from "@utils/hls";
 import "@/styles/index.css";
@@ -58,6 +59,7 @@ function getRootElement(): HTMLElement {
  */
 function OverlayWrapper({ children }: { children: React.ReactNode }) {
   useDeveloperModeProtection();
+  useBackgroundPause();
   return (
     <QueryClientProvider client={queryClient}>
       <HeroUIProvider>{children}</HeroUIProvider>
@@ -70,6 +72,7 @@ function OverlayWrapper({ children }: { children: React.ReactNode }) {
  */
 function AppConfigProvider({ children }: { children: React.ReactNode }) {
   useDeveloperModeProtection();
+  useBackgroundPause();
   const lowPerf = useLowPerformanceMode();
 
   useEffect(() => {

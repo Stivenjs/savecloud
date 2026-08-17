@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { useEffect, useState } from "react";
 import { formatSessionDuration } from "@utils/format";
+import { visibilityManager } from "@hooks/useAppVisibility";
 
 interface GameSessionState {
   /**
@@ -145,12 +146,37 @@ export function useGameSessionDuration(options: UseGameSessionDurationOptions) {
   useEffect(() => {
     if (!active || !startedAt) return;
 
-    setNow(Date.now());
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
+    let interval: ReturnType<typeof setInterval> | null = null;
 
-    return () => clearInterval(interval);
+    const startTimer = () => {
+      setNow(Date.now());
+      if (interval === null) {
+        interval = setInterval(() => {
+          setNow(Date.now());
+        }, 1000);
+      }
+    };
+
+    const stopTimer = () => {
+      if (interval !== null) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    if (visibilityManager.isVisible) {
+      startTimer();
+    }
+
+    const unsub = visibilityManager.subscribe(
+      () => stopTimer(),
+      () => startTimer()
+    );
+
+    return () => {
+      unsub();
+      stopTimer();
+    };
   }, [active, startedAt]);
 
   const sessionSeconds = active && startedAt ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0;

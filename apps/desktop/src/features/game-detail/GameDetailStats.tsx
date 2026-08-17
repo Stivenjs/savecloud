@@ -25,7 +25,6 @@ export function GameDetailStats({ stats, isGameRunning }: GameDetailStatsProps) 
             {isGameRunning && (
               <div className="flex items-center gap-1.5 rounded-md bg-emerald-500/10 px-2.5 py-1 text-sm text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                 <span className="relative flex size-2">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
                 </span>
                 <span className="font-medium text-default-400">En sesión:</span>

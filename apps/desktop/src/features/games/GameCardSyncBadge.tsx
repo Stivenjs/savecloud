@@ -31,11 +31,10 @@ export function GameCardSyncBadge({
 
     if (isGameRunning) {
       return (
-        <div className="absolute bottom-2.5 left-2.5 z-20 flex items-center gap-1.5 bg-zinc-950/85 backdrop-blur-md rounded-md p-0.5 pr-2 border border-white/10 shadow-lg select-none">
+        <div className="absolute bottom-2.5 left-2.5 z-20 flex items-center gap-1.5 bg-zinc-950/90 rounded-md p-0.5 pr-2 border border-white/10 shadow-md select-none">
           <span className="bg-danger text-danger-foreground font-sans text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-sm tracking-wide flex items-center gap-1">
-            <span className="relative flex h-1 w-1 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger-foreground opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-1 w-1 bg-danger-foreground"></span>
+            <span className="relative flex h-1.5 w-1.5 shrink-0">
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-danger-foreground"></span>
             </span>
             <span>{t("library.syncBadge.playing")}</span>
             {sessionSeconds > 0 && (

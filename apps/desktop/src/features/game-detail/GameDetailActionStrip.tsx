@@ -47,7 +47,6 @@ export function GameDetailActionStrip({ stats, isGameRunning, ...actionsProps }:
               {isGameRunning && (
                 <div className="flex min-w-30 items-start gap-2 text-sm text-emerald-500 font-medium">
                   <span className="relative flex size-2 mt-1 shrink-0">
-                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                     <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
                   </span>
                   <div className="flex min-w-0 flex-col gap-0.5">
