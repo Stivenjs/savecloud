@@ -52,6 +52,7 @@ pub async fn get_active_profile_cmd() -> Result<ProfileDTO, String> {
 pub async fn set_active_profile_cmd(profile_id: String) -> Result<ProfileDTO, String> {
     let mut index = ProfileManager::load_profiles()?;
     let profile = ProfileManager::set_active_profile(&mut index, &profile_id)?;
+    super::io::invalidate_config_cache();
     Ok(merge_profile_dto_disk_session(ProfileDTO::from(&profile)))
 }
 
@@ -73,6 +74,7 @@ pub async fn create_profile_cmd(
 ) -> Result<ProfileDTO, String> {
     let mut index = ProfileManager::load_profiles()?;
     let profile = ProfileManager::create_profile(&mut index, name, profile_avatar_url)?;
+    super::io::invalidate_config_cache();
     Ok(ProfileDTO::from(&profile))
 }
 
@@ -89,7 +91,9 @@ pub async fn create_profile_cmd(
 #[tauri::command]
 pub async fn delete_profile_cmd(profile_id: String) -> Result<(), String> {
     let mut index = ProfileManager::load_profiles()?;
-    ProfileManager::delete_profile(&mut index, &profile_id)
+    ProfileManager::delete_profile(&mut index, &profile_id)?;
+    super::io::invalidate_config_cache();
+    Ok(())
 }
 
 /// Actualiza metadatos de un perfil (nombre, avatar URL).
