@@ -9,8 +9,7 @@ import { useVoiceCommands, VoiceCommandIndicator } from "@features/voice-command
 function AppAmbientBackground({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative min-h-dvh bg-background text-foreground">
-      <div className="absolute inset-0 bg-linear-to-br from-background via-default-50/55 to-default-100/80 dark:from-default-200/10 dark:via-default-100/5 dark:to-background" />
-      <div className="absolute inset-0 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-linear-to-br from-background via-default-50/55 to-default-100/80 dark:from-default-200/10 dark:via-default-100/5 dark:to-background pointer-events-none" />
       <div className="relative min-h-dvh">{children}</div>
     </div>
   );

@@ -3,12 +3,14 @@ import { getLocalObservabilitySnapshot } from "@services/tauri/observability.ser
 import type { WsHealthBlock } from "@app-types/observability";
 import { Tooltip } from "@heroui/react";
 import { openOrFocusSettingsWindow } from "@/windows/settingsWindow";
+import { visibilityManager } from "@hooks/useAppVisibility";
 
 export function NetworkStatusPill() {
   const [wsState, setWsState] = useState<WsHealthBlock | null>(null);
 
   useEffect(() => {
     let isMounted = true;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
     const checkWsState = async () => {
       try {
@@ -21,12 +23,33 @@ export function NetworkStatusPill() {
       }
     };
 
-    void checkWsState();
-    const interval = setInterval(checkWsState, 5000);
+    const startTimer = () => {
+      void checkWsState();
+      if (interval === null) {
+        interval = setInterval(checkWsState, 5000);
+      }
+    };
+
+    const stopTimer = () => {
+      if (interval !== null) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    if (visibilityManager.isVisible) {
+      startTimer();
+    }
+
+    const unsub = visibilityManager.subscribe(
+      () => stopTimer(),
+      () => startTimer()
+    );
 
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      unsub();
+      stopTimer();
     };
   }, []);
 
@@ -37,7 +60,7 @@ export function NetworkStatusPill() {
       content={
         <div className="p-2 space-y-1 text-xs">
           <div className="font-bold flex items-center gap-1.5 text-zinc-100">
-            <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+            <span className={`w-2 h-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-amber-400"}`} />
             {isConnected ? "WebSocket Cloud Conectado" : "Reconectando WebSocket..."}
           </div>
           {wsState?.totalSuccessfulConnections ? (
@@ -56,14 +79,9 @@ export function NetworkStatusPill() {
         onClick={() => openOrFocusSettingsWindow()}
         className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-900/80 hover:bg-zinc-800/90 border border-zinc-800/80 transition-colors cursor-pointer text-xs select-none">
         <span className="relative flex h-2 w-2">
-          {isConnected ? (
-            <>
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-            </>
-          ) : (
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500 animate-pulse" />
-          )}
+          <span
+            className={`relative inline-flex rounded-full h-2 w-2 ${isConnected ? "bg-emerald-500" : "bg-amber-500"}`}
+          />
         </span>
         <span className="text-[10px] font-semibold text-zinc-300 tracking-wide">
           {isConnected ? "WS LIVE" : "RECONECTANDO"}

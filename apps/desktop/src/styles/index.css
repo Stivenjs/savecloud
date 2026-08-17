@@ -159,7 +159,10 @@ html.paused-bg *,
 html.paused-bg *::before,
 html.paused-bg *::after {
   animation-play-state: paused !important;
+  transition-delay: 0s !important;
   transition-duration: 0ms !important;
+  backdrop-filter: none !important;
+  filter: none !important;
 }
 
 html.paused-bg * {
