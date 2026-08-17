@@ -65,6 +65,7 @@ pub fn run() {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.set_focus();
+                    crate::system::window_memory::set_webview_memory_level(&window, false);
                 }
             }));
         }
@@ -86,12 +87,23 @@ pub fn run() {
         .on_window_event(|window, event| {
             crate::streaming::input_listener::handle_window_event(window, event);
 
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let label = window.label();
-                if label == "main" {
-                    let _ = window.hide();
-                    api.prevent_close();
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    let label = window.label();
+                    if label == "main" {
+                        let _ = window.hide();
+                        api.prevent_close();
+                        crate::system::window_memory::set_window_memory_level(window, true);
+                    }
                 }
+                tauri::WindowEvent::Focused(focused) => {
+                    if *focused {
+                        crate::system::window_memory::set_window_memory_level(window, false);
+                    } else if !window.is_visible().unwrap_or(true) || window.is_minimized().unwrap_or(false) {
+                        crate::system::window_memory::set_window_memory_level(window, true);
+                    }
+                }
+                _ => {}
             }
         })
         .setup(|app| {

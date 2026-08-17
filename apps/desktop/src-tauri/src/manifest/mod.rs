@@ -57,6 +57,7 @@ struct ManifestGame {
     steam: Option<SteamEntry>,
     #[serde(rename = "steamExtra")]
     steam_extra: Option<Vec<SteamId>>,
+    #[cfg(target_os = "windows")]
     registry: Option<HashMap<String, IgnoredAny>>,
     #[serde(rename = "installDir")]
     install_dir: Option<HashMap<String, IgnoredAny>>,
