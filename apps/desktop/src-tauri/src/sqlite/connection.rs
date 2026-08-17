@@ -68,6 +68,7 @@ impl AppDb {
             conn.pragma_update(None, "cache_size", -4000)?;
             conn.pragma_update(None, "mmap_size", 67108864)?;
             conn.pragma_update(None, "page_size", 4096)?;
+            conn.pragma_update(None, "threads", 4)?;
             Ok(())
         });
 

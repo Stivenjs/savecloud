@@ -156,6 +156,13 @@ pub fn scan_games_running(
     game_ids: &[String],
 ) -> (HashMap<String, bool>, Vec<DetectedGameProcess>) {
     let cfg = config::load_config();
+    scan_games_running_with_config(&cfg, game_ids)
+}
+
+pub fn scan_games_running_with_config(
+    cfg: &config::Config,
+    game_ids: &[String],
+) -> (HashMap<String, bool>, Vec<DetectedGameProcess>) {
     let mut result: HashMap<String, bool> = HashMap::with_capacity(game_ids.len());
     let mut processes_out: Vec<DetectedGameProcess> = Vec::new();
 
@@ -344,7 +351,7 @@ pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationTok
 
         let cfg = config::load_config();
         let game_ids: Vec<String> = cfg.games.iter().map(|g| g.id.clone()).collect();
-        let (current, pid_candidates) = scan_games_running(&game_ids);
+        let (current, pid_candidates) = scan_games_running_with_config(&cfg, &game_ids);
 
         sync_detected_game_cpu_boost(
             cfg.game_mode_boost_detected_game_cpu,

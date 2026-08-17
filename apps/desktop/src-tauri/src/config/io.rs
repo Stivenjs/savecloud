@@ -7,6 +7,24 @@ use super::models::*;
 use super::profile_storage;
 use super::profiles::DEFAULT_PROFILE_ID;
 use keyring::Entry;
+use once_cell::sync::Lazy;
+use std::sync::RwLock;
+
+static CONFIG_CACHE: Lazy<RwLock<Option<Config>>> = Lazy::new(|| RwLock::new(None));
+
+/// Invalida la caché en memoria de la configuración global para forzar su recarga en el próximo acceso.
+pub fn invalidate_config_cache() {
+    if let Ok(mut lock) = CONFIG_CACHE.write() {
+        *lock = None;
+    }
+}
+
+/// Actualiza directamente la caché en memoria con una instancia de configuración conocida.
+pub fn update_config_cache(config: Config) {
+    if let Ok(mut lock) = CONFIG_CACHE.write() {
+        *lock = Some(config);
+    }
+}
 
 pub const KEYRING_SERVICE: &str = "savecloud_api";
 pub const KEYRING_ACCOUNT: &str = "default_user";
@@ -220,12 +238,14 @@ pub fn get_secure_api_key_for_profile(profile_id: &str) -> Option<String> {
 }
 
 pub fn set_secure_api_key_for_profile(profile_id: &str, key: &str) -> Result<(), String> {
-    set_secret(
+    let res = set_secret(
         &profile_service(profile_id),
         KEYRING_PROFILE_ACCOUNT_API_KEY,
         key,
         MASKED_API_KEY,
-    )
+    );
+    invalidate_config_cache();
+    res
 }
 
 pub fn delete_secure_api_key_for_profile(profile_id: &str) -> Result<(), String> {
@@ -235,6 +255,7 @@ pub fn delete_secure_api_key_for_profile(profile_id: &str) -> Result<(), String>
         KEYRING_PROFILE_ACCOUNT_API_KEY,
     );
     let _ = delete_secret(KEYRING_SERVICE, &legacy_account);
+    invalidate_config_cache();
     Ok(())
 }
 
@@ -267,12 +288,14 @@ pub fn get_secure_steam_web_api_key_for_profile(profile_id: &str) -> Option<Stri
 }
 
 pub fn set_secure_steam_web_api_key_for_profile(profile_id: &str, key: &str) -> Result<(), String> {
-    set_secret(
+    let res = set_secret(
         &profile_service(profile_id),
         KEYRING_PROFILE_ACCOUNT_STEAM_WEB_API,
         key,
         MASKED_STEAM_WEB_API_KEY,
-    )
+    );
+    invalidate_config_cache();
+    res
 }
 
 pub fn delete_secure_steam_web_api_key_for_profile(profile_id: &str) -> Result<(), String> {
@@ -282,6 +305,7 @@ pub fn delete_secure_steam_web_api_key_for_profile(profile_id: &str) -> Result<(
         KEYRING_PROFILE_ACCOUNT_STEAM_WEB_API,
     );
     let _ = delete_secret(KEYRING_SERVICE, &legacy_account);
+    invalidate_config_cache();
     Ok(())
 }
 
@@ -290,7 +314,9 @@ pub fn load_settings() -> AppSettings {
 }
 
 pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
-    profile_storage::save_settings(settings)
+    let res = profile_storage::save_settings(settings);
+    invalidate_config_cache();
+    res
 }
 
 pub fn load_library() -> GameLibrary {
@@ -298,7 +324,9 @@ pub fn load_library() -> GameLibrary {
 }
 
 pub fn save_library(library: &GameLibrary) -> Result<(), String> {
-    profile_storage::save_library(library)
+    let res = profile_storage::save_library(library);
+    invalidate_config_cache();
+    res
 }
 
 pub fn load_history() -> OperationHistory {
@@ -306,7 +334,9 @@ pub fn load_history() -> OperationHistory {
 }
 
 pub fn save_history(history: &OperationHistory) -> Result<(), String> {
-    profile_storage::save_history(history)
+    let res = profile_storage::save_history(history);
+    invalidate_config_cache();
+    res
 }
 
 pub fn load_gamification() -> GamificationConfig {
@@ -314,7 +344,9 @@ pub fn load_gamification() -> GamificationConfig {
 }
 
 pub fn save_gamification(gamification: &GamificationConfig) -> Result<(), String> {
-    profile_storage::save_gamification(gamification)
+    let res = profile_storage::save_gamification(gamification);
+    invalidate_config_cache();
+    res
 }
 
 pub fn append_operation_log(
@@ -323,7 +355,9 @@ pub fn append_operation_log(
     file_count: u32,
     err_count: u32,
 ) -> Result<(), String> {
-    profile_storage::append_operation_log(kind, game_id, file_count, err_count)
+    let res = profile_storage::append_operation_log(kind, game_id, file_count, err_count);
+    invalidate_config_cache();
+    res
 }
 
 pub fn get_combined_config() -> Config {
@@ -442,9 +476,24 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
     })?;
     save_gamification(&cfg.gamification)?;
 
+    update_config_cache(cfg.clone());
     Ok(())
 }
 
+/// Obtiene la configuración consolidada activa.
+///
+/// Utiliza una caché en memoria para evitar accesos repetitivos a disco y consultas
+/// al almacén de credenciales del sistema operativo (Keyring) en bucles en segundo plano.
 pub fn load_config() -> Config {
-    get_combined_config()
+    if let Ok(lock) = CONFIG_CACHE.read() {
+        if let Some(cached) = lock.as_ref() {
+            return cached.clone();
+        }
+    }
+
+    let config = get_combined_config();
+    if let Ok(mut lock) = CONFIG_CACHE.write() {
+        *lock = Some(config.clone());
+    }
+    config
 }
