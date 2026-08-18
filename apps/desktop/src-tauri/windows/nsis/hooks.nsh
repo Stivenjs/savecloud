@@ -4,10 +4,14 @@
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
 
-; Cadenas multi-idioma (Español e Inglés)
+; Cadenas multi-idioma con fallbacks seguros (Español e Inglés)
+LangString MSG_INSTALL_SOURCES 0 "¿Deseas instalar las fuentes de descargas verificadas por SaveCloud?$\r$\n$\r$\nIncluye: FitGirl, SteamRip, DODI, GOG, OnlineFix, Xatab, Kazumi, SteamGG, RexaGames, 0xEMPRESS y AtopGames."
+LangString MSG_INSTALL_SOURCES ${LANG_SPANISH} "¿Deseas instalar las fuentes de descargas verificadas por SaveCloud?$\r$\n$\r$\nIncluye: FitGirl, SteamRip, DODI, GOG, OnlineFix, Xatab, Kazumi, SteamGG, RexaGames, 0xEMPRESS y AtopGames."
 LangString MSG_INSTALL_SOURCES ${LANG_SPANISHINTERNATIONAL} "¿Deseas instalar las fuentes de descargas verificadas por SaveCloud?$\r$\n$\r$\nIncluye: FitGirl, SteamRip, DODI, GOG, OnlineFix, Xatab, Kazumi, SteamGG, RexaGames, 0xEMPRESS y AtopGames."
 LangString MSG_INSTALL_SOURCES ${LANG_ENGLISH} "Do you want to install verified download sources for SaveCloud?$\r$\n$\r$\nIncludes: FitGirl, SteamRip, DODI, GOG, OnlineFix, Xatab, Kazumi, SteamGG, RexaGames, 0xEMPRESS, and AtopGames."
 
+LangString TITLE_INSTALL_SOURCES 0 "Fuentes Verificadas de SaveCloud"
+LangString TITLE_INSTALL_SOURCES ${LANG_SPANISH} "Fuentes Verificadas de SaveCloud"
 LangString TITLE_INSTALL_SOURCES ${LANG_SPANISHINTERNATIONAL} "Fuentes Verificadas de SaveCloud"
 LangString TITLE_INSTALL_SOURCES ${LANG_ENGLISH} "SaveCloud Verified Sources"
 

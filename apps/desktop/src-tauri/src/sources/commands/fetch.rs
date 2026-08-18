@@ -40,20 +40,30 @@ pub fn looks_like_cloudflare_block(content_type: &str, raw: &str) -> bool {
 }
 
 fn resolve_scrapling_script(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Ok(p) = app.path().resolve("resources/savecloud_crawler.py", BaseDirectory::Resource) {
+        if p.is_file() {
+            return Ok(p);
+        }
+    }
     app.path()
-        .resolve("resources/scrapling_fetch.py", BaseDirectory::Resource)
-        .map_err(|e| format!("No se pudo resolver el script de Scrapling: {e}"))
+        .resolve("resources/savecloud_crawler.py", BaseDirectory::Resource)
+        .map_err(|e| format!("No se pudo resolver el script del crawler: {e}"))
 }
 
 fn resolve_scrapling_binary(app: &AppHandle) -> Result<PathBuf, String> {
     let bin_name = if cfg!(target_os = "windows") {
-        "resources/scrapling_fetch.exe"
+        "resources/savecloud_crawler.exe"
     } else {
-        "resources/scrapling_fetch"
+        "resources/savecloud_crawler"
     };
+    if let Ok(p) = app.path().resolve(bin_name, BaseDirectory::Resource) {
+        if p.is_file() {
+            return Ok(p);
+        }
+    }
     app.path()
         .resolve(bin_name, BaseDirectory::Resource)
-        .map_err(|e| format!("No se pudo resolver el binario de Scrapling: {e}"))
+        .map_err(|e| format!("No se pudo resolver el binario del crawler: {e}"))
 }
 
 fn find_python_executable() -> Result<(String, Vec<String>), String> {
