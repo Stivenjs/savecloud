@@ -351,6 +351,7 @@ const CloudDashboardGameCoverThumb = memo(function CloudDashboardGameCoverThumb(
     resolvedSteamAppId: resolvedSteamAppId ?? null,
     mediaBySteamAppId,
     mediaFromBatch: true,
+    orientation: "horizontal",
   });
 
   const showGamepad = !isEffectivelyLoading && (!displayImageUrl || imgError);

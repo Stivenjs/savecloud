@@ -128,6 +128,7 @@ function CandidateRow({
     resolvedSteamAppId: appId,
     mediaBySteamAppId,
     mediaFromBatch: true,
+    orientation: "horizontal",
   });
 
   const navAdd = useNavigable({

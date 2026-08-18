@@ -118,18 +118,53 @@ def ensure_fetchers_installed():
     return True
 
 
+def is_missing_browser_error(exc) -> bool:
+    if not exc:
+        return False
+    msg = str(exc).lower()
+    indicators = [
+        "executable doesn't exist",
+        "executable doesnt exist",
+        "patchright install",
+        "playwright install",
+        "browsertype.launch",
+        "chrome-win64",
+        "chromium-",
+        "please run the following command to download new browsers",
+    ]
+    return any(ind in msg for ind in indicators)
+
+
+def is_browser_installed() -> bool:
+    try:
+        from patchright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            exe = p.chromium.executable_path
+            return bool(exe and os.path.isfile(exe))
+    except Exception:
+        return False
+
+
 def ensure_browsers_installed():
     last_error = None
-    
+    browsers_path = os.environ.get(
+        "PLAYWRIGHT_BROWSERS_PATH",
+        os.path.join(os.path.expanduser("~"), "AppData", "Local", "ms-playwright")
+        if sys.platform == "win32"
+        else os.path.join(os.path.expanduser("~"), ".cache", "ms-playwright"),
+    )
+    try:
+        os.makedirs(browsers_path, exist_ok=True)
+    except Exception:
+        pass
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers_path
+
     try:
         from patchright._impl._driver import compute_driver_executable, get_driver_env
         driver_executable, driver_cli = compute_driver_executable()
         env = get_driver_env()
-        env["PLAYWRIGHT_BROWSERS_PATH"] = os.environ.get(
-            "PLAYWRIGHT_BROWSERS_PATH",
-            os.path.join(os.path.expanduser("~"), "AppData", "Local", "ms-playwright")
-        )
-        sys.stderr.write(f"Instalando navegadores de Patchright usando el driver: {driver_executable}\n")
+        env["PLAYWRIGHT_BROWSERS_PATH"] = browsers_path
+        sys.stderr.write(f"[Scrapling] Instalando navegador Chromium usando driver Patchright: {driver_executable}\n")
         cmd = [driver_executable, driver_cli, "install", "chromium"]
         result = subprocess.run(
             cmd,
@@ -139,10 +174,10 @@ def ensure_browsers_installed():
             creationflags=CREATE_NO_WINDOW
         )
         if result.returncode == 0:
-            sys.stderr.write("Navegadores de Patchright instalados exitosamente.\n")
+            sys.stderr.write("[Scrapling] Navegadores de Patchright instalados exitosamente.\n")
             return
         else:
-            last_error = f"Patchright driver error: {result.stderr}"
+            last_error = f"Patchright driver error: {result.stderr or result.stdout}"
     except Exception as e:
         last_error = f"Patchright import error: {e}"
 
@@ -150,11 +185,8 @@ def ensure_browsers_installed():
         from playwright._impl._driver import compute_driver_executable, get_driver_env
         driver_executable, driver_cli = compute_driver_executable()
         env = get_driver_env()
-        env["PLAYWRIGHT_BROWSERS_PATH"] = os.environ.get(
-            "PLAYWRIGHT_BROWSERS_PATH",
-            os.path.join(os.path.expanduser("~"), "AppData", "Local", "ms-playwright")
-        )
-        sys.stderr.write(f"Instalando navegadores de Playwright usando el driver: {driver_executable}\n")
+        env["PLAYWRIGHT_BROWSERS_PATH"] = browsers_path
+        sys.stderr.write(f"[Scrapling] Instalando navegador Chromium usando driver Playwright: {driver_executable}\n")
         cmd = [driver_executable, driver_cli, "install", "chromium"]
         result = subprocess.run(
             cmd,
@@ -164,22 +196,38 @@ def ensure_browsers_installed():
             creationflags=CREATE_NO_WINDOW
         )
         if result.returncode == 0:
-            sys.stderr.write("Navegadores de Playwright instalados exitosamente.\n")
+            sys.stderr.write("[Scrapling] Navegadores de Playwright instalados exitosamente.\n")
             return
         else:
-            last_error = f"{last_error} | Playwright driver error: {result.stderr}"
+            last_error = f"{last_error} | Playwright driver error: {result.stderr or result.stdout}"
     except Exception as e:
         last_error = f"{last_error} | Playwright import error: {e}"
 
-    if not getattr(sys, 'frozen', False):
+    if not getattr(sys, "frozen", False):
+        try:
+            cmd = [sys.executable, "-m", "patchright", "install", "chromium"]
+            res = subprocess.run(cmd, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
+            if res.returncode == 0:
+                sys.stderr.write("[Scrapling] Navegadores instalados via python -m patchright.\n")
+                return
+        except Exception as e:
+            last_error = f"{last_error} | CLI error: {e}"
+
         try:
             from scrapling.cli import install as scrapling_install
             scrapling_install([], standalone_mode=False)
+            sys.stderr.write("[Scrapling] Navegadores instalados via scrapling.cli.\n")
             return
         except Exception as e:
             last_error = f"{last_error} | Scrapling CLI error: {e}"
 
     raise RuntimeError(f"No se pudieron instalar los navegadores de Scrapling: {last_error}")
+
+
+def check_and_ensure_browsers():
+    if not is_browser_installed():
+        sys.stderr.write("[Scrapling] Chromium no encontrado en el sistema. Descargando automáticamente...\n")
+        ensure_browsers_installed()
 
 
 StealthyFetcher = None
@@ -649,7 +697,15 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
         "disable_ads": True,
     }
 
-    page = StealthyFetcher.fetch(url, **kwargs)
+    try:
+        page = StealthyFetcher.fetch(url, **kwargs)
+    except Exception as exc:
+        if is_missing_browser_error(exc):
+            sys.stderr.write(f"[Scrapling] Error de navegador detectado: {exc}\nIniciando descarga de Chromium...\n")
+            ensure_browsers_installed()
+            page = StealthyFetcher.fetch(url, **kwargs)
+        else:
+            raise
 
     if captured_download["url"]:
         return captured_download["url"]
@@ -712,6 +768,7 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
 
 def fetch_with_capture(url: str) -> str:
     expect_json = is_json_url(url)
+    errors = []
 
     try:
         result = _strategy_response_listener(url, False, expect_json)
@@ -719,6 +776,9 @@ def fetch_with_capture(url: str) -> str:
             return result
     except Exception as e:
         sys.stderr.write(f"Initial strategy failed: {e}\n")
+        errors.append(f"Initial strategy: {e}")
+        if is_missing_browser_error(e):
+            ensure_browsers_installed()
 
     sys.stderr.write(f"Retrying with Cloudflare solver enabled for: {url}\n")
     try:
@@ -727,8 +787,12 @@ def fetch_with_capture(url: str) -> str:
             return result
     except Exception as e:
         sys.stderr.write(f"Retry with CF solver failed: {e}\n")
+        errors.append(f"CF solver retry: {e}")
+        if is_missing_browser_error(e):
+            ensure_browsers_installed()
 
-    raise RuntimeError(f"No se pudo obtener contenido válido de: {url}")
+    err_details = " | ".join(errors) if errors else "Respuesta vacía o bloqueada"
+    raise RuntimeError(f"No se pudo obtener contenido válido de {url}: {err_details}")
 
 
 def write_stdout(text: str):
@@ -744,6 +808,7 @@ def main() -> int:
     _start_watchdog(PROCESS_TIMEOUT_SECONDS)
 
     ensure_fetchers_installed()
+    check_and_ensure_browsers()
 
     if len(sys.argv) < 2:
         print(json.dumps({"error": "missing url"}), file=sys.stderr)
@@ -756,17 +821,16 @@ def main() -> int:
         write_stdout(fetch_with_capture(url))
         return 0
     except Exception as exc:
-        message = str(exc)
-        if "Executable doesn't exist" not in message and "patchright install" not in message:
-            print(message, file=sys.stderr)
-            return 1
-        try:
-            ensure_browsers_installed()
-            write_stdout(fetch_with_capture(url))
-            return 0
-        except Exception as retry_exc:
-            print(str(retry_exc), file=sys.stderr)
-            return 1
+        if is_missing_browser_error(exc):
+            try:
+                ensure_browsers_installed()
+                write_stdout(fetch_with_capture(url))
+                return 0
+            except Exception as retry_exc:
+                print(str(retry_exc), file=sys.stderr)
+                return 1
+        print(str(exc), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

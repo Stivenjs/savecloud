@@ -83,7 +83,7 @@ pub fn run_scrapling_fetch(
     url: &str,
     cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 ) -> Result<String, String> {
-    const SCRAPLING_TIMEOUT_SECS: u64 = 90;
+    const SCRAPLING_TIMEOUT_SECS: u64 = 180;
 
     let binary_path = resolve_scrapling_binary(app);
     let mut command = if let Some(bin_path) = binary_path.as_ref().ok().filter(|p| p.is_file()) {
@@ -179,10 +179,9 @@ pub fn run_scrapling_fetch(
 
         if let Some(code) = output.status.code() {
             if code == 3 {
-                return Err(
-                    "Scrapling: timeout — el proceso fue terminado después de 90 segundos"
-                        .to_string(),
-                );
+                return Err(format!(
+                    "Scrapling: timeout — el proceso fue terminado después de {SCRAPLING_TIMEOUT_SECS} segundos"
+                ));
             }
         }
 
