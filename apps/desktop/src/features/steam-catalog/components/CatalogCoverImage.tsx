@@ -22,7 +22,7 @@ export function CatalogCoverImage({
   alt,
   candidates,
   className = "h-full w-full object-cover",
-  fallbackClassName = "flex h-full w-full flex-col items-center justify-center p-4 bg-[#0e0f14] text-center gap-1.5 rounded-xl border border-zinc-800/20",
+  fallbackClassName = "flex h-full w-full flex-col items-center justify-center p-4 bg-[#0e0f14] text-center gap-1.5 rounded-xl",
   fallbackTitle,
   showSkeleton = false,
   onLoad,

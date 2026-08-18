@@ -5,10 +5,10 @@
  */
 
 import { Select, SelectItem } from "@heroui/react";
-import { LayoutGrid, Grid2X2, AlignJustify } from "lucide-react";
+import { LayoutGrid, Grid2X2, AlignJustify, RectangleVertical, RectangleHorizontal } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import type { GamesLayout, GamesSortDir, GamesSortField } from "@hooks/useGamesViewPreferences";
+import type { GamesCardOrientation, GamesLayout, GamesSortDir, GamesSortField } from "@hooks/useGamesViewPreferences";
 
 interface SortOption {
   key: string;
@@ -75,8 +75,10 @@ export interface GamesViewControlsProps {
   sortBy: GamesSortField;
   sortDir: GamesSortDir;
   layout: GamesLayout;
+  cardOrientation?: GamesCardOrientation;
   onSortChange: (field: GamesSortField, dir: GamesSortDir) => void;
   onLayoutChange: (layout: GamesLayout) => void;
+  onCardOrientationChange?: (orientation: GamesCardOrientation) => void;
   /** Big Picture / mando: controles más altos y foco visible. */
   consoleMode?: boolean;
 }
@@ -85,8 +87,10 @@ export function GamesViewControls({
   sortBy,
   sortDir,
   layout,
+  cardOrientation = "vertical",
   onSortChange,
   onLayoutChange,
+  onCardOrientationChange,
   consoleMode = false,
 }: GamesViewControlsProps) {
   const { t } = useTranslation();
@@ -186,6 +190,53 @@ export function GamesViewControls({
           <AlignJustify size={iconSize} />
         </LayoutButton>
       </div>
+
+      {onCardOrientationChange && (
+        <>
+          <div
+            className={[
+              "w-px shrink-0 bg-default-200",
+              consoleMode ? "block h-12 self-center sm:h-14" : "hidden h-6 sm:block",
+            ].join(" ")}
+            aria-hidden
+          />
+
+          <div
+            className={[
+              "flex items-center rounded-xl border border-default-200 bg-default-50 dark:border-default-100 dark:bg-default-100/30",
+              consoleMode ? "gap-1 rounded-2xl p-2" : "gap-1 p-1",
+            ].join(" ")}>
+            <button
+              type="button"
+              aria-label={t("library.viewControls.orientationVertical")}
+              aria-pressed={cardOrientation === "vertical"}
+              onClick={() => onCardOrientationChange("vertical")}
+              className={[
+                "flex items-center justify-center cursor-pointer rounded-lg transition-colors duration-150 tap-highlight-transparent outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                consoleMode ? "min-h-14 min-w-14 p-3.5 sm:min-h-15 sm:min-w-15" : "p-2",
+                cardOrientation === "vertical"
+                  ? "bg-default-200 text-foreground dark:bg-default-100"
+                  : "text-default-400 hover:bg-default-100 hover:text-default-600 dark:hover:bg-default-50",
+              ].join(" ")}>
+              <RectangleVertical size={iconSize} />
+            </button>
+            <button
+              type="button"
+              aria-label={t("library.viewControls.orientationHorizontal")}
+              aria-pressed={cardOrientation === "horizontal"}
+              onClick={() => onCardOrientationChange("horizontal")}
+              className={[
+                "flex items-center justify-center cursor-pointer rounded-lg transition-colors duration-150 tap-highlight-transparent outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                consoleMode ? "min-h-14 min-w-14 p-3.5 sm:min-h-15 sm:min-w-15" : "p-2",
+                cardOrientation === "horizontal"
+                  ? "bg-default-200 text-foreground dark:bg-default-100"
+                  : "text-default-400 hover:bg-default-100 hover:text-default-600 dark:hover:bg-default-50",
+              ].join(" ")}>
+              <RectangleHorizontal size={iconSize} />
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

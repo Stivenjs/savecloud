@@ -45,6 +45,8 @@ interface UseGameMediaOptions {
    * (desactiva la query individual para evitar duplicados).
    */
   mediaFromBatch?: boolean;
+  /** Orientación de la tarjeta (vertical para póster 2:3, horizontal para cápsula 460x215). */
+  orientation?: "vertical" | "horizontal";
 }
 
 /**
@@ -85,7 +87,8 @@ export function buildGameMediaCoverCandidates(
   resolvedSteamAppId: string | null | undefined,
   displayImageUrl: string | null,
   mediaUrls: readonly string[],
-  capsuleImage: string | null
+  capsuleImage: string | null,
+  orientation: "vertical" | "horizontal" = "vertical"
 ): string[] {
   const urls: string[] = [];
   if (displayImageUrl?.trim()) urls.push(displayImageUrl.trim());
@@ -96,7 +99,7 @@ export function buildGameMediaCoverCandidates(
 
   const appId = getSteamAppId(game, resolvedSteamAppId);
   if (appId) {
-    urls.push(...getSteamCdnCandidates(appId));
+    urls.push(...getSteamCdnCandidates(appId, orientation));
   }
 
   const legacyHeader = getGameImageUrl(game, resolvedSteamAppId);
@@ -129,6 +132,7 @@ export function useGameMedia({
   externalLoading = false,
   mediaBySteamAppId,
   mediaFromBatch = false,
+  orientation = "vertical",
 }: UseGameMediaOptions): UseGameMediaResult {
   const staticImageUrl = getGameImageUrl(game, resolvedSteamAppId);
   const extraImageUrl = getGameLibraryHeroUrl(game, resolvedSteamAppId);
@@ -225,8 +229,9 @@ export function useGameMedia({
     : (mediaSource?.capsuleImage ?? null);
 
   const coverCandidates = useMemo(
-    () => buildGameMediaCoverCandidates(game, resolvedSteamAppId, displayImageUrl, mediaUrls, capsuleImage),
-    [game, resolvedSteamAppId, displayImageUrl, mediaUrls, capsuleImage]
+    () =>
+      buildGameMediaCoverCandidates(game, resolvedSteamAppId, displayImageUrl, mediaUrls, capsuleImage, orientation),
+    [game, resolvedSteamAppId, displayImageUrl, mediaUrls, capsuleImage, orientation]
   );
 
   return {

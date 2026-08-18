@@ -221,6 +221,8 @@
       "layoutLarge": "Large cards",
       "layoutMedium": "Medium cards",
       "layoutList": "List view",
+      "orientationVertical": "Vertical format (Poster)",
+      "orientationHorizontal": "Horizontal format (Capsule)",
       "sort": {
         "titleAsc": "Title (A-Z)",
         "titleDesc": "Title (Z-A)",

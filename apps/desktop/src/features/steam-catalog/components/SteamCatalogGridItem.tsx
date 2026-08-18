@@ -9,6 +9,8 @@ import { catalogListItemToConfiguredGame } from "@features/steam-catalog/model/c
 import { sourceCandidateKey } from "@utils/sourceMatch";
 import { useShellUiStore } from "@store/ShellUiStore";
 
+import type { GamesCardOrientation } from "@hooks/useGamesViewPreferences";
+
 export type CatalogGridItemProps = {
   item: CatalogListItem;
   libraryGame?: ConfiguredGame;
@@ -19,6 +21,7 @@ export type CatalogGridItemProps = {
   onPickChange: (gameName: string, key: string) => void;
   onInstall: (gameName: string) => void;
   consoleMode?: boolean;
+  orientation?: GamesCardOrientation;
 };
 
 const CONSOLE_SOURCE_LISTBOX_PROPS = {
@@ -44,6 +47,7 @@ export const CatalogGridItem = memo(function CatalogGridItem({
   onPickChange,
   onInstall,
   consoleMode = false,
+  orientation = "vertical",
 }: CatalogGridItemProps) {
   const { t } = useTranslation();
   const game = libraryGame ?? catalogListItemToConfiguredGame(item);
@@ -56,13 +60,13 @@ export const CatalogGridItem = memo(function CatalogGridItem({
     <div className="w-full">
       <div className="space-y-2">
         <div
-          className="overflow-hidden rounded-xl ring-1 ring-transparent 
+          className="overflow-hidden rounded-xl 
                     transition-all duration-200 
-                    group-hover/card:ring-primary/30 
                     group-hover/card:shadow-lg group-hover/card:shadow-primary/10
                     group-hover/card:-translate-y-0.5">
           <GameCard
             variant="catalog"
+            orientation={orientation}
             game={game}
             cardTitle={item.name}
             resolvedSteamAppId={item.steamAppId}

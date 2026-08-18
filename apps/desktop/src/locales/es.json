@@ -221,6 +221,8 @@
       "layoutLarge": "Tarjetas grandes",
       "layoutMedium": "Tarjetas medianas",
       "layoutList": "Vista lista",
+      "orientationVertical": "Formato vertical (Póster)",
+      "orientationHorizontal": "Formato horizontal (Cápsula)",
       "sort": {
         "titleAsc": "Título (A-Z)",
         "titleDesc": "Título (Z-A)",

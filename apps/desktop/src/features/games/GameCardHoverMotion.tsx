@@ -3,7 +3,7 @@ import type { Variants } from "framer-motion";
 import type { ReactNode } from "react";
 
 const SHADOW_REST = "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)";
-const SHADOW_HOVER = "0 20px 40px -8px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(0 0 0 / 0.04)";
+const SHADOW_HOVER = "0 20px 40px -8px rgb(0 0 0 / 0.45)";
 
 const cardVariants: Variants = {
   rest: {

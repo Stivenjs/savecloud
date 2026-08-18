@@ -15,6 +15,7 @@ import { initTorrentListeners } from "@store/TorrentStore";
 import { useCloudWebSockets } from "@hooks/useCloudWebSockets";
 import { useCloudStreamRealtime } from "@hooks/useCloudStreamRealtime";
 import { useCloudStreamHostSignaling } from "@hooks/useCloudStreamHostSignaling";
+import { initGamesViewPreferences } from "@hooks/useGamesViewPreferences";
 import { useProfileSessionStore } from "@store/ProfileSessionStore";
 import { queryClient } from "@lib/queryClient";
 import { STEAM_CATALOG_PAGE_SIZE } from "@/constants/constants";
@@ -51,6 +52,10 @@ export function useAppInitialization() {
   useCloudWebSockets();
   useCloudStreamRealtime();
   useCloudStreamHostSignaling();
+
+  useEffect(() => {
+    return initGamesViewPreferences();
+  }, []);
 
   /**
    * Contador de notificaciones + sync periódico con la API (multi-dispositivo).

@@ -63,7 +63,7 @@ export function GameCardStatsPanel({ stats, editionLabel }: GameCardStatsPanelPr
   return (
     <motion.div
       variants={panelVariants}
-      className="absolute inset-0 bg-zinc-950/95 border border-white/10 p-3 flex flex-col justify-center gap-1.5 z-20 rounded-xl subpixel-antialiased transform-gpu backface-hidden">
+      className="absolute inset-0 bg-zinc-950/95 p-3 flex flex-col justify-center gap-1.5 z-20 rounded-xl subpixel-antialiased transform-gpu backface-hidden">
       <motion.div
         variants={itemVariants}
         className="flex items-center justify-between text-[10px] text-zinc-400 backface-hidden">
@@ -79,7 +79,7 @@ export function GameCardStatsPanel({ stats, editionLabel }: GameCardStatsPanelPr
             {t("library.gameCardStats.lastTime")}
           </span>
           <span
-            className="font-bold text-right truncate max-w-[130px] text-zinc-200"
+            className="font-bold text-right truncate max-w-32.5 text-zinc-200"
             title={formatRelativeDate(stats.localLastModified)}>
             {formatRelativeDate(stats.localLastModified).toUpperCase()}
           </span>
