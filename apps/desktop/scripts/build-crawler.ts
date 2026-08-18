@@ -92,7 +92,7 @@ const pyinstallerCmd = spawnSync(
     "-m",
     "PyInstaller",
     "--clean",
-    "--onefile",
+    "--onedir",
     "--name",
     "savecloud_crawler",
     "--distpath",

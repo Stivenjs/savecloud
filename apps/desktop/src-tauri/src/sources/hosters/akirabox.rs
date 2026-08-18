@@ -15,6 +15,35 @@ fn normalize_page_url(url: &str) -> Result<String, HosterError> {
     Ok(parsed.to_string())
 }
 
+async fn resolve_native(
+    client: &reqwest::Client,
+    page_url: &str,
+) -> Result<String, HosterError> {
+    let response = get(
+        client,
+        page_url,
+        ProfilePreset::BrowserSameOrigin {
+            referer: page_url.to_string(),
+        },
+    )
+    .await?;
+
+    let response = ensure_resolve(response)?;
+    let response_url = response.url().to_string();
+    if let Some(direct) = extract_download_link(
+        response.text().await?.as_str(),
+        &response_url,
+        HOST_MARKERS,
+        &["download", "descargar", "télécharger", "telecharger"],
+    ) {
+        return Ok(direct);
+    }
+
+    Err(HosterError::ResolutionFailed(
+        "akirabox: la página no expuso un enlace de descarga directo".into(),
+    ))
+}
+
 pub async fn resolve(
     app: Option<&AppHandle>,
     client: &reqwest::Client,
@@ -28,44 +57,28 @@ pub async fn resolve(
         ));
     }
 
-    if let Some(app) = app {
-        let scraped = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url, cancel_flag)
-            .map_err(HosterError::ResolutionFailed)?;
-        let trimmed = scraped.trim();
-        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-            return Ok((trimmed.to_string(), page_url));
-        }
-        if let Some(direct) = extract_download_link(
-            trimmed,
-            &page_url,
-            HOST_MARKERS,
-            &["download", "descargar", "télécharger", "telecharger"],
-        ) {
-            return Ok((direct, page_url));
+    // 1. Intento nativo rápido
+    match resolve_native(client, &page_url).await {
+        Ok(direct) => Ok((direct, page_url)),
+        Err(native_err) => {
+            if let Some(app) = app {
+                log::info!("akirabox: intento nativo falló ({native_err:?}), intentando Scrapling fallback");
+                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url, cancel_flag) {
+                    let trimmed = scraped.trim();
+                    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                        return Ok((trimmed.to_string(), page_url));
+                    }
+                    if let Some(direct) = extract_download_link(
+                        trimmed,
+                        &page_url,
+                        HOST_MARKERS,
+                        &["download", "descargar", "télécharger", "telecharger"],
+                    ) {
+                        return Ok((direct, page_url));
+                    }
+                }
+            }
+            Err(native_err)
         }
     }
-
-    let response = get(
-        client,
-        &page_url,
-        ProfilePreset::BrowserSameOrigin {
-            referer: page_url.clone(),
-        },
-    )
-    .await?;
-
-    let response = ensure_resolve(response)?;
-    let response_url = response.url().to_string();
-    if let Some(direct) = extract_download_link(
-        response.text().await?.as_str(),
-        &response_url,
-        HOST_MARKERS,
-        &["download", "descargar", "télécharger", "telecharger"],
-    ) {
-        return Ok((direct, page_url));
-    }
-
-    Err(HosterError::ResolutionFailed(
-        "akirabox: la página no expuso un enlace de descarga directo".into(),
-    ))
 }

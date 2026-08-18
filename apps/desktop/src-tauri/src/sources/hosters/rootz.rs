@@ -136,28 +136,39 @@ async fn fetch_page_token(
     page_url: &str,
     cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 ) -> Result<String, HosterError> {
-    if let Some(app) = app {
-        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, page_url, cancel_flag) {
-            let trimmed = scraped.trim();
-            if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
-                if let Ok(token) = extract_page_token(trimmed) {
-                    return Ok(token);
+    // 1. Intento nativo rápido (~50-100ms)
+    let native_res = async {
+        let response = get(
+            client,
+            page_url,
+            ProfilePreset::BrowserSameOrigin {
+                referer: format!("{ROOTZ_ORIGIN}/"),
+            },
+        )
+        .await?;
+        let response = ensure_resolve(response)?;
+        let html = response.text().await?;
+        extract_page_token(&html)
+    }
+    .await;
+
+    match native_res {
+        Ok(token) => Ok(token),
+        Err(native_err) => {
+            if let Some(app) = app {
+                log::info!("rootz: fetch_page_token nativo falló ({native_err:?}), intentando Scrapling fallback");
+                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, page_url, cancel_flag) {
+                    let trimmed = scraped.trim();
+                    if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
+                        if let Ok(token) = extract_page_token(trimmed) {
+                            return Ok(token);
+                        }
+                    }
                 }
             }
+            Err(native_err)
         }
     }
-
-    let response = get(
-        client,
-        page_url,
-        ProfilePreset::BrowserSameOrigin {
-            referer: format!("{ROOTZ_ORIGIN}/"),
-        },
-    )
-    .await?;
-    let response = ensure_resolve(response)?;
-    let html = response.text().await?;
-    extract_page_token(&html)
 }
 
 async fn rootz_api_get(
@@ -342,20 +353,30 @@ pub async fn resolve(
     let referer = format!("{ROOTZ_ORIGIN}/d/{short_id}");
     let page_url = referer.clone();
 
-    if let Some(app) = app {
-        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url, cancel_flag.clone()) {
-            let trimmed = scraped.trim();
-            if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-                return Ok((trimmed.to_string(), referer, None));
+    // 1. Intentar flujo nativo de tokens y API de Rootz
+    let native_res = async {
+        let page_token = fetch_page_token(app, client, &page_url, cancel_flag.clone()).await?;
+        let (direct_url, file_name_hint) =
+            resolve_direct_url(client, &short_id, &page_token, &referer).await?;
+        Ok::<_, HosterError>((direct_url, referer.clone(), file_name_hint))
+    }
+    .await;
+
+    match native_res {
+        Ok(res) => Ok(res),
+        Err(err) => {
+            if let Some(app) = app {
+                log::info!("rootz: resolución completa nativa falló ({err:?}), intentando Scrapling fallback directo");
+                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url, cancel_flag) {
+                    let trimmed = scraped.trim();
+                    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                        return Ok((trimmed.to_string(), referer, None));
+                    }
+                }
             }
+            Err(err)
         }
     }
-
-    let page_token = fetch_page_token(app, client, &page_url, cancel_flag).await?;
-    let (direct_url, file_name_hint) =
-        resolve_direct_url(client, &short_id, &page_token, &referer).await?;
-
-    Ok((direct_url, referer, file_name_hint))
 }
 
 #[cfg(test)]
