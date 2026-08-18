@@ -91,31 +91,15 @@ export function buildGameMediaCoverCandidates(
   orientation: "vertical" | "horizontal" = "vertical"
 ): string[] {
   const urls: string[] = [];
-  const hasUserCover = Boolean(game.imageUrl?.trim());
-  if (hasUserCover && game.imageUrl) {
-    urls.push(game.imageUrl.trim());
+  if (displayImageUrl?.trim()) urls.push(displayImageUrl.trim());
+  if (capsuleImage?.trim()) urls.push(capsuleImage.trim());
+  for (const url of mediaUrls) {
+    if (url?.trim()) urls.push(url.trim());
   }
 
   const appId = getSteamAppId(game, resolvedSteamAppId);
-
-  if (orientation === "vertical") {
-    if (appId) {
-      urls.push(...getSteamCdnCandidates(appId, "vertical"));
-    }
-    if (capsuleImage?.trim()) urls.push(capsuleImage.trim());
-    if (displayImageUrl?.trim()) urls.push(displayImageUrl.trim());
-    for (const url of mediaUrls) {
-      if (url?.trim()) urls.push(url.trim());
-    }
-  } else {
-    if (capsuleImage?.trim()) urls.push(capsuleImage.trim());
-    if (displayImageUrl?.trim()) urls.push(displayImageUrl.trim());
-    if (appId) {
-      urls.push(...getSteamCdnCandidates(appId, "horizontal"));
-    }
-    for (const url of mediaUrls) {
-      if (url?.trim()) urls.push(url.trim());
-    }
+  if (appId) {
+    urls.push(...getSteamCdnCandidates(appId, orientation));
   }
 
   const legacyHeader = getGameImageUrl(game, resolvedSteamAppId);
@@ -170,18 +154,16 @@ export function useGameMedia({
 
   const { displayImageUrl, mediaUrls, isEffectivelyLoading } = useMemo(() => {
     const isCustomImage = hasUserCover;
-    const verticalCoverUrl =
-      steamAppId && orientation === "vertical" ? getSteamCdnCandidates(steamAppId, "vertical")[0] : null;
-    const fallbackDisplay = verticalCoverUrl ?? staticImageUrl ?? "";
+    const fallbackDisplay = staticImageUrl ?? "";
     const fallbackUrls = [fallbackDisplay, extraImageUrl].filter(Boolean) as string[];
 
     // Portada personalizada: prioridad absoluta; galería = usuario + arte Steam si llegó (batch/query).
     if (isCustomImage) {
-      const steamExtras = (mediaSource?.mediaUrls ?? []).filter((u) => u && u !== staticImageUrl);
-      const merged = [staticImageUrl, ...steamExtras].filter(Boolean) as string[];
+      const steamExtras = (mediaSource?.mediaUrls ?? []).filter((u) => u && u !== fallbackDisplay);
+      const merged = [fallbackDisplay, ...steamExtras];
       const deduped = [...new Set(merged)];
       return {
-        displayImageUrl: staticImageUrl,
+        displayImageUrl: fallbackDisplay,
         mediaUrls: deduped.length > 0 ? deduped : fallbackUrls,
         isEffectivelyLoading: false,
       };
@@ -189,9 +171,8 @@ export function useGameMedia({
 
     // Steam tiene media
     if (mediaSource?.mediaUrls?.length) {
-      const mainCover = verticalCoverUrl ?? mediaSource.mediaUrls[0];
       return {
-        displayImageUrl: mainCover,
+        displayImageUrl: mediaSource.mediaUrls[0],
         mediaUrls: mediaSource.mediaUrls,
         isEffectivelyLoading: false,
       };
@@ -211,12 +192,12 @@ export function useGameMedia({
     return { displayImageUrl: fallbackDisplay, mediaUrls: fallbackUrls, isEffectivelyLoading: false };
   }, [
     hasUserCover,
+    game.imageUrl,
     staticImageUrl,
     extraImageUrl,
-    steamAppId,
-    orientation,
     mediaSource,
     externalLoading,
+    steamAppId,
     mediaFromBatch,
     isSteamQueryPending,
     mediaBySteamAppId,
