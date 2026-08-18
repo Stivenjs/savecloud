@@ -14,8 +14,11 @@ import {
   Plus,
   Power,
   Archive,
+  ShieldCheck,
+  CheckCircle2,
+  Sparkles,
 } from "lucide-react";
-import type { RemoteSourceConfig, SourceCatalogSummary } from "@services/tauri/sources.service";
+import type { RemoteSourceConfig, SourceCatalogSummary, VerifiedSourcesStatus } from "@services/tauri/sources.service";
 import { getSourceDisplayName } from "@utils/format";
 
 type Props = {
@@ -25,6 +28,7 @@ type Props = {
   sources: SourceCatalogSummary[];
   remoteSourceUrl: string;
   remoteSources: RemoteSourceConfig[];
+  verifiedSourcesStatus?: VerifiedSourcesStatus | null;
   deletingSourceIds: Set<string>;
   deletingRemoteSourceIds: Set<string>;
   onSourceUrlChange: (value: string) => void;
@@ -36,6 +40,7 @@ type Props = {
   onRegisterRemoteSource: () => void;
   onToggleRemoteSourceEnabled: (sourceId: string, enabled: boolean) => void;
   onDeleteRemoteSource: (sourceId: string) => void;
+  onInstallVerifiedSources?: () => void;
   onSyncRemoteSources: () => void;
   onPickFolder: () => void;
   onSaveDefaultDir: () => void;
@@ -72,6 +77,87 @@ export function SourceInstallSettingsCard(props: Props) {
               </span>
             </div>
           )}
+        </div>
+
+        {/* Divider */}
+        <div className="h-px bg-default-100" />
+
+        {/* Verified Sources */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck size={14} className="text-primary" />
+              <span className="text-xs font-semibold text-default-800">
+                {t("settings.sourceInstall.verifiedSourcesTitle")}
+              </span>
+            </div>
+            {props.verifiedSourcesStatus ? (
+              <Chip
+                size="sm"
+                variant="flat"
+                color={props.verifiedSourcesStatus.allInstalled ? "success" : "primary"}
+                startContent={
+                  props.verifiedSourcesStatus.allInstalled ? (
+                    <CheckCircle2 size={12} className="ml-1" />
+                  ) : (
+                    <Sparkles size={12} className="ml-1" />
+                  )
+                }
+                className="h-5 text-[10px]">
+                {props.verifiedSourcesStatus.allInstalled
+                  ? t("settings.sourceInstall.verifiedSourcesAllInstalled")
+                  : t("settings.sourceInstall.verifiedSourcesInstalledCount", {
+                      installed: props.verifiedSourcesStatus.installed,
+                      total: props.verifiedSourcesStatus.total,
+                    })}
+              </Chip>
+            ) : null}
+          </div>
+
+          <div className="rounded-xl border border-default-200 bg-default-50/80 p-3.5 space-y-3">
+            <p className="text-xs text-default-500 leading-relaxed">
+              {t("settings.sourceInstall.verifiedSourcesSubtitle")}
+            </p>
+
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                "FitGirl",
+                "SteamRip",
+                "DODI",
+                "GOG",
+                "OnlineFix",
+                "Xatab",
+                "Kazumi",
+                "SteamGG",
+                "RexaGames",
+                "0xEMPRESS",
+                "AtopGames",
+              ].map((name) => (
+                <Chip
+                  key={name}
+                  size="sm"
+                  variant="flat"
+                  className="h-5 border border-default-200/60 bg-default-100/70 text-[10px] text-default-700">
+                  {name}
+                </Chip>
+              ))}
+            </div>
+
+            <div className="pt-1 flex items-center justify-between gap-3">
+              <Button
+                size="sm"
+                color="primary"
+                variant={props.verifiedSourcesStatus?.allInstalled ? "flat" : "solid"}
+                isLoading={props.sourcesBusy}
+                onPress={props.onInstallVerifiedSources}
+                startContent={!props.sourcesBusy && <ShieldCheck size={14} />}
+                className="h-8 text-xs font-medium px-4">
+                {props.verifiedSourcesStatus?.allInstalled
+                  ? t("settings.sourceInstall.reinstallVerifiedSourcesButton")
+                  : t("settings.sourceInstall.installVerifiedSourcesButton")}
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Divider */}

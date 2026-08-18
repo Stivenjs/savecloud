@@ -166,8 +166,23 @@ export function listSourceItemsPage(params: {
   return invoke<SourceItemsPage>("list_source_items_page", params);
 }
 
+export interface VerifiedSourcesStatus {
+  total: number;
+  installed: number;
+  allInstalled: boolean;
+  presetSources: RemoteSourceConfig[];
+}
+
 export function listRemoteSources(): Promise<RemoteSourceConfig[]> {
   return invoke<RemoteSourceConfig[]>("list_remote_sources");
+}
+
+export function getVerifiedSourcesStatus(): Promise<VerifiedSourcesStatus> {
+  return invoke<VerifiedSourcesStatus>("get_verified_sources_status");
+}
+
+export function installVerifiedSources(syncNow = true): Promise<RemoteSyncResult> {
+  return invoke<RemoteSyncResult>("install_verified_sources", { syncNow });
 }
 
 export function upsertRemoteSource(url: string, enabled?: boolean | null): Promise<RemoteSourceConfig> {

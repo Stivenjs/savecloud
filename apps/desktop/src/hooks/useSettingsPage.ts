@@ -30,9 +30,11 @@ import {
   setAutoExtractDownloads,
 } from "@services/tauri";
 import {
+  getVerifiedSourcesStatus,
   importSourceFromFile,
   importSourceFromUrl,
   importSourcesFromFilesBatch,
+  installVerifiedSources,
   listRemoteSources,
   listSourcesSummary,
   removeRemoteSource,
@@ -276,6 +278,11 @@ export function useSettingsPage() {
   const { data: remoteSources = [] } = useQuery({
     queryKey: ["remote-sources"],
     queryFn: listRemoteSources,
+  });
+
+  const { data: verifiedSourcesStatus = null } = useQuery({
+    queryKey: ["verified-sources-status"],
+    queryFn: getVerifiedSourcesStatus,
   });
 
   const { data: defaultSourceDownloadDirFromConfig = "" } = useQuery({
@@ -940,6 +947,30 @@ export function useSettingsPage() {
     }
   };
 
+  const handleInstallVerifiedSources = async () => {
+    dispatch({ type: "SET_SOURCES_BUSY", payload: true });
+    try {
+      const result = await installVerifiedSources(true);
+      toastSuccess(
+        i18n.t("settings.toast.verifiedSourcesInstalledSuccess"),
+        i18n.t("settings.toast.verifiedSourcesInstalledSuccessDesc", {
+          total: result.total,
+          updated: result.updated,
+          unchanged: result.unchanged,
+        })
+      );
+      queryClient.invalidateQueries({ queryKey: ["verified-sources-status"] });
+      queryClient.invalidateQueries({ queryKey: ["remote-sources"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-catalogs"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-matches"] });
+      queryClient.invalidateQueries({ queryKey: ["sources-match-detail"] });
+    } catch (e) {
+      toastError(i18n.t("settings.toast.verifiedSourcesInstallError"), e instanceof Error ? e.message : String(e));
+    } finally {
+      dispatch({ type: "SET_SOURCES_BUSY", payload: false });
+    }
+  };
+
   const handleSyncRemoteSources = async () => {
     dispatch({ type: "SET_SOURCES_BUSY", payload: true });
     try {
@@ -1009,6 +1040,7 @@ export function useSettingsPage() {
     setPullFriendUserId: (id: string) => dispatch({ type: "SET_PULL_FRIEND_USER_ID", payload: id }),
     sourcesSummary,
     remoteSources,
+    verifiedSourcesStatus,
     setSourceUrl: (v: string) => dispatch({ type: "SET_SOURCE_URL", payload: v }),
     setRemoteSourceUrl: (v: string) => dispatch({ type: "SET_REMOTE_SOURCE_URL", payload: v }),
     setDefaultSourceDownloadDir: (v: string) => dispatch({ type: "SET_DEFAULT_SOURCE_DOWNLOAD_DIR", payload: v }),
@@ -1019,6 +1051,7 @@ export function useSettingsPage() {
     handleRegisterRemoteSource,
     handleToggleRemoteSourceEnabled,
     handleDeleteRemoteSource,
+    handleInstallVerifiedSources,
     handleSyncRemoteSources,
     handleSelectDefaultSourceDownloadDir,
     handleSaveDefaultSourceDownloadDir,
