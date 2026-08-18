@@ -7,10 +7,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const projectRoot = path.resolve(__dirname, "..");
-const pythonScriptPath = path.join(projectRoot, "src-tauri", "resources", "scrapling_fetch.py");
+const pythonScriptPath = path.join(projectRoot, "src-tauri", "resources", "savecloud_crawler.py");
 const distDir = path.join(projectRoot, "src-tauri", "resources");
 const buildDir = path.join(projectRoot, "build");
-const specPath = path.join(projectRoot, "scrapling_fetch.spec");
+const specPath = path.join(projectRoot, "savecloud_crawler.spec");
 const iconPath = path.join(projectRoot, "src-tauri", "icons", "icon.ico");
 
 const iconArgs: string[] = [];
@@ -38,7 +38,7 @@ if (process.platform === "win32") {
   }
 }
 
-console.log("Starting Scrapling Python compilation using PyInstaller...");
+console.log("Starting SaveCloud Crawler Python compilation using PyInstaller...");
 
 if (!fs.existsSync(pythonScriptPath)) {
   console.error(`Error: Python script not found at ${pythonScriptPath}`);
@@ -85,7 +85,7 @@ if (checkDeps.status !== 0) {
   }
 }
 
-console.log("Running PyInstaller to compile scrapling_fetch.py...");
+console.log("Running PyInstaller to compile savecloud_crawler.py...");
 const pyinstallerCmd = spawnSync(
   pythonBin,
   [
@@ -94,13 +94,13 @@ const pyinstallerCmd = spawnSync(
     "--clean",
     "--onefile",
     "--name",
-    "scrapling_fetch",
+    "savecloud_crawler",
     "--distpath",
     distDir,
     "--workpath",
     buildDir,
     "--specpath",
-    projectRoot,
+    buildDir,
     "--collect-all",
     "scrapling",
     "--collect-all",

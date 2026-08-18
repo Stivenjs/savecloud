@@ -26,6 +26,13 @@ dist-ssr
 *.db-journal
 *.db-wal
 
-# Compiled Scrapling Resources
+# Build & Spec files
+build
+build/
+*.spec
+
+# Compiled Crawler Resources
 src-tauri/resources/scrapling_fetch.exe
 src-tauri/resources/scrapling_fetch
+src-tauri/resources/savecloud_crawler.exe
+src-tauri/resources/savecloud_crawler

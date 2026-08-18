@@ -103,7 +103,7 @@
     },
     "resources": [
       "resources/oye_cloud.rpw",
-      "resources/scrapling_fetch*",
+      "resources/savecloud_crawler*",
       "resources/verified_sources.json"
     ]
   },

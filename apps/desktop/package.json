@@ -12,7 +12,8 @@
     "icon": "bun run scripts/make-icon-square.ts && tauri icon src-tauri/icons/icon-square.png",
     "latest-json": "bun run scripts/generate-latest-json.ts",
     "nsis-branding": "bun run scripts/generate-nsis-branding-bmps.ts",
-    "build-scrapling": "bun run scripts/build-scrapling.ts"
+    "build-crawler": "bun run scripts/build-crawler.ts",
+    "build-scrapling": "bun run scripts/build-crawler.ts"
   },
   "dependencies": {
     "@heroui/react": "^2.8.9",
