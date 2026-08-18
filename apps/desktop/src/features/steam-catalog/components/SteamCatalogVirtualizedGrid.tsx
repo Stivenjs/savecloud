@@ -19,6 +19,8 @@ export type SteamCatalogVirtualizedGridProps = {
   consoleMode?: boolean;
 };
 
+import { useGamesViewPreferences } from "@hooks/useGamesViewPreferences";
+
 export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualizedGrid({
   items,
   mediaBySteamAppId,
@@ -29,8 +31,10 @@ export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualized
   onInstall,
   consoleMode = false,
 }: SteamCatalogVirtualizedGridProps) {
-  const minItemWidth = consoleMode ? 320 : 280;
-  const estimatedRowHeight = consoleMode ? 330 : 235;
+  const { cardOrientation } = useGamesViewPreferences();
+  const isHorizontal = cardOrientation === "horizontal";
+  const minItemWidth = consoleMode ? (isHorizontal ? 320 : 220) : isHorizontal ? 280 : 180;
+  const estimatedRowHeight = consoleMode ? (isHorizontal ? 330 : 410) : isHorizontal ? 235 : 330;
   const catalogScrollPosition = useShellUiStore((state) => state.catalogScrollPosition);
 
   const { containerRef, visibleItems, topPadding, bottomPadding } = useNativeVirtualGrid({
@@ -52,8 +56,12 @@ export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualized
         className={cn(
           "grid gap-5",
           consoleMode
-            ? "grid-cols-[repeat(auto-fill,minmax(320px,1fr))]"
-            : "grid-cols-[repeat(auto-fill,minmax(280px,1fr))]"
+            ? isHorizontal
+              ? "grid-cols-[repeat(auto-fill,minmax(320px,1fr))]"
+              : "grid-cols-[repeat(auto-fill,minmax(220px,1fr))]"
+            : isHorizontal
+              ? "grid-cols-[repeat(auto-fill,minmax(280px,1fr))]"
+              : "grid-cols-[repeat(auto-fill,minmax(180px,1fr))]"
         )}>
         {visibleItems.map(({ item, index }) => {
           const libraryGame =
@@ -74,6 +82,7 @@ export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualized
                 onPickChange={onPickChange}
                 onInstall={onInstall}
                 consoleMode={consoleMode}
+                orientation={cardOrientation}
               />
             </div>
           );

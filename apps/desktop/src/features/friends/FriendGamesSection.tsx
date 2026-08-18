@@ -15,6 +15,7 @@ import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
 import { PlayingStatusBadge } from "@features/games/PlayingStatusBadge";
 import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
 import { useGameMediaBatch, getIsResolvingIds } from "@hooks/useGameMedia";
+import { useGamesViewPreferences } from "@hooks/useGamesViewPreferences";
 
 interface FriendProfileBannerProps {
   userIdDisplay: string;
@@ -229,10 +230,18 @@ export function FriendGamesSection({
     );
   }
 
+  const { cardOrientation } = useGamesViewPreferences();
+  const isHorizontal = cardOrientation === "horizontal";
+
   return (
     <div className="space-y-4">
       {profileHeader}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4">
+      <div
+        className={
+          isHorizontal
+            ? "grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4"
+            : "grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4"
+        }>
         {summaries.map(({ game, fileCount, totalSize }) => {
           const hasSaves = fileCount > 0;
           const isCopying = copyingGameId === game.id;
@@ -240,6 +249,7 @@ export function FriendGamesSection({
             <div key={game.id} className="space-y-1">
               <GameCard
                 game={game}
+                orientation={cardOrientation}
                 resolvedSteamAppId={resolvedSteamAppIds[game.id] ?? game.steamAppId}
                 isLoading={isResolvingIds}
                 mediaBySteamAppId={mediaBySteamAppId ?? null}

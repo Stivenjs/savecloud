@@ -177,6 +177,8 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::sources::commands::catalog::import_source_from_url,
         crate::sources::commands::remote::upsert_remote_source,
         crate::sources::commands::remote::set_remote_source_enabled,
+        crate::sources::commands::remote::get_verified_sources_status,
+        crate::sources::commands::remote::install_verified_sources,
         crate::sources::commands::remote::sync::sync_remote_sources,
         crate::sources::commands::downloads::list_source_download_jobs,
         crate::sources::commands::downloads::start_source_download,

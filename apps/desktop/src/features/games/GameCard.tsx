@@ -67,6 +67,8 @@ export interface GameCardProps {
   cardTitle?: string;
   /** Navegación al pulsar la tarjeta; por defecto va a `/games/:id`. */
   onCardNavigate?: (game: ConfiguredGame) => void;
+  /** Orientación de la tarjeta: vertical (póster 2:3) u horizontal (cápsula 460x215). Por defecto vertical. */
+  orientation?: "vertical" | "horizontal";
   /** `catalog`: sin menú ni barra de sync; sin tilt/sombra ni overlay de stats del pie; el desplegable de medios (imágenes/vídeo) se mantiene. */
   variant?: "library" | "catalog";
 }
@@ -106,10 +108,13 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     cardTitle,
     onCardNavigate,
     variant = "library",
+    orientation = "vertical",
     ...cardRest
   } = props;
 
   const isCatalog = variant === "catalog";
+  const isHorizontal = orientation === "horizontal";
+  const aspectClass = isHorizontal ? "aspect-460/215" : "aspect-2/3";
 
   const syncProgress = useSyncStore((state) => {
     if (state.syncOperation?.mode === "single" && state.syncOperation.gameId === game.id) {
@@ -124,6 +129,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     externalLoading,
     mediaBySteamAppId,
     mediaFromBatch,
+    orientation,
   });
 
   const navigate = useNavigate();
@@ -162,8 +168,8 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
 
   if (externalLoading) {
     return (
-      <div className="border border-zinc-800/80 shadow-md overflow-hidden bg-[#0e0f14] rounded-xl">
-        <Skeleton className="aspect-460/215 w-full bg-zinc-800 rounded-xl" />
+      <div className="shadow-md overflow-hidden bg-[#0e0f14] rounded-xl">
+        <Skeleton className={`${aspectClass} w-full bg-zinc-800 rounded-xl`} />
       </div>
     );
   }
@@ -171,7 +177,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
   const cardContent = (
     <GameCardHoverMotion disableMotion={isCatalog}>
       <div
-        className="cursor-pointer relative bg-[#0e0f14] border border-zinc-800/80 hover:border-zinc-700 shadow-md transition-colors duration-300 overflow-hidden rounded-xl aspect-460/215 w-full group/card"
+        className={`cursor-pointer relative bg-[#0e0f14] shadow-md transition-colors duration-300 overflow-hidden rounded-xl ${aspectClass} w-full group/card`}
         onClick={handleCardClick}
         onMouseEnter={onHoverStart}
         onMouseLeave={onHoverEnd}

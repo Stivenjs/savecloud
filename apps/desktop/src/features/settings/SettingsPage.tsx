@@ -157,6 +157,7 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
     defaultSourceDownloadDir,
     sourcesSummary,
     remoteSources,
+    verifiedSourcesStatus,
     setSourceUrl,
     setRemoteSourceUrl,
     setDefaultSourceDownloadDir,
@@ -166,6 +167,7 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
     handleRegisterRemoteSource,
     handleToggleRemoteSourceEnabled,
     handleDeleteRemoteSource,
+    handleInstallVerifiedSources,
     handleSyncRemoteSources,
     handleSelectDefaultSourceDownloadDir,
     handleSaveDefaultSourceDownloadDir,
@@ -288,6 +290,7 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
                 sourcesBusy={sourcesBusy}
                 sources={sourcesSummary}
                 remoteSources={remoteSources}
+                verifiedSourcesStatus={verifiedSourcesStatus}
                 deletingSourceIds={deletingSourceIds}
                 deletingRemoteSourceIds={deletingRemoteSourceIds}
                 onSourceUrlChange={setSourceUrl}
@@ -299,6 +302,7 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
                 onRegisterRemoteSource={handleRegisterRemoteSource}
                 onToggleRemoteSourceEnabled={handleToggleRemoteSourceEnabled}
                 onDeleteRemoteSource={handleDeleteRemoteSource}
+                onInstallVerifiedSources={handleInstallVerifiedSources}
                 onSyncRemoteSources={handleSyncRemoteSources}
                 onPickFolder={handleSelectDefaultSourceDownloadDir}
                 onSaveDefaultDir={handleSaveDefaultSourceDownloadDir}

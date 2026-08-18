@@ -1,0 +1,145 @@
+[
+  {
+    "id": "remote-59e6a31484ce",
+    "url": "https://hydralinks.cloud/sources/fitgirl.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-118d12535cb4",
+    "url": "https://hydralinks.cloud/sources/steamrip.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-2e45374d21bf",
+    "url": "https://hydralinks.cloud/sources/onlinefix.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-1783e708d297",
+    "url": "https://hydralinks.cloud/sources/xatab.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-6e247eb2aaad",
+    "url": "https://hydralinks.cloud/sources/dodi.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-1a3c886a3ff3",
+    "url": "https://hydralinks.cloud/sources/gog.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-6cd751fb21be",
+    "url": "https://hydralinks.cloud/sources/atop-games.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-d979e2a45109",
+    "url": "https://wkeynhk.online/steamgg.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-5d1baec7edea",
+    "url": "https://davidkazumisource.com/fontekazumi.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-ecee099b9bb0",
+    "url": "https://hydralinks.cloud/sources/rexagames.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-2fb22b88b8ad",
+    "url": "https://hydralinks.cloud/sources/empress.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  }
+]

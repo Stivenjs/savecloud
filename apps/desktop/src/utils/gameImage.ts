@@ -7,10 +7,32 @@ const STEAM_CLOUDFLARE_CDN_BASE = "https://cdn.cloudflare.steamstatic.com/steam/
 /**
  * Devuelve la lista jerárquica de URLs candidatas para la portada de una aplicación de Steam.
  */
-export function getSteamCdnCandidates(appId: string): string[] {
+export function getSteamCdnCandidates(appId: string, orientation: "vertical" | "horizontal" = "vertical"): string[] {
   const cleanId = appId.trim();
   if (!cleanId) return [];
+  if (orientation === "horizontal") {
+    return [
+      `${STEAM_FASTLY_CDN_BASE}/${cleanId}/header.jpg`,
+      `${STEAM_AKAMAI_CDN_BASE}/${cleanId}/header.jpg`,
+      `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/header.jpg`,
+      `https://cdn.akamai.steamstatic.com/steam/apps/${cleanId}/header.jpg`,
+      `${STEAM_FASTLY_CDN_BASE}/${cleanId}/capsule_616x353.jpg`,
+      `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/capsule_616x353.jpg`,
+      `${STEAM_FASTLY_CDN_BASE}/${cleanId}/library_hero.jpg`,
+      `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/library_hero.jpg`,
+      `${STEAM_FASTLY_CDN_BASE}/${cleanId}/library_600x900_2x.jpg`,
+      `${STEAM_FASTLY_CDN_BASE}/${cleanId}/library_600x900.jpg`,
+    ];
+  }
   return [
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/library_600x900_2x.jpg`,
+    `${STEAM_FASTLY_CDN_BASE}/${cleanId}/library_600x900.jpg`,
+    `${STEAM_AKAMAI_CDN_BASE}/${cleanId}/library_600x900_2x.jpg`,
+    `${STEAM_AKAMAI_CDN_BASE}/${cleanId}/library_600x900.jpg`,
+    `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/library_600x900_2x.jpg`,
+    `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/library_600x900.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${cleanId}/library_600x900_2x.jpg`,
+    `https://cdn.cloudflare.steamstatic.com/steam/apps/${cleanId}/library_600x900.jpg`,
     `${STEAM_FASTLY_CDN_BASE}/${cleanId}/header.jpg`,
     `${STEAM_AKAMAI_CDN_BASE}/${cleanId}/header.jpg`,
     `${STEAM_CLOUDFLARE_CDN_BASE}/${cleanId}/header.jpg`,

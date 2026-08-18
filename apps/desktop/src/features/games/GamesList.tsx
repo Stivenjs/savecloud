@@ -35,16 +35,29 @@ function getSyncStatus(gameId: string, stats: GameStats | undefined, unsyncedGam
   return null;
 }
 
-function getGridClass(layout: "grid-lg" | "grid-md" | "list"): string {
+function getGridClass(layout: "grid-lg" | "grid-md" | "list", orientation: "vertical" | "horizontal"): string {
+  if (orientation === "horizontal") {
+    switch (layout) {
+      case "grid-lg":
+        return "grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5";
+
+      case "grid-md":
+        return "grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5";
+
+      case "list":
+        return "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4";
+    }
+  }
+
   switch (layout) {
     case "grid-lg":
-      return "grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5";
+      return "grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-5";
 
     case "grid-md":
-      return "grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5";
+      return "grid grid-cols-[repeat(auto-fill,minmax(165px,1fr))] gap-4";
 
     case "list":
-      return "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4";
+      return "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4";
   }
 }
 
@@ -110,7 +123,8 @@ export function GamesList({
   consoleMode = false,
 }: GamesListProps) {
   const { t } = useTranslation();
-  const { layout, sortBy, sortDir, setLayout, setSortBy, setSortDir } = useGamesViewPreferences();
+  const { layout, cardOrientation, sortBy, sortDir, setLayout, setCardOrientation, setSortBy, setSortDir } =
+    useGamesViewPreferences();
 
   const handleSortChange = useCallback(
     (field: typeof sortBy, dir: typeof sortDir) => {
@@ -134,8 +148,8 @@ export function GamesList({
   const sortedGamesIds = useMemo(() => sortedGames.map((g) => g.id).join(","), [sortedGames]);
 
   const stableListKey = useMemo(
-    () => [animationKey ?? "", layout, sortBy, sortDir, sortedGamesIds].join("|"),
-    [animationKey, layout, sortBy, sortDir, sortedGamesIds]
+    () => [animationKey ?? "", layout, cardOrientation, sortBy, sortDir, sortedGamesIds].join("|"),
+    [animationKey, layout, cardOrientation, sortBy, sortDir, sortedGamesIds]
   );
 
   const [openActionsGameId, setOpenActionsGameId] = useState<string | null>(null);
@@ -153,8 +167,10 @@ export function GamesList({
             sortBy={sortBy}
             sortDir={sortDir}
             layout={layout}
+            cardOrientation={cardOrientation}
             onSortChange={handleSortChange}
             onLayoutChange={setLayout}
+            onCardOrientationChange={setCardOrientation}
             consoleMode={consoleMode}
           />
         </div>
@@ -217,18 +233,21 @@ export function GamesList({
           sortBy={sortBy}
           sortDir={sortDir}
           layout={layout}
+          cardOrientation={cardOrientation}
           onSortChange={handleSortChange}
           onLayoutChange={setLayout}
+          onCardOrientationChange={setCardOrientation}
           consoleMode={consoleMode}
         />
       </div>
 
       {/* Game grid / list */}
-      <GamesListMotionContainer className={getGridClass(layout)} listKey={stableListKey}>
+      <GamesListMotionContainer className={getGridClass(layout, cardOrientation)} listKey={stableListKey}>
         {sortedGames.map((game) => (
           <GamesListMotionItem key={game.id}>
             <GameCard
               game={game}
+              orientation={cardOrientation}
               stats={statsByGameId.get(game.id) as GameStats | undefined}
               resolvedSteamAppId={resolvedSteamAppIds[game.id]}
               mediaBySteamAppId={mediaBySteamAppId ?? null}

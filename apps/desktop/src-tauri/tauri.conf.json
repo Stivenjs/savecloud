@@ -97,12 +97,14 @@
           "SpanishInternational",
           "English"
         ],
-        "startMenuFolder": "SaveCloud"
+        "startMenuFolder": "SaveCloud",
+        "installerHooks": "windows/nsis/hooks.nsh"
       }
     },
     "resources": [
       "resources/oye_cloud.rpw",
-      "resources/scrapling_fetch*"
+      "resources/scrapling_fetch*",
+      "resources/verified_sources.json"
     ]
   },
   "identifier": "com.savecloud.desktop",
