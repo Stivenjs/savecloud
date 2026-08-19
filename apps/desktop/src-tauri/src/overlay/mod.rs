@@ -288,8 +288,9 @@ pub fn setup_overlay_window(app: &AppHandle) -> Result<(), Box<dyn std::error::E
 pub async fn show_overlay_notification(
     app: AppHandle,
     title: String,
-    body: String,
+    body: Option<String>,
 ) -> Result<(), String> {
+    let body = body.unwrap_or_default();
     let title_preview: String = title.chars().take(80).collect();
     let body_preview: String = body.chars().take(120).collect();
     sync_logger::log_operation(
