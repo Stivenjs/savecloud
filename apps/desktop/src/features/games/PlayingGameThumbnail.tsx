@@ -154,11 +154,11 @@ export function PlayingGameThumbnail({
 
   return (
     <div
-      className={`relative shrink-0 overflow-hidden bg-zinc-800/80 shadow-xs backdrop-blur-xs select-none ${sizeClass} ${
+      className={`relative shrink-0 overflow-hidden bg-default-100 dark:bg-zinc-800 shadow-xs select-none ${sizeClass} ${
         showGlow ? "shadow-[0_0_12px_rgba(34,197,94,0.35)] ring-1 ring-emerald-500/40" : ""
       } ${className}`}>
       {/* Skeleton mientras busca el ID o mientras descarga la imagen */}
-      {isLoading && <Skeleton className="absolute inset-0 z-10 size-full bg-zinc-700/60" />}
+      {isLoading && <Skeleton className="absolute inset-0 z-10 size-full bg-default-200/50 dark:bg-zinc-700/50" />}
 
       {currentSrc && !hasError ? (
         <img
@@ -172,8 +172,8 @@ export function PlayingGameThumbnail({
           onError={handleImgError}
         />
       ) : !isLoading ? (
-        <div className="flex size-full items-center justify-center bg-linear-to-br from-zinc-800 to-zinc-950 text-emerald-400/90">
-          <Gamepad2 size={iconSize} className="drop-shadow-xs" />
+        <div className="flex size-full items-center justify-center bg-default-100 dark:bg-zinc-800 text-default-400 dark:text-zinc-400">
+          <Gamepad2 size={iconSize} strokeWidth={1.75} />
         </div>
       ) : null}
     </div>

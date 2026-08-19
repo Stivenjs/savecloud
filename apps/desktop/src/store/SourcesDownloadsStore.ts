@@ -177,6 +177,9 @@ export function initSourcesListeners() {
     if (ev.payload.status === "completed") {
       invoke("show_overlay_notification", {
         title: "Juego Descargado",
+        body: ev.payload.title || "La descarga ha finalizado.",
+      }).catch((err) => {
+        console.error("Error al mostrar la notificación del overlay:", err);
       });
     }
   });

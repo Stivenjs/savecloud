@@ -450,7 +450,7 @@ async fn process_incoming_payload(
                 if let Err(e) = crate::overlay::show_overlay_notification(
                     app_handle.clone(),
                     "Amigo jugando".to_string(),
-                    format!("{} está jugando {}", data.friend_user_id, data.game_name),
+                    Some(format!("{} está jugando {}", data.friend_user_id, data.game_name)),
                 )
                 .await
                 {
