@@ -579,6 +579,31 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
             pass
 
         if expect_json:
+            try:
+                raw_json = page.evaluate("""() => {
+                    const pre = document.querySelector('pre');
+                    if (pre && pre.innerText) {
+                        const t = pre.innerText.trim();
+                        if (t.startsWith('{') || t.startsWith('[')) return t;
+                    }
+                    if (document.body && document.body.innerText) {
+                        const t = document.body.innerText.trim();
+                        if (t.startsWith('{') || t.startsWith('[')) return t;
+                    }
+                    return null;
+                }""")
+                if raw_json and isinstance(raw_json, str) and raw_json.strip():
+                    fetched_holder["text"] = raw_json
+                    return
+            except Exception as e:
+                sys.stderr.write(f"[page_action] Error extrayendo JSON del DOM: {e}\n")
+
+            try:
+                fetched = page.evaluate(JS_STREAM_FETCH, url)
+                if isinstance(fetched, str) and fetched.strip():
+                    fetched_holder["text"] = fetched
+            except Exception:
+                pass
             return
 
         try:
