@@ -12,30 +12,11 @@ pub fn is_supported_domain(url: &str) -> bool {
     DOMAINS.iter().any(|d| lower.contains(d))
 }
 
-pub async fn resolve(
-    app: Option<&AppHandle>,
+async fn resolve_native(
     client: &reqwest::Client,
-    url: &str,
-    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
-) -> Result<(String, String), HosterError> {
-    if !is_supported_domain(url) {
-        return Err(HosterError::ResolutionFailed(
-            "buzzheavier: dominio no soportado".into(),
-        ));
-    }
-
-    let base_url = url.split('#').next().unwrap_or(url).to_string();
-
-    if let Some(app) = app {
-        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &base_url, cancel_flag) {
-            let trimmed = scraped.trim();
-            if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-                return Ok((trimmed.to_string(), base_url));
-            }
-        }
-    }
-
-    let response = get(client, &base_url, ProfilePreset::BuzzheavierPage).await?;
+    base_url: &str,
+) -> Result<String, HosterError> {
+    let response = get(client, base_url, ProfilePreset::BuzzheavierPage).await?;
     ensure_resolve(response)?;
 
     let download_url = format!("{}/download", base_url.trim_end_matches('/'));
@@ -44,7 +25,7 @@ pub async fn resolve(
         client,
         &download_url,
         ProfilePreset::BuzzheavierHead {
-            page_url: base_url.clone(),
+            page_url: base_url.to_string(),
         },
     )
     .await?;
@@ -61,8 +42,8 @@ pub async fn resolve(
             )
         })?;
 
-    let domain = reqwest::Url::parse(&base_url)
-        .map_err(|_| HosterError::InvalidUrl(base_url.clone()))?
+    let domain = reqwest::Url::parse(base_url)
+        .map_err(|_| HosterError::InvalidUrl(base_url.to_string()))?
         .host_str()
         .unwrap_or("buzzheavier.com")
         .to_string();
@@ -73,5 +54,37 @@ pub async fn resolve(
         hx_redirect.to_string()
     };
 
-    Ok((direct, base_url))
+    Ok(direct)
+}
+
+pub async fn resolve(
+    app: Option<&AppHandle>,
+    client: &reqwest::Client,
+    url: &str,
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) -> Result<(String, String), HosterError> {
+    if !is_supported_domain(url) {
+        return Err(HosterError::ResolutionFailed(
+            "buzzheavier: dominio no soportado".into(),
+        ));
+    }
+
+    let base_url = url.split('#').next().unwrap_or(url).to_string();
+
+    // 1. Intento nativo rápido (~50-100ms)
+    match resolve_native(client, &base_url).await {
+        Ok(direct) => Ok((direct, base_url)),
+        Err(native_err) => {
+            if let Some(app) = app {
+                log::info!("buzzheavier: intento nativo falló ({native_err:?}), intentando Scrapling fallback");
+                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &base_url, cancel_flag) {
+                    let trimmed = scraped.trim();
+                    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                        return Ok((trimmed.to_string(), base_url));
+                    }
+                }
+            }
+            Err(native_err)
+        }
+    }
 }

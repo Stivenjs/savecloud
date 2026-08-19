@@ -51,18 +51,28 @@ fn resolve_scrapling_script(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn resolve_scrapling_binary(app: &AppHandle) -> Result<PathBuf, String> {
-    let bin_name = if cfg!(target_os = "windows") {
-        "resources/savecloud_crawler.exe"
+    let candidate_names = if cfg!(target_os = "windows") {
+        vec![
+            "resources/savecloud_crawler/savecloud_crawler.exe",
+            "resources/savecloud_crawler.exe",
+        ]
     } else {
-        "resources/savecloud_crawler"
+        vec![
+            "resources/savecloud_crawler/savecloud_crawler",
+            "resources/savecloud_crawler",
+        ]
     };
-    if let Ok(p) = app.path().resolve(bin_name, BaseDirectory::Resource) {
-        if p.is_file() {
-            return Ok(p);
+
+    for bin_name in &candidate_names {
+        if let Ok(p) = app.path().resolve(bin_name, BaseDirectory::Resource) {
+            if p.is_file() {
+                return Ok(p);
+            }
         }
     }
+
     app.path()
-        .resolve(bin_name, BaseDirectory::Resource)
+        .resolve(candidate_names[0], BaseDirectory::Resource)
         .map_err(|e| format!("No se pudo resolver el binario del crawler: {e}"))
 }
 

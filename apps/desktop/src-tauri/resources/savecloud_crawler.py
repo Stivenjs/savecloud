@@ -22,9 +22,8 @@ if "PLAYWRIGHT_BROWSERS_PATH" not in os.environ:
 
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
-
-
 PROCESS_TIMEOUT_SECONDS = 120
+
 
 def _start_watchdog(timeout: int = PROCESS_TIMEOUT_SECONDS):
     def _die():
@@ -52,6 +51,7 @@ def _kill_chromium_children():
             os.killpg(os.getpgid(pid), signal.SIGKILL)
     except Exception:
         pass
+
 
 @atexit.register
 def _cleanup_on_exit():
@@ -85,14 +85,19 @@ def is_json_url(url: str) -> bool:
 
 
 def _smart_referer(url: str) -> str:
-    host = _extract_host(url)
     return "https://www.google.com/"
 
+
+StealthyFetcher = None
+Fetcher = None
+
+
 def ensure_fetchers_installed():
-    global StealthyFetcher
+    global StealthyFetcher, Fetcher
     try:
-        from scrapling.fetchers import StealthyFetcher as SF
+        from scrapling.fetchers import StealthyFetcher as SF, Fetcher as F
         StealthyFetcher = SF
+        Fetcher = F
         return True
     except ModuleNotFoundError as exc:
         missing = str(exc)
@@ -113,8 +118,9 @@ def ensure_fetchers_installed():
             f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
         )
     
-    from scrapling.fetchers import StealthyFetcher as SF
+    from scrapling.fetchers import StealthyFetcher as SF, Fetcher as F
     StealthyFetcher = SF
+    Fetcher = F
     return True
 
 
@@ -223,14 +229,6 @@ def ensure_browsers_installed():
 
     raise RuntimeError(f"No se pudieron instalar los navegadores de Scrapling: {last_error}")
 
-
-def check_and_ensure_browsers():
-    if not is_browser_installed():
-        sys.stderr.write("[Scrapling] Chromium no encontrado en el sistema. Descargando automáticamente...\n")
-        ensure_browsers_installed()
-
-
-StealthyFetcher = None
 
 JS_STREAM_FETCH = """async (targetUrl) => {
     try {
@@ -376,38 +374,6 @@ def extract_body(page) -> str:
     return str(page)
 
 
-def _strategy_browser_fetch(url: str, expect_json: bool) -> str | None:
-    result_holder = {"text": None}
-
-    def page_action(page):
-        try:
-            fetched = page.evaluate(JS_STREAM_FETCH, url)
-            if isinstance(fetched, str) and fetched.strip():
-                result_holder["text"] = fetched
-        except Exception:
-            pass
-
-    def page_setup(page):
-        _setup_generic_route(page, url)
-
-    kwargs = {
-        "headless": True,
-        "network_idle": False,
-        "solve_cloudflare": True,
-        "timeout": 25000,
-        "page_action": page_action,
-        "google_search": False,
-        "dns_over_https": True,
-        "disable_ads": True,
-    }
-
-    kwargs["page_setup"] = page_setup
-
-    StealthyFetcher.fetch(url, **kwargs)
-    text = result_holder["text"]
-    return get_valid_content(text, expect_json, ignore_turnstile=True)
-
-
 def solve_embedded_turnstile(page) -> bool:
     try:
         target_selectors = ["a#download-link", "#download-btn", ".download-button", "a.download-btn"]
@@ -428,47 +394,50 @@ def solve_embedded_turnstile(page) -> bool:
             sys.stderr.write("Found embedded Cloudflare Turnstile iframe, attempting to solve...\n")
             try:
                 page.evaluate("document.querySelectorAll('#dontfoid, div[id^=\"dontfo\"]').forEach(el => el.remove())")
-            except Exception as e:
-                sys.stderr.write(f"Failed to remove intercepting element: {e}\n")
+            except Exception:
+                pass
             try:
                 checkbox = cf_frame.locator(".tIReV4 input").first
                 if checkbox.count() > 0 and checkbox.is_visible():
-                    sys.stderr.write("Hovering checkbox input inside frame...\n")
-                    checkbox.hover(timeout=5000)
-                    page.wait_for_timeout(500)
-                    sys.stderr.write("Clicking checkbox input inside frame naturally...\n")
-                    checkbox.click(timeout=5000)
-                    sys.stderr.write("Clicked Turnstile checkbox input inside frame.\n")
-                    page.wait_for_timeout(3000)
+                    checkbox.hover(timeout=2000)
+                    page.wait_for_timeout(200)
+                    checkbox.click(timeout=3000)
+                    page.wait_for_timeout(2000)
                     return True
-            except Exception as e:
-                sys.stderr.write(f"Failed to click checkbox input inside frame: {e}\n")
+            except Exception:
+                pass
 
             try:
                 iframe_locator = page.locator("iframe[src*='challenges.cloudflare.com']:visible").first
                 if iframe_locator.count() > 0:
-                    sys.stderr.write("Clicking center-left of Turnstile iframe (offset x=180, y=32)...\n")
-                    iframe_locator.click(position={'x': 180, 'y': 32}, timeout=3000)
-                    page.wait_for_timeout(3000)
+                    iframe_locator.click(position={'x': 180, 'y': 32}, timeout=2000)
+                    page.wait_for_timeout(2000)
                     return True
-            except Exception as e:
-                sys.stderr.write(f"Failed fallback (coordinate click): {e}\n")
+            except Exception:
+                pass
     except Exception as e:
         sys.stderr.write(f"Error in solve_embedded_turnstile: {e}\n")
     return False
 
 
-def _setup_generic_route(page, target_url: str):
-    """Set up route interception with a smart referer for any URL."""
+def _setup_generic_route(page, target_url: str, expect_json: bool = False):
+    """Set up route interception with smart referer and blocking of heavy assets."""
     referer = _smart_referer(target_url)
 
     def handle_route(route, request):
         try:
-            if is_ad_domain(request.url):
-                try:
-                    route.abort()
-                except Exception:
-                    pass
+            req_url = request.url.lower()
+            res_type = request.resource_type
+
+            if is_ad_domain(req_url):
+                route.abort()
+                return
+            if res_type in ("image", "media", "font"):
+                route.abort()
+                return
+
+            if expect_json and res_type == "stylesheet":
+                route.abort()
                 return
 
             if request.is_navigation_request():
@@ -516,6 +485,32 @@ def is_ad_domain(url: str) -> bool:
         return any(kw in url_lower for kw in ad_keywords)
     except Exception:
         return False
+
+
+def _strategy_fast_fetch(url: str, expect_json: bool) -> str | None:
+    """Nivel 1 Rápido (~100-200ms): Petición con TLS impersonation (curl_cffi via Fetcher)."""
+    try:
+        global Fetcher
+        if Fetcher is None:
+            ensure_fetchers_installed()
+        if Fetcher is None:
+            return None
+
+        referer = _smart_referer(url)
+        headers = {
+            "Referer": referer,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8",
+            "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
+        }
+        res = Fetcher.fetch(url, headers=headers, timeout=12, follow_redirects=True)
+        body = extract_body(res)
+        valid = get_valid_content(body, expect_json)
+        if valid:
+            return valid
+    except Exception as e:
+        sys.stderr.write(f"[FastFetch] curl_cffi attempt failed: {e}\n")
+    return None
 
 
 def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> str | None:
@@ -568,13 +563,7 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
             except Exception:
                 pass
 
-        try:
-            page.on("console", lambda msg: sys.stderr.write(f"CONSOLE: {msg.text}\n"))
-            page.on("pageerror", lambda err: sys.stderr.write(f"PAGE ERROR: {err.message}\n"))
-        except Exception:
-            pass
-
-        _setup_generic_route(page, url)
+        _setup_generic_route(page, url, expect_json)
 
         try:
             page.on("response", on_response)
@@ -585,7 +574,6 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
 
     def page_action(page):
         try:
-            page.wait_for_timeout(2000)
             solve_embedded_turnstile(page)
         except Exception:
             pass
@@ -597,16 +585,8 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
         except Exception:
             pass
 
-        try:
-            combined_selector = (
-                "a#download-link, #download-button, #download-btn, .download-button, "
-                "a.download-btn, button#download-button, a[hx-get*='download'], [hx-get*='download']"
-            )
-            sys.stderr.write("Waiting for any download button/link to become visible...\n")
-            page.wait_for_selector(combined_selector, state="visible", timeout=15000)
-            sys.stderr.write("Download element is now visible!\n")
-        except Exception as e:
-            sys.stderr.write(f"Wait for download element visibility failed: {e}\n")
+        if expect_json:
+            return
 
         try:
             for sel in ["a#download-link", "a[href*='/download/']", "a[href*='?download']", "a.download-btn"]:
@@ -624,14 +604,22 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
                                     sys.stderr.write(f"Direct link found in href of '{sel}': {absolute_url}\n")
                                     captured_download["url"] = absolute_url
                                     return
-        except Exception as e:
-            sys.stderr.write(f"Failed to extract href directly: {e}\n")
+        except Exception:
+            pass
 
         try:
-            page.wait_for_timeout(2000)
-            if captured_download["url"]:
-                return
-            
+            combined_selector = (
+                "a#download-link, #download-button, #download-btn, .download-button, "
+                "a.download-btn, button#download-button, a[hx-get*='download'], [hx-get*='download']"
+            )
+            page.wait_for_selector(combined_selector, state="visible", timeout=3500)
+        except Exception:
+            pass
+
+        if captured_download["url"]:
+            return
+
+        try:
             selectors = [
                 "#download-button",
                 "#download-btn",
@@ -652,7 +640,6 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
                 "a[href*='?download']",
                 "a[href*='download']",
                 "a[href*='/dl/']",
-                "a[href*='dl']"
             ]
             for selector in selectors:
                 try:
@@ -662,26 +649,16 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
                         el = elements.nth(i)
                         if el.is_visible():
                             try:
-                                sys.stderr.write(f"Clicking element: {selector}\n")
-                                el.click(timeout=3000, force=True)
-                                page.wait_for_timeout(1000)
+                                el.click(timeout=2000, force=True)
+                                page.wait_for_timeout(300)
                                 solve_embedded_turnstile(page)
-                            except Exception as click_err:
-                                sys.stderr.write(f"First click failed on {selector}: {click_err}\n")
-                            
-                            if not captured_download["url"]:
-                                sys.stderr.write(f"Download not captured, retrying click on: {selector}\n")
-                                try:
-                                    el.click(timeout=3000, force=True)
-                                    page.wait_for_timeout(2000)
-                                    solve_embedded_turnstile(page)
-                                except Exception as click_err:
-                                    sys.stderr.write(f"Retry click failed on {selector}: {click_err}\n")
-                                    
+                            except Exception:
+                                pass
+                                
                             if captured_download["url"]:
                                 return
-                except Exception as loop_err:
-                    sys.stderr.write(f"Error in selector loop for {selector}: {loop_err}\n")
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -689,7 +666,7 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
         "headless": True,
         "network_idle": False,
         "solve_cloudflare": solve_cf,
-        "timeout": 25000,
+        "timeout": 20000,
         "page_setup": page_setup,
         "page_action": page_action,
         "google_search": False,
@@ -770,26 +747,22 @@ def fetch_with_capture(url: str) -> str:
     expect_json = is_json_url(url)
     errors = []
 
-    try:
-        result = _strategy_response_listener(url, False, expect_json)
-        if result:
-            return result
-    except Exception as e:
-        sys.stderr.write(f"Initial strategy failed: {e}\n")
-        errors.append(f"Initial strategy: {e}")
-        if is_missing_browser_error(e):
-            ensure_browsers_installed()
+    fast_result = _strategy_fast_fetch(url, expect_json)
+    if fast_result:
+        return fast_result
 
-    sys.stderr.write(f"Retrying with Cloudflare solver enabled for: {url}\n")
     try:
         result = _strategy_response_listener(url, True, expect_json)
         if result:
             return result
     except Exception as e:
-        sys.stderr.write(f"Retry with CF solver failed: {e}\n")
-        errors.append(f"CF solver retry: {e}")
+        sys.stderr.write(f"Stealth browser attempt failed: {e}\n")
+        errors.append(f"Stealth browser: {e}")
         if is_missing_browser_error(e):
             ensure_browsers_installed()
+            result = _strategy_response_listener(url, True, expect_json)
+            if result:
+                return result
 
     err_details = " | ".join(errors) if errors else "Respuesta vacía o bloqueada"
     raise RuntimeError(f"No se pudo obtener contenido válido de {url}: {err_details}")
@@ -806,9 +779,7 @@ def main() -> int:
     multiprocessing.freeze_support()
 
     _start_watchdog(PROCESS_TIMEOUT_SECONDS)
-
     ensure_fetchers_installed()
-    check_and_ensure_browsers()
 
     if len(sys.argv) < 2:
         print(json.dumps({"error": "missing url"}), file=sys.stderr)

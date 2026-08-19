@@ -64,57 +64,29 @@ fn extract_download_form(
     None
 }
 
-pub async fn resolve(
-    app: Option<&AppHandle>,
+async fn resolve_native(
     client: &reqwest::Client,
-    url: &str,
-    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
-) -> Result<(String, String), HosterError> {
-    let page_url = normalize_page_url(url)?;
-    if !is_url_on_marked_host(&page_url, HOST_MARKERS) {
-        return Err(HosterError::ResolutionFailed(
-            "filekeeper: dominio no soportado".into(),
-        ));
-    }
+    page_url: &str,
+) -> Result<String, HosterError> {
+    let response = get(
+        client,
+        page_url,
+        ProfilePreset::BrowserSameOrigin {
+            referer: page_url.to_string(),
+        },
+    )
+    .await?;
 
-    let mut page_html = None;
+    let response = ensure_resolve(response)?;
+    let page_html = response.text().await?;
 
-    if let Some(app) = app {
-        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url, cancel_flag.clone()) {
-            let trimmed = scraped.trim();
-            if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-                return Ok((trimmed.to_string(), page_url));
-            }
-            if !trimmed.is_empty() {
-                page_html = Some(trimmed.to_string());
-            }
-        }
-    }
-
-    let page_html = match page_html {
-        Some(html) => html,
-        None => {
-            let response = get(
-                client,
-                &page_url,
-                ProfilePreset::BrowserSameOrigin {
-                    referer: page_url.clone(),
-                },
-            )
-            .await?;
-
-            let response = ensure_resolve(response)?;
-            response.text().await?
-        }
-    };
-
-    if let Some(direct) = extract_download_link(&page_html, &page_url, HOST_MARKERS, TEXT_MARKERS) {
-        return Ok((direct, page_url));
+    if let Some(direct) = extract_download_link(&page_html, page_url, HOST_MARKERS, TEXT_MARKERS) {
+        return Ok(direct);
     }
 
     sleep(DOWNLOAD_WAIT).await;
 
-    let Some((download_url, form_fields)) = extract_download_form(&page_html, &page_url) else {
+    let Some((download_url, form_fields)) = extract_download_form(&page_html, page_url) else {
         return Err(HosterError::ResolutionFailed(
             "filekeeper: no se encontró el formulario de descarga".into(),
         ));
@@ -129,7 +101,7 @@ pub async fn resolve(
         client,
         &download_url,
         ProfilePreset::BrowserSameOrigin {
-            referer: page_url.clone(),
+            referer: page_url.to_string(),
         },
         &form_fields_ref,
     )
@@ -138,17 +110,51 @@ pub async fn resolve(
     let download_response = ensure_resolve(download_response)?;
     let direct_url = download_response.url().to_string();
     if !is_url_on_marked_host(&direct_url, HOST_MARKERS) {
-        return Ok((direct_url, page_url));
+        return Ok(direct_url);
     }
 
     let download_html = download_response.text().await?;
     if let Some(direct) =
         extract_download_link(&download_html, &download_url, HOST_MARKERS, TEXT_MARKERS)
     {
-        return Ok((direct, page_url));
+        return Ok(direct);
     }
 
     Err(HosterError::ResolutionFailed(
         "filekeeper: el formulario no devolvió un enlace de descarga directo".into(),
     ))
+}
+
+pub async fn resolve(
+    app: Option<&AppHandle>,
+    client: &reqwest::Client,
+    url: &str,
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) -> Result<(String, String), HosterError> {
+    let page_url = normalize_page_url(url)?;
+    if !is_url_on_marked_host(&page_url, HOST_MARKERS) {
+        return Err(HosterError::ResolutionFailed(
+            "filekeeper: dominio no soportado".into(),
+        ));
+    }
+
+    // 1. Intento nativo rápido
+    match resolve_native(client, &page_url).await {
+        Ok(direct) => Ok((direct, page_url)),
+        Err(native_err) => {
+            if let Some(app) = app {
+                log::info!("filekeeper: intento nativo falló ({native_err:?}), intentando Scrapling fallback");
+                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url, cancel_flag) {
+                    let trimmed = scraped.trim();
+                    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                        return Ok((trimmed.to_string(), page_url));
+                    }
+                    if let Some(direct) = extract_download_link(trimmed, &page_url, HOST_MARKERS, TEXT_MARKERS) {
+                        return Ok((direct, page_url));
+                    }
+                }
+            }
+            Err(native_err)
+        }
+    }
 }

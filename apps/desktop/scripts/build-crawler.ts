@@ -111,8 +111,6 @@ const pyinstallerCmd = spawnSync(
     "curl_cffi",
     "--collect-all",
     "patchright",
-    "--collect-all",
-    "playwright",
     "--hidden-import",
     "_cffi_backend",
     ...dllArgs,

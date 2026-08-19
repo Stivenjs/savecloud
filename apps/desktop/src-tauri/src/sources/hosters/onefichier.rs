@@ -25,6 +25,82 @@ fn is_direct_1fichier_link(url: &str) -> bool {
     is_url_on_marked_host(url, PAGE_HOST_MARKERS)
 }
 
+async fn resolve_native(
+    client: &reqwest::Client,
+    page_url: &str,
+) -> Result<String, HosterError> {
+    let response = get(
+        client,
+        page_url,
+        ProfilePreset::BrowserSameOrigin {
+            referer: "https://1fichier.com/".to_string(),
+        },
+    )
+    .await?;
+
+    let response = ensure_resolve(response)?;
+    let response_url = response.url().to_string();
+    if response_url != page_url && is_direct_1fichier_link(&response_url) {
+        return Ok(response_url);
+    }
+    let page_html = response.text().await?;
+
+    if has_password_field(&page_html) {
+        return Err(HosterError::ResolutionFailed(
+            "1fichier: el enlace requiere contraseña; ábrelo en el navegador e introdúcela manualmente.".into(),
+        ));
+    }
+
+    let post_response = post_form_urlencoded(
+        client,
+        page_url,
+        ProfilePreset::BrowserSameOrigin {
+            referer: page_url.to_string(),
+        },
+        &[("dl_no_ssl", "on"), ("dlinline", "on")],
+    )
+    .await?;
+
+    let post_response = ensure_resolve(post_response)?;
+    let post_response_url = post_response.url().to_string();
+    if post_response_url != page_url && is_direct_1fichier_link(&post_response_url) {
+        return Ok(post_response_url);
+    }
+
+    let post_html = post_response.text().await?;
+    if let Some(direct) = extract_download_link(
+        &post_html,
+        &post_response_url,
+        PAGE_HOST_MARKERS,
+        DOWNLOAD_TEXT_MARKERS,
+    ) {
+        if is_direct_1fichier_link(&direct)
+            || direct.contains("/dl/")
+            || direct.contains("download")
+        {
+            return Ok(direct);
+        }
+    }
+
+    if let Some(direct) = extract_download_link(
+        &page_html,
+        page_url,
+        PAGE_HOST_MARKERS,
+        DOWNLOAD_TEXT_MARKERS,
+    ) {
+        if is_direct_1fichier_link(&direct)
+            || direct.contains("/dl/")
+            || direct.contains("download")
+        {
+            return Ok(direct);
+        }
+    }
+
+    Err(HosterError::ResolutionFailed(
+        "1fichier: no se pudo extraer el enlace directo de la página".into(),
+    ))
+}
+
 pub async fn resolve(
     app: Option<&AppHandle>,
     client: &reqwest::Client,
@@ -40,103 +116,30 @@ pub async fn resolve(
         ));
     }
 
-    let mut page_html = None;
-
-    if let Some(app) = app {
-        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url, cancel_flag.clone()) {
-            let trimmed = scraped.trim();
-            if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-                return Ok((trimmed.to_string(), page_url));
-            }
-            if let Some(direct) =
-                extract_download_link(trimmed, &page_url, PAGE_HOST_MARKERS, DOWNLOAD_TEXT_MARKERS)
-            {
-                if is_direct_1fichier_link(&direct)
-                    || direct.contains("/dl/")
-                    || direct.contains("download")
-                {
-                    return Ok((direct, page_url));
+    // 1. Intento nativo rápido
+    match resolve_native(client, &page_url).await {
+        Ok(direct) => Ok((direct, page_url)),
+        Err(native_err) => {
+            if let Some(app) = app {
+                log::info!("1fichier: intento nativo falló ({native_err:?}), intentando Scrapling fallback");
+                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url, cancel_flag) {
+                    let trimmed = scraped.trim();
+                    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                        return Ok((trimmed.to_string(), page_url));
+                    }
+                    if let Some(direct) =
+                        extract_download_link(trimmed, &page_url, PAGE_HOST_MARKERS, DOWNLOAD_TEXT_MARKERS)
+                    {
+                        if is_direct_1fichier_link(&direct)
+                            || direct.contains("/dl/")
+                            || direct.contains("download")
+                        {
+                            return Ok((direct, page_url));
+                        }
+                    }
                 }
             }
-            if !trimmed.is_empty() {
-                page_html = Some(trimmed.to_string());
-            }
+            Err(native_err)
         }
     }
-
-    let page_html = match page_html {
-        Some(html) => html,
-        None => {
-            let response = get(
-                client,
-                &page_url,
-                ProfilePreset::BrowserSameOrigin {
-                    referer: "https://1fichier.com/".to_string(),
-                },
-            )
-            .await?;
-
-            let response = ensure_resolve(response)?;
-            let response_url = response.url().to_string();
-            if response_url != page_url && is_direct_1fichier_link(&response_url) {
-                return Ok((response_url, page_url));
-            }
-            response.text().await?
-        }
-    };
-
-    if has_password_field(&page_html) {
-        return Err(HosterError::ResolutionFailed(
-            "1fichier: el enlace requiere contraseña; ábrelo en el navegador e introdúcela manualmente.".into(),
-        ));
-    }
-
-    let post_response = post_form_urlencoded(
-        client,
-        &page_url,
-        ProfilePreset::BrowserSameOrigin {
-            referer: page_url.clone(),
-        },
-        &[("dl_no_ssl", "on"), ("dlinline", "on")],
-    )
-    .await?;
-
-    let post_response = ensure_resolve(post_response)?;
-    let post_response_url = post_response.url().to_string();
-    if post_response_url != page_url && is_direct_1fichier_link(&post_response_url) {
-        return Ok((post_response_url, page_url));
-    }
-
-    let post_html = post_response.text().await?;
-    if let Some(direct) = extract_download_link(
-        &post_html,
-        &post_response_url,
-        PAGE_HOST_MARKERS,
-        DOWNLOAD_TEXT_MARKERS,
-    ) {
-        if is_direct_1fichier_link(&direct)
-            || direct.contains("/dl/")
-            || direct.contains("download")
-        {
-            return Ok((direct, page_url));
-        }
-    }
-
-    if let Some(direct) = extract_download_link(
-        &page_html,
-        &page_url,
-        PAGE_HOST_MARKERS,
-        DOWNLOAD_TEXT_MARKERS,
-    ) {
-        if is_direct_1fichier_link(&direct)
-            || direct.contains("/dl/")
-            || direct.contains("download")
-        {
-            return Ok((direct, page_url));
-        }
-    }
-
-    Err(HosterError::ResolutionFailed(
-        "1fichier: no se pudo extraer el enlace directo de la página".into(),
-    ))
 }
