@@ -1,18 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Badge, Button, Popover, PopoverContent, PopoverTrigger, ScrollShadow, Spinner } from "@heroui/react";
-import { AnimatePresence, motion } from "framer-motion";
-import {
-  AlertTriangle,
-  Bell,
-  CheckCheck,
-  Clock,
-  Download,
-  ExternalLink,
-  FolderOpen,
-  Info,
-  Trash2,
-  X,
-} from "lucide-react";
+import { AlertTriangle, Bell, CheckCheck, Download, ExternalLink, FolderOpen, Info, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   useNotificationsQuery,
@@ -95,98 +83,21 @@ function SeverityIcon({ color, kind, size = 15 }: { color: string; kind: string;
   }
 }
 
-const severityTheme: Record<
-  string,
-  {
-    badgeBg: string;
-    iconBg: string;
-    text: string;
-    border: string;
-  }
-> = {
-  success: {
-    badgeBg: "bg-emerald-500 text-white shadow-emerald-500/20",
-    iconBg: "bg-emerald-500/12 text-emerald-500 dark:bg-emerald-500/20 dark:text-emerald-400",
-    text: "text-emerald-600 dark:text-emerald-400",
-    border: "border-emerald-500/30 dark:border-emerald-500/20",
-  },
-  danger: {
-    badgeBg: "bg-rose-500 text-white shadow-rose-500/20",
-    iconBg: "bg-rose-500/12 text-rose-500 dark:bg-rose-500/20 dark:text-rose-400",
-    text: "text-rose-600 dark:text-rose-400",
-    border: "border-rose-500/30 dark:border-rose-500/20",
-  },
-  warning: {
-    badgeBg: "bg-amber-500 text-white shadow-amber-500/20",
-    iconBg: "bg-amber-500/12 text-amber-500 dark:bg-amber-500/20 dark:text-amber-400",
-    text: "text-amber-600 dark:text-amber-400",
-    border: "border-amber-500/30 dark:border-amber-500/20",
-  },
-  primary: {
-    badgeBg: "bg-blue-500 text-white shadow-blue-500/20",
-    iconBg: "bg-blue-500/12 text-blue-500 dark:bg-blue-500/20 dark:text-blue-400",
-    text: "text-blue-600 dark:text-blue-400",
-    border: "border-blue-500/30 dark:border-blue-500/20",
-  },
-  default: {
-    badgeBg: "bg-default-500 text-white shadow-default-500/20",
-    iconBg: "bg-default-100 text-default-500 dark:bg-white/10 dark:text-default-400",
-    text: "text-default-500",
-    border: "border-default-200/50 dark:border-white/10",
-  },
+const iconBgMap: Record<string, string> = {
+  success: "bg-emerald-500/12 text-emerald-500",
+  warning: "bg-amber-500/12 text-amber-500",
+  danger: "bg-rose-500/12 text-rose-500",
+  primary: "bg-blue-500/12 text-blue-500",
+  default: "bg-default-500/12 text-default-400",
 };
 
-/** Renderiza el texto del cuerpo con detección inteligente de rutas o datos técnicos */
-function FormattedNotificationBody({ body, gameId }: { body: string; gameId?: string | null }) {
-  let displayBody = body;
-  if (gameId) {
-    const formatted = formatGameDisplayName(gameId);
-    const escaped = gameId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const regex = new RegExp(`(?<![a-zA-Z0-9_-])${escaped}(?![a-zA-Z0-9_-])`, "g");
-    displayBody = displayBody.replace(regex, formatted);
-  }
-
-  const pathRegex = /([a-zA-Z]:\\[^\s"']+|\/(?:[^\s"']+\/)+[^\s"']+)/g;
-
-  if (!pathRegex.test(displayBody)) {
-    return (
-      <p className="mt-1 text-xs text-default-600 dark:text-zinc-300/90 leading-relaxed wrap-break-word select-text">
-        {displayBody}
-      </p>
-    );
-  }
-
-  const parts: (string | { isPath: boolean; text: string })[] = [];
-  let lastIndex = 0;
-  pathRegex.lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pathRegex.exec(displayBody)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(displayBody.substring(lastIndex, match.index));
-    }
-    parts.push({ isPath: true, text: match[0] });
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < displayBody.length) {
-    parts.push(displayBody.substring(lastIndex));
-  }
-
-  return (
-    <p className="mt-1 text-xs text-default-600 dark:text-zinc-300/90 leading-relaxed wrap-break-word select-text">
-      {parts.map((p, idx) => {
-        if (typeof p === "string") return <span key={idx}>{p}</span>;
-        return (
-          <code
-            key={idx}
-            className="inline-block my-0.5 px-1.5 py-0.5 text-[11px] font-mono bg-default-200/60 dark:bg-white/10 text-foreground rounded border border-default-300/40 dark:border-white/10 break-all select-all font-medium">
-            {p.text}
-          </code>
-        );
-      })}
-    </p>
-  );
-}
+const textColorMap: Record<string, string> = {
+  success: "text-emerald-500 dark:text-emerald-400",
+  warning: "text-amber-500 dark:text-amber-400",
+  danger: "text-rose-500 dark:text-rose-400",
+  primary: "text-blue-500 dark:text-blue-400",
+  default: "text-default-400",
+};
 
 /** Fila de notificación */
 function NotificationRow({
@@ -202,7 +113,8 @@ function NotificationRow({
   const { config } = useConfig();
   const unread = !n.readAt || !n.readAt.trim();
   const color = severityColor(n.severity);
-  const theme = severityTheme[color] ?? severityTheme.default;
+  const iconBg = iconBgMap[color] ?? iconBgMap.default;
+  const iconText = textColorMap[color] ?? textColorMap.default;
   const downloadDir = getDownloadDir(n);
   const downloadUri = getDownloadUri(n);
 
@@ -211,98 +123,82 @@ function NotificationRow({
     [n.gameId, n.body, n.title, config?.games]
   );
 
+  let displayBody = n.body;
+  if (n.gameId) {
+    const formatted = formatGameDisplayName(n.gameId);
+    const escaped = n.gameId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`(?<![a-zA-Z0-9_-])${escaped}(?![a-zA-Z0-9_-])`, "g");
+    displayBody = n.body.replace(regex, formatted);
+  }
+
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96, height: 0, marginTop: 0, marginBottom: 0, padding: 0, overflow: "hidden" }}
-      transition={{ duration: 0.2 }}
-      className={`group relative flex items-start gap-2.5 sm:gap-3 p-2.5 sm:p-3 text-sm transition-all duration-200 rounded-xl border ${
-        unread
-          ? "bg-default-50/90 hover:bg-default-100/80 dark:bg-zinc-800/40 dark:hover:bg-zinc-800/70 border-primary-500/25 shadow-xs"
-          : "bg-transparent hover:bg-default-100/50 dark:hover:bg-white/4 border-default-100/70 dark:border-white/5 opacity-85 hover:opacity-100"
-      }`}>
-      {/* Icono / Carátula limpia del juego con badge de severidad */}
-      <div className="relative shrink-0 select-none">
+    <div className="group relative flex items-start gap-3 p-2.5 text-sm transition-all duration-200 hover:bg-default-100/50 dark:hover:bg-white/5 rounded-xl">
+      {/* Icono / Carátula limpia del juego */}
+      <div className="relative shrink-0 mt-0.5">
         {detectedGameId ? (
-          <div className="relative">
-            <PlayingGameThumbnail
-              gameId={detectedGameId}
-              size="md"
-              className="h-10 w-15 sm:h-11 sm:w-16 rounded-lg ring-1 ring-black/10 dark:ring-white/10 shadow-xs object-cover"
-            />
-            {/* Badge de severidad superpuesto sobre la carátula */}
-            <div
-              className={`absolute -bottom-1 -right-1 size-4.5 rounded-full flex items-center justify-center ${theme.badgeBg} ring-2 ring-background shadow-xs`}>
-              <SeverityIcon color={color} kind={n.kind} size={10} />
-            </div>
-          </div>
+          <PlayingGameThumbnail
+            gameId={detectedGameId}
+            size="md"
+            className="h-11 w-18 rounded-lg shadow-xs object-cover"
+          />
         ) : (
-          <div
-            className={`flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl ${theme.iconBg} border border-default-200/40 dark:border-white/10 shadow-xs`}>
-            <SeverityIcon color={color} kind={n.kind} size={18} />
+          <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${iconBg} shadow-xs`}>
+            <SeverityIcon color={color} kind={n.kind} size={16} />
           </div>
         )}
       </div>
 
       {/* Contenido */}
-      <div className="min-w-0 flex-1 flex flex-col justify-between">
-        <div className="flex items-start justify-between gap-1.5 min-w-0">
-          <div className="min-w-0 flex-1 flex items-center gap-1.5">
-            {unread && (
-              <span className="size-2 rounded-full bg-primary shrink-0 shadow-xs animate-pulse" title="No leída" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            {detectedGameId && (
+              <span className={`shrink-0 ${iconText}`}>
+                <SeverityIcon color={color} kind={n.kind} size={14} />
+              </span>
             )}
-            <h4
-              className={`font-semibold text-xs sm:text-sm leading-snug wrap-break-word ${
-                unread ? "text-foreground" : "text-default-700 dark:text-zinc-200"
-              }`}>
+            <p
+              className={`font-medium leading-snug text-sm wrap-break-word ${unread ? "text-foreground font-semibold" : "text-default-700"}`}>
               {n.title}
-            </h4>
+            </p>
+            {unread && <span className="size-1.5 rounded-full bg-primary shrink-0" />}
           </div>
-
-          {/* Botón de descarte (X) */}
+          {/* Botón de descarte — visible al pasar el mouse */}
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDismiss(n.id);
-            }}
-            className="shrink-0 p-1 -mr-1 -mt-0.5 rounded-lg text-default-400 hover:text-danger-500 hover:bg-danger-500/10 active:scale-95 transition-all opacity-70 hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
-            title={t("notifications.dismiss")}
+            onClick={() => onDismiss(n.id)}
+            className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-default-400 hover:text-danger-400 mt-0.5"
             aria-label={t("notifications.dismiss")}>
             <X size={14} />
           </button>
         </div>
 
-        {/* Cuerpo formateado */}
-        <FormattedNotificationBody body={n.body} gameId={n.gameId} />
+        <p className="mt-1 text-xs text-default-500 leading-relaxed wrap-break-word select-text">{displayBody}</p>
 
-        {/* Fila de acciones y fecha */}
-        <div className="mt-2.5 pt-1.5 flex flex-wrap items-center justify-between gap-1.5 border-t border-default-100/50 dark:border-white/5">
-          <div className="flex items-center gap-1 text-[11px] text-default-400 shrink-0 font-medium">
-            <Clock size={11} className="opacity-70" />
-            <span>{formatRelativeDate(n.createdAt)}</span>
-          </div>
+        {/* Fila de acciones */}
+        <div className="mt-2.5 flex items-center justify-between gap-2 flex-wrap min-w-0">
+          <span className="text-[11px] text-default-400">{formatRelativeDate(n.createdAt)}</span>
 
-          <div className="flex items-center gap-1.5 flex-wrap ml-auto">
+          <div className="flex gap-1.5 ml-auto opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none group-hover:pointer-events-auto">
+            {/* Botón de apertura de carpeta — solo para descargas completadas */}
             {downloadDir && (
               <Button
                 size="sm"
                 variant="flat"
                 color="primary"
-                className="h-6 px-2 text-[11px] font-medium gap-1 min-w-0 rounded-md"
+                className="h-6 px-2 text-[11px] gap-1 min-w-0"
                 startContent={<FolderOpen size={12} />}
                 onPress={() => void openFolder(downloadDir)}>
                 {t("notifications.openFolder")}
               </Button>
             )}
 
+            {/* Botón de apertura de URL — para descargas fallidas */}
             {downloadUri && (
               <Button
                 size="sm"
                 variant="flat"
                 color="warning"
-                className="h-6 px-2 text-[11px] font-medium gap-1 min-w-0 rounded-md"
+                className="h-6 px-2 text-[11px] gap-1 min-w-0"
                 startContent={<ExternalLink size={12} />}
                 onPress={() => void openLink(downloadUri)}>
                 {t("notifications.openUrl")}
@@ -314,8 +210,7 @@ function NotificationRow({
                 size="sm"
                 variant="flat"
                 color="success"
-                className="h-6 px-2 text-[11px] font-medium min-w-0 gap-1 rounded-md hover:bg-emerald-500/20"
-                startContent={<CheckCheck size={12} />}
+                className="h-6 px-2 text-[11px] min-w-0"
                 onPress={() => onRead(n.id)}>
                 {t("notifications.markRead")}
               </Button>
@@ -323,7 +218,7 @@ function NotificationRow({
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -368,7 +263,7 @@ export function NotificationCenter() {
   })();
 
   return (
-    <Popover placement="bottom-end" offset={10} showArrow isOpen={open} onOpenChange={onOpenChange}>
+    <Popover placement="bottom-end" showArrow isOpen={open} onOpenChange={onOpenChange}>
       {/* Disparador */}
       <PopoverTrigger>
         <Button
@@ -393,28 +288,26 @@ export function NotificationCenter() {
       </PopoverTrigger>
 
       {/* Contenido */}
-      <PopoverContent className="w-[calc(100vw-1.5rem)] sm:w-115 md:w-120 max-w-120 rounded-2xl p-0 shadow-2xl overflow-hidden border border-default-200/60 dark:border-default-100/20 bg-background/95 backdrop-blur-xl">
+      <PopoverContent className="w-[calc(100vw-1.5rem)] sm:w-115 md:w-120 max-w-120 rounded-2xl p-0 shadow-2xl overflow-hidden border border-default-200/50 dark:border-default-100/20">
         {/* Encabezado */}
-        <div className="flex w-full items-center justify-between gap-2 px-3.5 py-3 border-b border-default-100/80 dark:border-white/5 bg-default-50/80 dark:bg-zinc-900/60 backdrop-blur-md">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="size-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              <Bell size={15} />
-            </div>
-            <span className="text-sm font-semibold tracking-tight truncate">{t("notifications.title")}</span>
+        <div className="flex w-full items-center justify-between gap-2 px-4 py-3 border-b border-default-100 bg-default-50/80 backdrop-blur-sm">
+          <div className="flex items-center gap-2">
+            <Bell size={15} className="text-default-500" />
+            <span className="text-sm font-semibold tracking-tight">{t("notifications.title")}</span>
             {unreadCount > 0 && (
-              <span className="inline-flex items-center justify-center rounded-full bg-primary-500 text-white text-[10px] font-bold h-4.5 min-w-4.5 px-1.5 shadow-xs">
-                {unreadCount > 99 ? "99+" : unreadCount}
+              <span className="inline-flex items-center justify-center rounded-full bg-primary-500 text-white text-[10px] font-bold h-4 min-w-4 px-1">
+                {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex gap-1 shrink-0">
             <Button
               size="sm"
               variant="flat"
               isDisabled={unreadCount === 0}
               color="success"
-              className="h-7 px-2 text-xs gap-1 font-medium rounded-lg"
+              className="h-7 px-2 text-xs gap-1"
               startContent={<CheckCheck size={13} />}
               onPress={() => void markAllRead()}>
               <span className="hidden xs:inline sm:inline">{t("notifications.markAllRead")}</span>
@@ -424,7 +317,7 @@ export function NotificationCenter() {
               variant="flat"
               isDisabled={items.length === 0}
               color="danger"
-              className="h-7 px-2 text-xs gap-1 font-medium rounded-lg"
+              className="h-7 px-2 text-xs gap-1"
               startContent={<Trash2 size={13} />}
               onPress={() => void dismissAll()}>
               <span className="hidden xs:inline sm:inline">{t("notifications.clearAll")}</span>
@@ -433,45 +326,35 @@ export function NotificationCenter() {
         </div>
 
         {/* Cuerpo */}
-        <ScrollShadow className="max-h-[min(72vh,520px)] overflow-y-auto px-2 py-2 sm:px-3 sm:py-2.5">
+        <ScrollShadow className="max-h-[min(70vh,460px)]">
           {loading ? (
-            <div className="flex flex-col items-center justify-center gap-2 py-14">
-              <Spinner size="md" color="primary" />
+            <div className="flex justify-center py-12">
+              <Spinner size="md" />
             </div>
           ) : items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-2.5 py-14 text-center px-4">
-              <div className="size-12 rounded-2xl bg-default-100/60 dark:bg-white/5 flex items-center justify-center text-default-400 mb-1">
-                <Bell size={24} strokeWidth={1.5} />
-              </div>
-              <p className="text-sm font-medium text-default-600 dark:text-zinc-300">{t("notifications.empty")}</p>
-              <p className="text-xs text-default-400 max-w-60">
-                Te avisaremos cuando haya nuevas descargas, sincronizaciones o actividades.
-              </p>
+            <div className="flex flex-col items-center justify-center gap-3 py-14 text-default-400">
+              <Bell size={32} strokeWidth={1.2} />
+              <p className="text-sm">{t("notifications.empty")}</p>
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
+            <div className="p-2.5 flex flex-col gap-1.5">
               {groups.map((g) => (
-                <div key={g.key} className="space-y-1.5">
+                <div key={g.key} className="space-y-1">
                   {/* Etiqueta de día */}
-                  <div className="sticky top-0 z-10 backdrop-blur-md bg-background/90 dark:bg-zinc-900/90 py-1 px-2 text-[10.5px] font-bold text-default-400 uppercase tracking-wider rounded-md border-b border-default-100/40 dark:border-white/5 flex items-center justify-between">
-                    <span>{g.label}</span>
-                    <span className="text-[10px] font-medium opacity-60">
-                      {g.items.length} {g.items.length === 1 ? "notificación" : "notificaciones"}
-                    </span>
+                  <div className="px-2.5 pt-2 pb-1 text-[11px] font-semibold text-default-400 uppercase tracking-wider">
+                    {g.label}
                   </div>
 
-                  {/* Filas con animación */}
+                  {/* Filas */}
                   <div className="flex flex-col gap-1.5">
-                    <AnimatePresence initial={false}>
-                      {g.items.map((n) => (
-                        <NotificationRow
-                          key={n.id}
-                          n={n}
-                          onRead={(id) => void markRead(id)}
-                          onDismiss={(id) => void dismiss(id)}
-                        />
-                      ))}
-                    </AnimatePresence>
+                    {g.items.map((n) => (
+                      <NotificationRow
+                        key={n.id}
+                        n={n}
+                        onRead={(id) => void markRead(id)}
+                        onDismiss={(id) => void dismiss(id)}
+                      />
+                    ))}
                   </div>
                 </div>
               ))}
