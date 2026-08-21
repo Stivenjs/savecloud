@@ -503,7 +503,7 @@ def _strategy_fast_fetch(url: str, expect_json: bool) -> str | None:
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8",
             "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
         }
-        res = Fetcher.fetch(url, headers=headers, timeout=12, follow_redirects=True)
+        res = Fetcher.get(url, headers=headers, timeout=12, follow_redirects=True)
         body = extract_body(res)
         valid = get_valid_content(body, expect_json)
         if valid:
@@ -574,6 +574,39 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
 
     def page_action(page):
         try:
+            page.wait_for_load_state("domcontentloaded", timeout=4000)
+        except Exception:
+            pass
+
+        if expect_json:
+            try:
+                raw_json = page.evaluate("""() => {
+                    const pre = document.querySelector('pre');
+                    if (pre && pre.innerText) {
+                        const t = pre.innerText.trim();
+                        if (t.startsWith('{') || t.startsWith('[')) return t;
+                    }
+                    if (document.body && document.body.innerText) {
+                        const t = document.body.innerText.trim();
+                        if (t.startsWith('{') || t.startsWith('[')) return t;
+                    }
+                    return null;
+                }""")
+                if raw_json and isinstance(raw_json, str) and raw_json.strip():
+                    fetched_holder["text"] = raw_json
+                    return
+            except Exception as e:
+                sys.stderr.write(f"[page_action] Error extrayendo JSON del DOM: {e}\n")
+
+            try:
+                fetched = page.evaluate(JS_STREAM_FETCH, url)
+                if isinstance(fetched, str) and fetched.strip():
+                    fetched_holder["text"] = fetched
+            except Exception:
+                pass
+            return
+
+        try:
             solve_embedded_turnstile(page)
         except Exception:
             pass
@@ -584,9 +617,6 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
                 fetched_holder["text"] = fetched
         except Exception:
             pass
-
-        if expect_json:
-            return
 
         try:
             for sel in ["a#download-link", "a[href*='/download/']", "a[href*='?download']", "a.download-btn"]:
@@ -711,28 +741,34 @@ def _strategy_response_listener(url: str, solve_cf: bool, expect_json: bool) -> 
         except Exception:
             pass
 
-    for response in captured_responses:
-        body_method = getattr(response, "body", None)
-        if callable(body_method):
-            try:
-                body_bytes = body_method() or b""
-                if body_bytes:
-                    decoded = body_bytes.decode("utf-8", "replace")
-                    valid = get_valid_content(decoded, expect_json, ignore_turnstile=solve_cf)
-                    if valid:
-                        return valid
-            except Exception:
-                pass
-        text_method = getattr(response, "text", None)
-        if callable(text_method):
-            try:
-                body_text = text_method() or ""
-                if body_text:
-                    valid = get_valid_content(body_text, expect_json, ignore_turnstile=solve_cf)
-                    if valid:
-                        return valid
-            except Exception:
-                pass
+    for response in reversed(captured_responses):
+        try:
+            status = getattr(response, "status", None)
+            if status and int(status) not in (200,):
+                continue
+            body_method = getattr(response, "body", None)
+            if callable(body_method):
+                try:
+                    body_bytes = body_method() or b""
+                    if body_bytes:
+                        decoded = body_bytes.decode("utf-8", "replace")
+                        valid = get_valid_content(decoded, expect_json, ignore_turnstile=solve_cf)
+                        if valid:
+                            return valid
+                except Exception:
+                    pass
+            text_method = getattr(response, "text", None)
+            if callable(text_method):
+                try:
+                    body_text = text_method() or ""
+                    if body_text:
+                        valid = get_valid_content(body_text, expect_json, ignore_turnstile=solve_cf)
+                        if valid:
+                            return valid
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     if fetched_holder["text"]:
         valid = get_valid_content(fetched_holder["text"], expect_json, ignore_turnstile=solve_cf)

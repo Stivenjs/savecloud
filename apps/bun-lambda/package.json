@@ -2,10 +2,9 @@
   "name": "bun-lambda",
   "private": true,
   "devDependencies": {
-    "@oclif/plugin-plugins": "^3.5.0",
-    "bun-types": "^0.7.0",
-    "jszip": "^3.10.1",
-    "oclif": "^3.6.5"
+    "@oclif/core": "^4.2.0",
+    "@types/bun": "latest",
+    "jszip": "^3.10.1"
   },
   "dependencies": {
     "aws4fetch": "^1.0.17"
@@ -17,6 +16,8 @@
     "format:check": "oxfmt --check ."
   },
   "overrides": {
-    "braces": "^3.0.3"
+    "braces": "^3.0.3",
+    "axios": "^1.18.0",
+    "brace-expansion": "^2.1.4"
   }
 }
