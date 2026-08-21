@@ -33,8 +33,8 @@
       "source.organizeImports": "never"
     }
   },
-  "typescript.tsdk": "node_modules/typescript/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "js/ts.experimental.useTsgo": true,
+  "typescript.enablePromptUseWorkspaceTsdk": false,
   "[dockerfile]": {
     "editor.defaultFormatter": "ms-azuretools.vscode-containers"
   },
