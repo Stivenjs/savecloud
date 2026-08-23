@@ -8,11 +8,13 @@
 use super::api::register_savecloud_api;
 use super::manifest::PluginManifest;
 use crate::plugins::log_buffer::AppLogs;
+use crate::sqlite::AppDb;
 use mlua::{Function, Lua, Result, Value};
+use rusqlite::params;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 pub struct Plugin {
     pub id: String,
@@ -41,7 +43,26 @@ impl Plugin {
         let id = manifest.id.clone();
         let name = dir_path.file_name().unwrap().to_string_lossy().to_string();
 
-        register_savecloud_api(&lua, app_handle, logs, name.clone())?;
+        
+        if let Some(db) = app_handle.try_state::<AppDb>() {
+            let id_clone = id.clone();
+            let name_clone = name.clone();
+            let _ = db.with_conn(|conn| {
+                if id_clone != name_clone {
+                    conn.execute(
+                        "UPDATE OR IGNORE plugin_storage SET plugin_id = ?1 WHERE plugin_id = ?2",
+                        params![id_clone, name_clone],
+                    )?;
+                    conn.execute(
+                        "DELETE FROM plugin_storage WHERE plugin_id = ?2",
+                        params![name_clone],
+                    )?;
+                }
+                Ok(())
+            });
+        }
+
+        register_savecloud_api(&lua, app_handle, logs, id.clone(), name.clone())?;
 
         let folder_str = dir_path.to_string_lossy().replace('\\', "/");
         let setup_script = format!(

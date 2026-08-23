@@ -21,6 +21,7 @@ pub fn register_savecloud_api(
     lua: &Lua,
     app_handle: AppHandle,
     logs: AppLogs,
+    plugin_id: String,
     plugin_name: String,
 ) -> Result<()> {
     let globals = lua.globals();
@@ -32,7 +33,7 @@ pub fn register_savecloud_api(
         &savecloud_table,
         app_handle.clone(),
         logs,
-        plugin_name.clone(),
+        plugin_name,
     )?;
     register_ui_module(lua, &savecloud_table, app_handle.clone())?;
     register_db_module(lua, &savecloud_table)?;
@@ -41,7 +42,7 @@ pub fn register_savecloud_api(
         lua,
         &savecloud_table,
         app_handle.clone(),
-        plugin_name.clone(),
+        plugin_id,
     )?;
     register_notifications_module(lua, &savecloud_table, app_handle.clone())?;
     register_games_module(lua, &savecloud_table, app_handle)?;

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import {
   getInstalledPlugins,
   togglePluginEnabled,
@@ -18,6 +19,7 @@ export function usePluginsManager() {
   const queryClient = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 250);
   const [logsModalOpen, setLogsModalOpen] = useState(false);
   const [selectedStoragePlugin, setSelectedStoragePlugin] = useState<PluginInfo | null>(null);
   const [pluginToDelete, setPluginToDelete] = useState<PluginInfo | null>(null);
@@ -137,16 +139,17 @@ export function usePluginsManager() {
     }
   };
 
-  const filteredPlugins: PluginInfo[] = plugins.filter((p: PluginInfo) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      p.name.toLowerCase().includes(q) ||
-      p.id.toLowerCase().includes(q) ||
-      (p.description && p.description.toLowerCase().includes(q)) ||
-      (p.author && p.author.toLowerCase().includes(q))
+  const filteredPlugins: PluginInfo[] = useMemo(() => {
+    if (!debouncedSearchQuery.trim()) return plugins;
+    const q = debouncedSearchQuery.toLowerCase();
+    return plugins.filter(
+      (p: PluginInfo) =>
+        p.name.toLowerCase().includes(q) ||
+        p.id.toLowerCase().includes(q) ||
+        (p.description && p.description.toLowerCase().includes(q)) ||
+        (p.author && p.author.toLowerCase().includes(q))
     );
-  });
+  }, [plugins, debouncedSearchQuery]);
 
   const activeCount = plugins.filter((p: PluginInfo) => p.enabled && p.loaded).length;
   const errorCount = plugins.filter((p: PluginInfo) => Boolean(p.error)).length;

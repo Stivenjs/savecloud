@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { getPluginStorage, clearPluginStorage, type PluginInfo, type PluginStorageEntry } from "@services/tauri";
 import { toastSuccess, toastError } from "@utils/toast";
 
@@ -8,6 +9,7 @@ export function usePluginStorage(plugin: PluginInfo | null, isOpen: boolean) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState("");
+  const debouncedFilter = useDebouncedValue(filter, 200);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
 
@@ -38,12 +40,12 @@ export function usePluginStorage(plugin: PluginInfo | null, isOpen: boolean) {
   });
 
   const filteredEntries = useMemo(() => {
-    if (!filter.trim()) return entries;
-    const q = filter.toLowerCase();
+    if (!debouncedFilter.trim()) return entries;
+    const q = debouncedFilter.toLowerCase();
     return entries.filter(
       (e: PluginStorageEntry) => e.key.toLowerCase().includes(q) || e.value.toLowerCase().includes(q)
     );
-  }, [entries, filter]);
+  }, [entries, debouncedFilter]);
 
   const handleCopy = (text: string, key: string): void => {
     navigator.clipboard.writeText(text);
