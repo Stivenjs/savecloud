@@ -490,46 +490,58 @@ pub(crate) async fn sync_upload_game_impl(
             .collect();
 
         let mut put_count: usize = 0;
+        let app_for_stream = app.clone();
+        let gid_for_stream = game_id.clone();
         let mut stream = stream::iter(items)
-            .map(|(absolute, relative, total, upload_url)| async move {
-                let body = match tokio::fs::read(&absolute).await {
-                    Ok(b) => b,
-                    Err(e) => {
-                        return Err((
-                            relative.clone(),
-                            absolute,
-                            total,
-                            format!("{}: {}", relative, e),
-                        ))
-                    }
-                };
+            .map(|(absolute, relative, total, upload_url)| {
+                let app_inner = app_for_stream.clone();
+                let gid_inner = gid_for_stream.clone();
+                async move {
+                    let mut body = match tokio::fs::read(&absolute).await {
+                        Ok(b) => b,
+                        Err(e) => {
+                            return Err((
+                                relative.clone(),
+                                absolute,
+                                total,
+                                format!("{}: {}", relative, e),
+                            ))
+                        }
+                    };
 
-                let put_res = match DATA_CLIENT
-                    .put(&upload_url)
-                    .body(body)
-                    .header("Content-Type", "application/octet-stream")
-                    .header("Content-Length", total.to_string())
-                    .send()
-                    .await
-                {
-                    Ok(r) => r,
-                    Err(e) => {
-                        return Err((
-                            relative.clone(),
-                            absolute,
-                            total,
-                            format!("{}: {}", relative, e),
-                        ))
+                    if let Some(pm) = app_inner.try_state::<crate::plugins::AppPluginManager>() {
+                        let pm = pm.lock().await;
+                        body = pm.execute_pre_upload(body, &gid_inner, &relative).await;
                     }
-                };
+                    let body_len = body.len() as u64;
 
-                if put_res.status().is_success() {
-                    let now = filetime::FileTime::from_system_time(std::time::SystemTime::now());
-                    let _ = filetime::set_file_mtime(std::path::Path::new(&absolute), now);
-                    Ok((relative, total))
-                } else {
-                    let msg = format!("{}: S3 PUT {}", relative, put_res.status());
-                    Err((relative, absolute, total, msg))
+                    let put_res = match DATA_CLIENT
+                        .put(&upload_url)
+                        .body(body)
+                        .header("Content-Type", "application/octet-stream")
+                        .header("Content-Length", body_len.to_string())
+                        .send()
+                        .await
+                    {
+                        Ok(r) => r,
+                        Err(e) => {
+                            return Err((
+                                relative.clone(),
+                                absolute,
+                                total,
+                                format!("{}: {}", relative, e),
+                            ))
+                        }
+                    };
+
+                    if put_res.status().is_success() {
+                        let now = filetime::FileTime::from_system_time(std::time::SystemTime::now());
+                        let _ = filetime::set_file_mtime(std::path::Path::new(&absolute), now);
+                        Ok((relative, total))
+                    } else {
+                        let msg = format!("{}: S3 PUT {}", relative, put_res.status());
+                        Err((relative, absolute, total, msg))
+                    }
                 }
             })
             .buffer_unordered(SIMPLE_PUT_CONCURRENCY);
@@ -603,6 +615,16 @@ pub(crate) async fn sync_upload_game_impl(
 
     let _ =
         crate::config::append_operation_log("upload", &game_id, result.ok_count, result.err_count);
+
+    if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
+        let pm = pm.lock().await;
+        pm.execute_post_upload(
+            &game_id,
+            result.err_count == 0,
+            ok_count as usize,
+            err_count as usize,
+        );
+    }
 
     Ok(result)
 }

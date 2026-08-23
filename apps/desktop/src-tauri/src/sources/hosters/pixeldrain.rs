@@ -47,12 +47,8 @@ async fn check_availability(client: &reqwest::Client, id: &str) -> Result<(), Ho
     Ok(())
 }
 
-pub async fn resolve(
-    client: &reqwest::Client,
-    url: &str,
-) -> Result<(String, String), HosterError> {
-    let parsed =
-        reqwest::Url::parse(url).map_err(|_| HosterError::InvalidUrl(url.to_string()))?;
+pub async fn resolve(client: &reqwest::Client, url: &str) -> Result<(String, String), HosterError> {
+    let parsed = reqwest::Url::parse(url).map_err(|_| HosterError::InvalidUrl(url.to_string()))?;
     let id = extract_id(&parsed)?;
     let page_referer = format!("https://pixeldrain.com/u/{id}");
 

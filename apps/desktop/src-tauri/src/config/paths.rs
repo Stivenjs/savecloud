@@ -64,6 +64,11 @@ pub fn cache_dir() -> Option<PathBuf> {
     data_dir().map(|d| d.join(CACHE_DIR_NAME))
 }
 
+/// Directorio donde se almacenan los plugins de usuario.
+pub fn plugins_dir() -> Option<PathBuf> {
+    config_dir().map(|d| d.join("plugins"))
+}
+
 /// Ruta del manifiesto de storage versionado.
 pub fn storage_manifest_path() -> Option<PathBuf> {
     core_dir().map(|d| d.join(STORAGE_MANIFEST_FILE_NAME))

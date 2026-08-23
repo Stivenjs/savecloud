@@ -1,11 +1,9 @@
-//! Módulo para gestionar los plugins.
+//! Módulo para gestionar y orquestar los plugins.
 //!
 //! Contiene las funciones para:
-//!
-//! - Cargar todos los plugins.
-//! - Registrar el plugin.
-//! - Ejecutar el hook de inicialización.
-//! - Ejecutar el hook de pre-subida (Pipeline).
+//! - Descubrir y cargar todos los plugins del directorio.
+//! - Orquestar la ejecución de los hooks de ciclo de vida (`on_init`, `on_game_start`, `on_game_exit`, `on_save_detected`).
+//! - Orquestar el pipeline de subida (`on_pre_upload`, `on_post_upload`).
 
 use super::plugin::{clean_lua_error, Plugin};
 use crate::plugins::log_buffer::AppLogs;
@@ -22,10 +20,6 @@ impl PluginManager {
         Self {
             plugins: Vec::new(),
         }
-    }
-
-    pub fn _plugin_count(&self) -> usize {
-        self.plugins.len()
     }
 
     pub fn load_all(&mut self, plugins_dir: PathBuf, app_handle: AppHandle, logs: AppLogs) {
@@ -92,9 +86,14 @@ impl PluginManager {
         }
     }
 
-    pub fn _execute_pre_upload(&self, mut data: Vec<u8>) -> Vec<u8> {
+    pub async fn execute_pre_upload(
+        &self,
+        mut data: Vec<u8>,
+        game_id: &str,
+        filename: &str,
+    ) -> Vec<u8> {
         for plugin in &self.plugins {
-            match plugin._on_pre_upload(&data) {
+            match plugin.trigger_on_pre_upload(&data, game_id, filename).await {
                 Ok(modified_data) => {
                     data = modified_data;
                 }
@@ -108,6 +107,60 @@ impl PluginManager {
             }
         }
         data
+    }
+
+    pub fn execute_post_upload(
+        &self,
+        game_id: &str,
+        ok: bool,
+        files_count: usize,
+        error_count: usize,
+    ) {
+        for plugin in &self.plugins {
+            if let Err(e) = plugin.trigger_on_post_upload(game_id, ok, files_count, error_count) {
+                eprintln!(
+                    "[Plugin Error] '{}' falló en on_post_upload: {}",
+                    plugin.name,
+                    clean_lua_error(&e)
+                );
+            }
+        }
+    }
+
+    pub fn execute_game_start(&self, game_id: &str, game_name: &str) {
+        for plugin in &self.plugins {
+            if let Err(e) = plugin.trigger_on_game_start(game_id, game_name) {
+                eprintln!(
+                    "[Plugin Error] '{}' falló en on_game_start: {}",
+                    plugin.name,
+                    clean_lua_error(&e)
+                );
+            }
+        }
+    }
+
+    pub fn execute_game_exit(&self, game_id: &str, game_name: &str, session_duration_secs: u64) {
+        for plugin in &self.plugins {
+            if let Err(e) = plugin.trigger_on_game_exit(game_id, game_name, session_duration_secs) {
+                eprintln!(
+                    "[Plugin Error] '{}' falló en on_game_exit: {}",
+                    plugin.name,
+                    clean_lua_error(&e)
+                );
+            }
+        }
+    }
+
+    pub fn execute_save_detected(&self, game_id: &str, save_path: &str) {
+        for plugin in &self.plugins {
+            if let Err(e) = plugin.trigger_on_save_detected(game_id, save_path) {
+                eprintln!(
+                    "[Plugin Error] '{}' falló en on_save_detected: {}",
+                    plugin.name,
+                    clean_lua_error(&e)
+                );
+            }
+        }
     }
 }
 

@@ -12,10 +12,7 @@ pub fn is_supported_domain(url: &str) -> bool {
     DOMAINS.iter().any(|d| lower.contains(d))
 }
 
-async fn resolve_native(
-    client: &reqwest::Client,
-    base_url: &str,
-) -> Result<String, HosterError> {
+async fn resolve_native(client: &reqwest::Client, base_url: &str) -> Result<String, HosterError> {
     let response = get(client, base_url, ProfilePreset::BuzzheavierPage).await?;
     ensure_resolve(response)?;
 
@@ -77,7 +74,11 @@ pub async fn resolve(
         Err(native_err) => {
             if let Some(app) = app {
                 log::info!("buzzheavier: intento nativo falló ({native_err:?}), intentando Scrapling fallback");
-                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &base_url, cancel_flag) {
+                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(
+                    app,
+                    &base_url,
+                    cancel_flag,
+                ) {
                     let trimmed = scraped.trim();
                     if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
                         return Ok((trimmed.to_string(), base_url));

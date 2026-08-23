@@ -12,7 +12,7 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::time::Instant;
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio_util::sync::CancellationToken;
 
 static GLOBAL_SYS: OnceLock<Mutex<System>> = OnceLock::new();
@@ -369,6 +369,14 @@ pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationTok
             if is_running {
                 if !was_running {
                     last_checkpoint.insert(game_id.clone(), Instant::now());
+                    if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
+                        let pm = pm.inner().clone();
+                        let gid = game_id.clone();
+                        let gname = game_id.clone();
+                        tauri::async_runtime::spawn(async move {
+                            pm.lock().await.execute_game_start(&gid, &gname);
+                        });
+                    }
                 } else if let Some(start) = last_checkpoint.get(game_id) {
                     let elapsed = start.elapsed().as_secs();
                     if elapsed >= 60 {
@@ -378,12 +386,23 @@ pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationTok
                     }
                 }
             } else if was_running {
+                let mut duration_secs = 0u64;
                 if let Some(start) = last_checkpoint.remove(game_id) {
                     let remaining = start.elapsed().as_secs();
                     if remaining > 0 {
                         let _ = time::add_playtime(game_id, remaining);
                         emit_playtime_update(app, game_id);
                     }
+                    duration_secs = remaining;
+                }
+
+                if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
+                    let pm = pm.inner().clone();
+                    let gid = game_id.clone();
+                    let gname = game_id.clone();
+                    tauri::async_runtime::spawn(async move {
+                        pm.lock().await.execute_game_exit(&gid, &gname, duration_secs);
+                    });
                 }
             }
         }
