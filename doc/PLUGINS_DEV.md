@@ -1,14 +1,14 @@
-# Guia de desarrollo de plugins para SaveCloud
+# Guía de desarrollo de plugins para SaveCloud
 
-Esta guia explica como escribir plugins para SaveCloud. Los plugins se escriben en Lua y no requieren ningun conocimiento de Rust.
+Esta guía explica cómo escribir plugins para SaveCloud. Los plugins se escriben en **Lua** y no requieren ningún conocimiento de Rust.
 
 ---
 
-## Como funcionan los plugins
+## Cómo funcionan los plugins
 
-SaveCloud escanea una carpeta llamada `plugins/` al iniciar. Cada subcarpeta dentro de ella es tratada como un plugin. Si la subcarpeta contiene un archivo llamado `init.lua`, SaveCloud lo carga y lo ejecuta dentro de un entorno Lua aislado.
+SaveCloud escanea la carpeta `plugins/` de la aplicación al iniciar. Cada subcarpeta dentro de ella es tratada como un plugin. Si la subcarpeta contiene un archivo `plugin.json` válido y un `init.lua`, SaveCloud lo carga y lo ejecuta dentro de un entorno Lua aislado.
 
-Tu plugin puede definir funciones hook que SaveCloud llama en momentos especificos (como cuando la app inicia, o antes de subir un archivo). Tambien puedes llamar la API de SaveCloud para registrar mensajes, emitir eventos de UI, guardar operaciones en la base de datos, o hacer peticiones HTTP a servicios externos.
+Tu plugin puede definir funciones **hook** que SaveCloud llama automáticamente durante eventos del ciclo de vida (como cuando un juego arranca, se cierra, se detecta un guardado, o durante la sincronización). Además, puedes usar la API global `savecloud` para persistir datos (`storage`), consultar tu biblioteca de juegos (`games`), emitir notificaciones y toasts (`notifications`, `ui`), o realizar peticiones de red (`http`).
 
 ---
 
@@ -17,35 +17,60 @@ Tu plugin puede definir funciones hook que SaveCloud llama en momentos especific
 ```
 plugins/
   mi-plugin/
-    init.lua
-    helpers.lua      (opcional, puedes requerirlo desde init.lua)
+    plugin.json      (obligatorio)
+    init.lua         (obligatorio)
+    helpers.lua      (opcional, puedes requerirlo con require("helpers"))
 ```
 
-El nombre de la carpeta se convierte en el nombre del plugin. Todo plugin debe tener un `init.lua` en la raiz de su carpeta.
+### `plugin.json` (Manifiesto Obligatorio)
+
+Todo plugin debe incluir un archivo `plugin.json` en la raíz de su carpeta:
+
+```json
+{
+  "id": "mi.plugin",
+  "name": "Mi Plugin",
+  "version": "1.0.0",
+  "api_version": 1,
+  "enabled": true,
+  "hooks": {
+    "on_pre_upload_timeout_ms": 2000
+  }
+}
+```
+
+- **`id`**: Identificador único del plugin (letras, números y puntos).
+- **`name`**: Nombre visible del plugin.
+- **`version`**: Versión del plugin (semver).
+- **`api_version`**: Debe ser `1` para ser compatible con la versión actual de SaveCloud.
+- **`enabled`**: Si es `false`, el plugin no se cargará (por defecto `true`).
+- **`hooks`** _(opcional)_: Objeto de ajustes avanzados para los hooks:
+  - **`on_pre_upload_timeout_ms`**: Timeout máximo en milisegundos para `on_pre_upload` (por defecto 2000ms, rango permitido: 250ms - 10000ms).
+
+> [!NOTE]
+> **No necesitas registrar los hooks en `plugin.json`:** SaveCloud detecta automáticamente qué hooks has implementado buscando si la función existe en el archivo `init.lua`. La sección `"hooks"` en `plugin.json` es únicamente para configurar parámetros opcionales como timeouts.
 
 ---
 
-## Ejemplo minimo
+## Ejemplo mínimo
 
 ```lua
 -- plugins/mi-plugin/init.lua
 
 function on_init()
-    savecloud.log.info("mi-plugin cargo correctamente")
+    savecloud.log.info("Mi plugin cargó correctamente")
 end
 ```
 
-Ese es el plugin valido mas pequeno. El hook `on_init` se llama una vez cuando SaveCloud inicia.
-
 ---
 
-## Hooks disponibles
+## Hooks Disponibles
 
-Los hooks son funciones Lua globales que defines en `init.lua`. SaveCloud las llama automaticamente. No necesitas definir todas, solo las que necesites.
+Los hooks son funciones Lua globales que defines en tu `init.lua`. SaveCloud utiliza **auto-descubrimiento**: cuando ocurre un evento, comprueba si definiste esa función en Lua y la ejecuta; si no la definiste, simplemente continúa sin errores. No necesitas declarar nada en el JSON ni implementar hooks que no uses.
 
-### on_init
+### 1. `on_init()`
 
-Se llama una vez cuando el plugin es cargado al iniciar.
+Se llama una vez al iniciar la aplicación cuando el plugin es cargado.
 
 ```lua
 function on_init()
@@ -53,203 +78,206 @@ function on_init()
 end
 ```
 
-### on_pre_upload
+### 2. `on_game_start(game)`
 
-Se llama antes de subir un archivo. Recibe los bytes crudos del archivo y debe devolver bytes (los mismos o modificados).
+Se ejecuta cuando SaveCloud detecta que un juego ha comenzado su ejecución.
+
+- **`game`**: Tabla con la información del juego:
+  - `game.id` (string): Identificador único del juego (ej: `"elden-ring"`).
+  - `game.name` (string): Nombre del juego (ej: `"Elden Ring"`).
 
 ```lua
-function on_pre_upload(data)
-    savecloud.log.info("A punto de subir un archivo")
-    -- Puedes modificar los bytes aqui y devolver la version modificada
+function on_game_start(game)
+    savecloud.log.info("Juego iniciado: " .. game.name)
+    savecloud.notifications.show_overlay("Companion", "¡A jugar " .. game.name .. "!")
+end
+```
+
+### 3. `on_game_exit(game, session)`
+
+Se ejecuta cuando el juego se cierra.
+
+- **`game`**: Tabla con `id` y `name`.
+- **`session`**: Tabla con información de la sesión:
+  - `session.duration_secs` (número): Tiempo total jugado en segundos durante esta sesión.
+
+```lua
+function on_game_exit(game, session)
+    local minutos = math.floor(session.duration_secs / 60)
+    savecloud.log.info("Juego cerrado tras " .. minutos .. " minutos")
+    savecloud.ui.show_toast(game.name .. ": sesión de " .. minutos .. " min finalizada", "info")
+end
+```
+
+### 4. `on_save_detected(game, save_path)`
+
+Se dispara en tiempo real cuando el observador de archivos detecta una modificación en las carpetas de guardado del juego.
+
+- **`game`**: Tabla con `id`.
+- **`save_path`** (string): Ruta física absoluta del archivo modificado.
+
+```lua
+function on_save_detected(game, save_path)
+    savecloud.log.debug("Guardado detectado en: " .. save_path)
+end
+```
+
+### 5. `on_pre_upload(data, context)`
+
+Hook de pipeline llamado antes de subir un archivo de guardado a la nube.
+Recibe los bytes crudos del archivo y devuelve los bytes modificados (o los mismos sin alterar).
+
+- **`data`** (string): Buffer binario de los bytes del archivo.
+- **`context`**: Tabla de contexto:
+  - `context.game_id` (string): ID del juego.
+  - `context.filename` (string): Nombre relativo del archivo en el conjunto de partidas.
+
+```lua
+function on_pre_upload(data, context)
+    savecloud.log.info("Procesando " .. context.filename .. " (" .. #data .. " bytes)")
+    -- Puedes transformar data o retornarlo sin cambios
     return data
 end
 ```
 
-Si no defines `on_pre_upload`, el archivo pasa sin cambios.
+### 6. `on_post_upload(summary)`
+
+Se llama tras finalizar el proceso de sincronización/subida de partidas de un juego.
+
+- **`summary`**:
+  - `summary.game_id` (string): ID del juego sincronizado.
+  - `summary.ok` (boolean): `true` si todos los archivos se subieron sin errores.
+  - `summary.files_count` (número): Cantidad total de archivos procesados.
+  - `summary.error_count` (número): Cantidad de archivos que fallaron.
+
+```lua
+function on_post_upload(summary)
+    if summary.ok then
+        savecloud.notifications.show_overlay("Sincronización Exitosa", summary.game_id .. " guardado en la nube.")
+    end
+end
+```
 
 ---
 
-## La API de SaveCloud
+## La API de SaveCloud (`savecloud.*`)
 
-SaveCloud expone una tabla global llamada `savecloud` con los siguientes modulos.
+SaveCloud expone una tabla global llamada `savecloud` con los siguientes módulos.
 
-### savecloud.log
+### `savecloud.storage` (Persistencia SQLite Aislada)
 
-Usa esto para imprimir mensajes desde tu plugin. Los mensajes aparecen en el panel de logs de la app en tiempo real.
-
-```lua
-savecloud.log.info("Todo esta bien")
-savecloud.log.error("Algo salio mal")
-```
-
-`info` imprime en la salida estandar. `error` imprime en la salida de error estandar.
-
-### savecloud.ui
-
-Usa esto para enviar eventos al frontend de la app. El frontend debe estar escuchando el nombre de evento que uses.
+Almacenamiento clave-valor persistente en la base de datos de SaveCloud. Cada plugin tiene su propio espacio de nombres aislado.
 
 ```lua
-savecloud.ui.emit("subida_iniciada", "foto.jpg")
+-- Guardar o actualizar un valor
+savecloud.storage.set("ultimo_juego", "elden-ring")
+
+-- Leer un valor (devuelve nil si no existe)
+local val = savecloud.storage.get("ultimo_juego")
+
+-- Eliminar una clave
+savecloud.storage.delete("ultimo_juego")
+
+-- Listar todas las claves guardadas por este plugin
+local keys = savecloud.storage.list_keys()
+
+-- Borrar todos los datos de este plugin
+savecloud.storage.clear()
 ```
 
-Ambos argumentos son strings. El primero es el nombre del evento, el segundo es el payload.
+### `savecloud.notifications` (Notificaciones & Overlay)
 
-### savecloud.db
-
-Usa esto para registrar una operacion en el log de la base de datos.
+Envía notificaciones de escritorio o avisos visuales en el In-Game Overlay de SaveCloud.
 
 ```lua
-savecloud.db.log_operation("mi-plugin", "comprimir", "archivo reducido un 40%")
+-- Notificación de escritorio + overlay
+savecloud.notifications.show("Título", "Mensaje informativo")
+
+-- Notificación exclusiva en el Overlay del juego
+savecloud.notifications.show_overlay("SaveCloud", "Partida sincronizada")
 ```
 
-Los tres argumentos son: nombre del plugin, nombre de la accion, y un string de detalles.
+### `savecloud.games` (Consulta de Biblioteca)
 
-### savecloud.http
+Permite consultar la biblioteca de juegos configurada en SaveCloud y verificar si un juego se está ejecutando.
 
-Usa esto para hacer peticiones HTTP a servicios externos. Todas las funciones son bloqueantes y devuelven una tabla con el resultado.
+```lua
+-- Obtener todos los juegos configurados
+local juegos = savecloud.games.get_all()
+for _, g in ipairs(juegos) do
+    savecloud.log.info("Juego: " .. g.name .. " (Corriendo: " .. tostring(g.is_running) .. ")")
+end
+
+-- Obtener un juego específico por ID
+local game = savecloud.games.get("elden-ring")
+if game then
+    savecloud.log.info("Rutas: " .. table.concat(game.paths, ", "))
+end
+
+-- Comprobar si un juego está en ejecución
+if savecloud.games.is_running("elden-ring") then
+    savecloud.log.info("Elden Ring está corriendo")
+end
+```
+
+### `savecloud.log` (Registro de Traza)
+
+Envía logs al panel de diagnóstico de la app y terminal en tiempo real.
+
+```lua
+savecloud.log.info("Mensaje informativo")
+savecloud.log.warn("Mensaje de advertencia")
+savecloud.log.error("Mensaje de error")
+savecloud.log.debug("Mensaje de depuración")
+```
+
+### `savecloud.ui` (Frontend & Toasts)
+
+Interacción con la interfaz de usuario.
+
+```lua
+-- Mostrar un toast flotante en la interfaz
+savecloud.ui.show_toast("Operación completada", "success") -- "info" | "warn" | "error" | "success"
+
+-- Emitir un evento IPC personalizado hacia componentes frontend
+savecloud.ui.emit("mi_evento_personalizado", "datos en formato string o json")
+```
+
+### `savecloud.http` (Peticiones de Red)
+
+Permite realizar peticiones HTTP síncronas sin romper el plugin ante fallos de red.
 
 ```lua
 local res = savecloud.http.get("https://api.example.com/status")
-local res = savecloud.http.post("https://api.example.com/data", '{"key":"value"}', {
-    ["Content-Type"] = "application/json"
-})
-local res = savecloud.http.put("https://api.example.com/resource/1", '{"name":"nuevo"}')
-local res = savecloud.http.delete("https://api.example.com/resource/1")
-```
-
-Todas las funciones devuelven una tabla con estos campos:
-
-```lua
-{
-    ok     = true,       -- true si el status esta entre 200 y 299
-    status = 200,        -- codigo de estado HTTP
-    body   = "...",      -- cuerpo de la respuesta como string
-    error  = nil,        -- mensaje de error de red (solo presente si ok es false y status es 0)
-}
-```
-
-El tercer argumento de `post` y `put`, y el segundo de `get` y `delete`, es una tabla de headers opcional.
-
-Siempre revisa `res.ok` antes de usar `res.body` para manejar errores de red correctamente:
-
-```lua
-local res = savecloud.http.get("https://api.example.com/ping")
-
-if not res.ok then
-    savecloud.log.error("Peticion fallida: " .. (res.error or tostring(res.status)))
-    return
+if res.ok then
+    savecloud.log.info("Respuesta: " .. res.body)
+else
+    savecloud.log.error("Fallo HTTP: " .. (res.error or tostring(res.status)))
 end
 
-savecloud.log.info("Respuesta: " .. res.body)
+-- POST con headers
+local res = savecloud.http.post(
+    "https://api.example.com/data",
+    '{"key":"value"}',
+    { ["Content-Type"] = "application/json" }
+)
 ```
 
 ---
 
-## Requerir otros archivos
+## Autocompletado en el Editor (VS Code / LuaLS)
 
-Puedes dividir tu plugin en multiples archivos Lua y usar `require` para cargarlos.
+SaveCloud incluye un archivo de definiciones Lua llamado `savecloud-api.lua` (puedes exportarlo desde la sección de Desarrollo en Ajustes de la app).
 
-```lua
--- plugins/mi-plugin/init.lua
-local helpers = require("helpers")
-
-function on_init()
-    helpers.setup()
-end
-```
-
-```lua
--- plugins/mi-plugin/helpers.lua
-local M = {}
-
-function M.setup()
-    savecloud.log.info("helpers cargado")
-end
-
-return M
-```
-
-SaveCloud configura automaticamente el `package.path` de Lua para buscar dentro de la carpeta de tu plugin, asi que `require("helpers")` encontrara `helpers.lua` en el mismo directorio que `init.lua`.
+Coloca `savecloud-api.lua` en la misma carpeta que tu `init.lua` para obtener autocompletado y tipado inline completo con la extensión **Lua by sumneko** en VS Code.
 
 ---
 
-## Autocompletado en el editor
+## Restricciones de Seguridad
 
-SaveCloud incluye un archivo de definiciones Lua llamado `savecloud-api.lua` que puedes descargar desde la app en la seccion de desarrollo de plugins. Coloca este archivo en la misma carpeta que tu `init.lua` y tu editor (VS Code con la extension Lua de sumneko, o cualquier editor compatible con LuaLS) mostrara autocompletado y documentacion inline para toda la API.
+Las siguientes librerías estándar de Lua están deshabilitadas:
 
----
+- `os` -- sin acceso arbitrario al sistema operativo
+- `io` -- sin acceso no controlado al sistema de archivos
 
-## Restricciones de seguridad
-
-Las siguientes librerias estandar de Lua estan deshabilitadas por seguridad:
-
-- `os` -- sin acceso al sistema operativo
-- `io` -- sin acceso al sistema de archivos
-
-Si tu plugin necesita hacer peticiones de red usa `savecloud.http`. Si necesita leer o escribir archivos, solicita esa capacidad a traves de la API de SaveCloud en lugar de usar las librerias de Lua directamente.
-
----
-
-## Manejo de errores
-
-Si tu funcion `on_init` lanza un error, SaveCloud imprimira el error y omitira el plugin. Los demas plugins se cargaran con normalidad.
-
-Si tu funcion `on_pre_upload` lanza un error, el error se registra y los datos originales sin modificar se pasan al siguiente plugin en el pipeline.
-
-Puedes manejar errores dentro de tu propio plugin usando `pcall` de Lua:
-
-```lua
-function on_init()
-    local ok, err = pcall(function()
-        -- codigo que podria fallar
-    end)
-
-    if not ok then
-        savecloud.log.error("Inicializacion fallida: " .. err)
-    end
-end
-```
-
----
-
-## Ejemplo completo
-
-```lua
--- plugins/notificador/init.lua
--- Envia una notificacion a un webhook cuando se sube un archivo.
-
-local WEBHOOK_URL = "https://hooks.example.com/mi-webhook"
-
-function on_init()
-    savecloud.log.info("Plugin notificador listo")
-
-    local res = savecloud.http.get(WEBHOOK_URL .. "/ping")
-    if res.ok then
-        savecloud.log.info("Webhook accesible")
-    else
-        savecloud.log.error("Webhook no responde: " .. tostring(res.status))
-    end
-end
-
-function on_pre_upload(data)
-    local tamano = #data
-    savecloud.log.info("Archivo recibido: " .. tamano .. " bytes")
-
-    local res = savecloud.http.post(
-        WEBHOOK_URL,
-        '{"texto":"Subiendo archivo de ' .. tamano .. ' bytes"}',
-        { ["Content-Type"] = "application/json" }
-    )
-
-    if res.ok then
-        savecloud.log.info("Notificacion enviada")
-    else
-        savecloud.log.error("Error al notificar: " .. (res.error or tostring(res.status)))
-    end
-
-    savecloud.db.log_operation("notificador", "pre_upload", tamano .. " bytes")
-    savecloud.ui.emit("plugin_notificado", tostring(tamano))
-
-    return data
-end
-```
+Utiliza `savecloud.storage` para persistencia, `savecloud.http` para red, y las funciones de hooks para procesamiento de partidas.

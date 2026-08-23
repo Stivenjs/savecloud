@@ -2,22 +2,26 @@ use super::{
     DEFAULT_PRE_UPLOAD_TIMEOUT_MS, MAX_PRE_UPLOAD_TIMEOUT_MS, MIN_PRE_UPLOAD_TIMEOUT_MS,
     SUPPORTED_PLUGIN_API_VERSION,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PluginManifest {
     pub id: String,
     pub name: String,
     pub version: String,
     pub api_version: u32,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub author: Option<String>,
     #[serde(default = "default_enabled")]
     pub enabled: bool,
     #[serde(default)]
     pub hooks: PluginHooks,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct PluginHooks {
     pub on_pre_upload_timeout_ms: Option<u64>,
 }

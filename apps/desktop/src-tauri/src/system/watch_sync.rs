@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
@@ -204,7 +204,16 @@ pub fn spawn_watcher(app: AppHandle, tray_state: Arc<crate::tray::tray_state::Tr
                                 };
 
                                 if !is_syncing {
-                                    pending_uploads.insert(game_id, Instant::now() + debounce_duration);
+                                    pending_uploads.insert(game_id.clone(), Instant::now() + debounce_duration);
+                                }
+
+                                if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
+                                    let pm = pm.inner().clone();
+                                    let gid = game_id.clone();
+                                    let path_str = path.to_string_lossy().to_string();
+                                    tauri::async_runtime::spawn(async move {
+                                        pm.lock().await.execute_save_detected(&gid, &path_str);
+                                    });
                                 }
                             }
                         }

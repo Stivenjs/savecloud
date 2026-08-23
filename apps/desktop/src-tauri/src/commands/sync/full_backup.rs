@@ -281,6 +281,11 @@ pub async fn download_and_restore_full_backup_impl(
         .find(|g| g.id.eq_ignore_ascii_case(&game_id))
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
+    if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
+        let pm = pm.lock().await;
+        pm.execute_pre_download(&game_id);
+    }
+
     let dest_dir =
         crate::utils::path_utils::expand_path(game.paths.first().map(|s| s.as_str()).unwrap_or(""))
             .ok_or("No se pudo expandir la ruta del juego")?;
@@ -429,6 +434,11 @@ pub async fn download_and_restore_full_backup_impl(
     );
     if emit_done {
         emit_sync_download_done(&app);
+    }
+
+    if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
+        let pm = pm.lock().await;
+        pm.execute_post_download(&game_id, true, 1, 0);
     }
 
     Ok(())

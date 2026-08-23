@@ -2,7 +2,7 @@ import { useState, lazy, Suspense, useEffect, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Tab, Tabs } from "@heroui/react";
 import { useTranslation } from "react-i18next";
-import { AppWindow, Bell, Cloud, FlaskConical, Gamepad2, Monitor, RefreshCw, User } from "lucide-react";
+import { AppWindow, Bell, Blocks, Cloud, FlaskConical, Gamepad2, Monitor, RefreshCw, User } from "lucide-react";
 import { AutostartCard } from "@features/settings/AutostartCard";
 import { BigPictureModeCard } from "@features/settings/BigPictureModeCard";
 import { ConfigSection } from "@features/settings/ConfigSection";
@@ -21,7 +21,7 @@ import { useSettingsPage } from "@/hooks/useSettingsPage";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigationStore } from "@features/input/store";
-import { DevSdk } from "@features/settings/DevSdk";
+import { PluginsSettingsSection } from "@features/settings/plugins/PluginsSettingsSection";
 import { DeveloperModeCard } from "@features/settings/DeveloperModeCard";
 import { SourceInstallSettingsCard } from "@features/settings/SourceInstallSettingsCard";
 import { ProxySettingsCard } from "@features/settings/ProxySettingsCard";
@@ -59,6 +59,7 @@ const SETTINGS_TABS: Array<{
   { key: "big-picture", label: "Big Picture", icon: <Monitor size={17} className="opacity-90" /> },
   { key: "integrations", label: "Integraciones", icon: <Bell size={17} className="opacity-90" /> },
   { key: "gamepad", label: "Mando", icon: <Gamepad2 size={17} className="opacity-90" /> },
+  { key: "plugins", label: "Plugins", icon: <Blocks size={17} className="opacity-90" /> },
   { key: "updates", label: "Versiones", icon: <RefreshCw size={17} className="opacity-90" /> },
   { key: "advanced", label: "Avanzado", icon: <FlaskConical size={17} className="opacity-90" /> },
 ];
@@ -330,6 +331,8 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
             <GamepadTesterCard />
           </div>
         );
+      case "plugins":
+        return <PluginsSettingsSection />;
       case "updates":
         return (
           <div className="grid gap-3 xl:grid-cols-2">
@@ -338,7 +341,6 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
           </div>
         );
       case "advanced": {
-        const showDeveloperSurface = import.meta.env.DEV || !!activeProfile?.developerMode;
         return (
           <div className="space-y-3">
             <HealthObservabilityCard />
@@ -353,7 +355,6 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
               fullBackupPackagedCompressionLevel={config?.fullBackupPackagedCompressionLevel}
               onFullBackupPackagedCompressionLevelChange={handleFullBackupPackagedCompressionLevelChange}
             />
-            {showDeveloperSurface ? <DevSdk /> : null}
           </div>
         );
       }

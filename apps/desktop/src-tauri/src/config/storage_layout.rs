@@ -36,6 +36,7 @@ pub fn ensure_storage_layout() -> Result<(), String> {
     ensure_directory(paths::db_dir().as_deref())?;
     ensure_directory(paths::runtime_dir().as_deref())?;
     ensure_directory(paths::cache_dir().as_deref())?;
+    ensure_directory(paths::plugins_dir().as_deref())?;
 
     migrate_legacy_file(
         paths::legacy_profiles_index_path(),

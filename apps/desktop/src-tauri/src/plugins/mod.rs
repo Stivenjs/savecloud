@@ -1,4 +1,5 @@
 pub mod api;
+pub mod commands;
 pub mod log_buffer;
 pub mod manager;
 pub mod manifest;
