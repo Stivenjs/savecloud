@@ -127,6 +127,36 @@ impl PluginManager {
         }
     }
 
+    pub fn execute_pre_download(&self, game_id: &str) {
+        for plugin in &self.plugins {
+            if let Err(e) = plugin.trigger_on_pre_download(game_id) {
+                eprintln!(
+                    "[Plugin Error] '{}' falló en on_pre_download: {}",
+                    plugin.name,
+                    clean_lua_error(&e)
+                );
+            }
+        }
+    }
+
+    pub fn execute_post_download(
+        &self,
+        game_id: &str,
+        ok: bool,
+        files_count: usize,
+        error_count: usize,
+    ) {
+        for plugin in &self.plugins {
+            if let Err(e) = plugin.trigger_on_post_download(game_id, ok, files_count, error_count) {
+                eprintln!(
+                    "[Plugin Error] '{}' falló en on_post_download: {}",
+                    plugin.name,
+                    clean_lua_error(&e)
+                );
+            }
+        }
+    }
+
     pub fn execute_game_start(&self, game_id: &str, game_name: &str) {
         for plugin in &self.plugins {
             if let Err(e) = plugin.trigger_on_game_start(game_id, game_name) {

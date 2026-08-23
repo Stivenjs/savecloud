@@ -42,6 +42,10 @@ export async function openPluginFolder(folderName: string): Promise<void> {
   return invoke<void>("open_plugin_folder", { folderName });
 }
 
+export async function openPluginInVscode(folderName: string): Promise<void> {
+  return invoke<void>("open_plugin_in_vscode", { folderName });
+}
+
 export async function deletePlugin(folderName: string, clearStorage: boolean): Promise<void> {
   return invoke<void>("delete_plugin", { folderName, clearStorage });
 }

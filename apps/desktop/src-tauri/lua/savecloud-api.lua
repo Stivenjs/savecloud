@@ -34,6 +34,17 @@
 ---@field files_count integer Cantidad de archivos procesados.
 ---@field error_count integer Cantidad de errores ocurridos durante la subida.
 
+--- Contexto pasado al iniciar la descarga o restauración de guardados de un juego.
+---@class DownloadContext
+---@field game_id string Identificador del juego cuyas partidas se van a descargar.
+
+--- Resumen del resultado tras completar la descarga o restauración de partidas de un juego.
+---@class PostDownloadSummary
+---@field game_id string Identificador del juego descargado.
+---@field ok boolean True si la descarga finalizó sin errores.
+---@field files_count integer Cantidad de archivos descargados/restaurados.
+---@field error_count integer Cantidad de errores ocurridos durante la descarga.
+
 --- API de logging del plugin para trazas informativas, advertencias y errores.
 ---@class SaveCloudLog
 ---@field info fun(mensaje: string) Imprime un mensaje informativo visible en el panel de logs.
@@ -126,3 +137,11 @@ on_pre_upload = nil
 --- Hook llamado tras completarse la subida de partidas de un juego.
 ---@type fun(summary: PostUploadSummary)|nil
 on_post_upload = nil
+
+--- Hook llamado justo antes de iniciar la descarga o restauración de partidas de un juego.
+---@type fun(context: DownloadContext)|nil
+on_pre_download = nil
+
+--- Hook llamado tras completarse la descarga o restauración de partidas de un juego.
+---@type fun(summary: PostDownloadSummary)|nil
+on_post_download = nil

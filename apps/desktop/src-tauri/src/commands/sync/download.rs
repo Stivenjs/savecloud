@@ -32,7 +32,7 @@ use crate::commands::logs::sync_logger;
 use crate::network::DATA_CLIENT;
 use crate::tray::tray_state::TrayState;
 use crate::utils::path_utils;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 /// Número máximo de reintentos al intentar crear un archivo bloqueado.
 const FILE_CREATE_MAX_RETRIES: u32 = 3;
@@ -713,6 +713,11 @@ pub(crate) async fn sync_download_game_impl(
         ));
     }
 
+    if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
+        let pm = pm.lock().await;
+        pm.execute_pre_download(&game_id);
+    }
+
     let user_id = cfg
         .user_id
         .as_deref()
@@ -826,6 +831,16 @@ pub(crate) async fn sync_download_game_impl(
             .keep_backups_per_game
             .unwrap_or(backup::DEFAULT_KEEP_BACKUPS_PER_GAME);
         let _ = backup::cleanup_old_backups(keep);
+    }
+
+    if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
+        let pm = pm.lock().await;
+        pm.execute_post_download(
+            &game_id,
+            result.err_count == 0,
+            ok_count as usize,
+            err_count as usize,
+        );
     }
 
     Ok(result)

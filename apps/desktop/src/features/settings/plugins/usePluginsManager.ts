@@ -8,6 +8,7 @@ import {
   reloadPlugins,
   openPluginsFolder,
   openPluginFolder,
+  openPluginInVscode,
   deletePlugin,
   exportPluginSdk,
   type PluginInfo,
@@ -106,6 +107,14 @@ export function usePluginsManager() {
     }
   };
 
+  const handleOpenInVscode = async (folderName: string): Promise<void> => {
+    try {
+      await openPluginInVscode(folderName);
+    } catch (e: unknown) {
+      toastError(t("settings.plugins.toastVscodeError"), typeof e === "string" ? e : String(e));
+    }
+  };
+
   const handleExportSdk = async (): Promise<void> => {
     setIsExportingSdk(true);
     try {
@@ -181,6 +190,7 @@ export function usePluginsManager() {
     handleDelete,
     handleOpenPluginsFolder,
     handleOpenSingleFolder,
+    handleOpenInVscode,
     handleExportSdk,
   };
 }

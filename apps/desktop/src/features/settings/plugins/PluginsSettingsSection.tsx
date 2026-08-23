@@ -63,6 +63,7 @@ export function PluginsSettingsSection() {
     handleDelete,
     handleOpenPluginsFolder,
     handleOpenSingleFolder,
+    handleOpenInVscode,
     handleExportSdk,
   } = usePluginsManager();
 
@@ -299,6 +300,17 @@ export function PluginsSettingsSection() {
                         className="h-7 w-7"
                         onPress={() => handleOpenSingleFolder(plugin.folderName)}>
                         <FolderOpen size={14} />
+                      </Button>
+                    </Tooltip>
+
+                    <Tooltip content={t("settings.plugins.openInVscodeTooltip")}>
+                      <Button
+                        size="sm"
+                        variant="light"
+                        isIconOnly
+                        className="h-7 w-7 text-default-500 hover:text-primary"
+                        onPress={() => handleOpenInVscode(plugin.folderName)}>
+                        <Code2 size={14} />
                       </Button>
                     </Tooltip>
 

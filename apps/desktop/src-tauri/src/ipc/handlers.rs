@@ -128,6 +128,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::plugins::commands::reload_plugins,
         crate::plugins::commands::open_plugins_folder,
         crate::plugins::commands::open_plugin_folder,
+        crate::plugins::commands::open_plugin_in_vscode,
         crate::plugins::commands::delete_plugin,
         crate::plugins::commands::get_plugin_storage,
         crate::plugins::commands::clear_plugin_storage,

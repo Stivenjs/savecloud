@@ -971,6 +971,7 @@
       "inspectStorageBtn": "SQLite",
       "inspectStorageTooltip": "Inspeccionar datos persistentes en SQLite",
       "openPluginFolderTooltip": "Abrir carpeta del plugin",
+      "openInVscodeTooltip": "Abrir en Visual Studio Code",
       "deleteModalTitle": "Eliminar Plugin",
       "deleteModalPrompt": "¿Estás seguro de que deseas eliminar permanentemente el plugin \"{{name}}\"?",
       "deleteClearStorageCheckbox": "Borrar también los datos almacenados en SQLite por este plugin",
@@ -984,6 +985,7 @@
       "toastDeleteSuccessDesc": "El plugin \"{{name}}\" ha sido eliminado.",
       "toastDeleteError": "Error al eliminar plugin",
       "toastFolderError": "Error al abrir la carpeta",
+      "toastVscodeError": "No se pudo abrir VS Code. Asegúrate de que el comando 'code' esté en tu PATH.",
       "storage": {
         "title": "Almacenamiento SQLite ({{name}})",
         "subtitle": "Espacio de nombres aislado: {{id}}",

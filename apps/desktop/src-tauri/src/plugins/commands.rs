@@ -246,6 +246,40 @@ pub async fn open_plugin_folder(app_handle: AppHandle, folder_name: String) -> R
         .map_err(|e| format!("Error al abrir carpeta del plugin: {}", e))
 }
 
+/// Abre la subcarpeta de un plugin específico directamente en Visual Studio Code.
+#[tauri::command]
+pub async fn open_plugin_in_vscode(folder_name: String) -> Result<(), String> {
+    let plugins_dir = resolve_plugins_dir();
+    let target = plugins_dir.join(&folder_name);
+    if !target.exists() {
+        return Err(format!("La carpeta {:?} no existe", target));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/C", "code", target.to_str().unwrap_or_default()]);
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.spawn().map_err(|e| {
+            format!("Error al ejecutar VS Code: {e}. Asegúrate de tener 'code' en tu PATH.")
+        })?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::process::Command::new("code")
+            .arg(&target)
+            .spawn()
+            .map_err(|e| {
+                format!("Error al ejecutar VS Code: {e}. Asegúrate de tener 'code' en tu PATH.")
+            })?;
+    }
+
+    Ok(())
+}
+
 /// Elimina la subcarpeta de un plugin del disco y opcionalmente limpia su base de datos.
 #[tauri::command]
 pub async fn delete_plugin(

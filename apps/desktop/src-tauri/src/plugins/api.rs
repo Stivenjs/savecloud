@@ -28,22 +28,11 @@ pub fn register_savecloud_api(
 
     let savecloud_table = lua.create_table()?;
 
-    register_log_module(
-        lua,
-        &savecloud_table,
-        app_handle.clone(),
-        logs,
-        plugin_name,
-    )?;
+    register_log_module(lua, &savecloud_table, app_handle.clone(), logs, plugin_name)?;
     register_ui_module(lua, &savecloud_table, app_handle.clone())?;
     register_db_module(lua, &savecloud_table)?;
     register_http_module(lua, &savecloud_table)?;
-    register_storage_module(
-        lua,
-        &savecloud_table,
-        app_handle.clone(),
-        plugin_id,
-    )?;
+    register_storage_module(lua, &savecloud_table, app_handle.clone(), plugin_id)?;
     register_notifications_module(lua, &savecloud_table, app_handle.clone())?;
     register_games_module(lua, &savecloud_table, app_handle)?;
 
@@ -434,98 +423,128 @@ fn build_error_table(lua: &Lua, mensaje: String) -> Result<Table> {
     Ok(t)
 }
 
-fn headers_from_lua(tabla: Option<Table>) -> reqwest::header::HeaderMap {
-    let mut map = reqwest::header::HeaderMap::new();
-
+fn extract_headers(tabla: Option<Table>) -> Vec<(String, String)> {
+    let mut list = Vec::new();
     if let Some(t) = tabla {
         for (k, v) in t.pairs::<String, String>().flatten() {
-            if let (Ok(name), Ok(value)) = (
-                reqwest::header::HeaderName::from_bytes(k.as_bytes()),
-                reqwest::header::HeaderValue::from_str(&v),
-            ) {
-                map.insert(name, value);
-            }
+            list.push((k, v));
         }
     }
+    list
+}
 
-    map
+fn apply_headers(
+    builder: reqwest::blocking::RequestBuilder,
+    headers: Vec<(String, String)>,
+) -> reqwest::blocking::RequestBuilder {
+    let mut req = builder;
+    for (k, v) in headers {
+        if let (Ok(name), Ok(val)) = (
+            reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+            reqwest::header::HeaderValue::from_str(&v),
+        ) {
+            req = req.header(name, val);
+        }
+    }
+    req
 }
 
 fn register_http_module(lua: &Lua, parent_table: &Table) -> Result<()> {
     let http_table = lua.create_table()?;
 
     let get = lua.create_function(|lua, (url, headers): (String, Option<Table>)| {
-        let client = reqwest::blocking::Client::new();
+        let headers_list = extract_headers(headers);
+        let result = std::thread::spawn(move || {
+            let client = reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_secs(10))
+                .build()
+                .map_err(|e| e.to_string())?;
 
-        let result = client.get(&url).headers(headers_from_lua(headers)).send();
+            let req = apply_headers(client.get(&url), headers_list);
+            let res = req.send().map_err(|e| e.to_string())?;
+            let status = res.status().as_u16();
+            let body = res.text().unwrap_or_default();
+            Ok::<(u16, String), String>((status, body))
+        })
+        .join()
+        .map_err(|_| "El subproceso de petición HTTP falló".to_string());
 
         match result {
-            Ok(res) => {
-                let status = res.status().as_u16();
-                let body = res.text().unwrap_or_default();
-                Ok(build_response_table(lua, status, body)?)
-            }
-            Err(e) => Ok(build_error_table(lua, e.to_string())?),
+            Ok(Ok((status, body))) => Ok(build_response_table(lua, status, body)?),
+            Ok(Err(e)) | Err(e) => Ok(build_error_table(lua, e)?),
         }
     })?;
 
     let post = lua.create_function(
         |lua, (url, body, headers): (String, String, Option<Table>)| {
-            let client = reqwest::blocking::Client::new();
+            let headers_list = extract_headers(headers);
+            let result = std::thread::spawn(move || {
+                let client = reqwest::blocking::Client::builder()
+                    .timeout(std::time::Duration::from_secs(10))
+                    .build()
+                    .map_err(|e| e.to_string())?;
 
-            let result = client
-                .post(&url)
-                .headers(headers_from_lua(headers))
-                .body(body)
-                .send();
+                let req = apply_headers(client.post(&url), headers_list).body(body);
+                let res = req.send().map_err(|e| e.to_string())?;
+                let status = res.status().as_u16();
+                let body = res.text().unwrap_or_default();
+                Ok::<(u16, String), String>((status, body))
+            })
+            .join()
+            .map_err(|_| "El subproceso de petición HTTP falló".to_string());
 
             match result {
-                Ok(res) => {
-                    let status = res.status().as_u16();
-                    let body = res.text().unwrap_or_default();
-                    Ok(build_response_table(lua, status, body)?)
-                }
-                Err(e) => Ok(build_error_table(lua, e.to_string())?),
+                Ok(Ok((status, body))) => Ok(build_response_table(lua, status, body)?),
+                Ok(Err(e)) | Err(e) => Ok(build_error_table(lua, e)?),
             }
         },
     )?;
 
     let put = lua.create_function(
         |lua, (url, body, headers): (String, String, Option<Table>)| {
-            let client = reqwest::blocking::Client::new();
+            let headers_list = extract_headers(headers);
+            let result = std::thread::spawn(move || {
+                let client = reqwest::blocking::Client::builder()
+                    .timeout(std::time::Duration::from_secs(10))
+                    .build()
+                    .map_err(|e| e.to_string())?;
 
-            let result = client
-                .put(&url)
-                .headers(headers_from_lua(headers))
-                .body(body)
-                .send();
+                let req = apply_headers(client.put(&url), headers_list).body(body);
+                let res = req.send().map_err(|e| e.to_string())?;
+                let status = res.status().as_u16();
+                let body = res.text().unwrap_or_default();
+                Ok::<(u16, String), String>((status, body))
+            })
+            .join()
+            .map_err(|_| "El subproceso de petición HTTP falló".to_string());
 
             match result {
-                Ok(res) => {
-                    let status = res.status().as_u16();
-                    let body = res.text().unwrap_or_default();
-                    Ok(build_response_table(lua, status, body)?)
-                }
-                Err(e) => Ok(build_error_table(lua, e.to_string())?),
+                Ok(Ok((status, body))) => Ok(build_response_table(lua, status, body)?),
+                Ok(Err(e)) | Err(e) => Ok(build_error_table(lua, e)?),
             }
         },
     )?;
 
     let delete = lua.create_function(|lua, (url, headers): (String, Option<Table>)| {
-        let client = reqwest::blocking::Client::new();
+        let headers_list = extract_headers(headers);
+        let result = std::thread::spawn(move || {
+            let client = reqwest::blocking::Client::builder()
+                .timeout(std::time::Duration::from_secs(10))
+                .build()
+                .map_err(|e| e.to_string())?;
 
-        let result = client
-            .delete(&url)
-            .headers(headers_from_lua(headers))
-            .send();
+            let req = apply_headers(client.delete(&url), headers_list);
+            let res = req.send().map_err(|e| e.to_string())?;
+            let status = res.status().as_u16();
+            let body = res.text().unwrap_or_default();
+            Ok::<(u16, String), String>((status, body))
+        })
+        .join()
+        .map_err(|_| "El subproceso de petición HTTP falló".to_string());
 
         match result {
-            Ok(res) => {
-                let status = res.status().as_u16();
-                let body = res.text().unwrap_or_default();
-                Ok(build_response_table(lua, status, body)?)
-            }
-            Err(e) => Ok(build_error_table(lua, e.to_string())?),
+            Ok(Ok((status, body))) => Ok(build_response_table(lua, status, body)?),
+            Ok(Err(e)) | Err(e) => Ok(build_error_table(lua, e)?),
         }
     })?;
 

@@ -43,7 +43,6 @@ impl Plugin {
         let id = manifest.id.clone();
         let name = dir_path.file_name().unwrap().to_string_lossy().to_string();
 
-        
         if let Some(db) = app_handle.try_state::<AppDb>() {
             let id_clone = id.clone();
             let name_clone = name.clone();
@@ -233,6 +232,49 @@ impl Plugin {
         let globals = lua.globals();
 
         if let Ok(func) = globals.get::<Function>("on_post_upload") {
+            let summary = lua.create_table()?;
+            summary.set("game_id", game_id)?;
+            summary.set("ok", ok)?;
+            summary.set("files_count", files_count)?;
+            summary.set("error_count", error_count)?;
+
+            func.call::<()>(summary)
+                .map_err(|err| mlua::Error::RuntimeError(clean_lua_error(&err)))?;
+        }
+
+        Ok(())
+    }
+
+    pub fn trigger_on_pre_download(&self, game_id: &str) -> Result<()> {
+        let lua = self.lua.lock().map_err(|_| {
+            mlua::Error::RuntimeError("No se pudo obtener lock de VM del plugin".to_string())
+        })?;
+        let globals = lua.globals();
+
+        if let Ok(func) = globals.get::<Function>("on_pre_download") {
+            let context = lua.create_table()?;
+            context.set("game_id", game_id)?;
+
+            func.call::<()>(context)
+                .map_err(|err| mlua::Error::RuntimeError(clean_lua_error(&err)))?;
+        }
+
+        Ok(())
+    }
+
+    pub fn trigger_on_post_download(
+        &self,
+        game_id: &str,
+        ok: bool,
+        files_count: usize,
+        error_count: usize,
+    ) -> Result<()> {
+        let lua = self.lua.lock().map_err(|_| {
+            mlua::Error::RuntimeError("No se pudo obtener lock de VM del plugin".to_string())
+        })?;
+        let globals = lua.globals();
+
+        if let Ok(func) = globals.get::<Function>("on_post_download") {
             let summary = lua.create_table()?;
             summary.set("game_id", game_id)?;
             summary.set("ok", ok)?;
