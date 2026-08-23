@@ -15,6 +15,7 @@ use std::time::Duration;
 use tauri::AppHandle;
 
 pub struct Plugin {
+    pub id: String,
     pub name: String,
     lua: Arc<Mutex<Lua>>,
     pre_upload_timeout: Duration,
@@ -37,6 +38,7 @@ impl Plugin {
     ) -> Result<Self> {
         let lua = Lua::new();
 
+        let id = manifest.id.clone();
         let name = dir_path.file_name().unwrap().to_string_lossy().to_string();
 
         register_savecloud_api(&lua, app_handle, logs, name.clone())?;
@@ -60,6 +62,7 @@ impl Plugin {
         lua.load(&script).exec()?;
 
         Ok(Self {
+            id,
             name,
             lua: Arc::new(Mutex::new(lua)),
             pre_upload_timeout: Duration::from_millis(manifest.resolved_pre_upload_timeout_ms()),
