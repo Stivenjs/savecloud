@@ -43,8 +43,12 @@ Todo plugin debe incluir un archivo `plugin.json` en la raíz de su carpeta:
 - **`name`**: Nombre visible del plugin.
 - **`version`**: Versión del plugin (semver).
 - **`api_version`**: Debe ser `1` para ser compatible con la versión actual de SaveCloud.
-- **`enabled`**: Si es `false`, el plugin no se cargará.
-- **`hooks.on_pre_upload_timeout_ms`**: Timeout máximo en milisegundos para el procesamiento de archivos antes de subir (por defecto 2000ms, rango permitido: 250ms - 10000ms).
+- **`enabled`**: Si es `false`, el plugin no se cargará (por defecto `true`).
+- **`hooks`** _(opcional)_: Objeto de ajustes avanzados para los hooks:
+  - **`on_pre_upload_timeout_ms`**: Timeout máximo en milisegundos para `on_pre_upload` (por defecto 2000ms, rango permitido: 250ms - 10000ms).
+
+> [!NOTE]
+> **No necesitas registrar los hooks en `plugin.json`:** SaveCloud detecta automáticamente qué hooks has implementado buscando si la función existe en el archivo `init.lua`. La sección `"hooks"` en `plugin.json` es únicamente para configurar parámetros opcionales como timeouts.
 
 ---
 
@@ -62,7 +66,7 @@ end
 
 ## Hooks Disponibles
 
-Los hooks son funciones Lua globales que defines en tu `init.lua`. SaveCloud las llama automáticamente cuando ocurren los eventos correspondientes. No necesitas definirlas todas, solo las que tu plugin necesite.
+Los hooks son funciones Lua globales que defines en tu `init.lua`. SaveCloud utiliza **auto-descubrimiento**: cuando ocurre un evento, comprueba si definiste esa función en Lua y la ejecuta; si no la definiste, simplemente continúa sin errores. No necesitas declarar nada en el JSON ni implementar hooks que no uses.
 
 ### 1. `on_init()`
 
