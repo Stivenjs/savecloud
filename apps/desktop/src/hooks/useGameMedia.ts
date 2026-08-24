@@ -144,7 +144,7 @@ export function useGameMedia({
     queryKey: ["steam-appdetails-media", steamAppId ?? ""],
     queryFn: () => getSteamAppdetailsMedia(steamAppId!),
     enabled: !!steamAppId && isSteamAppId(steamAppId) && !mediaFromBatch && !hasUserCover,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 60 * 60 * 1000,
     gcTime: 1000 * 60 * 60 * 24,
     refetchOnWindowFocus: false,
   });
@@ -159,7 +159,7 @@ export function useGameMedia({
 
     // Portada personalizada: prioridad absoluta; galería = usuario + arte Steam si llegó (batch/query).
     if (isCustomImage) {
-      const steamExtras = (mediaSource?.mediaUrls ?? []).filter((u) => u && u !== fallbackDisplay);
+      const steamExtras = (mediaSource?.mediaUrls ?? []).filter((u: string) => u && u !== fallbackDisplay);
       const merged = [fallbackDisplay, ...steamExtras];
       const deduped = [...new Set(merged)];
       return {
@@ -311,7 +311,8 @@ export function useGameMediaBatch({
     queryKey: ["steam-appdetails-media-batch", steamAppIdsForBatch.join(",")],
     queryFn: () => getSteamAppdetailsMediaBatch(steamAppIdsForBatch),
     enabled: steamAppIdsForBatch.length > 0 && !isResolvingIds,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 60 * 60 * 1000,
+    gcTime: 24 * 60 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 

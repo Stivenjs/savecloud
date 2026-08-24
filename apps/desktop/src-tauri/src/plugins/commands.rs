@@ -136,7 +136,7 @@ pub async fn get_installed_plugins(app_handle: AppHandle) -> Result<Vec<PluginIn
         }
     }
 
-    list.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    list.sort_by_key(|a| a.name.to_lowercase());
     Ok(list)
 }
 
@@ -332,12 +332,7 @@ pub async fn get_plugin_storage(
             })
         })?;
 
-        let mut entries = Vec::new();
-        for r in rows {
-            if let Ok(entry) = r {
-                entries.push(entry);
-            }
-        }
+        let entries = rows.flatten().collect();
         Ok(entries)
     });
 

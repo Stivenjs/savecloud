@@ -110,6 +110,7 @@ export function useGameRunningStatus(gameIds: readonly string[]): Record<string,
     };
   }, [queryClient]);
 
+  const gameIdsKey = gameIds.join(",");
   return useMemo(() => {
     const map = globalMap ?? {};
     const result: Record<string, boolean> = {};
@@ -117,5 +118,5 @@ export function useGameRunningStatus(gameIds: readonly string[]): Record<string,
       result[id] = map[id] === true;
     });
     return result;
-  }, [globalMap, gameIds]);
+  }, [globalMap, gameIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps
 }

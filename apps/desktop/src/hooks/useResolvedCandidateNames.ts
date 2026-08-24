@@ -37,7 +37,9 @@ export function useResolvedCandidateNames(
       return getSteamAppNamesBatch(uniqueAppIds);
     },
     enabled: uniqueAppIds.length > 0,
-    staleTime: 1000 * 60 * 60,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 24 * 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
     retry: 2,
   });
 

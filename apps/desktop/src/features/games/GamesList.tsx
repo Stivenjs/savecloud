@@ -243,11 +243,12 @@ export function GamesList({
 
       {/* Game grid / list */}
       <GamesListMotionContainer className={getGridClass(layout, cardOrientation)} listKey={stableListKey}>
-        {sortedGames.map((game) => (
+        {sortedGames.map((game, index) => (
           <GamesListMotionItem key={game.id}>
             <GameCard
               game={game}
               orientation={cardOrientation}
+              priority={index < 12}
               stats={statsByGameId.get(game.id) as GameStats | undefined}
               resolvedSteamAppId={resolvedSteamAppIds[game.id]}
               mediaBySteamAppId={mediaBySteamAppId ?? null}
