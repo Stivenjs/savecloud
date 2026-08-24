@@ -57,3 +57,20 @@ export async function getPluginStorage(pluginId: string): Promise<PluginStorageE
 export async function clearPluginStorage(pluginId: string): Promise<void> {
   return invoke<void>("clear_plugin_storage", { pluginId });
 }
+
+export interface PluginLogEntry {
+  timestamp: string;
+  level: "info" | "error";
+  plugin: string;
+  message: string;
+}
+
+/** Exporta el SDK de plugins. */
+export async function exportPluginSdk(): Promise<string> {
+  return invoke<string>("export_plugin_sdk");
+}
+
+/** Obtiene los logs de los plugins. */
+export async function getPluginLogs(): Promise<PluginLogEntry[]> {
+  return invoke<PluginLogEntry[]>("get_plugin_logs");
+}
