@@ -455,7 +455,12 @@ pub async fn get_steam_app_name(
 }
 
 async fn search_steam_app_id_impl(query: String) -> Option<String> {
-    let term = query.replace('-', " ");
+    let normalized = normalize_catalog_name(&query);
+    let term = if normalized.is_empty() {
+        query.replace('-', " ")
+    } else {
+        normalized
+    };
     let url = format!(
         "https://store.steampowered.com/search/suggest?term={}&f=games&cc=US&l=spanish",
         urlencoding::encode(&term)
@@ -516,11 +521,16 @@ pub struct SteamSearchResult {
 #[tauri::command]
 pub async fn search_steam_games(query: String) -> Vec<SteamSearchResult> {
     let query = query.trim();
-    if query.len() < 3 {
+    if query.is_empty() {
         return Vec::new();
     }
 
-    let term = query.replace('-', " ");
+    let normalized = normalize_catalog_name(query);
+    let term = if normalized.is_empty() {
+        query.replace('-', " ")
+    } else {
+        normalized
+    };
     let url = format!(
         "https://store.steampowered.com/search/suggest?term={}&f=games&cc=US&l=spanish",
         urlencoding::encode(&term)

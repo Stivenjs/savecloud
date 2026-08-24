@@ -226,16 +226,77 @@ export function formatGameDisplayName(id: string): string {
 }
 
 /**
- * Filtra juegos por término de búsqueda (id o nombre formateado).
- * Búsqueda case-insensitive y por coincidencia parcial.
+ * Normaliza un string para búsqueda inteligente y tolerante:
+ * - Convierte a minúsculas.
+ * - Descompone acentos / diacríticos (NFD) para que "pokémon" coincida con "pokemon".
+ * - Colapsa acrónimos con puntos ("s.t.a.l.k.e.r." -> "stalker", "f.e.a.r." -> "fear", "g.t.a." -> "gta").
+ * - Convierte guiones, dos puntos, comillas y caracteres especiales en espacios.
+ * - Colapsa espacios múltiples.
+ */
+export function normalizeSearchString(str: string): string {
+  if (!str) return "";
+
+  const noAccents = str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  const acronymCollapsed = noAccents.replace(/(?<=\b[a-z0-9])\.(?=[a-z0-9](\.|\b|\s))/gi, "").replace(/\.$/, "");
+
+  const cleanSymbols = acronymCollapsed.replace(/[^a-z0-9\s]/g, " ");
+
+  return cleanSymbols.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Comprueba si una cadena objetivo coincide con la consulta de búsqueda:
+ * - Coincidencia directa normalizada (substring).
+ * - Coincidencia compacta sin espacios ("stalker2" vs "stalker 2").
+ * - Coincidencia multi-token AND ("resident remake" encuentra "Resident Evil 4 Remake").
+ */
+export function matchesSearchQuery(target: string, query: string): boolean {
+  if (!query.trim()) return true;
+  if (!target) return false;
+
+  const normTarget = normalizeSearchString(target);
+  const normQuery = normalizeSearchString(query);
+
+  if (!normQuery) return true;
+
+  if (normTarget.includes(normQuery)) return true;
+
+  const compactTarget = normTarget.replace(/\s+/g, "");
+  const compactQuery = normQuery.replace(/\s+/g, "");
+  if (compactTarget.includes(compactQuery)) return true;
+
+  const tokens = normQuery.split(" ").filter((t) => t.length > 0);
+  if (tokens.length > 1) {
+    if (tokens.every((t) => normTarget.includes(t) || compactTarget.includes(t))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Filtra juegos por término de búsqueda (id, nombre formateado o edición).
+ * Búsqueda inteligente: case-insensitive, sin acentos, con soporte de acrónimos (S.T.A.L.K.E.R.) y multi-token.
  */
 export function filterGamesBySearch(games: readonly ConfiguredGame[], searchTerm: string): ConfiguredGame[] {
-  const term = searchTerm.trim().toLowerCase();
-  if (!term) return [...games];
+  const cleanTerm = searchTerm.trim();
+  if (!cleanTerm) return [...games];
+
   return games.filter((game) => {
-    const id = game.id.toLowerCase();
-    const displayName = formatGameDisplayName(game.id).toLowerCase();
-    return id.includes(term) || displayName.includes(term);
+    const id = game.id;
+    const displayName = formatGameDisplayName(game.id);
+    const edition = game.editionLabel ?? "";
+
+    return (
+      matchesSearchQuery(id, cleanTerm) ||
+      matchesSearchQuery(displayName, cleanTerm) ||
+      (edition ? matchesSearchQuery(edition, cleanTerm) : false)
+    );
   });
 }
 

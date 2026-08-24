@@ -851,6 +851,7 @@ pub struct StreamingDryRunMetrics {
 }
 
 /// Ejecuta una simulación de subida sin tocar el API ni S3, midiendo el impacto comprimido.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn upload_tar_stream_multipart_dry_run(
     mut rx: tokio::sync::mpsc::Receiver<TarStreamMsg>,
     game_id: &str,
@@ -971,7 +972,7 @@ pub(crate) async fn upload_tar_stream_multipart_dry_run(
     let simulated_parts_count = if compressed_bytes == 0 {
         1
     } else {
-        ((compressed_bytes + simulated_part_size as u64 - 1) / simulated_part_size as u64) as u32
+        compressed_bytes.div_ceil(simulated_part_size as u64) as u32
     };
     let threads = (num_cpus::get() - 1).max(1) as u32;
 

@@ -241,12 +241,7 @@ fn register_storage_module(
             let mut stmt = conn
                 .prepare("SELECT key FROM plugin_storage WHERE plugin_id = ?1 ORDER BY key ASC")?;
             let rows = stmt.query_map(params![p_name_list], |row| row.get::<_, String>(0))?;
-            let mut keys = Vec::new();
-            for r in rows {
-                if let Ok(k) = r {
-                    keys.push(k);
-                }
-            }
+            let keys = rows.flatten().collect();
             Ok(keys)
         });
         match res {

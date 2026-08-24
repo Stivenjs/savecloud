@@ -32,6 +32,9 @@ export function useResolvedSteamAppIds(games: readonly ConfiguredGame[]): Record
       return searchSteamAppIdsBatch(queries);
     },
     enabled: gamesToSearch.length > 0,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 24 * 60 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   return useMemo(() => {

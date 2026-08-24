@@ -19,7 +19,15 @@ import { useEffect } from "react";
 import { preloadHls } from "@utils/hls";
 import "@/styles/index.css";
 
-preloadHls();
+if (typeof window !== "undefined") {
+  if ("requestIdleCallback" in window) {
+    (
+      window as Window & { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number }
+    ).requestIdleCallback(() => preloadHls(), { timeout: 3000 });
+  } else {
+    setTimeout(preloadHls, 2000);
+  }
+}
 
 /** Configuración del tema */
 const THEME_CONFIG = {

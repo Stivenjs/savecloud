@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { ConfiguredGame } from "@savecloud/types";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { filterGames, type OriginFilter } from "@features/games/GamesFilters";
@@ -8,7 +8,10 @@ export function useGamesFiltering(games: readonly ConfiguredGame[] = [], cloudGa
   const [originFilter, setOriginFilter] = useState<OriginFilter>("all");
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
-  const filteredGames = filterGames(games, debouncedSearchTerm, originFilter);
+  const filteredGames = useMemo(
+    () => filterGames(games, debouncedSearchTerm, originFilter),
+    [games, debouncedSearchTerm, originFilter]
+  );
   const hasConfiguredGames = games.length > 0;
   const hasCloudGames = cloudGamesCount > 0;
 
