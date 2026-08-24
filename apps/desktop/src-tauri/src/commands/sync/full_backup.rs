@@ -548,13 +548,14 @@ pub async fn create_and_upload_full_backup(
             &game_id,
             &relative_filename,
             estimated_total,
+            zstd_packaged_level,
             app.clone(),
             Some(tray_state.0.clone()),
             None,
         )
         .await;
         let _ = tar_handle.await;
-        upload_res
+        upload_res.map(|_| ())
     } else if use_streaming {
         let strategy = streaming::upload_strategy::UploadStrategy::for_file(estimated_total);
 
@@ -812,4 +813,133 @@ pub async fn rename_cloud_backup(
         ));
     }
     Ok(())
+}
+
+/// Ejecuta una prueba de compresión y empaquetado streaming TAR (dry-run) para un juego específico
+/// con nivel Zstd configurable, sin subir datos a la nube ni alterar el estado remoto.
+#[tauri::command]
+pub async fn test_streaming_full_backup(
+    game_id: String,
+    compression_level: Option<i32>,
+    app: AppHandle,
+    tray_state: State<'_, TrayState>,
+) -> Result<streaming::multipart::StreamingDryRunMetrics, String> {
+    let cfg = config::load_config();
+
+    let game = cfg
+        .games
+        .iter()
+        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+        .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
+
+    let raw_path = game.paths.first().map(|s| s.as_str()).unwrap_or("");
+    let source_dir =
+        crate::utils::path_utils::expand_path(raw_path).ok_or("No se pudo expandir la ruta")?;
+    let source_dir = PathBuf::from(&source_dir);
+
+    if !source_dir.exists() || !source_dir.is_dir() {
+        return Err("La carpeta del juego no existe".to_string());
+    }
+
+    let source_dir_for_size = source_dir.clone();
+    let estimated_total = tokio::task::spawn_blocking(move || -> u64 {
+        fn dir_size(path: &Path) -> u64 {
+            let mut total = 0u64;
+            let Ok(meta) = std::fs::metadata(path) else {
+                return 0;
+            };
+            if meta.is_file() {
+                return meta.len();
+            }
+
+            let Ok(read_dir) = std::fs::read_dir(path) else {
+                return 0;
+            };
+            for entry in read_dir.flatten() {
+                total += dir_size(&entry.path());
+            }
+            total
+        }
+        dir_size(&source_dir_for_size)
+    })
+    .await
+    .unwrap_or(0);
+
+    let filename = format!("{}.tar", chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S"));
+    let relative_filename = format!("{}{}", BACKUPS_PREFIX, filename);
+
+    let zstd_level = compression_level
+        .or(cfg.full_backup_packaged_compression_level)
+        .unwrap_or(FULL_BACKUP_PACKAGED_ZSTD_DEFAULT)
+        .clamp(1, 22);
+
+    let strategy = streaming::upload_strategy::UploadStrategy::for_file(estimated_total);
+
+    tray_state.0.reset_upload_cancel();
+    tray_state.0.reset_upload_pause();
+
+    emit_sync_upload_progress(
+        &app,
+        SyncProgressPayload {
+            operation_id: Some(format!("sync-upload-{game_id}")),
+            status: Some("running".to_string()),
+            game_id: game_id.clone(),
+            filename: format!("{} (Prueba Streaming)", filename),
+            loaded: 0,
+            total: estimated_total.max(1),
+            downloaded_bytes: Some(0),
+            total_bytes: Some(estimated_total.max(1)),
+            can_pause: Some(false),
+            can_cancel: Some(true),
+            can_resume: Some(false),
+            strategy: Some(SyncOperationStrategy::Streaming),
+            state: None,
+            reason_code: None,
+        },
+    );
+
+    tray_state.0.syncing_inc();
+    tray_state.0.update_tooltip();
+
+    let (rx, tar_handle) = streaming::tar_stream::spawn_tar_stream(
+        source_dir,
+        strategy.tar_channel_capacity,
+        zstd_level,
+    );
+
+    let metrics_result = streaming::multipart::upload_tar_stream_multipart_dry_run(
+        rx,
+        &game_id,
+        &relative_filename,
+        estimated_total,
+        zstd_level,
+        app.clone(),
+        Some(tray_state.0.clone()),
+        None,
+    )
+    .await;
+
+    let _ = tar_handle.await;
+
+    tray_state.0.syncing_dec();
+    tray_state.0.update_tooltip();
+
+    let status = if tray_state.0.upload_cancel_requested() {
+        "cancelled"
+    } else {
+        sync_status_from_result(&metrics_result)
+    };
+
+    emit_sync_terminal(
+        &app,
+        format!("sync-upload-{game_id}"),
+        status,
+        "upload",
+        Some(game_id.clone()),
+        None,
+        None,
+    );
+    emit_full_backup_done(&app);
+
+    metrics_result
 }

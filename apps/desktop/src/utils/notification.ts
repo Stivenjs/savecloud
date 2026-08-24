@@ -80,6 +80,20 @@ export async function notifyFullBackupDone(gameName: string): Promise<void> {
 }
 
 /**
+ * Notificación cuando termina una prueba de streaming TAR (dry-run).
+ */
+export async function notifyStreamingDryRunDone(
+  gameName: string,
+  savedFormatted: string,
+  savedPercentage: number
+): Promise<void> {
+  await maybeNotify(() => ({
+    title: "SaveCloud - Modo Prueba",
+    body: `${gameName}: prueba completada (ahorro: ${savedFormatted} / ${savedPercentage.toFixed(1)}%)`,
+  }));
+}
+
+/**
  * Notificación cuando falla una subida.
  */
 export async function notifyUploadError(gameName: string, error: string): Promise<void> {

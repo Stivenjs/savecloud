@@ -1,8 +1,19 @@
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
-import { getActiveDownloadsState, getPausedUploadInfo } from "@services/tauri/config.service";
+import {
+  getActiveDownloadsState,
+  getPausedUploadInfo,
+  type StreamingDryRunMetrics,
+} from "@services/tauri/config.service";
 import { formatGameDisplayName } from "@utils/gameImage";
-import { notifyDownloadDone, notifyFullBackupDone, notifyUploadDone } from "@utils/notification";
+import { formatBytes } from "@utils/format";
+import {
+  notifyDownloadDone,
+  notifyFullBackupDone,
+  notifyStreamingDryRunDone,
+  notifyUploadDone,
+} from "@utils/notification";
+import { useStreamingMetricsStore } from "@store/StreamingMetricsStore";
 
 export interface SyncProgressState {
   type: "upload" | "download";
@@ -304,13 +315,32 @@ export function initSyncListeners() {
     }
   });
 
+  let lastDryRunGameId: string | null = null;
+  let lastDryRunTimestamp = 0;
+
+  listen<StreamingDryRunMetrics>("streaming-dry-run-completed", (ev) => {
+    if (ev.payload) {
+      lastDryRunGameId = ev.payload.gameId;
+      lastDryRunTimestamp = Date.now();
+      useStreamingMetricsStore.getState().openMetricsModal(ev.payload);
+      notifyStreamingDryRunDone(
+        formatGameDisplayName(ev.payload.gameId),
+        formatBytes(ev.payload.savedBytes),
+        ev.payload.savedPercentage
+      ).catch(() => {});
+    }
+  });
+
   listen("full-backup-done", () => {
     const state = useSyncStore.getState();
     const op = state.syncOperation;
     state.setProgress((prev) => (prev?.type === "upload" ? null : prev));
     if (op?.operationId) state.removeTaskByOperationId(op.operationId);
     state.setSyncOperation(null);
-    if (op?.mode === "single" && op?.gameId) {
+
+    const isRecentDryRun = op?.gameId && lastDryRunGameId === op.gameId && Date.now() - lastDryRunTimestamp < 2000;
+
+    if (op?.mode === "single" && op?.gameId && !isRecentDryRun) {
       notifyFullBackupDone(formatGameDisplayName(op.gameId)).catch(() => {});
     }
   });

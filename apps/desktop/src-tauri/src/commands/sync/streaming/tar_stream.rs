@@ -26,6 +26,16 @@ use walkdir::WalkDir;
 
 use super::upload_strategy::TAR_STREAM_CHUNK_BYTES;
 
+/// Estadísticas recolectadas durante el empaquetado del directorio en formato TAR.
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TarStreamStats {
+    pub files_count: u64,
+    pub dirs_count: u64,
+    pub symlinks_count: u64,
+    pub uncompressed_bytes: u64,
+}
+
 /// Mensajes que el hilo TAR envía al consumidor async.
 #[derive(Debug)]
 pub(crate) enum TarStreamMsg {
@@ -33,8 +43,8 @@ pub(crate) enum TarStreamMsg {
     /// Incluye la cantidad total de bytes originales [`TAR_STREAM_CHUNK_BYTES`] (sin comprimir) procesados hasta ahora
     /// para que el contador de progreso sea exacto.
     Chunk(bytes::Bytes, u64),
-    /// El archivo se generó y comprimió totalmente; todos los bytes fueron enviados.
-    Done,
+    /// El archivo se generó y comprimió totalmente; todos los bytes fueron enviados con sus estadísticas.
+    Done(TarStreamStats),
     /// Error irrecuperable durante la generación, compresión o envío al canal.
     Err(String),
 }
@@ -149,8 +159,8 @@ pub(crate) fn spawn_tar_stream(
 
     let handle = tokio::task::spawn_blocking(move || {
         match run_tar_pipeline(&source_dir, tx.clone(), zstd_compression_level) {
-            Ok(()) => {
-                let _ = tx.blocking_send(TarStreamMsg::Done);
+            Ok(stats) => {
+                let _ = tx.blocking_send(TarStreamMsg::Done(stats));
             }
             Err(e) => {
                 let _ = tx.blocking_send(TarStreamMsg::Err(e));
@@ -171,6 +181,7 @@ pub(crate) fn spawn_tar_stream(
 /// - Registrar por separado en el log cada archivo procesado (útil para diagnóstico).
 /// - Introducir puntos de backpressure entre archivos sin bloquear en mitad de uno.
 /// - Manejar errores por entrada individualmente sin abortar todo el TAR.
+/// - Contabilizar métricas detalladas (archivos, carpetas, symlinks, bytes totales).
 ///
 /// Los symlinks se preservan como entradas TAR de tipo enlace simbólico en vez de
 /// seguirlos, reduciendo el tamaño del TAR en directorios con muchos enlaces.
@@ -178,7 +189,7 @@ fn run_tar_pipeline(
     source_dir: &Path,
     tx: tokio::sync::mpsc::Sender<TarStreamMsg>,
     zstd_compression_level: i32,
-) -> Result<(), String> {
+) -> Result<TarStreamStats, String> {
     // Contador compartido para trackear el progreso original (crudo) mientras zstd comprime.
     let original_counter = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
 
@@ -214,11 +225,15 @@ fn run_tar_pipeline(
 
     let progress_writer = ProgressWrapper {
         inner: encoder,
-        counter: original_counter,
+        counter: original_counter.clone(),
     };
 
     let mut builder = tar::Builder::new(progress_writer);
     builder.follow_symlinks(false);
+
+    let mut files_count = 0u64;
+    let mut dirs_count = 0u64;
+    let mut symlinks_count = 0u64;
 
     // `WalkDir` itera en orden DFS. `min_depth(0)` incluye el directorio raíz
     // como primera entrada, necesario para que el TAR tenga la entrada de directorio
@@ -247,6 +262,7 @@ fn run_tar_pipeline(
         let file_type = entry.file_type();
 
         if file_type.is_dir() {
+            dirs_count += 1;
             // Las entradas de directorio solo escriben la cabecera TAR (512 bytes).
             // No hay datos que leer del disco, así que el backpressure solo aplica
             // cuando el buffer del `ChannelWriter` se llena con muchas cabeceras.
@@ -254,6 +270,7 @@ fn run_tar_pipeline(
                 .append_dir(relative, entry.path())
                 .map_err(|e| format!("error empaquetando dir '{}': {}", relative.display(), e))?;
         } else if file_type.is_file() {
+            files_count += 1;
             // `append_path_with_name` lee el archivo desde la ruta del sistema de
             // archivos y lo escribe en el TAR con la ruta relativa calculada arriba.
             // Esta es la operación costosa en I/O: lee el archivo en bloques y los
@@ -265,6 +282,7 @@ fn run_tar_pipeline(
                 .append_file(relative, &mut file)
                 .map_err(|e| format!("error empaquetando '{}': {}", relative.display(), e))?;
         } else if file_type.is_symlink() {
+            symlinks_count += 1;
             // Los symlinks se preservan usando `append_path` con `follow_symlinks(false)`.
             // `tar-rs` leerá el destino del enlace con `std::fs::read_link` y escribirá
             // una cabecera TAR de tipo enlace simbólico sin leer el archivo destino.
@@ -298,5 +316,12 @@ fn run_tar_pipeline(
         .flush_chunk()
         .map_err(|e| format!("error vaciando buffer final: {}", e))?;
 
-    Ok(())
+    let uncompressed_bytes = original_counter.load(std::sync::atomic::Ordering::Relaxed);
+
+    Ok(TarStreamStats {
+        files_count,
+        dirs_count,
+        symlinks_count,
+        uncompressed_bytes,
+    })
 }

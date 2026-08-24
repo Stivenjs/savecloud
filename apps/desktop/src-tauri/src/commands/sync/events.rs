@@ -125,6 +125,13 @@ pub(crate) fn emit_full_backup_done(app: &AppHandle) {
     let _ = app.emit("full-backup-done", ());
 }
 
+pub(crate) fn emit_streaming_dry_run_completed(
+    app: &AppHandle,
+    metrics: &super::streaming::multipart::StreamingDryRunMetrics,
+) {
+    let _ = app.emit("streaming-dry-run-completed", metrics);
+}
+
 pub(crate) fn sync_status_from_result<T, E>(result: &Result<T, E>) -> &'static str {
     if result.is_ok() {
         SYNC_STATUS_COMPLETED

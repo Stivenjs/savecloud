@@ -863,6 +863,15 @@
         "highLevels": "High Levels (approx. 10–22):",
         "highLevelsDesc": "smaller file in the cloud and less bandwidth; much slower and may heat up the device during packaging.",
         "gameDataHint": "Many games already contain compressed data (e.g., <code>.pak</code>, textures); in those cases, increasing the level yields little size reduction for a lot of time."
+      },
+      "benchmark": {
+        "title": "Test Streaming Compression (Dry-Run)",
+        "desc": "Simulates real-time TAR packaging and compression to measure speed and exact space saved without uploading to the cloud.",
+        "viewRecent": "View recent metrics",
+        "selectGame": "Select a game",
+        "runButton": "Run test",
+        "testing": "Compressing...",
+        "noGames": "Add at least one game to your library to test compression."
       }
     },
     "sdk": {
@@ -2286,5 +2295,35 @@
     "stable": "Stable release",
     "prerelease": "Pre-release",
     "noDate": "Date unavailable"
+  },
+  "streaming": {
+    "metrics": {
+      "title": "Streaming TAR Metrics",
+      "dryRunBadge": "Dry-Run Mode",
+      "subtitle": "Packaging and compression results without uploading to cloud",
+      "originalSize": "Original Size",
+      "compressedSize": "Compressed (TAR.ZST)",
+      "filesLabel": "files",
+      "ratioLabel": "ratio",
+      "compressionRatioBar": "Space reduction",
+      "spaceSavedLabel": "Saved",
+      "duration": "Duration",
+      "packagingTime": "Packaging and Zstd",
+      "speed": "Speed",
+      "rawThroughput": "Raw input",
+      "streamRate": "Stream",
+      "streamThroughput": "Compressed output",
+      "threads": "CPU Threads",
+      "detailsHeader": "Structure & S3 Simulation Details",
+      "files": "Processed files",
+      "folders": "Directories",
+      "s3Parts": "Estimated S3 parts",
+      "copyReport": "Copy report"
+    },
+    "benchmark": {
+      "successTitle": "Compression test completed",
+      "successDesc": "{{game}}: Saved {{saved}} (-{{percent}}%)",
+      "errorTitle": "Compression test error"
+    }
   }
 }
