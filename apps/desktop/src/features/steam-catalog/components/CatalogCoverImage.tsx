@@ -10,6 +10,8 @@ export interface CatalogCoverImageProps {
   fallbackClassName?: string;
   fallbackTitle?: string;
   showSkeleton?: boolean;
+  /** Carga prioritaria para elementos visibles inmediatamente (above-the-fold) */
+  priority?: boolean;
   onLoad?: () => void;
   onError?: () => void;
 }
@@ -25,6 +27,7 @@ export function CatalogCoverImage({
   fallbackClassName = "flex h-full w-full flex-col items-center justify-center p-4 bg-[#0e0f14] text-center gap-1.5 rounded-xl",
   fallbackTitle,
   showSkeleton = false,
+  priority = false,
   onLoad,
   onError,
 }: CatalogCoverImageProps) {
@@ -41,7 +44,8 @@ export function CatalogCoverImage({
 
   const activeUrl = validCandidates[candidateIndex] ?? null;
 
-  const [isLoaded, setIsLoaded] = useState(() => (activeUrl ? globalLoadedImages.has(activeUrl) : false));
+  const isCached = Boolean(activeUrl && globalLoadedImages.has(activeUrl));
+  const [isLoaded, setIsLoaded] = useState(() => isCached);
 
   useEffect(() => {
     if (activeUrl && globalLoadedImages.has(activeUrl)) {
@@ -86,12 +90,13 @@ export function CatalogCoverImage({
         key={activeUrl}
         src={activeUrl}
         alt={alt}
-        loading="lazy"
+        loading={priority ? "eager" : "lazy"}
+        fetchPriority={priority ? "high" : "auto"}
         decoding="async"
         draggable={false}
-        className={`${className} transition-opacity duration-200 ease-out select-none ${
-          isLoaded ? "opacity-100" : "opacity-0"
-        }`}
+        className={`${className} ${
+          isCached ? "opacity-100" : isLoaded ? "opacity-100 transition-opacity duration-150 ease-out" : "opacity-0"
+        } select-none`}
         onLoad={handleImageLoad}
         onError={handleImageError}
       />

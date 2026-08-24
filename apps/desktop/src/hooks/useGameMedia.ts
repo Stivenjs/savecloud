@@ -144,7 +144,7 @@ export function useGameMedia({
     queryKey: ["steam-appdetails-media", steamAppId ?? ""],
     queryFn: () => getSteamAppdetailsMedia(steamAppId!),
     enabled: !!steamAppId && isSteamAppId(steamAppId) && !mediaFromBatch && !hasUserCover,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 60 * 60 * 1000,
     gcTime: 1000 * 60 * 60 * 24,
     refetchOnWindowFocus: false,
   });

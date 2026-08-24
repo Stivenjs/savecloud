@@ -83,6 +83,7 @@ export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualized
                 onInstall={onInstall}
                 consoleMode={consoleMode}
                 orientation={cardOrientation}
+                priority={index < 8}
               />
             </div>
           );

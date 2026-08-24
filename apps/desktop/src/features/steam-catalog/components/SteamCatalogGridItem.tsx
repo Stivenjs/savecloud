@@ -22,6 +22,7 @@ export type CatalogGridItemProps = {
   onInstall: (gameName: string) => void;
   consoleMode?: boolean;
   orientation?: GamesCardOrientation;
+  priority?: boolean;
 };
 
 const CONSOLE_SOURCE_LISTBOX_PROPS = {
@@ -48,6 +49,7 @@ export const CatalogGridItem = memo(function CatalogGridItem({
   onInstall,
   consoleMode = false,
   orientation = "vertical",
+  priority = false,
 }: CatalogGridItemProps) {
   const { t } = useTranslation();
   const game = libraryGame ?? catalogListItemToConfiguredGame(item);
@@ -67,6 +69,7 @@ export const CatalogGridItem = memo(function CatalogGridItem({
           <GameCard
             variant="catalog"
             orientation={orientation}
+            priority={priority}
             game={game}
             cardTitle={item.name}
             resolvedSteamAppId={item.steamAppId}

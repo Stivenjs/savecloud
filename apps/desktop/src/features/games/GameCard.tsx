@@ -71,6 +71,8 @@ export interface GameCardProps {
   orientation?: "vertical" | "horizontal";
   /** `catalog`: sin menú ni barra de sync; sin tilt/sombra ni overlay de stats del pie; el desplegable de medios (imágenes/vídeo) se mantiene. */
   variant?: "library" | "catalog";
+  /** Carga prioritaria para las primeras tarjetas visibles */
+  priority?: boolean;
 }
 
 function MaybeViewTransition({
@@ -109,6 +111,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     onCardNavigate,
     variant = "library",
     orientation = "vertical",
+    priority = false,
     ...cardRest
   } = props;
 
@@ -207,6 +210,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
                 fallbackTitle={cardTitle ?? formatGameDisplayName(game.id)}
                 className="size-full object-cover object-center transition-[transform,opacity] duration-200 ease-out group-hover:scale-[1.02] subpixel-antialiased transform-gpu rounded-xl"
                 showSkeleton={!isCatalog}
+                priority={priority}
               />
             )}
             {/* Soft bottom shading to integrate image with card background */}
