@@ -35,7 +35,6 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
-        working-directory: apps/web
 
       - name: Build Web App
         run: bun run build
