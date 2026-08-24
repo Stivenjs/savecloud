@@ -1,0 +1,35 @@
+{
+  "name": "@savecloud/api",
+  "version": "26.8.23",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/interfaces/http/server.ts",
+    "build": "tsc",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.1115.0",
+    "@aws-sdk/client-dynamodb": "^3.1115.0",
+    "@aws-sdk/client-s3": "^3.1115.0",
+    "@aws-sdk/lib-dynamodb": "^3.1115.0",
+    "@aws-sdk/s3-request-presigner": "^3.1115.0",
+    "@fastify/aws-lambda": "^4.1.0",
+    "@fastify/compress": "^8.3.1",
+    "@fastify/cors": "^10.1.0",
+    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/websocket": "^11.3.0",
+    "@savecloud/types": "workspace:*",
+    "@sinclair/typebox": "^0.34.52",
+    "@smithy/node-http-handler": "^4.11.3",
+    "fastify": "^5.12.1",
+    "p-limit": "^7.3.1"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.162",
+    "@types/bun": "latest",
+    "@types/node": "^25.9.5",
+    "@types/ws": "^8.18.1",
+    "typescript": "^7.0.2"
+  }
+}

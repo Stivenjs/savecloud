@@ -1,12 +1,12 @@
 {
-  "name": "savecloud-desktop",
+  "name": "@savecloud/desktop",
   "private": true,
   "version": "26.8.23",
   "type": "module",
-  "packageManager": "bun",
   "scripts": {
     "dev": "bun run --bun vite",
     "build": "tsc && bun run --bun vite build",
+    "check": "tsc --noEmit",
     "preview": "bun run --bun vite preview",
     "tauri": "tauri",
     "icon": "bun run scripts/make-icon-square.ts && tauri icon src-tauri/icons/icon-square.png",
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@heroui/react": "^2.8.10",
+    "@savecloud/types": "workspace:*",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.101.4",
     "@tauri-apps/api": "^2.11.1",

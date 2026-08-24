@@ -1,5 +1,5 @@
 {
-  "name": "bun-lambda",
+  "name": "@savecloud/bun-lambda",
   "private": true,
   "devDependencies": {
     "@oclif/core": "^4.2.0",
