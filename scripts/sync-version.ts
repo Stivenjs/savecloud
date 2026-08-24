@@ -22,6 +22,9 @@ const root = process.cwd();
 
 const jsonFiles = [
   "package.json",
+  "packages/types/package.json",
+  "apps/api/package.json",
+  "apps/cli/package.json",
   "apps/desktop/package.json",
   "apps/desktop/src-tauri/tauri.conf.json",
   "apps/web/package.json",

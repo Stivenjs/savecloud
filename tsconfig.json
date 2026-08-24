@@ -18,9 +18,16 @@
       "@infrastructure/*": ["./apps/api/src/infrastructure/*"],
       "@interfaces/*": ["./apps/api/src/interfaces/*"],
       "@shared/*": ["./apps/api/src/shared/*"],
-      "@cli/*": ["./apps/cli/*"]
+      "@cli/*": ["./apps/cli/*"],
+      "@savecloud/types": ["./packages/types/src/index.ts"]
     }
   },
-  "include": ["apps/api/src/**/*", "apps/cli/**/*", "scripts/**/*.ts", "apps/desktop/scripts/**/*.ts"],
+  "include": [
+    "apps/api/src/**/*",
+    "apps/cli/**/*",
+    "packages/types/src/**/*",
+    "scripts/**/*.ts",
+    "apps/desktop/scripts/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

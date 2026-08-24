@@ -1,12 +1,12 @@
 {
-  "name": "savecloud-web",
+  "name": "@savecloud/web",
   "private": true,
   "version": "26.8.23",
   "type": "module",
-  "packageManager": "bun",
   "scripts": {
     "dev": "bun run --bun vite",
     "build": "tsc && bun run --bun vite build",
+    "check": "tsc --noEmit",
     "preview": "bun run --bun vite preview"
   },
   "dependencies": {

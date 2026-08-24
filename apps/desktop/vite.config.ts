@@ -64,6 +64,7 @@ export default defineConfig(() => ({
       "@styles": resolve(__dirname, "src/styles"),
       "@lib": resolve(__dirname, "src/lib"),
       "@router": resolve(__dirname, "src/router"),
+      "@savecloud/types": resolve(__dirname, "../../packages/types/src/index.ts"),
     },
   },
 

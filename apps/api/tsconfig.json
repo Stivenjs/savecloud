@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "outDir": "dist",
+    "rootDir": "../../",
+    "types": ["node", "bun"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@domain/*": ["./src/domain/*"],
+      "@application/*": ["./src/application/*"],
+      "@adapters/*": ["./src/adapters/*"],
+      "@infrastructure/*": ["./src/infrastructure/*"],
+      "@interfaces/*": ["./src/interfaces/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@savecloud/types": ["../../packages/types/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*"]
+}

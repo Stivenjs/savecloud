@@ -30,7 +30,8 @@
       "@store/*": ["./src/store/*"],
       "@lib/*": ["./src/lib/*"],
       "@styles/*": ["./src/styles/*"],
-      "@router/*": ["./src/router/*"]
+      "@router/*": ["./src/router/*"],
+      "@savecloud/types": ["../../packages/types/src/index.ts"]
     }
   },
   "include": ["src"],
