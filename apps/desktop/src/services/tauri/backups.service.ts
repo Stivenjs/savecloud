@@ -113,3 +113,37 @@ export async function setFullBackupStreamingDryRun(enabled: boolean): Promise<vo
 export async function setFullBackupPackagedCompressionLevel(level: number | null): Promise<void> {
   await invoke("set_full_backup_packaged_compression_level", { level });
 }
+
+/** Métricas de simulación de streaming full backup (dry-run). */
+export interface StreamingDryRunMetrics {
+  gameId: string;
+  filename: string;
+  originalBytes: number;
+  compressedBytes: number;
+  savedBytes: number;
+  savedRatio: number;
+  savedPercentage: number;
+  durationMs: number;
+  throughputMbS: number;
+  outputThroughputMbS: number;
+  zstdLevel: number;
+  threads: number;
+  totalFiles: number;
+  totalDirs: number;
+  totalSymlinks: number;
+  chunksCount: number;
+  simulatedPartSize: number;
+  simulatedPartsCount: number;
+  timestamp?: number;
+}
+
+/** Ejecuta una prueba de compresión y empaquetado streaming (dry-run) sin subir datos a la nube. */
+export async function testStreamingFullBackup(
+  gameId: string,
+  compressionLevel?: number | null
+): Promise<StreamingDryRunMetrics> {
+  return invoke<StreamingDryRunMetrics>("test_streaming_full_backup", {
+    gameId,
+    compressionLevel: compressionLevel ?? null,
+  });
+}
