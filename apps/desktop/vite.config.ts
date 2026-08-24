@@ -72,10 +72,21 @@ export default defineConfig(() => ({
   define: savecloudBuildDefines,
   esbuild: {
     drop: process.env.TAURI_ENV_DEBUG ? [] : ["console", "debugger"],
+    legalComments: "none",
+    treeShaking: true,
   },
 
   optimizeDeps: {
-    include: ["react", "react-dom", "@tanstack/react-query"],
+    include: [
+      "react",
+      "react-dom",
+      "@tanstack/react-query",
+      "framer-motion",
+      "lucide-react",
+      "zustand",
+      "i18next",
+      "react-i18next",
+    ],
   },
 
   build: {
@@ -83,17 +94,10 @@ export default defineConfig(() => ({
     target: "esnext",
     minify: (!process.env.TAURI_ENV_DEBUG ? "esbuild" : false) as "esbuild" | false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
-
-    manualChunks(id, { getModuleInfo }) {
-      if (!id.includes("node_modules")) return;
-
-      const info = getModuleInfo(id);
-
-      if (info?.dynamicImporters?.length) {
-        return "lazy";
-      }
-
-      return "vendor";
+    assetsInlineLimit: 4096,
+    chunkSizeWarningLimit: 800,
+    modulePreload: {
+      polyfill: false,
     },
 
     rollupOptions: {
@@ -101,6 +105,24 @@ export default defineConfig(() => ({
         chunkFileNames: "chunks/[name]-[hash].js",
         entryFileNames: "entry/[name]-[hash].js",
         assetFileNames: "assets/[name]-[hash][extname]",
+        manualChunks(id, { getModuleInfo }) {
+          if (!id.includes("node_modules")) return;
+
+          const info = getModuleInfo(id);
+          if (info?.dynamicImporters?.length) {
+            return "lazy";
+          }
+
+          if (id.includes("hls.js")) {
+            return "vendor-media";
+          }
+          if (id.includes("@tanstack")) {
+            return "vendor-query";
+          }
+          if (id.includes("@tauri-apps")) {
+            return "vendor-tauri";
+          }
+        },
       },
     },
   },
