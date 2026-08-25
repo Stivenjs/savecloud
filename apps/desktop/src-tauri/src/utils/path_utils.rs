@@ -128,24 +128,25 @@ pub fn sync_abs_path_for_cloud_save(
         return None;
     }
 
-    fn join_logical_base(base_norm: PathBuf, tail: &str) -> PathBuf {
+    fn join_logical_base(base_norm: PathBuf, tail: &str) -> Option<PathBuf> {
         let tail = tail.trim_matches(['/', '\\']);
         let mut pb = base_norm;
         if tail.is_empty() {
-            return pb;
+            return Some(pb);
         }
-        for seg in tail
-            .split(['/', '\\'])
-            .filter(|s| !s.is_empty())
-        {
+        for seg in tail.split(['/', '\\']).filter(|s| !s.is_empty()) {
+            if seg == ".." {
+                return None;
+            }
             pb.push(seg);
         }
-        pb
+        Some(pb)
     }
 
     if game_paths.len() == 1 {
         let b = expand_path(game_paths[0].trim())?;
-        return Some(join_logical_base(PathBuf::from(b), rf));
+        let clean_rf = rf.strip_prefix("sync-root-0/").unwrap_or(rf);
+        return join_logical_base(PathBuf::from(b), clean_rf);
     }
 
     // Prefijos más largos primero por si un nombre es prefijo del otro.
@@ -182,7 +183,7 @@ pub fn sync_abs_path_for_cloud_save(
         }
     };
     let base = expand_path(game_paths[idx].trim())?;
-    Some(join_logical_base(PathBuf::from(base), tail))
+    join_logical_base(PathBuf::from(base), tail)
 }
 
 pub fn collect_files_with_mtime(

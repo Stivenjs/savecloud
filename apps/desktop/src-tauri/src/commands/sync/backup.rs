@@ -36,7 +36,7 @@ fn count_files_recursive(dir: &Path) -> u32 {
 fn copy_recursive_to(
     src_root: &Path,
     src: &Path,
-    dest_base: &Path,
+    game_paths: &[String],
     ok_count: &mut u32,
     errors: &mut Vec<String>,
 ) {
@@ -49,11 +49,18 @@ fn copy_recursive_to(
         let Some(rel) = rel else {
             continue;
         };
-        let dest_path = dest_base.join(rel);
+        let rel_str = rel.to_string_lossy().replace('\\', "/");
         if path.is_dir() {
-            let _ = fs::create_dir_all(&dest_path);
-            copy_recursive_to(src_root, &path, dest_base, ok_count, errors);
+            copy_recursive_to(src_root, &path, game_paths, ok_count, errors);
         } else if path.is_file() {
+            let Some(dest_path) = path_utils::sync_abs_path_for_cloud_save(game_paths, &rel_str)
+            else {
+                errors.push(format!("{}: no se pudo resolver ruta destino", rel_str));
+                continue;
+            };
+            if let Some(parent) = dest_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
             match fs::copy(&path, &dest_path) {
                 Ok(_) => *ok_count += 1,
                 Err(e) => {
@@ -142,10 +149,9 @@ pub fn restore_backup(game_id: String, backup_id: String) -> Result<SyncResultDt
         ));
     }
 
-    let dest_base = match path_utils::expand_path(game.paths[0].trim()) {
-        Some(p) => std::path::PathBuf::from(p),
-        None => return Err("No se pudo expandir la ruta del juego".into()),
-    };
+    if game.paths.is_empty() {
+        return Err("El juego no tiene rutas de guardado configuradas".into());
+    }
 
     let backup_dir = crate::config::config_dir()
         .ok_or("No se pudo obtener directorio de configuración")?
@@ -163,7 +169,7 @@ pub fn restore_backup(game_id: String, backup_id: String) -> Result<SyncResultDt
     copy_recursive_to(
         &backup_dir,
         &backup_dir,
-        &dest_base,
+        &game.paths,
         &mut ok_count,
         &mut errors,
     );

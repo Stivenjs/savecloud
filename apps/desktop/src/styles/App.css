@@ -2,6 +2,13 @@
   view-transition-name: none;
 }
 
+aside,
+header,
+[data-tauri-drag-region] {
+  view-transition-name: none !important;
+  backface-visibility: hidden;
+}
+
 ::view-transition-old(.page-scale-lift),
 ::view-transition-new(.page-scale-lift) {
   animation-duration: 220ms;

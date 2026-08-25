@@ -126,8 +126,23 @@ export function SteamCatalogPage() {
   } = useSteamCatalogMediaAndMatches(deferredActiveItems, pageSize);
 
   useRegisterGlobalBack(() => {
-    navigate("/");
-    return true;
+    if (isFilterDrawerOpen) {
+      setIsFilterDrawerOpen(false);
+      return true;
+    }
+    if (searchTerm) {
+      setSearchTerm("");
+      return true;
+    }
+    if (selectedGenres.length > 0 || selectedTags.length > 0) {
+      clearFilters();
+      return true;
+    }
+    if (bigPictureConsole) {
+      navigate("/");
+      return true;
+    }
+    return false;
   });
 
   useEffect(() => {

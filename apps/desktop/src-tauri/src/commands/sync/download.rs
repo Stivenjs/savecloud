@@ -555,10 +555,7 @@ async fn download_one_file(
                 }
 
                 if let Err(e) = writer.write_all(&chunk).await {
-                    write_err = Some(file_write_error_message(
-                        &save.filename,
-                        &e,
-                    ));
+                    write_err = Some(file_write_error_message(&save.filename, &e));
                     break;
                 }
             }
@@ -595,10 +592,7 @@ async fn download_one_file(
 
     if write_err.is_none() {
         if let Err(e) = writer.flush().await {
-            write_err = Some(file_write_error_message(
-                &save.filename,
-                &e,
-            ));
+            write_err = Some(file_write_error_message(&save.filename, &e));
         }
     }
 

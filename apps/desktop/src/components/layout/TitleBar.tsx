@@ -31,7 +31,7 @@ interface WindowControlLabels {
  * Encapsula la lógica de los listeners y llamadas a la API nativa.
  * * @returns {WindowControls} Estado y controles de la ventana.
  */
-function useTauriWindow(): WindowControls {
+export function useTauriWindow(): WindowControls {
   const [isMaximized, setIsMaximized] = useState(false);
   const [platform, setPlatform] = useState("windows");
   const appWindow = getCurrentWindow();
@@ -76,7 +76,7 @@ function useTauriWindow(): WindowControls {
 /**
  * Componente que renderiza los controles de ventana estilo macOS.
  */
-const MacControls = ({
+export const MacControls = ({
   close,
   minimize,
   maximize,
@@ -119,21 +119,25 @@ const MacControls = ({
 /**
  * Componente que renderiza los controles de ventana estilo Windows.
  */
-const WindowsControls = ({
+export const WindowsControls = ({
   close,
   minimize,
   maximize,
   isMaximized,
   labels,
   className,
+  showTitle = true,
 }: Omit<WindowControls, "platform"> & {
   labels: WindowControlLabels;
   className?: string;
+  showTitle?: boolean;
 }) => (
   <>
-    <div data-tauri-drag-region className={`flex-1 h-full flex items-center px-4 ${className ?? ""}`}>
-      <span className="text-sm font-medium text-foreground/80 pointer-events-none">SaveCloud</span>
-    </div>
+    {showTitle && (
+      <div data-tauri-drag-region className={`flex-1 h-full flex items-center px-4 ${className ?? ""}`}>
+        <span className="text-sm font-medium text-foreground/80 pointer-events-none">SaveCloud</span>
+      </div>
+    )}
     <div className={`flex items-center h-full ${className ?? ""}`}>
       <button
         onClick={minimize}

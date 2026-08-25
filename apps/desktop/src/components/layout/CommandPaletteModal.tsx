@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Modal, ModalContent, Kbd } from "@heroui/react";
+import { Modal, ModalContent, Kbd, Spinner } from "@heroui/react";
 import { Search, Gamepad2, ArrowRight, Settings, Users, History, Library, LayoutGrid, ShieldAlert } from "lucide-react";
 import { useConfig } from "@hooks/useConfig";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
 import { useGameMedia, useGameMediaBatch, getIsResolvingIds } from "@hooks/useGameMedia";
 import { openOrFocusSettingsWindow } from "@/windows/settingsWindow";
+import { searchSteamCatalog, type CatalogListItem, type SteamAppdetailsMediaResult } from "@services/tauri";
+import { STEAM_CATALOG_GAME_ID_PREFIX } from "@utils/steamCatalogGameId";
+import { catalogListItemToConfiguredGame } from "@features/steam-catalog/model/catalogConfiguredGame";
+import { useShellUiStore } from "@store/ShellUiStore";
+import { STEAM_CATALOG_URL_Q } from "@/constants/constants";
 import type { ConfiguredGame } from "@app-types/config";
-import type { SteamAppdetailsMediaResult } from "@services/tauri";
 
 interface NavigationCommandItem {
   type: "nav";
@@ -21,7 +25,7 @@ interface NavigationCommandItem {
   action: () => void;
 }
 
-interface GameCommandItem {
+interface LocalGameCommandItem {
   type: "game";
   id: string;
   title: string;
@@ -30,14 +34,27 @@ interface GameCommandItem {
   action: () => void;
 }
 
-export type CommandItem = NavigationCommandItem | GameCommandItem;
+interface CatalogGameCommandItem {
+  type: "catalog";
+  id: string;
+  title: string;
+  game: ConfiguredGame;
+  steamAppId: string;
+  category: "catalog";
+  action: () => void;
+}
+
+export type CommandItem = NavigationCommandItem | LocalGameCommandItem | CatalogGameCommandItem;
 
 interface CommandPaletteModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-function CommandPaletteGameItem({
+/**
+ * Renderiza la miniatura del juego utilizando exactamente el mismo hook y caché que el catálogo de Steam y la biblioteca.
+ */
+function CommandPaletteGameThumbnail({
   game,
   resolvedSteamAppId,
   mediaBySteamAppId,
@@ -51,6 +68,7 @@ function CommandPaletteGameItem({
     resolvedSteamAppId,
     mediaBySteamAppId,
     mediaFromBatch: true,
+    orientation: "horizontal",
   });
 
   const showFallback = !capsuleImage || imgError;
@@ -83,17 +101,75 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
   const { config } = useConfig();
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [catalogResults, setCatalogResults] = useState<CatalogListItem[]>([]);
+  const [isCatalogLoading, setIsCatalogLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    return useShellUiStore.getState().registerBackHandler(() => {
+      onClose();
+      return true;
+    });
+  }, [isOpen, onClose]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setQuery("");
+      setCatalogResults([]);
+      setSelectedIndex(0);
+      const timer = setTimeout(() => inputRef.current?.focus(), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
   const configuredGames: readonly ConfiguredGame[] = useMemo(() => config?.games ?? [], [config?.games]);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      setCatalogResults([]);
+      setIsCatalogLoading(false);
+      return;
+    }
+
+    let active = true;
+    setIsCatalogLoading(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const results = await searchSteamCatalog(trimmed, 6);
+        if (active) {
+          setCatalogResults(results || []);
+        }
+      } catch {
+        if (active) setCatalogResults([]);
+      } finally {
+        if (active) setIsCatalogLoading(false);
+      }
+    }, 160);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [query]);
+
+  const catalogGames: ConfiguredGame[] = useMemo(
+    () => catalogResults.map(catalogListItemToConfiguredGame),
+    [catalogResults]
+  );
+
+  const combinedGames = useMemo(() => [...configuredGames, ...catalogGames], [configuredGames, catalogGames]);
 
   const resolvedSteamAppIds = useResolvedSteamAppIds(configuredGames);
   const isResolvingIds = useMemo(
     () => getIsResolvingIds(configuredGames, resolvedSteamAppIds),
     [configuredGames, resolvedSteamAppIds]
   );
+
   const { mediaBySteamAppId } = useGameMediaBatch({
-    games: configuredGames,
+    games: combinedGames,
     resolvedSteamAppIds,
     isResolvingIds,
   });
@@ -116,7 +192,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
         type: "nav",
         id: "nav-catalog",
         title: "Explorar Catálogo Steam",
-        subtitle: "Buscar juegos oficiales y parches",
+        subtitle: "Buscar juegos oficiales, demos y parches",
         category: "navigation",
         icon: LayoutGrid,
         action: () => {
@@ -156,7 +232,19 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
         category: "navigation",
         icon: Settings,
         action: () => {
-          openOrFocusSettingsWindow();
+          void openOrFocusSettingsWindow();
+          onClose();
+        },
+      },
+      {
+        type: "nav",
+        id: "action-observability",
+        title: "Diagnósticos y Salud WS",
+        subtitle: "Inspeccionar métricas y observabilidad remota",
+        category: "actions",
+        icon: ShieldAlert,
+        action: () => {
+          void openOrFocusSettingsWindow();
           onClose();
         },
       },
@@ -164,7 +252,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
     [navigate, onClose]
   );
 
-  const gameCommands: GameCommandItem[] = useMemo(
+  const localGameCommands: LocalGameCommandItem[] = useMemo(
     () =>
       configuredGames.map((game) => ({
         type: "game",
@@ -180,43 +268,66 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
     [configuredGames, navigate, onClose]
   );
 
-  const actionCommands: NavigationCommandItem[] = useMemo(
-    () => [
-      {
+  const catalogGameCommands: CatalogGameCommandItem[] = useMemo(
+    () =>
+      catalogResults.map((item) => {
+        const game = catalogListItemToConfiguredGame(item);
+        return {
+          type: "catalog",
+          id: `catalog-${item.steamAppId}`,
+          title: item.name,
+          game,
+          steamAppId: item.steamAppId,
+          category: "catalog" as const,
+          action: () => {
+            navigate(`/games/${STEAM_CATALOG_GAME_ID_PREFIX}${item.steamAppId}`);
+            onClose();
+          },
+        };
+      }),
+    [catalogResults, navigate, onClose]
+  );
+
+  const filteredCommands: CommandItem[] = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      return [...localGameCommands, ...navigationCommands];
+    }
+
+    const filteredLocal = localGameCommands.filter(
+      (cmd) => cmd.title.toLowerCase().includes(q) || cmd.game.id.toLowerCase().includes(q)
+    );
+
+    const filteredNav = navigationCommands.filter(
+      (cmd) => cmd.title.toLowerCase().includes(q) || (cmd.subtitle && cmd.subtitle.toLowerCase().includes(q))
+    );
+
+    const list: CommandItem[] = [...filteredLocal, ...catalogGameCommands, ...filteredNav];
+
+    // Acción para explorar directamente en la vista del catálogo
+    if (q.length > 0) {
+      list.push({
         type: "nav",
-        id: "action-observability",
-        title: "Abrir Diagnósticos y Salud WS",
-        subtitle: "Inspeccionar métricas y observabilidad remota",
+        id: "action-search-in-catalog",
+        title: `Buscar "${query.trim()}" en el Catálogo Steam`,
+        subtitle: "Abrir catálogo completo con este filtro",
         category: "actions",
-        icon: ShieldAlert,
+        icon: Search,
         action: () => {
-          openOrFocusSettingsWindow();
+          const trimmed = query.trim();
+          useShellUiStore.getState().setCatalogBpSearchTerm(trimmed);
+          navigate(`/catalog?${STEAM_CATALOG_URL_Q}=${encodeURIComponent(trimmed)}`);
           onClose();
         },
-      },
-    ],
-    [onClose]
-  );
+      });
+    }
 
-  const allCommands = useMemo(
-    () => [...gameCommands, ...navigationCommands, ...actionCommands],
-    [gameCommands, navigationCommands, actionCommands]
-  );
-
-  const filteredCommands = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return allCommands;
-    return allCommands.filter((cmd) => {
-      if (cmd.type === "game") {
-        return cmd.title.toLowerCase().includes(q) || cmd.game.id.toLowerCase().includes(q);
-      }
-      return cmd.title.toLowerCase().includes(q) || (cmd.subtitle && cmd.subtitle.toLowerCase().includes(q));
-    });
-  }, [allCommands, query]);
+    return list;
+  }, [query, localGameCommands, catalogGameCommands, navigationCommands, navigate, onClose]);
 
   useEffect(() => {
     setSelectedIndex(0);
-  }, [query]);
+  }, [query, catalogResults]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -254,13 +365,17 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
         <div onKeyDown={handleKeyDown} className="flex flex-col w-full">
           {/* Header Input */}
           <div className="flex items-center px-4 py-3.5 border-b border-default-200/80 bg-default-100/50 gap-3">
-            <Search className="w-4 h-4 text-primary shrink-0" strokeWidth={2} />
+            {isCatalogLoading ? (
+              <Spinner size="sm" color="primary" className="shrink-0" />
+            ) : (
+              <Search className="w-4 h-4 text-primary shrink-0" strokeWidth={2} />
+            )}
             <input
               ref={inputRef}
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar juegos o comandos... (Ctrl + K)"
+              placeholder="Buscar en biblioteca y catálogo Steam... (Ctrl + K)"
               className="w-full bg-transparent text-foreground placeholder-default-400 text-sm font-medium focus:outline-none"
             />
             <Kbd
@@ -271,7 +386,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
           </div>
 
           {/* Results List */}
-          <div className="max-h-95 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+          <div className="max-h-96 overflow-y-auto p-2 space-y-1 custom-scrollbar">
             <AnimatePresence mode="popLayout" initial={false}>
               {filteredCommands.length === 0 ? (
                 <motion.div
@@ -286,6 +401,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
               ) : (
                 filteredCommands.map((cmd, idx) => {
                   const isSelected = idx === selectedIndex;
+
                   if (cmd.type === "game") {
                     return (
                       <motion.div
@@ -309,20 +425,74 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
                             : "hover:bg-default-100/60 text-default-700 border border-transparent"
                         }`}>
                         <div className="flex items-center gap-3 min-w-0">
-                          <CommandPaletteGameItem
+                          <CommandPaletteGameThumbnail
                             game={cmd.game}
                             resolvedSteamAppId={resolvedSteamAppIds[cmd.game.id] ?? undefined}
                             mediaBySteamAppId={mediaBySteamAppId}
                           />
                           <div className="min-w-0">
-                            <p className="text-xs font-semibold truncate leading-snug">{cmd.title}</p>
-                            <p className="text-[10px] text-default-400 truncate">Ver partidas y guardados</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-semibold truncate leading-snug text-foreground">{cmd.title}</p>
+                              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-primary/10 text-primary font-medium shrink-0">
+                                Tu Biblioteca
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-default-400 truncate">Ver partidas y guardados locales</p>
                           </div>
                         </div>
 
                         {isSelected && (
                           <div className="flex items-center gap-1 text-[10px] font-semibold text-primary shrink-0">
                             <span>Abrir</span>
+                            <ArrowRight size={12} />
+                          </div>
+                        )}
+                      </motion.div>
+                    );
+                  }
+
+                  if (cmd.type === "catalog") {
+                    return (
+                      <motion.div
+                        key={cmd.id}
+                        layout
+                        initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 480,
+                          damping: 34,
+                          mass: 0.8,
+                          layout: { duration: 0.15, ease: "easeOut" },
+                        }}
+                        onClick={() => cmd.action()}
+                        onMouseEnter={() => setSelectedIndex(idx)}
+                        className={`flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-colors duration-150 ${
+                          isSelected
+                            ? "bg-default-200/60 border border-default-300/60 text-foreground"
+                            : "hover:bg-default-100/60 text-default-700 border border-transparent"
+                        }`}>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <CommandPaletteGameThumbnail
+                            game={cmd.game}
+                            resolvedSteamAppId={cmd.steamAppId}
+                            mediaBySteamAppId={mediaBySteamAppId}
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-semibold truncate leading-snug text-foreground">{cmd.title}</p>
+                              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-secondary/15 text-secondary font-medium shrink-0">
+                                Catálogo Steam
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-default-400 truncate">Ver ficha, media y descargas</p>
+                          </div>
+                        </div>
+
+                        {isSelected && (
+                          <div className="flex items-center gap-1 text-[10px] font-semibold text-secondary shrink-0">
+                            <span>Explorar</span>
                             <ArrowRight size={12} />
                           </div>
                         )}
@@ -362,7 +532,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
                           <Icon size={16} strokeWidth={1.5} />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold truncate leading-snug">{cmd.title}</p>
+                          <p className="text-xs font-semibold truncate leading-snug text-foreground">{cmd.title}</p>
                           {cmd.subtitle && <p className="text-[10px] text-default-400 truncate">{cmd.subtitle}</p>}
                         </div>
                       </div>
