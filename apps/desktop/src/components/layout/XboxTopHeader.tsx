@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { ArrowLeft, Search, Tv } from "lucide-react";
 import { Button, Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
@@ -13,7 +13,7 @@ export interface XboxTopHeaderProps {
   className?: string;
 }
 
-export function XboxTopHeader({
+export const XboxTopHeader = memo(function XboxTopHeader({
   onOpenSearch,
   onOpenBigPicture,
   canGoBack = false,
@@ -52,7 +52,8 @@ export function XboxTopHeader({
   return (
     <header
       data-tauri-drag-region
-      className={`fixed top-0 left-17 right-0 h-13 z-30 flex items-center justify-between px-3 select-none transition-all duration-300 ${
+      style={{ viewTransitionName: "none" }}
+      className={`fixed top-0 left-17 right-0 h-13 z-30 flex items-center justify-between px-3 select-none transition-all duration-300 transform-gpu ${
         showTransparent
           ? "bg-transparent border-b border-transparent shadow-none backdrop-blur-none"
           : "bg-background/75 dark:bg-background/85 backdrop-blur-xl border-b border-default-200/30 dark:border-default-100/10 shadow-xs"
@@ -148,4 +149,6 @@ export function XboxTopHeader({
       </div>
     </header>
   );
-}
+});
+
+XboxTopHeader.displayName = "XboxTopHeader";

@@ -1,5 +1,6 @@
 import {
   type ReactNode,
+  useCallback,
   startTransition,
   addTransitionType,
   lazy,
@@ -126,19 +127,22 @@ export function AppLayout({ children, hideTitleBar = false }: AppLayoutProps) {
   /**
    * Navega a una ruta usando `startTransition` para no bloquear la UI.
    */
-  const handleNavigation = (link: string) => {
-    if (link === "/settings") {
-      void openOrFocusSettingsWindow();
-      return;
-    }
-    if (location.pathname === link) return;
-    startTransition(() => {
-      navigate(link);
-    });
-  };
+  const handleNavigation = useCallback(
+    (link: string) => {
+      if (link === "/settings") {
+        void openOrFocusSettingsWindow();
+        return;
+      }
+      if (location.pathname === link) return;
+      startTransition(() => {
+        navigate(link);
+      });
+    },
+    [location.pathname, navigate]
+  );
 
   const canGoBack = location.pathname !== "/";
-  const handleGoBack = () => {
+  const handleGoBack = useCallback(() => {
     const handled = useShellUiStore.getState().dispatchBackNavigation();
     if (!handled) {
       startTransition(() => {
@@ -150,9 +154,18 @@ export function AppLayout({ children, hideTitleBar = false }: AppLayoutProps) {
         }
       });
     }
-  };
+  }, [navigate]);
+
+  const handleOpenSearch = useCallback(() => {
+    setIsCommandPaletteOpen(true);
+  }, []);
+
+  const handleOpenProfile = useCallback(() => {
+    setProfileDrawerOpen(true);
+  }, []);
 
   const isGameDetail = location.pathname.startsWith("/games/");
+  const activeUserId = activeProfile?.localUserId || config?.userId;
 
   return (
     <div className="relative min-h-screen bg-background text-foreground">
@@ -161,12 +174,12 @@ export function AppLayout({ children, hideTitleBar = false }: AppLayoutProps) {
         <XboxSidebar
           currentPath={location.pathname}
           onNavigate={handleNavigation}
-          userId={activeProfile?.localUserId || config?.userId}
+          userId={activeUserId}
           profileAvatar={config?.profileAvatar}
           profileFrame={config?.profileFrame}
           hasSyncConfig={hasSyncConfig}
           connectionStatus={connectionStatus}
-          onOpenProfile={() => setProfileDrawerOpen(true)}
+          onOpenProfile={handleOpenProfile}
           onIntentOpenProfile={prefetchProfileDrawer}
         />
       ) : null}
@@ -174,7 +187,7 @@ export function AppLayout({ children, hideTitleBar = false }: AppLayoutProps) {
       {/* Barra superior integrada (Buscador central, botón atrás y controles) */}
       {!hideTitleBar ? (
         <XboxTopHeader
-          onOpenSearch={() => setIsCommandPaletteOpen(true)}
+          onOpenSearch={handleOpenSearch}
           canGoBack={canGoBack}
           onGoBack={handleGoBack}
           isCinematic={isGameDetail}
@@ -184,7 +197,7 @@ export function AppLayout({ children, hideTitleBar = false }: AppLayoutProps) {
           hidden={profileDrawerOpen}
           profileAvatar={config?.profileAvatar}
           profileFrame={config?.profileFrame}
-          onOpenProfile={() => setProfileDrawerOpen(true)}
+          onOpenProfile={handleOpenProfile}
           onIntentOpenProfile={prefetchProfileDrawer}
         />
       )}

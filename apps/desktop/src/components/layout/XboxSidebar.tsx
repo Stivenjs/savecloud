@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { Avatar, Button, Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "next-themes";
@@ -43,7 +43,7 @@ const XBOX_NAV_ITEMS: XboxNavItem[] = [
   { id: "/history", translationKey: "nav.activity", fallbackLabel: "Actividad", icon: <History size={22} /> },
 ];
 
-export function XboxSidebar({
+export const XboxSidebar = memo(function XboxSidebar({
   currentPath,
   onNavigate,
   userId,
@@ -63,7 +63,8 @@ export function XboxSidebar({
 
   return (
     <aside
-      className="fixed left-0 top-0 bottom-0 w-17 z-40 flex flex-col justify-between items-center py-3.5 px-2 bg-background/80 dark:bg-background/85 backdrop-blur-2xl border-r border-default-200/40 dark:border-default-100/10 select-none shadow-xs"
+      style={{ viewTransitionName: "none" }}
+      className="fixed left-0 top-0 bottom-0 w-17 z-40 flex flex-col justify-between items-center py-3.5 px-2 bg-background/80 dark:bg-background/85 backdrop-blur-2xl border-r border-default-200/40 dark:border-default-100/10 select-none shadow-xs transform-gpu"
       aria-label="Barra de navegación principal">
       {/* Sección superior: Avatar y Perfil de Usuario */}
       <div className="flex flex-col items-center gap-4 w-full">
@@ -235,4 +236,6 @@ export function XboxSidebar({
       </div>
     </aside>
   );
-}
+});
+
+XboxSidebar.displayName = "XboxSidebar";
