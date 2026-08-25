@@ -46,19 +46,114 @@ fn get_api_context() -> Result<ApiContext, String> {
     super::context::resolve_api_context()
 }
 
-/// Crea un archivo .tar con el contenido de `source_dir` y lo escribe en `dest_path`.
-/// No comprime (solo agrupa); muchos juegos ya están comprimidos.
-fn create_tar_archive(source_dir: &Path, dest_path: &Path) -> Result<u64, String> {
+/// Crea un archivo .tar con el contenido de todas las rutas configuradas en `paths` y lo escribe en `dest_path`.
+/// Soporta empaquetar una o múltiples rutas con prefijos de carpeta ([`crate::utils::path_utils::compute_sync_multi_root_prefixes`]).
+fn create_tar_archive(paths: &[String], dest_path: &Path) -> Result<u64, String> {
     let file = fs::File::create(dest_path).map_err(|e| e.to_string())?;
     let writer = BufWriter::new(file);
     let mut builder = tar::Builder::new(writer);
-    builder
-        .append_dir_all(".", source_dir)
-        .map_err(|e| e.to_string())?;
+    builder.follow_symlinks(false);
+
+    let folder_prefixes = crate::utils::path_utils::compute_sync_multi_root_prefixes(paths);
+
+    for (root_idx, raw) in paths.iter().enumerate() {
+        let Some(expanded_str) = crate::utils::path_utils::expand_path(raw.trim()) else {
+            continue;
+        };
+        let root_path = PathBuf::from(&expanded_str);
+        if !root_path.exists() {
+            continue;
+        }
+
+        let prefix = folder_prefixes.get(root_idx).map(|s| s.as_str()).unwrap_or("");
+
+        if root_path.is_file() {
+            let file_name = root_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("file");
+            let tar_rel_path = format!("{prefix}{file_name}");
+            let mut f = fs::File::open(&root_path).map_err(|e| e.to_string())?;
+            builder
+                .append_file(&tar_rel_path, &mut f)
+                .map_err(|e| e.to_string())?;
+        } else if root_path.is_dir() {
+            if !prefix.is_empty() {
+                let root_dir_name = prefix.trim_end_matches('/');
+                let _ = builder.append_dir(root_dir_name, &root_path);
+            }
+
+            let walker = walkdir::WalkDir::new(&root_path)
+                .follow_links(false)
+                .same_file_system(true)
+                .into_iter();
+
+            for entry_res in walker {
+                let entry = entry_res.map_err(|e| e.to_string())?;
+                let rel = entry
+                    .path()
+                    .strip_prefix(&root_path)
+                    .map_err(|e| e.to_string())?;
+                if rel == Path::new("") || rel == Path::new(".") {
+                    continue;
+                }
+                let rel_str = rel.to_string_lossy().replace('\\', "/");
+                let tar_rel_path = format!("{prefix}{rel_str}");
+
+                let ft = entry.file_type();
+                if ft.is_dir() {
+                    builder
+                        .append_dir(&tar_rel_path, entry.path())
+                        .map_err(|e| e.to_string())?;
+                } else if ft.is_file() {
+                    let mut f = fs::File::open(entry.path()).map_err(|e| e.to_string())?;
+                    builder
+                        .append_file(&tar_rel_path, &mut f)
+                        .map_err(|e| e.to_string())?;
+                } else if ft.is_symlink() {
+                    builder
+                        .append_path_with_name(entry.path(), &tar_rel_path)
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+        }
+    }
+
     builder.finish().map_err(|e| e.to_string())?;
     fs::metadata(dest_path)
         .map(|m| m.len())
         .map_err(|e| e.to_string())
+}
+
+/// Calcula el tamaño total de todas las rutas válidas configuradas para el juego.
+fn calculate_total_paths_size(paths: &[String]) -> u64 {
+    fn dir_size(path: &Path) -> u64 {
+        let mut total = 0u64;
+        let Ok(meta) = std::fs::metadata(path) else {
+            return 0;
+        };
+        if meta.is_file() {
+            return meta.len();
+        }
+        let Ok(read_dir) = std::fs::read_dir(path) else {
+            return 0;
+        };
+        for entry in read_dir.flatten() {
+            total += dir_size(&entry.path());
+        }
+        total
+    }
+
+    let mut total = 0u64;
+    for raw in paths {
+        if let Some(expanded) = crate::utils::path_utils::expand_path(raw.trim()) {
+            let p = PathBuf::from(expanded);
+            if p.exists() {
+                total += dir_size(&p);
+            }
+        }
+    }
+    total
 }
 
 /// Guard que elimina un archivo temporal al salir del scope (éxito o error).
@@ -202,7 +297,7 @@ fn unpack_extraction_hint(e: &std::io::Error) -> &'static str {
 
 fn unpack_archive_resilient<R: std::io::Read>(
     archive: &mut tar::Archive<R>,
-    dest_dir: &Path,
+    game_paths: &[String],
 ) -> Result<(), String> {
     let entries = archive
         .entries()
@@ -214,29 +309,63 @@ fn unpack_archive_resilient<R: std::io::Read>(
             .path()
             .map_err(|e| format!("Ruta TAR inválida: {}", e))?
             .into_owned();
-        let target_path = dest_dir.join(&rel_path);
 
-        if entry.header().entry_type().is_file() && target_path.exists() {
-            remove_existing_file_for_unpack(&target_path)?;
+        let rel_str = rel_path.to_string_lossy().replace('\\', "/");
+        if rel_str.trim().is_empty() || rel_str == "." {
+            continue;
         }
 
-        match entry.unpack_in(dest_dir) {
-            Ok(true) => {}
-            Ok(false) => {
-                return Err(format!(
-                    "Ruta insegura al extraer backup: {}",
-                    rel_path.display()
-                ));
+        let Some(target_path) =
+            crate::utils::path_utils::sync_abs_path_for_cloud_save(game_paths, &rel_str)
+        else {
+            return Err(format!(
+                "Ruta insegura o no mapeable al extraer backup: {}",
+                rel_str
+            ));
+        };
+
+        let entry_type = entry.header().entry_type();
+        if entry_type.is_dir() {
+            fs::create_dir_all(&target_path).map_err(|e| {
+                format!("Fallo creando directorio [{}]: {}", target_path.display(), e)
+            })?;
+        } else if entry_type.is_file() {
+            if let Some(parent) = target_path.parent() {
+                fs::create_dir_all(parent).map_err(|e| {
+                    format!(
+                        "Fallo creando directorio padre [{}]: {}",
+                        parent.display(),
+                        e
+                    )
+                })?;
             }
-            Err(e) => {
+
+            if target_path.exists() {
+                remove_existing_file_for_unpack(&target_path)?;
+            }
+
+            entry.unpack(&target_path).map_err(|e| {
                 let hint = unpack_extraction_hint(&e);
-                return Err(format!(
+                format!(
                     "Fallo en extracción [{}]: {}{}",
                     target_path.display(),
                     e,
                     hint
-                ));
+                )
+            })?;
+        } else if entry_type.is_symlink() {
+            if let Some(parent) = target_path.parent() {
+                let _ = fs::create_dir_all(parent);
             }
+            entry.unpack(&target_path).map_err(|e| {
+                let hint = unpack_extraction_hint(&e);
+                format!(
+                    "Fallo en extracción symlink [{}]: {}{}",
+                    target_path.display(),
+                    e,
+                    hint
+                )
+            })?;
         }
     }
 
@@ -281,15 +410,16 @@ pub async fn download_and_restore_full_backup_impl(
         .find(|g| g.id.eq_ignore_ascii_case(&game_id))
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
+    if game.paths.is_empty() {
+        return Err("El juego no tiene rutas de guardado configuradas".to_string());
+    }
+
     if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
         let pm = pm.lock().await;
         pm.execute_pre_download(&game_id);
     }
 
-    let dest_dir =
-        crate::utils::path_utils::expand_path(game.paths.first().map(|s| s.as_str()).unwrap_or(""))
-            .ok_or("No se pudo expandir la ruta del juego")?;
-    let dest_dir = PathBuf::from(dest_dir);
+    let game_paths = game.paths.clone();
 
     // Resolución de URL pre-firmada
     let body = serde_json::json!({ "gameId": game_id, "key": backup_key });
@@ -338,8 +468,6 @@ pub async fn download_and_restore_full_backup_impl(
     // más lento de lo que la red descarga, la red se pausará temporalmente.
     let (mut tx, rx) = tokio::io::duplex(5 * 1024 * 1024);
 
-    let dest_dir_clone = dest_dir.clone();
-
     // Hilo dedicado a la descompresión y extracción. Se ejecuta en paralelo a la descarga.
     let extract_task = tokio::task::spawn_blocking(move || {
         // SyncIoBridge convierte el canal asíncrono 'rx' en un lector implementando std::io::Read.
@@ -350,7 +478,7 @@ pub async fn download_and_restore_full_backup_impl(
             .map_err(|e| format!("fallo al inicializar descompresor Zstd: {}", e))?;
 
         let mut archive = tar::Archive::new(zstd_decoder);
-        unpack_archive_resilient(&mut archive, &dest_dir_clone)
+        unpack_archive_resilient(&mut archive, &game_paths)
     });
 
     let mut loaded: u64 = 0;
@@ -459,38 +587,14 @@ pub async fn create_and_upload_full_backup(
         .find(|g| g.id.eq_ignore_ascii_case(&game_id))
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
-    let raw_path = game.paths.first().map(|s| s.as_str()).unwrap_or("");
-    let source_dir =
-        crate::utils::path_utils::expand_path(raw_path).ok_or("No se pudo expandir la ruta")?;
-    let source_dir = PathBuf::from(&source_dir);
-
-    if !source_dir.exists() || !source_dir.is_dir() {
-        return Err("La carpeta del juego no existe".to_string());
+    if game.paths.is_empty() {
+        return Err("El juego no tiene rutas de guardado configuradas".to_string());
     }
 
-    let source_dir_for_size = source_dir.clone();
-    let estimated_total = tokio::task::spawn_blocking(move || -> u64 {
-        fn dir_size(path: &Path) -> u64 {
-            let mut total = 0u64;
-            let Ok(meta) = std::fs::metadata(path) else {
-                return 0;
-            };
-            if meta.is_file() {
-                return meta.len();
-            }
-
-            let Ok(read_dir) = std::fs::read_dir(path) else {
-                return 0;
-            };
-            for entry in read_dir.flatten() {
-                total += dir_size(&entry.path());
-            }
-            total
-        }
-        dir_size(&source_dir_for_size)
-    })
-    .await
-    .unwrap_or(0);
+    let paths_for_size = game.paths.clone();
+    let estimated_total = tokio::task::spawn_blocking(move || calculate_total_paths_size(&paths_for_size))
+        .await
+        .unwrap_or(0);
 
     let temp_dir = std::env::temp_dir();
     let filename = format!("{}.tar", chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S"));
@@ -539,7 +643,7 @@ pub async fn create_and_upload_full_backup(
         let strategy = streaming::upload_strategy::UploadStrategy::for_file(estimated_total);
 
         let (rx, tar_handle) = streaming::tar_stream::spawn_tar_stream(
-            source_dir,
+            game.paths.clone(),
             strategy.tar_channel_capacity,
             zstd_packaged_level,
         );
@@ -560,7 +664,7 @@ pub async fn create_and_upload_full_backup(
         let strategy = streaming::upload_strategy::UploadStrategy::for_file(estimated_total);
 
         let (rx, tar_handle) = streaming::tar_stream::spawn_tar_stream(
-            source_dir,
+            game.paths.clone(),
             strategy.tar_channel_capacity,
             zstd_packaged_level,
         );
@@ -612,11 +716,11 @@ pub async fn create_and_upload_full_backup(
 
         upload_res
     } else {
-        let source_dir_clone = source_dir.clone();
+        let game_paths_clone = game.paths.clone();
         let tar_path_clone = tar_path.clone();
 
         let size = tokio::task::spawn_blocking(move || {
-            create_tar_archive(&source_dir_clone, &tar_path_clone)
+            create_tar_archive(&game_paths_clone, &tar_path_clone)
         })
         .await
         .map_err(|e| e.to_string())??;
@@ -832,38 +936,14 @@ pub async fn test_streaming_full_backup(
         .find(|g| g.id.eq_ignore_ascii_case(&game_id))
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
-    let raw_path = game.paths.first().map(|s| s.as_str()).unwrap_or("");
-    let source_dir =
-        crate::utils::path_utils::expand_path(raw_path).ok_or("No se pudo expandir la ruta")?;
-    let source_dir = PathBuf::from(&source_dir);
-
-    if !source_dir.exists() || !source_dir.is_dir() {
-        return Err("La carpeta del juego no existe".to_string());
+    if game.paths.is_empty() {
+        return Err("El juego no tiene rutas de guardado configuradas".to_string());
     }
 
-    let source_dir_for_size = source_dir.clone();
-    let estimated_total = tokio::task::spawn_blocking(move || -> u64 {
-        fn dir_size(path: &Path) -> u64 {
-            let mut total = 0u64;
-            let Ok(meta) = std::fs::metadata(path) else {
-                return 0;
-            };
-            if meta.is_file() {
-                return meta.len();
-            }
-
-            let Ok(read_dir) = std::fs::read_dir(path) else {
-                return 0;
-            };
-            for entry in read_dir.flatten() {
-                total += dir_size(&entry.path());
-            }
-            total
-        }
-        dir_size(&source_dir_for_size)
-    })
-    .await
-    .unwrap_or(0);
+    let paths_for_size = game.paths.clone();
+    let estimated_total = tokio::task::spawn_blocking(move || calculate_total_paths_size(&paths_for_size))
+        .await
+        .unwrap_or(0);
 
     let filename = format!("{}.tar", chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S"));
     let relative_filename = format!("{}{}", BACKUPS_PREFIX, filename);
@@ -902,7 +982,7 @@ pub async fn test_streaming_full_backup(
     tray_state.0.update_tooltip();
 
     let (rx, tar_handle) = streaming::tar_stream::spawn_tar_stream(
-        source_dir,
+        game.paths.clone(),
         strategy.tar_channel_capacity,
         zstd_level,
     );

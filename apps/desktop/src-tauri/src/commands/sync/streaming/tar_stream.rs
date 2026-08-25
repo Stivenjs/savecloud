@@ -4,6 +4,10 @@
 //! flujo de chunks (`bytes::Bytes`) comprimidos a medida que se genera el archivo,
 //! evitando almacenamiento intermedio en disco.
 //!
+//! Soporta tanto juegos de una única ruta de guardado como juegos con múltiples rutas
+//! configuradas (ej. carpeta de partidas en AppData y configuración en Documents),
+//! empaquetando cada ruta con su prefijo lógico correspondiente.
+//!
 //! La generación del TAR y la compresión se ejecutan en un hilo blocking mediante
 //! [`tokio::task::spawn_blocking`]. Los datos comprimidos se escriben en un
 //! [`ChannelWriter`], que implementa [`std::io::Write`] y se encarga de
@@ -12,7 +16,7 @@
 //! El consumidor recibe una secuencia de [`TarStreamMsg`] que representa:
 //!
 //! - [`TarStreamMsg::Chunk`]: datos del archivo comprimido en orden de generación.
-//! - [`TarStreamMsg::Done`]: finalización correcta del stream.
+//! - [`TarStreamMsg::Done`]: finalización correcta del stream con estadísticas.
 //! - [`TarStreamMsg::Err`]: fallo durante el empaquetado, compresión o envío.
 //!
 //! El canal actúa como mecanismo de backpressure, limitando la producción
@@ -25,6 +29,8 @@ use bytes::{BufMut, BytesMut};
 use walkdir::WalkDir;
 
 use super::upload_strategy::TAR_STREAM_CHUNK_BYTES;
+use crate::commands::logs::sync_logger;
+use crate::utils::path_utils;
 
 /// Estadísticas recolectadas durante el empaquetado del directorio en formato TAR.
 #[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
@@ -135,20 +141,20 @@ impl Write for ChannelWriter {
 
 /// Lanza la generación del TAR en un hilo blocking y devuelve el receptor de chunks.
 ///
-/// Usa un pipeline manual con `walkdir` en lugar de `append_dir_all` para tener
-/// control fino sobre el flujo de archivos y puntos de backpressure entre entradas.
+/// Soporta empaquetar una o múltiples rutas de guardado (`paths`).
 ///
 /// # Parameters
 ///
-/// - `source_dir`: directorio raíz a empaquetar. Se toma posesión para `'static`.
+/// - `paths`: lista de rutas sin expandir asociadas al juego. Se toma posesión para `'static`.
 /// - `channel_capacity`: capacidad del canal mpsc. Debe ser `strategy.tar_channel_capacity`.
+/// - `zstd_compression_level`: nivel de compresión Zstandard (1..=22).
 ///
 /// # Return
 ///
 /// `(Receiver<TarStreamMsg>, JoinHandle<()>)`. El canal se cierra con
 /// [`TarStreamMsg::Done`] en el camino feliz o [`TarStreamMsg::Err`] ante fallo.
 pub(crate) fn spawn_tar_stream(
-    source_dir: PathBuf,
+    paths: Vec<String>,
     channel_capacity: usize,
     zstd_compression_level: i32,
 ) -> (
@@ -158,7 +164,7 @@ pub(crate) fn spawn_tar_stream(
     let (tx, rx) = tokio::sync::mpsc::channel::<TarStreamMsg>(channel_capacity);
 
     let handle = tokio::task::spawn_blocking(move || {
-        match run_tar_pipeline(&source_dir, tx.clone(), zstd_compression_level) {
+        match run_tar_pipeline(&paths, tx.clone(), zstd_compression_level) {
             Ok(stats) => {
                 let _ = tx.blocking_send(TarStreamMsg::Done(stats));
             }
@@ -172,24 +178,21 @@ pub(crate) fn spawn_tar_stream(
     (rx, handle)
 }
 
-/// Empaqueta `source_dir` en formato TAR mediante un pipeline manual con `walkdir`.
+/// Empaqueta una o múltiples rutas en formato TAR mediante un pipeline manual con `walkdir`.
 ///
-/// En vez de delegar el recorrido a `append_dir_all`, itera explícitamente sobre
-/// las entradas del directorio y llama a `append_file` o `append_dir` según el tipo
-/// de cada entrada. Esto permite:
-///
-/// - Registrar por separado en el log cada archivo procesado (útil para diagnóstico).
-/// - Introducir puntos de backpressure entre archivos sin bloquear en mitad de uno.
-/// - Manejar errores por entrada individualmente sin abortar todo el TAR.
-/// - Contabilizar métricas detalladas (archivos, carpetas, symlinks, bytes totales).
-///
-/// Los symlinks se preservan como entradas TAR de tipo enlace simbólico en vez de
-/// seguirlos, reduciendo el tamaño del TAR en directorios con muchos enlaces.
+/// - Si `paths` contiene 1 sola ruta: empaqueta relativo a la raíz directamente.
+/// - Si `paths` contiene múltiples rutas: asigna prefijos de carpeta ([`path_utils::compute_sync_multi_root_prefixes`])
+///   para preservar la separación de carpetas en el TAR.
+/// - Normaliza todos los nombres de entradas con separador POSIX `/` para portabilidad entre plataformas.
 fn run_tar_pipeline(
-    source_dir: &Path,
+    paths: &[String],
     tx: tokio::sync::mpsc::Sender<TarStreamMsg>,
     zstd_compression_level: i32,
 ) -> Result<TarStreamStats, String> {
+    if paths.is_empty() {
+        return Err("No hay rutas configuradas para el juego".to_string());
+    }
+
     // Contador compartido para trackear el progreso original (crudo) mientras zstd comprime.
     let original_counter = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
 
@@ -234,66 +237,123 @@ fn run_tar_pipeline(
     let mut files_count = 0u64;
     let mut dirs_count = 0u64;
     let mut symlinks_count = 0u64;
+    let mut valid_roots_found = 0usize;
 
-    // `WalkDir` itera en orden DFS. `min_depth(0)` incluye el directorio raíz
-    // como primera entrada, necesario para que el TAR tenga la entrada de directorio
-    // antes que sus contenidos (comportamiento equivalente a `append_dir_all`).
-    let walker = WalkDir::new(source_dir)
-        .follow_links(false)
-        .same_file_system(true) // evitar cruzar puntos de montaje (ej. particiones distintas)
-        .into_iter();
+    let folder_prefixes = path_utils::compute_sync_multi_root_prefixes(paths);
 
-    for entry_result in walker {
-        let entry = entry_result.map_err(|e| format!("error recorriendo directorio: {}", e))?;
+    for (root_idx, raw) in paths.iter().enumerate() {
+        let Some(expanded_str) = path_utils::expand_path(raw.trim()) else {
+            sync_logger::log_error(
+                "tar_stream",
+                "run_tar_pipeline",
+                &format!("No se pudo expandir la ruta: {}", raw),
+            );
+            continue;
+        };
 
-        // Ruta relativa a la raíz del TAR. `strip_prefix` elimina el prefijo del
-        // directorio fuente, dejando solo la ruta dentro del archivo TAR.
-        let relative = entry
-            .path()
-            .strip_prefix(source_dir)
-            .map_err(|e| format!("error calculando ruta relativa: {}", e))?;
-
-        // Saltar la entrada raíz "." para evitar una entrada de directorio vacía
-        // al inicio del TAR que algunos extractores interpretan de forma distinta.
-        if relative == Path::new("") || relative == Path::new(".") {
+        let root_path = PathBuf::from(expanded_str);
+        if !root_path.exists() {
+            sync_logger::log_operation(
+                "tar_stream",
+                &format!(
+                    "Ruta inexistente omitida en el backup: {}",
+                    root_path.display()
+                ),
+            );
             continue;
         }
 
-        let file_type = entry.file_type();
+        valid_roots_found += 1;
+        let prefix = folder_prefixes
+            .get(root_idx)
+            .map(|s| s.as_str())
+            .unwrap_or("");
 
-        if file_type.is_dir() {
-            dirs_count += 1;
-            // Las entradas de directorio solo escriben la cabecera TAR (512 bytes).
-            // No hay datos que leer del disco, así que el backpressure solo aplica
-            // cuando el buffer del `ChannelWriter` se llena con muchas cabeceras.
-            builder
-                .append_dir(relative, entry.path())
-                .map_err(|e| format!("error empaquetando dir '{}': {}", relative.display(), e))?;
-        } else if file_type.is_file() {
+        if root_path.is_file() {
             files_count += 1;
-            // `append_path_with_name` lee el archivo desde la ruta del sistema de
-            // archivos y lo escribe en el TAR con la ruta relativa calculada arriba.
-            // Esta es la operación costosa en I/O: lee el archivo en bloques y los
-            // pasa a `ChannelWriter::write`, que aplica backpressure si el canal está lleno.
-            let mut file = std::fs::File::open(entry.path())
-                .map_err(|e| format!("error abriendo '{}': {}", entry.path().display(), e))?;
+            let file_name = root_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("file");
+            let tar_path = format!("{prefix}{file_name}");
+
+            let mut file = std::fs::File::open(&root_path)
+                .map_err(|e| format!("error abriendo '{}': {}", root_path.display(), e))?;
 
             builder
-                .append_file(relative, &mut file)
-                .map_err(|e| format!("error empaquetando '{}': {}", relative.display(), e))?;
-        } else if file_type.is_symlink() {
-            symlinks_count += 1;
-            // Los symlinks se preservan usando `append_path` con `follow_symlinks(false)`.
-            // `tar-rs` leerá el destino del enlace con `std::fs::read_link` y escribirá
-            // una cabecera TAR de tipo enlace simbólico sin leer el archivo destino.
-            builder
-                .append_path_with_name(entry.path(), relative)
-                .map_err(|e| {
-                    format!("error empaquetando symlink '{}': {}", relative.display(), e)
-                })?;
+                .append_file(&tar_path, &mut file)
+                .map_err(|e| format!("error empaquetando '{}': {}", tar_path, e))?;
+        } else if root_path.is_dir() {
+            if !prefix.is_empty() {
+                // Registrar la carpeta raíz en el TAR si estamos en modo multi-ruta
+                let root_dir_name = prefix.trim_end_matches('/');
+                dirs_count += 1;
+                let _ = builder.append_dir(root_dir_name, &root_path);
+            }
+
+            let walker = WalkDir::new(&root_path)
+                .follow_links(false)
+                .same_file_system(true)
+                .into_iter();
+
+            for entry_result in walker {
+                let entry = match entry_result {
+                    Ok(e) => e,
+                    Err(e) => {
+                        sync_logger::log_error(
+                            "tar_stream",
+                            "run_tar_pipeline",
+                            &format!(
+                                "Error recorriendo entrada en '{}': {}",
+                                root_path.display(),
+                                e
+                            ),
+                        );
+                        continue;
+                    }
+                };
+
+                let Ok(relative) = entry.path().strip_prefix(&root_path) else {
+                    continue;
+                };
+
+                if relative == Path::new("") || relative == Path::new(".") {
+                    continue;
+                }
+
+                // Normalizar separadores a '/' para compatibilidad TAR POSIX multiplataforma
+                let rel_str = relative.to_string_lossy().replace('\\', "/");
+                let tar_rel_path = format!("{prefix}{rel_str}");
+                let file_type = entry.file_type();
+
+                if file_type.is_dir() {
+                    dirs_count += 1;
+                    builder
+                        .append_dir(&tar_rel_path, entry.path())
+                        .map_err(|e| format!("error empaquetando dir '{}': {}", tar_rel_path, e))?;
+                } else if file_type.is_file() {
+                    files_count += 1;
+                    let mut file = std::fs::File::open(entry.path()).map_err(|e| {
+                        format!("error abriendo '{}': {}", entry.path().display(), e)
+                    })?;
+
+                    builder
+                        .append_file(&tar_rel_path, &mut file)
+                        .map_err(|e| format!("error empaquetando '{}': {}", tar_rel_path, e))?;
+                } else if file_type.is_symlink() {
+                    symlinks_count += 1;
+                    builder
+                        .append_path_with_name(entry.path(), &tar_rel_path)
+                        .map_err(|e| {
+                            format!("error empaquetando symlink '{}': {}", tar_rel_path, e)
+                        })?;
+                }
+            }
         }
-        // Otros tipos (sockets, devices) se omiten silenciosamente: no tienen
-        // representación significativa en un backup de saves de juego.
+    }
+
+    if valid_roots_found == 0 {
+        return Err("Ninguna de las carpetas configuradas existe en el equipo".to_string());
     }
 
     // `into_inner` devuelve el ProgressWrapper.
@@ -324,4 +384,149 @@ fn run_tar_pipeline(
         symlinks_count,
         uncompressed_bytes,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::io::Cursor;
+
+    struct TestDirGuard(PathBuf);
+    impl Drop for TestDirGuard {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn create_test_dir(name: &str) -> (PathBuf, TestDirGuard) {
+        let path = std::env::temp_dir().join(format!(
+            "savecloud_tar_test_{}_{}_{}",
+            name,
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
+        let _ = fs::create_dir_all(&path);
+        let guard = TestDirGuard(path.clone());
+        (path, guard)
+    }
+
+    #[tokio::test]
+    async fn tar_stream_single_path_should_package_and_decompress_properly() {
+        let (root, _guard) = create_test_dir("single_path");
+        let sub = root.join("slot1");
+        fs::create_dir_all(&sub).unwrap();
+        fs::write(sub.join("save.dat"), b"hello world savegame").unwrap();
+
+        let (mut rx, handle) = spawn_tar_stream(vec![root.to_string_lossy().to_string()], 8, 3);
+
+        let mut compressed_data = Vec::new();
+        let mut final_stats = None;
+
+        while let Some(msg) = rx.recv().await {
+            match msg {
+                TarStreamMsg::Chunk(bytes, _) => {
+                    compressed_data.extend_from_slice(&bytes);
+                }
+                TarStreamMsg::Done(stats) => {
+                    final_stats = Some(stats);
+                }
+                TarStreamMsg::Err(err) => {
+                    panic!("Error inesperado en tar stream: {}", err);
+                }
+            }
+        }
+
+        handle.await.unwrap();
+        assert!(final_stats.is_some(), "Debe emitirse TarStreamMsg::Done");
+        let stats = final_stats.unwrap();
+        assert_eq!(stats.files_count, 1);
+
+        let decoder = zstd::stream::read::Decoder::new(Cursor::new(compressed_data)).unwrap();
+        let mut archive = tar::Archive::new(decoder);
+        let entries: Vec<String> = archive
+            .entries()
+            .unwrap()
+            .map(|e| {
+                e.unwrap()
+                    .path()
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+
+        assert!(
+            entries
+                .iter()
+                .any(|e| e == "slot1" || e == "slot1/save.dat"),
+            "Debe contener slot1/save.dat en formato relativo a la raíz: {:?}",
+            entries
+        );
+    }
+
+    #[tokio::test]
+    async fn tar_stream_multi_paths_should_include_folder_prefixes() {
+        let (root_a, _guard_a) = create_test_dir("multi_path_saves");
+        let (root_b, _guard_b) = create_test_dir("multi_path_config");
+
+        fs::write(root_a.join("slot.sav"), b"savegame data").unwrap();
+        fs::write(root_b.join("settings.json"), b"{\"volume\": 100}").unwrap();
+
+        let paths = vec![
+            root_a.to_string_lossy().to_string(),
+            root_b.to_string_lossy().to_string(),
+        ];
+
+        let (mut rx, handle) = spawn_tar_stream(paths, 8, 3);
+
+        let mut compressed_data = Vec::new();
+        let mut final_stats = None;
+
+        while let Some(msg) = rx.recv().await {
+            match msg {
+                TarStreamMsg::Chunk(bytes, _) => {
+                    compressed_data.extend_from_slice(&bytes);
+                }
+                TarStreamMsg::Done(stats) => {
+                    final_stats = Some(stats);
+                }
+                TarStreamMsg::Err(err) => {
+                    panic!("Error inesperado en tar stream: {}", err);
+                }
+            }
+        }
+
+        handle.await.unwrap();
+        let stats = final_stats.expect("Debe completarse con éxito");
+        assert_eq!(stats.files_count, 2);
+
+        let decoder = zstd::stream::read::Decoder::new(Cursor::new(compressed_data)).unwrap();
+        let mut archive = tar::Archive::new(decoder);
+        let entries: Vec<String> = archive
+            .entries()
+            .unwrap()
+            .map(|e| {
+                e.unwrap()
+                    .path()
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+
+        let has_save_file = entries.iter().any(|e| e.ends_with("slot.sav"));
+        let has_config_file = entries.iter().any(|e| e.ends_with("settings.json"));
+
+        assert!(
+            has_save_file,
+            "Debe contener el archivo de la ruta A: {:?}",
+            entries
+        );
+        assert!(
+            has_config_file,
+            "Debe contener el archivo de la ruta B: {:?}",
+            entries
+        );
+    }
 }
