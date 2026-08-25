@@ -35,11 +35,11 @@ interface ShellUiStore {
   requestProfileToggle: () => void;
   setSideMenuOpen: (open: boolean) => void;
   requestCloseSideMenu: () => void;
-  /** Cierra el menú lateral si está abierto; si no, `requestGlobalBack` (misma lógica que B / Escape). */
-  dispatchBackNavigation: () => void;
+  /** Cierra el menú lateral si está abierto; si no, `requestGlobalBack` (misma lógica que B / Escape). Retorna true si fue manejado. */
+  dispatchBackNavigation: () => boolean;
   /** Registra un manejador; devuelve función para desregistrar al desmontar. */
   registerBackHandler: (handler: () => boolean) => () => void;
-  requestGlobalBack: () => void;
+  requestGlobalBack: () => boolean;
   /** Posición del scroll del catálogo. */
   catalogScrollPosition: number;
   /** Establece la posición del scroll del catálogo. */
@@ -78,8 +78,11 @@ export const useShellUiStore = create<ShellUiStore>((set, get) => ({
   requestCloseSideMenu: () => set((s) => ({ sideMenuCloseRequest: s.sideMenuCloseRequest + 1 })),
   dispatchBackNavigation: () => {
     const s = get();
-    if (s.sideMenuOpen) s.requestCloseSideMenu();
-    else s.requestGlobalBack();
+    if (s.sideMenuOpen) {
+      s.requestCloseSideMenu();
+      return true;
+    }
+    return s.requestGlobalBack();
   },
   registerBackHandler: (handler) => {
     set((s) => ({ backHandlers: [...s.backHandlers, handler] }));
@@ -90,8 +93,9 @@ export const useShellUiStore = create<ShellUiStore>((set, get) => ({
   requestGlobalBack: () => {
     const list = get().backHandlers;
     for (let i = list.length - 1; i >= 0; i--) {
-      if (list[i]()) return;
+      if (list[i]()) return true;
     }
+    return false;
   },
   catalogScrollPosition: 0,
   setCatalogScrollPosition: (position) => set({ catalogScrollPosition: position }),

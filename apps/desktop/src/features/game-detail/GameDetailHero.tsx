@@ -1,6 +1,6 @@
 import { ViewTransition } from "react";
-import { Button, Skeleton } from "@heroui/react";
-import { ArrowLeft, Gamepad2 } from "lucide-react";
+import { Skeleton } from "@heroui/react";
+import { Gamepad2 } from "lucide-react";
 import { GameMediaViewer, MediaThumbnailGallery, buildMediaItems } from "@/features/game-detail/media-viewer";
 import { useState, useCallback } from "react";
 import type { Swiper as SwiperType } from "swiper";
@@ -56,7 +56,6 @@ export function GameDetailHero({
   gameId,
   isLoading,
   isCatalog,
-  onBack,
 }: GameDetailHeroProps) {
   const isLowPerf = useLowPerformanceMode() || Boolean(isCatalog);
   const [swiper, setSwiper] = useState<SwiperType | null>(null);
@@ -91,7 +90,7 @@ export function GameDetailHero({
   if (isLoading) {
     return (
       <MaybeViewTransition name={`game-hero-${gameId}`} share="hero-morph" disabled={isLowPerf}>
-        <div className="-mx-6 -mt-16">
+        <div className="-mx-8 -mt-16">
           <Skeleton className="aspect-21/9 w-full" />
         </div>
       </MaybeViewTransition>
@@ -101,13 +100,12 @@ export function GameDetailHero({
   if (!heroSlides.length && !videoUrl) {
     return (
       <MaybeViewTransition name={`game-hero-${gameId}`} share="hero-morph" disabled={isLowPerf}>
-        <div className="group/hero relative -mx-6 -mt-16 w-[calc(100%+3rem)] overflow-hidden">
+        <div className="group/hero relative -mx-8 -mt-16 w-[calc(100%+4rem)] overflow-hidden">
           <div className="flex aspect-21/9 w-full items-center justify-center bg-linear-to-br from-default-100 to-default-200 dark:from-default-50/30 dark:to-default-100/20">
             <Gamepad2 size={64} className="text-default-300" strokeWidth={1.2} />
           </div>
           <HeroGradient />
           <TitleOverlay editionLabel={editionLabel} gameName={gameName} />
-          <BackButton onPress={onBack} />
         </div>
       </MaybeViewTransition>
     );
@@ -115,7 +113,7 @@ export function GameDetailHero({
 
   return (
     <MaybeViewTransition name={`game-hero-${gameId}`} share="hero-morph" disabled={isLowPerf}>
-      <div className="relative -mx-6 -mt-16 w-[calc(100%+3rem)]">
+      <div className="relative -mx-8 -mt-16 w-[calc(100%+4rem)]">
         {/* Hero con media viewer (sin thumbnails internos) */}
         <div className="group/hero relative overflow-hidden">
           <GameMediaViewer
@@ -131,7 +129,6 @@ export function GameDetailHero({
 
           <HeroGradient />
           <TitleOverlay editionLabel={editionLabel} gameName={gameName} />
-          <BackButton onPress={onBack} />
         </div>
 
         {/* Thumbnails debajo del hero */}
@@ -161,19 +158,5 @@ function TitleOverlay({ gameName, editionLabel }: { gameName: string; editionLab
       </h1>
       {editionLabel ? <p className="mt-1 text-sm font-medium text-white/85 drop-shadow">{editionLabel}</p> : null}
     </div>
-  );
-}
-
-function BackButton({ onPress }: { onPress: () => void }) {
-  return (
-    <Button
-      variant="flat"
-      size="sm"
-      isIconOnly
-      onPress={onPress}
-      className="absolute left-4 top-4 z-30 bg-black/45 text-white backdrop-blur-md hover:bg-black/65"
-      aria-label="Volver">
-      <ArrowLeft size={18} />
-    </Button>
   );
 }

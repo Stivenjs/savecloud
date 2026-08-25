@@ -1,4 +1,13 @@
-import { type ReactNode, startTransition, lazy, Suspense, useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  startTransition,
+  addTransitionType,
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useShellUiStore } from "@store/ShellUiStore";
 import { BigPictureConsoleTopRail } from "@features/big-picture/BigPictureConsoleTopRail";
@@ -128,6 +137,23 @@ export function AppLayout({ children, hideTitleBar = false }: AppLayoutProps) {
     });
   };
 
+  const canGoBack = location.pathname !== "/";
+  const handleGoBack = () => {
+    const handled = useShellUiStore.getState().dispatchBackNavigation();
+    if (!handled) {
+      startTransition(() => {
+        addTransitionType("game-detail");
+        if (window.history.state && typeof window.history.state.idx === "number" && window.history.state.idx > 0) {
+          navigate(-1);
+        } else {
+          navigate("/");
+        }
+      });
+    }
+  };
+
+  const isGameDetail = location.pathname.startsWith("/games/");
+
   return (
     <div className="relative min-h-screen bg-background text-foreground">
       {/* Barra lateral izquierda estilo Xbox */}
@@ -145,9 +171,14 @@ export function AppLayout({ children, hideTitleBar = false }: AppLayoutProps) {
         />
       ) : null}
 
-      {/* Barra superior integrada (Buscador central y controles) */}
+      {/* Barra superior integrada (Buscador central, botón atrás y controles) */}
       {!hideTitleBar ? (
-        <XboxTopHeader onOpenSearch={() => setIsCommandPaletteOpen(true)} />
+        <XboxTopHeader
+          onOpenSearch={() => setIsCommandPaletteOpen(true)}
+          canGoBack={canGoBack}
+          onGoBack={handleGoBack}
+          isCinematic={isGameDetail}
+        />
       ) : (
         <BigPictureConsoleTopRail
           hidden={profileDrawerOpen}
