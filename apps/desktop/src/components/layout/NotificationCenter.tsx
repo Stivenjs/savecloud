@@ -1,5 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
-import { Badge, Button, Popover, PopoverContent, PopoverTrigger, ScrollShadow, Spinner } from "@heroui/react";
+import {
+  Badge,
+  Button,
+  Popover,
+  PopoverContent,
+  type PopoverProps,
+  PopoverTrigger,
+  ScrollShadow,
+  Spinner,
+} from "@heroui/react";
 import { AlertTriangle, Bell, CheckCheck, Download, ExternalLink, FolderOpen, Info, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -223,7 +232,7 @@ function NotificationRow({
 }
 
 /** Centro de notificaciones */
-export function NotificationCenter() {
+export function NotificationCenter({ placement = "bottom-end" }: { placement?: PopoverProps["placement"] } = {}) {
   const { t } = useTranslation();
   const { data: items = [], isLoading: loading } = useNotificationsQuery();
   const { data: unreadCount = 0 } = useUnreadCountQuery();
@@ -263,7 +272,7 @@ export function NotificationCenter() {
   })();
 
   return (
-    <Popover placement="bottom-end" showArrow isOpen={open} onOpenChange={onOpenChange}>
+    <Popover placement={placement} showArrow isOpen={open} onOpenChange={onOpenChange}>
       {/* Disparador */}
       <PopoverTrigger>
         <Button
