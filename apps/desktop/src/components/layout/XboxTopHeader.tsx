@@ -1,6 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { ArrowLeft, Search, Tv } from "lucide-react";
-import { Button, Tooltip } from "@heroui/react";
+import { Button } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { useTauriWindow, WindowsControls, MacControls } from "@components/layout/TitleBar";
 
@@ -53,13 +53,17 @@ export const XboxTopHeader = memo(function XboxTopHeader({
     <header
       data-tauri-drag-region
       style={{ viewTransitionName: "none" }}
-      className={`fixed top-0 left-17 right-0 h-13 z-30 flex items-center justify-between px-3 select-none transition-all duration-300 transform-gpu ${
-        showTransparent
-          ? "bg-transparent border-b border-transparent shadow-none backdrop-blur-none"
-          : "bg-background/75 dark:bg-background/85 backdrop-blur-xl border-b border-default-200/30 dark:border-default-100/10 shadow-xs"
-      } ${className ?? ""}`}>
+      className={`fixed top-0 left-17 right-0 h-13 z-30 flex items-center justify-between px-3 select-none transform-gpu ${
+        className ?? ""
+      }`}>
+      <div
+        className={`absolute inset-0 border-b border-default-200/30 dark:border-default-100/10 bg-background/80 dark:bg-background/85 backdrop-blur-xl transition-opacity duration-200 pointer-events-none ${
+          showTransparent ? "opacity-0" : "opacity-100"
+        }`}
+      />
+
       {/* Zona izquierda: Botón Volver (Atrás) + Controles Mac + Arrastre */}
-      <div data-tauri-drag-region className="flex items-center gap-2.5 min-w-30 h-full">
+      <div data-tauri-drag-region className="relative z-10 flex items-center gap-2.5 min-w-30 h-full">
         {isMac ? (
           <div className="flex items-center gap-1.5 pl-1">
             <MacControls close={close} minimize={minimize} maximize={maximize} labels={labels} />
@@ -67,27 +71,25 @@ export const XboxTopHeader = memo(function XboxTopHeader({
         ) : null}
 
         {canGoBack && onGoBack ? (
-          <Tooltip content={t("common.back", "Volver (Atrás)")} placement="bottom" delay={200}>
-            <Button
-              isIconOnly
-              variant="flat"
-              radius="full"
-              size="sm"
-              onPress={onGoBack}
-              className={`h-8 w-8 min-w-0 shadow-xs cursor-pointer transition-all active:scale-90 ${
-                showTransparent
-                  ? "bg-black/55 hover:bg-black/75 border border-white/20 text-white backdrop-blur-md shadow-md"
-                  : "bg-default-100/80 hover:bg-default-200/80 dark:bg-default-50/20 dark:hover:bg-default-100/30 border border-default-200/60 dark:border-default-100/15 text-foreground"
-              }`}
-              aria-label={t("common.back", "Volver")}>
-              <ArrowLeft size={16} strokeWidth={2.2} />
-            </Button>
-          </Tooltip>
+          <button
+            type="button"
+            onClick={onGoBack}
+            title={t("common.back", "Volver (Atrás)")}
+            aria-label={t("common.back", "Volver")}
+            className={`size-8 rounded-full flex items-center justify-center cursor-pointer transition-all duration-150 active:scale-90 ${
+              showTransparent
+                ? "bg-black/60 hover:bg-black/80 border border-white/20 text-white shadow-md"
+                : "bg-default-100/80 hover:bg-default-200/80 dark:bg-default-50/20 dark:hover:bg-default-100/30 border border-default-200/60 dark:border-default-100/15 text-foreground shadow-xs"
+            }`}>
+            <ArrowLeft size={16} strokeWidth={2.2} />
+          </button>
         ) : null}
       </div>
 
       {/* Centro: Buscador global estilo Xbox (Ctrl + K) - Oculto en modo cinemático hasta hacer scroll */}
-      <div data-tauri-drag-region className="flex items-center justify-center flex-1 max-w-xl px-2 h-full">
+      <div
+        data-tauri-drag-region
+        className="relative z-10 flex items-center justify-center flex-1 max-w-xl px-2 h-full">
         <div
           className={`w-full max-w-md transition-all duration-300 ${
             showTransparent ? "opacity-0 pointer-events-none scale-95" : "opacity-100 scale-100"
@@ -112,24 +114,23 @@ export const XboxTopHeader = memo(function XboxTopHeader({
       </div>
 
       {/* Zona derecha: Acciones y Controles de Ventana */}
-      <div className="flex items-center gap-2 min-w-30 justify-end h-full">
+      <div className="relative z-10 flex items-center gap-2 min-w-30 justify-end h-full">
         {onOpenBigPicture && (
-          <Tooltip content={t("common.bigPictureMode", "Modo Big Picture")} placement="bottom" delay={200}>
-            <Button
-              isIconOnly
-              variant="light"
-              radius="full"
-              size="sm"
-              className={`h-8 w-8 min-w-0 transition-colors ${
-                showTransparent
-                  ? "text-white/80 hover:text-white hover:bg-black/40 backdrop-blur-xs"
-                  : "text-default-400 hover:text-foreground hover:bg-default-100/50"
-              }`}
-              onPress={onOpenBigPicture}
-              aria-label={t("common.bigPictureMode", "Modo Big Picture")}>
-              <Tv size={16} />
-            </Button>
-          </Tooltip>
+          <Button
+            isIconOnly
+            variant="light"
+            radius="full"
+            size="sm"
+            className={`h-8 w-8 min-w-0 transition-colors ${
+              showTransparent
+                ? "text-white/80 hover:text-white hover:bg-black/40 backdrop-blur-xs"
+                : "text-default-400 hover:text-foreground hover:bg-default-100/50"
+            }`}
+            onPress={onOpenBigPicture}
+            title={t("common.bigPictureMode", "Modo Big Picture")}
+            aria-label={t("common.bigPictureMode", "Modo Big Picture")}>
+            <Tv size={16} />
+          </Button>
         )}
 
         {/* Controles de ventana nativos (solo en Windows / Linux) */}

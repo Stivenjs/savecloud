@@ -61,6 +61,14 @@ export const XboxSidebar = memo(function XboxSidebar({
 
   const frameSrc = useMemo(() => resolveProfileAsset(profileFrame ?? undefined), [profileFrame]);
 
+  const activeNavId = useMemo(() => {
+    if (currentPath === "/" || currentPath.startsWith("/games/")) {
+      if (currentPath.startsWith("/games/steam-catalog")) return "/catalog";
+      return "/";
+    }
+    return currentPath;
+  }, [currentPath]);
+
   return (
     <aside
       style={{ viewTransitionName: "none" }}
@@ -145,7 +153,7 @@ export const XboxSidebar = memo(function XboxSidebar({
         {/* Navegación principal con animación fluida entre elementos */}
         <nav className="flex flex-col items-center gap-2 w-full">
           {XBOX_NAV_ITEMS.map((item) => {
-            const isActive = currentPath === item.id;
+            const isActive = activeNavId === item.id;
             const label = t(item.translationKey, item.fallbackLabel);
 
             return (
