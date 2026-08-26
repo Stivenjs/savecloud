@@ -1,8 +1,7 @@
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { Avatar, Button, Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "next-themes";
-import { motion } from "framer-motion";
 import { Gamepad2, History, Library, MonitorPlay, Moon, Settings, Sun, Users } from "lucide-react";
 import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { resolveProfileAsset } from "@utils/profileMedia";
@@ -68,6 +67,23 @@ export const XboxSidebar = memo(function XboxSidebar({
     }
     return currentPath;
   }, [currentPath]);
+
+  const [optimisticNavId, setOptimisticNavId] = useState<string>(activeNavId);
+
+  useEffect(() => {
+    setOptimisticNavId(activeNavId);
+  }, [activeNavId]);
+
+  const effectiveActiveId = optimisticNavId;
+
+  const activeIndex = useMemo(() => {
+    return XBOX_NAV_ITEMS.findIndex((item) => item.id === effectiveActiveId);
+  }, [effectiveActiveId]);
+
+  const handleNavItemClick = (id: string) => {
+    setOptimisticNavId(id);
+    onNavigate(id);
+  };
 
   return (
     <aside
@@ -150,43 +166,45 @@ export const XboxSidebar = memo(function XboxSidebar({
 
         <div className="w-8 h-px bg-default-200/50 dark:bg-default-100/15" />
 
-        {/* Navegación principal con animación fluida entre elementos */}
-        <nav className="flex flex-col items-center gap-2 w-full">
+        {/* Navegación principal con indicador acelerado por GPU / Compositor CSS */}
+        <nav className="relative flex flex-col items-center gap-2 w-full" aria-label="Enlaces principales">
+          {/* Cápsula de fondo animada (GPU Compositor) */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute left-0 top-0 size-11 rounded-2xl bg-default-200/80 dark:bg-default-100/25 shadow-xs transform-gpu will-change-transform transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            style={{
+              transform: activeIndex >= 0 ? `translate3d(0, ${activeIndex * 52}px, 0)` : "translate3d(0, 0, 0)",
+              opacity: activeIndex >= 0 ? 1 : 0,
+            }}
+          />
+
+          {/* Indicador de barra vertical izquierda (GPU Compositor) */}
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute -left-2 top-2.5 h-6 w-1 rounded-r-full bg-primary transform-gpu will-change-transform transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            style={{
+              transform: activeIndex >= 0 ? `translate3d(0, ${activeIndex * 52}px, 0)` : "translate3d(0, 0, 0)",
+              opacity: activeIndex >= 0 ? 1 : 0,
+            }}
+          />
+
           {XBOX_NAV_ITEMS.map((item) => {
-            const isActive = activeNavId === item.id;
+            const isActive = effectiveActiveId === item.id;
             const label = t(item.translationKey, item.fallbackLabel);
 
             return (
               <Tooltip key={item.id} content={label} placement="right" delay={150} closeDelay={0}>
                 <button
                   type="button"
-                  onClick={() => onNavigate(item.id)}
-                  className={`group relative size-11 rounded-2xl flex items-center justify-center cursor-pointer transition-colors duration-200 ${
+                  onClick={() => handleNavItemClick(item.id)}
+                  className={`group relative size-11 rounded-2xl flex items-center justify-center cursor-pointer transition-colors duration-150 ${
                     isActive
                       ? "text-primary dark:text-primary-400 font-semibold"
                       : "text-default-400 hover:text-foreground hover:bg-default-100/60 dark:hover:bg-default-100/10"
                   }`}
                   aria-label={label}
                   aria-current={isActive ? "page" : undefined}>
-                  {/* Cápsula de fondo animada que se desliza al cambiar de ítem */}
-                  {isActive && (
-                    <motion.div
-                      layoutId="xbox-nav-active-pill"
-                      transition={{ type: "spring", stiffness: 420, damping: 32 }}
-                      className="absolute inset-0 rounded-2xl bg-default-200/80 dark:bg-default-100/25 shadow-xs pointer-events-none"
-                    />
-                  )}
-
-                  {/* Indicador de barra vertical que se desliza suavemente */}
-                  {isActive && (
-                    <motion.span
-                      layoutId="xbox-nav-active-bar"
-                      transition={{ type: "spring", stiffness: 420, damping: 32 }}
-                      className="absolute -left-2 top-2.5 bottom-2.5 w-1 rounded-r-full bg-primary pointer-events-none"
-                    />
-                  )}
-
-                  <div className="relative z-10 transition-transform duration-200 group-hover:scale-110 group-active:scale-95">
+                  <div className="relative z-10 transition-transform duration-150 group-hover:scale-110 group-active:scale-95">
                     {item.icon}
                   </div>
                 </button>
