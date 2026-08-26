@@ -174,11 +174,10 @@ export function GameInventorySettingsCard() {
                 {localInventory.manifest.games.map((game) => (
                   <motion.div
                     key={game.gameKey}
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ type: "spring", stiffness: 160, damping: 22 }}
-                    style={{ overflow: "hidden" }}
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
                     className="flex items-center justify-between gap-3 px-3 py-2 text-xs hover:bg-default-100/30 transition-colors">
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-foreground truncate">{formatGameDisplayName(game.displayName)}</p>
@@ -242,11 +241,11 @@ export function GameInventorySettingsCard() {
           <AnimatePresence initial={false}>
             {showAddForm && (
               <motion.div
-                initial={{ height: 0, opacity: 0, marginTop: 0 }}
-                animate={{ height: "auto", opacity: 1, marginTop: 12 }}
-                exit={{ height: 0, opacity: 0, marginTop: 0 }}
-                transition={{ type: "spring", stiffness: 160, damping: 22 }}
-                style={{ overflow: "hidden" }}>
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="mt-3">
                 <div className="space-y-3 rounded-lg border border-default-200 bg-content1/60 px-3 py-3 dark:border-default-100/15">
                   <p className="text-xs text-default-500">{t("settings.inventory.addFormDesc")}</p>
 

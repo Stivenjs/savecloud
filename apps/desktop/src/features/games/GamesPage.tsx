@@ -29,6 +29,7 @@ import { toastError, toastSuccess } from "@utils/toast";
 import { useNavigationStore } from "@features/input/store";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useShellUiStore } from "@store/ShellUiStore";
+import { useScrollRestoration } from "@hooks/useScrollRestoration";
 
 export function GamesPage() {
   const { t } = useTranslation();
@@ -36,6 +37,7 @@ export function GamesPage() {
   const navigate = useNavigate();
   const pushLayer = useNavigationStore((state) => state.pushLayer);
   const popLayer = useNavigationStore((state) => state.popLayer);
+
   const {
     config,
     loading,
@@ -201,6 +203,10 @@ export function GamesPage() {
       );
     }
   };
+
+  useScrollRestoration("library", !loading && filteredGames.length > 0, {
+    resetOnDeps: [debouncedSearchTerm, originFilter],
+  });
 
   if (loading) {
     return (

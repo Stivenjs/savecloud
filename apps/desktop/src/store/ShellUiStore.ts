@@ -40,10 +40,21 @@ interface ShellUiStore {
   /** Registra un manejador; devuelve función para desregistrar al desmontar. */
   registerBackHandler: (handler: () => boolean) => () => void;
   requestGlobalBack: () => boolean;
-  /** Posición del scroll del catálogo. */
+  /** Diccionario unificado de posiciones de scroll por vista/ruta. */
+  scrollPositions: Record<string, number>;
+  /** Guarda la posición de scroll para una clave dada. */
+  setScrollPosition: (key: string, position: number) => void;
+  /** Obtiene la posición de scroll para una clave dada. */
+  getScrollPosition: (key: string) => number;
+
+  /** Posición del scroll del catálogo (legacy). */
   catalogScrollPosition: number;
-  /** Establece la posición del scroll del catálogo. */
+  /** Establece la posición del scroll del catálogo (legacy). */
   setCatalogScrollPosition: (position: number) => void;
+  /** Posición del scroll de la biblioteca (legacy). */
+  libraryScrollPosition: number;
+  /** Establece la posición del scroll de la biblioteca (legacy). */
+  setLibraryScrollPosition: (position: number) => void;
 
   /**
    * Petición desde otra ventana (p. ej. Ajustes) para abrir el asistente «Traer a este equipo» en la biblioteca.
@@ -97,8 +108,28 @@ export const useShellUiStore = create<ShellUiStore>((set, get) => ({
     }
     return false;
   },
+  scrollPositions: {},
+  setScrollPosition: (key, position) =>
+    set((s) => ({
+      scrollPositions: { ...s.scrollPositions, [key]: position },
+      ...(key === "catalog" ? { catalogScrollPosition: position } : {}),
+      ...(key === "library" ? { libraryScrollPosition: position } : {}),
+    })),
+  getScrollPosition: (key) =>
+    get().scrollPositions[key] ??
+    (key === "catalog" ? get().catalogScrollPosition : key === "library" ? get().libraryScrollPosition : 0),
   catalogScrollPosition: 0,
-  setCatalogScrollPosition: (position) => set({ catalogScrollPosition: position }),
+  setCatalogScrollPosition: (position) =>
+    set((s) => ({
+      catalogScrollPosition: position,
+      scrollPositions: { ...s.scrollPositions, catalog: position },
+    })),
+  libraryScrollPosition: 0,
+  setLibraryScrollPosition: (position) =>
+    set((s) => ({
+      libraryScrollPosition: position,
+      scrollPositions: { ...s.scrollPositions, library: position },
+    })),
 
   openRestoreFromCloudRequest: 0,
   openRestoreFromCloudGameId: null,

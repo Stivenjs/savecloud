@@ -35,7 +35,7 @@ export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualized
   const isHorizontal = cardOrientation === "horizontal";
   const minItemWidth = consoleMode ? (isHorizontal ? 320 : 220) : isHorizontal ? 280 : 180;
   const estimatedRowHeight = consoleMode ? (isHorizontal ? 330 : 410) : isHorizontal ? 235 : 330;
-  const catalogScrollPosition = useShellUiStore((state) => state.catalogScrollPosition);
+  const catalogScrollPosition = useShellUiStore((state) => state.getScrollPosition("catalog"));
 
   const { containerRef, visibleItems, topPadding, bottomPadding } = useNativeVirtualGrid({
     items,

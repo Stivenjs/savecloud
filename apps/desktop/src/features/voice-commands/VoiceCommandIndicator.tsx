@@ -41,13 +41,14 @@ export function VoiceCommandIndicator() {
         {holdKeyPressed && (
           <motion.div
             key="voice-command-indicator"
-            initial={{ opacity: 0, y: 16, scale: 0.96, filter: "blur(4px)" }}
-            animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: 12, scale: 0.98, filter: "blur(3px)" }}
-            transition={{ type: "spring", stiffness: 260, damping: 24, mass: 0.9 }}>
+            initial={{ opacity: 0, y: 16, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 260, damping: 24, mass: 0.9 }}
+            className="transform-gpu will-change-transform">
             <BorderGlow
               active={holdKeyPressed}
-              className="min-w-[220px] border-default-200/80 bg-background/95 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.25)]"
+              className="min-w-55 border-default-200/80 bg-background/95 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.25)]"
               borderRadius={16}
               edgeSensitivity={0}
               colors={["#7C3AED", "#8B5CF6", "#A78BFA"]}
