@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, startTransition, addTransitionType } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button, Select, SelectItem, Skeleton, cn } from "@heroui/react";
@@ -78,16 +78,19 @@ export const CatalogGridItem = memo(function CatalogGridItem({
             onCardNavigate={() => {
               const currentY = window.scrollY || document.documentElement.scrollTop;
               if (currentY > 0) {
-                useShellUiStore.getState().setCatalogScrollPosition(currentY);
+                useShellUiStore.getState().setScrollPosition("catalog", currentY);
               }
               const from = `${location.pathname}${location.search}`;
               const targetId = libraryGame ? libraryGame.id : game.id;
-              navigate(`/games/${targetId}`, {
-                state: {
-                  resolvedSteamAppId: item.steamAppId,
-                  catalogDisplayName: item.name,
-                  from,
-                },
+              startTransition(() => {
+                addTransitionType("game-detail");
+                navigate(`/games/${targetId}`, {
+                  state: {
+                    resolvedSteamAppId: item.steamAppId,
+                    catalogDisplayName: item.name,
+                    from,
+                  },
+                });
               });
             }}
           />

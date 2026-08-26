@@ -1,13 +1,14 @@
-import { useCallback, useMemo, useState, useEffect } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { syncCheckUnsyncedGames, syncUploadGame, type UnsyncedGame } from "@services/tauri";
 import { useConfig, CONFIG_QUERY_KEY } from "@hooks/useConfig";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { LAST_SYNC_QUERY_KEY } from "@hooks/useLastSyncInfo";
-import { toastSyncResult } from "@utils/toast";
+import { toastInfo, toastSyncResult } from "@utils/toast";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
+import i18n from "@lib/i18n";
 
 const UNSYNCED_QUERY_KEY = ["unsynced-games"] as const;
 
@@ -16,7 +17,8 @@ export function useUnsyncedSaves() {
   const { config } = useConfig();
   const { activeProfile } = useProfileSession();
 
-  const [isDismissed, setIsDismissed] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const hasNotifiedRef = useRef(false);
 
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
 
@@ -37,10 +39,20 @@ export function useUnsyncedSaves() {
   const unsyncedGameIds = useMemo(() => unsyncedList.map((g: UnsyncedGame) => g.gameId), [unsyncedList]);
 
   useEffect(() => {
-    if (unsyncedGameIds.length === 0) {
-      setIsDismissed(false);
+    if (unsyncedGameIds.length > 0 && !hasNotifiedRef.current) {
+      hasNotifiedRef.current = true;
+      const gameTitle = formatGameDisplayName(unsyncedGameIds[0]);
+      const desc =
+        unsyncedGameIds.length === 1
+          ? i18n.t("library.unsyncedSaves.desc_one", { gameName: gameTitle })
+          : i18n.t("library.unsyncedSaves.desc_other", { count: unsyncedGameIds.length });
+
+      toastInfo(i18n.t("library.unsyncedSaves.title"), desc);
+    } else if (unsyncedGameIds.length === 0) {
+      hasNotifiedRef.current = false;
+      setIsModalOpen(false);
     }
-  }, [unsyncedGameIds.length]);
+  }, [unsyncedGameIds]);
 
   const { mutateAsync: uploadAll, isPending: isUploading } = useMutation({
     mutationKey: ["upload-all-unsynced"],
@@ -71,15 +83,20 @@ export function useUnsyncedSaves() {
     },
   });
 
+  const openModal = useCallback(() => {
+    setIsModalOpen(true);
+  }, []);
+
   const closeModal = useCallback(() => {
-    setIsDismissed(true);
+    setIsModalOpen(false);
   }, []);
 
   return {
     unsyncedGameIds,
     isChecking,
     isUploading,
-    showUnsyncedModal: unsyncedGameIds.length > 0 && !isDismissed,
+    showUnsyncedModal: isModalOpen,
+    openModal,
     closeModal,
     uploadAll,
     refetchUnsynced,

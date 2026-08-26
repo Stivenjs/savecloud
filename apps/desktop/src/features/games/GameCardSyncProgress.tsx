@@ -1,5 +1,4 @@
 import { Tooltip } from "@heroui/react";
-import { motion } from "framer-motion";
 import { HardDrive, Pause, Upload, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -57,14 +56,7 @@ export function GameCardSyncProgress({ progress }: GameCardSyncProgressProps) {
         className="flex cursor-default items-center justify-center rounded-full bg-default-100/90 shadow-sm ring-1 ring-default-200/80"
         title={progress.type === "upload" ? t("sync.uploading") : t("sync.downloading")}>
         {isIndeterminate ? (
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{
-              duration: 0.9,
-              repeat: Infinity,
-              ease: "linear",
-            }}
-            className="flex p-0.5">
+          <div className="flex p-0.5 animate-spin">
             <svg width={RING_SIZE} height={RING_SIZE} className="-rotate-90" aria-hidden>
               <circle
                 cx={CX}
@@ -87,7 +79,7 @@ export function GameCardSyncProgress({ progress }: GameCardSyncProgressProps) {
                 className="text-primary"
               />
             </svg>
-          </motion.div>
+          </div>
         ) : (
           <div className="relative flex items-center justify-center p-0.5">
             <svg width={RING_SIZE} height={RING_SIZE} className="-rotate-90" aria-hidden>
@@ -100,7 +92,7 @@ export function GameCardSyncProgress({ progress }: GameCardSyncProgressProps) {
                 strokeWidth={RING_STROKE}
                 className="text-default-200"
               />
-              <motion.circle
+              <circle
                 cx={CX}
                 cy={CY}
                 r={R}
@@ -110,8 +102,7 @@ export function GameCardSyncProgress({ progress }: GameCardSyncProgressProps) {
                 strokeLinecap="round"
                 strokeDasharray={CIRCUMFERENCE}
                 strokeDashoffset={strokeDashoffset}
-                className="text-primary"
-                transition={{ type: "tween", duration: 0.25, ease: "easeOut" }}
+                className="text-primary transition-[stroke-dashoffset] duration-200 ease-out"
               />
             </svg>
             <span className="absolute inset-0 flex items-center justify-center text-[9px] font-semibold tabular-nums text-foreground">

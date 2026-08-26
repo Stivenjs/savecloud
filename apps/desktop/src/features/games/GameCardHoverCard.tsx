@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { initHls, isHlsUrl } from "@utils/hls";
 import type { HlsType } from "@utils/hls";
-import { motion } from "framer-motion";
 import { Button, Popover, PopoverContent, PopoverTrigger } from "@heroui/react";
 import { ImageIcon, Maximize2, Video, Volume2, VolumeX } from "lucide-react";
 import type { Swiper as SwiperType } from "swiper";
@@ -22,16 +21,6 @@ const HOVER_CLOSE_DELAY_MS = 150;
 const CAROUSEL_INTERVAL_MS = 3500;
 
 const VIDEO_INIT_DELAY_MS = 700;
-
-/** Entrada suave del contenido del popover. */
-const contentVariants = {
-  hidden: { opacity: 0, scale: 0.98 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: { duration: 0.2, ease: "easeOut" as const },
-  },
-};
 
 export interface GameCardHoverCardProps {
   game: ConfiguredGame;
@@ -271,11 +260,7 @@ export function GameCardHoverCard({
           className="p-0 overflow-hidden rounded-2xl border-0 shadow-none bg-transparent">
           {showHovercard ? (
             <>
-              <motion.div
-                className="relative w-full overflow-hidden bg-zinc-950/45 rounded-t-2xl"
-                variants={contentVariants}
-                initial="hidden"
-                animate="visible">
+              <div className="relative w-full overflow-hidden bg-zinc-950/45 rounded-t-2xl transform-gpu animate-in fade-in duration-150 zoom-in-98">
                 <div className="relative h-44 w-full overflow-hidden rounded-t-2xl">
                   {validUrls.length > 0 ? (
                     <div
@@ -376,7 +361,7 @@ export function GameCardHoverCard({
                     </Button>
                   </div>
                 )}
-              </motion.div>
+              </div>
 
               <div className="relative z-10 w-full border-t border-zinc-800/50 bg-[#13151b]/98 px-4 py-3 rounded-b-2xl">
                 <p className="line-clamp-2 text-xs font-bold text-white tracking-tight leading-snug mb-1.5">

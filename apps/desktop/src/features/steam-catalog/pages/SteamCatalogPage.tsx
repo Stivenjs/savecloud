@@ -18,20 +18,13 @@ import { useSteamCatalogMediaAndMatches } from "@features/steam-catalog/hooks/us
 import { useSteamCatalogTrendingHero } from "@features/steam-catalog/hooks/useSteamCatalogTrendingHero";
 import { useSteamCatalogGamepadPagination } from "@features/steam-catalog/hooks/useSteamCatalogGamepadPagination";
 import { useShellUiStore } from "@store/ShellUiStore";
+import { useScrollRestoration } from "@hooks/useScrollRestoration";
 import { STEAM_CATALOG_PAGE_SIZE } from "@/constants/constants";
-import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
+import { useCallback, useDeferredValue, useEffect, useState, useMemo } from "react";
 
 export function SteamCatalogPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-
-  const catalogScrollPosition = useShellUiStore((state) => state.catalogScrollPosition);
-  const setCatalogScrollPosition = useShellUiStore((state) => state.setCatalogScrollPosition);
-
-  const initialScrollTargetRef = useRef(catalogScrollPosition);
-  const currentScrollYRef = useRef(catalogScrollPosition);
-  const hasRestored = useRef(false);
-  const isRestoringRef = useRef(false);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
   const bigPictureConsole = useMemo(
@@ -95,27 +88,21 @@ export function SteamCatalogPage() {
 
   const [showStickyToolbar, setShowStickyToolbar] = useState(false);
   const [isPastHeader, setIsPastHeader] = useState(false);
-  const lastScrollY = useRef(0);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-      const isScrollingUp = currentScrollY < lastScrollY.current;
-      const pastThreshold = currentScrollY > 300;
-
-      setIsPastHeader(pastThreshold);
-      setShowStickyToolbar(pastThreshold && isScrollingUp);
-
-      lastScrollY.current = currentScrollY;
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
 
   const activeItems = isInfiniteMode ? infiniteQuery.items : items;
   const activeIsLoading = isInfiniteMode ? infiniteQuery.isLoading : isLoading;
   const activeTotalForRange = isInfiniteMode ? infiniteQuery.totalCount : totalForRange;
+
+  const isReady = !activeIsLoading && activeItems.length > 0;
+
+  useScrollRestoration("catalog", isReady, {
+    onScroll: (currentScrollY, isScrollingUp) => {
+      const pastThreshold = currentScrollY > 300;
+      setIsPastHeader(pastThreshold);
+      setShowStickyToolbar(pastThreshold && isScrollingUp);
+    },
+    resetOnDeps: [debouncedSearch, filterSignature, sortOption],
+  });
 
   const deferredActiveItems = useDeferredValue(activeItems);
 
@@ -167,7 +154,6 @@ export function SteamCatalogPage() {
     setPage,
   });
 
-  const isReady = !activeIsLoading && activeItems.length > 0;
   const showTrendingHero = !bigPictureConsole;
 
   const {
@@ -178,84 +164,6 @@ export function SteamCatalogPage() {
     isError: isHeroError,
     error: heroError,
   } = useSteamCatalogTrendingHero(showTrendingHero);
-
-  const prevFiltersRef = useRef({ debouncedSearch, filterSignature, sortOption });
-
-  useLayoutEffect(() => {
-    if (typeof history !== "undefined" && "scrollRestoration" in history) {
-      history.scrollRestoration = "manual";
-    }
-  }, []);
-
-  useLayoutEffect(() => {
-    if (hasRestored.current || !isReady) return;
-
-    const targetY = initialScrollTargetRef.current;
-    if (targetY > 0) {
-      isRestoringRef.current = true;
-      window.scrollTo({ top: targetY, behavior: "instant" });
-      hasRestored.current = true;
-
-      const raf1 = requestAnimationFrame(() => {
-        window.scrollTo({ top: targetY, behavior: "instant" });
-        const raf2 = requestAnimationFrame(() => {
-          window.scrollTo({ top: targetY, behavior: "instant" });
-          const timer = setTimeout(() => {
-            isRestoringRef.current = false;
-          }, 150);
-          return () => clearTimeout(timer);
-        });
-        return () => cancelAnimationFrame(raf2);
-      });
-      return () => cancelAnimationFrame(raf1);
-    } else {
-      hasRestored.current = true;
-    }
-  }, [isReady]);
-
-  useEffect(() => {
-    const prev = prevFiltersRef.current;
-    const hasChanged =
-      prev.debouncedSearch !== debouncedSearch ||
-      prev.filterSignature !== filterSignature ||
-      prev.sortOption !== sortOption;
-
-    prevFiltersRef.current = { debouncedSearch, filterSignature, sortOption };
-
-    if (hasChanged) {
-      setCatalogScrollPosition(0);
-      initialScrollTargetRef.current = 0;
-      currentScrollYRef.current = 0;
-      window.scrollTo({ top: 0, behavior: "instant" });
-    }
-  }, [debouncedSearch, filterSignature, sortOption, setCatalogScrollPosition]);
-
-  useEffect(() => {
-    let scrollTimeout: ReturnType<typeof setTimeout>;
-
-    const handleScroll = () => {
-      if (!hasRestored.current || isRestoringRef.current) return;
-      const currentY = window.scrollY || document.documentElement.scrollTop;
-      if (currentY > 0) {
-        currentScrollYRef.current = currentY;
-      }
-      clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(() => {
-        if (currentScrollYRef.current > 0) {
-          setCatalogScrollPosition(currentScrollYRef.current);
-        }
-      }, 150);
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-      clearTimeout(scrollTimeout);
-      if (hasRestored.current && !isRestoringRef.current && currentScrollYRef.current > 0) {
-        setCatalogScrollPosition(currentScrollYRef.current);
-      }
-    };
-  }, [setCatalogScrollPosition]);
 
   const totalSelectedFilters = selectedGenres.length + selectedTags.length;
 
