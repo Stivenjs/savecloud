@@ -130,23 +130,14 @@ export function TorrentProgressBar({ progress }: TorrentProgressBarProps) {
         </div>
 
         <div className="relative mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-default-200">
-          <motion.div
-            className={`relative z-0 h-full origin-left rounded-full ${isCompleted ? "bg-success" : isPaused ? "bg-warning" : "bg-secondary"}`}
-            style={{ width: "100%" }}
-            initial={{ scaleX: 0 }}
-            animate={{ scaleX: value / 100 }}
-            transition={{
-              type: "tween",
-              duration: value === 0 ? 0 : 0.38,
-              ease: [0.22, 1, 0.36, 1],
-            }}
+          <div
+            className={`relative z-0 h-full rounded-full transform-gpu will-change-[width] transition-[width] duration-200 ease-out ${
+              isCompleted ? "bg-success" : isPaused ? "bg-warning" : "bg-secondary"
+            }`}
+            style={{ width: `${Math.min(Math.max(value, 0), 100)}%` }}
           />
           {value === 0 && !isCompleted && !isPaused && (
-            <motion.div
-              className="pointer-events-none absolute inset-y-0 z-10 w-1/4 rounded-full bg-secondary/55"
-              animate={{ left: ["-30%", "100%"] }}
-              transition={{ duration: 1.35, repeat: Infinity, ease: "easeInOut" }}
-            />
+            <div className="pointer-events-none absolute inset-y-0 z-10 w-1/3 rounded-full bg-secondary/55 animate-pulse" />
           )}
         </div>
 

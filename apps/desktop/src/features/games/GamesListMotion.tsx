@@ -1,44 +1,26 @@
-/**
- * Animación de aparición de la lista de juegos (búsqueda/filtros).
- * Entrada en escalonado (stagger): cada tarjeta hace fade-in + slide up con un pequeño retraso.
- *
- * IMPORTANTE: no usar key={listKey} en el contenedor — eso desmonta y remonta
- * todo el árbol destruyendo memo en los hijos. En su lugar usamos useAnimationControls
- * para re-ejecutar la animación de forma imperativa sin tocar el DOM.
- */
-
-import { useEffect } from "react";
-import { motion, useAnimationControls } from "framer-motion";
-import { gamesListContainerVariants, gamesListItemVariants } from "@/constants/Gameslistmotionvariants";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 export interface GamesListMotionContainerProps {
   children: ReactNode;
   className?: string;
-  /**
-   * Cuando cambia este valor se re-ejecuta la animación de entrada.
-   * Ya no se usa como `key` del nodo — el árbol DOM se preserva para
-   * que memo en los hijos funcione correctamente.
-   */
   listKey?: string;
 }
 
+/**
+ * Contenedor de la lista de juegos con micro-fade de entrada acelerado 100% por CSS nativo en GPU.
+ */
 export function GamesListMotionContainer({ children, className, listKey }: GamesListMotionContainerProps) {
-  const controls = useAnimationControls();
+  const [animating, setAnimating] = useState(true);
 
   useEffect(() => {
-    controls.set("hidden");
-    const id = requestAnimationFrame(() => {
-      void controls.start("visible");
+    setAnimating(false);
+    const raf = requestAnimationFrame(() => {
+      setAnimating(true);
     });
-    return () => cancelAnimationFrame(id);
-  }, [listKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => cancelAnimationFrame(raf);
+  }, [listKey]);
 
-  return (
-    <motion.div className={className} variants={gamesListContainerVariants} initial="hidden" animate={controls}>
-      {children}
-    </motion.div>
-  );
+  return <div className={`${className ?? ""} ${animating ? "animate-games-list-enter" : "opacity-0"}`}>{children}</div>;
 }
 
 export interface GamesListMotionItemProps {
@@ -46,5 +28,5 @@ export interface GamesListMotionItemProps {
 }
 
 export function GamesListMotionItem({ children }: GamesListMotionItemProps) {
-  return <motion.div variants={gamesListItemVariants}>{children}</motion.div>;
+  return <div className="[content-visibility:auto] [contain-intrinsic-size:auto_280px]">{children}</div>;
 }

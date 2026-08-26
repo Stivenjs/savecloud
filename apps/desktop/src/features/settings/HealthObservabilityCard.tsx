@@ -3,7 +3,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { motion } from "framer-motion";
 import { Activity, Copy, FileText, RefreshCw, RotateCw, Stethoscope } from "lucide-react";
 import { useMemo, useState } from "react";
 import { openOrFocusSettingsWindow } from "@/windows/settingsWindow";
@@ -27,11 +26,7 @@ import type { HealthErrorEntry, RemoteMetricsBucket, SuggestedAction } from "@ap
 function PulseDot({ className }: { className: string }) {
   return (
     <span className="relative inline-flex h-2.5 w-2.5 items-center justify-center" aria-hidden="true">
-      <motion.span
-        className={`absolute inset-0 rounded-full ${className.split(" ")[0]} opacity-50`}
-        animate={{ scale: [1, 2.4, 1], opacity: [0.45, 0, 0.45] }}
-        transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-      />
+      <span className={`absolute inset-0 rounded-full ${className.split(" ")[0]} opacity-75 animate-ping`} />
       <span className={`relative inline-block h-2.5 w-2.5 rounded-full ${className}`} />
     </span>
   );
@@ -86,25 +81,18 @@ function LatencyBar({ p50, p95, p99, ceiling = 2500 }: LatencyBarProps) {
         </span>
       </div>
       <div className="relative h-2 overflow-hidden rounded-full bg-default-200/60">
-        <motion.div
-          className="absolute inset-y-0 left-0 bg-foreground/80"
-          initial={{ width: 0 }}
-          animate={{ width: `${p50Pct}%` }}
-          transition={{ type: "spring", stiffness: 90, damping: 20 }}
+        <div
+          className="absolute inset-y-0 left-0 bg-foreground/80 transform-gpu will-change-[width] transition-[width] duration-300 ease-out"
+          style={{ width: `${p50Pct}%` }}
         />
-        <motion.div
-          className={`absolute inset-y-0 left-0 ${exceeded ? "bg-rose-500/70" : "bg-emerald-500/60"}`}
-          style={{ mixBlendMode: "multiply" }}
-          initial={{ width: 0 }}
-          animate={{ width: `${p95Pct}%` }}
-          transition={{ type: "spring", stiffness: 90, damping: 22 }}
+        <div
+          className={`absolute inset-y-0 left-0 transform-gpu will-change-[width] transition-[width] duration-300 ease-out ${exceeded ? "bg-rose-500/70" : "bg-emerald-500/60"}`}
+          style={{ mixBlendMode: "multiply", width: `${p95Pct}%` }}
         />
         {p99 != null ? (
-          <motion.div
-            className="absolute inset-y-0 w-[2px] bg-rose-500/80"
-            initial={{ left: 0, opacity: 0 }}
-            animate={{ left: `calc(${p99Pct}% - 1px)`, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 90, damping: 22 }}
+          <div
+            className="absolute inset-y-0 w-0.5 bg-rose-500/80 transform-gpu will-change-[left] transition-[left] duration-300 ease-out"
+            style={{ left: `calc(${p99Pct}% - 1px)` }}
             aria-hidden
           />
         ) : null}
@@ -186,12 +174,7 @@ function ErrorRow({ entry }: ErrorRowProps) {
   const isAuth = status === 401 || status === 403 || /unauthorized/i.test(entry.message);
   const tone = isAuth ? "text-rose-600 dark:text-rose-300" : "text-default-700 dark:text-default-200";
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 110, damping: 22 }}
-      className="grid grid-cols-[64px_44px_1fr] items-baseline gap-3 px-4 py-2 font-mono text-[12px] hover:bg-default-100/50">
+    <div className="grid grid-cols-[64px_44px_1fr] items-baseline gap-3 px-4 py-2 font-mono text-[12px] hover:bg-default-100/50 transition-colors">
       <span className="text-default-400 tabular-nums">{timeOfDay(entry.tsMs)}</span>
       <span className={`tabular-nums ${status != null && status >= 400 ? "text-rose-500" : "text-default-400"}`}>
         {status ?? "—"}
@@ -200,7 +183,7 @@ function ErrorRow({ entry }: ErrorRowProps) {
         <span className="mr-2 text-default-500">{entry.source}</span>
         <span className={tone}>{entry.message}</span>
       </span>
-    </motion.div>
+    </div>
   );
 }
 

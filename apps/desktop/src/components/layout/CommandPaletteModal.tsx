@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
 import { Modal, ModalContent, Kbd, Spinner } from "@heroui/react";
 import { Search, Gamepad2, ArrowRight, Settings, Users, History, Library, LayoutGrid, ShieldAlert } from "lucide-react";
 import { useConfig } from "@hooks/useConfig";
@@ -51,9 +50,6 @@ interface CommandPaletteModalProps {
   onClose: () => void;
 }
 
-/**
- * Renderiza la miniatura del juego utilizando exactamente el mismo hook y caché que el catálogo de Steam y la biblioteca.
- */
 function CommandPaletteGameThumbnail({
   game,
   resolvedSteamAppId,
@@ -100,6 +96,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
   const navigate = useNavigate();
   const { config } = useConfig();
   const [query, setQuery] = useState("");
+  const deferredQuery = useDeferredValue(query);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [catalogResults, setCatalogResults] = useState<CatalogListItem[]>([]);
   const [isCatalogLoading, setIsCatalogLoading] = useState(false);
@@ -289,7 +286,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
   );
 
   const filteredCommands: CommandItem[] = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     if (!q) {
       return [...localGameCommands, ...navigationCommands];
     }
@@ -309,12 +306,12 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
       list.push({
         type: "nav",
         id: "action-search-in-catalog",
-        title: `Buscar "${query.trim()}" en el Catálogo Steam`,
+        title: `Buscar "${deferredQuery.trim()}" en el Catálogo Steam`,
         subtitle: "Abrir catálogo completo con este filtro",
         category: "actions",
         icon: Search,
         action: () => {
-          const trimmed = query.trim();
+          const trimmed = deferredQuery.trim();
           useShellUiStore.getState().setCatalogBpSearchTerm(trimmed);
           navigate(`/catalog?${STEAM_CATALOG_URL_Q}=${encodeURIComponent(trimmed)}`);
           onClose();
@@ -323,11 +320,11 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
     }
 
     return list;
-  }, [query, localGameCommands, catalogGameCommands, navigationCommands, navigate, onClose]);
+  }, [deferredQuery, localGameCommands, catalogGameCommands, navigationCommands, navigate, onClose]);
 
   useEffect(() => {
     setSelectedIndex(0);
-  }, [query, catalogResults]);
+  }, [deferredQuery, catalogResults]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -357,9 +354,31 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
       hideCloseButton
       size="2xl"
       backdrop="blur"
+      motionProps={{
+        variants: {
+          enter: {
+            y: 0,
+            opacity: 1,
+            scale: 1,
+            transition: {
+              duration: 0.18,
+              ease: [0.16, 1, 0.3, 1],
+            },
+          },
+          exit: {
+            y: -10,
+            opacity: 0,
+            scale: 0.98,
+            transition: {
+              duration: 0.12,
+              ease: "easeIn",
+            },
+          },
+        },
+      }}
       classNames={{
         wrapper: "z-[9999] items-start pt-20",
-        base: "bg-content1 border border-default-200/80 shadow-2xl rounded-2xl overflow-hidden p-0",
+        base: "bg-content1 border border-default-200/80 shadow-2xl rounded-2xl overflow-hidden p-0 transform-gpu",
       }}>
       <ModalContent>
         <div onKeyDown={handleKeyDown} className="flex flex-col w-full">
@@ -385,169 +404,130 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
             </Kbd>
           </div>
 
-          {/* Results List */}
-          <div className="max-h-96 overflow-y-auto p-2 space-y-1 custom-scrollbar">
-            <AnimatePresence mode="popLayout" initial={false}>
-              {filteredCommands.length === 0 ? (
-                <motion.div
-                  key="empty"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.18, ease: "easeOut" }}
-                  className="py-10 text-center text-default-400 text-xs font-medium">
-                  No se encontraron resultados para &quot;{query}&quot;
-                </motion.div>
-              ) : (
-                filteredCommands.map((cmd, idx) => {
-                  const isSelected = idx === selectedIndex;
+          {/* Results List con altura mínima estable para evitar saltos al teclear */}
+          <div className="min-h-75 max-h-96 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+            {filteredCommands.length === 0 ? (
+              <div className="flex flex-col items-center justify-center min-h-70 text-center text-default-400 text-xs font-medium gap-1 animate-in fade-in duration-150">
+                <Search size={24} className="text-default-300 mb-1" strokeWidth={1.5} />
+                <span>No se encontraron resultados para &quot;{query}&quot;</span>
+                <span className="text-[11px] text-default-400/80">Prueba buscando otro título o comando</span>
+              </div>
+            ) : (
+              filteredCommands.map((cmd, idx) => {
+                const isSelected = idx === selectedIndex;
 
-                  if (cmd.type === "game") {
-                    return (
-                      <motion.div
-                        key={cmd.id}
-                        layout
-                        initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                        transition={{
-                          type: "spring",
-                          stiffness: 480,
-                          damping: 34,
-                          mass: 0.8,
-                          layout: { duration: 0.15, ease: "easeOut" },
-                        }}
-                        onClick={() => cmd.action()}
-                        onMouseEnter={() => setSelectedIndex(idx)}
-                        className={`flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-colors duration-150 ${
-                          isSelected
-                            ? "bg-default-200/60 border border-default-300/60 text-foreground"
-                            : "hover:bg-default-100/60 text-default-700 border border-transparent"
-                        }`}>
-                        <div className="flex items-center gap-3 min-w-0">
-                          <CommandPaletteGameThumbnail
-                            game={cmd.game}
-                            resolvedSteamAppId={resolvedSteamAppIds[cmd.game.id] ?? undefined}
-                            mediaBySteamAppId={mediaBySteamAppId}
-                          />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="text-xs font-semibold truncate leading-snug text-foreground">{cmd.title}</p>
-                              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-primary/10 text-primary font-medium shrink-0">
-                                Tu Biblioteca
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-default-400 truncate">Ver partidas y guardados locales</p>
-                          </div>
-                        </div>
-
-                        {isSelected && (
-                          <div className="flex items-center gap-1 text-[10px] font-semibold text-primary shrink-0">
-                            <span>Abrir</span>
-                            <ArrowRight size={12} />
-                          </div>
-                        )}
-                      </motion.div>
-                    );
-                  }
-
-                  if (cmd.type === "catalog") {
-                    return (
-                      <motion.div
-                        key={cmd.id}
-                        layout
-                        initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                        transition={{
-                          type: "spring",
-                          stiffness: 480,
-                          damping: 34,
-                          mass: 0.8,
-                          layout: { duration: 0.15, ease: "easeOut" },
-                        }}
-                        onClick={() => cmd.action()}
-                        onMouseEnter={() => setSelectedIndex(idx)}
-                        className={`flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-colors duration-150 ${
-                          isSelected
-                            ? "bg-default-200/60 border border-default-300/60 text-foreground"
-                            : "hover:bg-default-100/60 text-default-700 border border-transparent"
-                        }`}>
-                        <div className="flex items-center gap-3 min-w-0">
-                          <CommandPaletteGameThumbnail
-                            game={cmd.game}
-                            resolvedSteamAppId={cmd.steamAppId}
-                            mediaBySteamAppId={mediaBySteamAppId}
-                          />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="text-xs font-semibold truncate leading-snug text-foreground">{cmd.title}</p>
-                              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-secondary/15 text-secondary font-medium shrink-0">
-                                Catálogo Steam
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-default-400 truncate">Ver ficha, media y descargas</p>
-                          </div>
-                        </div>
-
-                        {isSelected && (
-                          <div className="flex items-center gap-1 text-[10px] font-semibold text-secondary shrink-0">
-                            <span>Explorar</span>
-                            <ArrowRight size={12} />
-                          </div>
-                        )}
-                      </motion.div>
-                    );
-                  }
-
-                  const Icon = cmd.icon;
+                if (cmd.type === "game") {
                   return (
-                    <motion.div
+                    <div
                       key={cmd.id}
-                      layout
-                      initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                      transition={{
-                        type: "spring",
-                        stiffness: 480,
-                        damping: 34,
-                        mass: 0.8,
-                        layout: { duration: 0.15, ease: "easeOut" },
-                      }}
                       onClick={() => cmd.action()}
                       onMouseEnter={() => setSelectedIndex(idx)}
-                      className={`flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-colors duration-150 ${
+                      className={`flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-[background-color,border-color] duration-100 ease-out ${
                         isSelected
                           ? "bg-default-200/60 border border-default-300/60 text-foreground"
                           : "hover:bg-default-100/60 text-default-700 border border-transparent"
                       }`}>
                       <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className={`w-14 h-8 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${
-                            isSelected
-                              ? "bg-primary/15 border-primary/30 text-primary"
-                              : "bg-default-100 border-default-200/80 text-default-400"
-                          }`}>
-                          <Icon size={16} strokeWidth={1.5} />
-                        </div>
+                        <CommandPaletteGameThumbnail
+                          game={cmd.game}
+                          resolvedSteamAppId={resolvedSteamAppIds[cmd.game.id] ?? undefined}
+                          mediaBySteamAppId={mediaBySteamAppId}
+                        />
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold truncate leading-snug text-foreground">{cmd.title}</p>
-                          {cmd.subtitle && <p className="text-[10px] text-default-400 truncate">{cmd.subtitle}</p>}
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-semibold truncate leading-snug text-foreground">{cmd.title}</p>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-primary/10 text-primary font-medium shrink-0">
+                              Tu Biblioteca
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-default-400 truncate">Ver partidas y guardados locales</p>
                         </div>
                       </div>
 
                       {isSelected && (
                         <div className="flex items-center gap-1 text-[10px] font-semibold text-primary shrink-0">
-                          <span>Ir</span>
+                          <span>Abrir</span>
                           <ArrowRight size={12} />
                         </div>
                       )}
-                    </motion.div>
+                    </div>
                   );
-                })
-              )}
-            </AnimatePresence>
+                }
+
+                if (cmd.type === "catalog") {
+                  return (
+                    <div
+                      key={cmd.id}
+                      onClick={() => cmd.action()}
+                      onMouseEnter={() => setSelectedIndex(idx)}
+                      className={`flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-[background-color,border-color] duration-100 ease-out ${
+                        isSelected
+                          ? "bg-default-200/60 border border-default-300/60 text-foreground"
+                          : "hover:bg-default-100/60 text-default-700 border border-transparent"
+                      }`}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <CommandPaletteGameThumbnail
+                          game={cmd.game}
+                          resolvedSteamAppId={cmd.steamAppId}
+                          mediaBySteamAppId={mediaBySteamAppId}
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-semibold truncate leading-snug text-foreground">{cmd.title}</p>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-secondary/15 text-secondary font-medium shrink-0">
+                              Catálogo Steam
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-default-400 truncate">Ver ficha, media y descargas</p>
+                        </div>
+                      </div>
+
+                      {isSelected && (
+                        <div className="flex items-center gap-1 text-[10px] font-semibold text-secondary shrink-0">
+                          <span>Explorar</span>
+                          <ArrowRight size={12} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                const Icon = cmd.icon;
+                return (
+                  <div
+                    key={cmd.id}
+                    onClick={() => cmd.action()}
+                    onMouseEnter={() => setSelectedIndex(idx)}
+                    className={`flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition-[background-color,border-color] duration-100 ease-out ${
+                      isSelected
+                        ? "bg-default-200/60 border border-default-300/60 text-foreground"
+                        : "hover:bg-default-100/60 text-default-700 border border-transparent"
+                    }`}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`w-14 h-8 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${
+                          isSelected
+                            ? "bg-primary/15 border-primary/30 text-primary"
+                            : "bg-default-100 border-default-200/80 text-default-400"
+                        }`}>
+                        <Icon size={16} strokeWidth={1.5} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold truncate leading-snug text-foreground">{cmd.title}</p>
+                        {cmd.subtitle && <p className="text-[10px] text-default-400 truncate">{cmd.subtitle}</p>}
+                      </div>
+                    </div>
+
+                    {isSelected && (
+                      <div className="flex items-center gap-1 text-[10px] font-semibold text-primary shrink-0">
+                        <span>Ir</span>
+                        <ArrowRight size={12} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
 
           {/* Footer Shortcuts */}
