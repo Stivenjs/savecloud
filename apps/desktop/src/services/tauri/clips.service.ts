@@ -15,6 +15,9 @@ export interface ClipItem {
   createdAt: string;
   cdnUrl: string;
   watchUrl: string;
+  posterUrl?: string;
+  steamAppId?: string;
+  gameTitle?: string;
 }
 
 /**

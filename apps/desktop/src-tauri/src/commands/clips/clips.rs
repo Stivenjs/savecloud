@@ -174,6 +174,12 @@ pub struct ClipItemDto {
     pub cdn_url: String,
     #[serde(rename = "watchUrl")]
     pub watch_url: String,
+    #[serde(rename = "posterUrl", skip_serializing_if = "Option::is_none")]
+    pub poster_url: Option<String>,
+    #[serde(rename = "steamAppId", skip_serializing_if = "Option::is_none")]
+    pub steam_app_id: Option<String>,
+    #[serde(rename = "gameTitle", skip_serializing_if = "Option::is_none")]
+    pub game_title: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

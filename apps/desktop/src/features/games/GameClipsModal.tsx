@@ -213,14 +213,23 @@ export function GameClipsModal({ isOpen, onClose, game }: GameClipsModalProps) {
                         <div
                           onClick={() => setActivePreviewClipId(clip.clipId)}
                           className="w-40 sm:w-48 aspect-video rounded-lg bg-black border border-default-200 hover:border-primary/50 flex items-center justify-center relative overflow-hidden shrink-0 cursor-pointer group shadow-sm">
-                          {/* Video element decoded to 0.1s to show real thumbnail frame */}
-                          <video
-                            src={`${clip.cdnUrl}#t=0.1`}
-                            preload="metadata"
-                            muted
-                            playsInline
-                            className="w-full h-full object-cover rounded-lg group-hover:scale-105 transition-transform duration-300 pointer-events-none"
-                          />
+                          {/* Image snapshot or video decoded frame */}
+                          {clip.posterUrl ? (
+                            <img
+                              src={clip.posterUrl}
+                              alt={clip.filename}
+                              loading="lazy"
+                              className="w-full h-full object-cover rounded-lg group-hover:scale-105 transition-transform duration-300 pointer-events-none"
+                            />
+                          ) : (
+                            <video
+                              src={`${clip.cdnUrl}#t=0.1`}
+                              preload="metadata"
+                              muted
+                              playsInline
+                              className="w-full h-full object-cover rounded-lg group-hover:scale-105 transition-transform duration-300 pointer-events-none"
+                            />
+                          )}
                           <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                             <div className="size-9 rounded-full bg-black/75 border border-white/20 group-hover:bg-primary group-hover:border-primary group-hover:scale-110 flex items-center justify-center text-white transition-all shadow-lg backdrop-blur-sm">
                               <Play size={15} className="ml-0.5 fill-current" />
