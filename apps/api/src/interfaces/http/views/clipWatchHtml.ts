@@ -65,6 +65,7 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
   
   <link rel="icon" type="image/png" href="${safeLogoUrl}">
   <link rel="apple-touch-icon" href="${safeLogoUrl}">
+  <link rel="preload" as="image" href="${safePosterImage}">
 
   <meta property="og:site_name" content="SaveCloud">
   <meta property="og:title" content="Clip de ${safeGameTitle}">
@@ -1086,7 +1087,6 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
   </footer>
 
   <script>
-    // --- State & DOM Elements ---
     const playerRoot = document.getElementById('playerRoot');
     const video = document.getElementById('videoEl');
     const centerPlayBtn = document.getElementById('centerPlayBtn');
@@ -1124,7 +1124,6 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
     let feedbackTimeout = null;
     let lastTapTime = 0;
 
-    // --- Helpers ---
     function formatTime(seconds) {
       if (isNaN(seconds) || seconds < 0) return '00:00';
       const m = Math.floor(seconds / 60);
@@ -1140,7 +1139,6 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
       feedbackTimeout = setTimeout(() => feedbackHud.classList.remove('active'), 850);
     }
 
-    // --- Inactivity Auto-Hide ---
     function resetHideControlsTimer() {
       playerRoot.classList.remove('controls-hidden');
       playerRoot.classList.remove('hide-cursor');
@@ -1160,7 +1158,6 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
     playerRoot.addEventListener('touchstart', resetHideControlsTimer, { passive: true });
     playerRoot.addEventListener('touchmove', resetHideControlsTimer, { passive: true });
 
-    // --- Play / Pause ---
     function togglePlay() {
       if (video.paused || video.ended) {
         video.play().catch(() => {});
@@ -1227,7 +1224,6 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
     video.addEventListener('playing', () => playerRoot.classList.remove('is-buffering'));
     video.addEventListener('canplay', () => playerRoot.classList.remove('is-buffering'));
 
-    // --- Time & Progress Updates ---
     function updateProgress() {
       if (!isDraggingScrubber && video.duration) {
         const pct = (video.currentTime / video.duration) * 100;
@@ -1253,7 +1249,6 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
       currentTimeEl.textContent = formatTime(video.currentTime);
     });
 
-    // --- Scrubber Scrubbing ---
     function getScrubberFraction(e) {
       const rect = scrubberContainer.getBoundingClientRect();
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -1326,7 +1321,6 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
       }
     });
 
-    // --- Replay / Forward 5s ---
     replay5Btn.addEventListener('click', (e) => {
       e.stopPropagation();
       video.currentTime = Math.max(0, video.currentTime - 5);
@@ -1339,7 +1333,6 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
       showFeedback('+5s');
     });
 
-    // --- Volume & Mute ---
     function updateVolumeUI() {
       const isMuted = video.muted || video.volume === 0;
       volHighIcon.style.display = isMuted ? 'none' : 'block';
@@ -1369,7 +1362,6 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
     if (savedMuted === 'true') video.muted = true;
     updateVolumeUI();
 
-    // --- Playback Speed ---
     speedBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       speedMenu.classList.toggle('show');
@@ -1390,7 +1382,6 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
 
     document.addEventListener('click', () => speedMenu.classList.remove('show'));
 
-    // --- Loop Toggle ---
     loopBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       video.loop = !video.loop;
@@ -1398,7 +1389,6 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
       showFeedback(video.loop ? 'Bucle activado' : 'Bucle desactivado');
     });
 
-    // --- Picture in Picture ---
     pipBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       try {
@@ -1412,7 +1402,6 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
       }
     });
 
-    // --- Fullscreen ---
     function toggleFullscreen() {
       if (!document.fullscreenElement && !document.webkitFullscreenElement) {
         if (playerRoot.requestFullscreen) {
@@ -1448,7 +1437,6 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
       exitFsIcon.style.display = isFs ? 'block' : 'none';
     });
 
-    // --- Keyboard Shortcuts ---
     window.addEventListener('keydown', (e) => {
       if (['INPUT', 'TEXTAREA', 'BUTTON'].includes(document.activeElement?.tagName)) return;
 
@@ -1528,11 +1516,10 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
       shortcutsModal.classList.add('show');
     });
 
-    function closeShortcutsModal(e) {
+    function closeShortcutsModal() {
       shortcutsModal.classList.remove('show');
     }
 
-    // --- Copy & Download Actions ---
     function copyShareUrl() {
       const url = window.location.href;
       navigator.clipboard.writeText(url).then(() => {
@@ -1648,7 +1635,7 @@ export function renderNotFoundHtml(defaultCoverUrl?: string): string {
 </head>
 <body>
   <div class="card">
-    <img src="${logoUrl}" alt="SaveCloud" class="logo" />
+    <img src="${logoUrl}" alt="SaveCloud" class="logo">
     <h1>Clip no encontrado</h1>
     <p>El clip que estás buscando no existe o ha sido eliminado de la nube.</p>
   </div>
