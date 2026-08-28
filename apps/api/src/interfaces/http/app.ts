@@ -47,6 +47,8 @@ import { ListPendingTransferSessionsUseCase } from "@application/use-cases/ListP
 import type { GameInventoryRepository } from "@domain/ports/GameInventoryRepository";
 import { registerProfileRoutes } from "@interfaces/http/routes/users.routes";
 import { registerObservabilityRoutes } from "@interfaces/http/routes/observability.routes";
+import { registerClipRoutes } from "@interfaces/http/routes/clips.routes";
+import type { ClipStore } from "@infrastructure/clips/ClipStore";
 import { verifyUserAccessToken } from "@shared/accessToken";
 import { isPublicRoute } from "@interfaces/http/security/public-routes";
 import { GetFriendProfileUseCase } from "@application/use-cases/GetFriendProfileUseCase";
@@ -62,6 +64,7 @@ export interface AppDependencies {
   cloudInviteRepository?: CloudInviteRepository;
   gameInventoryRepository?: GameInventoryRepository;
   shareTokenStore?: ShareTokenS3;
+  clipStore?: ClipStore;
   notificationStore?: S3NotificationStore;
   connectionRepository?: ConnectionRepository;
   webSocketNotifier?: WebSocketNotifier;
@@ -134,6 +137,10 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
 
   if (deps.shareTokenStore) {
     await registerShareRoutes(app, deps.shareTokenStore);
+  }
+
+  if (deps.clipStore) {
+    await registerClipRoutes(app, deps.clipStore);
   }
 
   if (deps.notificationStore) {

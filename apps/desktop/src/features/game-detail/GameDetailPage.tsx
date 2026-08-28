@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { Button, Select, SelectItem, Spinner, Tab, Tabs, Skeleton } from "@heroui/react";
 import { ArrowLeft, Cpu, Gamepad2, LayoutList, ScrollText } from "lucide-react";
 import { formatGameDisplayName } from "@utils/gameImage";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   checkGamesRunning,
   forceRefreshSteamAppDetails,
@@ -26,8 +27,9 @@ import {
   removeGame,
   scheduleConfigBackupToCloud,
   syncCheckDownloadConflicts,
+  uploadGameClip,
 } from "@services/tauri";
-import type { DownloadConflict } from "@services/tauri";
+import type { DownloadConflict, SourceBestMatch } from "@services/tauri";
 import { sourcesFindMatchForGame, startSourceDownload, startPeerGameDownload } from "@services/tauri";
 import type { PeerInstallOffer } from "@services/tauri/inventory.service";
 import { usePeerInstallOffers } from "@hooks/usePeerInstallOffers";
@@ -43,6 +45,7 @@ import { FullBackupConfirmModal } from "@features/games/FullBackupConfirmModal";
 import { RestoreBackupModal } from "@features/games/RestoreBackupModal";
 import { SyncPreviewModal } from "@features/games/SyncPreviewModal";
 import { DownloadConflictModal } from "@features/games/DownloadConflictModal";
+import { GameClipsModal } from "@features/games/GameClipsModal";
 import { useGameDetail } from "@/hooks/useGameDetail";
 import { useGameDetailCloudActions } from "@/hooks/useGameDetailCloudActions";
 import { GameDetailHero } from "@features/game-detail/GameDetailHero";
@@ -92,6 +95,7 @@ export function GameDetailPage() {
   const [gameForTorrent, setGameForTorrent] = useState<ConfiguredGame | null>(null);
   const [gameToFullBackupConfirm, setGameToFullBackupConfirm] = useState<ConfiguredGame | null>(null);
   const [gameToRestoreBackup, setGameToRestoreBackup] = useState<ConfiguredGame | null>(null);
+  const [gameForClips, setGameForClips] = useState<ConfiguredGame | null>(null);
   const [downloadPreviewGameId, setDownloadPreviewGameId] = useState<string | null>(null);
   const [downloadConflictState, setDownloadConflictState] = useState<{
     gameId: string;
@@ -107,6 +111,7 @@ export function GameDetailPage() {
     protocols?: string[];
   } | null>(null);
   const [isStartingPlay, setIsStartingPlay] = useState(false);
+  const [isUploadingClip, setIsUploadingClip] = useState(false);
 
   const peerOffersHook = usePeerInstallOffers(
     steamAppId ?? game?.steamAppId,
@@ -274,6 +279,44 @@ export function GameDetailPage() {
     [t]
   );
 
+  const handleUploadClip = useCallback(
+    async (g: ConfiguredGame) => {
+      try {
+        const selected = await open({
+          multiple: false,
+          directory: false,
+          title: t("library.detail.pickClipTitle"),
+          filters: [
+            {
+              name: t("library.detail.videoFilterName"),
+              extensions: ["mp4", "webm", "mov", "mkv"],
+            },
+          ],
+        });
+
+        if (!selected || typeof selected !== "string") {
+          return;
+        }
+
+        setIsUploadingClip(true);
+        toastSuccess(t("library.toast.uploadingClipTitle"), t("library.toast.uploadingClipDesc"));
+
+        const { watchUrl } = await uploadGameClip(g.id, selected);
+
+        await navigator.clipboard.writeText(watchUrl);
+        toastSuccess(t("library.toast.clipUploadedTitle"), t("library.toast.clipUploadedDesc"));
+      } catch (e) {
+        toastError(
+          t("library.toast.clipUploadError"),
+          e instanceof Error ? e.message : t("library.toast.unexpectedError")
+        );
+      } finally {
+        setIsUploadingClip(false);
+      }
+    },
+    [t]
+  );
+
   const handleOpenGraph = useCallback(
     (g: ConfiguredGame) => {
       navigate(`/games/${g.id}/graph`);
@@ -360,7 +403,7 @@ export function GameDetailPage() {
       return;
     }
     setSelectedSourceKey((prev) => {
-      if (prev && list.some((c) => sourceCandidateKey(c) === prev)) {
+      if (prev && list.some((c: SourceBestMatch) => sourceCandidateKey(c) === prev)) {
         return prev;
       }
       return sourceCandidateKey(bestSourceMatch);
@@ -486,6 +529,7 @@ export function GameDetailPage() {
         isSyncing={isSyncing}
         isDownloading={isDownloading}
         isFullBackupUploading={fullBackupUploadingGameId === game.id}
+        isUploadingClip={isUploadingClip}
         onPlay={isSteamCatalogOnly ? undefined : handlePlay}
         onOpenGraph={isSteamCatalogOnly ? undefined : handleOpenGraph}
         onOpenFolder={isSteamCatalogOnly ? undefined : handleOpenFolder}
@@ -494,6 +538,8 @@ export function GameDetailPage() {
         onSync={!isSteamCatalogOnly && hasSyncConfig ? handleSync : undefined}
         onRecoverFromCloud={isSteamCatalogOnly ? undefined : (g) => setGameToRestoreBackup(g)}
         onShare={!isSteamCatalogOnly && hasSyncConfig ? handleShare : undefined}
+        onUploadClip={!isSteamCatalogOnly ? handleUploadClip : undefined}
+        onOpenClips={!isSteamCatalogOnly ? setGameForClips : undefined}
         onRemove={isSteamCatalogOnly ? undefined : handleRemove}
         onRefreshDetails={steamAppId ? handleRefreshDetails : undefined}
         onFullBackupUpload={!isSteamCatalogOnly && hasSyncConfig ? setGameToFullBackupConfirm : undefined}
@@ -532,7 +578,7 @@ export function GameDetailPage() {
                       setSelectedSourceKey(String(next));
                     }
                   }}>
-                  {sourceCandidates.map((c) => (
+                  {sourceCandidates.map((c: SourceBestMatch) => (
                     <SelectItem key={sourceCandidateKey(c)} textValue={`${c.source_name} — ${c.item_title}`}>
                       {c.source_name} — {c.item_title}
                     </SelectItem>
@@ -624,6 +670,7 @@ export function GameDetailPage() {
         }}
         isLoading={isDownloading && !!downloadConflictState && game?.id === downloadConflictState.gameId}
       />
+      <GameClipsModal isOpen={Boolean(gameForClips)} onClose={() => setGameForClips(null)} game={gameForClips} />
 
       {steamDetails ? (
         <div ref={tabsShellRef} className="scroll-mt-6">

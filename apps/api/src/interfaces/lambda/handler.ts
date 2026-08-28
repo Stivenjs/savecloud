@@ -15,6 +15,7 @@ import { DynamoDbGameStatRepository } from "@infrastructure/persistence/DynamoDb
 import { DynamoDbSaveFileIndexRepository } from "@infrastructure/persistence/DynamoDbSaveFileIndexRepository";
 import { DynamoDbConnectionRepository } from "@infrastructure/persistence/DynamoDbConnectionRepository";
 import { ApiGatewayNotifier } from "@infrastructure/websocket/ApiGatewayNotifier";
+import { ClipStore } from "@infrastructure/clips/ClipStore";
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -54,6 +55,7 @@ const dynamoClient = new DynamoDBClient({
 const saveRepository = new S3SaveRepository(s3, bucketName);
 const steamSeedRepository = new S3SteamSeedRepository(s3, bucketName);
 const shareTokenStore = new ShareTokenS3(s3, bucketName);
+const clipStore = new ClipStore(s3, bucketName);
 const notificationStore = new S3NotificationStore(s3, bucketName);
 const cloudInviteRepository = new S3CloudInviteRepository(s3, bucketName);
 const gameInventoryRepository = new S3GameInventoryRepository(s3, bucketName, cloudInviteRepository);
@@ -83,6 +85,7 @@ function initProxy(): Promise<Proxy> {
       saveFileIndexRepository,
       steamSeedRepository,
       shareTokenStore,
+      clipStore,
       notificationStore,
       cloudInviteRepository,
       gameInventoryRepository,

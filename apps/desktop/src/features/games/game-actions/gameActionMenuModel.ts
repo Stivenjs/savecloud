@@ -13,6 +13,7 @@ export interface GameActionsMenuModelProps {
   isSyncing?: boolean;
   isDownloading?: boolean;
   isFullBackupUploading?: boolean;
+  isUploadingClip?: boolean;
   onEdit?: (game: ConfiguredGame) => void;
   onTorrent?: (game: ConfiguredGame) => void;
   onOpenFolder?: (game: ConfiguredGame) => void;
@@ -21,14 +22,16 @@ export interface GameActionsMenuModelProps {
   onRecoverFromCloud?: (game: ConfiguredGame) => void;
   onFullBackupUpload?: (game: ConfiguredGame) => void;
   onShare?: (game: ConfiguredGame) => void;
+  onUploadClip?: (game: ConfiguredGame) => void;
+  onOpenClips?: (game: ConfiguredGame) => void;
   onRemove?: (game: ConfiguredGame) => void;
   onRefreshDetails?: (game: ConfiguredGame) => void;
 }
 
 export function getGameActionsDisabledKeys(p: GameActionsMenuModelProps): string[] {
-  const { isDownloading, isSyncing, isFullBackupUploading, isGameRunning } = p;
-  if (isDownloading || isSyncing || isFullBackupUploading) {
-    return ["folder", "recoverFromCloud", "sync", "fullBackup"];
+  const { isDownloading, isSyncing, isFullBackupUploading, isUploadingClip, isGameRunning } = p;
+  if (isDownloading || isSyncing || isFullBackupUploading || isUploadingClip) {
+    return ["folder", "recoverFromCloud", "sync", "fullBackup", "uploadClip"];
   }
   if (isGameRunning) {
     return ["recoverFromCloud", "sync", "fullBackup"];
@@ -52,6 +55,12 @@ export async function runGameAction(key: string, game: ConfiguredGame, p: GameAc
       break;
     case "share":
       p.onShare?.(game);
+      break;
+    case "uploadClip":
+      p.onUploadClip?.(game);
+      break;
+    case "clips":
+      p.onOpenClips?.(game);
       break;
     case "fullBackup":
       p.onFullBackupUpload?.(game);
@@ -83,6 +92,8 @@ export function isGameActionItemHidden(
     | "sync"
     | "fullBackup"
     | "share"
+    | "uploadClip"
+    | "clips"
     | "remove"
     | "refreshDetails",
   p: GameActionsMenuModelProps
@@ -105,6 +116,10 @@ export function isGameActionItemHidden(
       return !p.onFullBackupUpload;
     case "share":
       return !p.onShare;
+    case "uploadClip":
+      return !p.onUploadClip;
+    case "clips":
+      return !p.onOpenClips;
     case "remove":
       return !p.onRemove;
     case "refreshDetails":

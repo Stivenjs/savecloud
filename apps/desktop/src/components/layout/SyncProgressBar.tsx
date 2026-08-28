@@ -42,13 +42,17 @@ export function SyncProgressBar() {
     }
   }, [clearPausedUploadInfo]);
 
+  const isClipOperation = Boolean(progress?.filename?.startsWith("Clip:"));
   const isPackagedOperation =
     progress?.filename?.includes("Empaquetando") ||
     progress?.filename?.includes("Extrayendo") ||
     progress?.filename?.startsWith("backups/") ||
-    progress?.filename?.endsWith(".tar");
+    progress?.filename?.endsWith(".tar") ||
+    isClipOperation;
 
-  const showFloatingBar = progress && (syncOperation?.mode === "batch" || isPackagedOperation);
+  const showFloatingBar = Boolean(
+    progress && (syncOperation?.mode === "batch" || isPackagedOperation || isClipOperation)
+  );
 
   const isIndeterminate =
     progress &&

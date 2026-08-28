@@ -11,6 +11,7 @@ import { DynamoDbConnectionRepository } from "@infrastructure/persistence/Dynamo
 import { FastifyWebSocketNotifier } from "@infrastructure/websocket/FastifyWebSocketNotifier";
 import { createS3Client, createPresignS3Client, getBucketName } from "@infrastructure/factories/storageFactory";
 import { createDynamoDbClient, ensureDynamoDbTablesExist } from "@infrastructure/factories/dynamoDbFactory";
+import { ClipStore } from "@infrastructure/clips/ClipStore";
 import { startBunServer } from "@infrastructure/websocket/BunWebSocketServer";
 
 /** Puerto por defecto para el servidor HTTP de Fastify */
@@ -49,6 +50,7 @@ const dynamoClient = createDynamoDbClient();
 const saveRepository = new S3SaveRepository(s3, bucketName, presignS3);
 const steamSeedRepository = new S3SteamSeedRepository(s3, bucketName, presignS3);
 const shareTokenStore = new ShareTokenS3(s3, bucketName);
+const clipStore = new ClipStore(s3, bucketName, presignS3);
 const notificationStore = new S3NotificationStore(s3, bucketName);
 const cloudInviteRepository = new S3CloudInviteRepository(s3, bucketName);
 const gameInventoryRepository = new S3GameInventoryRepository(s3, bucketName, cloudInviteRepository);
@@ -90,6 +92,7 @@ async function main(): Promise<void> {
     saveFileIndexRepository,
     steamSeedRepository,
     shareTokenStore,
+    clipStore,
     notificationStore,
     cloudInviteRepository,
     gameInventoryRepository,

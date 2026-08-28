@@ -1,9 +1,9 @@
-//! Comandos Tauri expuestos al frontend.
-
+pub mod clips;
+pub mod emulators;
 pub mod inventory;
 pub mod logs;
 pub mod scan;
 pub mod share;
 pub mod stats;
 pub mod sync;
-pub mod emulators;
+

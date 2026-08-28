@@ -67,6 +67,14 @@ export function isPublicHttpRoute(method: string, path: string): boolean {
     return true;
   }
 
+  // Reproductor público de clips de vídeo y API de visualización
+  if (
+    upperMethod === "GET" &&
+    (path.startsWith("/v/") || path.startsWith("/clip/") || path.startsWith("/api/clips/"))
+  ) {
+    return true;
+  }
+
   // Webhook de MinIO (exclusivo para notificaciones de eventos en Docker)
   if (upperMethod === "POST" && path === "/webhooks/minio") {
     return true;

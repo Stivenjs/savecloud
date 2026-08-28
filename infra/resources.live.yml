@@ -110,7 +110,7 @@ Resources:
         function handler(event) {
           var request = event.request;
           var uri = request.uri || "";
-          if (uri.indexOf("/backups/") !== -1) {
+          if (uri.indexOf("/backups/") !== -1 || uri.indexOf("/clips/") !== -1) {
             return request;
           }
 
