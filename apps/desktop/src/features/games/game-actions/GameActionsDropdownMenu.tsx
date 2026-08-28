@@ -6,6 +6,7 @@ import {
   CloudDownload,
   CloudUpload,
   ExternalLink,
+  Film,
   FolderOpen,
   Link2,
   Magnet,
@@ -118,6 +119,26 @@ export function GameActionsDropdownMenu(props: GameActionsMenuModelProps) {
         className={isGameActionItemHidden("share", props) ? "hidden" : ""}
         startContent={<Link2 size={16} />}>
         {t("library.actionsMenu.shareLink")}
+      </DropdownItem>
+
+      <DropdownItem
+        key="uploadClip"
+        className={isGameActionItemHidden("uploadClip", props) ? "hidden" : ""}
+        startContent={
+          props.isUploadingClip ? (
+            <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          ) : (
+            <Film size={16} />
+          )
+        }>
+        {t("library.actionsMenu.uploadClip")}
+      </DropdownItem>
+
+      <DropdownItem
+        key="clips"
+        className={isGameActionItemHidden("clips", props) ? "hidden" : ""}
+        startContent={<Film size={16} />}>
+        {t("library.actionsMenu.viewClips")}
       </DropdownItem>
 
       <DropdownItem

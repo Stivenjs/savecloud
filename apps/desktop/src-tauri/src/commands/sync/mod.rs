@@ -15,7 +15,7 @@ pub mod context;
 pub mod download;
 pub mod events;
 pub mod full_backup;
-mod models;
+pub(crate) mod models;
 pub mod multipart_upload;
 pub mod preview;
 pub mod streaming;

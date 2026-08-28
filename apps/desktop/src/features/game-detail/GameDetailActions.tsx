@@ -1,5 +1,5 @@
 import { Button, Dropdown, DropdownTrigger } from "@heroui/react";
-import { ChevronDown, Gamepad2, Network, Play } from "lucide-react";
+import { ChevronDown, Film, Gamepad2, Network, Play } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import type { GameActionsMenuModelProps } from "@features/games/game-actions";
 import { GameActionsDropdownMenu } from "@features/games/game-actions";
@@ -73,6 +73,8 @@ export function GameDetailActions({
     menuProps.onSync ||
     menuProps.onFullBackupUpload ||
     menuProps.onShare ||
+    menuProps.onUploadClip ||
+    menuProps.onOpenClips ||
     onOpenGraph
   );
 
@@ -93,6 +95,12 @@ export function GameDetailActions({
           title={playTitle}
           onPress={() => onPlay(game)}>
           {playConfig.label}
+        </Button>
+      )}
+
+      {menuProps.onOpenClips && (
+        <Button variant="flat" startContent={<Film size={16} />} onPress={() => menuProps.onOpenClips?.(game)}>
+          {t("library.clips")}
         </Button>
       )}
 
