@@ -14,6 +14,7 @@
     "build:cli": "bun run scripts/build-cli.ts",
     "api-key": "bun run scripts/generate-api-key.ts",
     "api-key:live": "bun run scripts/generate-api-key.ts -- --live",
+    "clean:s3-migrated": "bun run scripts/cleanup-s3-migrated-data.ts",
     "deploy:dev": "serverless deploy --stage dev",
     "deploy:live": "serverless deploy --stage live",
     "invoke:local": "serverless invoke local -f api",

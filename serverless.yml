@@ -25,6 +25,8 @@ provider:
     CLIPS_TABLE: { Ref: ClipsTable }
     NOTIFICATIONS_TABLE: { Ref: NotificationsTable }
     SHARE_TOKENS_TABLE: { Ref: ShareTokensTable }
+    CLOUD_INVITES_TABLE: { Ref: CloudInvitesTable }
+    GAME_INVENTORY_TABLE: { Ref: GameInventoryTable }
     WS_ENDPOINT:
       Fn::Join:
         - ""
@@ -95,6 +97,10 @@ provider:
             - Fn::Join: ["/", [Fn::GetAtt: [ClipsTable, Arn], "index", "*"]]
             - Fn::GetAtt: [NotificationsTable, Arn]
             - Fn::GetAtt: [ShareTokensTable, Arn]
+            - Fn::GetAtt: [CloudInvitesTable, Arn]
+            - Fn::Join: ["/", [Fn::GetAtt: [CloudInvitesTable, Arn], "index", "*"]]
+            - Fn::GetAtt: [GameInventoryTable, Arn]
+            - Fn::Join: ["/", [Fn::GetAtt: [GameInventoryTable, Arn], "index", "*"]]
 
         - Effect: Allow
           Action:

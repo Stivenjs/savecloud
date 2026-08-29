@@ -2,7 +2,9 @@ import { buildApp } from "@interfaces/http/app";
 import { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
 import { DynamoDbNotificationStore } from "@infrastructure/persistence/DynamoDbNotificationStore";
 import { S3CloudInviteRepository } from "@infrastructure/persistence/S3CloudInviteRepository";
+import { DynamoDbCloudInviteRepository } from "@infrastructure/persistence/DynamoDbCloudInviteRepository";
 import { S3GameInventoryRepository } from "@infrastructure/persistence/S3GameInventoryRepository";
+import { DynamoDbGameInventoryRepository } from "@infrastructure/persistence/DynamoDbGameInventoryRepository";
 import { S3SaveRepository } from "@infrastructure/persistence/S3SaveRepository";
 import { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
 import { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
@@ -30,6 +32,8 @@ const DEFAULT_CONNECTIONS_TABLE = "savecloud-connections";
 const DEFAULT_CLIPS_TABLE = "savecloud-clips";
 const DEFAULT_NOTIFICATIONS_TABLE = "savecloud-notifications";
 const DEFAULT_SHARE_TOKENS_TABLE = "savecloud-share-tokens";
+const DEFAULT_CLOUD_INVITES_TABLE = "savecloud-cloud-invites";
+const DEFAULT_GAME_INVENTORY_TABLE = "savecloud-game-inventory";
 
 /**
  * Obtiene el valor de una variable de entorno de forma opcional, recortando espacios en blanco.
@@ -53,6 +57,10 @@ const notificationsTable =
   optionalEnv("NOTIFICATIONS_TABLE") || (process.env.DYNAMODB_ENDPOINT ? DEFAULT_NOTIFICATIONS_TABLE : undefined);
 const shareTokensTable =
   optionalEnv("SHARE_TOKENS_TABLE") || (process.env.DYNAMODB_ENDPOINT ? DEFAULT_SHARE_TOKENS_TABLE : undefined);
+const cloudInvitesTable =
+  optionalEnv("CLOUD_INVITES_TABLE") || (process.env.DYNAMODB_ENDPOINT ? DEFAULT_CLOUD_INVITES_TABLE : undefined);
+const gameInventoryTable =
+  optionalEnv("GAME_INVENTORY_TABLE") || (process.env.DYNAMODB_ENDPOINT ? DEFAULT_GAME_INVENTORY_TABLE : undefined);
 
 const s3 = createS3Client();
 const presignS3 = createPresignS3Client();
@@ -69,8 +77,19 @@ const clipStore = clipsTable
 const notificationStore = notificationsTable
   ? new DynamoDbNotificationStore(dynamoClient, notificationsTable, s3, bucketName)
   : new S3NotificationStore(s3, bucketName);
-const cloudInviteRepository = new S3CloudInviteRepository(s3, bucketName);
-const gameInventoryRepository = new S3GameInventoryRepository(s3, bucketName, cloudInviteRepository);
+const s3CloudInviteFallback = new S3CloudInviteRepository(s3, bucketName);
+const cloudInviteRepository = cloudInvitesTable
+  ? new DynamoDbCloudInviteRepository(dynamoClient, cloudInvitesTable, s3CloudInviteFallback)
+  : s3CloudInviteFallback;
+const s3GameInventoryFallback = new S3GameInventoryRepository(s3, bucketName, cloudInviteRepository);
+const gameInventoryRepository = gameInventoryTable
+  ? new DynamoDbGameInventoryRepository(
+      dynamoClient,
+      gameInventoryTable,
+      cloudInviteRepository,
+      s3GameInventoryFallback
+    )
+  : s3GameInventoryFallback;
 
 const gameStatRepository = gameStatsTable ? new DynamoDbGameStatRepository(dynamoClient, gameStatsTable) : undefined;
 const saveFileIndexRepository = saveFilesIndexTable
