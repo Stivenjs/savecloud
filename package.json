@@ -36,6 +36,8 @@
     "check:desktop": "bun --cwd apps/desktop check",
     "check:web": "bun --cwd apps/web check",
     "check:all": "bun run check:types && bun run check:api && bun run check:cli && bun run check:desktop && bun run check:web",
+    "test": "bun test tests/api-security-and-share.test.ts",
+    "test:api": "bun run tests/run-api-tests.ts",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "format:changed": "bun run scripts/format-changed.ts",

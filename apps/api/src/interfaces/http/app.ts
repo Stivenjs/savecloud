@@ -148,7 +148,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   });
 
   if (deps.shareTokenStore) {
-    await registerShareRoutes(app, deps.shareTokenStore);
+    await registerShareRoutes(app, deps.shareTokenStore, deps.saveRepository);
   }
 
   if (deps.clipStore) {
