@@ -37,6 +37,14 @@ Resources:
             Status: Enabled
             Prefix: game-inventory/
             ExpirationInDays: 90
+          - Id: ExpireTrash30Days
+            Status: Enabled
+            Prefix: trash/
+            ExpirationInDays: 30
+          - Id: AbortIncompleteMultipartUploads3Days
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 3
 
   # Tabla Efímera para WebSockets
   ActiveConnectionsTable:
@@ -94,3 +102,171 @@ Resources:
           KeyType: HASH
         - AttributeName: objectKey
           KeyType: RANGE
+
+  ClipsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-Clips
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+        - AttributeName: clipId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: createdAt
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: ClipIdIndex
+          KeySchema:
+            - AttributeName: clipId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  NotificationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-Notifications
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: id
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAtEpoch
+        Enabled: true
+
+  ShareTokensTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-ShareTokens
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: token
+          AttributeType: S
+      KeySchema:
+        - AttributeName: token
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAtEpoch
+        Enabled: true
+
+  CloudInvitesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-CloudInvites
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: gsi1pk
+          AttributeType: S
+        - AttributeName: gsi1sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: gsi1pk
+              KeyType: HASH
+            - AttributeName: gsi1sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: expiresAtEpoch
+        Enabled: true
+
+  GameInventoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-GameInventory
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: gsi1pk
+          AttributeType: S
+        - AttributeName: gsi1sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: gsi1pk
+              KeyType: HASH
+            - AttributeName: gsi1sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: expiresAtEpoch
+        Enabled: true
+
+  # Cola SQS para procesamiento por lotes de eventos S3 (syncGameStats)
+  SyncGameStatsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: ${sls:stage}-SyncGameStatsQueue
+      VisibilityTimeout: 180
+      MessageRetentionPeriod: 86400
+
+  SyncGameStatsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - Ref: SyncGameStatsQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowEventBridgeToSendMessage
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource:
+              Fn::GetAtt: [SyncGameStatsQueue, Arn]
+
+  SyncGameStatsEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: ${sls:stage}-SyncGameStatsRule
+      Description: "Captura eventos de archivos en S3 y los enruta hacia la cola SQS para procesamiento por lotes"
+      EventPattern:
+        Fn::Sub: >
+          {
+            "source": ["aws.s3"],
+            "detail-type": ["Object Created", "Object Deleted"],
+            "detail": {
+              "bucket": {
+                "name": ["${SavesBucket}"]
+              }
+            }
+          }
+      Targets:
+        - Id: SyncGameStatsQueueTarget
+          Arn:
+            Fn::GetAtt: [SyncGameStatsQueue, Arn]

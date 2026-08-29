@@ -31,7 +31,17 @@ pub struct ShareResponse {
     pub share_url: String,
 }
 
-/// Información básica recuperada al resolver un token de compartición.
+/// Información de un archivo dentro del recurso compartido.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ShareFileInfo {
+    pub filename: String,
+    #[serde(default)]
+    pub size: Option<u64>,
+    #[serde(default)]
+    pub key: Option<String>,
+}
+
+/// Información recuperada al resolver un token de compartición.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ResolvedShare {
     /// Identificador del usuario propietario del recurso.
@@ -40,6 +50,15 @@ pub struct ResolvedShare {
     /// Identificador del juego asociado.
     #[serde(rename = "gameId")]
     pub game_id: String,
+    /// Fecha de expiración en formato ISO.
+    #[serde(rename = "expiresAt", default)]
+    pub expires_at: Option<String>,
+    /// Lista de archivos asociados al juego compartido.
+    #[serde(default)]
+    pub files: Option<Vec<ShareFileInfo>>,
+    /// Indica si el juego fue respaldado en formato empaquetado (.tar).
+    #[serde(rename = "isPackaged", default)]
+    pub is_packaged: Option<bool>,
 }
 
 /// Crea un enlace de compartición remoto invocando la API de SaveCloud.

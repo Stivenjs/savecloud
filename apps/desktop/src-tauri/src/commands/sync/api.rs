@@ -392,9 +392,13 @@ pub async fn sync_list_remote_saves_for_user(
 }
 
 #[tauri::command]
-pub async fn sync_delete_game_from_cloud(game_id: String) -> Result<(), String> {
+pub async fn sync_delete_game_from_cloud(game_id: String, permanent: Option<bool>) -> Result<(), String> {
     let ctx = get_api_context()?;
-    let body = serde_json::json!({ "gameId": game_id.trim() }).to_string();
+    let is_perm = permanent.unwrap_or(false);
+    let body = serde_json::json!({
+        "gameId": game_id.trim(),
+        "permanent": is_perm
+    }).to_string();
 
     let res = api_request(
         &ctx.base_url,
@@ -410,6 +414,133 @@ pub async fn sync_delete_game_from_cloud(game_id: String) -> Result<(), String> 
     if !res.status().is_success() && res.status().as_u16() != 204 {
         return Err(format!(
             "API delete-game: {} {}",
+            res.status(),
+            res.text().await.unwrap_or_default()
+        ));
+    }
+    Ok(())
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashFileItem {
+    pub filename: String,
+    pub size: u64,
+    pub last_modified: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashGameItem {
+    pub game_id: String,
+    pub total_files: usize,
+    pub total_size_bytes: u64,
+    pub deleted_at: String,
+    pub expires_at: String,
+    pub files: Vec<TrashFileItem>,
+}
+
+#[derive(serde::Deserialize)]
+struct TrashListResponse {
+    items: Vec<TrashGameItem>,
+}
+
+#[tauri::command]
+pub async fn sync_list_trash() -> Result<Vec<TrashGameItem>, String> {
+    let ctx = get_api_context()?;
+    let res = api_request(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        "GET",
+        "/trash",
+        None,
+    )
+    .await
+    .map_err(|e| format!("list-trash: {}", e))?;
+
+    if !res.status().is_success() {
+        return Err(format!("API list-trash: {}", res.status()));
+    }
+
+    let parsed: TrashListResponse = res
+        .json()
+        .await
+        .map_err(|e| format!("list-trash parse: {}", e))?;
+
+    Ok(parsed.items)
+}
+
+#[tauri::command]
+pub async fn sync_restore_from_trash(game_id: String) -> Result<(), String> {
+    let ctx = get_api_context()?;
+    let body = serde_json::json!({ "gameId": game_id.trim() }).to_string();
+
+    let res = api_request(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        "POST",
+        "/trash/restore",
+        Some(body.as_bytes()),
+    )
+    .await
+    .map_err(|e| format!("restore-from-trash: {}", e))?;
+
+    if !res.status().is_success() && res.status().as_u16() != 204 {
+        return Err(format!(
+            "API restore-from-trash: {} {}",
+            res.status(),
+            res.text().await.unwrap_or_default()
+        ));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn sync_delete_from_trash(game_id: String) -> Result<(), String> {
+    let ctx = get_api_context()?;
+    let body = serde_json::json!({ "gameId": game_id.trim() }).to_string();
+
+    let res = api_request(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        "POST",
+        "/trash/delete",
+        Some(body.as_bytes()),
+    )
+    .await
+    .map_err(|e| format!("delete-from-trash: {}", e))?;
+
+    if !res.status().is_success() && res.status().as_u16() != 204 {
+        return Err(format!(
+            "API delete-from-trash: {} {}",
+            res.status(),
+            res.text().await.unwrap_or_default()
+        ));
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn sync_empty_trash() -> Result<(), String> {
+    let ctx = get_api_context()?;
+
+    let res = api_request(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        "POST",
+        "/trash/empty",
+        None,
+    )
+    .await
+    .map_err(|e| format!("empty-trash: {}", e))?;
+
+    if !res.status().is_success() && res.status().as_u16() != 204 {
+        return Err(format!(
+            "API empty-trash: {} {}",
             res.status(),
             res.text().await.unwrap_or_default()
         ));

@@ -1,5 +1,5 @@
-import { Button, Dropdown, DropdownTrigger } from "@heroui/react";
-import { ChevronDown, Film, Gamepad2, Network, Play } from "lucide-react";
+import { Button, Dropdown, DropdownTrigger, Tooltip } from "@heroui/react";
+import { Ellipsis, Film, Gamepad2, Network, Play } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import type { GameActionsMenuModelProps } from "@features/games/game-actions";
 import { GameActionsDropdownMenu } from "@features/games/game-actions";
@@ -48,7 +48,7 @@ export function GameDetailActions({
     if (isGameRunning) {
       return {
         label: t("library.running"),
-        icon: <Gamepad2 size={18} />,
+        icon: <Gamepad2 size={20} />,
         isLoading: false,
         color: "success" as const,
         variant: "flat" as const,
@@ -56,7 +56,7 @@ export function GameDetailActions({
     }
     return {
       label: t("library.launch"),
-      icon: <Play size={18} />,
+      icon: <Play size={20} />,
       isLoading: false,
       color: "primary" as const,
       variant: "solid" as const,
@@ -83,53 +83,70 @@ export function GameDetailActions({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      {/* Solo mostramos el botón Jugar si la vista padre autorizó la función onPlay */}
+    <div className="flex items-center gap-2">
       {onPlay && (
         <Button
           color={playConfig.color}
           variant={playConfig.variant}
+          size="lg"
           isLoading={playConfig.isLoading}
           startContent={playConfig.icon}
           isDisabled={playDisabled}
           title={playTitle}
+          className="h-11 min-w-32 gap-2 px-6 text-sm font-bold shadow-md shadow-primary/20 transition-all duration-200 active:scale-[0.97]"
           onPress={() => onPlay(game)}>
           {playConfig.label}
         </Button>
       )}
 
-      {menuProps.onOpenClips && (
-        <Button variant="flat" startContent={<Film size={16} />} onPress={() => menuProps.onOpenClips?.(game)}>
-          {t("library.clips")}
-        </Button>
-      )}
-
-      {onOpenGraph && (
-        <Button variant="flat" startContent={<Network size={16} />} onPress={() => onOpenGraph(game)}>
-          {t("library.viewMap")}
-        </Button>
-      )}
-
-      {/* Solo mostramos el Dropdown si hay acciones válidas */}
-      {hasActions && (
-        <Dropdown placement="bottom-end">
-          <DropdownTrigger>
-            <Button variant="bordered" endContent={<ChevronDown size={16} />}>
-              {t("common.actions")}
+      <div className="flex items-center gap-1">
+        {menuProps.onOpenClips && (
+          <Tooltip content={t("library.clips")} delay={400} closeDelay={0}>
+            <Button
+              variant="light"
+              isIconOnly
+              size="sm"
+              className="text-default-500 hover:text-foreground"
+              onPress={() => menuProps.onOpenClips?.(game)}>
+              <Film size={17} strokeWidth={1.5} />
             </Button>
-          </DropdownTrigger>
-          <GameActionsDropdownMenu
-            surface="detail"
-            game={game}
-            isGameRunning={isGameRunning}
-            isUploadTooLarge={isUploadTooLarge}
-            isSyncing={isSyncing}
-            isDownloading={isDownloading}
-            isFullBackupUploading={isFullBackupUploading}
-            {...menuProps}
-          />
-        </Dropdown>
-      )}
+          </Tooltip>
+        )}
+
+        {onOpenGraph && (
+          <Tooltip content={t("library.viewMap")} delay={400} closeDelay={0}>
+            <Button
+              variant="light"
+              isIconOnly
+              size="sm"
+              className="text-default-500 hover:text-foreground"
+              onPress={() => onOpenGraph(game)}>
+              <Network size={17} strokeWidth={1.5} />
+            </Button>
+          </Tooltip>
+        )}
+
+        {/* Solo mostramos el Dropdown si hay acciones válidas */}
+        {hasActions && (
+          <Dropdown placement="bottom-end">
+            <DropdownTrigger>
+              <Button variant="light" isIconOnly size="sm" className="text-default-500 hover:text-foreground">
+                <Ellipsis size={18} strokeWidth={1.5} />
+              </Button>
+            </DropdownTrigger>
+            <GameActionsDropdownMenu
+              surface="detail"
+              game={game}
+              isGameRunning={isGameRunning}
+              isUploadTooLarge={isUploadTooLarge}
+              isSyncing={isSyncing}
+              isDownloading={isDownloading}
+              isFullBackupUploading={isFullBackupUploading}
+              {...menuProps}
+            />
+          </Dropdown>
+        )}
+      </div>
     </div>
   );
 }

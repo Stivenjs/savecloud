@@ -4,9 +4,18 @@ export interface CreateShareResult {
   shareUrl: string;
 }
 
+export interface ShareFileItem {
+  filename: string;
+  size?: number;
+  key?: string;
+}
+
 export interface ResolveShareResult {
   userId: string;
   gameId: string;
+  expiresAt?: string;
+  files?: ShareFileItem[];
+  isPackaged?: boolean;
 }
 
 /**

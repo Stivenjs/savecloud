@@ -20,6 +20,7 @@ export type RenameBackupBody = Static<typeof RenameBackupSchema>;
 
 export const GameIdOnlySchema = Type.Object({
   gameId: Type.String({ minLength: 1 }),
+  permanent: Type.Optional(Type.Boolean()),
 });
 export type GameIdOnlyBody = Static<typeof GameIdOnlySchema>;
 

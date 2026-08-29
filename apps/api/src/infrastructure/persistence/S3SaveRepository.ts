@@ -25,28 +25,15 @@ import type {
   UploadUrlItem,
   UploadUrlResult,
 } from "@domain/ports/SaveRepository";
-import { resolvePublicUrl } from "@infrastructure/factories/storageFactory";
 
 export const PRESIGN_EXPIRES_IN_SECONDS = 3600;
 const DOWNLOAD_BASE_URL = process.env.DOWNLOAD_BASE_URL;
 
 /**
- * Máximo de presignados en paralelo hacia S3.
- *
- * Sin límite, 500 items disparan 500 peticiones simultáneas que pueden
- * provocar throttling (503 SlowDown) de S3 o agotar el pool de sockets
- * del SDK. 50 concurrentes es suficiente para saturar el ancho de banda
- * disponible sin presionar al servicio.
- */
-const PRESIGN_CONCURRENCY = 50;
-
-/**
  * Máximo de CopyObject en paralelo durante renameGame.
  *
- * CopyObject es más costoso que un presignado porque implica I/O interno
- * en S3. Se acota más bajo que PRESIGN_CONCURRENCY para evitar que un
- * rename de juego con cientos de archivos consuma todo el throughput de
- * la cuenta.
+ * CopyObject es costoso porque implica I/O interno en S3.
+ * Se acota a 20 concurrentes para evitar saturar el throughput de la cuenta.
  */
 const COPY_CONCURRENCY = 20;
 
@@ -209,10 +196,8 @@ export class S3SaveRepository implements SaveRepository {
 
   /**
    * Genera URLs de subida presignadas para un lote de archivos.
-   *
-   * Las peticiones al SDK de S3 se ejecutan en paralelo con un límite de
-   * {@link PRESIGN_CONCURRENCY} concurrentes para evitar throttling y no
-   * saturar el pool de sockets.
+   * La firma criptográfica de URLs (getSignedUrl) es puramente en memoria / CPU
+   * y se ejecuta en paralelo directo para máxima velocidad sin latencia añadida.
    *
    * @param userId - Identificador del usuario propietario.
    * @param items  - Lista de pares gameId/filename a presignar.
@@ -223,27 +208,21 @@ export class S3SaveRepository implements SaveRepository {
       throw new Error("BUCKET_NAME is not configured in the server");
     }
 
-    const limit = pLimit(PRESIGN_CONCURRENCY);
     const options = { expiresIn: PRESIGN_EXPIRES_IN_SECONDS };
 
     return Promise.all(
-      items.map(({ gameId, filename }) =>
-        limit(async () => {
-          const key = `${userId}/${gameId}/${filename}`;
-          const command = new PutObjectCommand({ Bucket: this.bucketName, Key: key });
-          const uploadUrl = await getSignedUrl(this.presignS3, command, options);
-          return { uploadUrl, key, gameId, filename };
-        })
-      )
+      items.map(async ({ gameId, filename }) => {
+        const key = `${userId}/${gameId}/${filename}`;
+        const command = new PutObjectCommand({ Bucket: this.bucketName, Key: key });
+        const uploadUrl = await getSignedUrl(this.presignS3, command, options);
+        return { uploadUrl, key, gameId, filename };
+      })
     );
   }
 
   /**
-   * Genera URLs de descarga presignadas (o de CloudFront) para un lote de
-   * archivos.
-   *
-   * Las peticiones al SDK de S3 se ejecutan con concurrencia acotada igual
-   * que en {@link getUploadUrls}.
+   * Genera URLs de descarga presignadas (o de CloudFront) para un lote de archivos.
+   * Ejecuta la firma en paralelo directo para respuesta inmediata.
    *
    * @param _userId - No se usa para construir la URL; la key ya es completa.
    * @param items   - Lista de pares gameId/key.
@@ -251,20 +230,17 @@ export class S3SaveRepository implements SaveRepository {
   async getDownloadUrls(_userId: string, items: DownloadUrlItem[]): Promise<DownloadUrlResult[]> {
     if (items.length === 0) return [];
 
-    const limit = pLimit(PRESIGN_CONCURRENCY);
     const options = { expiresIn: PRESIGN_EXPIRES_IN_SECONDS };
 
     return Promise.all(
-      items.map(({ gameId, key }) =>
-        limit(async () => {
-          const cloudFrontUrl = S3SaveRepository.buildCloudFrontUrl(key);
-          if (cloudFrontUrl) return { downloadUrl: cloudFrontUrl, gameId, key };
+      items.map(async ({ gameId, key }) => {
+        const cloudFrontUrl = S3SaveRepository.buildCloudFrontUrl(key);
+        if (cloudFrontUrl) return { downloadUrl: cloudFrontUrl, gameId, key };
 
-          const command = new GetObjectCommand({ Bucket: this.bucketName, Key: key });
-          const downloadUrl = await getSignedUrl(this.presignS3, command, options);
-          return { downloadUrl, gameId, key };
-        })
-      )
+        const command = new GetObjectCommand({ Bucket: this.bucketName, Key: key });
+        const downloadUrl = await getSignedUrl(this.presignS3, command, options);
+        return { downloadUrl, gameId, key };
+      })
     );
   }
 
@@ -288,22 +264,19 @@ export class S3SaveRepository implements SaveRepository {
   }
 
   async getUploadPartUrls(key: string, uploadId: string, partNumbers: number[]): Promise<UploadPartUrl[]> {
-    const limit = pLimit(PRESIGN_CONCURRENCY);
     const options = { expiresIn: PRESIGN_EXPIRES_IN_SECONDS };
 
     return Promise.all(
-      partNumbers.map((partNumber) =>
-        limit(async () => {
-          const command = new UploadPartCommand({
-            Bucket: this.bucketName,
-            Key: key,
-            UploadId: uploadId,
-            PartNumber: partNumber,
-          });
-          const url = await getSignedUrl(this.presignS3, command, options);
-          return { partNumber, url };
-        })
-      )
+      partNumbers.map(async (partNumber) => {
+        const command = new UploadPartCommand({
+          Bucket: this.bucketName,
+          Key: key,
+          UploadId: uploadId,
+          PartNumber: partNumber,
+        });
+        const url = await getSignedUrl(this.presignS3, command, options);
+        return { partNumber, url };
+      })
     );
   }
 
@@ -504,15 +477,17 @@ export class S3SaveRepository implements SaveRepository {
 
   /**
    * Elimina todos los objetos de un juego del bucket.
+   * Por defecto, los mueve a la papelera (trash/) a menos que options.permanent sea true.
    * @param userId - Identificador del usuario.
    * @param gameId - Identificador del juego a eliminar.
+   * @param options - Opciones de eliminación (ej. permanent: true).
    */
-  async deleteGame(userId: string, gameId: string): Promise<void> {
+  async deleteGame(userId: string, gameId: string, options?: { permanent?: boolean }): Promise<void> {
     const prefix = `${userId}/${gameId}/`;
     const deleteLimit = pLimit(DELETE_BATCH_CONCURRENCY);
+    const isPermanent = options?.permanent === true;
 
     const deletePromises: Promise<unknown>[] = [];
-
     let continuationToken: string | undefined;
 
     do {
@@ -527,6 +502,26 @@ export class S3SaveRepository implements SaveRepository {
       const keys = (list.Contents ?? []).filter((c): c is { Key: string } => !!c.Key).map((c) => ({ Key: c.Key }));
 
       if (keys.length > 0) {
+        if (!isPermanent) {
+          // Copiar a papelera trash/ antes de borrar para permitir recuperación durante 30 días
+          const copyPromises = keys.map(({ Key }) =>
+            deleteLimit(() =>
+              this.s3
+                .send(
+                  new CopyObjectCommand({
+                    Bucket: this.bucketName,
+                    CopySource: `${this.bucketName}/${encodeURIComponent(Key)}`,
+                    Key: `trash/${Key}`,
+                  })
+                )
+                .catch((err) => {
+                  console.warn(`[S3SaveRepository] No se pudo mover a papelera ${Key}:`, err);
+                })
+            )
+          );
+          await Promise.all(copyPromises);
+        }
+
         for (const batch of S3SaveRepository.chunk(keys, DELETE_BATCH_SIZE)) {
           deletePromises.push(
             deleteLimit(() =>
@@ -545,6 +540,211 @@ export class S3SaveRepository implements SaveRepository {
     } while (continuationToken);
 
     await Promise.all(deletePromises);
+  }
+
+  /**
+   * Lista los juegos almacenados en la papelera de reciclaje de un usuario.
+   */
+  async listTrash(userId: string): Promise<import("@savecloud/types").TrashGameItem[]> {
+    const prefix = `trash/${userId}/`;
+    const gamesMap = new Map<
+      string,
+      {
+        files: import("@savecloud/types").TrashFileItem[];
+        totalSize: number;
+        earliestDate: Date;
+        latestDate: Date;
+      }
+    >();
+
+    let continuationToken: string | undefined;
+
+    do {
+      const list = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucketName,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        })
+      );
+
+      for (const obj of list.Contents ?? []) {
+        if (!obj.Key) continue;
+        // Key format: trash/{userId}/{gameId}/{filename...}
+        const rel = obj.Key.slice(prefix.length);
+        const slashIdx = rel.indexOf("/");
+        if (slashIdx < 0) continue;
+
+        const gameId = rel.slice(0, slashIdx);
+        const filename = rel.slice(slashIdx + 1);
+        if (!filename) continue;
+
+        const size = obj.Size ?? 0;
+        const modified = obj.LastModified ?? new Date();
+
+        let entry = gamesMap.get(gameId);
+        if (!entry) {
+          entry = {
+            files: [],
+            totalSize: 0,
+            earliestDate: modified,
+            latestDate: modified,
+          };
+          gamesMap.set(gameId, entry);
+        }
+
+        entry.files.push({
+          filename,
+          size,
+          lastModified: modified.toISOString(),
+        });
+        entry.totalSize += size;
+        if (modified < entry.earliestDate) entry.earliestDate = modified;
+        if (modified > entry.latestDate) entry.latestDate = modified;
+      }
+
+      continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    const items: import("@savecloud/types").TrashGameItem[] = [];
+    for (const [gameId, data] of gamesMap.entries()) {
+      const deletedAt = data.latestDate.toISOString();
+      const expiresDate = new Date(data.latestDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+      items.push({
+        gameId,
+        totalFiles: data.files.length,
+        totalSizeBytes: data.totalSize,
+        deletedAt,
+        expiresAt: expiresDate.toISOString(),
+        files: data.files,
+      });
+    }
+
+    return items.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
+  }
+
+  /**
+   * Restaura un juego desde la papelera de reciclaje a su ubicación activa.
+   */
+  async restoreFromTrash(userId: string, gameId: string): Promise<void> {
+    const trashPrefix = `trash/${userId}/${gameId}/`;
+    const targetPrefix = `${userId}/${gameId}/`;
+    const copyLimit = pLimit(DELETE_BATCH_CONCURRENCY);
+
+    let continuationToken: string | undefined;
+    const keysToDelete: { Key: string }[] = [];
+
+    do {
+      const list = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucketName,
+          Prefix: trashPrefix,
+          ContinuationToken: continuationToken,
+        })
+      );
+
+      const contents = (list.Contents ?? []).filter((c): c is { Key: string } => !!c.Key);
+
+      if (contents.length > 0) {
+        const copyPromises = contents.map(({ Key }) => {
+          const relFilename = Key.slice(trashPrefix.length);
+          const targetKey = `${targetPrefix}${relFilename}`;
+          keysToDelete.push({ Key });
+
+          return copyLimit(() =>
+            this.s3.send(
+              new CopyObjectCommand({
+                Bucket: this.bucketName,
+                CopySource: `${this.bucketName}/${encodeURIComponent(Key)}`,
+                Key: targetKey,
+              })
+            )
+          );
+        });
+
+        await Promise.all(copyPromises);
+      }
+
+      continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    if (keysToDelete.length > 0) {
+      for (const batch of S3SaveRepository.chunk(keysToDelete, DELETE_BATCH_SIZE)) {
+        await this.s3.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucketName,
+            Delete: { Objects: batch, Quiet: true },
+          })
+        );
+      }
+    }
+  }
+
+  /**
+   * Elimina definitivamente un juego de la papelera.
+   */
+  async deleteFromTrash(userId: string, gameId: string): Promise<void> {
+    const trashPrefix = `trash/${userId}/${gameId}/`;
+    let continuationToken: string | undefined;
+
+    do {
+      const list = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucketName,
+          Prefix: trashPrefix,
+          ContinuationToken: continuationToken,
+        })
+      );
+
+      const keys = (list.Contents ?? []).filter((c): c is { Key: string } => !!c.Key).map((c) => ({ Key: c.Key }));
+
+      if (keys.length > 0) {
+        for (const batch of S3SaveRepository.chunk(keys, DELETE_BATCH_SIZE)) {
+          await this.s3.send(
+            new DeleteObjectsCommand({
+              Bucket: this.bucketName,
+              Delete: { Objects: batch, Quiet: true },
+            })
+          );
+        }
+      }
+
+      continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
+    } while (continuationToken);
+  }
+
+  /**
+   * Vacía toda la papelera del usuario.
+   */
+  async emptyTrash(userId: string): Promise<void> {
+    const trashPrefix = `trash/${userId}/`;
+    let continuationToken: string | undefined;
+
+    do {
+      const list = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucketName,
+          Prefix: trashPrefix,
+          ContinuationToken: continuationToken,
+        })
+      );
+
+      const keys = (list.Contents ?? []).filter((c): c is { Key: string } => !!c.Key).map((c) => ({ Key: c.Key }));
+
+      if (keys.length > 0) {
+        for (const batch of S3SaveRepository.chunk(keys, DELETE_BATCH_SIZE)) {
+          await this.s3.send(
+            new DeleteObjectsCommand({
+              Bucket: this.bucketName,
+              Delete: { Objects: batch, Quiet: true },
+            })
+          );
+        }
+      }
+
+      continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
+    } while (continuationToken);
   }
 
   /**

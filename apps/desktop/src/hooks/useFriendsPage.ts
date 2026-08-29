@@ -42,7 +42,8 @@ export type ShareLinkPreview = {
   gameId: string;
   gameName?: string;
   friendGame?: ConfiguredGame;
-  files: { filename: string; size?: number }[];
+  files: { filename: string; size?: number; key?: string }[];
+  isPackaged?: boolean;
 };
 
 /** Preview antes de confirmar la copia de guardados del amigo a tu nube. */
@@ -519,21 +520,36 @@ export function useFriendsPage() {
     dispatch({ type: "SET_SHARE_LINK_LOADING", payload: true });
     dispatch({ type: "SET_SHARE_LINK_PREVIEW", payload: null });
     try {
-      const { userId, gameId } = await resolveShareToken(token);
-      const [friendCfg, saves] = await Promise.all([
-        getFriendConfig(userId).catch(() => null),
-        syncListRemoteSavesForUser(userId),
-      ]);
-      const gameSaves = saves.filter((s) => s.gameId.toLowerCase() === gameId.toLowerCase());
+      const shareData = await resolveShareToken(token);
+      const { userId, gameId } = shareData;
+
+      let gameFiles: { filename: string; size?: number; key?: string }[] = (shareData.files || []).map((s) => ({
+        filename: s.filename,
+        size: s.size,
+        key: s.key,
+      }));
+
+      if (gameFiles.length === 0) {
+        const saves = await syncListRemoteSavesForUser(userId).catch(() => []);
+        gameFiles = saves
+          .filter((s) => s.gameId.toLowerCase() === gameId.toLowerCase())
+          .map((s) => ({ filename: s.filename, size: s.size, key: s.key }));
+      }
+
+      const friendCfg = await getFriendConfig(userId).catch(() => null);
       const friendGame = findConfiguredGame(friendCfg?.games, gameId);
+      const isPackaged =
+        shareData.isPackaged ?? gameFiles.some((f) => f.filename.startsWith("backups/") || f.filename.endsWith(".tar"));
+
       dispatch({
         type: "SET_SHARE_LINK_PREVIEW",
         payload: {
           userId,
           gameId,
-          gameName: friendGame?.id,
+          gameName: friendGame?.id || gameId,
           friendGame: friendGame ?? undefined,
-          files: gameSaves.map((s) => ({ filename: s.filename, size: s.size })),
+          files: gameFiles,
+          isPackaged,
         },
       });
     } catch (e) {
@@ -548,10 +564,21 @@ export function useFriendsPage() {
 
   const handleConfirmShareLinkImport = async () => {
     if (!shareLinkPreview) return;
-    const { userId, gameId, friendGame } = shareLinkPreview;
+    const { userId, gameId, friendGame, files } = shareLinkPreview;
     dispatch({ type: "SET_SHARE_LINK_CONFIRM_LOADING", payload: true });
     try {
-      const result = await copyFriendSaves(userId, gameId);
+      let result;
+      if (files && files.length > 0) {
+        const plan = files.map((f) => ({
+          key: f.key || `${userId}/${gameId}/${f.filename}`,
+          filename: f.filename,
+          targetFilename: f.filename,
+        }));
+        result = await copyFriendSavesWithPlan(userId, gameId, plan);
+      } else {
+        result = await copyFriendSaves(userId, gameId);
+      }
+
       const alreadyHave = ourGameIds.has(gameId.toLowerCase());
       if (!alreadyHave) {
         const gameToAdd = friendGame

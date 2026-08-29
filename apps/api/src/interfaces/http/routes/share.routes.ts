@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
+import type { DynamoDbShareTokenStore } from "@infrastructure/share/DynamoDbShareTokenStore";
+import type { SaveRepository } from "@domain/ports/SaveRepository";
 
 const USER_ID_HEADER = "x-user-id";
 const MAX_TTL_SECONDS = 365 * 24 * 60 * 60;
@@ -28,7 +30,11 @@ function resolveTtlSeconds(expiresInDays: unknown): number {
   return DEFAULT_TTL_SECONDS;
 }
 
-export async function registerShareRoutes(app: FastifyInstance, shareTokenStore: ShareTokenS3): Promise<void> {
+export async function registerShareRoutes(
+  app: FastifyInstance,
+  shareTokenStore: ShareTokenS3 | DynamoDbShareTokenStore,
+  saveRepository?: SaveRepository
+): Promise<void> {
   app.post<{
     Body: { gameId?: string; expiresInDays?: number };
   }>("/share", async (request, reply: FastifyReply) => {
@@ -58,12 +64,32 @@ export async function registerShareRoutes(app: FastifyInstance, shareTokenStore:
       const result = await shareTokenStore.getToken(token);
 
       switch (result.status) {
-        case "ok":
+        case "ok": {
+          let files: { filename: string; size?: number; key: string }[] = [];
+          let isPackaged = false;
+
+          if (saveRepository) {
+            try {
+              const saves = await saveRepository.listByUserAndGame(result.payload.userId, result.payload.gameId);
+              files = saves.map((s) => ({
+                filename: s.filename,
+                size: s.size,
+                key: s.key,
+              }));
+              isPackaged = files.some((f) => f.filename.startsWith("backups/") || f.filename.endsWith(".tar"));
+            } catch (err) {
+              request.log.warn({ err }, "Could not resolve save files for share token");
+            }
+          }
+
           return reply.send({
             userId: result.payload.userId,
             gameId: result.payload.gameId,
             expiresAt: result.payload.expiresAt,
+            files,
+            isPackaged,
           });
+        }
 
         case "expired":
           return reply.status(410).send({

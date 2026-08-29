@@ -48,7 +48,15 @@ import type { GameInventoryRepository } from "@domain/ports/GameInventoryReposit
 import { registerProfileRoutes } from "@interfaces/http/routes/users.routes";
 import { registerObservabilityRoutes } from "@interfaces/http/routes/observability.routes";
 import { registerClipRoutes } from "@interfaces/http/routes/clips.routes";
+import { registerTrashRoutes } from "@interfaces/http/routes/trash.routes";
+import { ListTrashUseCase } from "@application/use-cases/ListTrashUseCase";
+import { RestoreFromTrashUseCase } from "@application/use-cases/RestoreFromTrashUseCase";
+import { DeleteFromTrashUseCase } from "@application/use-cases/DeleteFromTrashUseCase";
+import { EmptyTrashUseCase } from "@application/use-cases/EmptyTrashUseCase";
 import type { ClipStore } from "@infrastructure/clips/ClipStore";
+import type { DynamoDbClipStore } from "@infrastructure/clips/DynamoDbClipStore";
+import type { DynamoDbNotificationStore } from "@infrastructure/persistence/DynamoDbNotificationStore";
+import type { DynamoDbShareTokenStore } from "@infrastructure/share/DynamoDbShareTokenStore";
 import { verifyUserAccessToken } from "@shared/accessToken";
 import { isPublicRoute } from "@interfaces/http/security/public-routes";
 import { GetFriendProfileUseCase } from "@application/use-cases/GetFriendProfileUseCase";
@@ -63,9 +71,9 @@ export interface AppDependencies {
   steamSeedRepository?: S3SteamSeedRepository;
   cloudInviteRepository?: CloudInviteRepository;
   gameInventoryRepository?: GameInventoryRepository;
-  shareTokenStore?: ShareTokenS3;
-  clipStore?: ClipStore;
-  notificationStore?: S3NotificationStore;
+  shareTokenStore?: ShareTokenS3 | DynamoDbShareTokenStore;
+  clipStore?: ClipStore | DynamoDbClipStore;
+  notificationStore?: S3NotificationStore | DynamoDbNotificationStore;
   connectionRepository?: ConnectionRepository;
   webSocketNotifier?: WebSocketNotifier;
 }
@@ -97,6 +105,15 @@ interface SavesRouteUseCases {
 declare module "fastify" {
   interface FastifyRequest {
     _scMetricsStartNs?: bigint;
+    awsLambda?: {
+      event?: {
+        requestContext?: {
+          authorizer?: {
+            lambda?: Record<string, unknown>;
+          };
+        };
+      };
+    };
   }
 }
 
@@ -110,7 +127,10 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   });
 
   await app.register(cors, { origin: true });
-  await app.register(import("@fastify/compress"));
+  await app.register(import("@fastify/compress"), {
+    threshold: 512,
+    encodings: ["br", "gzip", "deflate"],
+  });
   await app.register(import("@fastify/websocket"));
 
   await app.register(rateLimit, {
@@ -136,7 +156,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   });
 
   if (deps.shareTokenStore) {
-    await registerShareRoutes(app, deps.shareTokenStore);
+    await registerShareRoutes(app, deps.shareTokenStore, deps.saveRepository);
   }
 
   if (deps.clipStore) {
@@ -193,6 +213,12 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
 
   await registerWebhookRoutes(app, { processS3EventUseCase });
   await registerWebSocketRoutes(app, { connectionRepository: deps.connectionRepository });
+  await registerTrashRoutes(app, {
+    listTrashUseCase: new ListTrashUseCase(deps.saveRepository),
+    restoreFromTrashUseCase: new RestoreFromTrashUseCase(deps.saveRepository),
+    deleteFromTrashUseCase: new DeleteFromTrashUseCase(deps.saveRepository),
+    emptyTrashUseCase: new EmptyTrashUseCase(deps.saveRepository),
+  });
 
   app.get(
     "/health",
@@ -247,6 +273,20 @@ function registerApiKeyAuthHook(app: FastifyInstance, expectedApiKey?: string): 
 
   app.addHook("onRequest", async (request, reply) => {
     if (isPublicRoute(request)) return;
+
+    const rawReq = request.raw as {
+      apiGateway?: { event?: { requestContext?: { authorizer?: { lambda?: Record<string, unknown> } } } };
+    };
+    const authorizerLambda =
+      rawReq.apiGateway?.event?.requestContext?.authorizer?.lambda ??
+      request.awsLambda?.event?.requestContext?.authorizer?.lambda;
+
+    if (
+      authorizerLambda &&
+      (authorizerLambda.authMode || authorizerLambda.isAuthorized === true || authorizerLambda.isAuthorized === "true")
+    ) {
+      return;
+    }
 
     const query = (request.query as Record<string, string> | undefined) ?? {};
     const headerKey = request.headers["x-api-key"];

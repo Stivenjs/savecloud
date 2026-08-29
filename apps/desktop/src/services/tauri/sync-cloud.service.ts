@@ -263,9 +263,9 @@ export async function previewDownload(gameId: string): Promise<PreviewDownload> 
   return invoke<PreviewDownload>("preview_download", { gameId });
 }
 
-/** Borra todos los guardados del juego en la nube (S3) */
-export async function deleteGameFromCloud(gameId: string): Promise<void> {
-  await invoke("sync_delete_game_from_cloud", { gameId });
+/** Borra todos los guardados del juego en la nube (S3). Por defecto mueve a papelera a menos que permanent sea true. */
+export async function deleteGameFromCloud(gameId: string, permanent?: boolean): Promise<void> {
+  await invoke("sync_delete_game_from_cloud", { gameId, permanent: permanent ?? false });
 }
 
 /** Renombra un juego en la nube (copia a nuevo id y borra el prefijo antiguo) */

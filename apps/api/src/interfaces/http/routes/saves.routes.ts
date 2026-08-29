@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
   ListBackupsQuerySchema,
   type ListBackupsQuery,
@@ -121,7 +121,7 @@ export async function registerSavesRoutes(
     cloudInviteRepository?: CloudInviteRepository;
   }
 ): Promise<void> {
-  async function getStorageUserIdFromRequest(request: any): Promise<string> {
+  async function getStorageUserIdFromRequest(request: FastifyRequest): Promise<string> {
     const requesterUserId = getUserId(request);
     const hostHeader = request.headers[CLOUD_HOST_HEADER];
     const requestedHostUserId = typeof hostHeader === "string" && hostHeader.trim() ? hostHeader.trim() : undefined;
@@ -281,7 +281,8 @@ export async function registerSavesRoutes(
         const userId = getUserId(request);
         const storageUserId = await getStorageUserIdFromRequest(request);
         const gameId = request.body.gameId.trim();
-        await deps.deleteGameFromCloudUseCase.execute({ userId: storageUserId, gameId });
+        const permanent = request.body.permanent === true;
+        await deps.deleteGameFromCloudUseCase.execute({ userId: storageUserId, gameId, permanent });
         invalidateSavesCaches(userId, gameId);
         invalidateBackupsCache(storageUserId, gameId);
         return reply.status(204).send();

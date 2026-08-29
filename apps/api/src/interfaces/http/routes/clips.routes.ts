@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ClipStore } from "@infrastructure/clips/ClipStore";
+import type { DynamoDbClipStore } from "@infrastructure/clips/DynamoDbClipStore";
 import { renderNotFoundHtml, renderWatchHtml } from "@interfaces/http/views/clipWatchHtml";
 
 const USER_ID_HEADER = "x-user-id";
@@ -29,7 +30,10 @@ function getBaseUrl(request: FastifyRequest): string {
 /**
  * Registra las rutas HTTP asociadas a los clips de vídeo.
  */
-export async function registerClipRoutes(app: FastifyInstance, clipStore: ClipStore): Promise<void> {
+export async function registerClipRoutes(
+  app: FastifyInstance,
+  clipStore: ClipStore | DynamoDbClipStore
+): Promise<void> {
   /**
    * POST /clips/upload-url (Autenticado)
    * Solicita una URL presignada para subir el archivo binario del clip directamente a S3.
@@ -148,11 +152,19 @@ export async function registerClipRoutes(app: FastifyInstance, clipStore: ClipSt
     const result = await clipStore.getClip(clipId);
 
     if (result.status === "not_found") {
-      return reply.status(404).type("text/html; charset=utf-8").send(renderNotFoundHtml(defaultCoverUrl));
+      return reply
+        .status(404)
+        .header("Cache-Control", "public, max-age=60, s-maxage=300")
+        .type("text/html; charset=utf-8")
+        .send(renderNotFoundHtml(defaultCoverUrl));
     }
 
     if (result.status === "error") {
-      return reply.status(502).type("text/html; charset=utf-8").send("<h1>Error al cargar el clip</h1>");
+      return reply
+        .status(502)
+        .header("Cache-Control", "no-cache, no-store, must-revalidate")
+        .type("text/html; charset=utf-8")
+        .send("<h1>Error al cargar el clip</h1>");
     }
 
     const baseUrl = getBaseUrl(request);
@@ -164,7 +176,11 @@ export async function registerClipRoutes(app: FastifyInstance, clipStore: ClipSt
       defaultCoverUrl,
     });
 
-    return reply.type("text/html; charset=utf-8").send(html);
+    return reply
+      .status(200)
+      .header("Cache-Control", "public, max-age=300, s-maxage=86400, stale-while-revalidate=604800")
+      .type("text/html; charset=utf-8")
+      .send(html);
   };
 
   /**
@@ -218,7 +234,7 @@ export async function registerClipRoutes(app: FastifyInstance, clipStore: ClipSt
       }
 
       const baseUrl = getBaseUrl(request);
-      return reply.send({
+      return reply.header("Cache-Control", "public, max-age=120, s-maxage=3600, stale-while-revalidate=86400").send({
         clip: result.clip,
         cdnUrl: result.cdnUrl,
         watchUrl: `${baseUrl}/v/${clipId}`,

@@ -27,6 +27,7 @@
     "apps/cli/**/*",
     "packages/types/src/**/*",
     "scripts/**/*.ts",
+    "tests/**/*.ts",
     "apps/desktop/scripts/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]
