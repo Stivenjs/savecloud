@@ -22,6 +22,9 @@ provider:
     CONNECTIONS_TABLE: { Ref: ActiveConnectionsTable }
     GAME_STATS_TABLE: { Ref: GameStatsTable }
     SAVE_FILES_INDEX_TABLE: { Ref: SaveFilesIndexTable }
+    CLIPS_TABLE: { Ref: ClipsTable }
+    NOTIFICATIONS_TABLE: { Ref: NotificationsTable }
+    SHARE_TOKENS_TABLE: { Ref: ShareTokensTable }
     WS_ENDPOINT:
       Fn::Join:
         - ""
@@ -30,6 +33,22 @@ provider:
           - ".execute-api.${self:provider.region}.amazonaws.com/${sls:stage}"
 
   httpApi:
+    cors:
+      allowedOrigins:
+        - "*"
+      allowedHeaders:
+        - Content-Type
+        - x-api-key
+        - x-user-id
+        - x-cloud-host-user-id
+        - Authorization
+      allowedMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - HEAD
+        - OPTIONS
     authorizers:
       apiKeyAuthorizer:
         type: request
@@ -65,11 +84,17 @@ provider:
             - dynamodb:DeleteItem
             - dynamodb:UpdateItem
             - dynamodb:Query
+            - dynamodb:BatchWriteItem
+            - dynamodb:BatchGetItem
           Resource:
             - Fn::GetAtt: [ActiveConnectionsTable, Arn]
             - Fn::Join: ["/", [Fn::GetAtt: [ActiveConnectionsTable, Arn], "index", "*"]]
             - Fn::GetAtt: [GameStatsTable, Arn]
             - Fn::GetAtt: [SaveFilesIndexTable, Arn]
+            - Fn::GetAtt: [ClipsTable, Arn]
+            - Fn::Join: ["/", [Fn::GetAtt: [ClipsTable, Arn], "index", "*"]]
+            - Fn::GetAtt: [NotificationsTable, Arn]
+            - Fn::GetAtt: [ShareTokensTable, Arn]
 
         - Effect: Allow
           Action:
@@ -122,6 +147,33 @@ functions:
     timeout: 30
     memorySize: 1536
     events:
+      # Rutas públicas (Acceso libre para links compartidos, streaming y health checks)
+      - httpApi:
+          path: /health
+          method: GET
+      - httpApi:
+          path: /share/{token}
+          method: GET
+      - httpApi:
+          path: /v/{clipId}
+          method: GET
+      - httpApi:
+          path: /clip/{clipId}
+          method: GET
+      - httpApi:
+          path: /api/clips/{clipId}
+          method: GET
+      - httpApi:
+          path: /invites/accept-token
+          method: POST
+      - httpApi:
+          path: /webhooks/minio
+          method: POST
+      - httpApi:
+          path: /favicon.ico
+          method: GET
+
+      # Rutas protegidas (Con authorizer y caché de 5 minutos)
       - httpApi:
           path: /{proxy+}
           method: ANY

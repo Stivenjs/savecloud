@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { getUserId, getErrorMessage } from "@shared/utils";
 import type { NotificationRecord } from "@domain/entities/NotificationRecord";
 import { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
+import { DynamoDbNotificationStore } from "@infrastructure/persistence/DynamoDbNotificationStore";
 import {
   NotificationAckSchema,
   type NotificationAckBody,
@@ -11,7 +12,10 @@ import {
   type NotificationListQuery,
 } from "@interfaces/schema/notifications";
 
-export async function registerNotificationRoutes(app: FastifyInstance, store: S3NotificationStore): Promise<void> {
+export async function registerNotificationRoutes(
+  app: FastifyInstance,
+  store: S3NotificationStore | DynamoDbNotificationStore
+): Promise<void> {
   app.get<{ Querystring: NotificationListQuery }>(
     "/notifications",
     { schema: { querystring: NotificationListQuerySchema } },

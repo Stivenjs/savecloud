@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ClipStore } from "@infrastructure/clips/ClipStore";
+import type { DynamoDbClipStore } from "@infrastructure/clips/DynamoDbClipStore";
 import { renderNotFoundHtml, renderWatchHtml } from "@interfaces/http/views/clipWatchHtml";
 
 const USER_ID_HEADER = "x-user-id";
@@ -29,7 +30,10 @@ function getBaseUrl(request: FastifyRequest): string {
 /**
  * Registra las rutas HTTP asociadas a los clips de vídeo.
  */
-export async function registerClipRoutes(app: FastifyInstance, clipStore: ClipStore): Promise<void> {
+export async function registerClipRoutes(
+  app: FastifyInstance,
+  clipStore: ClipStore | DynamoDbClipStore
+): Promise<void> {
   /**
    * POST /clips/upload-url (Autenticado)
    * Solicita una URL presignada para subir el archivo binario del clip directamente a S3.

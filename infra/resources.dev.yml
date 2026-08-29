@@ -95,6 +95,65 @@ Resources:
         - AttributeName: objectKey
           KeyType: RANGE
 
+  ClipsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-Clips
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+        - AttributeName: clipId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: createdAt
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: ClipIdIndex
+          KeySchema:
+            - AttributeName: clipId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  NotificationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-Notifications
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: id
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAtEpoch
+        Enabled: true
+
+  ShareTokensTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-ShareTokens
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: token
+          AttributeType: S
+      KeySchema:
+        - AttributeName: token
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAtEpoch
+        Enabled: true
+
   # Cola SQS para procesamiento por lotes de eventos S3 (syncGameStats)
   SyncGameStatsQueue:
     Type: AWS::SQS::Queue

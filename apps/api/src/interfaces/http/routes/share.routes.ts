@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
+import type { DynamoDbShareTokenStore } from "@infrastructure/share/DynamoDbShareTokenStore";
 
 const USER_ID_HEADER = "x-user-id";
 const MAX_TTL_SECONDS = 365 * 24 * 60 * 60;
@@ -28,7 +29,10 @@ function resolveTtlSeconds(expiresInDays: unknown): number {
   return DEFAULT_TTL_SECONDS;
 }
 
-export async function registerShareRoutes(app: FastifyInstance, shareTokenStore: ShareTokenS3): Promise<void> {
+export async function registerShareRoutes(
+  app: FastifyInstance,
+  shareTokenStore: ShareTokenS3 | DynamoDbShareTokenStore
+): Promise<void> {
   app.post<{
     Body: { gameId?: string; expiresInDays?: number };
   }>("/share", async (request, reply: FastifyReply) => {

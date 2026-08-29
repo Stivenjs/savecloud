@@ -49,6 +49,9 @@ import { registerProfileRoutes } from "@interfaces/http/routes/users.routes";
 import { registerObservabilityRoutes } from "@interfaces/http/routes/observability.routes";
 import { registerClipRoutes } from "@interfaces/http/routes/clips.routes";
 import type { ClipStore } from "@infrastructure/clips/ClipStore";
+import type { DynamoDbClipStore } from "@infrastructure/clips/DynamoDbClipStore";
+import type { DynamoDbNotificationStore } from "@infrastructure/persistence/DynamoDbNotificationStore";
+import type { DynamoDbShareTokenStore } from "@infrastructure/share/DynamoDbShareTokenStore";
 import { verifyUserAccessToken } from "@shared/accessToken";
 import { isPublicRoute } from "@interfaces/http/security/public-routes";
 import { GetFriendProfileUseCase } from "@application/use-cases/GetFriendProfileUseCase";
@@ -63,9 +66,9 @@ export interface AppDependencies {
   steamSeedRepository?: S3SteamSeedRepository;
   cloudInviteRepository?: CloudInviteRepository;
   gameInventoryRepository?: GameInventoryRepository;
-  shareTokenStore?: ShareTokenS3;
-  clipStore?: ClipStore;
-  notificationStore?: S3NotificationStore;
+  shareTokenStore?: ShareTokenS3 | DynamoDbShareTokenStore;
+  clipStore?: ClipStore | DynamoDbClipStore;
+  notificationStore?: S3NotificationStore | DynamoDbNotificationStore;
   connectionRepository?: ConnectionRepository;
   webSocketNotifier?: WebSocketNotifier;
 }

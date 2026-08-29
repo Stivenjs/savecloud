@@ -21,6 +21,9 @@ export interface DynamoDbTablesConfig {
   gameStatsTable?: string;
   saveFilesIndexTable?: string;
   connectionsTable?: string;
+  clipsTable?: string;
+  notificationsTable?: string;
+  shareTokensTable?: string;
 }
 
 /**
@@ -50,7 +53,7 @@ export function createDynamoDbClient(): DynamoDBClient {
  * del servidor espere a que DynamoDB Local levante.
  *
  * @param client - Instancia de `DynamoDBClient` para realizar las operaciones.
- * @param tables - Nombres de las tablas configuradas (`gameStatsTable`, `saveFilesIndexTable`, `connectionsTable`).
+ * @param tables - Nombres de las tablas configuradas.
  * @returns Promesa que se resuelve cuando todas las tablas han sido verificadas o creadas.
  */
 export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: DynamoDbTablesConfig): Promise<void> {
@@ -59,7 +62,8 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
   if (!dynamoEndpoint) return;
 
   const initTables = async (): Promise<void> => {
-    const { gameStatsTable, saveFilesIndexTable, connectionsTable } = tables;
+    const { gameStatsTable, saveFilesIndexTable, connectionsTable, clipsTable, notificationsTable, shareTokensTable } =
+      tables;
 
     if (gameStatsTable) {
       await createTableIfNotExists(client, {
@@ -106,6 +110,53 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
             Projection: { ProjectionType: "ALL" },
           },
         ],
+        BillingMode: "PAY_PER_REQUEST",
+      });
+    }
+
+    if (clipsTable) {
+      await createTableIfNotExists(client, {
+        TableName: clipsTable,
+        AttributeDefinitions: [
+          { AttributeName: "userId", AttributeType: "S" },
+          { AttributeName: "createdAt", AttributeType: "S" },
+          { AttributeName: "clipId", AttributeType: "S" },
+        ],
+        KeySchema: [
+          { AttributeName: "userId", KeyType: "HASH" },
+          { AttributeName: "createdAt", KeyType: "RANGE" },
+        ],
+        GlobalSecondaryIndexes: [
+          {
+            IndexName: "ClipIdIndex",
+            KeySchema: [{ AttributeName: "clipId", KeyType: "HASH" }],
+            Projection: { ProjectionType: "ALL" },
+          },
+        ],
+        BillingMode: "PAY_PER_REQUEST",
+      });
+    }
+
+    if (notificationsTable) {
+      await createTableIfNotExists(client, {
+        TableName: notificationsTable,
+        AttributeDefinitions: [
+          { AttributeName: "userId", AttributeType: "S" },
+          { AttributeName: "id", AttributeType: "S" },
+        ],
+        KeySchema: [
+          { AttributeName: "userId", KeyType: "HASH" },
+          { AttributeName: "id", KeyType: "RANGE" },
+        ],
+        BillingMode: "PAY_PER_REQUEST",
+      });
+    }
+
+    if (shareTokensTable) {
+      await createTableIfNotExists(client, {
+        TableName: shareTokensTable,
+        AttributeDefinitions: [{ AttributeName: "token", AttributeType: "S" }],
+        KeySchema: [{ AttributeName: "token", KeyType: "HASH" }],
         BillingMode: "PAY_PER_REQUEST",
       });
     }
