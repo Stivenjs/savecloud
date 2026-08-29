@@ -5,11 +5,13 @@ import type { GameStats } from "@services/tauri";
 import { GameDetailActions, type GameDetailActionsProps } from "./GameDetailActions";
 import { useTranslation } from "react-i18next";
 
-function StatBlock({ label, value }: { label: string; value: string }) {
+function StatTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-w-30 flex-col gap-0.5">
-      <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-default-400">{label}</span>
-      <span className="text-sm font-semibold tabular-nums text-foreground">{value}</span>
+    <div className="flex flex-col gap-0.5 min-w-0">
+      <span className="text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-default-400 truncate">{label}</span>
+      <span className="text-[0.8125rem] font-semibold tabular-nums text-foreground leading-tight truncate">
+        {value}
+      </span>
     </div>
   );
 }
@@ -35,53 +37,42 @@ export function GameDetailActionStrip({ stats, isGameRunning, ...actionsProps }:
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-default-200/70 bg-default-100/95 px-4 py-3 shadow-sm backdrop-blur-sm dark:border-default-100/20 dark:bg-default-50/15 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
-      <div className="flex min-w-0 flex-wrap items-center gap-3">
-        <GameDetailActions isGameRunning={isGameRunning} {...actionsProps} />
-      </div>
-
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <GameDetailActions isGameRunning={isGameRunning} {...actionsProps} />
       {hasMeta && (
-        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 border-t border-default-200/60 pt-3 lg:border-t-0 lg:pt-0 dark:border-default-100/15">
-          {stats && (
-            <>
-              {isGameRunning && (
-                <div className="flex min-w-30 items-start gap-2 text-sm text-emerald-500 font-medium">
-                  <span className="relative flex size-2 mt-1 shrink-0">
-                    <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
-                  </span>
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                      En sesión
-                    </span>
-                    <span className="font-semibold tabular-nums text-emerald-500">{formattedDuration}</span>
-                  </div>
-                </div>
-              )}
-              <StatBlock label={t("library.localSize")} value={formatBytes(stats.localSizeBytes)} />
-              <StatBlock label={t("library.playtime")} value={formatPlaytime(stats.playtimeSeconds)} />
-              {stats.localLastModified && (
-                <div className="flex min-w-30 items-start gap-2 text-sm text-default-600">
-                  <Calendar size={16} className="mt-0.5 shrink-0 text-secondary" />
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-default-400">
-                      {t("library.modified")}
-                    </span>
-                    <span className="font-medium tabular-nums">{formatRelativeDate(stats.localLastModified)}</span>
-                  </div>
-                </div>
-              )}
-              {stats.cloudLastModified && (
-                <div className="flex min-w-30 items-start gap-2 text-sm text-default-600">
-                  <CloudCheck size={16} className="mt-0.5 shrink-0 text-success" />
-                  <div className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-default-400">
-                      {t("library.cloud")}
-                    </span>
-                    <span className="font-medium tabular-nums">{formatRelativeDate(stats.cloudLastModified)}</span>
-                  </div>
-                </div>
-              )}
-            </>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          {isGameRunning && (
+            <div className="flex items-center gap-2">
+              <span className="relative flex size-2 shrink-0">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+              </span>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-emerald-600 dark:text-emerald-400">
+                  {t("library.detail.inSession", { defaultValue: "En sesión" })}
+                </span>
+                <span className="text-[0.8125rem] font-semibold tabular-nums text-emerald-500 leading-tight">
+                  {formattedDuration}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <StatTile label={t("library.localSize")} value={formatBytes(stats!.localSizeBytes)} />
+          <StatTile label={t("library.playtime")} value={formatPlaytime(stats!.playtimeSeconds)} />
+
+          {stats!.localLastModified && (
+            <div className="flex items-start gap-1.5">
+              <Calendar size={13} className="mt-0.75 shrink-0 text-default-300" strokeWidth={1.5} />
+              <StatTile label={t("library.modified")} value={formatRelativeDate(stats!.localLastModified)} />
+            </div>
+          )}
+
+          {stats!.cloudLastModified && (
+            <div className="flex items-start gap-1.5">
+              <CloudCheck size={13} className="mt-0.75 shrink-0 text-default-300" strokeWidth={1.5} />
+              <StatTile label={t("library.cloud")} value={formatRelativeDate(stats!.cloudLastModified)} />
+            </div>
           )}
         </div>
       )}

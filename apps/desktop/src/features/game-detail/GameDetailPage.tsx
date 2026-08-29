@@ -15,7 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
-import { Button, Select, SelectItem, Spinner, Tab, Tabs, Skeleton } from "@heroui/react";
+import { Button, Spinner, Tab, Tabs } from "@heroui/react";
 import { ArrowLeft, Cpu, Gamepad2, LayoutList, ScrollText } from "lucide-react";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -50,6 +50,7 @@ import { useGameDetail } from "@/hooks/useGameDetail";
 import { useGameDetailCloudActions } from "@/hooks/useGameDetailCloudActions";
 import { GameDetailHero } from "@features/game-detail/GameDetailHero";
 import { GameDetailActionStrip } from "@features/game-detail/GameDetailActionStrip";
+import { GameDetailSourceHub } from "@features/game-detail/GameDetailSourceHub";
 import { GameDetailSyncSetupBanner } from "@features/game-detail/GameDetailSyncSetupBanner";
 import { InstallModal } from "@features/steam-catalog/components/InstallModal";
 import { useDisclosure } from "@heroui/react";
@@ -545,61 +546,13 @@ export function GameDetailPage() {
         onFullBackupUpload={!isSteamCatalogOnly && hasSyncConfig ? setGameToFullBackupConfirm : undefined}
       />
 
-      {isMatchingPending ? (
-        <section className="rounded-xl border border-default-200/50 bg-default-50/50 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-            <div className="min-w-0 flex-1 space-y-3 w-full">
-              {/* Título falso */}
-              <Skeleton className="h-5 w-48 rounded-lg" />
-              {/* Selector falso */}
-              <Skeleton className="h-12 w-full max-w-md rounded-lg" />
-            </div>
-            {/* Botón falso */}
-            <Skeleton className="h-10 w-full sm:w-24 rounded-lg" />
-          </div>
-        </section>
-      ) : bestSourceMatch && sourceCandidates ? (
-        <section className="rounded-xl border border-primary/30 bg-primary/5 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-            <div className="min-w-0 flex-1 space-y-2">
-              <p className="text-sm font-semibold">{t("library.detail.availability")}</p>
-              {sourceCandidates.length > 1 ? (
-                <Select
-                  label={t("library.detail.chooseSource")}
-                  placeholder={t("library.detail.selectMatch")}
-                  size="sm"
-                  variant="bordered"
-                  className="mt-1 max-w-md"
-                  selectionMode="single"
-                  selectedKeys={new Set([selectedSourceKey ?? sourceCandidateKey(bestSourceMatch)])}
-                  onSelectionChange={(keys) => {
-                    const next = [...keys][0];
-                    if (next !== undefined) {
-                      setSelectedSourceKey(String(next));
-                    }
-                  }}>
-                  {sourceCandidates.map((c: SourceBestMatch) => (
-                    <SelectItem key={sourceCandidateKey(c)} textValue={`${c.source_name} — ${c.item_title}`}>
-                      {c.source_name} — {c.item_title}
-                    </SelectItem>
-                  ))}
-                </Select>
-              ) : (
-                <p className="text-xs text-default-500">
-                  {t("library.detail.selectMatch")}: {bestSourceMatch.item_title} ({bestSourceMatch.source_name})
-                </p>
-              )}
-            </div>
-            <Button color="primary" onPress={() => void handleInstallFromSources()}>
-              {t("library.detail.install")}
-            </Button>
-          </div>
-        </section>
-      ) : (
-        <section className="rounded-xl border border-default-200/70 bg-default-100/80 p-4">
-          <p className="text-sm text-default-500">{t("library.detail.notAvailable")}</p>
-        </section>
-      )}
+      <GameDetailSourceHub
+        sourceCandidates={sourceCandidates}
+        isMatchingPending={isMatchingPending}
+        selectedSourceKey={selectedSourceKey}
+        onSelectSourceKey={setSelectedSourceKey}
+        onInstall={handleInstallFromSources}
+      />
 
       <GameDrawer
         isOpen={!!gameToEdit}
