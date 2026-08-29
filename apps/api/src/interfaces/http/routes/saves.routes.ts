@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import {
   ListBackupsQuerySchema,
   type ListBackupsQuery,
@@ -121,7 +121,7 @@ export async function registerSavesRoutes(
     cloudInviteRepository?: CloudInviteRepository;
   }
 ): Promise<void> {
-  async function getStorageUserIdFromRequest(request: any): Promise<string> {
+  async function getStorageUserIdFromRequest(request: FastifyRequest): Promise<string> {
     const requesterUserId = getUserId(request);
     const hostHeader = request.headers[CLOUD_HOST_HEADER];
     const requestedHostUserId = typeof hostHeader === "string" && hostHeader.trim() ? hostHeader.trim() : undefined;

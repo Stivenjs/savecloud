@@ -74,8 +74,8 @@ export async function registerWebhookRoutes(
     }
 
     const events = parseMinioNotification(request.body);
-    for (const event of events) {
-      await deps.processS3EventUseCase.execute(event);
+    if (events.length > 0) {
+      await deps.processS3EventUseCase.executeBatch(events);
     }
 
     return reply.send({ status: "ok", processed: events.length });

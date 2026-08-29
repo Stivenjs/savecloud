@@ -36,9 +36,10 @@ provider:
         functionName: apiAuthorizer
         enableSimpleResponses: true
         authorizerPayloadFormatVersion: "2.0"
-        resultTtlInSeconds: 0
+        resultTtlInSeconds: 300
         identitySource:
-          - "$request.header.host"
+          - "$request.header.x-api-key"
+          - "$request.header.x-user-id"
 
   iam:
     role:
@@ -75,6 +76,14 @@ provider:
             - execute-api:ManageConnections
           Resource:
             - "arn:aws:execute-api:*:*:**/@connections/*"
+
+        - Effect: Allow
+          Action:
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+          Resource:
+            - Fn::GetAtt: [SyncGameStatsQueue, Arn]
 
 build:
   esbuild:
@@ -146,20 +155,14 @@ functions:
 
   syncGameStats:
     handler: apps/api/src/interfaces/lambda/s3-events/syncGameStats.handler
-    description: Actualiza DynamoDB cuando se sube/borra un save en S3 - ${sls:stage}
+    description: Actualiza DynamoDB cuando se sube/borra un save en S3 procesando lotes desde SQS - ${sls:stage}
     timeout: 30
     events:
-      - eventBridge:
-          pattern:
-            source:
-              - aws.s3
-            detail-type:
-              - "Object Created"
-              - "Object Deleted"
-            detail:
-              bucket:
-                name:
-                  - Ref: SavesBucket
+      - sqs:
+          arn:
+            Fn::GetAtt: [SyncGameStatsQueue, Arn]
+          batchSize: 25
+          maximumBatchingWindow: 5
 
   wsConnect:
     handler: apps/api/src/interfaces/lambda/websocket/connect.handler

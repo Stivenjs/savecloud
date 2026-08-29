@@ -182,6 +182,51 @@ Resources:
         - AttributeName: objectKey
           KeyType: RANGE
 
+  # Cola SQS para procesamiento por lotes de eventos S3 (syncGameStats)
+  SyncGameStatsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: ${sls:stage}-SyncGameStatsQueue
+      VisibilityTimeout: 180
+      MessageRetentionPeriod: 86400
+
+  SyncGameStatsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - Ref: SyncGameStatsQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowEventBridgeToSendMessage
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource:
+              Fn::GetAtt: [SyncGameStatsQueue, Arn]
+
+  SyncGameStatsEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: ${sls:stage}-SyncGameStatsRule
+      Description: "Captura eventos de archivos en S3 y los enruta hacia la cola SQS para procesamiento por lotes"
+      EventPattern:
+        Fn::Sub: >
+          {
+            "source": ["aws.s3"],
+            "detail-type": ["Object Created", "Object Deleted"],
+            "detail": {
+              "bucket": {
+                "name": ["${SavesBucket}"]
+              }
+            }
+          }
+      Targets:
+        - Id: SyncGameStatsQueueTarget
+          Arn:
+            Fn::GetAtt: [SyncGameStatsQueue, Arn]
+
 Outputs:
   CloudFrontDistributionDomainName:
     Description: CloudFront domain for backup downloads

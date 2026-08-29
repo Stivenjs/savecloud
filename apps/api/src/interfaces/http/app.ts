@@ -97,6 +97,15 @@ interface SavesRouteUseCases {
 declare module "fastify" {
   interface FastifyRequest {
     _scMetricsStartNs?: bigint;
+    awsLambda?: {
+      event?: {
+        requestContext?: {
+          authorizer?: {
+            lambda?: Record<string, unknown>;
+          };
+        };
+      };
+    };
   }
 }
 
@@ -247,6 +256,20 @@ function registerApiKeyAuthHook(app: FastifyInstance, expectedApiKey?: string): 
 
   app.addHook("onRequest", async (request, reply) => {
     if (isPublicRoute(request)) return;
+
+    const rawReq = request.raw as {
+      apiGateway?: { event?: { requestContext?: { authorizer?: { lambda?: Record<string, unknown> } } } };
+    };
+    const authorizerLambda =
+      rawReq.apiGateway?.event?.requestContext?.authorizer?.lambda ??
+      request.awsLambda?.event?.requestContext?.authorizer?.lambda;
+
+    if (
+      authorizerLambda &&
+      (authorizerLambda.authMode || authorizerLambda.isAuthorized === true || authorizerLambda.isAuthorized === "true")
+    ) {
+      return;
+    }
 
     const query = (request.query as Record<string, string> | undefined) ?? {};
     const headerKey = request.headers["x-api-key"];

@@ -26,7 +26,10 @@ export interface AuthorizerEvent {
   };
 }
 
-type AuthorizerResult = { isAuthorized: boolean };
+export interface AuthorizerResult {
+  isAuthorized: boolean;
+  context?: Record<string, string | number | boolean>;
+}
 
 type DenyResult = { isAuthorized: false };
 
@@ -54,12 +57,18 @@ function deny(reason: string, context: Record<string, string>): DenyResult {
   return { isAuthorized: false };
 }
 
-/** Registra un acceso concedido para auditoría. */
-function allow(mode: "api-key" | "access-token" | "public", context: Record<string, string>): { isAuthorized: true } {
+/** Registra un acceso concedido para auditoría y retorna el contexto cacheable para API Gateway y Lambda. */
+function allow(mode: "api-key" | "access-token" | "public", context: Record<string, string>): AuthorizerResult {
   if (logAuthorizerSuccess) {
     console.info(JSON.stringify({ level: "INFO", authorizer: "ALLOWED", mode, ...context }));
   }
-  return { isAuthorized: true };
+  return {
+    isAuthorized: true,
+    context: {
+      authMode: mode,
+      ...context,
+    },
+  };
 }
 
 export async function handler(event: AuthorizerEvent): Promise<AuthorizerResult> {

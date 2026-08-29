@@ -25,28 +25,15 @@ import type {
   UploadUrlItem,
   UploadUrlResult,
 } from "@domain/ports/SaveRepository";
-import { resolvePublicUrl } from "@infrastructure/factories/storageFactory";
 
 export const PRESIGN_EXPIRES_IN_SECONDS = 3600;
 const DOWNLOAD_BASE_URL = process.env.DOWNLOAD_BASE_URL;
 
 /**
- * Máximo de presignados en paralelo hacia S3.
- *
- * Sin límite, 500 items disparan 500 peticiones simultáneas que pueden
- * provocar throttling (503 SlowDown) de S3 o agotar el pool de sockets
- * del SDK. 50 concurrentes es suficiente para saturar el ancho de banda
- * disponible sin presionar al servicio.
- */
-const PRESIGN_CONCURRENCY = 50;
-
-/**
  * Máximo de CopyObject en paralelo durante renameGame.
  *
- * CopyObject es más costoso que un presignado porque implica I/O interno
- * en S3. Se acota más bajo que PRESIGN_CONCURRENCY para evitar que un
- * rename de juego con cientos de archivos consuma todo el throughput de
- * la cuenta.
+ * CopyObject es costoso porque implica I/O interno en S3.
+ * Se acota a 20 concurrentes para evitar saturar el throughput de la cuenta.
  */
 const COPY_CONCURRENCY = 20;
 
@@ -209,10 +196,8 @@ export class S3SaveRepository implements SaveRepository {
 
   /**
    * Genera URLs de subida presignadas para un lote de archivos.
-   *
-   * Las peticiones al SDK de S3 se ejecutan en paralelo con un límite de
-   * {@link PRESIGN_CONCURRENCY} concurrentes para evitar throttling y no
-   * saturar el pool de sockets.
+   * La firma criptográfica de URLs (getSignedUrl) es puramente en memoria / CPU
+   * y se ejecuta en paralelo directo para máxima velocidad sin latencia añadida.
    *
    * @param userId - Identificador del usuario propietario.
    * @param items  - Lista de pares gameId/filename a presignar.
@@ -223,27 +208,21 @@ export class S3SaveRepository implements SaveRepository {
       throw new Error("BUCKET_NAME is not configured in the server");
     }
 
-    const limit = pLimit(PRESIGN_CONCURRENCY);
     const options = { expiresIn: PRESIGN_EXPIRES_IN_SECONDS };
 
     return Promise.all(
-      items.map(({ gameId, filename }) =>
-        limit(async () => {
-          const key = `${userId}/${gameId}/${filename}`;
-          const command = new PutObjectCommand({ Bucket: this.bucketName, Key: key });
-          const uploadUrl = await getSignedUrl(this.presignS3, command, options);
-          return { uploadUrl, key, gameId, filename };
-        })
-      )
+      items.map(async ({ gameId, filename }) => {
+        const key = `${userId}/${gameId}/${filename}`;
+        const command = new PutObjectCommand({ Bucket: this.bucketName, Key: key });
+        const uploadUrl = await getSignedUrl(this.presignS3, command, options);
+        return { uploadUrl, key, gameId, filename };
+      })
     );
   }
 
   /**
-   * Genera URLs de descarga presignadas (o de CloudFront) para un lote de
-   * archivos.
-   *
-   * Las peticiones al SDK de S3 se ejecutan con concurrencia acotada igual
-   * que en {@link getUploadUrls}.
+   * Genera URLs de descarga presignadas (o de CloudFront) para un lote de archivos.
+   * Ejecuta la firma en paralelo directo para respuesta inmediata.
    *
    * @param _userId - No se usa para construir la URL; la key ya es completa.
    * @param items   - Lista de pares gameId/key.
@@ -251,20 +230,17 @@ export class S3SaveRepository implements SaveRepository {
   async getDownloadUrls(_userId: string, items: DownloadUrlItem[]): Promise<DownloadUrlResult[]> {
     if (items.length === 0) return [];
 
-    const limit = pLimit(PRESIGN_CONCURRENCY);
     const options = { expiresIn: PRESIGN_EXPIRES_IN_SECONDS };
 
     return Promise.all(
-      items.map(({ gameId, key }) =>
-        limit(async () => {
-          const cloudFrontUrl = S3SaveRepository.buildCloudFrontUrl(key);
-          if (cloudFrontUrl) return { downloadUrl: cloudFrontUrl, gameId, key };
+      items.map(async ({ gameId, key }) => {
+        const cloudFrontUrl = S3SaveRepository.buildCloudFrontUrl(key);
+        if (cloudFrontUrl) return { downloadUrl: cloudFrontUrl, gameId, key };
 
-          const command = new GetObjectCommand({ Bucket: this.bucketName, Key: key });
-          const downloadUrl = await getSignedUrl(this.presignS3, command, options);
-          return { downloadUrl, gameId, key };
-        })
-      )
+        const command = new GetObjectCommand({ Bucket: this.bucketName, Key: key });
+        const downloadUrl = await getSignedUrl(this.presignS3, command, options);
+        return { downloadUrl, gameId, key };
+      })
     );
   }
 
@@ -288,22 +264,19 @@ export class S3SaveRepository implements SaveRepository {
   }
 
   async getUploadPartUrls(key: string, uploadId: string, partNumbers: number[]): Promise<UploadPartUrl[]> {
-    const limit = pLimit(PRESIGN_CONCURRENCY);
     const options = { expiresIn: PRESIGN_EXPIRES_IN_SECONDS };
 
     return Promise.all(
-      partNumbers.map((partNumber) =>
-        limit(async () => {
-          const command = new UploadPartCommand({
-            Bucket: this.bucketName,
-            Key: key,
-            UploadId: uploadId,
-            PartNumber: partNumber,
-          });
-          const url = await getSignedUrl(this.presignS3, command, options);
-          return { partNumber, url };
-        })
-      )
+      partNumbers.map(async (partNumber) => {
+        const command = new UploadPartCommand({
+          Bucket: this.bucketName,
+          Key: key,
+          UploadId: uploadId,
+          PartNumber: partNumber,
+        });
+        const url = await getSignedUrl(this.presignS3, command, options);
+        return { partNumber, url };
+      })
     );
   }
 
