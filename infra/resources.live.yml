@@ -37,6 +37,14 @@ Resources:
             Status: Enabled
             Prefix: game-inventory/
             ExpirationInDays: 90
+          - Id: ExpireTrash30Days
+            Status: Enabled
+            Prefix: trash/
+            ExpirationInDays: 30
+          - Id: AbortIncompleteMultipartUploads3Days
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 3
 
   CloudFrontOriginAccessIdentity:
     Type: AWS::CloudFront::CloudFrontOriginAccessIdentity

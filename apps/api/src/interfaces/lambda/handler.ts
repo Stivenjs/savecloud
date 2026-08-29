@@ -122,7 +122,7 @@ function initProxy(): Promise<Proxy> {
     });
 
     const proxy = awsLambdaFastify<APIGatewayProxyEvent>(app, {
-      binaryMimeTypes: ["application/octet-stream"],
+      binaryMimeTypes: ["application/octet-stream", "application/gzip", "application/x-brotli", "image/*", "video/*"],
       callbackWaitsForEmptyEventLoop: false,
     });
 

@@ -48,6 +48,11 @@ import type { GameInventoryRepository } from "@domain/ports/GameInventoryReposit
 import { registerProfileRoutes } from "@interfaces/http/routes/users.routes";
 import { registerObservabilityRoutes } from "@interfaces/http/routes/observability.routes";
 import { registerClipRoutes } from "@interfaces/http/routes/clips.routes";
+import { registerTrashRoutes } from "@interfaces/http/routes/trash.routes";
+import { ListTrashUseCase } from "@application/use-cases/ListTrashUseCase";
+import { RestoreFromTrashUseCase } from "@application/use-cases/RestoreFromTrashUseCase";
+import { DeleteFromTrashUseCase } from "@application/use-cases/DeleteFromTrashUseCase";
+import { EmptyTrashUseCase } from "@application/use-cases/EmptyTrashUseCase";
 import type { ClipStore } from "@infrastructure/clips/ClipStore";
 import type { DynamoDbClipStore } from "@infrastructure/clips/DynamoDbClipStore";
 import type { DynamoDbNotificationStore } from "@infrastructure/persistence/DynamoDbNotificationStore";
@@ -122,7 +127,10 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   });
 
   await app.register(cors, { origin: true });
-  await app.register(import("@fastify/compress"));
+  await app.register(import("@fastify/compress"), {
+    threshold: 512,
+    encodings: ["br", "gzip", "deflate"],
+  });
   await app.register(import("@fastify/websocket"));
 
   await app.register(rateLimit, {
@@ -205,6 +213,12 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
 
   await registerWebhookRoutes(app, { processS3EventUseCase });
   await registerWebSocketRoutes(app, { connectionRepository: deps.connectionRepository });
+  await registerTrashRoutes(app, {
+    listTrashUseCase: new ListTrashUseCase(deps.saveRepository),
+    restoreFromTrashUseCase: new RestoreFromTrashUseCase(deps.saveRepository),
+    deleteFromTrashUseCase: new DeleteFromTrashUseCase(deps.saveRepository),
+    emptyTrashUseCase: new EmptyTrashUseCase(deps.saveRepository),
+  });
 
   app.get(
     "/health",

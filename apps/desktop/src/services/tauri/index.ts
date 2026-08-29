@@ -20,3 +20,4 @@ export * from "./observability.service";
 export * from "./emulators.service";
 export * from "./plugins.service";
 export * from "./clips.service";
+export * from "./trash.service";

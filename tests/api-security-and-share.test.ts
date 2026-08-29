@@ -209,3 +209,37 @@ describe("Suite de Enlaces Compartidos y Juegos Empaquetados", () => {
     expect(response.status).toBe(404);
   });
 });
+
+describe("Suite de Rendimiento y Compresion HTTP", () => {
+  test("La API debe responder exitosamente cuando el cliente solicita compresion gzip o brotli", async () => {
+    const response = await fetch(`${config.apiBaseUrl}/health`, {
+      headers: {
+        "Accept-Encoding": "gzip, deflate, br",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { status: string };
+    expect(body.status).toBe("ok");
+  });
+});
+
+describe("Suite de Papelera de Reciclaje (Trash / Soft Delete)", () => {
+  test("GET /trash debe listar los juegos en papelera para un usuario autenticado", async () => {
+    if (!config.apiKey) {
+      console.warn("[WARN] SYNC_GAMES_API_KEY no configurada. Omitiendo prueba de papelera.");
+      return;
+    }
+
+    const response = await fetch(`${config.apiBaseUrl}/trash`, {
+      headers: {
+        "x-api-key": config.apiKey,
+        "x-user-id": config.testUserId,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { items: unknown[] };
+    expect(body.items).toBeArray();
+  });
+});

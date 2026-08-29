@@ -11,6 +11,7 @@ import {
   RefreshCw,
   ScanLine,
   Search,
+  Trash2,
   Zap,
 } from "lucide-react";
 import { useNavigable } from "@features/input/useNavigable";
@@ -28,6 +29,7 @@ interface GamesPageHeaderProps {
   onSyncAllPress: () => void;
   onRefreshPress: () => void;
   onSaveGraphPress: () => void;
+  onTrashPress?: () => void;
   isRefreshing?: boolean;
   density?: "comfortable" | "compact" | "unified";
   /** Mapa general se muestra fuera del header (p. ej. icono mundo en rail BP). */
@@ -47,6 +49,7 @@ export function GamesPageHeader({
   onSyncAllPress,
   onRefreshPress,
   onSaveGraphPress,
+  onTrashPress,
   isRefreshing = false,
   density = "comfortable",
   omitMapGraph = false,
@@ -285,6 +288,17 @@ export function GamesPageHeader({
                   showDivider>
                   {t("library.header.syncAllLabel")}
                 </DropdownItem>
+                {onTrashPress ? (
+                  <DropdownItem
+                    key="trash"
+                    startContent={<Trash2 size={16} />}
+                    onPress={() => {
+                      onTrashPress();
+                      handleUnifiedMenuChange(false);
+                    }}>
+                    {t("library.trashModal.title")}
+                  </DropdownItem>
+                ) : null}
               </>
             ) : null}
 
@@ -411,6 +425,21 @@ export function GamesPageHeader({
           </Dropdown>
         ) : null}
 
+        {hasSyncConfig && onTrashPress && (
+          <Tooltip content={t("library.trashModal.title")} placement="bottom" delay={400}>
+            <Button
+              isIconOnly
+              variant="flat"
+              radius="md"
+              size="sm"
+              aria-label={t("library.trashModal.title")}
+              onPress={onTrashPress}
+              className="h-10 min-w-10 shrink-0 text-default-600 hover:text-warning">
+              <Trash2 size={18} />
+            </Button>
+          </Tooltip>
+        )}
+
         <Tooltip
           content={isRefreshing ? t("library.header.updating") : t("library.header.refresh")}
           placement="bottom"
@@ -443,7 +472,7 @@ export function GamesPageHeader({
           variant="flat"
           startContent={<Search size={18} />}
           onPress={onScanPress}
-          className={`h-10 min-w-[150px] ${getGamepadFocusClass(navScan.isFocused, navScan.inputMode)}`}
+          className={`h-10 min-w-37.5 ${getGamepadFocusClass(navScan.isFocused, navScan.inputMode)}`}
           {...navScan.navProps}>
           {t("library.header.scan")}
         </Button>
@@ -454,7 +483,7 @@ export function GamesPageHeader({
               variant="flat"
               startContent={<NetworkIcon size={18} />}
               onPress={onSaveGraphPress}
-              className={`h-10 min-w-[150px] ${getGamepadFocusClass(navGraph.isFocused, navGraph.inputMode)}`}
+              className={`h-10 min-w-37.5 ${getGamepadFocusClass(navGraph.isFocused, navGraph.inputMode)}`}
               {...navGraph.navProps}>
               {t("library.header.map")}
             </Button>
@@ -464,7 +493,7 @@ export function GamesPageHeader({
           color="primary"
           startContent={<Plus size={18} />}
           onPress={onAddPress}
-          className={`h-10 min-w-[150px] font-semibold ${getGamepadFocusClass(navAdd.isFocused, navAdd.inputMode)}`}
+          className={`h-10 min-w-37.5 font-semibold ${getGamepadFocusClass(navAdd.isFocused, navAdd.inputMode)}`}
           {...navAdd.navProps}>
           {t("library.header.add")}
         </Button>
@@ -477,7 +506,7 @@ export function GamesPageHeader({
                 variant="bordered"
                 endContent={<ChevronDown size={16} />}
                 isDisabled={!gamesCount || isOperationRunning}
-                className={`h-10 min-w-[160px] ${getGamepadFocusClass(
+                className={`h-10 min-w-40 ${getGamepadFocusClass(
                   navDropdownTrigger.isFocused,
                   navDropdownTrigger.inputMode
                 )}`}
@@ -519,13 +548,26 @@ export function GamesPageHeader({
           </Dropdown>
         )}
 
+        {hasSyncConfig && onTrashPress && (
+          <Tooltip content={t("library.trashModal.title")} placement="bottom" delay={400}>
+            <Button
+              variant="light"
+              isIconOnly
+              onPress={onTrashPress}
+              aria-label={t("library.trashModal.title")}
+              className="h-10 min-w-10 text-default-600 hover:text-warning">
+              <Trash2 size={18} />
+            </Button>
+          </Tooltip>
+        )}
+
         <Button
           variant="light"
           startContent={!isRefreshing ? <RefreshCw size={18} /> : undefined}
           onPress={onRefreshPress}
           isLoading={isRefreshing}
           isDisabled={isRefreshing}
-          className={`h-10 min-w-[120px] ${getGamepadFocusClass(navRefresh.isFocused, navRefresh.inputMode)}`}
+          className={`h-10 min-w-30 ${getGamepadFocusClass(navRefresh.isFocused, navRefresh.inputMode)}`}
           {...navRefresh.navProps}>
           {t("library.header.refresh")}
         </Button>

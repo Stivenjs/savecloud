@@ -20,6 +20,7 @@ import { BulkActionConfirmModal } from "@features/games/BulkActionConfirmModal";
 import { RemoveGameModal } from "@features/games/RemoveGameModal";
 import { ScanModal } from "@features/games/ScanModal";
 import { RestoreFromCloudWizardModal } from "@features/games/RestoreFromCloudWizardModal";
+import { TrashModal } from "@features/games/TrashModal";
 import { useGamesPage } from "@/hooks/useGamesPage";
 import { useGameStats } from "@hooks/useGameStats";
 import { scheduleConfigBackupToCloud } from "@services/tauri";
@@ -53,6 +54,8 @@ export function GamesPage() {
     setAddModalOpen,
     scanModalOpen,
     setScanModalOpen,
+    trashModalOpen,
+    setTrashModalOpen,
     setConfigureFromCloudGameId,
     restoreFromCloudGameId,
     handleOpenRestoreFromCloud,
@@ -78,6 +81,7 @@ export function GamesPage() {
     handleScanSelect,
     handleRemoveGame,
     handleConfirmRemove,
+    handleConfirmClearCloudSaves,
     handleSyncOne,
     handleDownloadOne,
     handleFullBackupUpload,
@@ -282,6 +286,7 @@ export function GamesPage() {
                     onSyncAllPress={openSyncAllConfirm}
                     onRefreshPress={handleRefresh}
                     onSaveGraphPress={() => navigate("/graph")}
+                    onTrashPress={() => setTrashModalOpen(true)}
                     isRefreshing={refreshing}
                   />
                 </div>
@@ -335,7 +340,10 @@ export function GamesPage() {
           onClose={() => setGameToRemove(null)}
           game={gameToRemove}
           onConfirm={handleConfirmRemove}
+          onClearCloudOnly={handleConfirmClearCloudSaves}
+          hasCloudIntegration={hasSyncConfig}
         />
+        <TrashModal isOpen={trashModalOpen} onClose={() => setTrashModalOpen(false)} onRestored={handleRefresh} />
         <DownloadConflictModal
           isOpen={!!downloadConflictGame}
           onClose={handleCloseDownloadConflict}

@@ -281,7 +281,8 @@ export async function registerSavesRoutes(
         const userId = getUserId(request);
         const storageUserId = await getStorageUserIdFromRequest(request);
         const gameId = request.body.gameId.trim();
-        await deps.deleteGameFromCloudUseCase.execute({ userId: storageUserId, gameId });
+        const permanent = request.body.permanent === true;
+        await deps.deleteGameFromCloudUseCase.execute({ userId: storageUserId, gameId, permanent });
         invalidateSavesCaches(userId, gameId);
         invalidateBackupsCache(storageUserId, gameId);
         return reply.status(204).send();

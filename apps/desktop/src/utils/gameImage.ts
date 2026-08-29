@@ -219,7 +219,8 @@ export function formatGameDisplayName(id: string): string {
   const result = cleaned
     .split(/\s+/)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
+    .join(" ")
+    .replace(/\b([a-zA-Z]+)\s+S\b/g, "$1's");
 
   displayNameCache.set(id, result);
   return result;

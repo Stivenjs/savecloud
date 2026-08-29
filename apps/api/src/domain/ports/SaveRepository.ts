@@ -76,8 +76,16 @@ export interface SaveRepository {
   deleteBackup(userId: string, gameId: string, key: string): Promise<void>;
   /** Renombra un backup: copia a userId/gameId/backups/newFilename y borra el antiguo. */
   renameBackup(userId: string, gameId: string, oldKey: string, newFilename: string): Promise<void>;
-  /** Borra todos los objetos en S3 bajo userId/gameId/ */
-  deleteGame(userId: string, gameId: string): Promise<void>;
+  /** Borra todos los objetos en S3 bajo userId/gameId/. Si permanent es false (default), se mueven a trash/ */
+  deleteGame(userId: string, gameId: string, options?: { permanent?: boolean }): Promise<void>;
+  /** Lista los juegos almacenados en la papelera (trash/userId/) */
+  listTrash(userId: string): Promise<import("@savecloud/types").TrashGameItem[]>;
+  /** Restaura un juego desde la papelera a su ubicación activa */
+  restoreFromTrash(userId: string, gameId: string): Promise<void>;
+  /** Elimina definitivamente un juego específico de la papelera */
+  deleteFromTrash(userId: string, gameId: string): Promise<void>;
+  /** Vacía toda la papelera del usuario */
+  emptyTrash(userId: string): Promise<void>;
   /** Copia todos los objetos de userId/oldGameId/ a userId/newGameId/ y borra los antiguos */
   renameGame(userId: string, oldGameId: string, newGameId: string): Promise<void>;
   /** Descarga y devuelve el contenido de un archivo en texto plano desde S3 */

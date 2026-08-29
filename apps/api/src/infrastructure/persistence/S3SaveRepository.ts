@@ -477,15 +477,17 @@ export class S3SaveRepository implements SaveRepository {
 
   /**
    * Elimina todos los objetos de un juego del bucket.
+   * Por defecto, los mueve a la papelera (trash/) a menos que options.permanent sea true.
    * @param userId - Identificador del usuario.
    * @param gameId - Identificador del juego a eliminar.
+   * @param options - Opciones de eliminación (ej. permanent: true).
    */
-  async deleteGame(userId: string, gameId: string): Promise<void> {
+  async deleteGame(userId: string, gameId: string, options?: { permanent?: boolean }): Promise<void> {
     const prefix = `${userId}/${gameId}/`;
     const deleteLimit = pLimit(DELETE_BATCH_CONCURRENCY);
+    const isPermanent = options?.permanent === true;
 
     const deletePromises: Promise<unknown>[] = [];
-
     let continuationToken: string | undefined;
 
     do {
@@ -500,6 +502,26 @@ export class S3SaveRepository implements SaveRepository {
       const keys = (list.Contents ?? []).filter((c): c is { Key: string } => !!c.Key).map((c) => ({ Key: c.Key }));
 
       if (keys.length > 0) {
+        if (!isPermanent) {
+          // Copiar a papelera trash/ antes de borrar para permitir recuperación durante 30 días
+          const copyPromises = keys.map(({ Key }) =>
+            deleteLimit(() =>
+              this.s3
+                .send(
+                  new CopyObjectCommand({
+                    Bucket: this.bucketName,
+                    CopySource: `${this.bucketName}/${encodeURIComponent(Key)}`,
+                    Key: `trash/${Key}`,
+                  })
+                )
+                .catch((err) => {
+                  console.warn(`[S3SaveRepository] No se pudo mover a papelera ${Key}:`, err);
+                })
+            )
+          );
+          await Promise.all(copyPromises);
+        }
+
         for (const batch of S3SaveRepository.chunk(keys, DELETE_BATCH_SIZE)) {
           deletePromises.push(
             deleteLimit(() =>
@@ -518,6 +540,211 @@ export class S3SaveRepository implements SaveRepository {
     } while (continuationToken);
 
     await Promise.all(deletePromises);
+  }
+
+  /**
+   * Lista los juegos almacenados en la papelera de reciclaje de un usuario.
+   */
+  async listTrash(userId: string): Promise<import("@savecloud/types").TrashGameItem[]> {
+    const prefix = `trash/${userId}/`;
+    const gamesMap = new Map<
+      string,
+      {
+        files: import("@savecloud/types").TrashFileItem[];
+        totalSize: number;
+        earliestDate: Date;
+        latestDate: Date;
+      }
+    >();
+
+    let continuationToken: string | undefined;
+
+    do {
+      const list = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucketName,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        })
+      );
+
+      for (const obj of list.Contents ?? []) {
+        if (!obj.Key) continue;
+        // Key format: trash/{userId}/{gameId}/{filename...}
+        const rel = obj.Key.slice(prefix.length);
+        const slashIdx = rel.indexOf("/");
+        if (slashIdx < 0) continue;
+
+        const gameId = rel.slice(0, slashIdx);
+        const filename = rel.slice(slashIdx + 1);
+        if (!filename) continue;
+
+        const size = obj.Size ?? 0;
+        const modified = obj.LastModified ?? new Date();
+
+        let entry = gamesMap.get(gameId);
+        if (!entry) {
+          entry = {
+            files: [],
+            totalSize: 0,
+            earliestDate: modified,
+            latestDate: modified,
+          };
+          gamesMap.set(gameId, entry);
+        }
+
+        entry.files.push({
+          filename,
+          size,
+          lastModified: modified.toISOString(),
+        });
+        entry.totalSize += size;
+        if (modified < entry.earliestDate) entry.earliestDate = modified;
+        if (modified > entry.latestDate) entry.latestDate = modified;
+      }
+
+      continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    const items: import("@savecloud/types").TrashGameItem[] = [];
+    for (const [gameId, data] of gamesMap.entries()) {
+      const deletedAt = data.latestDate.toISOString();
+      const expiresDate = new Date(data.latestDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+      items.push({
+        gameId,
+        totalFiles: data.files.length,
+        totalSizeBytes: data.totalSize,
+        deletedAt,
+        expiresAt: expiresDate.toISOString(),
+        files: data.files,
+      });
+    }
+
+    return items.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
+  }
+
+  /**
+   * Restaura un juego desde la papelera de reciclaje a su ubicación activa.
+   */
+  async restoreFromTrash(userId: string, gameId: string): Promise<void> {
+    const trashPrefix = `trash/${userId}/${gameId}/`;
+    const targetPrefix = `${userId}/${gameId}/`;
+    const copyLimit = pLimit(DELETE_BATCH_CONCURRENCY);
+
+    let continuationToken: string | undefined;
+    const keysToDelete: { Key: string }[] = [];
+
+    do {
+      const list = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucketName,
+          Prefix: trashPrefix,
+          ContinuationToken: continuationToken,
+        })
+      );
+
+      const contents = (list.Contents ?? []).filter((c): c is { Key: string } => !!c.Key);
+
+      if (contents.length > 0) {
+        const copyPromises = contents.map(({ Key }) => {
+          const relFilename = Key.slice(trashPrefix.length);
+          const targetKey = `${targetPrefix}${relFilename}`;
+          keysToDelete.push({ Key });
+
+          return copyLimit(() =>
+            this.s3.send(
+              new CopyObjectCommand({
+                Bucket: this.bucketName,
+                CopySource: `${this.bucketName}/${encodeURIComponent(Key)}`,
+                Key: targetKey,
+              })
+            )
+          );
+        });
+
+        await Promise.all(copyPromises);
+      }
+
+      continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    if (keysToDelete.length > 0) {
+      for (const batch of S3SaveRepository.chunk(keysToDelete, DELETE_BATCH_SIZE)) {
+        await this.s3.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucketName,
+            Delete: { Objects: batch, Quiet: true },
+          })
+        );
+      }
+    }
+  }
+
+  /**
+   * Elimina definitivamente un juego de la papelera.
+   */
+  async deleteFromTrash(userId: string, gameId: string): Promise<void> {
+    const trashPrefix = `trash/${userId}/${gameId}/`;
+    let continuationToken: string | undefined;
+
+    do {
+      const list = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucketName,
+          Prefix: trashPrefix,
+          ContinuationToken: continuationToken,
+        })
+      );
+
+      const keys = (list.Contents ?? []).filter((c): c is { Key: string } => !!c.Key).map((c) => ({ Key: c.Key }));
+
+      if (keys.length > 0) {
+        for (const batch of S3SaveRepository.chunk(keys, DELETE_BATCH_SIZE)) {
+          await this.s3.send(
+            new DeleteObjectsCommand({
+              Bucket: this.bucketName,
+              Delete: { Objects: batch, Quiet: true },
+            })
+          );
+        }
+      }
+
+      continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
+    } while (continuationToken);
+  }
+
+  /**
+   * Vacía toda la papelera del usuario.
+   */
+  async emptyTrash(userId: string): Promise<void> {
+    const trashPrefix = `trash/${userId}/`;
+    let continuationToken: string | undefined;
+
+    do {
+      const list = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucketName,
+          Prefix: trashPrefix,
+          ContinuationToken: continuationToken,
+        })
+      );
+
+      const keys = (list.Contents ?? []).filter((c): c is { Key: string } => !!c.Key).map((c) => ({ Key: c.Key }));
+
+      if (keys.length > 0) {
+        for (const batch of S3SaveRepository.chunk(keys, DELETE_BATCH_SIZE)) {
+          await this.s3.send(
+            new DeleteObjectsCommand({
+              Bucket: this.bucketName,
+              Delete: { Objects: batch, Quiet: true },
+            })
+          );
+        }
+      }
+
+      continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
+    } while (continuationToken);
   }
 
   /**

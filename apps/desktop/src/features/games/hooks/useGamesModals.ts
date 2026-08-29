@@ -1,7 +1,9 @@
 import { useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { ConfiguredGame } from "@savecloud/types";
 import { addGame, removeGame, deleteGameFromCloud, scheduleConfigBackupToCloud } from "@services/tauri";
-import { toastError } from "@utils/toast";
+import { toastError, toastSuccess } from "@utils/toast";
+import { formatGameDisplayName } from "@/utils/gameImage";
 import i18n from "@lib/i18n";
 
 interface UseGamesModalsProps {
@@ -11,6 +13,7 @@ interface UseGamesModalsProps {
 }
 
 export function useGamesModals({ gamesCount, onRefresh, onInvalidateConfig }: UseGamesModalsProps) {
+  const queryClient = useQueryClient();
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [scanModalOpen, setScanModalOpen] = useState(false);
   const [addModalInitial, setAddModalInitial] = useState<{ paths: string[]; suggestedId: string }>({
@@ -24,6 +27,8 @@ export function useGamesModals({ gamesCount, onRefresh, onInvalidateConfig }: Us
   const [syncPreviewType, setSyncPreviewType] = useState<"upload" | "download" | null>(null);
   const [gameToRestoreBackup, setGameToRestoreBackup] = useState<ConfiguredGame | null>(null);
   const [bulkConfirm, setBulkConfirm] = useState<{ type: "sync" | "download"; count: number } | null>(null);
+
+  const [trashModalOpen, setTrashModalOpen] = useState(false);
 
   const handleScanSelect = async (paths: string[], suggestedId: string) => {
     const idToUse = configureFromCloudGameId ?? suggestedId;
@@ -78,10 +83,12 @@ export function useGamesModals({ gamesCount, onRefresh, onInvalidateConfig }: Us
     setGameToRemove(game);
   };
 
-  const handleConfirmRemove = async (gameId: string) => {
+  const handleConfirmRemove = async (gameId: string, permanent?: boolean) => {
+    const displayName = formatGameDisplayName(gameId);
     try {
       try {
-        await deleteGameFromCloud(gameId);
+        await deleteGameFromCloud(gameId, permanent);
+        void queryClient.invalidateQueries({ queryKey: ["trash-items"] });
       } catch (e) {
         toastError(i18n.t("library.toast.cannotDeleteCloudSaves"), e instanceof Error ? e.message : String(e));
       }
@@ -91,8 +98,47 @@ export function useGamesModals({ gamesCount, onRefresh, onInvalidateConfig }: Us
       await new Promise((resolve) => setTimeout(resolve, 150));
       onRefresh();
       setGameToRemove(null);
+
+      if (permanent) {
+        toastSuccess(
+          i18n.t("library.toast.gameRemovedPermanentlyTitle", "Juego eliminado"),
+          i18n.t("library.toast.gameRemovedPermanentlyDesc", { gameName: displayName })
+        );
+      } else {
+        toastSuccess(
+          i18n.t("library.toast.gameMovedToTrashTitle", "Juego eliminado"),
+          i18n.t("library.toast.gameMovedToTrashDesc", { gameName: displayName })
+        );
+      }
     } catch (e) {
       console.error("Error al eliminar juego:", e);
+      toastError(i18n.t("library.toast.cannotDelete"), e instanceof Error ? e.message : String(e));
+      throw e;
+    }
+  };
+
+  const handleConfirmClearCloudSaves = async (gameId: string, permanent?: boolean) => {
+    const displayName = formatGameDisplayName(gameId);
+    try {
+      await deleteGameFromCloud(gameId, permanent);
+      void queryClient.invalidateQueries({ queryKey: ["trash-items"] });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      onRefresh();
+      setGameToRemove(null);
+
+      if (permanent) {
+        toastSuccess(
+          i18n.t("library.toast.cloudSavesPermanentlyDeletedTitle", "Guardados destruidos"),
+          i18n.t("library.toast.cloudSavesPermanentlyDeletedDesc", { gameName: displayName })
+        );
+      } else {
+        toastSuccess(
+          i18n.t("library.toast.cloudSavesMovedToTrashTitle", "Guardados en la nube"),
+          i18n.t("library.toast.cloudSavesMovedToTrashDesc", { gameName: displayName })
+        );
+      }
+    } catch (e) {
+      toastError(i18n.t("library.toast.cannotDeleteCloudSaves"), e instanceof Error ? e.message : String(e));
       throw e;
     }
   };
@@ -127,6 +173,8 @@ export function useGamesModals({ gamesCount, onRefresh, onInvalidateConfig }: Us
     setAddModalOpen,
     scanModalOpen,
     setScanModalOpen,
+    trashModalOpen,
+    setTrashModalOpen,
     addModalInitial,
     setAddModalInitial: (initial: { paths: string[]; suggestedId: string }) => {
       setAddModalInitial(initial);
@@ -145,6 +193,7 @@ export function useGamesModals({ gamesCount, onRefresh, onInvalidateConfig }: Us
     setGameToRemove,
     handleRemoveGame,
     handleConfirmRemove,
+    handleConfirmClearCloudSaves,
     syncPreviewGame,
     setSyncPreviewGame,
     syncPreviewType,
