@@ -1,8 +1,9 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { formatPlaytime } from "@utils/format";
+import i18n from "@lib/i18n";
 
-/** Título de las notificaciones (cambiar aquí para todas). */
+/** Título de las notificaciones por defecto. */
 export const NOTIFICATION_TITLE = "SaveCloud";
 /** Título de las notificaciones de error. */
 export const NOTIFICATION_TITLE_ERROR = "SaveCloud: Error";
@@ -54,8 +55,8 @@ async function maybeNotify(build: () => { title: string; body: string }): Promis
  */
 export async function notifyUploadDone(gameName: string): Promise<void> {
   await maybeNotify(() => ({
-    title: NOTIFICATION_TITLE,
-    body: `${gameName}: subida completada`,
+    title: i18n.t("notifications.defaultTitle", NOTIFICATION_TITLE),
+    body: i18n.t("notifications.uploadDone", { gameName, defaultValue: `${gameName}: subida completada` }),
   }));
 }
 
@@ -64,8 +65,8 @@ export async function notifyUploadDone(gameName: string): Promise<void> {
  */
 export async function notifyDownloadDone(gameName: string): Promise<void> {
   await maybeNotify(() => ({
-    title: NOTIFICATION_TITLE,
-    body: `${gameName}: descarga completada`,
+    title: i18n.t("notifications.defaultTitle", NOTIFICATION_TITLE),
+    body: i18n.t("notifications.downloadDone", { gameName, defaultValue: `${gameName}: descarga completada` }),
   }));
 }
 
@@ -74,8 +75,8 @@ export async function notifyDownloadDone(gameName: string): Promise<void> {
  */
 export async function notifyFullBackupDone(gameName: string): Promise<void> {
   await maybeNotify(() => ({
-    title: NOTIFICATION_TITLE,
-    body: `${gameName}: backup completo subido`,
+    title: i18n.t("notifications.defaultTitle", NOTIFICATION_TITLE),
+    body: i18n.t("notifications.fullBackupDone", { gameName, defaultValue: `${gameName}: backup completo subido` }),
   }));
 }
 
@@ -88,8 +89,13 @@ export async function notifyStreamingDryRunDone(
   savedPercentage: number
 ): Promise<void> {
   await maybeNotify(() => ({
-    title: "SaveCloud - Modo Prueba",
-    body: `${gameName}: prueba completada (ahorro: ${savedFormatted} / ${savedPercentage.toFixed(1)}%)`,
+    title: i18n.t("notifications.streamingDryRunTitle", "SaveCloud - Modo Prueba"),
+    body: i18n.t("notifications.streamingDryRunBody", {
+      gameName,
+      savedFormatted,
+      savedPercentage: savedPercentage.toFixed(1),
+      defaultValue: `${gameName}: prueba completada (ahorro: ${savedFormatted} / ${savedPercentage.toFixed(1)}%)`,
+    }),
   }));
 }
 
@@ -98,8 +104,12 @@ export async function notifyStreamingDryRunDone(
  */
 export async function notifyUploadError(gameName: string, error: string): Promise<void> {
   await maybeNotify(() => ({
-    title: NOTIFICATION_TITLE_ERROR,
-    body: `${gameName}: error al subir — ${error}`,
+    title: i18n.t("notifications.errorTitle", NOTIFICATION_TITLE_ERROR),
+    body: i18n.t("notifications.uploadError", {
+      gameName,
+      error,
+      defaultValue: `${gameName}: error al subir — ${error}`,
+    }),
   }));
 }
 
@@ -108,8 +118,12 @@ export async function notifyUploadError(gameName: string, error: string): Promis
  */
 export async function notifyDownloadError(gameName: string, error: string): Promise<void> {
   await maybeNotify(() => ({
-    title: NOTIFICATION_TITLE_ERROR,
-    body: `${gameName}: error al descargar — ${error}`,
+    title: i18n.t("notifications.errorTitle", NOTIFICATION_TITLE_ERROR),
+    body: i18n.t("notifications.downloadError", {
+      gameName,
+      error,
+      defaultValue: `${gameName}: error al descargar — ${error}`,
+    }),
   }));
 }
 
@@ -118,8 +132,12 @@ export async function notifyDownloadError(gameName: string, error: string): Prom
  */
 export async function notifyFullBackupError(gameName: string, error: string): Promise<void> {
   await maybeNotify(() => ({
-    title: NOTIFICATION_TITLE_ERROR,
-    body: `${gameName}: error al empaquetar/subir — ${error}`,
+    title: i18n.t("notifications.errorTitle", NOTIFICATION_TITLE_ERROR),
+    body: i18n.t("notifications.fullBackupError", {
+      gameName,
+      error,
+      defaultValue: `${gameName}: error al empaquetar/subir — ${error}`,
+    }),
   }));
 }
 
@@ -130,19 +148,26 @@ export async function notifyBatchUploadDone(okCount: number, errCount: number): 
   await maybeNotify(() => {
     if (errCount === 0) {
       return {
-        title: NOTIFICATION_TITLE,
-        body: `Subida completada: ${okCount} archivo(s) a la nube`,
+        title: i18n.t("notifications.defaultTitle", NOTIFICATION_TITLE),
+        body: i18n.t("notifications.batchUploadSuccess", {
+          count: okCount,
+          defaultValue: `Subida completada: ${okCount} archivo(s) a la nube`,
+        }),
       };
     }
     if (okCount > 0) {
       return {
-        title: NOTIFICATION_TITLE,
-        body: `Subida completada con errores: ${okCount} subido(s), ${errCount} error(es)`,
+        title: i18n.t("notifications.defaultTitle", NOTIFICATION_TITLE),
+        body: i18n.t("notifications.batchUploadPartial", {
+          okCount,
+          errCount,
+          defaultValue: `Subida completada con errores: ${okCount} subido(s), ${errCount} error(es)`,
+        }),
       };
     }
     return {
-      title: NOTIFICATION_TITLE_ERROR,
-      body: "Subida fallida",
+      title: i18n.t("notifications.errorTitle", NOTIFICATION_TITLE_ERROR),
+      body: i18n.t("notifications.batchUploadFailed", "Subida fallida"),
     };
   });
 }
@@ -154,19 +179,26 @@ export async function notifyBatchDownloadDone(okCount: number, errCount: number)
   await maybeNotify(() => {
     if (errCount === 0) {
       return {
-        title: NOTIFICATION_TITLE,
-        body: `Descarga completada: ${okCount} archivo(s)`,
+        title: i18n.t("notifications.defaultTitle", NOTIFICATION_TITLE),
+        body: i18n.t("notifications.batchDownloadSuccess", {
+          count: okCount,
+          defaultValue: `Descarga completada: ${okCount} archivo(s)`,
+        }),
       };
     }
     if (okCount > 0) {
       return {
-        title: NOTIFICATION_TITLE,
-        body: `Descarga completada con errores: ${okCount} descargado(s), ${errCount} error(es)`,
+        title: i18n.t("notifications.defaultTitle", NOTIFICATION_TITLE),
+        body: i18n.t("notifications.batchDownloadPartial", {
+          okCount,
+          errCount,
+          defaultValue: `Descarga completada con errores: ${okCount} descargado(s), ${errCount} error(es)`,
+        }),
       };
     }
     return {
-      title: NOTIFICATION_TITLE_ERROR,
-      body: "Descarga fallida",
+      title: i18n.t("notifications.errorTitle", NOTIFICATION_TITLE_ERROR),
+      body: i18n.t("notifications.batchDownloadFailed", "Descarga fallida"),
     };
   });
 }
@@ -178,19 +210,31 @@ export async function notifySyncComplete(gameName: string, okCount: number, errC
   await maybeNotify(() => {
     if (errCount === 0) {
       return {
-        title: NOTIFICATION_TITLE,
-        body: `${gameName}: ${okCount} archivo(s) subido(s) a la nube`,
+        title: i18n.t("notifications.defaultTitle", NOTIFICATION_TITLE),
+        body: i18n.t("notifications.syncCompleteSuccess", {
+          gameName,
+          count: okCount,
+          defaultValue: `${gameName}: ${okCount} archivo(s) subido(s) a la nube`,
+        }),
       };
     }
     if (okCount > 0) {
       return {
-        title: NOTIFICATION_TITLE,
-        body: `${gameName}: ${okCount} subido(s), ${errCount} error(es)`,
+        title: i18n.t("notifications.defaultTitle", NOTIFICATION_TITLE),
+        body: i18n.t("notifications.syncCompletePartial", {
+          gameName,
+          okCount,
+          errCount,
+          defaultValue: `${gameName}: ${okCount} subido(s), ${errCount} error(es)`,
+        }),
       };
     }
     return {
-      title: NOTIFICATION_TITLE_ERROR,
-      body: `${gameName}: No se pudo subir`,
+      title: i18n.t("notifications.errorTitle", NOTIFICATION_TITLE_ERROR),
+      body: i18n.t("notifications.syncCompleteFailed", {
+        gameName,
+        defaultValue: `${gameName}: No se pudo subir`,
+      }),
     };
   });
 }
@@ -200,8 +244,11 @@ export async function notifySyncComplete(gameName: string, okCount: number, errC
  */
 export async function notifyWeeklyDigest(weeklyPlaytimeSeconds: number): Promise<void> {
   await maybeNotify(() => ({
-    title: NOTIFICATION_TITLE,
-    body: `Esta semana: ${formatPlaytime(weeklyPlaytimeSeconds)} jugados.`,
+    title: i18n.t("notifications.defaultTitle", NOTIFICATION_TITLE),
+    body: i18n.t("notifications.weeklyDigest", {
+      playtime: formatPlaytime(weeklyPlaytimeSeconds),
+      defaultValue: `Esta semana: ${formatPlaytime(weeklyPlaytimeSeconds)} jugados.`,
+    }),
   }));
 }
 
@@ -212,8 +259,8 @@ export async function notifyTest(): Promise<boolean> {
   const granted = await ensurePermission();
   if (!granted) return false;
   sendNotification({
-    title: NOTIFICATION_TITLE,
-    body: "Notificación de prueba — si ves esto, todo funciona correctamente",
+    title: i18n.t("notifications.testTitle", NOTIFICATION_TITLE),
+    body: i18n.t("notifications.testBody", "Notificación de prueba — si ves esto, todo funciona correctamente"),
   });
   return true;
 }
@@ -223,7 +270,11 @@ export async function notifyTest(): Promise<boolean> {
  */
 export async function notifySyncError(gameName: string, error: string): Promise<void> {
   await maybeNotify(() => ({
-    title: NOTIFICATION_TITLE_ERROR,
-    body: `${gameName}: ${error}`,
+    title: i18n.t("notifications.errorTitle", NOTIFICATION_TITLE_ERROR),
+    body: i18n.t("notifications.syncError", {
+      gameName,
+      error,
+      defaultValue: `${gameName}: ${error}`,
+    }),
   }));
 }

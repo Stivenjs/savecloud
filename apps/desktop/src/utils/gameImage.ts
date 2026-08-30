@@ -385,6 +385,22 @@ export function detectGameFromText({
   }
 
   // 2. Extracción por patrones de texto comunes (notificaciones, overlays, sync)
+  const partidasMatch = bodyStr.match(
+    /partidas\s+de\s+(.+?)(?:\s+sincronizada|\s+guardada|\s+subida|\s+descargada|\.|$)/i
+  );
+  if (partidasMatch && partidasMatch[1].trim().length < 50) return partidasMatch[1].trim();
+
+  const syncMatch = bodyStr.match(
+    /sincronizaci[oó]n\s+(?:de\s+|exitosa\s+de\s+)?(.+?)(?:\s+completada|\s+exitosa|\s*\(|\.|$)/i
+  );
+  if (syncMatch && syncMatch[1].trim().length < 50) return syncMatch[1].trim();
+
+  const playMatch = bodyStr.match(/¡?a\s+jugar\s+([^!]+)!?/i);
+  if (playMatch && playMatch[1].trim().length < 50) return playMatch[1].trim();
+
+  const savedMatch = bodyStr.match(/^(.+?)\s+guardado\s+en\s+la\s+nube/i);
+  if (savedMatch && savedMatch[1].trim().length < 50) return savedMatch[1].trim();
+
   const startMatch = bodyStr.match(/iniciaste\s+(.+)$/i);
   if (startMatch && startMatch[1].trim().length < 50) return startMatch[1].trim();
 
@@ -398,4 +414,46 @@ export function detectGameFromText({
   if (colonMatch) return colonMatch[1].trim();
 
   return null;
+}
+
+/**
+ * Reemplaza identificadores de juegos o el juego detectado dentro de un texto
+ * con sus nombres formateados legibles (formatGameDisplayName).
+ */
+export function formatTextWithGameNames(
+  text: string,
+  targetGameId?: string | null,
+  games?: readonly ConfiguredGame[]
+): string {
+  if (!text?.trim()) return text;
+  let result = text;
+
+  if (targetGameId?.trim()) {
+    const raw = targetGameId.trim();
+    const formatted = formatGameDisplayName(raw);
+    if (raw && formatted && raw.toLowerCase() !== formatted.toLowerCase()) {
+      const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      result = result.replace(new RegExp(escaped, "gi"), formatted);
+    } else if (result.trim().toLowerCase() === raw.toLowerCase()) {
+      result = formatted;
+    }
+  }
+
+  if (games?.length) {
+    for (const game of games) {
+      const raw = game.id.trim();
+      const formatted = formatGameDisplayName(raw);
+      if (
+        raw &&
+        formatted &&
+        raw.toLowerCase() !== formatted.toLowerCase() &&
+        result.toLowerCase().includes(raw.toLowerCase())
+      ) {
+        const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        result = result.replace(new RegExp(escaped, "gi"), formatted);
+      }
+    }
+  }
+
+  return result;
 }

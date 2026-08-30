@@ -6,7 +6,8 @@
     "social": "Social",
     "activity": "Actividad",
     "settings": "Ajustes",
-    "about": "Información"
+    "about": "Información",
+    "socialMembers": "Miembros Cloud"
   },
   "common": {
     "save": "Guardar",
@@ -52,7 +53,12 @@
       "paused": "Pausado",
       "completed": "Completado",
       "failed": "Error"
-    }
+    },
+    "copy": "Copiar",
+    "copied": "¡Copiado!",
+    "searchGames": "Buscar juegos, complementos y mucho más",
+    "searchPlaceholder": "Buscar juegos, partidas y más...",
+    "bigPictureMode": "Modo Big Picture"
   },
   "errors": {
     "unexpected": "Ocurrió un error inesperado",
@@ -150,7 +156,10 @@
       "deleteGameCompletelyDesc": "Elimina el juego de tu biblioteca local y borra sus guardados en la nube.",
       "permanentCheckbox": "Eliminar definitivamente de inmediato",
       "permanentWarning": "Los datos se destruirán sin pasar por la papelera.",
-      "trashHint": "Los datos se moverán a la papelera donde podrás recuperarlos durante 30 días."
+      "trashHint": "Los datos se moverán a la papelera donde podrás recuperarlos durante 30 días.",
+      "recommendedBadge": "Recomendado",
+      "purgeCloudConfirm": "Purgar guardados de la nube",
+      "purgeFullConfirm": "Eliminar permanentemente"
     },
     "trashModal": {
       "sectionLabel": "NUBE • RECUPERACIÓN",
@@ -646,7 +655,10 @@
         "noExecutableConfigured": "Sin ejecutable directo configurado (puedes añadirlo en Editar).",
         "editionTitle": "Edición / Origen",
         "standardEdition": "Estándar / Sin etiqueta"
-      }
+      },
+      "inSession": "En sesión",
+      "sourcesAvailable_one": "1 fuente",
+      "sourcesAvailable_other": "{{count}} fuentes"
     },
     "toast": {
       "downloadSuccessTitle": "Descarga completada",
@@ -713,8 +725,11 @@
       "cloudSavesPermanentlyDeletedTitle": "Guardados destruidos",
       "cloudSavesPermanentlyDeletedDesc": "Guardados de {{gameName}} eliminados permanentemente de la nube.",
       "gameRemovedPermanentlyTitle": "Juego eliminado",
-      "gameRemovedPermanentlyDesc": "{{gameName}} y sus guardados fueron destruidos definitivamente."
-    }
+      "gameRemovedPermanentlyDesc": "{{gameName}} y sus guardados fueron destruidos definitivamente.",
+      "transferStarted": "Transferencia iniciada",
+      "transferStartedDesc": "Iniciando recepción de {{displayName}} desde {{deviceName}}..."
+    },
+    "stop": "Detener"
   },
   "settings": {
     "emulators": {
@@ -1168,7 +1183,8 @@
       "openDevTools": "Abrir DevTools (esta ventana)",
       "closeDevTools": "Cerrar DevTools",
       "lockedInfo": "Activa el modo arriba para usar DevTools en producción.",
-      "errorOpen": "No se pudo abrir DevTools"
+      "errorOpen": "No se pudo abrir DevTools",
+      "errorClose": "Error al cerrar DevTools"
     },
     "inventory": {
       "title": "Inventario de juegos en el cloud",
@@ -1378,6 +1394,14 @@
       "remoteBackupDesc": "Sube tu configuración al servidor o aplica la última copia guardada.",
       "backupToCloud": "Respaldar en la nube",
       "restoreFromCloud": "Restaurar desde la nube"
+    },
+    "audioOutput": {
+      "title": "Dispositivo de salida de sonido",
+      "description": "Selecciona los altavoces, auriculares o salida de audio física para la reproducción de sonido en tiempo real.",
+      "systemDefault": "Por defecto del sistema",
+      "defaultSuffix": " (Predeterminado)",
+      "deviceUpdated": "Dispositivo de sonido actualizado correctamente",
+      "deviceUpdateError": "Error al cambiar dispositivo de sonido"
     }
   },
   "friends": {
@@ -1857,7 +1881,8 @@
         "shareMembersDesc": "Si eres anfitrión, los miembros de tu nube podrán ver tu perfil visual en Amigos.",
         "helpDesc": "Puedes usar enlaces https o rutas a archivos locales. Las rutas locales dependen del archivo en disco; si mueves o borras el archivo, el perfil dejará de mostrarlo."
       }
-    }
+    },
+    "openProfile": "Ver Perfil"
   },
   "saveGraph": {
     "filters": {
@@ -1940,15 +1965,38 @@
     "ariaLabel": "Cerrando"
   },
   "notifications": {
-    "center": "Centro de notificaciones",
     "title": "Notificaciones",
-    "dismiss": "Descartar notificación",
-    "openFolder": "Abrir carpeta",
-    "openUrl": "Abrir enlace",
-    "markRead": "Leída",
+    "center": "Centro de notificaciones",
+    "empty": "Sin notificaciones pendientes",
     "markAllRead": "Marcar leídas",
     "clearAll": "Limpiar",
-    "empty": "Sin notificaciones"
+    "markRead": "Marcar como leída",
+    "dismiss": "Descartar",
+    "openFolder": "Abrir carpeta",
+    "openUrl": "Abrir enlace",
+    "defaultTitle": "SaveCloud",
+    "errorTitle": "SaveCloud: Error",
+    "uploadDone": "{{gameName}}: subida completada",
+    "downloadDone": "{{gameName}}: descarga completada",
+    "fullBackupDone": "{{gameName}}: backup completo subido",
+    "streamingDryRunTitle": "SaveCloud - Modo Prueba",
+    "streamingDryRunBody": "{{gameName}}: prueba completada (ahorro: {{savedFormatted}} / {{savedPercentage}}%)",
+    "uploadError": "{{gameName}}: error al subir — {{error}}",
+    "downloadError": "{{gameName}}: error al descargar — {{error}}",
+    "fullBackupError": "{{gameName}}: error al empaquetar/subir — {{error}}",
+    "batchUploadSuccess": "Subida completada: {{count}} archivo(s) a la nube",
+    "batchUploadPartial": "Subida completada con errores: {{okCount}} subido(s), {{errCount}} error(es)",
+    "batchUploadFailed": "Subida fallida",
+    "batchDownloadSuccess": "Descarga completada: {{count}} archivo(s)",
+    "batchDownloadPartial": "Descarga completada con errores: {{okCount}} descargado(s), {{errCount}} error(es)",
+    "batchDownloadFailed": "Descarga fallida",
+    "syncCompleteSuccess": "{{gameName}}: {{count}} archivo(s) subido(s) a la nube",
+    "syncCompletePartial": "{{gameName}}: {{okCount}} subido(s), {{errCount}} error(es)",
+    "syncCompleteFailed": "{{gameName}}: No se pudo subir",
+    "weeklyDigest": "Esta semana: {{playtime}} jugados.",
+    "testTitle": "SaveCloud",
+    "testBody": "Notificación de prueba — si ves esto, todo funciona correctamente",
+    "syncError": "{{gameName}}: {{error}}"
   },
   "history": {
     "title": "Historial de operaciones",
@@ -2186,7 +2234,11 @@
           "desc": "No se pudo determinar el método de descarga."
         }
       }
-    }
+    },
+    "infiniteScrollEnd": "Has alcanzado el final del catálogo.",
+    "loadingMore": "Cargando más juegos...",
+    "modeInfinite": "Scroll infinito",
+    "modePaginated": "Páginas numeradas"
   },
   "about": {
     "heroTagline": "Open Source · Self-Hosted · AWS",
@@ -2242,8 +2294,14 @@
     "deployTitle": "Listo en minutos",
     "deploySubtitle": "Solo necesitas una cuenta de AWS y dos comandos.",
     "deploySteps": {
-      "clone": { "cmd": "git clone https://github.com/Stivenjs/savecloud", "label": "Clona el repositorio" },
-      "run": { "cmd": "cd savecloud && bun run deploy:live", "label": "Ejecuta el deploy" }
+      "clone": {
+        "cmd": "git clone https://github.com/Stivenjs/savecloud",
+        "label": "Clona el repositorio"
+      },
+      "run": {
+        "cmd": "cd savecloud && bun run deploy:live",
+        "label": "Ejecuta el deploy"
+      }
     },
     "deployHint": "El proceso genera automáticamente todas las credenciales necesarias para conectarte.",
     "selfHostedLabel": "Por qué self-hosted",
@@ -2259,10 +2317,22 @@
     "shareDesc": "Una vez desplegada tu instancia, puedes invitar a tus amigos a usarla. Ellos solo necesitan las credenciales que genera el deploy. Perfecto para grupos que quieren compartir recursos y costos.",
     "securityLabel": "Seguridad",
     "security": {
-      "files": { "title": "Tus archivos son tuyos", "desc": "Almacenados en tu propia cuenta de AWS" },
-      "encrypted": { "title": "Conexiones encriptadas", "desc": "HTTPS en todas las comunicaciones" },
-      "telemetry": { "title": "Sin telemetría", "desc": "Cero rastreo, cero analytics ocultos" },
-      "auditable": { "title": "Código auditable", "desc": "100% open source en GitHub" }
+      "files": {
+        "title": "Tus archivos son tuyos",
+        "desc": "Almacenados en tu propia cuenta de AWS"
+      },
+      "encrypted": {
+        "title": "Conexiones encriptadas",
+        "desc": "HTTPS en todas las comunicaciones"
+      },
+      "telemetry": {
+        "title": "Sin telemetría",
+        "desc": "Cero rastreo, cero analytics ocultos"
+      },
+      "auditable": {
+        "title": "Código auditable",
+        "desc": "100% open source en GitHub"
+      }
     },
     "ctaTitle": "¿Listo para empezar?",
     "ctaDesc": "Revisa el repositorio en GitHub para instrucciones detalladas y documentación completa.",
@@ -2395,5 +2465,22 @@
       "successDesc": "{{game}}: Ahorrado {{saved}} (-{{percent}}%)",
       "errorTitle": "Error en la prueba de compresión"
     }
+  },
+  "overlay": {
+    "ariaLabel": "Notificaciones de overlay",
+    "defaultTitle": "SaveCloud",
+    "gameDownloaded": "Juego Descargado",
+    "downloadFinished": "La descarga ha finalizado.",
+    "youArePlaying": "Tú estás jugando",
+    "youStarted": "Iniciaste {{gameName}}",
+    "friendPlaying": "Amigo jugando",
+    "friendPlayingGame": "{{friend}} está jugando {{gameName}}",
+    "cloudSave": "Guardado en la Nube",
+    "savesSynced": "Partidas de {{gameName}} sincronizadas correctamente.",
+    "companion": "SaveCloud Companion",
+    "playPrompt": "¡A jugar {{gameName}}! Auto-sync activo.",
+    "syncSuccess": "Sincronización Exitosa",
+    "savedToCloud": "{{gameName}} guardado en la nube.",
+    "saveDetected": "Guardado detectado"
   }
 }

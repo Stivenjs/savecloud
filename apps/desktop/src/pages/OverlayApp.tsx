@@ -3,8 +3,9 @@ import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { AnimatePresence, motion, type Transition } from "framer-motion";
 import { Gamepad2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useConfig } from "@hooks/useConfig";
-import { detectGameFromText } from "@utils/gameImage";
+import { detectGameFromText, formatTextWithGameNames } from "@utils/gameImage";
 import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
 
 /**
@@ -56,6 +57,16 @@ const NotificationCard: React.FC<OverlayNotification> = ({ id, title, body, avat
     [gameId, body, title, config?.games]
   );
 
+  const formattedTitle = useMemo(
+    () => formatTextWithGameNames(title, detectedGameId, config?.games),
+    [title, detectedGameId, config?.games]
+  );
+
+  const formattedBody = useMemo(
+    () => formatTextWithGameNames(body, detectedGameId, config?.games),
+    [body, detectedGameId, config?.games]
+  );
+
   return (
     <motion.div key={id} {...ANIMATION_CONFIG} className="pointer-events-auto">
       {/* Contenedor principal estilo Steam Toast */}
@@ -88,8 +99,12 @@ const NotificationCard: React.FC<OverlayNotification> = ({ id, title, body, avat
 
           {/* Texto */}
           <div className="flex flex-col min-w-0">
-            <span className="text-[#c6d4df] text-[14px] font-medium leading-[1.2] truncate max-w-60">{title}</span>
-            <span className="text-[#5c7e10] text-[13px] font-normal leading-[1.3] truncate max-w-60">{body}</span>
+            <span className="text-[#c6d4df] text-[14px] font-medium leading-[1.2] truncate max-w-60">
+              {formattedTitle}
+            </span>
+            <span className="text-[#5c7e10] text-[13px] font-normal leading-[1.3] truncate max-w-60">
+              {formattedBody}
+            </span>
           </div>
         </div>
       </div>
@@ -171,6 +186,7 @@ function useOverlayNotifications() {
  * <OverlayApp />
  */
 export function OverlayApp() {
+  const { t } = useTranslation();
   const { notifications, addNotification, cleanup } = useOverlayNotifications();
   const hasSignaledReadyRef = useRef(false);
 
@@ -231,7 +247,7 @@ export function OverlayApp() {
       <div
         className="absolute bottom-17 right-4 flex flex-col items-end gap-2.5 pointer-events-none"
         role="region"
-        aria-label="Notificaciones de overlay"
+        aria-label={t("overlay.ariaLabel", "Notificaciones de overlay")}
         aria-live="polite">
         <AnimatePresence mode="popLayout">
           {notifications.map((notification) => (

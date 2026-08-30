@@ -7,8 +7,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { formatGameDisplayName } from "@utils/gameImage";
+import type { ConfiguredGame } from "@app-types/config";
 import { getFriendConfig, setCloudHostWsUrl } from "@services/tauri/config.service";
 import { useGameSessionStore } from "@store/GameSessionStore";
+import i18n from "@lib/i18n";
 
 /**
  * Mensaje entrante desde el WebSocket de la nube (Rust → TS).
@@ -71,7 +73,7 @@ export function useCloudWebSockets() {
   const activeUserId = activeProfile?.localUserId?.trim() ?? "";
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
 
-  const gamesRef = useRef(config?.games);
+  const gamesRef = useRef<readonly ConfiguredGame[] | undefined>(config?.games);
   gamesRef.current = config?.games;
 
   const lastActiveUserIdRef = useRef(activeUserId);
@@ -185,7 +187,7 @@ export function useCloudWebSockets() {
     let unlistenStatus: (() => void) | undefined;
 
     function resolveGameName(gameId: string): string {
-      const gameNode = gamesRef.current?.find((g) => g.id === gameId);
+      const gameNode = gamesRef.current?.find((g: ConfiguredGame) => g.id === gameId);
       const baseDisplayName = formatGameDisplayName(gameId);
       const editionLabel = gameNode?.editionLabel?.trim();
       return editionLabel ? `${baseDisplayName} (${editionLabel})` : baseDisplayName;
@@ -208,8 +210,8 @@ export function useCloudWebSockets() {
 
       if (import.meta.env.DEV) {
         invoke("show_overlay_notification", {
-          title: "Tú estás jugando",
-          body: `Iniciaste ${gameName}`,
+          title: i18n.t("overlay.youArePlaying", "Tú estás jugando"),
+          body: i18n.t("overlay.youStarted", { gameName, defaultValue: `Iniciaste ${gameName}` }),
         }).catch(() => {});
       }
     }
