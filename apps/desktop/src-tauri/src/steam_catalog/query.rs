@@ -260,25 +260,31 @@ pub fn search_catalog_filtered(
         return Ok(Vec::new());
     };
 
-    let fts_match_query = tokens
-        .iter()
-        .map(|t| format!("\"{}\"*", t.replace('"', "")))
-        .collect::<Vec<_>>()
-        .join(" AND ");
+    let (table_name, match_query) = if phrase.len() >= 3 {
+        let trigram_query = format!("\"{}\"", phrase.replace('"', ""));
+        ("steam_catalog_trigram", trigram_query)
+    } else {
+        let fts_match = tokens
+            .iter()
+            .map(|t| format!("\"{}\"*", t.replace('"', "")))
+            .collect::<Vec<_>>()
+            .join(" AND ");
+        ("steam_catalog_search", fts_match)
+    };
 
-    let mut sql = String::from(
+    let mut sql = format!(
         "SELECT a.app_id, a.name \
-         FROM steam_catalog_search s \
+         FROM {table_name} s \
          JOIN steam_catalog_apps a ON a.app_id = s.app_id \
          LEFT JOIN steam_catalog_trending tr ON tr.app_id = a.app_id \
-         WHERE steam_catalog_search MATCH ?",
+         WHERE {table_name} MATCH ?",
     );
 
     let phrase_like = escape_like_pattern(&phrase);
     let phrase_prefix = format!("{phrase_like}%");
     let phrase_contains = format!("% {phrase_like}%");
 
-    let mut params: Vec<String> = vec![fts_match_query];
+    let mut params: Vec<String> = vec![match_query];
     append_genre_filter(&mut sql, &mut params, genres, "a");
     append_tag_filter(&mut sql, &mut params, tags, "a");
     params.push(phrase.clone());

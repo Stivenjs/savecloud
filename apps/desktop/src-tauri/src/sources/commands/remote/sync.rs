@@ -16,7 +16,7 @@ use super::super::match_index::invalidate_index;
 use crate::sources::domain::{
     ImportMode, RemoteSourceConfig, RemoteSyncItemResult, RemoteSyncResult, SourceCatalog,
 };
-use crate::sources::parser::parse_catalog;
+use crate::sources::parser::parse_catalog_from_reader;
 use crate::sources::queue::now_iso;
 use crate::sources::store;
 
@@ -135,13 +135,14 @@ fn persist_catalog_body(
         return;
     }
 
-    let mut catalog = match parse_catalog(&fetched.raw, Some(remote_source.url.clone())) {
-        Ok(catalog) => catalog,
-        Err(error) => {
-            counters.record_failure(remote_source, items, error);
-            return;
-        }
-    };
+    let mut catalog =
+        match parse_catalog_from_reader(fetched.raw.as_bytes(), Some(remote_source.url.clone())) {
+            Ok(catalog) => catalog,
+            Err(error) => {
+                counters.record_failure(remote_source, items, error);
+                return;
+            }
+        };
 
     let previous_hash = remote_source.sync.content_hash.clone();
     let previous_synced_at = remote_source.sync.last_synced_at.clone();
