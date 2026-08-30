@@ -9,10 +9,18 @@ use serde_json::Value;
 use super::domain::{DownloadProtocol, SourceCatalog, SourceItem, SourceUri};
 
 /// Convierte texto JSON en un catálogo normalizado.
-///
-/// Requiere como contrato mínimo el campo raíz `downloads[]`.
+#[allow(dead_code)]
 pub fn parse_catalog(raw: &str, source_url: Option<String>) -> Result<SourceCatalog, String> {
-    let parsed: Value = serde_json::from_str(raw).map_err(|e| format!("JSON inválido: {e}"))?;
+    parse_catalog_from_reader(raw.as_bytes(), source_url)
+}
+
+/// Convierte un flujo de bytes JSON (`std::io::Read`) en un catálogo normalizado sin duplicar memoria en heap.
+pub fn parse_catalog_from_reader<R: std::io::Read>(
+    reader: R,
+    source_url: Option<String>,
+) -> Result<SourceCatalog, String> {
+    let parsed: Value =
+        serde_json::from_reader(reader).map_err(|e| format!("JSON inválido: {e}"))?;
     let downloads = parsed
         .get("downloads")
         .and_then(Value::as_array)
@@ -29,10 +37,9 @@ pub fn parse_catalog(raw: &str, source_url: Option<String>) -> Result<SourceCata
         .filter(|v| !v.is_empty())
         .unwrap_or("source");
     let base_slug = slugify(source_name);
-    // Sufijo estable: varios JSONs con el mismo `name` no deben compartir id (merge sobrescribiría).
-    let source_id = unique_catalog_id(&base_slug, source_url.as_deref(), raw);
+    let source_id = unique_catalog_id(&base_slug, source_url.as_deref(), "");
 
-    let mut items: Vec<SourceItem> = Vec::new();
+    let mut items: Vec<SourceItem> = Vec::with_capacity(downloads.len());
     for (idx, item) in downloads.iter().enumerate() {
         let Some(obj) = item.as_object() else {
             continue;
@@ -53,7 +60,7 @@ pub fn parse_catalog(raw: &str, source_url: Option<String>) -> Result<SourceCata
             continue;
         };
 
-        let mut normalized_uris: Vec<SourceUri> = Vec::new();
+        let mut normalized_uris: Vec<SourceUri> = Vec::with_capacity(uris.len());
         for (priority, uri) in uris.iter().enumerate() {
             let Some(raw_uri) = uri.as_str() else {
                 continue;

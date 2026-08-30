@@ -6,7 +6,7 @@ use unicode_normalization::UnicodeNormalization;
 use super::meta::{get_meta, set_meta, META_NAME_NORMALIZED_BACKFILL};
 
 /// Metadato: versión de la lógica de normalización; si cambia, se puede forzar otro backfill.
-pub const NAME_NORMALIZED_LOGIC_VERSION: &str = "3";
+pub const NAME_NORMALIZED_LOGIC_VERSION: &str = "1";
 
 fn collapse_dotted_acronyms(s: &str) -> String {
     let mut out = String::with_capacity(s.len());

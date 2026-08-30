@@ -174,6 +174,10 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
     handleSaveDefaultSourceDownloadDir,
     deletingSourceIds,
     deletingRemoteSourceIds,
+    exportingSourceIds,
+    exportingAllSources,
+    handleExportAllSources,
+    handleExportSource,
     handleDeleteSource,
     handleAutoExtractDownloadsChange,
   } = useSettingsPage();
@@ -294,12 +298,16 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
                 verifiedSourcesStatus={verifiedSourcesStatus}
                 deletingSourceIds={deletingSourceIds}
                 deletingRemoteSourceIds={deletingRemoteSourceIds}
+                exportingSourceIds={exportingSourceIds}
+                exportingAllSources={exportingAllSources}
                 onSourceUrlChange={setSourceUrl}
                 onRemoteSourceUrlChange={setRemoteSourceUrl}
                 onDefaultDownloadDirChange={setDefaultSourceDownloadDir}
                 onImportUrl={() => handleImportSourceByUrl("merge")}
                 onImportFile={() => handleImportSourceByFile("merge")}
                 onImportBatch={() => handleImportSourcesBatch("updateorcreate")}
+                onExportAllSources={handleExportAllSources}
+                onExportSource={handleExportSource}
                 onRegisterRemoteSource={handleRegisterRemoteSource}
                 onToggleRemoteSourceEnabled={handleToggleRemoteSourceEnabled}
                 onDeleteRemoteSource={handleDeleteRemoteSource}

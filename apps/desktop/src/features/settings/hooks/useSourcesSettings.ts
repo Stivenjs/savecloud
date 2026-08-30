@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import {
+  exportSourceToJson,
+  exportSourcesToJson,
   getVerifiedSourcesStatus,
   importSourceFromFile,
   importSourceFromUrl,
@@ -31,6 +33,8 @@ export function useSourcesSettings() {
   const [proxyUrl, setProxyUrlState] = useState("");
   const [deletingSourceIds, setDeletingSourceIds] = useState<Set<string>>(new Set());
   const [deletingRemoteSourceIds, setDeletingRemoteSourceIds] = useState<Set<string>>(new Set());
+  const [exportingSourceIds, setExportingSourceIds] = useState<Set<string>>(new Set());
+  const [exportingAllSources, setExportingAllSources] = useState(false);
 
   const { data: sourcesSummary = [] } = useQuery({
     queryKey: ["sources-catalogs"],
@@ -307,6 +311,51 @@ export function useSourcesSettings() {
     }
   };
 
+  const handleExportAllSources = async () => {
+    setExportingAllSources(true);
+    try {
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const defaultName = `savecloud-sources-${dateStr}.json`;
+      const path = await save({
+        title: i18n.t("settings.sourceInstall.exportAllButton"),
+        defaultPath: defaultName,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!path) return;
+      const savedPath = await exportSourcesToJson(path);
+      toastSuccess(i18n.t("settings.toast.exportSuccess"), savedPath);
+    } catch (e) {
+      toastError(i18n.t("settings.toast.exportError"), e instanceof Error ? e.message : String(e));
+    } finally {
+      setExportingAllSources(false);
+    }
+  };
+
+  const handleExportSource = async (sourceId: string, sourceName: string) => {
+    setExportingSourceIds((prev) => new Set(prev).add(sourceId));
+    try {
+      const safeName = sourceName.toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const defaultName = `source-${safeName}-${dateStr}.json`;
+      const path = await save({
+        title: `${i18n.t("settings.sourceInstall.exportSourceTooltip")}: ${sourceName}`,
+        defaultPath: defaultName,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!path) return;
+      const savedPath = await exportSourceToJson(sourceId, path);
+      toastSuccess(i18n.t("settings.toast.exportSuccess"), savedPath);
+    } catch (e) {
+      toastError(i18n.t("settings.toast.exportError"), e instanceof Error ? e.message : String(e));
+    } finally {
+      setExportingSourceIds((prev) => {
+        const next = new Set(prev);
+        next.delete(sourceId);
+        return next;
+      });
+    }
+  };
+
   return {
     sourcesBusy,
     sourceUrl,
@@ -322,9 +371,13 @@ export function useSourcesSettings() {
     verifiedSourcesStatus,
     deletingSourceIds,
     deletingRemoteSourceIds,
+    exportingSourceIds,
+    exportingAllSources,
     handleImportSourceByUrl,
     handleImportSourceByFile,
     handleImportSourcesBatch,
+    handleExportAllSources,
+    handleExportSource,
     handleSelectDefaultSourceDownloadDir,
     handleSaveDefaultSourceDownloadDir,
     handleSaveProxyUrl,

@@ -54,6 +54,8 @@ const MIGRATIONS: &[&str] = &[
     include_str!("sql/019_fix_indexes.sql"),
     include_str!("sql/020_reviews_seed_support.sql"),
     include_str!("sql/021_plugin_storage.sql"),
+    include_str!("sql/022_sources_schema.sql"),
+    include_str!("sql/023_fts5_trigram_catalog.sql"),
 ];
 
 /// Ejecuta todas las migraciones pendientes.

@@ -2,11 +2,11 @@
 
 use super::fetch::{fetch_catalog_for_import, sync_metadata_from_fetch};
 use super::match_index::invalidate_index;
-use super::super::events::emit_catalog_updated;
 use super::super::domain::{
     BatchImportItemResult, BatchImportResult, ImportMode, SourceCatalogSummary, SourceItemsPage,
 };
-use super::super::parser::parse_catalog;
+use super::super::events::emit_catalog_updated;
+use super::super::parser::parse_catalog_from_reader;
 use super::super::queue::now_iso;
 use super::super::store;
 
@@ -19,17 +19,7 @@ pub async fn list_sources() -> Result<Vec<super::super::domain::SourceCatalog>, 
 /// Resumen de catálogos instalados con conteo de descargas.
 #[tauri::command]
 pub async fn list_sources_summary() -> Result<Vec<SourceCatalogSummary>, String> {
-    let sources = store::load_sources()?;
-    Ok(sources
-        .into_iter()
-        .map(|s| SourceCatalogSummary {
-            id: s.id,
-            name: s.name,
-            source_url: s.source_url,
-            imported_at: s.imported_at,
-            downloads_count: s.downloads.len(),
-        })
-        .collect())
+    store::load_sources_summary()
 }
 
 /// Página de items de un catálogo.
@@ -39,29 +29,9 @@ pub async fn list_source_items_page(
     offset: Option<usize>,
     limit: Option<usize>,
 ) -> Result<SourceItemsPage, String> {
-    let sources = store::load_sources()?;
-    let source = sources
-        .into_iter()
-        .find(|s| s.id == source_id)
-        .ok_or_else(|| format!("Fuente no encontrada: {source_id}"))?;
-
     let safe_offset = offset.unwrap_or(0);
     let safe_limit = limit.unwrap_or(50).clamp(1, 200);
-    let total = source.downloads.len();
-    let items = source
-        .downloads
-        .into_iter()
-        .skip(safe_offset)
-        .take(safe_limit)
-        .collect();
-
-    Ok(SourceItemsPage {
-        source_id: source.id,
-        total,
-        offset: safe_offset,
-        limit: safe_limit,
-        items,
-    })
+    store::load_source_items_page(&source_id, safe_offset, safe_limit)
 }
 
 /// Elimina un catálogo por ID.
@@ -73,24 +43,23 @@ pub async fn remove_source(app: tauri::AppHandle, source_id: String) -> Result<(
     result
 }
 
-/// Importa una fuente desde un archivo JSON local.
+/// Importa una fuente desde un archivo JSON local con streaming directo.
 #[tauri::command]
 pub async fn import_source_from_file(
     app: tauri::AppHandle,
     path: String,
     mode: ImportMode,
 ) -> Result<super::super::domain::SourceCatalog, String> {
-    let raw = tokio::fs::read_to_string(&path)
-        .await
-        .map_err(|e| format!("No se pudo leer JSON: {e}"))?;
-    let catalog = parse_catalog(&raw, Some(format!("file://{path}")))?;
+    let file = std::fs::File::open(&path).map_err(|e| format!("No se pudo abrir archivo: {e}"))?;
+    let reader = std::io::BufReader::new(file);
+    let catalog = parse_catalog_from_reader(reader, Some(format!("file://{path}")))?;
     let result = store::upsert_catalog(catalog, mode)?;
     invalidate_index();
     emit_catalog_updated(&app);
     Ok(result)
 }
 
-/// Importa varios archivos JSON en paralelo.
+/// Importa varios archivos JSON en paralelo con streaming.
 #[tauri::command]
 pub async fn import_sources_from_files_batch(
     app: tauri::AppHandle,
@@ -101,12 +70,13 @@ pub async fn import_sources_from_files_batch(
 
     let mut parse_tasks = Vec::with_capacity(total);
     for path in paths {
-        let task = tokio::spawn(async move {
-            let raw = match tokio::fs::read_to_string(&path).await {
-                Ok(content) => content,
-                Err(e) => return Err((path, format!("No se pudo leer archivo: {e}"))),
+        let task = tokio::task::spawn_blocking(move || {
+            let file = match std::fs::File::open(&path) {
+                Ok(f) => f,
+                Err(e) => return Err((path, format!("No se pudo abrir archivo: {e}"))),
             };
-            match parse_catalog(&raw, Some(format!("file://{path}"))) {
+            let reader = std::io::BufReader::new(file);
+            match parse_catalog_from_reader(reader, Some(format!("file://{path}"))) {
                 Ok(catalog) => Ok((path, catalog)),
                 Err(e) => Err((path, format!("JSON inválido: {e}"))),
             }
@@ -132,75 +102,62 @@ pub async fn import_sources_from_files_batch(
                     was_updated: false,
                 });
             }
-            Err(e) => {
+            Err(join_err) => {
                 failed += 1;
                 items.push(BatchImportItemResult {
-                    path: "<unknown>".to_string(),
+                    path: "desconocido".to_string(),
                     success: false,
                     catalog_id: None,
                     catalog_name: None,
-                    error: Some(format!("Task panicked: {e}")),
+                    error: Some(format!("Tarea abortada: {join_err}")),
                     was_updated: false,
                 });
             }
         }
     }
 
-    let mut succeeded = 0usize;
-
+    let mut imported = 0usize;
     for (path, catalog) in parsed {
         let catalog_id = catalog.id.clone();
         let catalog_name = catalog.name.clone();
-
-        let was_updated = match store::load_sources() {
-            Ok(sources) => sources.iter().any(|s| match mode {
-                ImportMode::Merge => s.id == catalog_id,
-                ImportMode::UpdateOrCreate => s.name == catalog_name,
-                ImportMode::Replace => false,
-            }),
-            Err(_) => false,
-        };
-
         match store::upsert_catalog(catalog, mode.clone()) {
             Ok(_) => {
-                succeeded += 1;
+                imported += 1;
                 items.push(BatchImportItemResult {
                     path,
                     success: true,
                     catalog_id: Some(catalog_id),
                     catalog_name: Some(catalog_name),
                     error: None,
-                    was_updated,
+                    was_updated: false,
                 });
             }
-            Err(e) => {
+            Err(error) => {
                 failed += 1;
                 items.push(BatchImportItemResult {
                     path,
                     success: false,
                     catalog_id: Some(catalog_id),
                     catalog_name: Some(catalog_name),
-                    error: Some(format!("Error al guardar: {e}")),
+                    error: Some(error),
                     was_updated: false,
                 });
             }
         }
     }
 
-    if succeeded > 0 {
-        invalidate_index();
-        emit_catalog_updated(&app);
-    }
+    invalidate_index();
+    emit_catalog_updated(&app);
 
     Ok(BatchImportResult {
         total,
-        succeeded,
+        succeeded: imported,
         failed,
         items,
     })
 }
 
-/// Importa una fuente descargándola por URL.
+/// Importa o actualiza una fuente desde una URL remota.
 #[tauri::command]
 pub async fn import_source_from_url(
     app: tauri::AppHandle,
@@ -209,7 +166,7 @@ pub async fn import_source_from_url(
 ) -> Result<super::super::domain::SourceCatalog, String> {
     let fetched = fetch_catalog_for_import(&app, &url).await?;
     let checked_at = now_iso();
-    let mut catalog = parse_catalog(&fetched.raw, Some(url))?;
+    let mut catalog = parse_catalog_from_reader(fetched.raw.as_bytes(), Some(url))?;
     catalog.sync = Some(sync_metadata_from_fetch(
         &fetched.headers,
         &fetched.raw,
@@ -220,4 +177,28 @@ pub async fn import_source_from_url(
     emit_catalog_updated(&app);
     Ok(result)
 }
+
+/// Exporta todas las fuentes almacenadas en SQLite a un archivo JSON.
+///
+/// Si no se especifica `destination_path`, se genera un archivo en el directorio de caché
+/// con nombre `sources_export_<timestamp>.json` y se devuelve su ruta absoluta.
+#[tauri::command]
+pub async fn export_sources_to_json(destination_path: Option<String>) -> Result<String, String> {
+    let path = store::export_sources_to_file(destination_path.as_deref())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Exporta una fuente específica por `source_id` a un archivo JSON.
+///
+/// Si no se especifica `destination_path`, se genera un archivo en el directorio de caché
+/// con nombre `source_<id>_<timestamp>.json` y se devuelve su ruta absoluta.
+#[tauri::command]
+pub async fn export_source_to_json(
+    source_id: String,
+    destination_path: Option<String>,
+) -> Result<String, String> {
+    let path = store::export_source_to_file(&source_id, destination_path.as_deref())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 

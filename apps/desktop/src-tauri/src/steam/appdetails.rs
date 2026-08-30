@@ -17,7 +17,21 @@ const STEAM_APPDETAILS_FILTERS_FULL: &str =
 const STEAM_APPDETAILS_FILTERS_WITHOUT_MEDIA: &str =
     "basic,developers,publishers,genres,categories,release_date";
 
-const APPDETAILS_429_MAX_ATTEMPTS: u32 = 5;
+const APPDETAILS_429_MAX_ATTEMPTS: u32 = 1;
+
+/// Construye una estructura de medios básica utilizando los CDNs estáticos públicos de Steam (sin rate limit).
+pub fn default_cdn_media(app_id: &str) -> SteamAppdetailsMedia {
+    let header_url = format!(
+        "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/{app_id}/header.jpg"
+    );
+    SteamAppdetailsMedia {
+        media_urls: vec![header_url.clone()],
+        video_url: None,
+        genres: Vec::new(),
+        name: String::new(),
+        capsule_image: Some(header_url),
+    }
+}
 
 /// Realiza una petición a `appdetails` y retorna el campo `data`.
 ///
@@ -43,13 +57,11 @@ pub async fn fetch_appdetails_data(
         let code = status.as_u16();
 
         if code == 429 {
-            eprintln!("Límite de Steam (429) en appdetails, app_id={app_id}, intento {attempt}");
             attempt += 1;
             if attempt >= APPDETAILS_429_MAX_ATTEMPTS {
-                return Err(format!("HTTP Error: {status}"));
+                return Err(format!("HTTP Error 429: Steam rate limit"));
             }
-            let backoff_ms = 500_u64 * 2_u64.pow(attempt.min(5));
-            tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+            tokio::time::sleep(Duration::from_millis(300)).await;
             continue;
         }
 
@@ -229,21 +241,14 @@ fn extract_keyed_string_array(value: &serde_json::Value, field: &str, sub: &str)
         .unwrap_or_default()
 }
 
-/// Lista / hover: `basic` (nombre), capturas, tráiler y géneros en una sola petición Store.
+/// Lista / hover: `basic` (nombre), capturas, tráiler y géneros en una sola petición Store con fallback a CDN.
 pub async fn fetch_steam_appdetails_media_from_store(
     app_id: &str,
 ) -> Result<SteamAppdetailsMedia, String> {
-    let data = fetch_appdetails_data(app_id, "spanish", "basic,screenshots,movies,genres").await?;
-    Ok(data
-        .as_ref()
-        .map(parse_media_from_data)
-        .unwrap_or_else(|| SteamAppdetailsMedia {
-            media_urls: Vec::new(),
-            video_url: None,
-            genres: Vec::new(),
-            name: String::new(),
-            capsule_image: None,
-        }))
+    match fetch_appdetails_data(app_id, "spanish", "basic,screenshots,movies,genres").await {
+        Ok(Some(ref data)) => Ok(parse_media_from_data(data)),
+        _ => Ok(default_cdn_media(app_id)),
+    }
 }
 
 /// Ficha completa desde la Store API (español), reutilizando caché de medios en RAM si existe.
