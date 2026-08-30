@@ -16,6 +16,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { emitTo } from "@tauri-apps/api/event";
 import { Cloud, CloudOff, Database, Gamepad2, RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { SAVECLOUD_OPEN_RESTORE_FROM_CLOUD_EVENT } from "@/constants/savecloudCrossWindow";
 import { CONFIG_QUERY_KEY, useConfig } from "@hooks/useConfig";
 import { useProfileSession } from "@hooks/useProfileSession";
@@ -39,6 +40,7 @@ interface CloudDashboardPanelProps {
 }
 
 export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelProps) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { config, loading: configLoading } = useConfig();
   const { activeProfile } = useProfileSession();
@@ -61,7 +63,7 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
 
   const gamesCount = config?.games?.length ?? 0;
   const localGameIdsLower = useMemo(
-    () => new Set((config?.games ?? []).map((g) => g.id.toLowerCase())),
+    () => new Set((config?.games ?? []).map((g: ConfiguredGame) => g.id.toLowerCase())),
     [config?.games]
   );
 
@@ -75,11 +77,11 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
       case "name":
         return list.sort(byName);
       case "size":
-        return list.sort((a, b) => b.totalSize - a.totalSize);
+        return list.sort((a: CloudGameSummary, b: CloudGameSummary) => b.totalSize - a.totalSize);
       case "files":
-        return list.sort((a, b) => b.fileCount - a.fileCount);
+        return list.sort((a: CloudGameSummary, b: CloudGameSummary) => b.fileCount - a.fileCount);
       case "modified": {
-        return list.sort((a, b) => {
+        return list.sort((a: CloudGameSummary, b: CloudGameSummary) => {
           const ta = a.lastModified ? new Date(a.lastModified).getTime() : 0;
           const tb = b.lastModified ? new Date(b.lastModified).getTime() : 0;
           return tb - ta;
@@ -91,7 +93,7 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
   }, [cloudGames, sortKey]);
 
   const gamesForCloudTableMedia = useMemo((): ConfiguredGame[] => {
-    return sortedGames.map((row) => {
+    return sortedGames.map((row: CloudGameSummary) => {
       const fromLibrary = findConfiguredGame(config?.games, row.gameId);
       return fromLibrary ?? ({ id: row.gameId, paths: [] } as ConfiguredGame);
     });
@@ -120,7 +122,7 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
     return (
       <div className="flex min-h-50 items-center justify-center gap-3 text-default-500">
         <Spinner size="md" color="default" />
-        <span className="text-sm">Cargando configuración…</span>
+        <span className="text-sm">{t("settings.cloudDashboard.loadingConfig", "Cargando configuración…")}</span>
       </div>
     );
   }
@@ -130,11 +132,13 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
       <Card className="border border-default-200/70 shadow-sm dark:border-default-100/15">
         <CardBody className="gap-3 p-5">
           <p className="text-sm text-default-600">
-            No hay cuenta de nube configurada en este perfil. Configura la API en «Cuenta» para ver estadísticas y
-            guardados remotos.
+            {t(
+              "settings.cloudDashboard.noAccountConfigured",
+              "No hay cuenta de nube configurada en este perfil. Configura la API en «Cuenta» para ver estadísticas y guardados remotos."
+            )}
           </p>
           <Button color="primary" variant="flat" onPress={onSelectAccountTab}>
-            Ir a Cuenta
+            {t("settings.cloudDashboard.goToAccount", "Ir a Cuenta")}
           </Button>
         </CardBody>
       </Card>
@@ -149,7 +153,9 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
       <GameInventorySettingsCard />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-default-500">Resumen de la nube y detalle por juego.</p>
+        <p className="text-sm text-default-500">
+          {t("settings.cloudDashboard.summarySubtitle", "Resumen de la nube y detalle por juego.")}
+        </p>
         <Button
           size="sm"
           variant="bordered"
@@ -158,7 +164,7 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
           startContent={<RefreshCw size={16} className={isFetching ? "animate-spin" : ""} />}
           isDisabled={isFetching}
           onPress={() => void handleRefresh()}>
-          Actualizar
+          {t("settings.cloudDashboard.refresh", "Actualizar")}
         </Button>
       </div>
 
@@ -167,18 +173,23 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
           <div className="flex flex-col gap-1 px-4 py-3.5">
             <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-default-500">
               <Gamepad2 size={12} className="text-primary" />
-              juegos
+              {t("settings.cloudDashboard.games", "juegos")}
             </span>
             <span className="text-xl font-medium text-foreground">
               {gamesCount}{" "}
-              <span className="text-sm font-normal text-default-500">configurado{gamesCount !== 1 ? "s" : ""}</span>
+              <span className="text-sm font-normal text-default-500">
+                {t("settings.cloudDashboard.configured", {
+                  count: gamesCount,
+                  defaultValue: `configurado${gamesCount !== 1 ? "s" : ""}`,
+                })}
+              </span>
             </span>
           </div>
 
           <div className="flex flex-col gap-1 px-4 py-3.5">
             <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-default-500">
               <RefreshCw size={12} className="text-secondary" />
-              última sincronización
+              {t("settings.cloudDashboard.lastSync", "última sincronización")}
             </span>
             <div className="flex flex-wrap items-center gap-2">
               {lastSyncLoading ? (
@@ -189,7 +200,11 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
                 <CloudOff size={14} className="shrink-0 text-default-400" />
               )}
               <span className="text-sm font-medium text-foreground">
-                {lastSyncLoading ? "cargando…" : lastSyncAt ? formatLastSync(lastSyncAt) : "nunca"}
+                {lastSyncLoading
+                  ? t("settings.cloudDashboard.loading", "cargando…")
+                  : lastSyncAt
+                    ? formatLastSync(lastSyncAt)
+                    : t("settings.cloudDashboard.never", "nunca")}
               </span>
               {lastSyncAt && lastSyncGameId ? (
                 <span className="truncate text-xs text-default-400">{formatGameDisplayName(lastSyncGameId)}</span>
@@ -197,7 +212,7 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
             </div>
             {connectionStatus === "error" ? (
               <span className="text-xs text-danger" title={connectionError ?? undefined}>
-                {connectionError ?? "Error al contactar la nube"}
+                {connectionError ?? t("settings.cloudDashboard.errorContactingCloud", "Error al contactar la nube")}
               </span>
             ) : null}
           </div>
@@ -205,19 +220,22 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
           <div className="flex flex-col gap-1 px-4 py-3.5">
             <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-default-500">
               <Database size={12} className="text-warning" />
-              almacenamiento
+              {t("settings.cloudDashboard.storage", "almacenamiento")}
             </span>
             <div className="flex flex-wrap items-center gap-2">
               {lastSyncLoading ? (
                 <Spinner size="sm" color="default" />
               ) : (
                 <span className="text-base font-semibold text-foreground">
-                  {hasCloudGames ? formatSize(totalCloudSize) : "vacío"}
+                  {hasCloudGames ? formatSize(totalCloudSize) : t("settings.cloudDashboard.empty", "vacío")}
                 </span>
               )}
               {!lastSyncLoading && hasCloudGames ? (
                 <span className="text-xs text-default-400">
-                  {cloudGames.length} juego{cloudGames.length !== 1 ? "s" : ""}
+                  {t("settings.cloudDashboard.gamesCount", {
+                    count: cloudGames.length,
+                    defaultValue: `${cloudGames.length} juego${cloudGames.length !== 1 ? "s" : ""}`,
+                  })}
                 </span>
               ) : null}
             </div>
@@ -229,9 +247,14 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
         <CardBody className="flex flex-col gap-3 p-0">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-default-200/70 px-4 py-3 dark:border-default-100/15">
             <div>
-              <p className="text-sm font-medium text-foreground">Guardados en la nube</p>
+              <p className="text-sm font-medium text-foreground">
+                {t("settings.cloudDashboard.title", "Guardados en la nube")}
+              </p>
               <p className="text-xs text-default-500">
-                Ordena por columna. «Traer a este equipo» abre el asistente en la ventana principal.
+                {t(
+                  "settings.cloudDashboard.subtitle",
+                  "Ordena por columna. «Traer a este equipo» abre el asistente en la ventana principal."
+                )}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -243,10 +266,10 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
                   color={sortKey === key ? "primary" : "default"}
                   className="min-w-0"
                   onPress={() => setSortKey(key)}>
-                  {key === "modified" && "Última modif."}
-                  {key === "name" && "Nombre"}
-                  {key === "size" && "Tamaño"}
-                  {key === "files" && "Archivos"}
+                  {key === "modified" && t("settings.cloudDashboard.sortModified", "Última modif.")}
+                  {key === "name" && t("settings.cloudDashboard.sortName", "Nombre")}
+                  {key === "size" && t("settings.cloudDashboard.sortSize", "Tamaño")}
+                  {key === "files" && t("settings.cloudDashboard.sortFiles", "Archivos")}
                 </Button>
               ))}
             </div>
@@ -256,13 +279,17 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
             {showLoadingRow ? (
               <div className="flex items-center justify-center gap-2 py-16 text-default-500">
                 <Spinner size="md" />
-                <span className="text-sm">Cargando datos de la nube…</span>
+                <span className="text-sm">
+                  {t("settings.cloudDashboard.loadingCloudData", "Cargando datos de la nube…")}
+                </span>
               </div>
             ) : !hasCloudGames ? (
-              <p className="px-4 py-10 text-center text-sm text-default-500">No hay guardados en la nube todavía.</p>
+              <p className="px-4 py-10 text-center text-sm text-default-500">
+                {t("settings.cloudDashboard.noCloudSavesYet", "No hay guardados en la nube todavía.")}
+              </p>
             ) : (
               <Table
-                aria-label="Guardados en la nube por juego"
+                aria-label={t("settings.cloudDashboard.tableAria", "Guardados en la nube por juego")}
                 removeWrapper
                 radius="none"
                 classNames={{
@@ -270,14 +297,14 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
                   thead: "[&>tr]:first:rounded-none",
                 }}>
                 <TableHeader>
-                  <TableColumn>Juego</TableColumn>
-                  <TableColumn>Archivos</TableColumn>
-                  <TableColumn>Tamaño</TableColumn>
-                  <TableColumn>Última modif. (nube)</TableColumn>
-                  <TableColumn>Acciones</TableColumn>
+                  <TableColumn>{t("settings.cloudDashboard.colGame", "Juego")}</TableColumn>
+                  <TableColumn>{t("settings.cloudDashboard.colFiles", "Archivos")}</TableColumn>
+                  <TableColumn>{t("settings.cloudDashboard.colSize", "Tamaño")}</TableColumn>
+                  <TableColumn>{t("settings.cloudDashboard.colLastModified", "Última modif. (nube)")}</TableColumn>
+                  <TableColumn>{t("settings.cloudDashboard.colActions", "Acciones")}</TableColumn>
                 </TableHeader>
                 <TableBody>
-                  {sortedGames.map((row, rowIndex) => {
+                  {sortedGames.map((row: CloudGameSummary, rowIndex: number) => {
                     const inLibrary = localGameIdsLower.has(row.gameId.toLowerCase());
                     const displayTitle = formatGameDisplayName(row.gameId);
                     const gameForMedia = gamesForCloudTableMedia[rowIndex]!;
@@ -307,7 +334,9 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
                         </TableCell>
                         <TableCell>
                           {inLibrary ? (
-                            <span className="text-xs text-default-400">En biblioteca</span>
+                            <span className="text-xs text-default-400">
+                              {t("settings.cloudDashboard.inLibrary", "En biblioteca")}
+                            </span>
                           ) : (
                             <Button
                               size="sm"
@@ -315,7 +344,7 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
                               color="primary"
                               className="h-8 min-w-0 px-2 text-xs"
                               onPress={() => handleBringToDevice(row.gameId)}>
-                              Traer a este equipo
+                              {t("settings.cloudDashboard.bringToDevice", "Traer a este equipo")}
                             </Button>
                           )}
                         </TableCell>

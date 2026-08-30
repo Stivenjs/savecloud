@@ -7,6 +7,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { Card, CardBody, Select, SelectItem } from "@heroui/react";
 import { Volume2 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import { toastError, toastSuccess } from "@utils/toast";
 
 export interface AudioOutputDeviceItem {
@@ -20,6 +21,7 @@ interface SelectOption {
 }
 
 export function AudioOutputSettingsCard() {
+  const { t } = useTranslation();
   const [devices, setDevices] = useState<AudioOutputDeviceItem[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<string>("default");
   const [loading, setLoading] = useState<boolean>(true);
@@ -48,22 +50,29 @@ export function AudioOutputSettingsCard() {
       const deviceName = key === "default" ? null : key;
       await invoke("set_audio_output_device", { deviceName });
       setSelectedDevice(key);
-      toastSuccess("Dispositivo de sonido actualizado correctamente");
+      toastSuccess(t("settings.audioOutput.deviceUpdated", "Dispositivo de sonido actualizado correctamente"));
     } catch (e) {
-      toastError(e instanceof Error ? e.message : "Error al cambiar dispositivo de sonido");
+      toastError(
+        e instanceof Error
+          ? e.message
+          : t("settings.audioOutput.deviceUpdateError", "Error al cambiar dispositivo de sonido")
+      );
     }
   };
 
   const selectOptions: SelectOption[] = useMemo(() => {
-    const options: SelectOption[] = [{ key: "default", label: "Por defecto del sistema" }];
+    const defaultSuffix = t("settings.audioOutput.defaultSuffix", " (Predeterminado)");
+    const options: SelectOption[] = [
+      { key: "default", label: t("settings.audioOutput.systemDefault", "Por defecto del sistema") },
+    ];
     for (const dev of devices) {
       options.push({
         key: dev.name,
-        label: `${dev.name}${dev.is_default ? " (Predeterminado)" : ""}`,
+        label: `${dev.name}${dev.is_default ? defaultSuffix : ""}`,
       });
     }
     return options;
-  }, [devices]);
+  }, [devices, t]);
 
   return (
     <Card>
@@ -72,15 +81,19 @@ export function AudioOutputSettingsCard() {
           <div className="flex items-start gap-3">
             <Volume2 size={20} className="mt-0.5 shrink-0 text-default-500" />
             <div>
-              <h2 className="text-base font-semibold text-foreground">Dispositivo de salida de sonido</h2>
+              <h2 className="text-base font-semibold text-foreground">
+                {t("settings.audioOutput.title", "Dispositivo de salida de sonido")}
+              </h2>
               <p className="mt-0.5 text-sm text-default-500">
-                Selecciona los altavoces, auriculares o salida de audio física para la reproducción de sonido en tiempo
-                real.
+                {t(
+                  "settings.audioOutput.description",
+                  "Selecciona los altavoces, auriculares o salida de audio física para la reproducción de sonido en tiempo real."
+                )}
               </p>
             </div>
           </div>
           <Select
-            aria-label="Dispositivo de salida de sonido"
+            aria-label={t("settings.audioOutput.title", "Dispositivo de salida de sonido")}
             items={selectOptions}
             selectedKeys={[selectedDevice]}
             isDisabled={loading}

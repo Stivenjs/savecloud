@@ -64,7 +64,7 @@ export function GamesStats({
   // Contenido compartido para el detalle de la nube (Popover o Modal)
   const cloudDetailContent = (
     <ul className="space-y-2">
-      {cloudGames.map((g) => {
+      {cloudGames.map((g: CloudGameSummary) => {
         const inLibrary = localGameIdsLower?.has(g.gameId.toLowerCase()) ?? false;
         return (
           <li key={g.gameId} className="flex flex-col gap-1 rounded-lg bg-default-100 px-3 py-2">
@@ -75,7 +75,7 @@ export function GamesStats({
               </span>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <Code size="sm" className="max-w-[200px] truncate text-[10px]">
+              <Code size="sm" className="max-w-50 truncate text-[10px]">
                 {g.gameId}
               </Code>
               {onRestoreFromCloud &&

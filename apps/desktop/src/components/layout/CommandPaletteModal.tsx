@@ -2,6 +2,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } f
 import { useNavigate } from "react-router-dom";
 import { Modal, ModalContent, Kbd, Spinner } from "@heroui/react";
 import { Search, Gamepad2, ArrowRight, Settings, Users, History, Library, LayoutGrid, ShieldAlert } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useConfig } from "@hooks/useConfig";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
@@ -59,32 +60,28 @@ function CommandPaletteGameThumbnail({
   resolvedSteamAppId?: string;
   mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null;
 }) {
-  const { capsuleImage, imgLoaded, imgError, handleImgLoad, handleImgError } = useGameMedia({
+  const { displayImageUrl, isEffectivelyLoading, imgLoaded, imgError, handleImgLoad, handleImgError } = useGameMedia({
     game,
-    resolvedSteamAppId,
+    resolvedSteamAppId: resolvedSteamAppId ?? null,
     mediaBySteamAppId,
     mediaFromBatch: true,
-    orientation: "horizontal",
   });
 
-  const showFallback = !capsuleImage || imgError;
-
   return (
-    <div className="w-14 h-8 rounded-lg overflow-hidden bg-default-100 border border-default-200/80 flex items-center justify-center shrink-0 relative shadow-xs">
-      {!showFallback && (
+    <div className="relative w-14 h-8 rounded-lg overflow-hidden shrink-0 bg-default-100 border border-default-200/80">
+      {isEffectivelyLoading && !imgLoaded && <div className="absolute inset-0 bg-default-200 animate-pulse" />}
+      {displayImageUrl && !imgError ? (
         <img
-          src={capsuleImage}
-          alt=""
-          className={`w-full h-full object-cover object-center transition-opacity duration-200 ${
+          src={displayImageUrl}
+          alt={game.id}
+          className={`w-full h-full object-cover transition-opacity duration-200 ${
             imgLoaded ? "opacity-100" : "opacity-0"
           }`}
           onLoad={handleImgLoad}
           onError={handleImgError}
-          draggable={false}
         />
-      )}
-      {(showFallback || !imgLoaded) && (
-        <div className="absolute inset-0 flex items-center justify-center text-default-400 bg-default-100">
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-default-400">
           <Gamepad2 size={16} strokeWidth={1.5} />
         </div>
       )}
@@ -93,6 +90,7 @@ function CommandPaletteGameThumbnail({
 }
 
 export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { config } = useConfig();
   const [query, setQuery] = useState("");
@@ -103,24 +101,16 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
-    return useShellUiStore.getState().registerBackHandler(() => {
-      onClose();
-      return true;
-    });
-  }, [isOpen, onClose]);
-
-  useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
       setQuery("");
-      setCatalogResults([]);
       setSelectedIndex(0);
-      const timer = setTimeout(() => inputRef.current?.focus(), 50);
-      return () => clearTimeout(timer);
+      setCatalogResults([]);
+    } else {
+      setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [isOpen]);
 
-  const configuredGames: readonly ConfiguredGame[] = useMemo(() => config?.games ?? [], [config?.games]);
+  const configuredGames: ConfiguredGame[] = useMemo(() => config?.games ?? [], [config?.games]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -135,7 +125,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
 
     const timer = setTimeout(async () => {
       try {
-        const results = await searchSteamCatalog(trimmed, 6);
+        const results = await searchSteamCatalog(trimmed, 4);
         if (active) {
           setCatalogResults(results || []);
         }
@@ -144,7 +134,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
       } finally {
         if (active) setIsCatalogLoading(false);
       }
-    }, 160);
+    }, 200);
 
     return () => {
       active = false;
@@ -176,8 +166,8 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
       {
         type: "nav",
         id: "nav-library",
-        title: "Ir a Biblioteca",
-        subtitle: "Ver todos tus juegos configurados y locales",
+        title: t("commandPalette.navLibraryTitle", "Ir a Biblioteca"),
+        subtitle: t("commandPalette.navLibrarySubtitle", "Ver todos tus juegos configurados y locales"),
         category: "navigation",
         icon: Library,
         action: () => {
@@ -188,8 +178,8 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
       {
         type: "nav",
         id: "nav-catalog",
-        title: "Explorar Catálogo Steam",
-        subtitle: "Buscar juegos oficiales, demos y parches",
+        title: t("commandPalette.navCatalogTitle", "Explorar Catálogo Steam"),
+        subtitle: t("commandPalette.navCatalogSubtitle", "Buscar juegos oficiales, demos y parches"),
         category: "navigation",
         icon: LayoutGrid,
         action: () => {
@@ -200,8 +190,8 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
       {
         type: "nav",
         id: "nav-social",
-        title: "Amigos y Social",
-        subtitle: "Ver quién está jugando y partidas activas",
+        title: t("commandPalette.navSocialTitle", "Amigos y Social"),
+        subtitle: t("commandPalette.navSocialSubtitle", "Ver quién está jugando y partidas activas"),
         category: "navigation",
         icon: Users,
         action: () => {
@@ -212,8 +202,8 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
       {
         type: "nav",
         id: "nav-history",
-        title: "Historial de Actividad",
-        subtitle: "Registro de sincronizaciones y backups",
+        title: t("commandPalette.navHistoryTitle", "Historial de Actividad"),
+        subtitle: t("commandPalette.navHistorySubtitle", "Registro de sincronizaciones y backups"),
         category: "navigation",
         icon: History,
         action: () => {
@@ -224,8 +214,8 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
       {
         type: "nav",
         id: "nav-settings",
-        title: "Configuración y Ajustes",
-        subtitle: "Rutas, perfiles y observabilidad",
+        title: t("commandPalette.navSettingsTitle", "Configuración y Ajustes"),
+        subtitle: t("commandPalette.navSettingsSubtitle", "Rutas, perfiles y observabilidad"),
         category: "navigation",
         icon: Settings,
         action: () => {
@@ -236,8 +226,8 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
       {
         type: "nav",
         id: "action-observability",
-        title: "Diagnósticos y Salud WS",
-        subtitle: "Inspeccionar métricas y observabilidad remota",
+        title: t("commandPalette.navObservabilityTitle", "Diagnósticos y Salud WS"),
+        subtitle: t("commandPalette.navObservabilitySubtitle", "Inspeccionar métricas y observabilidad remota"),
         category: "actions",
         icon: ShieldAlert,
         action: () => {
@@ -246,7 +236,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
         },
       },
     ],
-    [navigate, onClose]
+    [navigate, onClose, t]
   );
 
   const localGameCommands: LocalGameCommandItem[] = useMemo(
@@ -303,15 +293,18 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
 
     // Acción para explorar directamente en la vista del catálogo
     if (q.length > 0) {
+      const trimmed = deferredQuery.trim();
       list.push({
         type: "nav",
         id: "action-search-in-catalog",
-        title: `Buscar "${deferredQuery.trim()}" en el Catálogo Steam`,
-        subtitle: "Abrir catálogo completo con este filtro",
+        title: t("commandPalette.searchInCatalog", {
+          query: trimmed,
+          defaultValue: `Buscar "${trimmed}" en el Catálogo Steam`,
+        }),
+        subtitle: t("commandPalette.searchInCatalogSubtitle", "Abrir catálogo completo con este filtro"),
         category: "actions",
         icon: Search,
         action: () => {
-          const trimmed = deferredQuery.trim();
           useShellUiStore.getState().setCatalogBpSearchTerm(trimmed);
           navigate(`/catalog?${STEAM_CATALOG_URL_Q}=${encodeURIComponent(trimmed)}`);
           onClose();
@@ -320,7 +313,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
     }
 
     return list;
-  }, [deferredQuery, localGameCommands, catalogGameCommands, navigationCommands, navigate, onClose]);
+  }, [deferredQuery, localGameCommands, catalogGameCommands, navigationCommands, navigate, onClose, t]);
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -394,7 +387,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar en biblioteca y catálogo Steam... (Ctrl + K)"
+              placeholder={t("commandPalette.placeholder", "Buscar en biblioteca y catálogo Steam... (Ctrl + K)")}
               className="w-full bg-transparent text-foreground placeholder-default-400 text-sm font-medium focus:outline-none"
             />
             <Kbd
@@ -409,8 +402,15 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
             {filteredCommands.length === 0 ? (
               <div className="flex flex-col items-center justify-center min-h-70 text-center text-default-400 text-xs font-medium gap-1 animate-in fade-in duration-150">
                 <Search size={24} className="text-default-300 mb-1" strokeWidth={1.5} />
-                <span>No se encontraron resultados para &quot;{query}&quot;</span>
-                <span className="text-[11px] text-default-400/80">Prueba buscando otro título o comando</span>
+                <span>
+                  {t("commandPalette.noResults", {
+                    query,
+                    defaultValue: `No se encontraron resultados para "${query}"`,
+                  })}
+                </span>
+                <span className="text-[11px] text-default-400/80">
+                  {t("commandPalette.noResultsHint", "Prueba buscando otro título o comando")}
+                </span>
               </div>
             ) : (
               filteredCommands.map((cmd, idx) => {
@@ -437,16 +437,18 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
                           <div className="flex items-center gap-2">
                             <p className="text-xs font-semibold truncate leading-snug text-foreground">{cmd.title}</p>
                             <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-primary/10 text-primary font-medium shrink-0">
-                              Tu Biblioteca
+                              {t("commandPalette.yourLibrary", "Tu Biblioteca")}
                             </span>
                           </div>
-                          <p className="text-[10px] text-default-400 truncate">Ver partidas y guardados locales</p>
+                          <p className="text-[10px] text-default-400 truncate">
+                            {t("commandPalette.localSavesDesc", "Ver partidas y guardados locales")}
+                          </p>
                         </div>
                       </div>
 
                       {isSelected && (
                         <div className="flex items-center gap-1 text-[10px] font-semibold text-primary shrink-0">
-                          <span>Abrir</span>
+                          <span>{t("commandPalette.openAction", "Abrir")}</span>
                           <ArrowRight size={12} />
                         </div>
                       )}
@@ -475,16 +477,18 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
                           <div className="flex items-center gap-2">
                             <p className="text-xs font-semibold truncate leading-snug text-foreground">{cmd.title}</p>
                             <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-secondary/15 text-secondary font-medium shrink-0">
-                              Catálogo Steam
+                              {t("commandPalette.steamCatalog", "Catálogo Steam")}
                             </span>
                           </div>
-                          <p className="text-[10px] text-default-400 truncate">Ver ficha, media y descargas</p>
+                          <p className="text-[10px] text-default-400 truncate">
+                            {t("commandPalette.catalogDesc", "Ver ficha, media y descargas")}
+                          </p>
                         </div>
                       </div>
 
                       {isSelected && (
                         <div className="flex items-center gap-1 text-[10px] font-semibold text-secondary shrink-0">
-                          <span>Explorar</span>
+                          <span>{t("commandPalette.exploreAction", "Explorar")}</span>
                           <ArrowRight size={12} />
                         </div>
                       )}
@@ -520,7 +524,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
 
                     {isSelected && (
                       <div className="flex items-center gap-1 text-[10px] font-semibold text-primary shrink-0">
-                        <span>Ir</span>
+                        <span>{t("commandPalette.goAction", "Ir")}</span>
                         <ArrowRight size={12} />
                       </div>
                     )}
@@ -535,14 +539,17 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
             <div className="flex items-center gap-3">
               <span className="flex items-center gap-1">
                 <Kbd className="bg-default-200/80 text-default-600 text-[9px] px-1.5 py-0.5">↑</Kbd>
-                <Kbd className="bg-default-200/80 text-default-600 text-[9px] px-1.5 py-0.5">↓</Kbd> Navegar
+                <Kbd className="bg-default-200/80 text-default-600 text-[9px] px-1.5 py-0.5">↓</Kbd>{" "}
+                {t("commandPalette.navigateShortcut", "Navegar")}
               </span>
               <span className="flex items-center gap-1">
-                <Kbd className="bg-default-200/80 text-default-600 text-[9px] px-1.5 py-0.5">↵</Kbd> Abrir
+                <Kbd className="bg-default-200/80 text-default-600 text-[9px] px-1.5 py-0.5">↵</Kbd>{" "}
+                {t("commandPalette.openShortcut", "Abrir")}
               </span>
             </div>
             <span className="flex items-center gap-1">
-              <Kbd className="bg-default-200/80 text-default-600 text-[9px] px-1.5 py-0.5">ESC</Kbd> Cerrar
+              <Kbd className="bg-default-200/80 text-default-600 text-[9px] px-1.5 py-0.5">ESC</Kbd>{" "}
+              {t("commandPalette.closeShortcut", "Cerrar")}
             </span>
           </div>
         </div>

@@ -62,6 +62,29 @@ export function formatRelativeDate(dateStr: string | null): string {
   });
 }
 
+/**
+ * Formatea una fecha a estilo Xbox ultra-compacto (ej: "2 m", "16 h", "2 d", "1 sem", "1 m").
+ */
+export function formatShortRelativeDate(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = Math.max(0, now.getTime() - date.getTime());
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "1 m";
+  if (diffMins < 60) return `${diffMins} m`;
+  if (diffHours < 24) return `${diffHours} h`;
+  if (diffDays < 7) return `${diffDays} d`;
+  const diffWeeks = Math.floor(diffDays / 7);
+  if (diffWeeks < 4) return `${diffWeeks} sem`;
+  const diffMonths = Math.floor(diffDays / 30);
+  if (diffMonths < 12) return `${diffMonths} mes`;
+  return `${Math.floor(diffDays / 365)} a`;
+}
+
 export function formatPlaytime(seconds: number): string {
   if (!seconds || seconds <= 0) return "0m";
   const hours = Math.floor(seconds / 3600);

@@ -6,7 +6,8 @@
     "social": "Social",
     "activity": "Activity",
     "settings": "Settings",
-    "about": "About"
+    "about": "About",
+    "socialMembers": "Cloud Members"
   },
   "common": {
     "save": "Save",
@@ -52,7 +53,12 @@
       "paused": "Paused",
       "completed": "Completed",
       "failed": "Error"
-    }
+    },
+    "copy": "Copy",
+    "copied": "Copied!",
+    "searchGames": "Search games, add-ons and more",
+    "searchPlaceholder": "Search games, saves and more...",
+    "bigPictureMode": "Big Picture Mode"
   },
   "errors": {
     "unexpected": "An unexpected error occurred",
@@ -150,7 +156,10 @@
       "deleteGameCompletelyDesc": "Removes the game from your local library and deletes its cloud saves.",
       "permanentCheckbox": "Delete permanently immediately",
       "permanentWarning": "Data will be destroyed directly without going to the trash.",
-      "trashHint": "Data will be moved to the recycle bin where you can restore it within 30 days."
+      "trashHint": "Data will be moved to the recycle bin where you can restore it within 30 days.",
+      "recommendedBadge": "Recommended",
+      "purgeCloudConfirm": "Purge cloud saves",
+      "purgeFullConfirm": "Delete permanently"
     },
     "trashModal": {
       "sectionLabel": "CLOUD • RECOVERY",
@@ -647,7 +656,10 @@
         "noExecutableConfigured": "No direct executable configured (you can add one in Edit).",
         "editionTitle": "Edition / Source",
         "standardEdition": "Standard / Untagged"
-      }
+      },
+      "inSession": "In session",
+      "sourcesAvailable_other": "{{count}} sources",
+      "sourcesAvailable_one": "1 source"
     },
     "toast": {
       "downloadSuccessTitle": "Download completed",
@@ -714,10 +726,46 @@
       "cloudSavesPermanentlyDeletedTitle": "Cloud saves destroyed",
       "cloudSavesPermanentlyDeletedDesc": "{{gameName}} saves permanently deleted from the cloud.",
       "gameRemovedPermanentlyTitle": "Game removed",
-      "gameRemovedPermanentlyDesc": "{{gameName}} and its saves were permanently deleted."
+      "gameRemovedPermanentlyDesc": "{{gameName}} and its saves were permanently deleted.",
+      "transferStarted": "Transfer started",
+      "transferStartedDesc": "Starting transfer of {{displayName}} from {{deviceName}}..."
     }
   },
   "settings": {
+    "cloudDashboard": {
+      "loadingConfig": "Loading configuration…",
+      "noAccountConfigured": "No cloud account configured for this profile. Configure the API under «Account» to view remote saves and statistics.",
+      "goToAccount": "Go to Account",
+      "summarySubtitle": "Cloud overview and per-game details.",
+      "refresh": "Refresh",
+      "games": "games",
+      "configured_one": "{{count}} configured",
+      "configured_other": "{{count}} configured",
+      "lastSync": "last sync",
+      "loading": "loading…",
+      "never": "never",
+      "errorContactingCloud": "Error contacting cloud",
+      "storage": "storage",
+      "empty": "empty",
+      "gamesCount_one": "{{count}} game",
+      "gamesCount_other": "{{count}} games",
+      "title": "Cloud Saves",
+      "subtitle": "Sort by column. «Bring to this device» opens the wizard in the main window.",
+      "sortModified": "Last modified",
+      "sortName": "Name",
+      "sortSize": "Size",
+      "sortFiles": "Files",
+      "loadingCloudData": "Loading cloud data…",
+      "noCloudSavesYet": "No cloud saves yet.",
+      "tableAria": "Cloud saves by game",
+      "colGame": "Game",
+      "colFiles": "Files",
+      "colSize": "Size",
+      "colLastModified": "Last modified (cloud)",
+      "colActions": "Actions",
+      "inLibrary": "In library",
+      "bringToDevice": "Bring to this device"
+    },
     "emulators": {
       "title": "Emulators & Tools",
       "subtitle": "Download or configure your emulator paths to manage and sync your console saves.",
@@ -1169,7 +1217,8 @@
       "openDevTools": "Open DevTools (this window)",
       "closeDevTools": "Close DevTools",
       "lockedInfo": "Enable developer mode above to use DevTools in production.",
-      "errorOpen": "Failed to open DevTools"
+      "errorOpen": "Failed to open DevTools",
+      "errorClose": "Error closing DevTools"
     },
     "inventory": {
       "title": "Cloud Game Inventory",
@@ -1379,6 +1428,14 @@
       "remoteBackupDesc": "Upload your configuration to the server or apply the latest saved copy.",
       "backupToCloud": "Back up to cloud",
       "restoreFromCloud": "Restore from cloud"
+    },
+    "audioOutput": {
+      "title": "Audio Output Device",
+      "description": "Select speakers, headphones, or physical audio output for real-time audio playback.",
+      "systemDefault": "System Default",
+      "defaultSuffix": " (Default)",
+      "deviceUpdated": "Audio output device updated successfully",
+      "deviceUpdateError": "Error updating audio output device"
     }
   },
   "friends": {
@@ -1858,7 +1915,8 @@
         "shareMembersDesc": "If you are a host, members of your cloud will be able to see your visual profile in Friends.",
         "helpDesc": "You can use https links or paths to local files. Local paths depend on the file on disk; if you move or delete the file, the profile will stop displaying it."
       }
-    }
+    },
+    "openProfile": "View Profile"
   },
   "saveGraph": {
     "filters": {
@@ -1941,15 +1999,49 @@
     "ariaLabel": "Closing"
   },
   "notifications": {
-    "center": "Notification center",
     "title": "Notifications",
-    "dismiss": "Dismiss notification",
-    "openFolder": "Open folder",
-    "openUrl": "Open Link",
-    "markRead": "Mark as read",
+    "center": "Notification Center",
+    "empty": "No pending notifications",
     "markAllRead": "Mark all read",
-    "clearAll": "Clear",
-    "empty": "No notifications"
+    "clearAll": "Clear all",
+    "markRead": "Mark as read",
+    "dismiss": "Dismiss",
+    "openFolder": "Open folder",
+    "openUrl": "Open link",
+    "defaultTitle": "SaveCloud",
+    "errorTitle": "SaveCloud: Error",
+    "uploadDone": "{{gameName}}: upload completed",
+    "downloadDone": "{{gameName}}: download completed",
+    "fullBackupDone": "{{gameName}}: full backup uploaded",
+    "streamingDryRunTitle": "SaveCloud - Test Mode",
+    "streamingDryRunBody": "{{gameName}}: test completed (saved: {{savedFormatted}} / {{savedPercentage}}%)",
+    "uploadError": "{{gameName}}: error uploading — {{error}}",
+    "downloadError": "{{gameName}}: error downloading — {{error}}",
+    "fullBackupError": "{{gameName}}: error packaging/uploading — {{error}}",
+    "batchUploadSuccess": "Upload completed: {{count}} file(s) to cloud",
+    "batchUploadPartial": "Upload completed with errors: {{okCount}} uploaded, {{errCount}} error(s)",
+    "batchUploadFailed": "Upload failed",
+    "batchDownloadSuccess": "Download completed: {{count}} file(s)",
+    "batchDownloadPartial": "Download completed with errors: {{okCount}} downloaded, {{errCount}} error(s)",
+    "batchDownloadFailed": "Download failed",
+    "syncCompleteSuccess": "{{gameName}}: {{count}} file(s) uploaded to cloud",
+    "syncCompletePartial": "{{gameName}}: {{okCount}} uploaded, {{errCount}} error(s)",
+    "syncCompleteFailed": "{{gameName}}: Could not upload",
+    "weeklyDigest": "This week: {{playtime}} played.",
+    "testTitle": "SaveCloud",
+    "testBody": "Test notification — if you see this, everything is working properly",
+    "syncError": "{{gameName}}: {{error}}",
+    "showUnreadOnly": "Show unread only",
+    "allCaughtUp": "You're all caught up",
+    "noUnread": "No unread notifications.",
+    "emptyDesc": "We'll let you know when there is activity or syncs.",
+    "options": "Notification options",
+    "close": "Close",
+    "syncNow": "Sync with cloud",
+    "goToSettings": "Go to Settings",
+    "later": "Later",
+    "achievementsUnlocked": "achievements unlocked",
+    "featuredAlert": "Important notice"
   },
   "history": {
     "title": "Operation history",
@@ -2187,7 +2279,11 @@
           "desc": "Could not determine the download method."
         }
       }
-    }
+    },
+    "infiniteScrollEnd": "You have reached the end of the catalog.",
+    "loadingMore": "Loading more games...",
+    "modeInfinite": "Infinite scroll",
+    "modePaginated": "Numbered pages"
   },
   "about": {
     "heroTagline": "Open Source · Self-Hosted · AWS",
@@ -2243,8 +2339,14 @@
     "deployTitle": "Ready in minutes",
     "deploySubtitle": "You only need an AWS account and two commands.",
     "deploySteps": {
-      "clone": { "cmd": "git clone https://github.com/Stivenjs/savecloud", "label": "Clone the repository" },
-      "run": { "cmd": "cd savecloud && bun run deploy:live", "label": "Run the deploy" }
+      "clone": {
+        "cmd": "git clone https://github.com/Stivenjs/savecloud",
+        "label": "Clone the repository"
+      },
+      "run": {
+        "cmd": "cd savecloud && bun run deploy:live",
+        "label": "Run the deploy"
+      }
     },
     "deployHint": "The process automatically generates all credentials needed to connect.",
     "selfHostedLabel": "Why self-hosted",
@@ -2260,10 +2362,22 @@
     "shareDesc": "Once your instance is deployed, you can invite friends to use it. They only need the credentials generated by the deploy. Perfect for groups that want to share resources and costs.",
     "securityLabel": "Security",
     "security": {
-      "files": { "title": "Your files are yours", "desc": "Stored in your own AWS account" },
-      "encrypted": { "title": "Encrypted connections", "desc": "HTTPS on all communications" },
-      "telemetry": { "title": "No telemetry", "desc": "Zero tracking, zero hidden analytics" },
-      "auditable": { "title": "Auditable code", "desc": "100% open source on GitHub" }
+      "files": {
+        "title": "Your files are yours",
+        "desc": "Stored in your own AWS account"
+      },
+      "encrypted": {
+        "title": "Encrypted connections",
+        "desc": "HTTPS on all communications"
+      },
+      "telemetry": {
+        "title": "No telemetry",
+        "desc": "Zero tracking, zero hidden analytics"
+      },
+      "auditable": {
+        "title": "Auditable code",
+        "desc": "100% open source on GitHub"
+      }
     },
     "ctaTitle": "Ready to get started?",
     "ctaDesc": "Check the GitHub repository for detailed instructions and full documentation.",
@@ -2396,5 +2510,51 @@
       "successDesc": "{{game}}: Saved {{saved}} (-{{percent}}%)",
       "errorTitle": "Compression test error"
     }
+  },
+  "overlay": {
+    "ariaLabel": "Overlay notifications",
+    "defaultTitle": "SaveCloud",
+    "gameDownloaded": "Game Downloaded",
+    "downloadFinished": "Download has finished.",
+    "youArePlaying": "You are playing",
+    "youStarted": "Started {{gameName}}",
+    "friendPlaying": "Friend playing",
+    "friendPlayingGame": "{{friend}} is playing {{gameName}}",
+    "cloudSave": "Cloud Save",
+    "savesSynced": "Saves for {{gameName}} synchronized successfully.",
+    "companion": "SaveCloud Companion",
+    "playPrompt": "Let's play {{gameName}}! Auto-sync active.",
+    "syncSuccess": "Sync Successful",
+    "savedToCloud": "{{gameName}} saved to cloud.",
+    "saveDetected": "Save detected"
+  },
+  "commandPalette": {
+    "placeholder": "Search in library and Steam catalog... (Ctrl + K)",
+    "noResults": "No results found for \"{{query}}\"",
+    "noResultsHint": "Try searching for another title or command",
+    "yourLibrary": "Your Library",
+    "localSavesDesc": "View local saves and game details",
+    "openAction": "Open",
+    "steamCatalog": "Steam Catalog",
+    "catalogDesc": "View details, media, and downloads",
+    "exploreAction": "Explore",
+    "goAction": "Go",
+    "searchInCatalog": "Search for \"{{query}}\" in Steam Catalog",
+    "searchInCatalogSubtitle": "Open full catalog with this filter",
+    "navLibraryTitle": "Go to Library",
+    "navLibrarySubtitle": "View all configured and local games",
+    "navCatalogTitle": "Explore Steam Catalog",
+    "navCatalogSubtitle": "Search official games, demos, and patches",
+    "navSocialTitle": "Friends & Social",
+    "navSocialSubtitle": "See who is playing and active sessions",
+    "navHistoryTitle": "Activity History",
+    "navHistorySubtitle": "Log of syncs and backups",
+    "navSettingsTitle": "Settings & Preferences",
+    "navSettingsSubtitle": "Paths, profiles, and observability",
+    "navObservabilityTitle": "Diagnostics & WS Health",
+    "navObservabilitySubtitle": "Inspect remote observability and metrics",
+    "navigateShortcut": "Navigate",
+    "openShortcut": "Open",
+    "closeShortcut": "Close"
   }
 }

@@ -7,6 +7,8 @@ import {
   type SourceDownloadJob,
   type SourceProgressPayload,
 } from "@services/tauri/sources.service";
+import { formatGameDisplayName } from "@utils/gameImage";
+import i18n from "@lib/i18n";
 
 type SourcesAggregate = {
   loaded: number;
@@ -176,8 +178,10 @@ export function initSourcesListeners() {
 
     if (ev.payload.status === "completed") {
       invoke("show_overlay_notification", {
-        title: "Juego Descargado",
-        body: ev.payload.title || "La descarga ha finalizado.",
+        title: i18n.t("overlay.gameDownloaded", "Juego Descargado"),
+        body: ev.payload.title
+          ? formatGameDisplayName(ev.payload.title)
+          : i18n.t("overlay.downloadFinished", "La descarga ha finalizado."),
       }).catch((err) => {
         console.error("Error al mostrar la notificación del overlay:", err);
       });
