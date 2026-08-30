@@ -3,6 +3,7 @@ import { Button, Card, CardBody, Input, Tooltip, Chip, Switch } from "@heroui/re
 import { useTranslation } from "react-i18next";
 import {
   FileJson,
+  FileDown,
   FolderOpen,
   Trash2,
   Download,
@@ -31,12 +32,16 @@ type Props = {
   verifiedSourcesStatus?: VerifiedSourcesStatus | null;
   deletingSourceIds: Set<string>;
   deletingRemoteSourceIds: Set<string>;
+  exportingSourceIds?: Set<string>;
+  exportingAllSources?: boolean;
   onSourceUrlChange: (value: string) => void;
   onRemoteSourceUrlChange: (value: string) => void;
   onDefaultDownloadDirChange: (value: string) => void;
   onImportUrl: () => void;
   onImportFile: () => void;
   onImportBatch: () => void;
+  onExportAllSources?: () => void;
+  onExportSource?: (sourceId: string, sourceName: string) => void;
   onRegisterRemoteSource: () => void;
   onToggleRemoteSourceEnabled: (sourceId: string, enabled: boolean) => void;
   onDeleteRemoteSource: (sourceId: string) => void;
@@ -317,16 +322,34 @@ export function SourceInstallSettingsCard(props: Props) {
         {/* Sources List */}
         {props.sources.length > 0 && (
           <div className="space-y-2">
-            <div className="flex items-center gap-1.5">
-              <FolderInput size={13} className="text-default-500" />
-              <span className="text-xs font-medium text-default-600">
-                {t("settings.sourceInstall.importedCatalogsTitle")}
-              </span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <FolderInput size={13} className="text-default-500" />
+                <span className="text-xs font-medium text-default-600">
+                  {t("settings.sourceInstall.importedCatalogsTitle")}
+                </span>
+              </div>
+              {props.onExportAllSources && (
+                <Button
+                  size="sm"
+                  variant="flat"
+                  color="primary"
+                  isLoading={props.exportingAllSources}
+                  isDisabled={props.sourcesBusy || props.exportingAllSources || props.sources.length === 0}
+                  onPress={props.onExportAllSources}
+                  startContent={!props.exportingAllSources && <FileDown size={13} />}
+                  className="h-7 text-[11px] px-2.5 font-medium">
+                  {props.exportingAllSources
+                    ? t("settings.sourceInstall.exporting")
+                    : t("settings.sourceInstall.exportAllButton")}
+                </Button>
+              )}
             </div>
             <div className="overflow-hidden rounded-xl border border-default-200 bg-default-50">
               <div className="max-h-52 divide-y divide-default-100 overflow-y-auto">
                 {props.sources.map((source) => {
                   const isDeleting = props.deletingSourceIds.has(source.id);
+                  const isExporting = props.exportingSourceIds?.has(source.id) ?? false;
                   const isHovered = hoveredSourceId === source.id;
                   const isFromFile = source.sourceUrl?.startsWith("file://");
                   const displayUrl = source.sourceUrl
@@ -361,35 +384,64 @@ export function SourceInstallSettingsCard(props: Props) {
                         size="sm"
                         variant="flat"
                         className={`h-5 shrink-0 text-[10px] transition-opacity ${
-                          isHovered && !isDeleting ? "opacity-0" : "opacity-100"
+                          isHovered && !isDeleting && !isExporting ? "opacity-0" : "opacity-100"
                         }`}>
                         {source.downloadsCount.toLocaleString()}
                       </Chip>
 
-                      {/* Delete button */}
-                      <Tooltip
-                        content={
-                          isDeleting
-                            ? t("settings.sourceInstall.deleting")
-                            : t("settings.sourceInstall.deleteSourceTooltip")
-                        }
-                        placement="left"
-                        delay={300}>
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="light"
-                          color="danger"
-                          isLoading={isDeleting}
-                          isDisabled={isDeleting || props.sourcesBusy}
-                          onPress={() => props.onDeleteSource(source.id)}
-                          className={`h-7 w-7 min-w-0 shrink-0 transition-all ${
-                            isHovered || isDeleting ? "opacity-100 scale-100" : "opacity-0 scale-90"
-                          }`}
-                          aria-label={`${t("settings.sourceInstall.deleteSourceTooltip")} ${source.name}`}>
-                          {!isDeleting && <Trash2 size={13} />}
-                        </Button>
-                      </Tooltip>
+                      {/* Action buttons */}
+                      <div
+                        className={`flex items-center gap-1 shrink-0 transition-all ${
+                          isHovered || isDeleting || isExporting ? "opacity-100 scale-100" : "opacity-0 scale-90"
+                        }`}>
+                        {/* Export single source button */}
+                        {props.onExportSource && (
+                          <Tooltip
+                            content={
+                              isExporting
+                                ? t("settings.sourceInstall.exporting")
+                                : t("settings.sourceInstall.exportSourceTooltip")
+                            }
+                            placement="left"
+                            delay={300}>
+                            <Button
+                              isIconOnly
+                              size="sm"
+                              variant="light"
+                              color="default"
+                              isLoading={isExporting}
+                              isDisabled={isDeleting || isExporting || props.sourcesBusy}
+                              onPress={() => props.onExportSource?.(source.id, source.name)}
+                              className="h-7 w-7 min-w-0 shrink-0 text-default-500 hover:text-default-800"
+                              aria-label={`${t("settings.sourceInstall.exportSourceTooltip")} ${source.name}`}>
+                              {!isExporting && <FileDown size={13} />}
+                            </Button>
+                          </Tooltip>
+                        )}
+
+                        {/* Delete button */}
+                        <Tooltip
+                          content={
+                            isDeleting
+                              ? t("settings.sourceInstall.deleting")
+                              : t("settings.sourceInstall.deleteSourceTooltip")
+                          }
+                          placement="left"
+                          delay={300}>
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            variant="light"
+                            color="danger"
+                            isLoading={isDeleting}
+                            isDisabled={isDeleting || isExporting || props.sourcesBusy}
+                            onPress={() => props.onDeleteSource(source.id)}
+                            className="h-7 w-7 min-w-0 shrink-0"
+                            aria-label={`${t("settings.sourceInstall.deleteSourceTooltip")} ${source.name}`}>
+                            {!isDeleting && <Trash2 size={13} />}
+                          </Button>
+                        </Tooltip>
+                      </div>
                     </div>
                   );
                 })}

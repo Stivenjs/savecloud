@@ -19,17 +19,7 @@ pub async fn list_sources() -> Result<Vec<super::super::domain::SourceCatalog>, 
 /// Resumen de catálogos instalados con conteo de descargas.
 #[tauri::command]
 pub async fn list_sources_summary() -> Result<Vec<SourceCatalogSummary>, String> {
-    let sources = store::load_sources()?;
-    Ok(sources
-        .into_iter()
-        .map(|s| SourceCatalogSummary {
-            id: s.id,
-            name: s.name,
-            source_url: s.source_url,
-            imported_at: s.imported_at,
-            downloads_count: s.downloads.len(),
-        })
-        .collect())
+    store::load_sources_summary()
 }
 
 /// Página de items de un catálogo.
@@ -39,29 +29,9 @@ pub async fn list_source_items_page(
     offset: Option<usize>,
     limit: Option<usize>,
 ) -> Result<SourceItemsPage, String> {
-    let sources = store::load_sources()?;
-    let source = sources
-        .into_iter()
-        .find(|s| s.id == source_id)
-        .ok_or_else(|| format!("Fuente no encontrada: {source_id}"))?;
-
     let safe_offset = offset.unwrap_or(0);
     let safe_limit = limit.unwrap_or(50).clamp(1, 200);
-    let total = source.downloads.len();
-    let items = source
-        .downloads
-        .into_iter()
-        .skip(safe_offset)
-        .take(safe_limit)
-        .collect();
-
-    Ok(SourceItemsPage {
-        source_id: source.id,
-        total,
-        offset: safe_offset,
-        limit: safe_limit,
-        items,
-    })
+    store::load_source_items_page(&source_id, safe_offset, safe_limit)
 }
 
 /// Elimina un catálogo por ID.
@@ -220,4 +190,28 @@ pub async fn import_source_from_url(
     emit_catalog_updated(&app);
     Ok(result)
 }
+
+/// Exporta todas las fuentes almacenadas en SQLite a un archivo JSON.
+///
+/// Si no se especifica `destination_path`, se genera un archivo en el directorio de caché
+/// con nombre `sources_export_<timestamp>.json` y se devuelve su ruta absoluta.
+#[tauri::command]
+pub async fn export_sources_to_json(destination_path: Option<String>) -> Result<String, String> {
+    let path = store::export_sources_to_file(destination_path.as_deref())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Exporta una fuente específica por `source_id` a un archivo JSON.
+///
+/// Si no se especifica `destination_path`, se genera un archivo en el directorio de caché
+/// con nombre `source_<id>_<timestamp>.json` y se devuelve su ruta absoluta.
+#[tauri::command]
+pub async fn export_source_to_json(
+    source_id: String,
+    destination_path: Option<String>,
+) -> Result<String, String> {
+    let path = store::export_source_to_file(&source_id, destination_path.as_deref())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 

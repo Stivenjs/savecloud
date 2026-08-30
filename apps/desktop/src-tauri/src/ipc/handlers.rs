@@ -191,6 +191,8 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::sources::commands::catalog::import_source_from_file,
         crate::sources::commands::catalog::import_sources_from_files_batch,
         crate::sources::commands::catalog::import_source_from_url,
+        crate::sources::commands::catalog::export_sources_to_json,
+        crate::sources::commands::catalog::export_source_to_json,
         crate::sources::commands::remote::upsert_remote_source,
         crate::sources::commands::remote::set_remote_source_enabled,
         crate::sources::commands::remote::get_verified_sources_status,

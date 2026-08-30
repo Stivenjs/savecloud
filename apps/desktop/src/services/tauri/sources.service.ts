@@ -217,6 +217,14 @@ export function importSourcesFromFilesBatch(paths: string[], mode: ImportMode): 
   return invoke<BatchImportResult>("import_sources_from_files_batch", { paths, mode });
 }
 
+export function exportSourcesToJson(destinationPath?: string | null): Promise<string> {
+  return invoke<string>("export_sources_to_json", { destinationPath: destinationPath ?? null });
+}
+
+export function exportSourceToJson(sourceId: string, destinationPath?: string | null): Promise<string> {
+  return invoke<string>("export_source_to_json", { sourceId, destinationPath: destinationPath ?? null });
+}
+
 export function listSourceDownloadJobs(): Promise<SourceDownloadJob[]> {
   return invoke<SourceDownloadJob[]>("list_source_download_jobs");
 }
