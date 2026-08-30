@@ -110,7 +110,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
     }
   }, [isOpen]);
 
-  const configuredGames: ConfiguredGame[] = useMemo(() => config?.games ?? [], [config?.games]);
+  const configuredGames: readonly ConfiguredGame[] = useMemo(() => config?.games ?? [], [config?.games]);
 
   useEffect(() => {
     const trimmed = query.trim();
