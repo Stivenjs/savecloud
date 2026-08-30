@@ -1996,7 +1996,18 @@
     "weeklyDigest": "Esta semana: {{playtime}} jugados.",
     "testTitle": "SaveCloud",
     "testBody": "Notificación de prueba — si ves esto, todo funciona correctamente",
-    "syncError": "{{gameName}}: {{error}}"
+    "syncError": "{{gameName}}: {{error}}",
+    "showUnreadOnly": "Mostrar solo los no leídos",
+    "allCaughtUp": "Estás al día",
+    "noUnread": "No tienes notificaciones sin leer.",
+    "emptyDesc": "Te avisaremos cuando haya actividad o sincronizaciones.",
+    "options": "Opciones de notificaciones",
+    "close": "Cerrar",
+    "syncNow": "Sincronizar con la nube",
+    "goToSettings": "Ir a Configuración",
+    "later": "Lo haré más tarde",
+    "achievementsUnlocked": "logros desbloqueados",
+    "featuredAlert": "Aviso importante"
   },
   "history": {
     "title": "Historial de operaciones",
