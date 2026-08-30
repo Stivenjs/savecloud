@@ -1,77 +1,116 @@
-//! Motor de matching puro: sin I/O, sin estado global.
+//! Motor de coincidencia de alta precisión y rendimiento para fuentes de descarga.
 //!
-//! Recibe el índice, la configuración y devuelve exactamente 1 resultado por `source_id`.
+//! Implementa normalización heurística de títulos, eliminación de ruido de versiones y grupos
+//! de la escena (repacks), detección de acrónimos y un índice invertido en memoria basado en
+//! hashes FNV-1a para resolución en tiempo constante `O(1)`.
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Configuración global del motor de emparejamiento (matching).
-///
-/// Debe cargarse una sola vez en el arranque de la aplicación y pasarse por referencia a cada llamada.
+use serde::{Deserialize, Serialize};
+
+/// Configuración global de umbrales y palabras vacías para el motor de coincidencia.
 #[derive(Debug, Clone)]
 pub struct MatchConfig {
-    /// Umbral mínimo de similitud (score de Jaccard) requerido para considerar a un candidato como válido.
+    /// Umbral mínimo de similitud requerido para aceptar a un candidato.
     pub threshold: f32,
-    /// Hashes FNV-1a correspondientes a las palabras que se ignorarán durante la tokenización (stopwords).
+    /// Hashes FNV-1a ordenados de las palabras que se ignoran durante la tokenización.
     pub stopwords: Vec<u64>,
 }
 
-/// Entrada estandarizada del índice de búsqueda.
-///
-/// Estructuralmente equivalente a `IndexedSourceItem` en el módulo de comandos. Representa
-/// un elemento pre-procesado listo para la comparación rápida en memoria.
+/// Registro estructurado de un item de catálogo procesado para búsqueda rápida en memoria.
 #[derive(Debug, Clone)]
 pub struct IndexEntry {
+    /// Identificador único de la fuente a la que pertenece el item.
     pub source_id: String,
+    /// Nombre visible del proveedor o fuente.
     pub source_name: String,
+    /// Identificador único del juego dentro del catálogo.
     pub item_id: String,
+    /// Título original sin procesar.
     pub item_title: String,
+    /// Título canónico normalizado.
     pub normalized_title: String,
-    /// Tokens del título hasheados con FNV-1a, ordenados numéricamente y filtrados (sin stopwords).
+    /// Variaciones y alias limpios extraídos del título.
+    pub clean_aliases: Vec<String>,
+    /// Hashes FNV-1a únicos y ordenados de los tokens del título.
     pub token_hashes: Vec<u64>,
+    /// Protocolos de descarga soportados por el item.
     pub protocols: Vec<crate::sources::domain::DownloadProtocol>,
+    /// Tamaño legible del archivo descargable.
     pub file_size: Option<String>,
+    /// Enlaces URI disponibles para descarga.
     pub uris: Vec<crate::sources::domain::SourceUri>,
 }
 
-/// Un candidato temporal que ha sido evaluado y superado el umbral mínimo de similitud.
-#[derive(Debug, Clone)]
-pub struct RawCandidate<'a> {
-    pub entry: &'a IndexEntry,
-    pub score: f32,
+/// Índice invertido en memoria para búsqueda acelerada en tiempo sub-milisegundo.
+#[derive(Debug, Clone, Default)]
+pub struct MatchIndex {
+    /// Vector de todas las entradas indexadas.
+    pub entries: Vec<IndexEntry>,
+    /// Mapeo de hash de token a los índices posicionales dentro de `entries`.
+    pub token_to_entries: HashMap<u64, Vec<usize>>,
 }
 
-/// Resultado final que encapsula la mejor coincidencia encontrada para una fuente de catálogo específica.
+impl MatchIndex {
+    /// Construye una nueva instancia de [`MatchIndex`] generando el índice invertido por tokens.
+    ///
+    /// # Arguments
+    ///
+    /// * `entries` - Colección plana de elementos de fuentes de catálogo.
+    ///
+    /// # Returns
+    ///
+    /// Estructura [`MatchIndex`] lista para consultas en memoria `O(1)`.
+    pub fn build(entries: Vec<IndexEntry>) -> Self {
+        let mut token_to_entries: HashMap<u64, Vec<usize>> = HashMap::new();
+        for (idx, entry) in entries.iter().enumerate() {
+            for &token in &entry.token_hashes {
+                token_to_entries.entry(token).or_default().push(idx);
+            }
+        }
+        Self {
+            entries,
+            token_to_entries,
+        }
+    }
+
+    /// Indica si el índice no contiene ningún registro.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+/// Representación del mejor resultado de coincidencia por cada fuente de catálogo.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceBestMatch {
+    /// Identificador de la fuente proveedora.
     pub source_id: String,
+    /// Nombre visible de la fuente.
     pub source_name: String,
+    /// Identificador del item coincidente.
     pub item_id: String,
+    /// Título original del item coincidente.
     pub item_title: String,
+    /// Puntuación final de coincidencia asignada.
     pub score: f32,
+    /// Protocolos de descarga soportados por el item.
     pub protocols: Vec<crate::sources::domain::DownloadProtocol>,
+    /// Tamaño formateado del archivo.
     pub file_size: Option<String>,
+    /// Enlaces URI de descarga asociados.
     pub uris: Vec<crate::sources::domain::SourceUri>,
 }
 
-/// Clasificación heurística del tipo de consulta (query) solicitada por el usuario.
-#[derive(Debug, PartialEq)]
-pub enum QueryKind {
-    /// La consulta contiene números o más de 3 tokens, por lo que se exige coincidencia numérica estricta.
-    Specific { number: Option<u32> },
-    /// La consulta tiene 3 o menos tokens y carece de números. Se intenta seleccionar un representante global por franquicia.
-    Generic,
-}
-
-/// Calcula el hash rápido de 64 bits FNV-1a para una cadena de texto.
+/// Calcula el hash FNV-1a de 64 bits para una cadena de texto.
 ///
 /// # Arguments
 ///
-/// * `s` - Cadena de texto a procesar.
+/// * `s` - Cadena a procesar.
 ///
 /// # Returns
 ///
-/// El entero `u64` resultante del algoritmo FNV-1a.
+/// Entero `u64` con el hash calculado.
 #[inline]
 pub fn fnv1a(s: &str) -> u64 {
     const OFFSET: u64 = 14695981039346656037;
@@ -84,7 +123,16 @@ pub fn fnv1a(s: &str) -> u64 {
     hash
 }
 
-fn convert_roman_numeral(token: &str) -> Option<&'static str> {
+/// Convierte números romanos comunes (del 1 al 20) a sus dígitos arábigos en formato string.
+///
+/// # Arguments
+///
+/// * `token` - Palabra candidata en minúsculas.
+///
+/// # Returns
+///
+/// `Some(&'static str)` con el número en dígitos si es un número romano válido, o `None`.
+pub fn convert_roman_numeral(token: &str) -> Option<&'static str> {
     match token {
         "i" => Some("1"),
         "ii" => Some("2"),
@@ -110,39 +158,187 @@ fn convert_roman_numeral(token: &str) -> Option<&'static str> {
     }
 }
 
-/// Normaliza un título para facilitar una comparación robusta y consistente.
+/// Elimina corchetes, paréntesis y metadatos de versiones, repacks e idiomas de la escena.
 ///
-/// Convierte caracteres a minúsculas, elimina los que no sean alfanuméricos,
-/// convierte números romanos aislados a dígitos y comprime los espacios múltiples.
+/// # Arguments
+///
+/// * `raw` - Título original del juego o item de la fuente.
+///
+/// # Returns
+///
+/// Cadena limpia de ruido de empaquetado y etiquetas de grupo.
+pub fn strip_brackets_and_scene_noise(raw: &str) -> String {
+    let mut result = String::with_capacity(raw.len());
+    let mut depth = 0usize;
+    let mut in_bracket_content = String::new();
+
+    for ch in raw.chars() {
+        match ch {
+            '[' | '(' | '{' => {
+                depth += 1;
+                in_bracket_content.clear();
+            }
+            ']' | ')' | '}' => {
+                if depth > 0 {
+                    depth -= 1;
+                }
+            }
+            c => {
+                if depth == 0 {
+                    result.push(c);
+                } else {
+                    in_bracket_content.push(c);
+                }
+            }
+        }
+    }
+
+    let trimmed = result.trim();
+    if trimmed.is_empty() && !in_bracket_content.is_empty() {
+        return in_bracket_content;
+    }
+
+    trimmed.to_string()
+}
+
+/// Elimina sufijos de ediciones estándar comerciales (ej. "Deluxe Edition", "GOTY", "Remastered").
+///
+/// # Arguments
+///
+/// * `input` - Cadena de texto de entrada.
+///
+/// # Returns
+///
+/// Cadena en minúsculas sin las etiquetas de edición comercial.
+pub fn strip_edition_tags(input: &str) -> String {
+    let lowercase = input.to_lowercase();
+    let edition_patterns = [
+        "game of the year edition",
+        "game of the year",
+        "goty edition",
+        "goty",
+        "digital deluxe edition",
+        "deluxe edition",
+        "ultimate edition",
+        "complete edition",
+        "complete collection",
+        "directors cut",
+        "director s cut",
+        "definitive edition",
+        "anniversary edition",
+        "enhanced edition",
+        "special edition",
+        "standard edition",
+        "collector s edition",
+        "collectors edition",
+        "collector edition",
+        "remastered edition",
+        "remastered",
+        "hd remaster",
+        "premium edition",
+        "legacy edition",
+        "gold edition",
+        "day one edition",
+        "bonus content",
+        "all dlcs",
+        "next gen update",
+    ];
+
+    let mut clean = lowercase;
+    for pattern in edition_patterns {
+        clean = clean.replace(pattern, " ");
+    }
+    clean
+}
+
+/// Normaliza un título para comparaciones consistentes.
+///
+/// Limpia corchetes, remueve etiquetas de edición, traduce números romanos a arábigos,
+/// sustituye caracteres no alfanuméricos por espacios y comprime espacios redundantes.
+///
+/// # Arguments
+///
+/// * `input` - Título original a normalizar.
+///
+/// # Returns
+///
+/// Cadena canónica normalizada en minúsculas.
 pub fn normalize_title(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
+    let no_brackets = strip_brackets_and_scene_noise(input);
+    let no_editions = strip_edition_tags(&no_brackets);
+
+    let mut out = String::with_capacity(no_editions.len());
     let mut last_space = false;
-    for ch in input.chars().flat_map(|c| c.to_lowercase()) {
-        if ch.is_alphanumeric() {
-            out.push(ch);
+
+    for ch in no_editions.chars() {
+        let ch_lower = ch.to_ascii_lowercase();
+        if ch_lower.is_alphanumeric() {
+            out.push(ch_lower);
             last_space = false;
+        } else if ch_lower == '&' {
+            if !last_space {
+                out.push(' ');
+            }
+            out.push_str("and ");
+            last_space = true;
         } else if !last_space {
             out.push(' ');
             last_space = true;
         }
     }
+
     out.split_whitespace()
         .map(|token| convert_roman_numeral(token).unwrap_or(token))
         .collect::<Vec<_>>()
         .join(" ")
 }
 
-
-/// Genera una lista de hashes FNV-1a a partir de un título normalizado, descartando palabras vacías.
+/// Extrae alias limpios de títulos que combinan nombres alternativos con separadores `/` o `|`.
 ///
 /// # Arguments
 ///
-/// * `normalized` - Cadena de texto normalizada.
-/// * `stopwords` - Slice de hashes ordenados que serán omitidos.
+/// * `raw` - Título original del item.
 ///
 /// # Returns
 ///
-/// Un vector ordenado y deduplicado de hashes `u64`.
+/// Vector con los alias normalizados individuales y la forma compuesta completa.
+pub fn extract_title_aliases(raw: &str) -> Vec<String> {
+    let no_brackets = strip_brackets_and_scene_noise(raw);
+    let mut aliases = Vec::new();
+
+    let parts: Vec<&str> = no_brackets
+        .split(['/', '|'])
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    if parts.len() > 1 {
+        for part in parts {
+            let norm = normalize_title(part);
+            if !norm.is_empty() && !aliases.contains(&norm) {
+                aliases.push(norm);
+            }
+        }
+    }
+
+    let full_norm = normalize_title(raw);
+    if !full_norm.is_empty() && !aliases.contains(&full_norm) {
+        aliases.push(full_norm);
+    }
+
+    aliases
+}
+
+/// Genera una secuencia ordenada y deduplicada de hashes FNV-1a excluyendo stopwords.
+///
+/// # Arguments
+///
+/// * `normalized` - Cadena normalizada.
+/// * `stopwords` - Hashes ordenados de palabras a omitir.
+///
+/// # Returns
+///
+/// Vector de hashes `u64`.
 pub fn tokenize_sorted_filtered(normalized: &str, stopwords: &[u64]) -> Vec<u64> {
     let mut hashes: Vec<u64> = normalized
         .split_whitespace()
@@ -154,388 +350,332 @@ pub fn tokenize_sorted_filtered(normalized: &str, stopwords: &[u64]) -> Vec<u64>
     hashes
 }
 
-/// Analiza un título normalizado para detectar dinámicamente la estrategia de búsqueda a aplicar.
+/// Extrae el primer número de secuela (<= 99) o año de lanzamiento (1970..=2099) presente en el título.
 ///
 /// # Arguments
 ///
-/// * `normalized` - El texto de búsqueda normalizado aportado por el usuario.
+/// * `normalized` - Título normalizado a inspeccionar.
 ///
 /// # Returns
 ///
-/// Una variante `QueryKind` señalando la intención (`Specific` o `Generic`).
-pub fn detect_query_kind(normalized: &str) -> QueryKind {
-    let tokens: Vec<&str> = normalized.split_whitespace().collect();
-
-    let number = tokens.iter().find_map(|t| t.parse::<u32>().ok());
-
-    // Genérica: pocos tokens Y sin números explícitos
-    if tokens.len() <= 3 && number.is_none() {
-        return QueryKind::Generic;
-    }
-
-    QueryKind::Specific { number }
+/// `Some(u32)` si se localiza un número o año válido, o `None`.
+pub fn extract_sequel_number(normalized: &str) -> Option<u32> {
+    normalized.split_whitespace().find_map(|t| {
+        t.parse::<u32>()
+            .ok()
+            .filter(|&n| n <= 99 || (1970..=2099).contains(&n))
+    })
 }
 
-/// Comprueba si todos los hashes del slice `needle` están presentes dentro de `haystack`.
-///
-/// Aprovecha que ambos slices están ordenados para hacer la búsqueda en O(n+m) con
-/// dos punteros, evitando asignaciones dinámicas.
-///
-/// Se usa como condición previa al atajo de contención en `jaccard_score`: garantiza
-/// que la contención es real a nivel de **tokens** y no un falso positivo por substring
-/// de texto (ej. "dream" dentro de "fractured dream" a nivel de caracteres, pero no
-/// como token completo dentro del set de hashes del query).
-///
-/// # Arguments
-///
-/// * `needle` - Hashes ordenados del lado más corto (candidato o query).
-/// * `haystack` - Hashes ordenados del lado más largo donde se busca contención.
-///
-/// # Returns
-///
-/// `true` si cada hash de `needle` aparece en `haystack`.
-#[inline]
-fn hashes_are_subset(needle: &[u64], haystack: &[u64]) -> bool {
-    if needle.is_empty() {
-        return true;
-    }
-    if needle.len() > haystack.len() {
+/// Comprueba si las letras iniciales de los tokens forman el acrónimo buscado.
+fn matches_acronym_slice(acronym: &str, target_tokens: &[&str]) -> bool {
+    if target_tokens.len() < 2 || acronym.len() != target_tokens.len() {
         return false;
     }
-    let mut hi = 0;
-    for &n in needle {
-        // Avanza en haystack hasta encontrar n o superarlo
-        while hi < haystack.len() && haystack[hi] < n {
-            hi += 1;
+
+    let mut initials = String::with_capacity(target_tokens.len());
+    for t in target_tokens {
+        if let Some(first_char) = t.chars().next() {
+            initials.push(first_char);
         }
-        if hi >= haystack.len() || haystack[hi] != n {
-            return false;
-        }
-        hi += 1;
     }
-    true
+
+    initials.eq_ignore_ascii_case(acronym)
 }
 
-/// Calcula el coeficiente de similitud de Jaccard entre dos secuencias de tokens (hashes).
+/// Evalúa la similitud entre la consulta y un candidato con cero asignaciones en memoria heap.
 ///
-/// Incorpora heurísticas de abandono prematuro: evalúa contención de tokens completos y
-/// la cota superior matemática posible antes de iterar para optimizar CPU.
-///
-/// El atajo de contención (`0.96`) aplica únicamente cuando **todos los tokens** del lado
-/// más corto están presentes en el lado más largo, evaluado sobre los hashes FNV-1a.
-/// Esto evita falsos positivos por coincidencia de substring a nivel de caracteres
-/// (ej. "dream" contenido en "fractured dream" como texto, pero no como token del query
-/// "demi and the fractured dream").
+/// Aplica discriminación de secuelas, concordancia de acrónimos, recall de tokens y penalización
+/// por palabras residuales o spin-offs no solicitados.
 ///
 /// # Arguments
 ///
-/// * `left_norm` - Cadena normalizada de la consulta izquierda.
-/// * `left_hashes` - Hashes correspondientes a la cadena izquierda.
-/// * `right_norm` - Cadena normalizada del candidato a comparar.
-/// * `right_hashes` - Hashes correspondientes al candidato.
-/// * `threshold` - Límite mínimo esperado; si la cota superior es menor, retorna 0 temprano.
+/// * `query_norm` - Título normalizado de la consulta.
+/// * `q_tokens` - Tokens de la consulta precalculados en slice.
+/// * `q_num` - Número de secuela extraído de la consulta.
+/// * `candidate_aliases` - Lista de alias limpios del candidato.
+/// * `candidate_norm` - Título normalizado principal del candidato.
 ///
 /// # Returns
 ///
-/// Coeficiente flotante entre `0.0` y `1.0`.
+/// Puntuación flotante entre `0.0` y `1.0`.
 #[inline]
-pub fn jaccard_score(
-    left_norm: &str,
-    left_hashes: &[u64],
-    right_norm: &str,
-    right_hashes: &[u64],
-    threshold: f32,
+pub fn calculate_match_score_fast(
+    query_norm: &str,
+    q_tokens: &[&str],
+    q_num: Option<u32>,
+    candidate_aliases: &[String],
+    candidate_norm: &str,
 ) -> f32 {
-    if left_norm.is_empty() || right_norm.is_empty() {
-        return 0.0;
-    }
-    if left_norm == right_norm {
-        return 1.0;
-    }
-
-    let ln = left_hashes.len();
-    let rn = right_hashes.len();
-    if ln == 0 || rn == 0 {
+    if query_norm.is_empty() {
         return 0.0;
     }
 
-    // Atajo de contención: solo aplica cuando todos los tokens del lado más corto
-    // están presentes en el lado más largo. Evaluar sobre hashes (no sobre el string)
-    // evita que "dream" (1 token) obtenga 0.96 contra "demi and the fractured dream"
-    // (5 tokens) simplemente porque "dream" es substring del texto normalizado.
-    let (shorter, longer) = if ln <= rn {
-        (left_hashes, right_hashes)
-    } else {
-        (right_hashes, left_hashes)
-    };
-    if hashes_are_subset(shorter, longer) {
-        return 0.96;
-    }
+    let mut best_score = 0.0f32;
 
-    let upper_bound = ln.min(rn) as f32 / ln.max(rn) as f32;
-    if upper_bound < threshold {
-        return 0.0;
-    }
-    let mut i = 0;
-    let mut j = 0;
-    let mut intersection = 0usize;
-    while i < ln && j < rn {
-        match left_hashes[i].cmp(&right_hashes[j]) {
-            std::cmp::Ordering::Equal => {
-                intersection += 1;
-                i += 1;
-                j += 1;
+    let eval_alias = |cand: &str, best_score: &mut f32| {
+        if cand.is_empty() {
+            return;
+        }
+
+        if query_norm == cand {
+            *best_score = 1.0;
+            return;
+        }
+
+        let c_num = extract_sequel_number(cand);
+
+        if let (Some(qn), Some(cn)) = (q_num, c_num) {
+            if qn != cn {
+                return;
             }
-            std::cmp::Ordering::Less => i += 1,
-            std::cmp::Ordering::Greater => j += 1,
+        }
+
+        let mut c_tokens_buf = [""; 16];
+        let mut c_len = 0;
+        for token in cand.split_whitespace() {
+            if c_len < c_tokens_buf.len() {
+                c_tokens_buf[c_len] = token;
+                c_len += 1;
+            }
+        }
+        let c_tokens = &c_tokens_buf[..c_len];
+
+        if c_tokens.is_empty() || q_tokens.is_empty() {
+            return;
+        }
+
+        if q_tokens.len() == 2 && c_tokens.len() >= 3 {
+            let acronym_part = q_tokens[0];
+            let rest_cand = &c_tokens[..c_tokens.len() - 1];
+            if matches_acronym_slice(acronym_part, rest_cand)
+                && q_tokens[1] == c_tokens[c_tokens.len() - 1]
+            {
+                *best_score = best_score.max(0.96);
+                return;
+            }
+        }
+
+        let mut common_count = 0usize;
+        for qt in q_tokens {
+            if c_tokens.contains(qt) {
+                common_count += 1;
+            }
+        }
+
+        if common_count == 0 {
+            return;
+        }
+
+        let query_recall = common_count as f32 / q_tokens.len() as f32;
+        let cand_precision = common_count as f32 / c_tokens.len() as f32;
+
+        let mut score: f32;
+
+        if query_recall >= 0.99 {
+            let extra_tokens = c_tokens.len().saturating_sub(q_tokens.len());
+            let extra_penalty = (extra_tokens as f32 * 0.08).min(0.35);
+            score = 0.95 - extra_penalty;
+
+            let mut seq_match = true;
+            let mut last_idx = None;
+            for qt in q_tokens {
+                if let Some(pos) = c_tokens.iter().position(|t| t == qt) {
+                    if let Some(prev) = last_idx {
+                        if pos <= prev {
+                            seq_match = false;
+                            break;
+                        }
+                    }
+                    last_idx = Some(pos);
+                }
+            }
+            if seq_match {
+                score += 0.04;
+            }
+        } else {
+            let dice = (2.0 * common_count as f32) / (q_tokens.len() + c_tokens.len()) as f32;
+            score = dice * (0.6 * query_recall + 0.4 * cand_precision);
+        }
+
+        match (q_num, c_num) {
+            (None, Some(_)) => {
+                score -= 0.40;
+            }
+            (Some(_), None) => {
+                score -= 0.40;
+            }
+            (Some(qn), Some(cn)) if qn == cn => {
+                score = (score + 0.05).min(1.0);
+            }
+            _ => {}
+        }
+
+        *best_score = best_score.max(score.clamp(0.0, 1.0));
+    };
+
+    if candidate_aliases.is_empty() {
+        eval_alias(candidate_norm, &mut best_score);
+    } else {
+        for alias in candidate_aliases {
+            eval_alias(alias, &mut best_score);
+            if best_score >= 0.99 {
+                break;
+            }
         }
     }
-    let union = ln + rn - intersection;
-    intersection as f32 / union as f32
+
+    best_score
 }
 
-/// Extrae el año más reciente (limitado al rango lógico de 1970-2099) que aparezca en el título.
+/// Orquesta la búsqueda y selecciona el mejor candidato representativo por cada catálogo.
 ///
-/// Se utiliza para desempates cronológicos en la búsqueda genérica.
-///
-/// # Argumentos
-///
-/// * `title` - Título original de donde se buscarán los dígitos.
-///
-/// # Retorna
-///
-/// El año extraído `Option<u32>` si se encontró alguno válido.
-fn extract_year(title: &str) -> Option<u32> {
-    title
-        .split_whitespace()
-        .filter_map(|t| {
-            let n: u32 = t.trim_matches(|c: char| !c.is_ascii_digit()).parse().ok()?;
-            if (1970..=2099).contains(&n) {
-                Some(n)
-            } else {
-                None
-            }
-        })
-        .max()
-}
-
-/// Escanea y extrae el primer número considerado conceptualmente una secuela (≤ 99).
+/// Utiliza el índice invertido de [`MatchIndex`] para filtrar instantáneamente los candidatos
+/// antes de la evaluación detallada de similitud.
 ///
 /// # Arguments
 ///
-/// * `normalized` - Cadena de texto ya normalizada.
+/// * `_game_name` - Nombre original de búsqueda provisto por el usuario.
+/// * `normalized_game` - Nombre de búsqueda normalizado.
+/// * `game_hashes` - Hashes FNV-1a de las palabras clave de la consulta.
+/// * `config` - Configuración de umbral y stopwords.
+/// * `index` - Referencia al índice en memoria.
 ///
 /// # Returns
 ///
-/// El número hallado encapsulado en un `Option<u32>`.
-fn extract_sequel_number(normalized: &str) -> Option<u32> {
-    normalized
-        .split_whitespace()
-        .find_map(|t| t.parse::<u32>().ok().filter(|&n| n <= 99))
-}
-
-/// Selecciona el candidato óptimo para resoluciones de una búsqueda **específica**.
-///
-/// Reglas de prioridad en orden descendente:
-/// 1. Score igual a `1.0` (Igualdad plena de texto).
-/// 2. Coincidencia estricta del número de secuela con el proporcionado.
-/// 3. Mayor coeficiente numérico de similitud (`score`).
-/// 4. El título más corto (para penalizar ruido adicional en nombres).
-///
-/// # Arguments
-///
-/// * `candidates` - Listado de candidatos locales ya filtrados que superaron el umbral.
-/// * `query_number` - El número primario de secuela o de serie extraído del query, si existe.
-///
-/// # Returns
-///
-/// Una referencia pura `&IndexEntry` al ganador.
-fn best_specific<'a>(
-    candidates: &[RawCandidate<'a>],
-    query_number: Option<u32>,
-) -> Option<&'a IndexEntry> {
-    let has_non_sequel_candidate = query_number.is_none()
-        && candidates
-            .iter()
-            .any(|c| extract_sequel_number(&c.entry.normalized_title).is_none());
-
-    candidates
-        .iter()
-        .filter(|c| {
-            let cn = extract_sequel_number(&c.entry.normalized_title);
-            if let Some(qn) = query_number {
-                match cn {
-                    Some(n) => n == qn,
-                    None => c.score >= 1.0,
-                }
-            } else if has_non_sequel_candidate {
-                // Si el query NO busca una secuela numérica (ej: "Dark Souls") y existe
-                // un candidato sin secuela, descartar los que sean secuelas (ej: "Dark Souls 2")
-                cn.is_none() || c.score >= 1.0
-            } else {
-                true
-            }
-        })
-        .max_by(|a, b| {
-            // 1. Coincidencia exacta de texto primero (score >= 1.0)
-            let ea = (a.score >= 1.0) as u8;
-            let eb = (b.score >= 1.0) as u8;
-            if ea != eb {
-                return eb.cmp(&ea);
-            }
-
-            // 2. Coincidencia estricta de número de secuela con la consulta
-            let na = extract_sequel_number(&a.entry.normalized_title);
-            let nb = extract_sequel_number(&b.entry.normalized_title);
-            if let Some(qn) = query_number {
-                let match_a = na == Some(qn);
-                let match_b = nb == Some(qn);
-                if match_a != match_b {
-                    return match_b.cmp(&match_a);
-                }
-            } else {
-                let no_num_a = na.is_none();
-                let no_num_b = nb.is_none();
-                if no_num_a != no_num_b {
-                    return no_num_b.cmp(&no_num_a);
-                }
-            }
-
-            // 3. Mayor coeficiente de similitud (score de Jaccard)
-            let sc = a.score.total_cmp(&b.score);
-            if sc != std::cmp::Ordering::Equal {
-                return sc;
-            }
-
-            // 4. Menor diferencia de longitud del título con el query
-            b.entry.item_title.len().cmp(&a.entry.item_title.len())
-        })
-        .map(|c| c.entry)
-}
-
-
-/// Selecciona el candidato óptimo para resoluciones de una búsqueda **genérica** (franquicia principal).
-///
-/// Reglas de prioridad en orden descendente:
-/// 1. El año de publicación más reciente reflejado en el título (ej. Remakes).
-/// 2. Mayor coeficiente numérico de similitud (`score`).
-/// 3. Menor conteo de palabras en el título normalizado (prioriza la base del título sobre subtítulos).
-///
-/// # Arguments
-///
-/// * `candidates` - Listado de candidatos locales ya filtrados por el umbral mínimo.
-///
-/// # Returns
-///
-/// Una referencia pura `&IndexEntry` al ganador.
-fn best_generic<'a>(candidates: &[RawCandidate<'a>]) -> Option<&'a IndexEntry> {
-    candidates
-        .iter()
-        .max_by(|a, b| {
-            let ya = extract_year(&a.entry.item_title).unwrap_or(0);
-            let yb = extract_year(&b.entry.item_title).unwrap_or(0);
-            if ya != yb {
-                return ya.cmp(&yb);
-            }
-
-            let sc = a.score.total_cmp(&b.score);
-            if sc != std::cmp::Ordering::Equal {
-                return sc;
-            }
-
-            b.entry
-                .normalized_title
-                .split_whitespace()
-                .count()
-                .cmp(&a.entry.normalized_title.split_whitespace().count())
-        })
-        .map(|c| c.entry)
-}
-
-/// Orquesta la búsqueda y selecciona exactamente 1 representante idóneo por cada fuente cargada.
-///
-/// Al carecer de estado mutable global o I/O, esta función es idónea para invocación
-/// paralela (ej. `rayon::par_iter`) sobre un lote masivo de títulos.
-///
-/// # Arguments
-///
-/// * `game_name` - Nombre original provisto por el cliente, devuelto intacto si hay coincidencias.
-/// * `normalized_game` - El nombre sometido a validación y compresión de caracteres.
-/// * `game_hashes` - Representación tokenizada en FNV-1a del nombre a buscar.
-/// * `config` - Contenedor con los umbrales exigidos y diccionarios de ignorados.
-/// * `index` - Base de datos referencial cacheada y aplanada de todos los elementos disponibles.
-///
-/// # Returns
-///
-/// Vector conteniendo un `SourceBestMatch` por cada `source_id` donde se superaron los criterios.
-/// Los resultados se envían ya ordenados por relevancia global (score descendente).
+/// Vector de [`SourceBestMatch`] ordenado de forma descendente por score.
 pub fn find_best_per_source(
     _game_name: &str,
     normalized_game: &str,
     game_hashes: &[u64],
     config: &MatchConfig,
-    index: &[IndexEntry],
+    index: &MatchIndex,
 ) -> Vec<SourceBestMatch> {
-    let kind = detect_query_kind(normalized_game);
-    let query_number = match &kind {
-        QueryKind::Specific { number } => *number,
-        QueryKind::Generic => None,
-    };
-
-    // Fase 1 — Filtrar rápidamente candidatos basándose en el score de similitud
-    let candidates: Vec<RawCandidate> = index
-        .iter()
-        .filter_map(|entry| {
-            let score = jaccard_score(
-                normalized_game,
-                game_hashes,
-                &entry.normalized_title,
-                &entry.token_hashes,
-                config.threshold,
-            );
-            if score >= config.threshold {
-                Some(RawCandidate { entry, score })
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    // Fase 2 — Agrupar la colección de candidatos supervivientes mapeándolos a su fuente original
-    let mut by_source: HashMap<&str, Vec<RawCandidate>> = HashMap::new();
-    for c in &candidates {
-        by_source
-            .entry(&c.entry.source_id)
-            .or_default()
-            .push(c.clone());
+    if normalized_game.is_empty() || index.is_empty() {
+        return Vec::new();
     }
 
-    // Fase 3 — Delegar en la heurística ganadora y componer la estructura de respuesta
+    let mut candidate_lists: Vec<&Vec<usize>> = Vec::with_capacity(game_hashes.len());
+    for &h in game_hashes {
+        if let Some(list) = index.token_to_entries.get(&h) {
+            candidate_lists.push(list);
+        }
+    }
+
+    if candidate_lists.is_empty() {
+        return Vec::new();
+    }
+
+    candidate_lists.sort_unstable_by_key(|l| l.len());
+
+    let mut candidate_indices: Vec<usize> = Vec::with_capacity(256);
+    if candidate_lists.len() > 1 && candidate_lists[0].len() <= 600 {
+        candidate_indices.extend_from_slice(candidate_lists[0]);
+        if candidate_lists.len() > 1 && candidate_lists[1].len() <= 600 {
+            candidate_indices.extend_from_slice(candidate_lists[1]);
+        }
+    } else {
+        for list in candidate_lists {
+            candidate_indices.extend_from_slice(list);
+        }
+    }
+
+    candidate_indices.sort_unstable();
+    candidate_indices.dedup();
+
+    let q_num = extract_sequel_number(normalized_game);
+    let q_tokens: Vec<&str> = normalized_game.split_whitespace().collect();
+
+    let mut by_source: HashMap<&str, (&IndexEntry, f32)> = HashMap::with_capacity(16);
+
+    for idx in candidate_indices {
+        let entry = &index.entries[idx];
+        let score = calculate_match_score_fast(
+            normalized_game,
+            &q_tokens,
+            q_num,
+            &entry.clean_aliases,
+            &entry.normalized_title,
+        );
+
+        if score >= config.threshold {
+            by_source
+                .entry(&entry.source_id)
+                .and_modify(|(best_entry, best_score)| {
+                    if score > *best_score
+                        || ((score - *best_score).abs() < f32::EPSILON
+                            && entry.item_title.len() < best_entry.item_title.len())
+                    {
+                        *best_entry = entry;
+                        *best_score = score;
+                    }
+                })
+                .or_insert((entry, score));
+        }
+    }
+
     let mut results: Vec<SourceBestMatch> = by_source
         .into_values()
-        .filter_map(|group| {
-            let winner = match kind {
-                QueryKind::Specific { .. } => best_specific(&group, query_number),
-                QueryKind::Generic => best_generic(&group),
-            }?;
-
-            Some(SourceBestMatch {
-                source_id: winner.source_id.clone(),
-                source_name: winner.source_name.clone(),
-                item_id: winner.item_id.clone(),
-                item_title: winner.item_title.clone(),
-                score: group
-                    .iter()
-                    .find(|c| c.entry.item_id == winner.item_id)
-                    .map(|c| c.score)
-                    .unwrap_or(0.0),
-                protocols: winner.protocols.clone(),
-                file_size: winner.file_size.clone(),
-                uris: winner.uris.clone(),
-            })
+        .map(|(winner, score)| SourceBestMatch {
+            source_id: winner.source_id.clone(),
+            source_name: winner.source_name.clone(),
+            item_id: winner.item_id.clone(),
+            item_title: winner.item_title.clone(),
+            score,
+            protocols: winner.protocols.clone(),
+            file_size: winner.file_size.clone(),
+            uris: winner.uris.clone(),
         })
         .collect();
 
     results.sort_unstable_by(|a, b| b.score.total_cmp(&a.score));
     results
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_inverted_index_fast_search() {
+        let entry1 = IndexEntry {
+            source_id: "fitgirl".to_string(),
+            source_name: "FitGirl".to_string(),
+            item_id: "1".to_string(),
+            item_title: "Cyberpunk 2077 [FitGirl Repack]".to_string(),
+            normalized_title: "cyberpunk 2077".to_string(),
+            clean_aliases: vec!["cyberpunk 2077".to_string()],
+            token_hashes: tokenize_sorted_filtered("cyberpunk 2077", &[]),
+            protocols: vec![],
+            file_size: None,
+            uris: vec![],
+        };
+
+        let entry2 = IndexEntry {
+            source_id: "fitgirl".to_string(),
+            source_name: "FitGirl".to_string(),
+            item_id: "2".to_string(),
+            item_title: "Hades II [FitGirl Repack]".to_string(),
+            normalized_title: "hades 2".to_string(),
+            clean_aliases: vec!["hades 2".to_string()],
+            token_hashes: tokenize_sorted_filtered("hades 2", &[]),
+            protocols: vec![],
+            file_size: None,
+            uris: vec![],
+        };
+
+        let index = MatchIndex::build(vec![entry1, entry2]);
+        let config = MatchConfig {
+            threshold: 0.60,
+            stopwords: vec![],
+        };
+
+        let norm_query = normalize_title("Cyberpunk 2077");
+        let hashes = tokenize_sorted_filtered(&norm_query, &[]);
+        let results = find_best_per_source("Cyberpunk 2077", &norm_query, &hashes, &config, &index);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].item_title, "Cyberpunk 2077 [FitGirl Repack]");
+        assert_eq!(results[0].score, 1.0);
+    }
 }
