@@ -105,7 +105,8 @@ async fn resolve_hoster_url_internal<'a>(
     let host = normalized_host(&parsed);
 
     if host.contains("gofile.io") {
-        let (url, account_token) = gofile::resolve(client, uri).await?;
+        let (url, account_token) =
+            gofile::resolve(app, client, uri, cancel_flag.clone()).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::GofileDownload { account_token }.build(),
@@ -196,7 +197,8 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if vikingfile::is_vikingfile_url(uri) {
-        let (url, referer, name_hint) = vikingfile::resolve(client, uri).await?;
+        let (url, referer, name_hint) =
+            vikingfile::resolve(app, client, uri, cancel_flag.clone()).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::Downloader { referer }.build(),
@@ -205,7 +207,8 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if host.contains("rootz.so") {
-        let (url, referer, file_name_hint) = rootz::resolve(app, client, uri, cancel_flag.clone()).await?;
+        let (url, referer, file_name_hint) =
+            rootz::resolve(app, client, uri, cancel_flag.clone()).await?;
         let download_profile = if is_signed_cdn_url(&url) {
             ProfilePreset::Passthrough.build()
         } else {

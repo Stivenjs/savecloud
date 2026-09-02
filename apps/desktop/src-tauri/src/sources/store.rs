@@ -1,5 +1,6 @@
 //! Persistencia local del módulo de fuentes respaldada por SQLite con fallback/exportación JSON.
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use rusqlite::OptionalExtension;
@@ -133,14 +134,39 @@ fn insert_catalog_in_tx(
     )
     .map_err(|e| e.to_string())?;
 
-    tx.execute(
-        "DELETE FROM source_items WHERE source_id = ?1",
-        rusqlite::params![&catalog.id],
-    )
-    .map_err(|e| e.to_string())?;
+
+    let mut existing_stmt = tx
+        .prepare_cached(
+            "SELECT item_id, title, uris_json, upload_date, file_size FROM source_items WHERE source_id = ?1",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let mut existing_map: HashMap<String, (String, String, Option<String>, Option<String>)> =
+        HashMap::new();
+
+    let rows = existing_stmt
+        .query_map(rusqlite::params![&catalog.id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    for row in rows {
+        let (id, title, uris, upload_date, file_size) = row.map_err(|e| e.to_string())?;
+        existing_map.insert(id, (title, uris, upload_date, file_size));
+    }
+
+    let mut new_item_ids = HashSet::with_capacity(catalog.downloads.len());
+    let mut inserted_count = 0usize;
+    let mut updated_count = 0usize;
 
     {
-        let mut stmt = tx
+        let mut upsert_stmt = tx
             .prepare_cached(
                 "INSERT OR REPLACE INTO source_items (
                     source_id, item_id, title, normalized_title, upload_date, file_size, uris_json, metadata_json
@@ -149,24 +175,68 @@ fn insert_catalog_in_tx(
             .map_err(|e| e.to_string())?;
 
         for item in &catalog.downloads {
-            let normalized = crate::sources::matcher::normalize_title(&item.title);
+            new_item_ids.insert(item.id.as_str());
+
             let uris_json = serde_json::to_string(&item.uris).unwrap_or_else(|_| "[]".to_string());
+
+            if let Some((old_title, old_uris, old_upload, old_size)) = existing_map.get(&item.id) {
+                if old_title == &item.title
+                    && old_uris == &uris_json
+                    && old_upload == &item.upload_date
+                    && old_size == &item.file_size
+                {
+                    continue;
+                }
+                updated_count += 1;
+            } else {
+                inserted_count += 1;
+            }
+
+            let normalized = crate::sources::matcher::normalize_title(&item.title);
             let meta_json =
                 serde_json::to_string(&item.metadata).unwrap_or_else(|_| "{}".to_string());
 
-            stmt.execute(rusqlite::params![
-                &catalog.id,
-                &item.id,
-                &item.title,
-                &normalized,
-                &item.upload_date,
-                &item.file_size,
-                &uris_json,
-                &meta_json,
-            ])
-            .map_err(|e| e.to_string())?;
+            upsert_stmt
+                .execute(rusqlite::params![
+                    &catalog.id,
+                    &item.id,
+                    &item.title,
+                    &normalized,
+                    &item.upload_date,
+                    &item.file_size,
+                    &uris_json,
+                    &meta_json,
+                ])
+                .map_err(|e| e.to_string())?;
         }
     }
+
+    let mut deleted_count = 0usize;
+    {
+        let mut delete_stmt = tx
+            .prepare_cached("DELETE FROM source_items WHERE source_id = ?1 AND item_id = ?2")
+            .map_err(|e| e.to_string())?;
+
+        for existing_id in existing_map.keys() {
+            if !new_item_ids.contains(existing_id.as_str()) {
+                delete_stmt
+                    .execute(rusqlite::params![&catalog.id, existing_id])
+                    .map_err(|e| e.to_string())?;
+                deleted_count += 1;
+            }
+        }
+    }
+
+    let unchanged_count = catalog.downloads.len().saturating_sub(inserted_count + updated_count);
+    log::info!(
+        "[sources] Delta sync para '{}': {} nuevos, {} modificados, {} eliminados, {} sin cambios (total: {})",
+        catalog.name,
+        inserted_count,
+        updated_count,
+        deleted_count,
+        unchanged_count,
+        catalog.downloads.len()
+    );
 
     Ok(())
 }

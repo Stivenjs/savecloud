@@ -28,6 +28,7 @@ const jsonFiles = [
   "apps/desktop/package.json",
   "apps/desktop/src-tauri/tauri.conf.json",
   "apps/web/package.json",
+  "packages/crawler/package.json",
 ];
 
 const tomlFiles = ["apps/desktop/src-tauri/Cargo.toml"];

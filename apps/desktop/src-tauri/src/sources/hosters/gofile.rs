@@ -1,8 +1,12 @@
 //! Resolución de enlaces Gofile
 
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use tauri::AppHandle;
 
 use hex::encode as hex_encode;
 use reqwest::Client;
@@ -457,8 +461,39 @@ async fn resolve_inner(client: &Client, url: &str) -> Result<(String, String), H
     Ok((direct, account_token))
 }
 
+#[derive(Deserialize)]
+struct GofileScrapedOutput {
+    url: String,
+    token: Option<String>,
+}
+
 /// Resuelve la URL de descarga directa y el token de cuenta para el perfil de descarga.
-pub async fn resolve(client: &Client, url: &str) -> Result<(String, String), HosterError> {
+pub async fn resolve(
+    app: Option<&AppHandle>,
+    client: &Client,
+    url: &str,
+    cancel_flag: Option<Arc<AtomicBool>>,
+) -> Result<(String, String), HosterError> {
+    if let Some(app) = app {
+        log::info!("gofile: ejecutando Scrapling crawler para resolver enlace y sesión de descarga");
+        if let Ok(scraped) =
+            crate::sources::commands::fetch::run_scrapling_fetch(app, url, cancel_flag.clone())
+        {
+            let trimmed = scraped.trim();
+            if trimmed.starts_with('{') {
+                if let Ok(parsed) = serde_json::from_str::<GofileScrapedOutput>(trimmed) {
+                    let token = parsed.token.unwrap_or_default();
+                    log::info!("gofile: Scrapling resolvió URL directa: {}", parsed.url);
+                    return Ok((parsed.url, token));
+                }
+            } else if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                log::info!("gofile: Scrapling resolvió URL directa: {trimmed}");
+                let token = ensure_account_token(client).await.unwrap_or_default();
+                return Ok((trimmed.to_string(), token));
+            }
+        }
+    }
+
     tokio::time::timeout(GOFILE_RESOLVE_TIMEOUT, resolve_inner(client, url))
         .await
         .map_err(|_| HosterError::ResolutionFailed(gofile_timeout()))?

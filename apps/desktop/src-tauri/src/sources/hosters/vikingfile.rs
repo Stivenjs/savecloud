@@ -1,7 +1,9 @@
-//! VikingFile: resolución vía API + CDN (vik1ngfile.site).
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use reqwest::Client;
 use serde::Deserialize;
+use tauri::AppHandle;
 
 use crate::network::{
     head_no_redirect, head_short, post_form_urlencoded, post_json, ProfilePreset,
@@ -225,8 +227,10 @@ const VIKING_CAPTCHA_MSG: &str = "vikingfile: Cloudflare/CAPTCHA bloqueó la des
 
 /// Devuelve URL directa, referer y nombre de archivo opcional.
 pub async fn resolve(
+    app: Option<&AppHandle>,
     client: &Client,
     url: &str,
+    cancel_flag: Option<Arc<AtomicBool>>,
 ) -> Result<(String, String, Option<String>), HosterError> {
     let hash = extract_file_hash(url)?;
     let mut file_name = None;
@@ -244,6 +248,19 @@ pub async fn resolve(
         }
         file_name = info.name;
         expected_size = info.size;
+    }
+
+    if let Some(app) = app {
+        log::info!("vikingfile: ejecutando Scrapling crawler para resolver Turnstile y enlace directo");
+        if let Ok(scraped) =
+            crate::sources::commands::fetch::run_scrapling_fetch(app, url, cancel_flag.clone())
+        {
+            let trimmed = scraped.trim();
+            if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                log::info!("vikingfile: Scrapling resolvió URL directa: {trimmed}");
+                return Ok((trimmed.to_string(), VIKING_REFERER.to_string(), file_name));
+            }
+        }
     }
 
     // CDN suele devolver la URL firmada real antes que get-server (que a veces apunta a HTML de CF).

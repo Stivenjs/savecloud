@@ -56,6 +56,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("sql/021_plugin_storage.sql"),
     include_str!("sql/022_sources_schema.sql"),
     include_str!("sql/023_fts5_trigram_catalog.sql"),
+    include_str!("sql/024_drop_source_items_trigram.sql"),
 ];
 
 /// Ejecuta todas las migraciones pendientes.
