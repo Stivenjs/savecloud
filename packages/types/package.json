@@ -1,6 +1,6 @@
 {
   "name": "@savecloud/types",
-  "version": "26.8.23",
+  "version": "26.9.1",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
