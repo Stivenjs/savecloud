@@ -52,11 +52,13 @@ class StealthBrowserStrategy(FetchStrategy):
             if action_result:
                 context.captured_download_url = action_result
 
+        browser_timeout = getattr(extractor, "browser_timeout_ms", BROWSER_TIMEOUT_MS)
+
         kwargs = {
             "headless": True,
             "network_idle": False,
             "solve_cloudflare": context.solve_cloudflare,
-            "timeout": BROWSER_TIMEOUT_MS,
+            "timeout": browser_timeout,
             "page_setup": page_setup,
             "page_action": page_action,
             "google_search": False,

@@ -124,3 +124,30 @@ class TurnstileSolver:
         except Exception as e:
             sys.stderr.write(f"Error in solve_embedded_turnstile: {e}\n")
         return False
+
+    @classmethod
+    def solve_if_present(cls, page, timeout_seconds: int = 10) -> bool:
+        """Quickly detects if Turnstile is present and attempts to solve it."""
+        try:
+            for sec in range(timeout_seconds):
+                has_turnstile = page.evaluate("""() => {
+                    const hasIframe = Array.from(document.querySelectorAll('iframe')).some(
+                        f => (f.src || '').includes('challenges.cloudflare.com')
+                    );
+                    const hasInput = !!document.querySelector('input[name="cf-turnstile-response"]');
+                    return hasIframe || hasInput;
+                }""")
+                if not has_turnstile and sec >= 2:
+                    return False
+
+                cls.solve(page)
+                has_token = page.evaluate(
+                    "() => document.querySelector('input[name=\"cf-turnstile-response\"]')?.value?.length > 20"
+                )
+                if has_token:
+                    sys.stderr.write("[Turnstile] Verified successfully!\n")
+                    return True
+                page.wait_for_timeout(1000)
+        except Exception:
+            pass
+        return False

@@ -6,6 +6,7 @@ from typing import Any
 
 from crawler.core.network import extract_host
 from crawler.extractors.base import BaseExtractor, ExtractionContext
+from crawler.utils.dom import DomHelper
 
 
 class FileKeeperExtractor(BaseExtractor):
@@ -15,35 +16,35 @@ class FileKeeperExtractor(BaseExtractor):
     priority: int = 80
     requires_browser: bool = True  # FileKeeper is a Vue SPA with 5s countdown
 
+    DOMAINS: tuple[str, ...] = ("filekeeper.net",)
+    API_PATH_PATTERNS: tuple[str, ...] = ("api/file", "api/contents")
+    EXCLUDED_RESPONSE_URLS: tuple[str, ...] = (
+        "filekeeper.net/vue_theme",
+        "filekeeper.net/images",
+    )
+
+    READY_PATTERNS: tuple[str, ...] = ("Your download link is ready",)
+    FREE_DOWNLOAD_PATTERNS: tuple[str, ...] = ("Free download", "Download")
+    COUNTDOWN_WAIT_SECONDS: int = 8
+    CAPTURE_WAIT_SECONDS: int = 6
+
     def matches(self, url: str) -> bool:
         host = extract_host(url)
-        return "filekeeper.net" in host or "api/file" in url.lower() or "api/contents" in url.lower()
-
-    def on_download(self, download, context: ExtractionContext) -> None:
-        try:
-            dl_url = download.url
-            sys.stderr.write(f"[FileKeeper] Direct download captured from event: {dl_url}\n")
-            context.captured_download_url = dl_url
-            download.cancel()
-        except Exception:
-            pass
+        url_lower = url.lower()
+        return any(d in host for d in self.DOMAINS) or any(p in url_lower for p in self.API_PATH_PATTERNS)
 
     def on_response(self, response, context: ExtractionContext) -> None:
         try:
-            response_url = getattr(response, "url", "") or ""
-            headers = getattr(response, "headers", {}) or {}
-            cd = headers.get("content-disposition", "")
-            ct = headers.get("content-type", "")
-
-            # If response is a direct download link or proxy
-            if ("attachment" in cd or "octet-stream" in ct or "dlproxy" in response_url) and response_url.startswith("http"):
-                if "filekeeper.net/vue_theme" not in response_url and "filekeeper.net/images" not in response_url:
-                    sys.stderr.write(f"[FileKeeper] Direct link captured from response: {response_url}\n")
-                    context.captured_download_url = response_url
-                    return
+            # Check direct download or proxy response headers
+            captured = self.capture_direct_download_response(
+                response, context, exclude_patterns=self.EXCLUDED_RESPONSE_URLS
+            )
+            if captured:
+                return
 
             # Check if JSON API response
-            if "api/file" in response_url or "api/contents" in response_url:
+            response_url = getattr(response, "url", "") or ""
+            if any(p in response_url for p in self.API_PATH_PATTERNS):
                 body_text = response.text()
                 data = json.loads(body_text)
                 link = self._extract_url_from_data(data)
@@ -57,49 +58,16 @@ class FileKeeperExtractor(BaseExtractor):
         try:
             page.wait_for_timeout(2000)
 
-            # 1. Wait for 5-second countdown to complete
-            sys.stderr.write("[FileKeeper] Waiting 5 seconds for countdown to finish...\n")
-            for sec in range(8):
-                page.wait_for_timeout(1000)
-                if context.captured_download_url:
-                    return context.captured_download_url
-
-                ready = page.evaluate("""() => {
-                    const btn = document.querySelector('#download-button, button.btn-primary');
-                    const text = document.body.innerText;
-                    return text.includes('Your download link is ready') || (btn && btn.offsetParent !== null && !btn.disabled);
-                }""")
-                if ready:
-                    sys.stderr.write(f"[FileKeeper] Download link ready at {sec+1}s!\n")
-                    break
-
-            page.wait_for_timeout(1000)
+            # 1. Wait for countdown to complete
+            sys.stderr.write("[FileKeeper] Waiting for countdown to finish...\n")
+            DomHelper.wait_for_text(page, self.READY_PATTERNS, timeout_seconds=self.COUNTDOWN_WAIT_SECONDS)
 
             # 2. Click the 'Free download' button
             sys.stderr.write("[FileKeeper] Clicking 'Free download' button...\n")
-            clicked = page.evaluate("""() => {
-                const btn = document.querySelector('#download-button') || Array.from(document.querySelectorAll('button, a')).find(b => /free download/i.test(b.innerText));
-                if (btn) {
-                    btn.scrollIntoView();
-                    btn.click();
-                    return true;
-                }
-                return false;
-            }""")
+            DomHelper.click_button_with_text(page, self.FREE_DOWNLOAD_PATTERNS)
 
-            if not clicked:
-                try:
-                    btn = page.locator("#download-button, button:has-text('Free download')").first
-                    if btn.is_visible():
-                        btn.click(force=True)
-                except Exception:
-                    pass
-
-            # 3. Wait up to 6 seconds for direct download event or proxy response
-            for _ in range(6):
-                if context.captured_download_url:
-                    return context.captured_download_url
-                page.wait_for_timeout(1000)
+            # 3. Wait for direct download event or proxy response
+            DomHelper.wait_for_capture(context, page, timeout_seconds=self.CAPTURE_WAIT_SECONDS)
 
         except Exception as e:
             sys.stderr.write(f"[FileKeeper] Error in page_action: {e}\n")
@@ -110,11 +78,13 @@ class FileKeeperExtractor(BaseExtractor):
     def _extract_url_from_data(data: Any) -> str | None:
         if not isinstance(data, dict):
             return None
-        for key in ("url", "downloadUrl", "directLink", "link"):
+        keys = ("url", "downloadUrl", "directLink", "link")
+        for key in keys:
             if data.get(key):
                 return str(data[key])
-        if isinstance(data.get("data"), dict):
-            for key in ("url", "downloadUrl", "directLink", "link"):
-                if data["data"].get(key):
-                    return str(data["data"][key])
+        nested_data = data.get("data")
+        if isinstance(nested_data, dict):
+            for key in keys:
+                if nested_data.get(key):
+                    return str(nested_data[key])
         return None
