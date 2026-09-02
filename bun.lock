@@ -144,6 +144,10 @@
         "vite": "^7.3.6",
       },
     },
+    "packages/crawler": {
+      "name": "@savecloud/crawler",
+      "version": "26.8.23",
+    },
     "packages/types": {
       "name": "@savecloud/types",
       "version": "26.8.23",
@@ -959,6 +963,8 @@
     "@savecloud/bun-lambda": ["@savecloud/bun-lambda@workspace:apps/bun-lambda"],
 
     "@savecloud/cli": ["@savecloud/cli@workspace:apps/cli"],
+
+    "@savecloud/crawler": ["@savecloud/crawler@workspace:packages/crawler"],
 
     "@savecloud/desktop": ["@savecloud/desktop@workspace:apps/desktop"],
 
