@@ -196,7 +196,8 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if vikingfile::is_vikingfile_url(uri) {
-        let (url, referer, name_hint) = vikingfile::resolve(client, uri).await?;
+        let (url, referer, name_hint) =
+            vikingfile::resolve(app, client, uri, cancel_flag.clone()).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::Downloader { referer }.build(),

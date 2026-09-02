@@ -109,7 +109,6 @@ pub enum ProfilePreset {
     BuzzheavierHead {
         page_url: String,
     },
-    PixeldrainBypass,
     PixeldrainCheck {
         page_url: String,
     },
@@ -224,13 +223,6 @@ impl ProfilePreset {
                     ("hx-current-url", page_url),
                     ("hx-request", "true".to_string()),
                 ],
-            },
-            ProfilePreset::PixeldrainBypass => DownloadProfile {
-                user_agent: HOSTER_BROWSER_USER_AGENT,
-                referer: None,
-                origin: None,
-                cookie: None,
-                extras: Vec::new(),
             },
             ProfilePreset::PixeldrainCheck { page_url } => DownloadProfile {
                 user_agent: HOSTER_BROWSER_USER_AGENT,
