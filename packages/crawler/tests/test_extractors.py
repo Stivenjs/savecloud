@@ -40,6 +40,7 @@ class TestExtractors(unittest.TestCase):
         ext = FileKeeperExtractor()
         self.assertTrue(ext.matches("https://filekeeper.net/view/123"))
         self.assertTrue(ext.matches("https://filekeeper.net/api/file/abc"))
+        self.assertTrue(ext.requires_browser)
         self.assertFalse(ext.matches("https://vikingfile.com/f/abc"))
 
     def test_filekeeper_on_response(self):
