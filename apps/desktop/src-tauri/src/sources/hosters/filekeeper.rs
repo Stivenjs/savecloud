@@ -81,7 +81,9 @@ async fn resolve_native(
     let page_html = response.text().await?;
 
     if let Some(direct) = extract_download_link(&page_html, page_url, HOST_MARKERS, TEXT_MARKERS) {
-        return Ok(direct);
+        if !direct.contains("freedownloadmanager.org") && !direct.ends_with("/download") {
+            return Ok(direct);
+        }
     }
 
     sleep(DOWNLOAD_WAIT).await;
@@ -117,7 +119,9 @@ async fn resolve_native(
     if let Some(direct) =
         extract_download_link(&download_html, &download_url, HOST_MARKERS, TEXT_MARKERS)
     {
-        return Ok(direct);
+        if !direct.contains("freedownloadmanager.org") && !direct.ends_with("/download") {
+            return Ok(direct);
+        }
     }
 
     Err(HosterError::ResolutionFailed(
@@ -138,23 +142,21 @@ pub async fn resolve(
         ));
     }
 
-    // 1. Intento nativo rápido
-    match resolve_native(client, &page_url).await {
-        Ok(direct) => Ok((direct, page_url)),
-        Err(native_err) => {
-            if let Some(app) = app {
-                log::info!("filekeeper: intento nativo falló ({native_err:?}), intentando Scrapling fallback");
-                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url, cancel_flag) {
-                    let trimmed = scraped.trim();
-                    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-                        return Ok((trimmed.to_string(), page_url));
-                    }
-                    if let Some(direct) = extract_download_link(trimmed, &page_url, HOST_MARKERS, TEXT_MARKERS) {
-                        return Ok((direct, page_url));
-                    }
+    if let Some(app) = app {
+        log::info!("filekeeper: ejecutando Scrapling crawler para resolución con cuenta regresiva");
+        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url, cancel_flag.clone()) {
+            let trimmed = scraped.trim();
+            if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+                if !trimmed.contains("freedownloadmanager.org") && !trimmed.ends_with("/download") {
+                    log::info!("filekeeper: Scrapling resolvió URL directa: {trimmed}");
+                    return Ok((trimmed.to_string(), page_url));
                 }
             }
-            Err(native_err)
         }
+    }
+
+    match resolve_native(client, &page_url).await {
+        Ok(direct) => Ok((direct, page_url)),
+        Err(native_err) => Err(native_err),
     }
 }
