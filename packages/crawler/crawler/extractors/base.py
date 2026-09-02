@@ -1,5 +1,6 @@
 """Base class and context definition for Hoster Extractors."""
 
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
@@ -39,8 +40,41 @@ class BaseExtractor(ABC):
         pass
 
     def on_download(self, download, context: ExtractionContext) -> None:
-        """Called when a browser download event is triggered."""
-        pass
+        """Called when a browser download event is triggered. Captures URL and cancels browser stream."""
+        try:
+            dl_url = getattr(download, "url", "")
+            if dl_url:
+                sys.stderr.write(f"[{self.name.capitalize()}] Direct download captured from event: {dl_url}\n")
+                context.captured_download_url = dl_url
+                if hasattr(download, "cancel"):
+                    download.cancel()
+        except Exception:
+            pass
+
+    def capture_direct_download_response(
+        self,
+        response: Any,
+        context: ExtractionContext,
+        exclude_patterns: tuple[str, ...] = (),
+    ) -> str | None:
+        """Helper to capture download URLs from HTTP response headers (Content-Disposition, proxy links)."""
+        try:
+            url = getattr(response, "url", "") or ""
+            if not url.startswith("http"):
+                return None
+            for exc in exclude_patterns:
+                if exc in url:
+                    return None
+            headers = getattr(response, "headers", {}) or {}
+            cd = headers.get("content-disposition", "")
+            ct = headers.get("content-type", "")
+            if "attachment" in cd or "octet-stream" in ct or "dlproxy" in url:
+                sys.stderr.write(f"[{self.name.capitalize()}] Direct link captured from response: {url}\n")
+                context.captured_download_url = url
+                return url
+        except Exception:
+            pass
+        return None
 
     def page_action(self, page, context: ExtractionContext) -> str | None:
         """Performs DOM interactions (clicking download buttons, waiting, solving captcha).

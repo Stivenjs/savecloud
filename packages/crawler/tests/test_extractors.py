@@ -64,7 +64,30 @@ class TestExtractors(unittest.TestCase):
         self.assertTrue(ext.matches("https://datanodes.to/rpmce0vlrxy1"))
         self.assertTrue(ext.matches("https://datanodes.to/download"))
         self.assertTrue(ext.requires_browser)
+        self.assertEqual(ext.browser_timeout_ms, 60000)
         self.assertFalse(ext.matches("https://google.com"))
+
+    def test_datanodes_on_response(self):
+        from crawler.extractors.datanodes import DataNodesExtractor
+        ext = DataNodesExtractor()
+        context = ExtractionContext(target_url="https://datanodes.to/rpmce0vlrxy1")
+
+        resp = MagicMock()
+        resp.url = "https://tunnel5.dlproxy.uk/download/abc123xyz"
+        resp.headers = {"content-disposition": "attachment; filename=game.zip"}
+        ext.on_response(resp, context)
+        self.assertEqual(context.captured_download_url, "https://tunnel5.dlproxy.uk/download/abc123xyz")
+
+    def test_datanodes_on_download(self):
+        from crawler.extractors.datanodes import DataNodesExtractor
+        ext = DataNodesExtractor()
+        context = ExtractionContext(target_url="https://datanodes.to/rpmce0vlrxy1")
+
+        download = MagicMock()
+        download.url = "https://tunnel5.dlproxy.uk/download/game.zip"
+        ext.on_download(download, context)
+        self.assertEqual(context.captured_download_url, "https://tunnel5.dlproxy.uk/download/game.zip")
+        download.cancel.assert_called_once()
 
     def test_gofile_matches(self):
         from crawler.extractors.gofile import GofileExtractor
