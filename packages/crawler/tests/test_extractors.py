@@ -66,6 +66,23 @@ class TestExtractors(unittest.TestCase):
         self.assertTrue(ext.requires_browser)
         self.assertFalse(ext.matches("https://google.com"))
 
+    def test_gofile_matches(self):
+        from crawler.extractors.gofile import GofileExtractor
+        ext = GofileExtractor()
+        self.assertTrue(ext.matches("https://gofile.io/d/1hEOBZ"))
+        self.assertTrue(ext.requires_browser)
+        self.assertFalse(ext.matches("https://google.com"))
+
+    def test_gofile_on_response(self):
+        from crawler.extractors.gofile import GofileExtractor
+        ext = GofileExtractor()
+        context = ExtractionContext(target_url="https://gofile.io/d/1hEOBZ")
+
+        resp = MagicMock()
+        resp.url = "https://store-na-phx-3.gofile.io/download/web/82f39d2b/GOW.zip"
+        ext.on_response(resp, context)
+        self.assertEqual(context.captured_download_url, "https://store-na-phx-3.gofile.io/download/web/82f39d2b/GOW.zip")
+
     def test_generic_matches_anything(self):
         ext = GenericExtractor()
         self.assertTrue(ext.matches("https://anyrandomhost.org/download"))

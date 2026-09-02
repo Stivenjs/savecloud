@@ -105,7 +105,8 @@ async fn resolve_hoster_url_internal<'a>(
     let host = normalized_host(&parsed);
 
     if host.contains("gofile.io") {
-        let (url, account_token) = gofile::resolve(client, uri).await?;
+        let (url, account_token) =
+            gofile::resolve(app, client, uri, cancel_flag.clone()).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::GofileDownload { account_token }.build(),

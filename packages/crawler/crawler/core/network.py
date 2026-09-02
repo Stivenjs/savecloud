@@ -50,6 +50,9 @@ class RouteInterceptor:
     @classmethod
     def setup_routes(cls, page, target_url: str, expect_json: bool = False) -> None:
         """Sets up route handlers to abort ads and heavy media assets."""
+        if "gofile.io" in target_url:
+            return
+
         referer = smart_referer(target_url)
 
         def handle_route(route, request):
