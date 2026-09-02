@@ -22,8 +22,9 @@ class StealthBrowserStrategy(FetchStrategy):
         url = context.target_url
 
         def page_setup(page):
-            # Route interception for ads and heavy assets
-            RouteInterceptor.setup_routes(page, url, context.expect_json)
+            # Route interception for ads and heavy assets (can be disabled by extractors)
+            if getattr(extractor, "intercept_routes", True):
+                RouteInterceptor.setup_routes(page, url, context.expect_json)
 
             def on_response(response):
                 extractor.on_response(response, context)
