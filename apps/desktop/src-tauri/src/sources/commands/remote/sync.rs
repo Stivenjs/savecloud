@@ -1,6 +1,6 @@
 //! Sincronización manual de fuentes remotas (HTTP en paralelo, Scrapling limitado).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use reqwest::header::{ETAG, LAST_MODIFIED};
@@ -139,11 +139,17 @@ fn persist_catalog_body(
         match parse_catalog_from_reader(fetched.raw.as_bytes(), Some(remote_source.url.clone())) {
             Ok(catalog) => catalog,
             Err(error) => {
+                log::warn!(
+                    "[sources] Error al parsear catálogo de '{}': {}",
+                    remote_source.url,
+                    error
+                );
                 counters.record_failure(remote_source, items, error);
                 return;
             }
         };
 
+    let total_items = catalog.downloads.len();
     let previous_hash = remote_source.sync.content_hash.clone();
     let previous_synced_at = remote_source.sync.last_synced_at.clone();
     remote_source.sync.content_hash = Some(hash);
@@ -152,11 +158,21 @@ fn persist_catalog_body(
 
     match store::upsert_catalog(catalog, ImportMode::Merge) {
         Ok(saved) => {
+            log::info!(
+                "[sources] Catálogo '{}' guardado en SQLite con éxito ({} juegos)",
+                saved.name,
+                total_items
+            );
             known_catalog_urls.insert(remote_source.url.clone());
             counters.updated += 1;
             items.push(updated_item(remote_source, &saved));
         }
         Err(error) => {
+            log::error!(
+                "[sources] Error al guardar catálogo de '{}' en SQLite: {}",
+                remote_source.url,
+                error
+            );
             remote_source.sync.content_hash = previous_hash;
             remote_source.sync.last_synced_at = previous_synced_at;
             counters.record_failure(remote_source, items, error);
@@ -267,8 +283,8 @@ pub async fn sync_remote_sources(
         });
     }
 
-    let mut phase_results: HashMap<usize, FetchPhaseResult> = HashMap::with_capacity(total);
     let mut scrapling_jobs: Vec<(usize, String, reqwest::header::HeaderMap)> = Vec::new();
+    let mut processed_indices: HashSet<usize> = HashSet::with_capacity(total);
 
     while let Some(joined) = fetch_tasks.join_next().await {
         match joined {
@@ -276,8 +292,28 @@ pub async fn sync_remote_sources(
                 FetchPhaseResult::NeedsScrapling { headers, url } => {
                     scrapling_jobs.push((index, url, headers));
                 }
-                other => {
-                    phase_results.insert(index, other);
+                FetchPhaseResult::Body(body) => {
+                    processed_indices.insert(index);
+                    persist_catalog_body(
+                        &mut remote_sources[index],
+                        body,
+                        &mut known_catalog_urls,
+                        &mut counters,
+                        &mut items,
+                    );
+                    let _ = store::save_remote_sources(&remote_sources);
+                }
+                FetchPhaseResult::NotModified => {
+                    processed_indices.insert(index);
+                    remote_sources[index].sync.last_checked_at = Some(now_iso());
+                    counters.record_unchanged(&mut remote_sources[index], &mut items);
+                    let _ = store::save_remote_sources(&remote_sources);
+                }
+                FetchPhaseResult::Failed(message) => {
+                    processed_indices.insert(index);
+                    remote_sources[index].sync.last_checked_at = Some(now_iso());
+                    counters.record_failure(&mut remote_sources[index], &mut items, message);
+                    let _ = store::save_remote_sources(&remote_sources);
                 }
             },
             Err(error) => {
@@ -302,10 +338,21 @@ pub async fn sync_remote_sources(
         while let Some(joined) = scrapling_tasks.join_next().await {
             match joined {
                 Ok((index, Ok(body))) => {
-                    phase_results.insert(index, FetchPhaseResult::Body(body));
+                    processed_indices.insert(index);
+                    persist_catalog_body(
+                        &mut remote_sources[index],
+                        body,
+                        &mut known_catalog_urls,
+                        &mut counters,
+                        &mut items,
+                    );
+                    let _ = store::save_remote_sources(&remote_sources);
                 }
                 Ok((index, Err(message))) => {
-                    phase_results.insert(index, FetchPhaseResult::Failed(message));
+                    processed_indices.insert(index);
+                    remote_sources[index].sync.last_checked_at = Some(now_iso());
+                    counters.record_failure(&mut remote_sources[index], &mut items, message);
+                    let _ = store::save_remote_sources(&remote_sources);
                 }
                 Err(error) => {
                     log::warn!("[sources] Tarea de Scrapling falló: {error}");
@@ -315,47 +362,28 @@ pub async fn sync_remote_sources(
     }
 
     for index in sync_indices {
-        remote_sources[index].sync.last_checked_at = Some(now_iso());
-
-        let Some(outcome) = phase_results.remove(&index) else {
+        if !processed_indices.contains(&index) {
+            remote_sources[index].sync.last_checked_at = Some(now_iso());
             counters.record_failure(
                 &mut remote_sources[index],
                 &mut items,
                 "La descarga no devolvió resultado".to_string(),
             );
-            continue;
-        };
-
-        match outcome {
-            FetchPhaseResult::NotModified => {
-                counters.record_unchanged(&mut remote_sources[index], &mut items);
-            }
-            FetchPhaseResult::Body(body) => {
-                persist_catalog_body(
-                    &mut remote_sources[index],
-                    body,
-                    &mut known_catalog_urls,
-                    &mut counters,
-                    &mut items,
-                );
-            }
-            FetchPhaseResult::Failed(message) => {
-                counters.record_failure(&mut remote_sources[index], &mut items, message);
-            }
-            FetchPhaseResult::NeedsScrapling { .. } => {
-                counters.record_failure(
-                    &mut remote_sources[index],
-                    &mut items,
-                    "Scrapling no completó la descarga".to_string(),
-                );
-            }
         }
     }
 
     invalidate_index();
     crate::sources::events::emit_catalog_updated(&app);
 
-    store::save_remote_sources(&remote_sources)?;
+    let _ = store::save_remote_sources(&remote_sources);
+
+    log::info!(
+        "[sources] Sincronización finalizada exitosamente: {} actualizados, {} sin cambios, {} fallidos (total: {})",
+        counters.updated,
+        counters.unchanged,
+        counters.failed,
+        total
+    );
 
     Ok(RemoteSyncResult {
         total,
