@@ -23,6 +23,7 @@ class BaseExtractor(ABC):
 
     name: str = "base"
     priority: int = 50  # Higher priority extractors are matched first
+    requires_browser: bool = False  # Set to True if extractor requires headless browser (skips Tier-1 FastFetch)
 
     @abstractmethod
     def matches(self, url: str) -> bool:

@@ -205,7 +205,8 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if host.contains("rootz.so") {
-        let (url, referer, file_name_hint) = rootz::resolve(app, client, uri, cancel_flag.clone()).await?;
+        let (url, referer, file_name_hint) =
+            rootz::resolve(app, client, uri, cancel_flag.clone()).await?;
         let download_profile = if is_signed_cdn_url(&url) {
             ProfilePreset::Passthrough.build()
         } else {

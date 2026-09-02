@@ -24,6 +24,11 @@ class TestExtractorRegistry(unittest.TestCase):
         ext = ExtractorRegistry.resolve("https://rootz.so/dl/12345")
         self.assertIsInstance(ext, RootzExtractor)
 
+    def test_datanodes_resolved(self):
+        from crawler.extractors.datanodes import DataNodesExtractor
+        ext = ExtractorRegistry.resolve("https://datanodes.to/rpmce0vlrxy1")
+        self.assertIsInstance(ext, DataNodesExtractor)
+
     def test_unknown_host_resolves_to_generic(self):
         ext = ExtractorRegistry.resolve("https://unknownhost.org/download")
         self.assertIsInstance(ext, GenericExtractor)

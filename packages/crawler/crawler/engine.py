@@ -27,9 +27,10 @@ class CrawlerEngine:
         context = ExtractionContext(target_url=url, expect_json=expect_json)
 
         # 1. Tier-1 Fast Fetch (curl_cffi TLS impersonation)
-        fast_result = self.fast_strategy.execute(context, extractor)
-        if fast_result:
-            return fast_result
+        if not getattr(extractor, "requires_browser", False):
+            fast_result = self.fast_strategy.execute(context, extractor)
+            if fast_result:
+                return fast_result
 
         # 2. Tier-2 Stealth Headless Browser
         errors: list[str] = []

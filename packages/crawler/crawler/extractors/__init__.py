@@ -1,6 +1,7 @@
 """Hoster extractors plugin package."""
 
 from crawler.extractors.base import BaseExtractor, ExtractionContext
+from crawler.extractors.datanodes import DataNodesExtractor
 from crawler.extractors.filekeeper import FileKeeperExtractor
 from crawler.extractors.generic import GenericExtractor
 from crawler.extractors.registry import ExtractorRegistry
@@ -12,6 +13,7 @@ ExtractorRegistry.register(GenericExtractor)
 ExtractorRegistry.register(VikingFileExtractor)
 ExtractorRegistry.register(FileKeeperExtractor)
 ExtractorRegistry.register(RootzExtractor)
+ExtractorRegistry.register(DataNodesExtractor)
 
 __all__ = [
     "BaseExtractor",
@@ -21,4 +23,5 @@ __all__ = [
     "VikingFileExtractor",
     "FileKeeperExtractor",
     "RootzExtractor",
+    "DataNodesExtractor",
 ]

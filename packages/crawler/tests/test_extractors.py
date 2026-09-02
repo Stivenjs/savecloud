@@ -57,6 +57,14 @@ class TestExtractors(unittest.TestCase):
         self.assertTrue(ext.matches("https://rootz.so/d/xyz"))
         self.assertFalse(ext.matches("https://google.com"))
 
+    def test_datanodes_matches(self):
+        from crawler.extractors.datanodes import DataNodesExtractor
+        ext = DataNodesExtractor()
+        self.assertTrue(ext.matches("https://datanodes.to/rpmce0vlrxy1"))
+        self.assertTrue(ext.matches("https://datanodes.to/download"))
+        self.assertTrue(ext.requires_browser)
+        self.assertFalse(ext.matches("https://google.com"))
+
     def test_generic_matches_anything(self):
         ext = GenericExtractor()
         self.assertTrue(ext.matches("https://anyrandomhost.org/download"))
