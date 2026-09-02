@@ -12,6 +12,7 @@ const distDir = path.join(projectRoot, "src-tauri", "resources");
 const buildDir = path.join(projectRoot, "build");
 const specPath = path.join(projectRoot, "savecloud_crawler.spec");
 const iconPath = path.join(projectRoot, "src-tauri", "icons", "icon.ico");
+const crawlerPackageDir = path.resolve(projectRoot, "..", "..", "packages", "crawler");
 
 const iconArgs: string[] = [];
 if (fs.existsSync(iconPath)) {
@@ -101,6 +102,10 @@ const pyinstallerCmd = spawnSync(
     buildDir,
     "--specpath",
     buildDir,
+    "--paths",
+    crawlerPackageDir,
+    "--collect-all",
+    "crawler",
     "--collect-all",
     "scrapling",
     "--collect-all",
