@@ -131,3 +131,22 @@ JS_STREAM_FETCH: str = """async (targetUrl) => {
         return result;
     } catch(e) { return null; }
 }"""
+
+# Banderas de optimización agresiva para el arranque ultrarrápido de Chromium
+CHROMIUM_OPTIMIZATION_FLAGS: tuple[str, ...] = (
+    "--blink-settings=imagesEnabled=false",
+    "--mute-audio",
+    "--disable-extensions",
+    "--disable-default-apps",
+    "--disable-background-networking",
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-breakpad",
+    "--disable-component-update",
+    "--disable-domain-reliability",
+    "--disable-sync",
+    "--disable-ipc-flooding-protection",
+    "--disable-renderer-backgrounding",
+    "--no-first-run",
+    "--metrics-recording-only",
+)

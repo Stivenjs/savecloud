@@ -78,6 +78,22 @@ class SessionManager:
         return session
 
     @classmethod
+    def get_cookie_list_for_playwright(cls, host_or_url: str) -> list[dict[str, Any]]:
+        """Returns cached cookies formatted for Playwright context injection."""
+        session = cls.get_session(host_or_url)
+        if not session:
+            return []
+        if "raw_cookies" in session and isinstance(session["raw_cookies"], list):
+            return session["raw_cookies"]
+
+        host = cls._normalize_host(host_or_url)
+        cookies = session.get("cookies", {})
+        return [
+            {"name": str(k), "value": str(v), "domain": host, "path": "/"}
+            for k, v in cookies.items()
+        ]
+
+    @classmethod
     def save_session(
         cls,
         host_or_url: str,
@@ -90,14 +106,28 @@ class SessionManager:
             return
 
         cookie_dict: dict[str, str] = {}
+        raw_cookie_list: list[dict[str, Any]] = []
         if isinstance(cookies, list):
             for c in cookies:
                 name = c.get("name")
                 val = c.get("value")
                 if name and val is not None:
                     cookie_dict[name] = str(val)
+                    raw_cookie_list.append({
+                        "name": str(name),
+                        "value": str(val),
+                        "domain": c.get("domain", host),
+                        "path": c.get("path", "/"),
+                    })
         elif isinstance(cookies, dict):
-            cookie_dict = {str(k): str(v) for k, v in cookies.items()}
+            for k, v in cookies.items():
+                cookie_dict[str(k)] = str(v)
+                raw_cookie_list.append({
+                    "name": str(k),
+                    "value": str(v),
+                    "domain": host,
+                    "path": "/",
+                })
 
         if not cookie_dict:
             return
@@ -105,6 +135,7 @@ class SessionManager:
         now = time.time()
         session_data = {
             "cookies": cookie_dict,
+            "raw_cookies": raw_cookie_list,
             "user_agent": user_agent,
             "created_at": now,
             "expires_at": now + ttl_seconds,
