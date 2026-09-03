@@ -185,6 +185,7 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
     match job.protocol {
         DownloadProtocol::Http => {
             let cancel_flag = state.create_cancel_flag(job_id);
+            let pause_flag = state.create_pause_flag(job_id);
             let app_for_status = app.clone();
             let job_id_for_status = job_id.to_string();
             let on_status_detail = Arc::new(move |status_detail: Option<String>| {
@@ -193,33 +194,34 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
             });
 
             let result = http_runner::run_http_download(
-                    app,
-                    &job.title,
-                    &job.destination_dir,
-                    &job.selected_uri,
-                    cancel_flag,
-                    |output_file_name| {
-                        let mut current = find_job(state, job_id)?;
-                        current.output_file_name = Some(output_file_name.to_string());
-                        current.updated_at = now_iso();
-                        state.upsert_job(current.clone())?;
-                        emit_progress(app, &current);
-                        Ok(())
-                    },
-                    |loaded, total, download_speed_bytes, eta_seconds| {
-                        emit_job_download_progress(
-                            app,
-                            state,
-                            job_id,
-                            loaded,
-                            total,
-                            download_speed_bytes,
-                            eta_seconds,
-                        )
-                    },
-                    on_status_detail,
-                )
-                .await;
+                app,
+                &job.title,
+                &job.destination_dir,
+                &job.selected_uri,
+                cancel_flag,
+                pause_flag,
+                |output_file_name| {
+                    let mut current = find_job(state, job_id)?;
+                    current.output_file_name = Some(output_file_name.to_string());
+                    current.updated_at = now_iso();
+                    state.upsert_job(current.clone())?;
+                    emit_progress(app, &current);
+                    Ok(())
+                },
+                |loaded, total, download_speed_bytes, eta_seconds| {
+                    emit_job_download_progress(
+                        app,
+                        state,
+                        job_id,
+                        loaded,
+                        total,
+                        download_speed_bytes,
+                        eta_seconds,
+                    )
+                },
+                on_status_detail,
+            )
+            .await;
 
             match result {
                 Ok(done) => {
@@ -252,6 +254,17 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
                         emit_terminal(app, &current);
                     }
                     return Err(err);
+                }
+                Err(err) if err == "paused_by_user" => {
+                    let mut paused_job = find_job(state, job_id)?;
+                    paused_job.status = SourceJobStatus::Paused;
+                    paused_job.status_detail = None;
+                    paused_job.download_speed_bytes = 0;
+                    paused_job.eta_seconds = None;
+                    paused_job.updated_at = now_iso();
+                    state.upsert_job(paused_job.clone())?;
+                    emit_progress(app, &paused_job);
+                    return Ok(());
                 }
                 Err(err) => return Err(err),
             }

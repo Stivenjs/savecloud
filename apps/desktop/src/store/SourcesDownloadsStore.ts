@@ -170,6 +170,10 @@ let listenersInitialized = false;
 
 export function initSourcesListeners() {
   if (listenersInitialized) return;
+  if (typeof window !== "undefined") {
+    const isOverlay = new URLSearchParams(window.location.search).get("overlay") === "true";
+    if (isOverlay) return;
+  }
   listenersInitialized = true;
 
   const store = useSourcesDownloadsStore.getState();

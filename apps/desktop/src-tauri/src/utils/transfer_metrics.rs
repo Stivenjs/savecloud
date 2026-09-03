@@ -125,9 +125,9 @@ impl TransferSpeedTracker {
 
     fn maybe_publish(&mut self, total: u64, raw_speed: u64, now: Instant, force: bool) {
         let first_speed = self.published_speed == 0 && raw_speed > 0;
-        let interval_ok = self.last_publish_at.is_none_or(|t| {
-            now.saturating_duration_since(t) >= MIN_PUBLISH_INTERVAL
-        });
+        let interval_ok = self
+            .last_publish_at
+            .is_none_or(|t| now.saturating_duration_since(t) >= MIN_PUBLISH_INTERVAL);
 
         if !force && !first_speed && !interval_ok {
             return;
@@ -139,7 +139,17 @@ impl TransferSpeedTracker {
         } else {
             None
         };
-        let eta_seconds = smooth_eta(self.published_eta, raw_eta);
+
+        let is_major_acceleration = match (self.published_eta, raw_eta) {
+            (Some(prev), Some(curr)) => curr.saturating_mul(2) < prev,
+            _ => false,
+        };
+
+        let eta_seconds = if first_speed || is_major_acceleration {
+            raw_eta
+        } else {
+            smooth_eta(self.published_eta, raw_eta)
+        };
 
         self.published_speed = speed;
         self.published_eta = eta_seconds;

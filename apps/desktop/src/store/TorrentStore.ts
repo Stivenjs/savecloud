@@ -134,6 +134,10 @@ let listenersInitialized = false;
 
 export function initTorrentListeners() {
   if (listenersInitialized) return;
+  if (typeof window !== "undefined") {
+    const isOverlay = new URLSearchParams(window.location.search).get("overlay") === "true";
+    if (isOverlay) return;
+  }
   listenersInitialized = true;
 
   const { setProgress, removeByHash, hydrateActive } = useTorrentStore.getState();
