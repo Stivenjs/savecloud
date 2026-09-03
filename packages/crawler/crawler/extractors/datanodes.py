@@ -65,9 +65,10 @@ class DataNodesExtractor(BaseExtractor):
                 return context.captured_download_url
 
             # 1. Handle Step 1 (File Verification screen) if present
-            if DomHelper.has_text(page, self.STEP1_INDICATORS) or DomHelper.exists(page, self.STEP1_BUTTON_SELECTOR):
+            has_step1 = DomHelper.has_text(page, self.STEP1_INDICATORS) or DomHelper.exists(page, self.STEP1_BUTTON_SELECTOR)
+            if has_step1:
                 sys.stderr.write("[DataNodes] Detected Step 1 (File Verification). Waiting for check to finish...\n")
-                TurnstileSolver.solve_if_present(page, timeout_seconds=8)
+                TurnstileSolver.solve_if_present(page, timeout_seconds=10)
                 DomHelper.wait_until_enabled(page, self.STEP1_BUTTON_SELECTOR, timeout_seconds=10)
                 DomHelper.click(page, self.STEP1_BUTTON_SELECTOR, force_enable=True)
                 DomHelper.wait_for_text(page, self.FREE_DOWNLOAD_PATTERNS, timeout_seconds=10)
@@ -75,8 +76,10 @@ class DataNodesExtractor(BaseExtractor):
             if context.captured_download_url:
                 return context.captured_download_url
 
-            # 2. Solve Cloudflare Turnstile if present
-            TurnstileSolver.solve_if_present(page, timeout_seconds=15)
+            # 2. If Step 1 was not present, check if Turnstile is on the download page
+            if not has_step1:
+                TurnstileSolver.solve_if_present(page, timeout_seconds=12)
+
             if context.captured_download_url:
                 return context.captured_download_url
 
@@ -88,11 +91,7 @@ class DataNodesExtractor(BaseExtractor):
                 exclude_patterns=("continue",),
             )
 
-            # 4. Check Turnstile again if appearing on the countdown screen
-            page.wait_for_timeout(1500)
-            TurnstileSolver.solve_if_present(page, timeout_seconds=8)
-
-            # 5. Wait for countdown and trigger final download
+            # 4. Wait for countdown and trigger final download
             sys.stderr.write("[DataNodes] Waiting for countdown...\n")
             DomHelper.wait_and_click_button(
                 page,

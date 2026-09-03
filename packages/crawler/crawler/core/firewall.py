@@ -126,11 +126,27 @@ class TurnstileSolver:
         return False
 
     @classmethod
+    def is_solved(cls, page) -> bool:
+        """Checks if Turnstile has already been successfully solved on the page."""
+        return DomHelper.has_input_value(page, TURNSTILE_RESPONSE_INPUT, min_length=20)
+
+    @classmethod
     def solve_if_present(cls, page, timeout_seconds: int = 15) -> bool:
         """Quickly detects if Turnstile is present and attempts to solve it."""
         try:
+            # If already verified/solved, do not report to UI or attempt to re-solve
+            if cls.is_solved(page):
+                return True
+
             reported = False
             for sec in range(timeout_seconds):
+                if cls.is_solved(page):
+                    if reported:
+                        CrawlerReporter.report(
+                            "turnstile_solved", "Cloudflare Turnstile verified successfully"
+                        )
+                    return True
+
                 has_turnstile = (
                     DomHelper.has_iframe_src(page, TURNSTILE_FRAME_SUBSTRING)
                     or DomHelper.exists(page, TURNSTILE_RESPONSE_INPUT)
@@ -144,7 +160,7 @@ class TurnstileSolver:
 
                 cls.solve(page, reported=True)
 
-                if DomHelper.has_input_value(page, TURNSTILE_RESPONSE_INPUT, min_length=20):
+                if cls.is_solved(page):
                     CrawlerReporter.report(
                         "turnstile_solved", "Cloudflare Turnstile verified successfully"
                     )
