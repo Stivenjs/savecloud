@@ -56,7 +56,85 @@ class TestExtractors(unittest.TestCase):
     def test_rootz_matches(self):
         ext = RootzExtractor()
         self.assertTrue(ext.matches("https://rootz.so/d/xyz"))
+        self.assertTrue(ext.matches("https://www.rootz.so/d/2KssK0"))
+        self.assertTrue(ext.matches("https://rootz.so/file/abcdef123"))
         self.assertFalse(ext.matches("https://google.com"))
+        self.assertFalse(ext.matches("https://example.com/rootz"))
+
+    def test_rootz_extract_helpers(self):
+        self.assertEqual(RootzExtractor.extract_short_id("https://rootz.so/d/2KssK0"), "2KssK0")
+        self.assertEqual(RootzExtractor.extract_short_id("https://www.rootz.so/file/uuid-1234"), "uuid-1234")
+        html_chunk = r'5:[null,{"shortId":"2KssK0","pageToken":"token_abc123_xyz"}]'
+        self.assertEqual(RootzExtractor.extract_page_token(html_chunk), "token_abc123_xyz")
+
+    def test_rootz_extract_from_content_fast_fetch(self):
+        ext = RootzExtractor()
+        context = ExtractionContext(target_url="https://rootz.so/d/2KssK0")
+        html = r'5:[{"shortId":"2KssK0","pageToken":"tok123"}]'
+
+        # Mock API responses
+        mock_meta = {
+            "fileName": "Game.zip",
+            "fileId": "uuid-999",
+            "status": "active",
+            "downloadAllowed": True,
+            "passwordProtected": False,
+        }
+        with unittest.mock.patch.object(ext, "_http_get_json", return_value=mock_meta):
+            with unittest.mock.patch.object(
+                ext,
+                "_resolve_proxy_redirect",
+                return_value="https://cdn.alcyone.so/download/Game.zip",
+            ):
+                result = ext.extract_from_content(html, context)
+                self.assertEqual(result, "https://cdn.alcyone.so/download/Game.zip")
+                self.assertEqual(context.captured_download_url, "https://cdn.alcyone.so/download/Game.zip")
+                self.assertEqual(context.metadata.get("fileName"), "Game.zip")
+
+    def test_rootz_extract_from_content_deleted(self):
+        ext = RootzExtractor()
+        context = ExtractionContext(target_url="https://rootz.so/d/2KssK0")
+        html = r'5:[{"shortId":"2KssK0","pageToken":"tok123"}]'
+
+        mock_meta = {
+            "fileName": "Game.zip",
+            "status": "deleted",
+            "downloadAllowed": False,
+        }
+        with unittest.mock.patch.object(ext, "_http_get_json", return_value=mock_meta):
+            result = ext.extract_from_content(html, context)
+            self.assertIsNone(result)
+
+    def test_rootz_on_response(self):
+        ext = RootzExtractor()
+        context = ExtractionContext(target_url="https://rootz.so/d/2KssK0")
+
+        # 1. CDN URL directly
+        resp_cdn = MagicMock()
+        resp_cdn.url = "https://bucket.alcyone.so/files/game.zip?token=xyz"
+        ext.on_response(resp_cdn, context)
+        self.assertEqual(context.captured_download_url, "https://bucket.alcyone.so/files/game.zip?token=xyz")
+
+        # 2. Proxy-download location header
+        context.captured_download_url = None
+        resp_proxy = MagicMock()
+        resp_proxy.url = "https://rootz.so/api/files/proxy-download/2KssK0"
+        resp_proxy.headers = {"location": "https://pub.cloudflarestorage.com/download/game.zip"}
+        ext.on_response(resp_proxy, context)
+        self.assertEqual(
+            context.captured_download_url,
+            "https://pub.cloudflarestorage.com/download/game.zip",
+        )
+
+    def test_rootz_on_download(self):
+        ext = RootzExtractor()
+        context = ExtractionContext(target_url="https://rootz.so/d/2KssK0")
+
+        download = MagicMock()
+        download.url = "https://cdn.alcyone.so/files/game.zip"
+        ext.on_download(download, context)
+        self.assertEqual(context.captured_download_url, "https://cdn.alcyone.so/files/game.zip")
+        download.cancel.assert_called_once()
 
     def test_datanodes_matches(self):
         from crawler.extractors.datanodes import DataNodesExtractor
@@ -105,6 +183,145 @@ class TestExtractors(unittest.TestCase):
         resp.url = "https://store-na-phx-3.gofile.io/download/web/82f39d2b/GOW.zip"
         ext.on_response(resp, context)
         self.assertEqual(context.captured_download_url, "https://store-na-phx-3.gofile.io/download/web/82f39d2b/GOW.zip")
+
+    def test_buzzheavier_matches(self):
+        from crawler.extractors.buzzheavier import BuzzheavierExtractor
+        ext = BuzzheavierExtractor()
+        self.assertTrue(ext.matches("https://buzzheavier.com/s062m8hwy33u"))
+        self.assertTrue(ext.matches("https://bzzhr.co/abc123xyz"))
+        self.assertTrue(ext.matches("https://bzzhr.to/test"))
+        self.assertTrue(ext.matches("https://fuckingfast.net/file/123"))
+        self.assertTrue(ext.matches("https://dd.buzzheavier.com/f/GKu-CQfhIAA="))
+        self.assertFalse(ext.matches("https://google.com"))
+        self.assertFalse(ext.matches("https://example.com/buzzheavier"))
+
+    def test_buzzheavier_on_response(self):
+        from crawler.extractors.buzzheavier import BuzzheavierExtractor
+        ext = BuzzheavierExtractor()
+        context = ExtractionContext(target_url="https://buzzheavier.com/s062m8hwy33u")
+
+        # 1. Via hx-redirect header
+        resp1 = MagicMock()
+        resp1.url = "https://buzzheavier.com/s062m8hwy33u/download"
+        resp1.headers = {"hx-redirect": "/dl/token123_abc"}
+        ext.on_response(resp1, context)
+        self.assertEqual(context.captured_download_url, "https://buzzheavier.com/dl/token123_abc")
+
+        # 2. Via Location header
+        context.captured_download_url = None
+        resp2 = MagicMock()
+        resp2.url = "https://buzzheavier.com/s062m8hwy33u/download"
+        resp2.headers = {"location": "https://cdn.buzzheavier.com/files/game.rar"}
+        ext.on_response(resp2, context)
+        self.assertEqual(context.captured_download_url, "https://cdn.buzzheavier.com/files/game.rar")
+
+        # 3. Via direct /dl/ url
+        context.captured_download_url = None
+        resp3 = MagicMock()
+        resp3.url = "https://buzzheavier.com/dl/token123_abc"
+        resp3.headers = {}
+        ext.on_response(resp3, context)
+        self.assertEqual(context.captured_download_url, "https://buzzheavier.com/dl/token123_abc")
+
+    def test_buzzheavier_on_download(self):
+        from crawler.extractors.buzzheavier import BuzzheavierExtractor
+        ext = BuzzheavierExtractor()
+        context = ExtractionContext(target_url="https://buzzheavier.com/s062m8hwy33u")
+
+        download = MagicMock()
+        download.url = "https://buzzheavier.com/dl/direct_download.zip"
+        ext.on_download(download, context)
+        self.assertEqual(context.captured_download_url, "https://buzzheavier.com/dl/direct_download.zip")
+        download.cancel.assert_called_once()
+
+    def test_buzzheavier_extract_from_content(self):
+        from crawler.extractors.buzzheavier import BuzzheavierExtractor
+        ext = BuzzheavierExtractor()
+        context = ExtractionContext(target_url="https://buzzheavier.com/s062m8hwy33u")
+
+        html = '<button class="download-btn" hx-get="/s062m8hwy33u/download">Download</button>'
+        with unittest.mock.patch.object(
+            ext,
+            "_resolve_htmx_redirect",
+            return_value="https://buzzheavier.com/dl/final_token",
+        ):
+            result = ext.extract_from_content(html, context)
+            self.assertEqual(result, "https://buzzheavier.com/dl/final_token")
+            self.assertEqual(context.captured_download_url, "https://buzzheavier.com/dl/final_token")
+
+    def test_onefichier_matches(self):
+        from crawler.extractors.onefichier import OneFichierExtractor
+        ext = OneFichierExtractor()
+        self.assertTrue(ext.matches("https://1fichier.com/?041pxek1ck5xeedsv2a2"))
+        self.assertTrue(ext.matches("https://dl4free.com/?abc123xyz"))
+        self.assertTrue(ext.matches("https://desfichiers.com/?test"))
+        self.assertFalse(ext.matches("https://google.com"))
+        self.assertFalse(ext.matches("https://example.com/1fichier"))
+
+    def test_onefichier_on_response(self):
+        from crawler.extractors.onefichier import OneFichierExtractor
+        ext = OneFichierExtractor()
+        context = ExtractionContext(target_url="https://1fichier.com/?041pxek1ck5xeedsv2a2")
+
+        # 1. Direct storage URL (a-1.1fichier.com)
+        resp1 = MagicMock()
+        resp1.url = "https://a-5.1fichier.com/c12345678"
+        resp1.headers = {}
+        ext.on_response(resp1, context)
+        self.assertEqual(context.captured_download_url, "https://a-5.1fichier.com/c12345678")
+
+        # 2. Location header pointing to storage
+        context.captured_download_url = None
+        resp2 = MagicMock()
+        resp2.url = "https://1fichier.com/?041pxek1ck5xeedsv2a2"
+        resp2.headers = {"location": "https://a-10.1fichier.com/c87654321"}
+        ext.on_response(resp2, context)
+        self.assertEqual(context.captured_download_url, "https://a-10.1fichier.com/c87654321")
+
+    def test_onefichier_on_download(self):
+        from crawler.extractors.onefichier import OneFichierExtractor
+        ext = OneFichierExtractor()
+        context = ExtractionContext(target_url="https://1fichier.com/?041pxek1ck5xeedsv2a2")
+
+        download = MagicMock()
+        download.url = "https://a-5.1fichier.com/c12345678"
+        ext.on_download(download, context)
+        self.assertEqual(context.captured_download_url, "https://a-5.1fichier.com/c12345678")
+        download.cancel.assert_called_once()
+
+    def test_onefichier_extract_from_content_rate_limited(self):
+        from crawler.extractors.onefichier import OneFichierExtractor
+        ext = OneFichierExtractor()
+        context = ExtractionContext(target_url="https://1fichier.com/?041pxek1ck5xeedsv2a2")
+
+        html = '<div class="ct_warn">You must wait 59 minutes before downloading another file</div>'
+        result = ext.extract_from_content(html, context)
+        self.assertIsNone(result)
+        self.assertIsNone(context.captured_download_url)
+
+    def test_onefichier_extract_from_content_fast_fetch(self):
+        from crawler.extractors.onefichier import OneFichierExtractor
+        ext = OneFichierExtractor()
+        context = ExtractionContext(target_url="https://1fichier.com/?041pxek1ck5xeedsv2a2")
+
+        initial_html = """
+        <span style="font-weight:bold">OUTRIDERS-SteamRIP.com.rar</span>
+        <td>44.42 GB</td>
+        <input type="submit" value="Start download">
+        """
+        post_response_html = """
+        <a class="ok btn-general btn-orange" href="https://a-2.1fichier.com/c999888777">Click here to download</a>
+        """
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = post_response_html.encode("utf-8")
+        mock_resp.__enter__.return_value = mock_resp
+
+        with unittest.mock.patch("urllib.request.urlopen", return_value=mock_resp):
+            result = ext.extract_from_content(initial_html, context)
+            self.assertEqual(result, "https://a-2.1fichier.com/c999888777")
+            self.assertEqual(context.captured_download_url, "https://a-2.1fichier.com/c999888777")
+            self.assertEqual(context.metadata.get("fileName"), "OUTRIDERS-SteamRIP.com.rar")
 
     def test_generic_matches_anything(self):
         ext = GenericExtractor()

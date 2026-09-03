@@ -30,7 +30,9 @@ crawler/
 │   ├── generic.py        # Fallback genérico para botones y descargas
 │   ├── vikingfile.py     # Extractor dedicado VikingFile
 │   ├── filekeeper.py     # Extractor dedicado FileKeeper
-│   └── rootz.py          # Extractor dedicado Rootz
+│   ├── rootz.py          # Extractor dedicado Rootz
+│   ├── buzzheavier.py    # Extractor dedicado Buzzheavier
+│   └── onefichier.py     # Extractor dedicado 1fichier
 ├── strategies/
 │   ├── base.py           # FetchStrategy base
 │   ├── fast_fetch.py     # Estrategia TLS impersonation

@@ -102,7 +102,12 @@ class StealthBrowserStrategy(FetchStrategy):
                             )
                             if valid:
                                 extracted = extractor.extract_from_content(valid, context)
-                                return extracted or valid
+                                if extracted:
+                                    return extracted
+                                if context.captured_download_url:
+                                    return context.captured_download_url
+                                if extractor.name == "generic":
+                                    return valid
                     except Exception:
                         pass
 
@@ -118,7 +123,12 @@ class StealthBrowserStrategy(FetchStrategy):
                             )
                             if valid:
                                 extracted = extractor.extract_from_content(valid, context)
-                                return extracted or valid
+                                if extracted:
+                                    return extracted
+                                if context.captured_download_url:
+                                    return context.captured_download_url
+                                if extractor.name == "generic":
+                                    return valid
                     except Exception:
                         pass
             except Exception:
@@ -133,7 +143,12 @@ class StealthBrowserStrategy(FetchStrategy):
             )
             if valid:
                 extracted = extractor.extract_from_content(valid, context)
-                return extracted or valid
+                if extracted:
+                    return extracted
+                if context.captured_download_url:
+                    return context.captured_download_url
+                if extractor.name == "generic":
+                    return valid
 
         # 4. Fallback to final page body
         body = extract_body(page)
@@ -142,6 +157,11 @@ class StealthBrowserStrategy(FetchStrategy):
         )
         if valid:
             extracted = extractor.extract_from_content(valid, context)
-            return extracted or valid
+            if extracted:
+                return extracted
+            if context.captured_download_url:
+                return context.captured_download_url
+            if extractor.name == "generic":
+                return valid
 
-        return None
+        return context.captured_download_url

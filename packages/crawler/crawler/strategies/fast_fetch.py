@@ -35,7 +35,11 @@ class FastFetchStrategy(FetchStrategy):
             if valid:
                 # Give the extractor a chance to parse direct links if applicable
                 extracted = extractor.extract_from_content(valid, context)
-                return extracted or valid
+                if extracted:
+                    return extracted
+                if extractor.name == "generic":
+                    return valid
+                return None
         except Exception as e:
             sys.stderr.write(f"[FastFetch] curl_cffi attempt failed: {e}\n")
 
