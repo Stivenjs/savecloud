@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { getKenneyGamepadAssetUrl, kenneyAnalogTriggerAssetId } from "@/lib/kenneyGamepadAssets";
+import { useQuery } from "@tanstack/react-query";
 import type { GamepadLayoutKind } from "@/lib/gamepadLabelMaps";
 
 interface UseSteamCatalogGamepadPaginationProps {
@@ -14,32 +14,24 @@ export function useSteamCatalogGamepadPagination({
   totalPages,
   setPage,
 }: UseSteamCatalogGamepadPaginationProps) {
-  const [layoutKind, setLayoutKind] = useState<GamepadLayoutKind>("xbox");
+  const { data: preferredLayout } = useQuery({
+    queryKey: ["preferred-gamepad-layout"],
+    queryFn: () => invoke<string | null>("get_preferred_gamepad_layout"),
+    enabled: bigPictureConsole,
+    staleTime: 5 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    if (!bigPictureConsole) return;
-    let cancelled = false;
-    const loadPreferredLayout = async () => {
-      try {
-        const savedLayout = await invoke<string | null>("get_preferred_gamepad_layout");
-        if (cancelled) return;
-        if (
-          savedLayout === "playstation" ||
-          savedLayout === "nintendo" ||
-          savedLayout === "xbox" ||
-          savedLayout === "generic"
-        ) {
-          setLayoutKind(savedLayout);
-        }
-      } catch {
-        // Fallback
-      }
-    };
-    void loadPreferredLayout();
-    return () => {
-      cancelled = true;
-    };
-  }, [bigPictureConsole]);
+  const layoutKind: GamepadLayoutKind = useMemo(() => {
+    if (
+      preferredLayout === "playstation" ||
+      preferredLayout === "nintendo" ||
+      preferredLayout === "xbox" ||
+      preferredLayout === "generic"
+    ) {
+      return preferredLayout;
+    }
+    return "xbox";
+  }, [preferredLayout]);
 
   const triggerLabels = useMemo(() => {
     if (layoutKind === "playstation") return { left: "L2", right: "R2" };
@@ -47,11 +39,19 @@ export function useSteamCatalogGamepadPagination({
     return { left: "LT", right: "RT" };
   }, [layoutKind]);
 
-  const triggerUrls = useMemo(() => {
-    const left = getKenneyGamepadAssetUrl(layoutKind, kenneyAnalogTriggerAssetId(layoutKind, "left"));
-    const right = getKenneyGamepadAssetUrl(layoutKind, kenneyAnalogTriggerAssetId(layoutKind, "right"));
-    return { left, right };
-  }, [layoutKind]);
+  // TanStack Query con dynamic import: los SVGs de Kenney SOLO se cargan si bigPictureConsole es true
+  const { data: triggerUrls } = useQuery({
+    queryKey: ["gamepad-trigger-assets", layoutKind],
+    queryFn: async () => {
+      const { getKenneyGamepadAssetUrl, kenneyAnalogTriggerAssetId } = await import("@/lib/kenneyGamepadAssets");
+      return {
+        left: getKenneyGamepadAssetUrl(layoutKind, kenneyAnalogTriggerAssetId(layoutKind, "left")),
+        right: getKenneyGamepadAssetUrl(layoutKind, kenneyAnalogTriggerAssetId(layoutKind, "right")),
+      };
+    },
+    enabled: bigPictureConsole,
+    staleTime: Infinity,
+  });
 
   useEffect(() => {
     if (!bigPictureConsole) return;

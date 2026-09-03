@@ -336,28 +336,28 @@ export function SteamCatalogPage() {
               ) : bigPictureConsole ? (
                 <div className="flex items-center justify-center gap-10 pt-10 pb-4 text-white/80 font-bold text-xl md:text-2xl select-none">
                   <span className="flex items-center gap-3">
-                    {triggerUrls.left ? (
+                    {triggerUrls?.left ? (
                       <img
                         src={triggerUrls.left}
                         alt={triggerLabels.left}
                         className="size-11 object-contain brightness-100 filter invert dark:invert-0 transition-transform active:scale-90"
                       />
                     ) : (
-                      <span className="text-sm bg-default-100/50 px-3 py-1 rounded font-bold text-default-600 border border-default-200/60">
+                      <span className="text-xs bg-default-100/50 px-3 py-1.5 rounded-lg font-bold text-default-600 border border-default-200/60 shadow-sm">
                         {triggerLabels.left}
                       </span>
                     )}
                   </span>
                   <span className="tracking-wide">{t("steamCatalog.pageXofY", { page, total: totalPages })}</span>
                   <span className="flex items-center gap-3">
-                    {triggerUrls.right ? (
+                    {triggerUrls?.right ? (
                       <img
                         src={triggerUrls.right}
                         alt={triggerLabels.right}
                         className="size-11 object-contain brightness-100 filter invert dark:invert-0 transition-transform active:scale-90"
                       />
                     ) : (
-                      <span className="text-sm bg-default-100/50 px-3 py-1 rounded font-bold text-default-600 border border-default-200/60">
+                      <span className="text-xs bg-default-100/50 px-3 py-1.5 rounded-lg font-bold text-default-600 border border-default-200/60 shadow-sm">
                         {triggerLabels.right}
                       </span>
                     )}
