@@ -11,8 +11,7 @@ import {
   type EffectiveDownloadKind,
 } from "@utils/sourceMatch";
 import type { ConfiguredGame } from "@app-types/config";
-import type { SourceUri } from "@services/tauri";
-import type { SteamAppdetailsMediaResult } from "@services/tauri";
+import type { DiskInfo, SourceUri, SteamAppdetailsMediaResult } from "@services/tauri";
 import { useDisks } from "@hooks/useDisks";
 import { formatBytes } from "@utils/format";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -124,12 +123,12 @@ export function InstallModal({
   const effectiveDisk = useMemo(() => {
     if (customPath) {
       const lowerPath = customPath.toLowerCase().replace(/\//g, "\\");
-      return disks.find((d) => {
+      return disks.find((d: DiskInfo) => {
         const lowerMount = d.mountPoint.toLowerCase().replace(/\//g, "\\");
         return lowerPath.startsWith(lowerMount);
       });
     }
-    return disks.find((d) => d.mountPoint === selectedDisk);
+    return disks.find((d: DiskInfo) => d.mountPoint === selectedDisk);
   }, [customPath, selectedDisk, disks]);
 
   const hasEnoughSpace = useMemo(() => {
@@ -170,6 +169,8 @@ export function InstallModal({
       onOpenChange={onOpenChange}
       size={consoleMode ? "4xl" : "2xl"}
       classNames={{
+        wrapper: "z-[150]",
+        backdrop: "z-[140]",
         base: cn("bg-content1 text-foreground border border-divider", consoleMode ? "p-4 rounded-2xl" : ""),
         header: cn("border-b border-divider pb-4", consoleMode ? "px-6 pt-6" : ""),
         footer: cn("border-t border-divider pt-4", consoleMode ? "px-6 pb-6" : ""),
@@ -419,7 +420,7 @@ export function InstallModal({
                 )}
 
                 <ScrollShadow className={cn("space-y-2", consoleMode ? "max-h-96" : "max-h-75")}>
-                  {disks.map((disk) => {
+                  {disks.map((disk: DiskInfo) => {
                     const isSelected = selectedDisk === disk.mountPoint && !customPath;
                     const lowSpace = disk.availableSpace < gameSizeBytes;
 

@@ -69,9 +69,8 @@ const DownloadConflictModalLazy = lazy(() =>
 const GameClipsModalLazy = lazy(() =>
   import("@features/games/GameClipsModal").then((m) => ({ default: m.GameClipsModal }))
 );
-const InstallModalLazy = lazy(() =>
-  import("@features/steam-catalog/components/InstallModal").then((m) => ({ default: m.InstallModal }))
-);
+import { useBigPictureConsole } from "@hooks/useBigPictureConsole";
+import { InstallModal } from "@features/steam-catalog/components/InstallModal";
 
 import {
   GameDetailLocalSummary,
@@ -87,6 +86,7 @@ export function GameDetailPage() {
   const { t } = useTranslation();
   const isLowPerf = useLowPerformanceMode();
   const navigate = useNavigate();
+  const bigPictureConsole = useBigPictureConsole();
   const queryClient = useQueryClient();
   const { handleSync, handleDownload, handleFullBackupUpload, isSyncing, isDownloading, fullBackupUploadingGameId } =
     useGameDetailCloudActions();
@@ -550,6 +550,7 @@ export function GameDetailPage() {
         isFullBackupUploading={fullBackupUploadingGameId === game.id}
         isUploadingClip={isUploadingClip}
         onPlay={isSteamCatalogOnly ? undefined : handlePlay}
+        onInstall={sourceCandidates && sourceCandidates.length > 0 ? handleInstallFromSources : undefined}
         onOpenGraph={isSteamCatalogOnly ? undefined : handleOpenGraph}
         onOpenFolder={isSteamCatalogOnly ? undefined : handleOpenFolder}
         onEdit={isSteamCatalogOnly ? undefined : setGameToEdit}
@@ -738,23 +739,27 @@ export function GameDetailPage() {
         </section>
       )}
       {installingFromSource && game ? (
-        <Suspense fallback={null}>
-          <InstallModalLazy
-            isOpen={isInstallModalOpen}
-            onOpenChange={onInstallModalOpenChange}
-            gameName={displayName}
-            gameSizeStr={installingFromSource.size}
-            protocols={installingFromSource.protocols}
-            uris={pickCandidate(sourceCandidates, selectedSourceKey)?.uris}
-            game={game}
-            mediaBySteamAppId={installModalMediaBySteamAppId}
-            peerOffers={peerOffersHook.offers}
-            selectedPeerDeviceId={peerOffersHook.selectedDeviceId}
-            onSelectPeerDevice={peerOffersHook.setSelectedDeviceId}
-            onConfirm={handleConfirmInstall}
-            onConfirmPeer={handleConfirmPeerInstall}
-          />
-        </Suspense>
+        <InstallModal
+          isOpen={isInstallModalOpen}
+          onOpenChange={(open) => {
+            onInstallModalOpenChange();
+            if (!open) {
+              setInstallingFromSource(null);
+            }
+          }}
+          gameName={displayName}
+          gameSizeStr={installingFromSource.size}
+          protocols={installingFromSource.protocols}
+          uris={pickCandidate(sourceCandidates, selectedSourceKey)?.uris}
+          game={game}
+          mediaBySteamAppId={installModalMediaBySteamAppId}
+          peerOffers={peerOffersHook.offers}
+          selectedPeerDeviceId={peerOffersHook.selectedDeviceId}
+          onSelectPeerDevice={peerOffersHook.setSelectedDeviceId}
+          onConfirm={handleConfirmInstall}
+          onConfirmPeer={handleConfirmPeerInstall}
+          consoleMode={bigPictureConsole}
+        />
       ) : null}
     </div>
   );

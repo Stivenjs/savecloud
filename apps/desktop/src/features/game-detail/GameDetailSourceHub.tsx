@@ -107,7 +107,7 @@ export function GameDetailSourceHub({
           color="primary"
           variant="solid"
           size="md"
-          className="font-bold h-10 px-5 shrink-0 shadow-sm shadow-primary/15 transition-transform duration-150 active:scale-[0.97]"
+          className="font-bold h-10 px-5 shrink-0 shadow-sm shadow-primary/15 transition-all duration-150 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           startContent={<Download size={16} />}
           onPress={onInstall}>
           {chosen.file_size ? `${t("library.detail.install")} (${chosen.file_size})` : t("library.detail.install")}

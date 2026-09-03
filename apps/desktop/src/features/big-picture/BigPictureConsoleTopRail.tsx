@@ -1,6 +1,5 @@
 import type { InputProps } from "@heroui/react";
 import { Button, Tooltip } from "@heroui/react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Search, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -75,7 +74,6 @@ export function BigPictureConsoleTopRail({
   const currentSearchTerm = libraryMode ? librarySearchTerm : catalogSearchTerm;
   const currentSetSearch = libraryMode ? librarySetSearch : catalogSetSearch;
 
-  const prefersReducedMotion = useReducedMotion();
   const searchExpandMaxPx = useBpSearchRailMaxPx();
   const [searchRailOpen, setSearchRailOpen] = useState(() => currentSearchTerm.trim().length > 0);
 
@@ -87,9 +85,6 @@ export function BigPictureConsoleTopRail({
     setSearchRailOpen(false);
     currentSetSearch?.("");
   };
-
-  const motionEase = prefersReducedMotion ? ([0.4, 0, 0.2, 1] as const) : ([0.16, 1, 0.3, 1] as const);
-  const revealTransition = prefersReducedMotion ? { duration: 0 } : { duration: 0.28, ease: motionEase };
 
   if (hidden || typeof document === "undefined") return null;
 
@@ -103,48 +98,42 @@ export function BigPictureConsoleTopRail({
             className={`pointer-events-auto inline-flex max-w-full min-h-12 items-center gap-4 rounded-2xl px-4 py-2 sm:min-h-13.5 sm:gap-7 md:gap-10 sm:px-5 md:px-6 ${BP_TOP_GLASS}`}>
             {searchEnabled ? (
               <>
-                <AnimatePresence initial={false}>
-                  {searchRailOpen ? (
-                    <motion.div
-                      key="bp-library-search-slot"
-                      id="games-library-search-rail"
-                      initial={prefersReducedMotion ? false : { maxWidth: 0, opacity: 0 }}
-                      animate={{ maxWidth: searchExpandMaxPx, opacity: 1 }}
-                      exit={
-                        prefersReducedMotion
-                          ? { maxWidth: 0, opacity: 0, transition: { duration: 0 } }
-                          : { maxWidth: 0, opacity: 0, transition: { ...revealTransition, duration: 0.22 } }
+                <div
+                  id="games-library-search-rail"
+                  style={{
+                    maxWidth: searchRailOpen ? `${searchExpandMaxPx}px` : "0px",
+                  }}
+                  className={`min-w-0 overflow-hidden transform-gpu will-change-[max-width,opacity,transform] transition-[max-width,opacity,transform] duration-250 ease-[cubic-bezier(0.16,1,0.3,1)] backface-hidden ${
+                    searchRailOpen
+                      ? "opacity-100 scale-100 translate-x-0"
+                      : "opacity-0 scale-95 -translate-x-3 pointer-events-none"
+                  }`}>
+                  <div style={{ width: searchExpandMaxPx }} className="flex min-w-0 flex-row items-center">
+                    <DebouncedGamesSearchInput
+                      searchTerm={currentSearchTerm}
+                      onSearchChange={(v) => currentSetSearch?.(v)}
+                      compact
+                      variant="flat"
+                      autoFocus={searchRailOpen}
+                      isClearable
+                      className="min-h-0 min-w-0 flex-1"
+                      placeholder={
+                        libraryMode
+                          ? t("bigPictureUi.searchLibraryPlaceholder")
+                          : t("bigPictureUi.searchCatalogPlaceholder")
                       }
-                      transition={revealTransition}
-                      className="min-w-0 overflow-hidden">
-                      <div style={{ width: searchExpandMaxPx }} className="flex min-w-0 flex-row items-center">
-                        <DebouncedGamesSearchInput
-                          searchTerm={currentSearchTerm}
-                          onSearchChange={(v) => currentSetSearch?.(v)}
-                          compact
-                          variant="flat"
-                          autoFocus
-                          isClearable
-                          className="min-h-0 min-w-0 flex-1"
-                          placeholder={
-                            libraryMode
-                              ? t("bigPictureUi.searchLibraryPlaceholder")
-                              : t("bigPictureUi.searchCatalogPlaceholder")
-                          }
-                          startContent={
-                            <Search
-                              size={18}
-                              className="shrink-0 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.72)]"
-                              strokeWidth={1.65}
-                              aria-hidden
-                            />
-                          }
-                          classNames={RAIL_INPUT_CLASS_NAMES}
+                      startContent={
+                        <Search
+                          size={18}
+                          className="shrink-0 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.72)]"
+                          strokeWidth={1.65}
+                          aria-hidden
                         />
-                      </div>
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
+                      }
+                      classNames={RAIL_INPUT_CLASS_NAMES}
+                    />
+                  </div>
+                </div>
 
                 {!searchRailOpen ? (
                   <Tooltip
