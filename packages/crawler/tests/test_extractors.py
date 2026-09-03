@@ -56,7 +56,85 @@ class TestExtractors(unittest.TestCase):
     def test_rootz_matches(self):
         ext = RootzExtractor()
         self.assertTrue(ext.matches("https://rootz.so/d/xyz"))
+        self.assertTrue(ext.matches("https://www.rootz.so/d/2KssK0"))
+        self.assertTrue(ext.matches("https://rootz.so/file/abcdef123"))
         self.assertFalse(ext.matches("https://google.com"))
+        self.assertFalse(ext.matches("https://example.com/rootz"))
+
+    def test_rootz_extract_helpers(self):
+        self.assertEqual(RootzExtractor.extract_short_id("https://rootz.so/d/2KssK0"), "2KssK0")
+        self.assertEqual(RootzExtractor.extract_short_id("https://www.rootz.so/file/uuid-1234"), "uuid-1234")
+        html_chunk = r'5:[null,{"shortId":"2KssK0","pageToken":"token_abc123_xyz"}]'
+        self.assertEqual(RootzExtractor.extract_page_token(html_chunk), "token_abc123_xyz")
+
+    def test_rootz_extract_from_content_fast_fetch(self):
+        ext = RootzExtractor()
+        context = ExtractionContext(target_url="https://rootz.so/d/2KssK0")
+        html = r'5:[{"shortId":"2KssK0","pageToken":"tok123"}]'
+
+        # Mock API responses
+        mock_meta = {
+            "fileName": "Game.zip",
+            "fileId": "uuid-999",
+            "status": "active",
+            "downloadAllowed": True,
+            "passwordProtected": False,
+        }
+        with unittest.mock.patch.object(ext, "_http_get_json", return_value=mock_meta):
+            with unittest.mock.patch.object(
+                ext,
+                "_resolve_proxy_redirect",
+                return_value="https://cdn.alcyone.so/download/Game.zip",
+            ):
+                result = ext.extract_from_content(html, context)
+                self.assertEqual(result, "https://cdn.alcyone.so/download/Game.zip")
+                self.assertEqual(context.captured_download_url, "https://cdn.alcyone.so/download/Game.zip")
+                self.assertEqual(context.metadata.get("fileName"), "Game.zip")
+
+    def test_rootz_extract_from_content_deleted(self):
+        ext = RootzExtractor()
+        context = ExtractionContext(target_url="https://rootz.so/d/2KssK0")
+        html = r'5:[{"shortId":"2KssK0","pageToken":"tok123"}]'
+
+        mock_meta = {
+            "fileName": "Game.zip",
+            "status": "deleted",
+            "downloadAllowed": False,
+        }
+        with unittest.mock.patch.object(ext, "_http_get_json", return_value=mock_meta):
+            result = ext.extract_from_content(html, context)
+            self.assertIsNone(result)
+
+    def test_rootz_on_response(self):
+        ext = RootzExtractor()
+        context = ExtractionContext(target_url="https://rootz.so/d/2KssK0")
+
+        # 1. CDN URL directly
+        resp_cdn = MagicMock()
+        resp_cdn.url = "https://bucket.alcyone.so/files/game.zip?token=xyz"
+        ext.on_response(resp_cdn, context)
+        self.assertEqual(context.captured_download_url, "https://bucket.alcyone.so/files/game.zip?token=xyz")
+
+        # 2. Proxy-download location header
+        context.captured_download_url = None
+        resp_proxy = MagicMock()
+        resp_proxy.url = "https://rootz.so/api/files/proxy-download/2KssK0"
+        resp_proxy.headers = {"location": "https://pub.cloudflarestorage.com/download/game.zip"}
+        ext.on_response(resp_proxy, context)
+        self.assertEqual(
+            context.captured_download_url,
+            "https://pub.cloudflarestorage.com/download/game.zip",
+        )
+
+    def test_rootz_on_download(self):
+        ext = RootzExtractor()
+        context = ExtractionContext(target_url="https://rootz.so/d/2KssK0")
+
+        download = MagicMock()
+        download.url = "https://cdn.alcyone.so/files/game.zip"
+        ext.on_download(download, context)
+        self.assertEqual(context.captured_download_url, "https://cdn.alcyone.so/files/game.zip")
+        download.cancel.assert_called_once()
 
     def test_datanodes_matches(self):
         from crawler.extractors.datanodes import DataNodesExtractor
