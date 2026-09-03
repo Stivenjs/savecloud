@@ -2,7 +2,40 @@
 
 from urllib.parse import urlparse
 
-from crawler.config import AD_KEYWORDS, DEFAULT_REFERER, IGNORED_EXTENSIONS
+from crawler.config import (
+    AD_KEYWORDS,
+    DEFAULT_HEADERS,
+    DEFAULT_REFERER,
+    DEFAULT_USER_AGENT,
+    IGNORED_EXTENSIONS,
+)
+
+
+def build_headers(
+    referer: str | None = None,
+    origin: str | None = None,
+    accept: str | None = None,
+    htmx: bool = False,
+    user_agent: str | None = None,
+    extra: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Builds consistent, modular HTTP headers for requests across the crawler."""
+    headers = {
+        "User-Agent": user_agent or DEFAULT_USER_AGENT,
+        "Accept": accept or DEFAULT_HEADERS.get("Accept", "*/*"),
+        "Accept-Language": DEFAULT_HEADERS.get("Accept-Language", "en-US,en;q=0.9"),
+    }
+    if referer:
+        headers["Referer"] = referer
+    if origin:
+        headers["Origin"] = origin
+    if htmx:
+        headers["hx-request"] = "true"
+        if referer:
+            headers["hx-current-url"] = referer
+    if extra:
+        headers.update(extra)
+    return headers
 
 
 def extract_host(url: str) -> str:

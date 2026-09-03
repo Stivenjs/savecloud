@@ -184,6 +184,71 @@ class TestExtractors(unittest.TestCase):
         ext.on_response(resp, context)
         self.assertEqual(context.captured_download_url, "https://store-na-phx-3.gofile.io/download/web/82f39d2b/GOW.zip")
 
+    def test_buzzheavier_matches(self):
+        from crawler.extractors.buzzheavier import BuzzheavierExtractor
+        ext = BuzzheavierExtractor()
+        self.assertTrue(ext.matches("https://buzzheavier.com/s062m8hwy33u"))
+        self.assertTrue(ext.matches("https://bzzhr.co/abc123xyz"))
+        self.assertTrue(ext.matches("https://bzzhr.to/test"))
+        self.assertTrue(ext.matches("https://fuckingfast.net/file/123"))
+        self.assertTrue(ext.matches("https://dd.buzzheavier.com/f/GKu-CQfhIAA="))
+        self.assertFalse(ext.matches("https://google.com"))
+        self.assertFalse(ext.matches("https://example.com/buzzheavier"))
+
+    def test_buzzheavier_on_response(self):
+        from crawler.extractors.buzzheavier import BuzzheavierExtractor
+        ext = BuzzheavierExtractor()
+        context = ExtractionContext(target_url="https://buzzheavier.com/s062m8hwy33u")
+
+        # 1. Via hx-redirect header
+        resp1 = MagicMock()
+        resp1.url = "https://buzzheavier.com/s062m8hwy33u/download"
+        resp1.headers = {"hx-redirect": "/dl/token123_abc"}
+        ext.on_response(resp1, context)
+        self.assertEqual(context.captured_download_url, "https://buzzheavier.com/dl/token123_abc")
+
+        # 2. Via Location header
+        context.captured_download_url = None
+        resp2 = MagicMock()
+        resp2.url = "https://buzzheavier.com/s062m8hwy33u/download"
+        resp2.headers = {"location": "https://cdn.buzzheavier.com/files/game.rar"}
+        ext.on_response(resp2, context)
+        self.assertEqual(context.captured_download_url, "https://cdn.buzzheavier.com/files/game.rar")
+
+        # 3. Via direct /dl/ url
+        context.captured_download_url = None
+        resp3 = MagicMock()
+        resp3.url = "https://buzzheavier.com/dl/token123_abc"
+        resp3.headers = {}
+        ext.on_response(resp3, context)
+        self.assertEqual(context.captured_download_url, "https://buzzheavier.com/dl/token123_abc")
+
+    def test_buzzheavier_on_download(self):
+        from crawler.extractors.buzzheavier import BuzzheavierExtractor
+        ext = BuzzheavierExtractor()
+        context = ExtractionContext(target_url="https://buzzheavier.com/s062m8hwy33u")
+
+        download = MagicMock()
+        download.url = "https://buzzheavier.com/dl/direct_download.zip"
+        ext.on_download(download, context)
+        self.assertEqual(context.captured_download_url, "https://buzzheavier.com/dl/direct_download.zip")
+        download.cancel.assert_called_once()
+
+    def test_buzzheavier_extract_from_content(self):
+        from crawler.extractors.buzzheavier import BuzzheavierExtractor
+        ext = BuzzheavierExtractor()
+        context = ExtractionContext(target_url="https://buzzheavier.com/s062m8hwy33u")
+
+        html = '<button class="download-btn" hx-get="/s062m8hwy33u/download">Download</button>'
+        with unittest.mock.patch.object(
+            ext,
+            "_resolve_htmx_redirect",
+            return_value="https://buzzheavier.com/dl/final_token",
+        ):
+            result = ext.extract_from_content(html, context)
+            self.assertEqual(result, "https://buzzheavier.com/dl/final_token")
+            self.assertEqual(context.captured_download_url, "https://buzzheavier.com/dl/final_token")
+
     def test_generic_matches_anything(self):
         ext = GenericExtractor()
         self.assertTrue(ext.matches("https://anyrandomhost.org/download"))

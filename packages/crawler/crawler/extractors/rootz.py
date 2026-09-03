@@ -9,7 +9,7 @@ import urllib.request
 from typing import Any
 
 from crawler.core.firewall import TurnstileSolver
-from crawler.core.network import extract_host
+from crawler.core.network import build_headers, extract_host
 from crawler.extractors.base import BaseExtractor, ExtractionContext
 from crawler.utils.dom import DomHelper
 
@@ -228,13 +228,12 @@ class RootzExtractor(BaseExtractor):
 
             # 1. Query metadata API: /api/files/download-by-short/{short_id}
             api_url = f"{self.API_ORIGIN}/api/files/download-by-short/{short_id}"
-            req_headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Referer": f"{self.API_ORIGIN}/d/{short_id}",
-                "Origin": self.API_ORIGIN,
-                "Accept": "application/json",
-                "X-Page-Token": page_token,
-            }
+            req_headers = build_headers(
+                referer=f"{self.API_ORIGIN}/d/{short_id}",
+                origin=self.API_ORIGIN,
+                accept="application/json",
+                extra={"X-Page-Token": page_token},
+            )
 
             meta_data = self._http_get_json(api_url, req_headers)
             if meta_data:
