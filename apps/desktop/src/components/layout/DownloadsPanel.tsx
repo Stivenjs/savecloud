@@ -13,7 +13,7 @@ import {
 import { useSourcesDownloadsStore } from "@store/SourcesDownloadsStore";
 import { useSyncStore } from "@store/SyncStore";
 import { useTorrentStore } from "@store/TorrentStore";
-import { formatBytes, mapTorrentState } from "@utils/format";
+import { formatBytes, formatSourcesSyncSubtitle, mapTorrentState } from "@utils/format";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { formatEta, formatSpeed } from "@utils/progress";
 
@@ -100,6 +100,7 @@ export function DownloadsPanel() {
   const aggregate = useSyncStore((s) => s.aggregateProgress);
   const sourcesTasks = useSourcesDownloadsStore((s) => s.activeByJobId);
   const sourcesAggregate = useSourcesDownloadsStore((s) => s.aggregateProgress);
+  const sourcesSyncProgress = useSourcesDownloadsStore((s) => s.syncProgress);
   const torrentTasks = useTorrentStore((s) => s.activeByHash);
   const metricsRef = useRef<Record<string, { startMs: number; lastLoaded: number; gameId: string; filename: string }>>(
     {}
@@ -316,8 +317,26 @@ export function DownloadsPanel() {
       };
     });
 
-    return [...syncRows, ...sourceRows, ...torrentRows];
-  }, [syncTasks, syncMetrics, sourcesTasks, torrentTasks, t]);
+    const syncSourcesRow: DownloadRow[] = sourcesSyncProgress?.inProgress
+      ? [
+          {
+            id: "remote-sources-sync",
+            label: t("sources.sync.title", { defaultValue: "Sincronizando fuentes" }),
+            subtitle: formatSourcesSyncSubtitle(sourcesSyncProgress, t),
+            value:
+              sourcesSyncProgress.totalSources > 0
+                ? Math.min(100, Math.round((sourcesSyncProgress.currentIndex / sourcesSyncProgress.totalSources) * 100))
+                : 0,
+            source: "sync" as const,
+            statusDetail: sourcesSyncProgress.stage,
+            canPause: false,
+            canCancel: false,
+          },
+        ]
+      : [];
+
+    return [...syncSourcesRow, ...syncRows, ...sourceRows, ...torrentRows];
+  }, [syncTasks, syncMetrics, sourcesTasks, torrentTasks, sourcesSyncProgress, t]);
 
   const totalActive = rows.length;
   const keepPanelVisibleForBatch = syncOperation?.mode === "batch";
@@ -437,24 +456,39 @@ export function DownloadsPanel() {
                 />
 
                 {/* Stats comunes: bytes, velocidad de bajada y ETA */}
-                <div className="mt-2 flex items-center gap-3 text-xs text-default-500">
-                  <span className="tabular-nums">
-                    {formatBytes(row.loaded ?? 0)}
-                    {(row.total ?? 0) > 0 ? ` / ${formatBytes(row.total ?? 0)}` : ""}
-                  </span>
-                  {row.status === "extracting" ? null : (
-                    <>
-                      <span className="inline-flex items-center gap-1">
-                        <Zap size={12} className="text-primary/70" />
-                        <span className="tabular-nums">{formatSpeed(row.speedBps ?? null)}</span>
+                {row.id === "remote-sources-sync" ? (
+                  <div className="mt-2 flex items-center justify-between text-xs text-default-500">
+                    <span className="tabular-nums font-medium text-default-600">
+                      {sourcesSyncProgress?.currentIndex ?? 0} / {sourcesSyncProgress?.totalSources ?? 0}{" "}
+                      {t("sources.sync.sourcesCountLabel", { defaultValue: "fuentes" })}
+                    </span>
+                    {sourcesSyncProgress?.itemsCount != null && (
+                      <span className="text-[11px] font-medium text-primary">
+                        +{sourcesSyncProgress.itemsCount.toLocaleString()}{" "}
+                        {t("sources.sync.gamesLabel", { defaultValue: "juegos" })}
                       </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Clock size={12} className="text-default-400" />
-                        <span className="tabular-nums">{formatEta(row.etaSeconds ?? null)}</span>
-                      </span>
-                    </>
-                  )}
-                </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-2 flex items-center gap-3 text-xs text-default-500">
+                    <span className="tabular-nums">
+                      {formatBytes(row.loaded ?? 0)}
+                      {(row.total ?? 0) > 0 ? ` / ${formatBytes(row.total ?? 0)}` : ""}
+                    </span>
+                    {row.status === "extracting" ? null : (
+                      <>
+                        <span className="inline-flex items-center gap-1">
+                          <Zap size={12} className="text-primary/70" />
+                          <span className="tabular-nums">{formatSpeed(row.speedBps ?? null)}</span>
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <Clock size={12} className="text-default-400" />
+                          <span className="tabular-nums">{formatEta(row.etaSeconds ?? null)}</span>
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* Stats extra exclusivos de torrents: subida y peers */}
                 {row.torrentExtra ? (

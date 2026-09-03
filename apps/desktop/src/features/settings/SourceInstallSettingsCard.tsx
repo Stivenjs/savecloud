@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, CardBody, Input, Tooltip, Chip, Switch } from "@heroui/react";
+import { Button, Card, CardBody, Input, Tooltip, Chip, Switch, Progress, Spinner } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import {
   FileJson,
@@ -20,7 +20,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { RemoteSourceConfig, SourceCatalogSummary, VerifiedSourcesStatus } from "@services/tauri/sources.service";
-import { getSourceDisplayName } from "@utils/format";
+import { formatSourcesSyncSubtitle, getSourceDisplayName } from "@utils/format";
+import { useSourcesDownloadsStore } from "@store/SourcesDownloadsStore";
 
 type Props = {
   sourceUrl: string;
@@ -57,6 +58,7 @@ type Props = {
 export function SourceInstallSettingsCard(props: Props) {
   const { t } = useTranslation();
   const [hoveredSourceId, setHoveredSourceId] = useState<string | null>(null);
+  const sourcesSyncProgress = useSourcesDownloadsStore((s) => s.syncProgress);
 
   const totalDownloads = props.sources.reduce((acc, s) => acc + s.downloadsCount, 0);
 
@@ -244,6 +246,60 @@ export function SourceInstallSettingsCard(props: Props) {
               {t("settings.sourceInstall.syncAllButton")}
             </Button>
           </div>
+
+          {(sourcesSyncProgress?.inProgress || props.sourcesBusy) && (
+            <div className="rounded-xl border border-default-200 bg-default-50/80 p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <Spinner size="sm" color="primary" />
+                  <span className="font-semibold text-default-800">
+                    {t("sources.sync.title", { defaultValue: "Sincronizando fuentes" })}
+                  </span>
+                </div>
+                {sourcesSyncProgress && sourcesSyncProgress.totalSources > 0 ? (
+                  <Chip size="sm" variant="flat" color="primary" className="h-5 text-[10px] font-medium tabular-nums">
+                    {sourcesSyncProgress.currentIndex} / {sourcesSyncProgress.totalSources} (
+                    {Math.round((sourcesSyncProgress.currentIndex / sourcesSyncProgress.totalSources) * 100)}%)
+                  </Chip>
+                ) : (
+                  <Chip size="sm" variant="flat" color="default" className="h-5 text-[10px] font-medium">
+                    {t("sources.sync.starting", { defaultValue: "Iniciando…" })}
+                  </Chip>
+                )}
+              </div>
+              <Progress
+                size="sm"
+                isIndeterminate={!sourcesSyncProgress || sourcesSyncProgress.totalSources === 0}
+                value={
+                  sourcesSyncProgress && sourcesSyncProgress.totalSources > 0
+                    ? (sourcesSyncProgress.currentIndex / sourcesSyncProgress.totalSources) * 100
+                    : 0
+                }
+                aria-label={t("sources.sync.title", { defaultValue: "Sincronizando fuentes" })}
+                classNames={{
+                  track: "h-1.5 bg-default-200/60",
+                  indicator: "bg-primary",
+                }}
+              />
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <p
+                  key={
+                    sourcesSyncProgress ? `${sourcesSyncProgress.sourceName}-${sourcesSyncProgress.stage}` : "starting"
+                  }
+                  className="animate-text-swap truncate text-default-500">
+                  {sourcesSyncProgress
+                    ? formatSourcesSyncSubtitle(sourcesSyncProgress, t)
+                    : t("sources.sync.starting", { defaultValue: "Iniciando sincronización…" })}
+                </p>
+                {sourcesSyncProgress?.itemsCount != null && (
+                  <span className="shrink-0 text-[11px] font-medium text-primary tabular-nums">
+                    +{sourcesSyncProgress.itemsCount.toLocaleString()}{" "}
+                    {t("sources.sync.gamesLabel", { defaultValue: "juegos" })}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {props.remoteSources.length > 0 ? (
             <div className="overflow-hidden rounded-xl border border-default-200 bg-default-50">

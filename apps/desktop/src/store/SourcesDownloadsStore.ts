@@ -6,6 +6,7 @@ import {
   listSourceDownloadJobs,
   type SourceDownloadJob,
   type SourceProgressPayload,
+  type SourceSyncProgressPayload,
 } from "@services/tauri/sources.service";
 import { formatGameDisplayName } from "@utils/gameImage";
 import i18n from "@lib/i18n";
@@ -22,9 +23,11 @@ interface SourcesDownloadsStore {
   activeCount: number;
   tombstones: Set<string>;
   aggregateProgress: SourcesAggregate;
+  syncProgress: SourceSyncProgressPayload | null;
   hydrateActive: () => Promise<void>;
   upsertFromPayload: (payload: SourceProgressPayload) => void;
   removeByJobId: (jobId: string) => void;
+  setSyncProgress: (payload: SourceSyncProgressPayload | null) => void;
 }
 
 function isActive(job: SourceDownloadJob): boolean {
@@ -74,6 +77,8 @@ export const useSourcesDownloadsStore = create<SourcesDownloadsStore>((set) => (
   activeCount: 0,
   tombstones: new Set(),
   aggregateProgress: { loaded: 0, total: 0, percent: 0 },
+  syncProgress: null,
+  setSyncProgress: (payload) => set({ syncProgress: payload }),
   hydrateActive: async () => {
     try {
       const jobs = await listSourceDownloadJobs();
@@ -194,4 +199,22 @@ export function initSourcesListeners() {
     void queryClient.invalidateQueries({ queryKey: ["sources-match-detail"] });
     void queryClient.invalidateQueries({ queryKey: ["sources-summary"] });
   });
+
+  let clearSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  listen<SourceSyncProgressPayload>("sources-sync-progress", (ev) => {
+    if (clearSyncTimer) {
+      clearTimeout(clearSyncTimer);
+      clearSyncTimer = null;
+    }
+    useSourcesDownloadsStore.getState().setSyncProgress(ev.payload);
+    if (!ev.payload.inProgress) {
+      clearSyncTimer = setTimeout(() => {
+        useSourcesDownloadsStore.getState().setSyncProgress(null);
+      }, 3000);
+    }
+  });
+}
+
+if (typeof window !== "undefined") {
+  initSourcesListeners();
 }

@@ -2568,5 +2568,19 @@
     "navigateShortcut": "Navegar",
     "openShortcut": "Abrir",
     "closeShortcut": "Cerrar"
+  },
+  "sources": {
+    "sync": {
+      "title": "Sincronizando fuentes",
+      "starting": "Iniciando sincronización…",
+      "checking": "Comprobando catálogo…",
+      "saved": "Guardado ({{count}} juegos)",
+      "unchanged": "Sin cambios",
+      "failed": "Error al sincronizar",
+      "completed": "Sincronización completada",
+      "sourceDefault": "Fuente",
+      "sourcesCountLabel": "fuentes",
+      "gamesLabel": "juegos"
+    }
   }
 }

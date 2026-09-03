@@ -2568,5 +2568,19 @@
     "navigateShortcut": "Navigate",
     "openShortcut": "Open",
     "closeShortcut": "Close"
+  },
+  "sources": {
+    "sync": {
+      "title": "Syncing sources",
+      "starting": "Starting synchronization…",
+      "checking": "Checking catalog…",
+      "saved": "Saved ({{count}} games)",
+      "unchanged": "Up to date",
+      "failed": "Failed to sync",
+      "completed": "Synchronization completed",
+      "sourceDefault": "Source",
+      "sourcesCountLabel": "sources",
+      "gamesLabel": "games"
+    }
   }
 }
