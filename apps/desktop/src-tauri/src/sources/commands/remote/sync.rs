@@ -481,6 +481,17 @@ pub async fn sync_remote_sources(
 
     if !scrapling_jobs.is_empty() {
         let scrapling_sem = Arc::new(Semaphore::new(MAX_CONCURRENT_SCRAPLING));
+        let mut domain_locks: HashMap<String, Arc<tokio::sync::Mutex<()>>> = HashMap::new();
+        for (_, url, _) in &scrapling_jobs {
+            let domain = url::Url::parse(url)
+                .ok()
+                .and_then(|u| u.host_str().map(|s| s.to_string()))
+                .unwrap_or_else(|| url.clone());
+            domain_locks
+                .entry(domain)
+                .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())));
+        }
+
         let mut scrapling_tasks = JoinSet::new();
 
         for (index, url, headers) in scrapling_jobs {
@@ -508,7 +519,17 @@ pub async fn sync_remote_sources(
                 );
             });
 
+            let domain = url::Url::parse(&url)
+                .ok()
+                .and_then(|u| u.host_str().map(|s| s.to_string()))
+                .unwrap_or_else(|| url.clone());
+            let domain_lock = domain_locks.get(&domain).cloned();
+
             scrapling_tasks.spawn(async move {
+                let _domain_guard = match domain_lock {
+                    Some(lock) => Some(lock.lock_owned().await),
+                    None => None,
+                };
                 let result =
                     scrapling_phase(app_clone, url, headers, sem, Some(on_crawler_event)).await;
                 (index, result)

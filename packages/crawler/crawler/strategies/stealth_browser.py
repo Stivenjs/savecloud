@@ -7,6 +7,7 @@ from crawler.core.browser import BrowserManager
 from crawler.core.firewall import FirewallDetector
 from crawler.core.network import RouteInterceptor, is_ad_domain
 from crawler.core.reporter import CrawlerReporter
+from crawler.core.session import SessionManager
 from crawler.extractors.base import BaseExtractor, ExtractionContext
 from crawler.strategies.base import FetchStrategy
 from crawler.utils.page_utils import extract_body
@@ -52,6 +53,22 @@ class StealthBrowserStrategy(FetchStrategy):
 
         def page_action(page):
             CrawlerReporter.report("waiting_download", "Resolving hoster download link...")
+            try:
+                cookies = page.context.cookies()
+                ua = page.evaluate("navigator.userAgent")
+                if cookies and ua:
+                    SessionManager.save_session(url, cookies, ua)
+            except Exception as e:
+                sys.stderr.write(f"[StealthBrowser] Warning capturing cookies: {e}\n")
+
+            if context.expect_json and not context.fetched_text:
+                try:
+                    inner = page.evaluate("() => document.body ? document.body.innerText : ''")
+                    if inner and inner.strip().startswith(("{", "[")):
+                        context.fetched_text = inner.strip()
+                except Exception:
+                    pass
+
             action_result = extractor.page_action(page, context)
             if action_result:
                 context.captured_download_url = action_result
