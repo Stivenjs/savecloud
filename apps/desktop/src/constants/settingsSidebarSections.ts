@@ -10,6 +10,6 @@ export const SETTINGS_SIDEBAR_SECTIONS: ReadonlyArray<{
 }> = [
   { title: "Cuenta y datos", tabKeys: ["account", "cloud"] },
   { title: "Aplicación", tabKeys: ["app", "big-picture"] },
-  { title: "Dispositivos e integraciones", tabKeys: ["integrations", "gamepad", "plugins"] },
+  { title: "Dispositivos e integraciones", tabKeys: ["sources", "integrations", "gamepad", "plugins"] },
   { title: "Sistema", tabKeys: ["updates", "advanced"] },
 ];

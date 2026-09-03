@@ -2,7 +2,18 @@ import { useState, lazy, Suspense, useEffect, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Tab, Tabs } from "@heroui/react";
 import { useTranslation } from "react-i18next";
-import { AppWindow, Bell, Blocks, Cloud, FlaskConical, Gamepad2, Monitor, RefreshCw, User } from "lucide-react";
+import {
+  AppWindow,
+  Bell,
+  Blocks,
+  Cloud,
+  Download,
+  FlaskConical,
+  Gamepad2,
+  Monitor,
+  RefreshCw,
+  User,
+} from "lucide-react";
 import { AutostartCard } from "@features/settings/AutostartCard";
 import { BigPictureModeCard } from "@features/settings/BigPictureModeCard";
 import { ConfigSection } from "@features/settings/ConfigSection";
@@ -23,16 +34,11 @@ import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigationStore } from "@features/input/store";
 import { PluginsSettingsSection } from "@features/settings/plugins/PluginsSettingsSection";
 import { DeveloperModeCard } from "@features/settings/DeveloperModeCard";
-import { SourceInstallSettingsCard } from "@features/settings/SourceInstallSettingsCard";
-import { ProxySettingsCard } from "@features/settings/ProxySettingsCard";
-import { EmulatorIntegrationsCard } from "@features/settings/EmulatorIntegrationsCard";
 import { GamepadTesterCard } from "@features/settings/GamepadTesterCard";
-import { VoiceCommandsCard } from "@features/voice-commands";
 import { GameModeCard } from "@features/settings/GameModeCard";
 import { LowPerformanceModeCard } from "@features/settings/LowPerformanceModeCard";
 import { DisableHardwareAccelerationCard } from "@features/settings/DisableHardwareAccelerationCard";
 import { LanguageSettingsCard } from "@features/settings/LanguageSettingsCard";
-import { AudioOutputSettingsCard } from "@features/settings/AudioOutputSettingsCard";
 import { HealthObservabilityCard } from "@features/settings/HealthObservabilityCard";
 import { CloudDashboardPanel } from "@features/settings/CloudDashboardPanel";
 import { SettingsSidebarAnimatedPanel } from "@features/settings/SettingsSidebarAnimatedPanel";
@@ -43,6 +49,23 @@ import {
   SAVECLOUD_SETTINGS_SELECT_TAB_EVENT,
   type SavecloudSettingsSelectTabPayload,
 } from "@/constants/savecloudCrossWindow";
+import { SourcesTabSkeleton, IntegrationsTabSkeleton } from "@/features/settings/SettingsTabSkeletons";
+
+const SourceInstallSettingsCardLazy = lazy(() =>
+  import("@features/settings/SourceInstallSettingsCard").then((m) => ({ default: m.SourceInstallSettingsCard }))
+);
+const ProxySettingsCardLazy = lazy(() =>
+  import("@features/settings/ProxySettingsCard").then((m) => ({ default: m.ProxySettingsCard }))
+);
+const EmulatorIntegrationsCardLazy = lazy(() =>
+  import("@features/settings/EmulatorIntegrationsCard").then((m) => ({ default: m.EmulatorIntegrationsCard }))
+);
+const VoiceCommandsCardLazy = lazy(() =>
+  import("@features/voice-commands").then((m) => ({ default: m.VoiceCommandsCard }))
+);
+const AudioOutputSettingsCardLazy = lazy(() =>
+  import("@features/settings/AudioOutputSettingsCard").then((m) => ({ default: m.AudioOutputSettingsCard }))
+);
 
 const ReleaseNotesDialogLazy = lazy(() =>
   import("@features/settings/ReleaseNotesDialog").then((module) => ({ default: module.ReleaseNotesDialog }))
@@ -57,6 +80,7 @@ const SETTINGS_TABS: Array<{
   { key: "cloud", label: "Nube", icon: <Cloud size={17} className="opacity-90" /> },
   { key: "app", label: "Inicio y app", icon: <AppWindow size={17} className="opacity-90" /> },
   { key: "big-picture", label: "Big Picture", icon: <Monitor size={17} className="opacity-90" /> },
+  { key: "sources", label: "Fuentes", icon: <Download size={17} className="opacity-90" /> },
   { key: "integrations", label: "Integraciones", icon: <Bell size={17} className="opacity-90" /> },
   { key: "gamepad", label: "Mando", icon: <Gamepad2 size={17} className="opacity-90" /> },
   { key: "plugins", label: "Plugins", icon: <Blocks size={17} className="opacity-90" /> },
@@ -282,13 +306,12 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
             <BigPictureModeCard />
           </div>
         );
-      case "integrations":
+      case "sources":
         return (
-          <div className="grid gap-4 xl:grid-cols-2 items-start">
-            {/* Columna 1: Red y Descarga de Fuentes */}
+          <Suspense fallback={<SourcesTabSkeleton />}>
             <div className="space-y-4">
-              <ProxySettingsCard proxyUrl={proxyUrl} onProxyUrlChange={setProxyUrl} onSave={handleSaveProxyUrl} />
-              <SourceInstallSettingsCard
+              <ProxySettingsCardLazy proxyUrl={proxyUrl} onProxyUrlChange={setProxyUrl} onSave={handleSaveProxyUrl} />
+              <SourceInstallSettingsCardLazy
                 sourceUrl={sourceUrl}
                 remoteSourceUrl={remoteSourceUrl}
                 defaultDownloadDir={defaultSourceDownloadDir}
@@ -320,18 +343,21 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
                 onAutoExtractDownloadsChange={handleAutoExtractDownloadsChange}
               />
             </div>
-
-            {/* Columna 2: Dispositivo e Integraciones de Sistema */}
+          </Suspense>
+        );
+      case "integrations":
+        return (
+          <Suspense fallback={<IntegrationsTabSkeleton />}>
             <div className="space-y-4">
-              <AudioOutputSettingsCard />
+              <AudioOutputSettingsCardLazy />
               <NotificationsCard
                 testingNotification={testingNotification}
                 onTestNotification={handleTestNotification}
               />
-              <VoiceCommandsCard />
-              <EmulatorIntegrationsCard />
+              <VoiceCommandsCardLazy />
+              <EmulatorIntegrationsCardLazy />
             </div>
-          </div>
+          </Suspense>
         );
       case "gamepad":
         return (
