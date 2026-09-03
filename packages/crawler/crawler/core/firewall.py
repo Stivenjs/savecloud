@@ -134,29 +134,31 @@ class TurnstileSolver:
     def solve_if_present(cls, page, timeout_seconds: int = 15) -> bool:
         """Quickly detects if Turnstile is present and attempts to solve it."""
         try:
-            # If already verified/solved, do not report to UI or attempt to re-solve
-            if cls.is_solved(page):
+            
+            if getattr(page, "_turnstile_handled", False):
                 return True
+
+            has_turnstile = (
+                DomHelper.has_iframe_src(page, TURNSTILE_FRAME_SUBSTRING)
+                or DomHelper.exists(page, TURNSTILE_RESPONSE_INPUT)
+            )
+            if not has_turnstile:
+                return False
 
             reported = False
             for sec in range(timeout_seconds):
-                if cls.is_solved(page):
-                    if reported:
-                        CrawlerReporter.report(
-                            "turnstile_solved", "Cloudflare Turnstile verified successfully"
-                        )
-                    return True
-
-                has_turnstile = (
-                    DomHelper.has_iframe_src(page, TURNSTILE_FRAME_SUBSTRING)
-                    or DomHelper.exists(page, TURNSTILE_RESPONSE_INPUT)
-                )
-                if not has_turnstile and sec >= 2:
-                    return False
-
                 if not reported:
                     reported = True
                     CrawlerReporter.report("turnstile", "Resolving Cloudflare Turnstile...")
+
+                if cls.is_solved(page):
+                    CrawlerReporter.report(
+                        "turnstile_solved", "Cloudflare Turnstile verified successfully"
+                    )
+                    sys.stderr.write("[Turnstile] Verified successfully!\n")
+                    setattr(page, "_turnstile_handled", True)
+                    page.wait_for_timeout(600)
+                    return True
 
                 cls.solve(page, reported=True)
 
@@ -165,6 +167,8 @@ class TurnstileSolver:
                         "turnstile_solved", "Cloudflare Turnstile verified successfully"
                     )
                     sys.stderr.write("[Turnstile] Verified successfully!\n")
+                    setattr(page, "_turnstile_handled", True)
+                    page.wait_for_timeout(600)
                     return True
 
                 page.wait_for_timeout(1000)
