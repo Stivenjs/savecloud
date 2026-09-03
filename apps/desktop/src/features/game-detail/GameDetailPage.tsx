@@ -7,6 +7,8 @@ import {
   useRef,
   useState,
   useLayoutEffect,
+  lazy,
+  Suspense,
 } from "react";
 import { pickCandidate, sourceCandidateKey } from "@utils/sourceMatch";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
@@ -39,21 +41,37 @@ import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
 import { RUNNING_STATUS_KEY } from "@hooks/useGameRunningStatus";
 import { LAST_SYNC_QUERY_KEY } from "@hooks/useLastSyncInfo";
 import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";
-import { GameDrawer } from "@features/games/GameDrawer";
-import { GameTorrentDrawer } from "@features/games/GameTorrentDrawer";
-import { FullBackupConfirmModal } from "@features/games/FullBackupConfirmModal";
-import { RestoreBackupModal } from "@features/games/RestoreBackupModal";
-import { SyncPreviewModal } from "@features/games/SyncPreviewModal";
-import { DownloadConflictModal } from "@features/games/DownloadConflictModal";
-import { GameClipsModal } from "@features/games/GameClipsModal";
 import { useGameDetail } from "@/hooks/useGameDetail";
 import { useGameDetailCloudActions } from "@/hooks/useGameDetailCloudActions";
 import { GameDetailHero } from "@features/game-detail/GameDetailHero";
 import { GameDetailActionStrip } from "@features/game-detail/GameDetailActionStrip";
 import { GameDetailSourceHub } from "@features/game-detail/GameDetailSourceHub";
 import { GameDetailSyncSetupBanner } from "@features/game-detail/GameDetailSyncSetupBanner";
-import { InstallModal } from "@features/steam-catalog/components/InstallModal";
 import { useDisclosure } from "@heroui/react";
+
+// Modales y drawers cargados de forma diferida (lazy)
+const GameDrawerLazy = lazy(() => import("@features/games/GameDrawer").then((m) => ({ default: m.GameDrawer })));
+const GameTorrentDrawerLazy = lazy(() =>
+  import("@features/games/GameTorrentDrawer").then((m) => ({ default: m.GameTorrentDrawer }))
+);
+const FullBackupConfirmModalLazy = lazy(() =>
+  import("@features/games/FullBackupConfirmModal").then((m) => ({ default: m.FullBackupConfirmModal }))
+);
+const RestoreBackupModalLazy = lazy(() =>
+  import("@features/games/RestoreBackupModal").then((m) => ({ default: m.RestoreBackupModal }))
+);
+const SyncPreviewModalLazy = lazy(() =>
+  import("@features/games/SyncPreviewModal").then((m) => ({ default: m.SyncPreviewModal }))
+);
+const DownloadConflictModalLazy = lazy(() =>
+  import("@features/games/DownloadConflictModal").then((m) => ({ default: m.DownloadConflictModal }))
+);
+const GameClipsModalLazy = lazy(() =>
+  import("@features/games/GameClipsModal").then((m) => ({ default: m.GameClipsModal }))
+);
+const InstallModalLazy = lazy(() =>
+  import("@features/steam-catalog/components/InstallModal").then((m) => ({ default: m.InstallModal }))
+);
 
 import {
   GameDetailLocalSummary,
@@ -554,76 +572,110 @@ export function GameDetailPage() {
         onInstall={handleInstallFromSources}
       />
 
-      <GameDrawer
-        isOpen={!!gameToEdit}
-        onClose={() => setGameToEdit(null)}
-        onSuccess={() => {
-          scheduleConfigBackupToCloud();
-          void queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
-          setGameToEdit(null);
-        }}
-        mode="edit"
-        game={gameToEdit}
-      />
-      <GameTorrentDrawer
-        isOpen={!!gameForTorrent}
-        onClose={() => setGameForTorrent(null)}
-        game={gameForTorrent}
-        cloudEnabled={hasSyncConfig}
-      />
-      <FullBackupConfirmModal
-        isOpen={!!gameToFullBackupConfirm}
-        onClose={() => setGameToFullBackupConfirm(null)}
-        game={gameToFullBackupConfirm}
-        onConfirm={async () => {
-          if (gameToFullBackupConfirm) {
-            await handleFullBackupUpload(gameToFullBackupConfirm);
-          }
-        }}
-      />
-      <RestoreBackupModal
-        isOpen={!!gameToRestoreBackup}
-        onClose={() => setGameToRestoreBackup(null)}
-        game={gameToRestoreBackup}
-        hasCloudIntegration={hasSyncConfig}
-        onDownloadFromCloud={
-          gameToRestoreBackup && hasSyncConfig
-            ? () => {
-                void requestDownloadFromCloud(gameToRestoreBackup);
+      {gameToEdit && (
+        <Suspense fallback={null}>
+          <GameDrawerLazy
+            isOpen={!!gameToEdit}
+            onClose={() => setGameToEdit(null)}
+            onSuccess={() => {
+              scheduleConfigBackupToCloud();
+              void queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+              setGameToEdit(null);
+            }}
+            mode="edit"
+            game={gameToEdit}
+          />
+        </Suspense>
+      )}
+      {gameForTorrent && (
+        <Suspense fallback={null}>
+          <GameTorrentDrawerLazy
+            isOpen={!!gameForTorrent}
+            onClose={() => setGameForTorrent(null)}
+            game={gameForTorrent}
+            cloudEnabled={hasSyncConfig}
+          />
+        </Suspense>
+      )}
+      {gameToFullBackupConfirm && (
+        <Suspense fallback={null}>
+          <FullBackupConfirmModalLazy
+            isOpen={!!gameToFullBackupConfirm}
+            onClose={() => setGameToFullBackupConfirm(null)}
+            game={gameToFullBackupConfirm}
+            onConfirm={async () => {
+              if (gameToFullBackupConfirm) {
+                await handleFullBackupUpload(gameToFullBackupConfirm);
               }
-            : undefined
-        }
-        isDownloadingFromCloud={Boolean(isDownloading && gameToRestoreBackup && game?.id === gameToRestoreBackup.id)}
-        onSuccess={() => {
-          void queryClient.invalidateQueries({ queryKey: ["game-stats"] });
-          void queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
-        }}
-      />
-      <SyncPreviewModal
-        isOpen={!!downloadPreviewGameId}
-        onClose={() => setDownloadPreviewGameId(null)}
-        type="download"
-        gameId={downloadPreviewGameId ?? ""}
-        onConfirm={async () => {
-          if (!downloadPreviewGameId || !game || game.id !== downloadPreviewGameId) return;
-          await handleDownload(game);
-          setDownloadPreviewGameId(null);
-        }}
-        isLoading={isDownloading && !!downloadPreviewGameId && game?.id === downloadPreviewGameId}
-      />
-      <DownloadConflictModal
-        isOpen={!!downloadConflictState && downloadConflictState.conflicts.length > 0}
-        onClose={() => setDownloadConflictState(null)}
-        gameId={downloadConflictState?.gameId ?? ""}
-        conflicts={downloadConflictState?.conflicts ?? []}
-        onConfirm={async () => {
-          if (!downloadConflictState || !game || game.id !== downloadConflictState.gameId) return;
-          setDownloadConflictState(null);
-          await handleDownload(game);
-        }}
-        isLoading={isDownloading && !!downloadConflictState && game?.id === downloadConflictState.gameId}
-      />
-      <GameClipsModal isOpen={Boolean(gameForClips)} onClose={() => setGameForClips(null)} game={gameForClips} />
+            }}
+          />
+        </Suspense>
+      )}
+      {gameToRestoreBackup && (
+        <Suspense fallback={null}>
+          <RestoreBackupModalLazy
+            isOpen={!!gameToRestoreBackup}
+            onClose={() => setGameToRestoreBackup(null)}
+            game={gameToRestoreBackup}
+            hasCloudIntegration={hasSyncConfig}
+            onDownloadFromCloud={
+              gameToRestoreBackup && hasSyncConfig
+                ? () => {
+                    void requestDownloadFromCloud(gameToRestoreBackup);
+                  }
+                : undefined
+            }
+            isDownloadingFromCloud={Boolean(
+              isDownloading && gameToRestoreBackup && game?.id === gameToRestoreBackup.id
+            )}
+            onSuccess={() => {
+              void queryClient.invalidateQueries({ queryKey: ["game-stats"] });
+              void queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+            }}
+          />
+        </Suspense>
+      )}
+      {downloadPreviewGameId && (
+        <Suspense fallback={null}>
+          <SyncPreviewModalLazy
+            isOpen={!!downloadPreviewGameId}
+            onClose={() => setDownloadPreviewGameId(null)}
+            type="download"
+            gameId={downloadPreviewGameId ?? ""}
+            onConfirm={async () => {
+              if (!downloadPreviewGameId || !game || game.id !== downloadPreviewGameId) return;
+              await handleDownload(game);
+              setDownloadPreviewGameId(null);
+            }}
+            isLoading={isDownloading && !!downloadPreviewGameId && game?.id === downloadPreviewGameId}
+          />
+        </Suspense>
+      )}
+      {downloadConflictState && downloadConflictState.conflicts.length > 0 && (
+        <Suspense fallback={null}>
+          <DownloadConflictModalLazy
+            isOpen={!!downloadConflictState && downloadConflictState.conflicts.length > 0}
+            onClose={() => setDownloadConflictState(null)}
+            gameId={downloadConflictState?.gameId ?? ""}
+            conflicts={downloadConflictState?.conflicts ?? []}
+            onConfirm={async () => {
+              if (!downloadConflictState || !game || game.id !== downloadConflictState.gameId) return;
+              setDownloadConflictState(null);
+              await handleDownload(game);
+            }}
+            isLoading={isDownloading && !!downloadConflictState && game?.id === downloadConflictState.gameId}
+          />
+        </Suspense>
+      )}
+      {gameForClips && (
+        <Suspense fallback={null}>
+          <GameClipsModalLazy
+            isOpen={Boolean(gameForClips)}
+            onClose={() => setGameForClips(null)}
+            game={gameForClips}
+          />
+        </Suspense>
+      )}
 
       {steamDetails ? (
         <div ref={tabsShellRef} className="scroll-mt-6">
@@ -686,21 +738,23 @@ export function GameDetailPage() {
         </section>
       )}
       {installingFromSource && game ? (
-        <InstallModal
-          isOpen={isInstallModalOpen}
-          onOpenChange={onInstallModalOpenChange}
-          gameName={displayName}
-          gameSizeStr={installingFromSource.size}
-          protocols={installingFromSource.protocols}
-          uris={pickCandidate(sourceCandidates, selectedSourceKey)?.uris}
-          game={game}
-          mediaBySteamAppId={installModalMediaBySteamAppId}
-          peerOffers={peerOffersHook.offers}
-          selectedPeerDeviceId={peerOffersHook.selectedDeviceId}
-          onSelectPeerDevice={peerOffersHook.setSelectedDeviceId}
-          onConfirm={handleConfirmInstall}
-          onConfirmPeer={handleConfirmPeerInstall}
-        />
+        <Suspense fallback={null}>
+          <InstallModalLazy
+            isOpen={isInstallModalOpen}
+            onOpenChange={onInstallModalOpenChange}
+            gameName={displayName}
+            gameSizeStr={installingFromSource.size}
+            protocols={installingFromSource.protocols}
+            uris={pickCandidate(sourceCandidates, selectedSourceKey)?.uris}
+            game={game}
+            mediaBySteamAppId={installModalMediaBySteamAppId}
+            peerOffers={peerOffersHook.offers}
+            selectedPeerDeviceId={peerOffersHook.selectedDeviceId}
+            onSelectPeerDevice={peerOffersHook.setSelectedDeviceId}
+            onConfirm={handleConfirmInstall}
+            onConfirmPeer={handleConfirmPeerInstall}
+          />
+        </Suspense>
       ) : null}
     </div>
   );

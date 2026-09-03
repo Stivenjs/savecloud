@@ -1,26 +1,45 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Spinner } from "@heroui/react";
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+import { Button } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import { RefreshCw } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import { useNavigate } from "react-router-dom";
-import { DownloadAllConflictModal } from "@features/games/DownloadAllConflictModal";
-import { GameDrawer } from "@features/games/GameDrawer";
-import { GameTorrentDrawer } from "@features/games/GameTorrentDrawer";
-import { DownloadConflictModal } from "@features/games/DownloadConflictModal";
-import { FullBackupConfirmModal } from "@features/games/FullBackupConfirmModal";
-import { RestoreBackupModal } from "@features/games/RestoreBackupModal";
-import { SyncPreviewModal } from "@features/games/SyncPreviewModal";
 import { GamesFilters } from "@features/games/GamesFilters";
 import { GamesList } from "@features/games/GamesList";
 import { GamesPageHeader } from "@features/games/GamesPageHeader";
-/* import { OperationErrorCard } from "@features/games/OperationErrorCard"; */
-import { BulkActionConfirmModal } from "@features/games/BulkActionConfirmModal";
-import { RemoveGameModal } from "@features/games/RemoveGameModal";
-import { ScanModal } from "@features/games/ScanModal";
-import { RestoreFromCloudWizardModal } from "@features/games/RestoreFromCloudWizardModal";
-import { TrashModal } from "@features/games/TrashModal";
+import { GamesPageSkeleton } from "@features/games/GamesPageSkeleton";
+
+const DownloadAllConflictModalLazy = lazy(() =>
+  import("@features/games/DownloadAllConflictModal").then((m) => ({ default: m.DownloadAllConflictModal }))
+);
+const GameDrawerLazy = lazy(() => import("@features/games/GameDrawer").then((m) => ({ default: m.GameDrawer })));
+const GameTorrentDrawerLazy = lazy(() =>
+  import("@features/games/GameTorrentDrawer").then((m) => ({ default: m.GameTorrentDrawer }))
+);
+const DownloadConflictModalLazy = lazy(() =>
+  import("@features/games/DownloadConflictModal").then((m) => ({ default: m.DownloadConflictModal }))
+);
+const FullBackupConfirmModalLazy = lazy(() =>
+  import("@features/games/FullBackupConfirmModal").then((m) => ({ default: m.FullBackupConfirmModal }))
+);
+const RestoreBackupModalLazy = lazy(() =>
+  import("@features/games/RestoreBackupModal").then((m) => ({ default: m.RestoreBackupModal }))
+);
+const SyncPreviewModalLazy = lazy(() =>
+  import("@features/games/SyncPreviewModal").then((m) => ({ default: m.SyncPreviewModal }))
+);
+const BulkActionConfirmModalLazy = lazy(() =>
+  import("@features/games/BulkActionConfirmModal").then((m) => ({ default: m.BulkActionConfirmModal }))
+);
+const RemoveGameModalLazy = lazy(() =>
+  import("@features/games/RemoveGameModal").then((m) => ({ default: m.RemoveGameModal }))
+);
+const ScanModalLazy = lazy(() => import("@features/games/ScanModal").then((m) => ({ default: m.ScanModal })));
+const RestoreFromCloudWizardModalLazy = lazy(() =>
+  import("@features/games/RestoreFromCloudWizardModal").then((m) => ({ default: m.RestoreFromCloudWizardModal }))
+);
+const TrashModalLazy = lazy(() => import("@features/games/TrashModal").then((m) => ({ default: m.TrashModal })));
 import { useGamesPage } from "@/hooks/useGamesPage";
 import { useGameStats } from "@hooks/useGameStats";
 import { scheduleConfigBackupToCloud } from "@services/tauri";
@@ -213,12 +232,7 @@ export function GamesPage() {
   });
 
   if (loading) {
-    return (
-      <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4">
-        <Spinner size="lg" color="primary" />
-        <p className="text-default-500">{t("common.loading")}</p>
-      </div>
-    );
+    return <GamesPageSkeleton />;
   }
 
   if (error) {
@@ -294,146 +308,200 @@ export function GamesPage() {
             </div>
           </div>
         )}
-        <GameDrawer
-          isOpen={addModalOpen}
-          onClose={() => setAddModalOpen(false)}
-          onSuccess={() => {
-            scheduleConfigBackupToCloud();
-            handleRefresh?.();
-          }}
-          mode="add"
-          initialPaths={addModalInitial.paths}
-          suggestedId={addModalInitial.suggestedId}
-        />
-        {restoreFromCloudGameId && (
-          <RestoreFromCloudWizardModal
-            gameId={restoreFromCloudGameId}
-            isOpen={!!restoreFromCloudGameId}
-            onClose={handleCloseRestoreFromCloud}
-            onLinkFolder={(folderPath) => linkCloudGameFolder(restoreFromCloudGameId, folderPath)}
-            onRequestScanAssist={() => {
-              const gid = restoreFromCloudGameId;
-              if (!gid) return;
-              pushLayer("scan-modal", "scan-search-input");
-              openScanAssistForCloudRestore(gid);
-            }}
-            onDownloadNow={() => {
-              const gid = restoreFromCloudGameId;
-              if (!gid) return;
-              handleCloseRestoreFromCloud();
-              restoreWizardTriggerDownload(gid);
-            }}
-          />
+        {addModalOpen && (
+          <Suspense fallback={null}>
+            <GameDrawerLazy
+              isOpen={addModalOpen}
+              onClose={() => setAddModalOpen(false)}
+              onSuccess={() => {
+                scheduleConfigBackupToCloud();
+                handleRefresh?.();
+              }}
+              mode="add"
+              initialPaths={addModalInitial.paths}
+              suggestedId={addModalInitial.suggestedId}
+            />
+          </Suspense>
         )}
-        <ScanModal
-          isOpen={scanModalOpen}
-          onClose={() => {
-            setConfigureFromCloudGameId(null);
-            setScanModalOpen(false);
-            popLayer();
-          }}
-          onSelectCandidate={handleScanSelect}
-          configuredGames={config?.games ?? []}
-        />
-        <RemoveGameModal
-          isOpen={!!gameToRemove}
-          onClose={() => setGameToRemove(null)}
-          game={gameToRemove}
-          onConfirm={handleConfirmRemove}
-          onClearCloudOnly={handleConfirmClearCloudSaves}
-          hasCloudIntegration={hasSyncConfig}
-        />
-        <TrashModal isOpen={trashModalOpen} onClose={() => setTrashModalOpen(false)} onRestored={handleRefresh} />
-        <DownloadConflictModal
-          isOpen={!!downloadConflictGame}
-          onClose={handleCloseDownloadConflict}
-          gameId={downloadConflictGame?.id ?? ""}
-          conflicts={downloadConflicts}
-          onConfirm={handleConfirmDownloadConflict}
-          isLoading={!!downloading && downloading === downloadConflictGame?.id}
-        />
-        <BulkActionConfirmModal
-          isOpen={!!bulkConfirm}
-          type={bulkConfirm?.type ?? "sync"}
-          count={bulkConfirm?.count ?? 0}
-          gamesOverSizeThreshold={
-            bulkConfirm?.type === "sync" && config?.games?.length
-              ? countGamesOverSizeThreshold(
-                  config.games.map((g: ConfiguredGame) => g.id),
-                  statsByGameId as unknown as Map<string, { localSizeBytes: number }>
-                )
-              : 0
-          }
-          onConfirm={handleConfirmBulkAction}
-          onClose={handleCancelBulkAction}
-        />
-        <DownloadAllConflictModal
-          isOpen={downloadAllConflictGames.length > 0}
-          onClose={handleCloseDownloadAllConflict}
-          gamesWithConflicts={downloadAllConflictGames}
-          onConfirm={handleConfirmDownloadAllConflict}
-          isLoading={downloading === "all"}
-        />
-        <SyncPreviewModal
-          isOpen={!!syncPreviewGame && !!syncPreviewType}
-          onClose={handleCloseSyncPreview}
-          type={syncPreviewType ?? "upload"}
-          gameId={syncPreviewGame?.id ?? ""}
-          onConfirm={handleConfirmSyncPreview}
-          onFullBackupInstead={
-            syncPreviewType === "upload" && syncPreviewGame
-              ? () => {
-                  handleCloseSyncPreview();
-                  setGameToFullBackupConfirm(syncPreviewGame);
+        {restoreFromCloudGameId && (
+          <Suspense fallback={null}>
+            <RestoreFromCloudWizardModalLazy
+              gameId={restoreFromCloudGameId}
+              isOpen={!!restoreFromCloudGameId}
+              onClose={handleCloseRestoreFromCloud}
+              onLinkFolder={(folderPath) => linkCloudGameFolder(restoreFromCloudGameId, folderPath)}
+              onRequestScanAssist={() => {
+                const gid = restoreFromCloudGameId;
+                if (!gid) return;
+                pushLayer("scan-modal", "scan-search-input");
+                openScanAssistForCloudRestore(gid);
+              }}
+              onDownloadNow={() => {
+                const gid = restoreFromCloudGameId;
+                if (!gid) return;
+                handleCloseRestoreFromCloud();
+                restoreWizardTriggerDownload(gid);
+              }}
+            />
+          </Suspense>
+        )}
+        {scanModalOpen && (
+          <Suspense fallback={null}>
+            <ScanModalLazy
+              isOpen={scanModalOpen}
+              onClose={() => {
+                setConfigureFromCloudGameId(null);
+                setScanModalOpen(false);
+                popLayer();
+              }}
+              onSelectCandidate={handleScanSelect}
+              configuredGames={config?.games ?? []}
+            />
+          </Suspense>
+        )}
+        {gameToRemove && (
+          <Suspense fallback={null}>
+            <RemoveGameModalLazy
+              isOpen={!!gameToRemove}
+              onClose={() => setGameToRemove(null)}
+              game={gameToRemove}
+              onConfirm={handleConfirmRemove}
+              onClearCloudOnly={handleConfirmClearCloudSaves}
+              hasCloudIntegration={hasSyncConfig}
+            />
+          </Suspense>
+        )}
+        {trashModalOpen && (
+          <Suspense fallback={null}>
+            <TrashModalLazy
+              isOpen={trashModalOpen}
+              onClose={() => setTrashModalOpen(false)}
+              onRestored={handleRefresh}
+            />
+          </Suspense>
+        )}
+        {downloadConflictGame && (
+          <Suspense fallback={null}>
+            <DownloadConflictModalLazy
+              isOpen={!!downloadConflictGame}
+              onClose={handleCloseDownloadConflict}
+              gameId={downloadConflictGame?.id ?? ""}
+              conflicts={downloadConflicts}
+              onConfirm={handleConfirmDownloadConflict}
+              isLoading={!!downloading && downloading === downloadConflictGame?.id}
+            />
+          </Suspense>
+        )}
+        {bulkConfirm && (
+          <Suspense fallback={null}>
+            <BulkActionConfirmModalLazy
+              isOpen={!!bulkConfirm}
+              type={bulkConfirm?.type ?? "sync"}
+              count={bulkConfirm?.count ?? 0}
+              gamesOverSizeThreshold={
+                bulkConfirm?.type === "sync" && config?.games?.length
+                  ? countGamesOverSizeThreshold(
+                      config.games.map((g: ConfiguredGame) => g.id),
+                      statsByGameId as unknown as Map<string, { localSizeBytes: number }>
+                    )
+                  : 0
+              }
+              onConfirm={handleConfirmBulkAction}
+              onClose={handleCancelBulkAction}
+            />
+          </Suspense>
+        )}
+        {downloadAllConflictGames.length > 0 && (
+          <Suspense fallback={null}>
+            <DownloadAllConflictModalLazy
+              isOpen={downloadAllConflictGames.length > 0}
+              onClose={handleCloseDownloadAllConflict}
+              gamesWithConflicts={downloadAllConflictGames}
+              onConfirm={handleConfirmDownloadAllConflict}
+              isLoading={downloading === "all"}
+            />
+          </Suspense>
+        )}
+        {syncPreviewGame && syncPreviewType && (
+          <Suspense fallback={null}>
+            <SyncPreviewModalLazy
+              isOpen={!!syncPreviewGame && !!syncPreviewType}
+              onClose={handleCloseSyncPreview}
+              type={syncPreviewType ?? "upload"}
+              gameId={syncPreviewGame?.id ?? ""}
+              onConfirm={handleConfirmSyncPreview}
+              onFullBackupInstead={
+                syncPreviewType === "upload" && syncPreviewGame
+                  ? () => {
+                      handleCloseSyncPreview();
+                      setGameToFullBackupConfirm(syncPreviewGame);
+                    }
+                  : undefined
+              }
+              isLoading={
+                (!!syncing && syncing === syncPreviewGame?.id) || (!!downloading && downloading === syncPreviewGame?.id)
+              }
+            />
+          </Suspense>
+        )}
+        {gameToFullBackupConfirm && (
+          <Suspense fallback={null}>
+            <FullBackupConfirmModalLazy
+              isOpen={!!gameToFullBackupConfirm}
+              onClose={() => setGameToFullBackupConfirm(null)}
+              game={gameToFullBackupConfirm}
+              onConfirm={async () => {
+                if (gameToFullBackupConfirm) {
+                  await handleFullBackupUpload(gameToFullBackupConfirm);
                 }
-              : undefined
-          }
-          isLoading={
-            (!!syncing && syncing === syncPreviewGame?.id) || (!!downloading && downloading === syncPreviewGame?.id)
-          }
-        />
-        <FullBackupConfirmModal
-          isOpen={!!gameToFullBackupConfirm}
-          onClose={() => setGameToFullBackupConfirm(null)}
-          game={gameToFullBackupConfirm}
-          onConfirm={async () => {
-            if (gameToFullBackupConfirm) {
-              await handleFullBackupUpload(gameToFullBackupConfirm);
-            }
-          }}
-        />
-        <RestoreBackupModal
-          isOpen={!!gameToRestoreBackup}
-          onClose={handleCloseRestoreBackup}
-          game={gameToRestoreBackup}
-          onSuccess={handleRefresh}
-          hasCloudIntegration={hasSyncConfig}
-          onDownloadFromCloud={
-            gameToRestoreBackup && hasSyncConfig
-              ? () => {
-                  void handleDownloadOne(gameToRestoreBackup);
-                }
-              : undefined
-          }
-          isDownloadingFromCloud={!!(gameToRestoreBackup && downloading === gameToRestoreBackup.id)}
-        />
-        <GameDrawer
-          isOpen={!!gameToEdit}
-          onClose={() => setGameToEdit(null)}
-          onSuccess={() => {
-            scheduleConfigBackupToCloud();
-            handleRefresh();
-            setGameToEdit(null);
-          }}
-          mode="edit"
-          game={gameToEdit}
-        />
-        <GameTorrentDrawer
-          isOpen={!!gameForTorrent}
-          onClose={() => setGameForTorrent(null)}
-          game={gameForTorrent}
-          cloudEnabled={hasSyncConfig}
-        />
+              }}
+            />
+          </Suspense>
+        )}
+        {gameToRestoreBackup && (
+          <Suspense fallback={null}>
+            <RestoreBackupModalLazy
+              isOpen={!!gameToRestoreBackup}
+              onClose={handleCloseRestoreBackup}
+              game={gameToRestoreBackup}
+              onSuccess={handleRefresh}
+              hasCloudIntegration={hasSyncConfig}
+              onDownloadFromCloud={
+                gameToRestoreBackup && hasSyncConfig
+                  ? () => {
+                      void handleDownloadOne(gameToRestoreBackup);
+                    }
+                  : undefined
+              }
+              isDownloadingFromCloud={!!(gameToRestoreBackup && downloading === gameToRestoreBackup.id)}
+            />
+          </Suspense>
+        )}
+        {gameToEdit && (
+          <Suspense fallback={null}>
+            <GameDrawerLazy
+              isOpen={!!gameToEdit}
+              onClose={() => setGameToEdit(null)}
+              onSuccess={() => {
+                scheduleConfigBackupToCloud();
+                handleRefresh();
+                setGameToEdit(null);
+              }}
+              mode="edit"
+              game={gameToEdit}
+            />
+          </Suspense>
+        )}
+        {gameForTorrent && (
+          <Suspense fallback={null}>
+            <GameTorrentDrawerLazy
+              isOpen={!!gameForTorrent}
+              onClose={() => setGameForTorrent(null)}
+              game={gameForTorrent}
+              cloudEnabled={hasSyncConfig}
+            />
+          </Suspense>
+        )}
         <motion.div
           layout={bigPictureConsole ? "position" : false}
           transition={{ layout: layoutShiftTransition }}

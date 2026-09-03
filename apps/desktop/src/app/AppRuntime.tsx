@@ -76,8 +76,12 @@ interface AppRuntimeProps {
   hideTitleBar?: boolean;
 }
 
+import { lazy, Suspense } from "react";
 import { StreamingOverlay } from "@components/streaming/StreamingOverlay";
-import { StreamingDryRunMetricsModal } from "@features/streaming";
+
+const StreamingDryRunMetricsModalLazy = lazy(() =>
+  import("@features/streaming").then((m) => ({ default: m.StreamingDryRunMetricsModal }))
+);
 
 export function AppRuntime({ hideTitleBar = false }: AppRuntimeProps) {
   useProfileSessionHydration();
@@ -88,7 +92,9 @@ export function AppRuntime({ hideTitleBar = false }: AppRuntimeProps) {
       <TrayActionsListener />
       <UnsyncedSavesModalWithProgress />
       <StreamingOverlay />
-      <StreamingDryRunMetricsModal />
+      <Suspense fallback={null}>
+        <StreamingDryRunMetricsModalLazy />
+      </Suspense>
 
       <HashRouter>
         <AppContent hideTitleBar={hideTitleBar} />
