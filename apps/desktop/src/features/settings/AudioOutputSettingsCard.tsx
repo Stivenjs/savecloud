@@ -1,13 +1,14 @@
 /**
  * @file AudioOutputSettingsCard.tsx
- * @description Tarjeta de configuración para la selección multiplataforma del dispositivo de salida de sonido.
+ * @description Tarjeta de configuración para la selección multiplataforma del dispositivo de salida de sonido con TanStack Query.
  */
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import { Card, CardBody, Select, SelectItem } from "@heroui/react";
 import { Volume2 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastError, toastSuccess } from "@utils/toast";
 
 export interface AudioOutputDeviceItem {
@@ -20,45 +21,72 @@ interface SelectOption {
   label: string;
 }
 
+const AUDIO_OUTPUT_QUERY_KEYS = {
+  devices: ["audio-output-devices"] as const,
+  active: ["audio-output-device-active"] as const,
+};
+
+async function fetchAudioOutputDevices(): Promise<AudioOutputDeviceItem[]> {
+  const list = await invoke<AudioOutputDeviceItem[]>("list_audio_output_devices");
+  return list ?? [];
+}
+
+async function fetchActiveAudioOutputDevice(): Promise<string> {
+  const active = await invoke<string | null>("get_audio_output_device");
+  return active || "default";
+}
+
+async function setAudioOutputDevice(key: string): Promise<string> {
+  const deviceName = key === "default" ? null : key;
+  await invoke("set_audio_output_device", { deviceName });
+  return key;
+}
+
 export function AudioOutputSettingsCard() {
   const { t } = useTranslation();
-  const [devices, setDevices] = useState<AudioOutputDeviceItem[]>([]);
-  const [selectedDevice, setSelectedDevice] = useState<string>("default");
-  const [loading, setLoading] = useState<boolean>(true);
+  const queryClient = useQueryClient();
 
-  const loadAudioDevices = useCallback(async () => {
-    try {
-      setLoading(true);
-      const list = await invoke<AudioOutputDeviceItem[]>("list_audio_output_devices");
-      const active = await invoke<string | null>("get_audio_output_device");
+  const { data: devices = [], isLoading: loadingDevices } = useQuery({
+    queryKey: AUDIO_OUTPUT_QUERY_KEYS.devices,
+    queryFn: fetchAudioOutputDevices,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
 
-      setDevices(list || []);
-      setSelectedDevice(active || "default");
-    } catch (e) {
-      console.error("[AudioSettings] Error al cargar dispositivos de sonido:", e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data: selectedDevice = "default", isLoading: loadingActive } = useQuery({
+    queryKey: AUDIO_OUTPUT_QUERY_KEYS.active,
+    queryFn: fetchActiveAudioOutputDevice,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
 
-  useEffect(() => {
-    loadAudioDevices();
-  }, [loadAudioDevices]);
-
-  const handleChange = async (key: string) => {
-    try {
-      const deviceName = key === "default" ? null : key;
-      await invoke("set_audio_output_device", { deviceName });
-      setSelectedDevice(key);
+  const { mutate: handleChangeDevice, isPending: updating } = useMutation({
+    mutationFn: setAudioOutputDevice,
+    onMutate: async (newKey: string) => {
+      await queryClient.cancelQueries({ queryKey: AUDIO_OUTPUT_QUERY_KEYS.active });
+      const previous = queryClient.getQueryData<string>(AUDIO_OUTPUT_QUERY_KEYS.active);
+      queryClient.setQueryData<string>(AUDIO_OUTPUT_QUERY_KEYS.active, newKey);
+      return { previous };
+    },
+    onSuccess: () => {
       toastSuccess(t("settings.audioOutput.deviceUpdated", "Dispositivo de sonido actualizado correctamente"));
-    } catch (e) {
+    },
+    onError: (e, _newKey, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(AUDIO_OUTPUT_QUERY_KEYS.active, context.previous);
+      }
       toastError(
         e instanceof Error
           ? e.message
           : t("settings.audioOutput.deviceUpdateError", "Error al cambiar dispositivo de sonido")
       );
-    }
-  };
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: AUDIO_OUTPUT_QUERY_KEYS.active });
+    },
+  });
+
+  const loading = loadingDevices || loadingActive || updating;
 
   const selectOptions: SelectOption[] = useMemo(() => {
     const defaultSuffix = t("settings.audioOutput.defaultSuffix", " (Predeterminado)");
@@ -97,7 +125,11 @@ export function AudioOutputSettingsCard() {
             items={selectOptions}
             selectedKeys={[selectedDevice]}
             isDisabled={loading}
-            onChange={(e) => handleChange(e.target.value)}
+            onChange={(e) => {
+              if (e.target.value) {
+                handleChangeDevice(e.target.value);
+              }
+            }}
             className="w-full sm:max-w-65"
             disallowEmptySelection
             size="sm">
