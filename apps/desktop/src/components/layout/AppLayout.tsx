@@ -26,7 +26,13 @@ import { XboxTopHeader } from "@components/layout/XboxTopHeader";
 import type { ConfiguredGame } from "@app-types/config";
 import type { NavItem } from "@components/layout/Sidebar";
 
+import { MenuGamesList } from "@components/layout/Menugameslist";
+import type { StaggeredMenuItem } from "@components/external/StaggeredMenu";
+
 const ProfileDrawer = lazy(() => import("@features/profile/ProfileDrawer").then((m) => ({ default: m.ProfileDrawer })));
+const StaggeredMenu = lazy(() =>
+  import("@components/external/StaggeredMenu").then((m) => ({ default: m.StaggeredMenu }))
+);
 
 /**
  * Props del componente {@link AppLayout}.
@@ -54,7 +60,7 @@ interface AppLayoutProps {
  * - {@link ProfileDrawer}: Drawer de perfil y estadísticas de usuario.
  * - {@link CommandPaletteModal}: Buscador rápido global activado con `Ctrl+K`.
  */
-export function AppLayout({ children, hideTitleBar = false }: AppLayoutProps) {
+export function AppLayout({ navItems, games = [], onMenuGameClick, children, hideTitleBar = false }: AppLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -141,6 +147,23 @@ export function AppLayout({ children, hideTitleBar = false }: AppLayoutProps) {
     [location.pathname, navigate]
   );
 
+  const staggeredMenuItems: StaggeredMenuItem[] = useMemo(() => {
+    return navItems.map((item) => ({
+      id: item.id,
+      label: item.label,
+      ariaLabel: item.label,
+      link: item.id,
+      icon: item.icon,
+    }));
+  }, [navItems]);
+
+  const handleStaggeredItemClick = useCallback(
+    (item: StaggeredMenuItem) => {
+      handleNavigation(item.link);
+    },
+    [handleNavigation]
+  );
+
   const canGoBack = location.pathname !== "/";
   const handleGoBack = useCallback(() => {
     const handled = useShellUiStore.getState().dispatchBackNavigation();
@@ -200,6 +223,31 @@ export function AppLayout({ children, hideTitleBar = false }: AppLayoutProps) {
           onOpenProfile={handleOpenProfile}
           onIntentOpenProfile={prefetchProfileDrawer}
         />
+      )}
+
+      {/* Menú escalonado con lista integrada de juegos para Modo Consola */}
+      {hideTitleBar && (
+        <Suspense fallback={null}>
+          <StaggeredMenu
+            isFixed
+            position="left"
+            bigPictureMode
+            closeOnClickAway
+            hideFloatingHeader
+            items={staggeredMenuItems}
+            onItemClick={handleStaggeredItemClick}
+            panelSection={
+              <MenuGamesList
+                games={games}
+                onGameClick={(game) => {
+                  onMenuGameClick?.(game);
+                  useShellUiStore.getState().requestCloseSideMenu();
+                }}
+                bigPictureConsole
+              />
+            }
+          />
+        </Suspense>
       )}
 
       {/* Contenido principal */}
