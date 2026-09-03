@@ -36,6 +36,13 @@ class TestExtractorRegistry(unittest.TestCase):
         ext_mirror = ExtractorRegistry.resolve("https://bzzhr.co/abc123")
         self.assertIsInstance(ext_mirror, BuzzheavierExtractor)
 
+    def test_onefichier_resolved(self):
+        from crawler.extractors.onefichier import OneFichierExtractor
+        ext = ExtractorRegistry.resolve("https://1fichier.com/?041pxek1ck5xeedsv2a2")
+        self.assertIsInstance(ext, OneFichierExtractor)
+        ext_mirror = ExtractorRegistry.resolve("https://dl4free.com/?abc123xyz")
+        self.assertIsInstance(ext_mirror, OneFichierExtractor)
+
     def test_unknown_host_resolves_to_generic(self):
         ext = ExtractorRegistry.resolve("https://unknownhost.org/download")
         self.assertIsInstance(ext, GenericExtractor)

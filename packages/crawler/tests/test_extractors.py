@@ -249,6 +249,80 @@ class TestExtractors(unittest.TestCase):
             self.assertEqual(result, "https://buzzheavier.com/dl/final_token")
             self.assertEqual(context.captured_download_url, "https://buzzheavier.com/dl/final_token")
 
+    def test_onefichier_matches(self):
+        from crawler.extractors.onefichier import OneFichierExtractor
+        ext = OneFichierExtractor()
+        self.assertTrue(ext.matches("https://1fichier.com/?041pxek1ck5xeedsv2a2"))
+        self.assertTrue(ext.matches("https://dl4free.com/?abc123xyz"))
+        self.assertTrue(ext.matches("https://desfichiers.com/?test"))
+        self.assertFalse(ext.matches("https://google.com"))
+        self.assertFalse(ext.matches("https://example.com/1fichier"))
+
+    def test_onefichier_on_response(self):
+        from crawler.extractors.onefichier import OneFichierExtractor
+        ext = OneFichierExtractor()
+        context = ExtractionContext(target_url="https://1fichier.com/?041pxek1ck5xeedsv2a2")
+
+        # 1. Direct storage URL (a-1.1fichier.com)
+        resp1 = MagicMock()
+        resp1.url = "https://a-5.1fichier.com/c12345678"
+        resp1.headers = {}
+        ext.on_response(resp1, context)
+        self.assertEqual(context.captured_download_url, "https://a-5.1fichier.com/c12345678")
+
+        # 2. Location header pointing to storage
+        context.captured_download_url = None
+        resp2 = MagicMock()
+        resp2.url = "https://1fichier.com/?041pxek1ck5xeedsv2a2"
+        resp2.headers = {"location": "https://a-10.1fichier.com/c87654321"}
+        ext.on_response(resp2, context)
+        self.assertEqual(context.captured_download_url, "https://a-10.1fichier.com/c87654321")
+
+    def test_onefichier_on_download(self):
+        from crawler.extractors.onefichier import OneFichierExtractor
+        ext = OneFichierExtractor()
+        context = ExtractionContext(target_url="https://1fichier.com/?041pxek1ck5xeedsv2a2")
+
+        download = MagicMock()
+        download.url = "https://a-5.1fichier.com/c12345678"
+        ext.on_download(download, context)
+        self.assertEqual(context.captured_download_url, "https://a-5.1fichier.com/c12345678")
+        download.cancel.assert_called_once()
+
+    def test_onefichier_extract_from_content_rate_limited(self):
+        from crawler.extractors.onefichier import OneFichierExtractor
+        ext = OneFichierExtractor()
+        context = ExtractionContext(target_url="https://1fichier.com/?041pxek1ck5xeedsv2a2")
+
+        html = '<div class="ct_warn">You must wait 59 minutes before downloading another file</div>'
+        result = ext.extract_from_content(html, context)
+        self.assertIsNone(result)
+        self.assertIsNone(context.captured_download_url)
+
+    def test_onefichier_extract_from_content_fast_fetch(self):
+        from crawler.extractors.onefichier import OneFichierExtractor
+        ext = OneFichierExtractor()
+        context = ExtractionContext(target_url="https://1fichier.com/?041pxek1ck5xeedsv2a2")
+
+        initial_html = """
+        <span style="font-weight:bold">OUTRIDERS-SteamRIP.com.rar</span>
+        <td>44.42 GB</td>
+        <input type="submit" value="Start download">
+        """
+        post_response_html = """
+        <a class="ok btn-general btn-orange" href="https://a-2.1fichier.com/c999888777">Click here to download</a>
+        """
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = post_response_html.encode("utf-8")
+        mock_resp.__enter__.return_value = mock_resp
+
+        with unittest.mock.patch("urllib.request.urlopen", return_value=mock_resp):
+            result = ext.extract_from_content(initial_html, context)
+            self.assertEqual(result, "https://a-2.1fichier.com/c999888777")
+            self.assertEqual(context.captured_download_url, "https://a-2.1fichier.com/c999888777")
+            self.assertEqual(context.metadata.get("fileName"), "OUTRIDERS-SteamRIP.com.rar")
+
     def test_generic_matches_anything(self):
         ext = GenericExtractor()
         self.assertTrue(ext.matches("https://anyrandomhost.org/download"))
