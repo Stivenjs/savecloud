@@ -12,7 +12,7 @@ from crawler.utils.page_utils import extract_body
 
 
 class StealthBrowserStrategy(FetchStrategy):
-    """Nivel 2: Navegador headless indetectable con bypass de Cloudflare y listeners de red."""
+    """Level 2: Undetectable headless browser with Cloudflare bypass and network listeners."""
 
     def execute(self, context: ExtractionContext, extractor: BaseExtractor) -> str | None:
         stealthy_fetcher = BrowserManager.get_stealthy_fetcher()
