@@ -135,6 +135,7 @@ async fn fetch_page_token(
     client: &reqwest::Client,
     page_url: &str,
     cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    on_event: Option<crate::sources::commands::fetch::CrawlerEventCallback>,
 ) -> Result<String, HosterError> {
     // 1. Intento nativo rápido (~50-100ms)
     let native_res = async {
@@ -157,7 +158,14 @@ async fn fetch_page_token(
         Err(native_err) => {
             if let Some(app) = app {
                 log::info!("rootz: fetch_page_token nativo falló ({native_err:?}), intentando Scrapling fallback");
-                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, page_url, cancel_flag) {
+                if let Ok(scraped) =
+                    crate::sources::commands::fetch::run_scrapling_fetch_with_progress(
+                        app,
+                        page_url,
+                        cancel_flag,
+                        on_event,
+                    )
+                {
                     let trimmed = scraped.trim();
                     if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
                         if let Ok(token) = extract_page_token(trimmed) {
@@ -348,14 +356,23 @@ pub async fn resolve(
     client: &reqwest::Client,
     url: &str,
     cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    on_event: Option<crate::sources::commands::fetch::CrawlerEventCallback>,
 ) -> Result<(String, String, Option<String>), HosterError> {
     let short_id = extract_short_id(url)?;
     let referer = format!("{ROOTZ_ORIGIN}/d/{short_id}");
     let page_url = referer.clone();
 
     // 1. Intentar flujo nativo de tokens y API de Rootz
+    let on_event_for_token = on_event.clone();
     let native_res = async {
-        let page_token = fetch_page_token(app, client, &page_url, cancel_flag.clone()).await?;
+        let page_token = fetch_page_token(
+            app,
+            client,
+            &page_url,
+            cancel_flag.clone(),
+            on_event_for_token,
+        )
+        .await?;
         let (direct_url, file_name_hint) =
             resolve_direct_url(client, &short_id, &page_token, &referer).await?;
         Ok::<_, HosterError>((direct_url, referer.clone(), file_name_hint))
@@ -367,7 +384,14 @@ pub async fn resolve(
         Err(err) => {
             if let Some(app) = app {
                 log::info!("rootz: resolución completa nativa falló ({err:?}), intentando Scrapling fallback directo");
-                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(app, &page_url, cancel_flag) {
+                if let Ok(scraped) =
+                    crate::sources::commands::fetch::run_scrapling_fetch_with_progress(
+                        app,
+                        &page_url,
+                        cancel_flag,
+                        on_event,
+                    )
+                {
                     let trimmed = scraped.trim();
                     if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
                         return Ok((trimmed.to_string(), referer, None));
@@ -390,24 +414,31 @@ mod tests {
         let urls = vec![
             "https://www.rootz.so/d/2KssK0",
             "https://www.rootz.so/d/20ah72",
-            "https://rootz.so/d/1EoJ28"
+            "https://rootz.so/d/1EoJ28",
         ];
-        
+
         for url in urls {
             println!("--- TESTING URL: {} ---", url);
             let short_id = extract_short_id(url).unwrap();
             let referer = format!("{ROOTZ_ORIGIN}/d/{short_id}");
             let page_url = referer.clone();
-            
-            if let Ok(page_token) = fetch_page_token(None, &client, &page_url, None).await {
+
+            if let Ok(page_token) = fetch_page_token(None, &client, &page_url, None, None).await {
                 println!("PAGE TOKEN: {}", page_token);
                 if let Ok(meta) = fetch_metadata(&client, &short_id, &page_token, &referer).await {
                     println!("METADATA FILE_NAME: {:?}", meta.file_name);
                     println!("METADATA DOWNLOAD_ALLOWED: {:?}", meta.download_allowed);
                     println!("METADATA STATUS: {:?}", meta.status);
-                    
+
                     let file_id_ref = meta.file_id.as_deref();
-                    let cdn_res = resolve_proxy_cdn_url(&client, &short_id, file_id_ref, &page_token, &referer).await;
+                    let cdn_res = resolve_proxy_cdn_url(
+                        &client,
+                        &short_id,
+                        file_id_ref,
+                        &page_token,
+                        &referer,
+                    )
+                    .await;
                     println!("CDN RES: {:?}", cdn_res);
                 } else {
                     println!("Failed to fetch metadata");

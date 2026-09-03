@@ -4,6 +4,7 @@ from crawler.core.browser import BrowserManager
 from crawler.core.firewall import FirewallDetector, TurnstileSolver
 from crawler.core.network import RouteInterceptor
 from crawler.core.process import ProcessManager, WatchdogTimer
+from crawler.core.reporter import CrawlerReporter
 
 __all__ = [
     "BrowserManager",
@@ -12,4 +13,5 @@ __all__ = [
     "RouteInterceptor",
     "ProcessManager",
     "WatchdogTimer",
+    "CrawlerReporter",
 ]

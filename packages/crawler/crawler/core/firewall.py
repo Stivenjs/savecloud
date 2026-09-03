@@ -4,6 +4,7 @@ import json
 import sys
 
 from crawler.config import FIREWALL_KEYWORDS
+from crawler.core.reporter import CrawlerReporter
 from crawler.utils.json_cleaner import clean_json_from_html
 
 
@@ -87,6 +88,7 @@ class TurnstileSolver:
                     break
 
             if cf_frame:
+                CrawlerReporter.report("turnstile", "Found Cloudflare Turnstile, solving challenge...")
                 sys.stderr.write(
                     "Found embedded Cloudflare Turnstile iframe, attempting to solve...\n"
                 )
@@ -145,6 +147,7 @@ class TurnstileSolver:
                     "() => document.querySelector('input[name=\"cf-turnstile-response\"]')?.value?.length > 20"
                 )
                 if has_token:
+                    CrawlerReporter.report("turnstile_solved", "Cloudflare Turnstile verified successfully")
                     sys.stderr.write("[Turnstile] Verified successfully!\n")
                     return True
                 page.wait_for_timeout(1000)

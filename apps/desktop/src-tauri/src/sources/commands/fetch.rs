@@ -40,7 +40,10 @@ pub fn looks_like_cloudflare_block(content_type: &str, raw: &str) -> bool {
 }
 
 fn resolve_scrapling_script(app: &AppHandle) -> Result<PathBuf, String> {
-    if let Ok(p) = app.path().resolve("resources/savecloud_crawler.py", BaseDirectory::Resource) {
+    if let Ok(p) = app
+        .path()
+        .resolve("resources/savecloud_crawler.py", BaseDirectory::Resource)
+    {
         if p.is_file() {
             return Ok(p);
         }
@@ -98,10 +101,21 @@ fn find_python_executable() -> Result<(String, Vec<String>), String> {
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
+pub type CrawlerEventCallback = std::sync::Arc<dyn Fn(&str) + Send + Sync>;
+
 pub fn run_scrapling_fetch(
     app: &AppHandle,
     url: &str,
     cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) -> Result<String, String> {
+    run_scrapling_fetch_with_progress(app, url, cancel_flag, None)
+}
+
+pub fn run_scrapling_fetch_with_progress(
+    app: &AppHandle,
+    url: &str,
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    on_event: Option<CrawlerEventCallback>,
 ) -> Result<String, String> {
     const SCRAPLING_TIMEOUT_SECS: u64 = 180;
 
@@ -136,11 +150,50 @@ pub fn run_scrapling_fetch(
         command.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let child = command
+    let mut child = command
         .spawn()
         .map_err(|e| format!("No se pudo ejecutar Scrapling: {e}"))?;
 
     let child_pid = child.id();
+    let stdout_pipe = child
+        .stdout
+        .take()
+        .ok_or_else(|| "No se pudo capturar stdout de Scrapling".to_string())?;
+    let stderr_pipe = child
+        .stderr
+        .take()
+        .ok_or_else(|| "No se pudo capturar stderr de Scrapling".to_string())?;
+
+    let on_event_clone = on_event.clone();
+    let stderr_thread = std::thread::spawn(move || {
+        use std::io::{BufRead, BufReader};
+        let reader = BufReader::new(stderr_pipe);
+        let mut lines = Vec::new();
+        for line in reader.lines() {
+            let Ok(l) = line else { break };
+            if let Some(idx) = l.find("[CRAWLER_EVENT]") {
+                let json_slice = &l[idx + "[CRAWLER_EVENT]".len()..];
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_slice.trim()) {
+                    if let Some(stage) = v.get("stage").and_then(|s| s.as_str()) {
+                        log::info!("[fetch] Dispatching crawler stage: crawler:{stage}");
+                        if let Some(ref cb) = on_event_clone {
+                            cb(&format!("crawler:{stage}"));
+                        }
+                    }
+                }
+            }
+            lines.push(l);
+        }
+        lines.join("\n")
+    });
+
+    let stdout_thread = std::thread::spawn(move || {
+        use std::io::Read;
+        let mut reader = stdout_pipe;
+        let mut buf = Vec::new();
+        let _ = reader.read_to_end(&mut buf);
+        buf
+    });
 
     let (tx, rx) = std::sync::mpsc::channel::<()>();
     let cancel_flag_clone = cancel_flag.clone();
@@ -175,13 +228,15 @@ pub fn run_scrapling_fetch(
         kill_process_tree(child_pid);
     });
 
-    let output = child.wait_with_output().map_err(|e| {
+    let status = child.wait().map_err(|e| {
         let _ = tx.send(());
         format!("Error al esperar resultado de Scrapling: {e}")
     })?;
 
     let _ = tx.send(());
     let _ = watchdog.join();
+    let stderr = stderr_thread.join().unwrap_or_default();
+    let stdout_bytes = stdout_thread.join().unwrap_or_default();
 
     if let Some(ref flag) = cancel_flag {
         if flag.load(std::sync::atomic::Ordering::Relaxed) {
@@ -189,15 +244,15 @@ pub fn run_scrapling_fetch(
         }
     }
 
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if !stderr.is_empty() {
-        log::info!("[Scrapling Debug Output]:\n{}", stderr);
+    let stderr_trimmed = stderr.trim().to_string();
+    if !stderr_trimmed.is_empty() {
+        log::info!("[Scrapling Debug Output]:\n{}", stderr_trimmed);
     }
 
-    if !output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if !status.success() {
+        let stdout = String::from_utf8_lossy(&stdout_bytes).trim().to_string();
 
-        if let Some(code) = output.status.code() {
+        if let Some(code) = status.code() {
             if code == 3 {
                 return Err(format!(
                     "Scrapling: timeout — el proceso fue terminado después de {SCRAPLING_TIMEOUT_SECS} segundos"
@@ -205,10 +260,10 @@ pub fn run_scrapling_fetch(
             }
         }
 
-        let details = if stderr.is_empty() {
+        let details = if stderr_trimmed.is_empty() {
             stdout
         } else {
-            stderr.clone()
+            stderr_trimmed
         };
         return Err(if details.is_empty() {
             "Scrapling falló sin mensaje de error".to_string()
@@ -217,7 +272,7 @@ pub fn run_scrapling_fetch(
         });
     }
 
-    String::from_utf8(output.stdout).map_err(|e| format!("Scrapling devolvió texto no UTF-8: {e}"))
+    String::from_utf8(stdout_bytes).map_err(|e| format!("Scrapling devolvió texto no UTF-8: {e}"))
 }
 
 fn kill_process_tree(pid: u32) {

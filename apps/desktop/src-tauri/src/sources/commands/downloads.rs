@@ -87,6 +87,7 @@ pub async fn start_source_download(
         error: None,
         external_id: None,
         output_file_name: None,
+        status_detail: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -134,6 +135,7 @@ pub async fn start_peer_game_download_inner(
         error: None,
         external_id: Some(target_device_id),
         output_file_name: None,
+        status_detail: None,
         created_at: now.clone(),
         updated_at: now,
     };

@@ -6,6 +6,7 @@ from crawler.config import DEFAULT_HEADERS, FAST_FETCH_TIMEOUT_SECONDS
 from crawler.core.browser import BrowserManager
 from crawler.core.firewall import FirewallDetector
 from crawler.core.network import smart_referer
+from crawler.core.reporter import CrawlerReporter
 from crawler.extractors.base import BaseExtractor, ExtractionContext
 from crawler.strategies.base import FetchStrategy
 from crawler.utils.page_utils import extract_body
@@ -16,6 +17,7 @@ class FastFetchStrategy(FetchStrategy):
 
     def execute(self, context: ExtractionContext, extractor: BaseExtractor) -> str | None:
         try:
+            CrawlerReporter.report("fast_fetch", "Checking fast connection...")
             fetcher = BrowserManager.get_fetcher()
             if fetcher is None:
                 return None

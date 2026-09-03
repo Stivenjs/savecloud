@@ -40,6 +40,7 @@ pub async fn run_http_download(
     cancel_flag: Arc<AtomicBool>,
     mut on_prepared: impl FnMut(&str) -> Result<(), String>,
     mut on_progress: impl FnMut(u64, u64, u64, Option<u64>) -> Result<(), String>,
+    on_status_detail: Arc<dyn Fn(Option<String>) -> Result<(), String> + Send + Sync>,
 ) -> Result<HttpRunResult, String> {
     let destination = PathBuf::from(destination_dir);
     tokio::fs::create_dir_all(&destination)
@@ -65,14 +66,26 @@ pub async fn run_http_download(
     emit_progress(0, 0, false)?;
 
     let client = get_hoster_download_client();
-    let resolved = hosters::resolve_download_url_with_client(
+
+    let on_status_detail_clone = on_status_detail.clone();
+    let status_cb: crate::sources::commands::fetch::CrawlerEventCallback =
+        Arc::new(move |stage: &str| {
+            let _ = on_status_detail_clone(Some(stage.to_string()));
+        });
+
+    let resolved = hosters::resolve_download_url_with_client_and_progress(
         Some(app),
         &client,
         uri,
         Some(cancel_flag.clone()),
+        Some(status_cb),
     )
     .await
     .map_err(|e: HosterError| e.to_user_string_for_uri(uri))?;
+
+    // Limpia el detalle del crawler una vez que el enlace fue obtenido y la descarga comienza
+    let _ = on_status_detail(None);
+
     let effective_uri = resolved.url.as_ref();
 
     let response = get_with_profile(&client, effective_uri, &resolved.download_profile)

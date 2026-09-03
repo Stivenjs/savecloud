@@ -97,6 +97,7 @@ export interface SourceDownloadJob {
   etaSeconds?: number | null;
   error?: string | null;
   externalId?: string | null;
+  statusDetail?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -112,6 +113,7 @@ export interface SourceProgressPayload {
   etaSeconds?: number | null;
   externalId?: string | null;
   error?: string | null;
+  statusDetail?: string | null;
 }
 
 export interface SourceMatchCandidate {

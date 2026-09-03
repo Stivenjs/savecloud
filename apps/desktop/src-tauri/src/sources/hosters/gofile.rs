@@ -473,12 +473,16 @@ pub async fn resolve(
     client: &Client,
     url: &str,
     cancel_flag: Option<Arc<AtomicBool>>,
+    on_event: Option<crate::sources::commands::fetch::CrawlerEventCallback>,
 ) -> Result<(String, String), HosterError> {
     if let Some(app) = app {
         log::info!("gofile: ejecutando Scrapling crawler para resolver enlace y sesión de descarga");
-        if let Ok(scraped) =
-            crate::sources::commands::fetch::run_scrapling_fetch(app, url, cancel_flag.clone())
-        {
+        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch_with_progress(
+            app,
+            url,
+            cancel_flag.clone(),
+            on_event,
+        ) {
             let trimmed = scraped.trim();
             if trimmed.starts_with('{') {
                 if let Ok(parsed) = serde_json::from_str::<GofileScrapedOutput>(trimmed) {

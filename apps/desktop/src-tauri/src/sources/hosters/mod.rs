@@ -64,7 +64,19 @@ pub async fn resolve_download_url_with_client<'a>(
     uri: &'a str,
     cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 ) -> Result<ResolvedDownload<'a>, HosterError> {
-    match resolve_hoster_url_internal(app, client, uri, cancel_flag.clone()).await {
+    resolve_download_url_with_client_and_progress(app, client, uri, cancel_flag, None).await
+}
+
+/// Resuelve la URL de descarga emitiendo eventos de progreso detallados durante la resolución con Scrapling.
+pub async fn resolve_download_url_with_client_and_progress<'a>(
+    app: Option<&AppHandle>,
+    client: &Client,
+    uri: &'a str,
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    on_event: Option<crate::sources::commands::fetch::CrawlerEventCallback>,
+) -> Result<ResolvedDownload<'a>, HosterError> {
+    match resolve_hoster_url_internal(app, client, uri, cancel_flag.clone(), on_event.clone()).await
+    {
         Ok(res) => Ok(res),
         Err(e) => {
             if let Some(app) = app {
@@ -73,7 +85,12 @@ pub async fn resolve_download_url_with_client<'a>(
                     e,
                     uri
                 );
-                match crate::sources::commands::fetch::run_scrapling_fetch(app, uri, cancel_flag) {
+                match crate::sources::commands::fetch::run_scrapling_fetch_with_progress(
+                    app,
+                    uri,
+                    cancel_flag,
+                    on_event,
+                ) {
                     Ok(stdout) => {
                         let trimmed = stdout.trim();
                         if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
@@ -100,13 +117,14 @@ async fn resolve_hoster_url_internal<'a>(
     client: &Client,
     uri: &'a str,
     cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    on_event: Option<crate::sources::commands::fetch::CrawlerEventCallback>,
 ) -> Result<ResolvedDownload<'a>, HosterError> {
     let parsed = reqwest::Url::parse(uri).map_err(|_| HosterError::InvalidUrl(uri.to_string()))?;
     let host = normalized_host(&parsed);
 
     if host.contains("gofile.io") {
         let (url, account_token) =
-            gofile::resolve(app, client, uri, cancel_flag.clone()).await?;
+            gofile::resolve(app, client, uri, cancel_flag.clone(), on_event.clone()).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::GofileDownload { account_token }.build(),
@@ -115,7 +133,8 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if host.contains("1fichier.com") {
-        let (url, page_url) = onefichier::resolve(app, client, uri, cancel_flag.clone()).await?;
+        let (url, page_url) =
+            onefichier::resolve(app, client, uri, cancel_flag.clone(), on_event.clone()).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::BrowserSameOrigin { referer: page_url }.build(),
@@ -124,7 +143,8 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if host.contains("akirabox.com") || host.contains("akirabox.to") {
-        let (url, _page_url) = akirabox::resolve(app, client, uri, cancel_flag.clone()).await?;
+        let (url, _page_url) =
+            akirabox::resolve(app, client, uri, cancel_flag.clone(), on_event.clone()).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::Passthrough.build(),
@@ -133,7 +153,8 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if host.contains("filekeeper.net") {
-        let (url, page_url) = filekeeper::resolve(app, client, uri, cancel_flag.clone()).await?;
+        let (url, page_url) =
+            filekeeper::resolve(app, client, uri, cancel_flag.clone(), on_event.clone()).await?;
         let download_profile = if is_signed_cdn_url(&url)
             || !normalized_host(
                 &reqwest::Url::parse(&url).map_err(|_| HosterError::InvalidUrl(url.clone()))?,
@@ -179,7 +200,8 @@ async fn resolve_hoster_url_internal<'a>(
     }
 
     if buzzheavier::is_supported_domain(uri) {
-        let (url, page_url) = buzzheavier::resolve(app, client, uri, cancel_flag.clone()).await?;
+        let (url, page_url) =
+            buzzheavier::resolve(app, client, uri, cancel_flag.clone(), on_event.clone()).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::Downloader { referer: page_url }.build(),
@@ -198,7 +220,7 @@ async fn resolve_hoster_url_internal<'a>(
 
     if vikingfile::is_vikingfile_url(uri) {
         let (url, referer, name_hint) =
-            vikingfile::resolve(app, client, uri, cancel_flag.clone()).await?;
+            vikingfile::resolve(app, client, uri, cancel_flag.clone(), on_event.clone()).await?;
         return Ok(ResolvedDownload {
             url: Cow::Owned(url),
             download_profile: ProfilePreset::Downloader { referer }.build(),
@@ -208,7 +230,7 @@ async fn resolve_hoster_url_internal<'a>(
 
     if host.contains("rootz.so") {
         let (url, referer, file_name_hint) =
-            rootz::resolve(app, client, uri, cancel_flag.clone()).await?;
+            rootz::resolve(app, client, uri, cancel_flag.clone(), on_event.clone()).await?;
         let download_profile = if is_signed_cdn_url(&url) {
             ProfilePreset::Passthrough.build()
         } else {

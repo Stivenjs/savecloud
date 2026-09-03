@@ -34,6 +34,7 @@ type DownloadRow = {
   speedBps?: number | null;
   etaSeconds?: number | null;
   status?: string;
+  statusDetail?: string | null;
   /** Solo para filas de tipo torrent */
   torrentExtra?: {
     uploadSpeedBytes: number;
@@ -78,6 +79,17 @@ function formatStatus(status: string, t: (key: string) => string): string {
     default:
       return status;
   }
+}
+
+function formatCrawlerStage(stageOrKey: string, t: (key: string) => string): string {
+  if (stageOrKey.startsWith("crawler:")) {
+    const key = stageOrKey.replace("crawler:", "");
+    const translated = t(`downloads.crawler.${key}`);
+    if (translated && !translated.startsWith("downloads.crawler.")) {
+      return translated;
+    }
+  }
+  return stageOrKey;
 }
 
 export function DownloadsPanel() {
@@ -264,9 +276,11 @@ export function DownloadsPanel() {
               ? Math.min(100, Math.round((task.loaded / task.total) * 100))
               : 0;
 
+      const statusText = task.statusDetail ? formatCrawlerStage(task.statusDetail, t) : formatStatus(task.status, t);
+
       const subtitle = isTorrentBacked
         ? `${formatProtocol(task.protocol, t)} · ${torrent ? mapTorrentState(torrent.state) : t("downloads.preparingDownload")}`
-        : `${formatProtocol(task.protocol, t)} · ${formatStatus(task.status, t)}`;
+        : `${formatProtocol(task.protocol, t)} · ${statusText}`;
 
       return {
         id: `sources-${task.jobId}`,
@@ -289,6 +303,7 @@ export function DownloadsPanel() {
         etaSeconds: torrent ? torrent.etaSeconds : (task.etaSeconds ?? null),
         infoHash: torrent?.infoHash,
         status: task.status,
+        statusDetail: task.statusDetail,
         // Las filas de sources con torrent también exponen peers y upload
         // para que el panel muestre la misma riqueza de información.
         torrentExtra: torrent
@@ -316,7 +331,7 @@ export function DownloadsPanel() {
   const listMaxHeightPx = collapsed ? 0 : Math.min(visibleRows * estimatedRowHeightPx, 420);
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-50 w-[380px] max-w-[90vw]">
+    <div className="pointer-events-none fixed bottom-4 right-4 z-50 w-95 max-w-[90vw]">
       <div className="pointer-events-auto rounded-2xl border border-default-200/60 bg-content1/95 p-4 shadow-xl backdrop-blur-md transition-all duration-200 ease-out">
         {/* Header */}
         <div className="mb-3 flex items-center justify-between">
@@ -379,7 +394,7 @@ export function DownloadsPanel() {
         <div
           className="overflow-hidden transition-[max-height,opacity] duration-300 ease-out"
           style={{ maxHeight: `${listMaxHeightPx}px`, opacity: collapsed ? 0 : 1 }}>
-          <ScrollShadow hideScrollBar className="max-h-[420px] space-y-2.5 pr-1" size={20} orientation="vertical">
+          <ScrollShadow hideScrollBar className="max-h-105 space-y-2.5 pr-1" size={20} orientation="vertical">
             {rows.length === 0 && keepPanelVisibleForBatch ? (
               <div className="flex items-center gap-3 rounded-xl border border-default-200/40 bg-default-50/80 p-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
@@ -400,7 +415,11 @@ export function DownloadsPanel() {
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium leading-tight">{row.label}</p>
-                    <p className="mt-0.5 truncate text-xs text-default-400">{row.subtitle}</p>
+                    <p
+                      key={row.subtitle}
+                      className={`animate-text-swap mt-0.5 truncate text-xs ${row.statusDetail ? "font-medium text-primary" : "text-default-400"}`}>
+                      {row.subtitle}
+                    </p>
                   </div>
                   <span className="shrink-0 rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold tabular-nums text-primary">
                     {row.value}%

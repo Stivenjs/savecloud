@@ -117,6 +117,7 @@ export const useSourcesDownloadsStore = create<SourcesDownloadsStore>((set) => (
         etaSeconds: metrics.etaSeconds,
         error: payload.error ?? current?.error ?? null,
         externalId: payload.externalId ?? current?.externalId ?? null,
+        statusDetail: payload.statusDetail !== undefined ? payload.statusDetail : (current?.statusDetail ?? null),
         createdAt: current?.createdAt ?? new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

@@ -2155,6 +2155,15 @@
       "completed": "Completed",
       "failed": "Error"
     },
+    "crawler": {
+      "init": "Starting stealth browser…",
+      "fast_fetch": "Checking fast connection…",
+      "navigating": "Connecting to hoster…",
+      "turnstile": "Solving Cloudflare Turnstile…",
+      "turnstile_solved": "Verification passed",
+      "waiting_download": "Waiting for download link…",
+      "resolved": "Direct download link acquired…"
+    },
     "preparingDownload": "Preparing download…",
     "defaultLabel": "Download",
     "torrentLabel": "Torrent"

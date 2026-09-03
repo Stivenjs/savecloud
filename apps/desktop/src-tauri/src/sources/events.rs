@@ -28,6 +28,7 @@ pub struct SourceProgressPayload {
     pub eta_seconds: Option<u64>,
     pub external_id: Option<String>,
     pub error: Option<String>,
+    pub status_detail: Option<String>,
 }
 
 /// Emite actualización de progreso.
@@ -43,6 +44,7 @@ pub fn emit_progress(app: &AppHandle, job: &SourceDownloadJob) {
         eta_seconds: job.eta_seconds,
         external_id: job.external_id.clone(),
         error: job.error.clone(),
+        status_detail: job.status_detail.clone(),
     };
     let _ = app.emit(SOURCES_PROGRESS_EVENT, payload);
 }
@@ -60,6 +62,7 @@ pub fn emit_terminal(app: &AppHandle, job: &SourceDownloadJob) {
         eta_seconds: job.eta_seconds,
         external_id: job.external_id.clone(),
         error: job.error.clone(),
+        status_detail: job.status_detail.clone(),
     };
     let _ = app.emit(SOURCES_TERMINAL_EVENT, payload);
     writer::try_record_source_download_terminal(app, job);

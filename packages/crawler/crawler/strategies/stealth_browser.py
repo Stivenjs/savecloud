@@ -6,6 +6,7 @@ from crawler.config import BROWSER_TIMEOUT_MS
 from crawler.core.browser import BrowserManager
 from crawler.core.firewall import FirewallDetector
 from crawler.core.network import RouteInterceptor, is_ad_domain
+from crawler.core.reporter import CrawlerReporter
 from crawler.extractors.base import BaseExtractor, ExtractionContext
 from crawler.strategies.base import FetchStrategy
 from crawler.utils.page_utils import extract_body
@@ -15,6 +16,7 @@ class StealthBrowserStrategy(FetchStrategy):
     """Level 2: Undetectable headless browser with Cloudflare bypass and network listeners."""
 
     def execute(self, context: ExtractionContext, extractor: BaseExtractor) -> str | None:
+        CrawlerReporter.report("init", "Starting stealth browser...")
         stealthy_fetcher = BrowserManager.get_stealthy_fetcher()
         if stealthy_fetcher is None:
             return None
@@ -30,6 +32,7 @@ class StealthBrowserStrategy(FetchStrategy):
                 extractor.on_response(response, context)
 
             def on_download(download):
+                CrawlerReporter.report("resolved", "Direct download event captured")
                 extractor.on_download(download, context)
 
             def on_popup(popup):
@@ -48,6 +51,7 @@ class StealthBrowserStrategy(FetchStrategy):
                 pass
 
         def page_action(page):
+            CrawlerReporter.report("waiting_download", "Resolving hoster download link...")
             action_result = extractor.page_action(page, context)
             if action_result:
                 context.captured_download_url = action_result
@@ -66,10 +70,12 @@ class StealthBrowserStrategy(FetchStrategy):
             "disable_ads": True,
         }
 
+        CrawlerReporter.report("navigating", "Connecting to hoster page...")
         try:
             page = stealthy_fetcher.fetch(url, **kwargs)
         except Exception as exc:
             if BrowserManager.is_missing_browser_error(exc):
+                CrawlerReporter.report("init", "Installing browser engine...")
                 sys.stderr.write(
                     f"[Scrapling] Browser error detected: {exc}\nDownloading Chromium...\n"
                 )
@@ -80,6 +86,7 @@ class StealthBrowserStrategy(FetchStrategy):
 
         # 1. Check if direct download URL was captured
         if context.captured_download_url:
+            CrawlerReporter.report("resolved", "Download URL resolved successfully")
             return context.captured_download_url
 
         # 2. Check captured responses in reverse order
