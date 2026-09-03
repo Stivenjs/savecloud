@@ -161,7 +161,7 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
           variant="bordered"
           radius="md"
           className="border-default-300/70"
-          startContent={<RefreshCw size={16} className={isFetching ? "animate-spin" : ""} />}
+          startContent={isFetching ? <Spinner size="sm" color="default" /> : <RefreshCw size={16} />}
           isDisabled={isFetching}
           onPress={() => void handleRefresh()}>
           {t("settings.cloudDashboard.refresh", "Actualizar")}

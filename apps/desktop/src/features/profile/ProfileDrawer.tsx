@@ -55,7 +55,7 @@ import {
   setShareVisualProfileWithHosts,
   setShareVisualProfileWithMembers,
 } from "@services/tauri";
-import { listCloudPresence } from "@services/tauri/invites.service";
+import { listCloudPresence, type CloudPresenceItem } from "@services/tauri/invites.service";
 import { achievementLabel, formatHoursToNextLevel } from "@utils/gamificationLabels";
 import { formatPlaytime } from "@utils/format";
 import { resolveProfileAsset } from "@utils/profileMedia";
@@ -137,7 +137,7 @@ export function ProfileDrawer({
   const displayName = userId || t("profile.selector.noUser");
   const conn = connectionLabel(hasSyncConfig ? connectionStatus : undefined, t);
 
-  const { data: cloudPresence = [], isLoading: cloudPresenceLoading } = useQuery({
+  const { data: cloudPresence = [], isLoading: cloudPresenceLoading } = useQuery<CloudPresenceItem[]>({
     queryKey: ["cloud-presence"],
     queryFn: listCloudPresence,
     enabled: isOpen && !!userId,
@@ -145,7 +145,7 @@ export function ProfileDrawer({
   });
   useCloudPresenceRealtimeInvalidation(isOpen);
 
-  const ownPresence = userId ? cloudPresence.find((item) => item.userId === userId) : undefined;
+  const ownPresence = userId ? cloudPresence.find((item: CloudPresenceItem) => item.userId === userId) : undefined;
   const localRunningGames = useGameSessionStore((s) => s.localSessionStartTimes);
   const activeLocalGameId = Object.keys(localRunningGames)[0];
   const isPlayingNow = ownPresence?.status === "playing" || Boolean(activeLocalGameId);
@@ -288,19 +288,33 @@ export function ProfileDrawer({
             ) : (
               <div className="absolute inset-0 bg-[linear-gradient(125deg,#1b2838_0%,#0e1621_45%,#1b2838_100%)]" />
             )}
-            {/* Botón Cambiar de Perfil en la parte superior derecha de la cabecera */}
-            <div className="absolute right-4 top-4 z-30">
-              <Button
-                variant="flat"
-                size="sm"
-                radius="full"
-                className="group min-w-0 w-9 h-9 p-0 backdrop-blur-md bg-black/40 border border-white/10 hover:bg-danger-500/15 hover:border-danger-500/30 text-white font-medium shadow-sm transition-all duration-300 ease-in-out hover:w-32 hover:pr-3 flex items-center justify-start overflow-hidden pl-2.5 active:scale-[0.95]"
-                onPress={handleLogout}>
-                <LogOut size={14} className="text-danger-400 shrink-0" />
-                <span className="opacity-0 max-w-0 overflow-hidden transition-all duration-300 ease-in-out group-hover:opacity-100 group-hover:max-w-24 group-hover:ml-2 whitespace-nowrap text-xs text-danger-200 font-semibold select-none">
-                  {t("profile.drawer.logout")}
-                </span>
-              </Button>
+            {/* Botón Cerrar Sesión en la parte superior derecha de la cabecera */}
+            <div className={`absolute z-30 ${bp ? "right-6 top-6" : "right-4 top-4"}`}>
+              {bp ? (
+                <Button
+                  variant="flat"
+                  size="md"
+                  radius="full"
+                  className="h-11 px-4 min-w-0 bg-danger-500/20 border border-danger-500/35 text-danger-200 hover:bg-danger-500/30 hover:border-danger-500/50 font-bold text-sm tracking-wide backdrop-blur-xl shadow-lg shadow-black/50 flex items-center gap-2.5 transition-all duration-150 active:scale-[0.96] focus-visible:ring-2 focus-visible:ring-danger-400 focus-visible:outline-none"
+                  onPress={handleLogout}
+                  aria-label={t("profile.drawer.logout")}>
+                  <LogOut size={18} className="text-danger-400 shrink-0" />
+                  <span>{t("profile.drawer.logout")}</span>
+                </Button>
+              ) : (
+                <Button
+                  variant="flat"
+                  size="sm"
+                  radius="full"
+                  className="group min-w-0 w-9 h-9 p-0 backdrop-blur-md bg-black/40 border border-white/10 hover:bg-danger-500/15 hover:border-danger-500/30 text-white font-medium shadow-sm transition-all duration-300 ease-in-out hover:w-32 hover:pr-3 flex items-center justify-start overflow-hidden pl-2.5 active:scale-[0.95]"
+                  onPress={handleLogout}
+                  aria-label={t("profile.drawer.logout")}>
+                  <LogOut size={14} className="text-danger-400 shrink-0" />
+                  <span className="opacity-0 max-w-0 overflow-hidden transition-all duration-300 ease-in-out group-hover:opacity-100 group-hover:max-w-24 group-hover:ml-2 whitespace-nowrap text-xs text-danger-200 font-semibold select-none">
+                    {t("profile.drawer.logout")}
+                  </span>
+                </Button>
+              )}
             </div>
 
             {/* Gradiente más oscuro y alto para máxima legibilidad */}
