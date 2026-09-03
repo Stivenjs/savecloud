@@ -39,16 +39,22 @@ export function useSourcesSettings() {
   const { data: sourcesSummary = [] } = useQuery({
     queryKey: ["sources-catalogs"],
     queryFn: listSourcesSummary,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: remoteSources = [] } = useQuery({
     queryKey: ["remote-sources"],
     queryFn: listRemoteSources,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: verifiedSourcesStatus = null } = useQuery({
     queryKey: ["verified-sources-status"],
     queryFn: getVerifiedSourcesStatus,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: defaultSourceDownloadDirFromConfig = "" } = useQuery({
