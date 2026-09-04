@@ -201,7 +201,7 @@ export function GamepadDiagram({ layoutKind, telemetry, className = "" }: Gamepa
   const legacyTrigCy = legacyBumperTop - legacyShoulderGap - legacyTrigH / 2;
 
   return (
-    <div className={`mx-auto w-full max-w-[720px] ${className}`}>
+    <div className={`mx-auto w-full max-w-180 ${className}`}>
       <svg
         viewBox={svgViewBox}
         className="h-auto w-full overflow-visible"
