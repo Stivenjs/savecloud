@@ -112,6 +112,25 @@ class DomHelper:
         return False
 
     @classmethod
+    def click_and_wait_navigation(
+        cls,
+        page: Any,
+        selector: str,
+        timeout_seconds: int = 15,
+        fallback_indicators: str | Iterable[str] = (),
+    ) -> bool:
+        """Clicks an element matching selector and safely awaits navigation or DOM change."""
+        try:
+            with page.expect_navigation(timeout=int(timeout_seconds * 1000)):
+                cls.click(page, selector)
+            return True
+        except Exception:
+            cls.click(page, selector, force_enable=True)
+            if fallback_indicators:
+                return cls.wait_for_text(page, fallback_indicators, timeout_seconds=timeout_seconds)
+            return False
+
+    @classmethod
     def click_button_with_text(
         cls,
         page: Any,

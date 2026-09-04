@@ -134,7 +134,6 @@ JS_STREAM_FETCH: str = """async (targetUrl) => {
 
 # Banderas de optimización agresiva para el arranque ultrarrápido de Chromium
 CHROMIUM_OPTIMIZATION_FLAGS: tuple[str, ...] = (
-    "--blink-settings=imagesEnabled=false",
     "--mute-audio",
     "--disable-extensions",
     "--disable-default-apps",
