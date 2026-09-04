@@ -189,6 +189,7 @@ export function OverlayApp() {
   const { t } = useTranslation();
   const { notifications, addNotification, cleanup } = useOverlayNotifications();
   const hasSignaledReadyRef = useRef(false);
+  const prevNotificationsCountRef = useRef(0);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -226,7 +227,10 @@ export function OverlayApp() {
   }, [addNotification, cleanup]);
 
   useEffect(() => {
-    if (notifications.length > 0) {
+    const prevCount = prevNotificationsCountRef.current;
+    prevNotificationsCountRef.current = notifications.length;
+
+    if (!(prevCount > 0 && notifications.length === 0)) {
       return;
     }
 
