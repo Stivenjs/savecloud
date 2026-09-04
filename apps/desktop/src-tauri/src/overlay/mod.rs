@@ -108,13 +108,13 @@ fn register_overlay_ready_listener(app: &AppHandle) {
             state.consecutive_emit_errors = 0;
         }
 
+        flush_pending_notifications(&app_clone);
+
         if pending_count > 0 {
             if let Some(window) = app_clone.get_webview_window("overlay") {
                 let _ = window.show();
             }
         }
-
-        flush_pending_notifications(&app_clone);
     });
 
     if let Ok(mut state) = overlay_state().lock() {
