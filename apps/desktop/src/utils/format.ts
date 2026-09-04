@@ -165,3 +165,53 @@ export function mapTorrentState(state: string) {
       return state;
   }
 }
+
+export function formatSourcesSyncSubtitle(
+  progress: {
+    sourceName?: string | null;
+    sourceUrl?: string | null;
+    stage: string;
+    itemsCount?: number | null;
+    error?: string | null;
+  },
+  t: (key: string, options?: any) => string
+): string {
+  const name =
+    progress.sourceName ||
+    (progress.sourceUrl
+      ? (() => {
+          try {
+            return new URL(progress.sourceUrl).hostname;
+          } catch {
+            return progress.sourceUrl;
+          }
+        })()
+      : t("sources.sync.sourceDefault", { defaultValue: "Fuente" }));
+
+  if (progress.stage.startsWith("crawler:")) {
+    const crawlerKey = progress.stage.replace("crawler:", "");
+    const crawlerText = t(`downloads.crawler.${crawlerKey}`);
+    return `${name} · ${crawlerText && !crawlerText.startsWith("downloads.crawler.") ? crawlerText : crawlerKey}`;
+  }
+
+  if (progress.stage === "saved" && progress.itemsCount != null) {
+    return `${name} · ${t("sources.sync.saved", { count: progress.itemsCount, defaultValue: `Guardado (${progress.itemsCount.toLocaleString()} juegos)` })}`;
+  }
+  if (progress.stage === "unchanged") {
+    return `${name} · ${t("sources.sync.unchanged", { defaultValue: "Sin cambios" })}`;
+  }
+  if (progress.stage === "failed") {
+    return `${name} · ${progress.error || t("sources.sync.failed", { defaultValue: "Error al sincronizar" })}`;
+  }
+  if (progress.stage === "checking") {
+    return `${name} · ${t("sources.sync.checking", { defaultValue: "Comprobando catálogo…" })}`;
+  }
+  if (progress.stage === "starting") {
+    return t("sources.sync.starting", { defaultValue: "Iniciando sincronización…" });
+  }
+  if (progress.stage === "completed") {
+    return t("sources.sync.completed", { defaultValue: "Sincronización completada" });
+  }
+
+  return `${name} · ${progress.stage}`;
+}

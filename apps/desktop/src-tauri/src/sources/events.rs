@@ -28,6 +28,7 @@ pub struct SourceProgressPayload {
     pub eta_seconds: Option<u64>,
     pub external_id: Option<String>,
     pub error: Option<String>,
+    pub status_detail: Option<String>,
 }
 
 /// Emite actualización de progreso.
@@ -43,6 +44,7 @@ pub fn emit_progress(app: &AppHandle, job: &SourceDownloadJob) {
         eta_seconds: job.eta_seconds,
         external_id: job.external_id.clone(),
         error: job.error.clone(),
+        status_detail: job.status_detail.clone(),
     };
     let _ = app.emit(SOURCES_PROGRESS_EVENT, payload);
 }
@@ -60,6 +62,7 @@ pub fn emit_terminal(app: &AppHandle, job: &SourceDownloadJob) {
         eta_seconds: job.eta_seconds,
         external_id: job.external_id.clone(),
         error: job.error.clone(),
+        status_detail: job.status_detail.clone(),
     };
     let _ = app.emit(SOURCES_TERMINAL_EVENT, payload);
     writer::try_record_source_download_terminal(app, job);
@@ -68,4 +71,28 @@ pub fn emit_terminal(app: &AppHandle, job: &SourceDownloadJob) {
 /// Emite notificación al frontend cuando la colección de fuentes de juegos cambia o se sincroniza.
 pub fn emit_catalog_updated(app: &AppHandle) {
     let _ = app.emit(SOURCES_CATALOG_UPDATED_EVENT, ());
+}
+
+/// Nombre del evento de progreso de sincronización de fuentes.
+pub const SOURCES_SYNC_PROGRESS_EVENT: &str = "sources-sync-progress";
+
+/// Payload serializable para el progreso en streaming de la sincronización de fuentes.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceSyncProgressPayload {
+    pub in_progress: bool,
+    pub current_index: usize,
+    pub total_sources: usize,
+    pub source_id: Option<String>,
+    pub source_url: Option<String>,
+    pub source_name: Option<String>,
+    pub stage: String,
+    pub status_detail: Option<String>,
+    pub items_count: Option<usize>,
+    pub error: Option<String>,
+}
+
+/// Emite actualización del progreso de sincronización de fuentes al frontend.
+pub fn emit_sync_progress(app: &AppHandle, payload: &SourceSyncProgressPayload) {
+    let _ = app.emit(SOURCES_SYNC_PROGRESS_EVENT, payload);
 }

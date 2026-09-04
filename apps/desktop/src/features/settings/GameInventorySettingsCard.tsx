@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, CardBody, Input, Switch } from "@heroui/react";
+import { Button, Card, CardBody, Input, Switch, Spinner } from "@heroui/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { FolderOpen, Gamepad2, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +13,8 @@ import {
   inventoryScanAndPublish,
   inventoryUnregisterInstallFolder,
   setShareGameInventoryWithCloud,
+  type DeviceInventoryManifest,
+  type GameInventoryEntry,
 } from "@services/tauri/inventory.service";
 import { searchSteamGames, type ManifestSearchResult } from "@services/tauri/config.service";
 import { toastError, toastSuccess } from "@utils/toast";
@@ -34,7 +36,7 @@ export function GameInventorySettingsCard() {
 
   const debouncedSearch = useDebouncedValue(searchInput.trim(), 400);
 
-  const { data: localInventory } = useQuery({
+  const { data: localInventory } = useQuery<{ manifest: DeviceInventoryManifest | null }>({
     queryKey: INVENTORY_LOCAL_QUERY_KEY,
     queryFn: inventoryGetLocal,
     staleTime: 60_000,
@@ -171,7 +173,7 @@ export function GameInventorySettingsCard() {
             </p>
             <div className="divide-y divide-default-100 rounded-lg border border-default-200 bg-default-50/30 dark:divide-default-100/10 dark:border-default-100/10 overflow-hidden">
               <AnimatePresence initial={false}>
-                {localInventory.manifest.games.map((game) => (
+                {localInventory.manifest.games.map((game: GameInventoryEntry) => (
                   <motion.div
                     key={game.gameKey}
                     initial={{ opacity: 0, scale: 0.98 }}
@@ -230,7 +232,7 @@ export function GameInventorySettingsCard() {
                 size="sm"
                 variant="bordered"
                 className="border-default-300/70"
-                startContent={<RefreshCw size={14} className={scanMutation.isPending ? "animate-spin" : ""} />}
+                startContent={scanMutation.isPending ? <Spinner size="sm" /> : <RefreshCw size={14} />}
                 isDisabled={scanMutation.isPending || !sharing}
                 onPress={() => scanMutation.mutate()}>
                 {t("settings.inventory.rescanButton")}
@@ -269,7 +271,7 @@ export function GameInventorySettingsCard() {
                       ) : steamResults.length === 0 ? (
                         <p className="px-2 py-1.5 text-default-500">{t("settings.inventory.noGamesFound")}</p>
                       ) : (
-                        steamResults.map((r) => (
+                        steamResults.map((r: ManifestSearchResult) => (
                           <button
                             key={r.steamAppId}
                             type="button"

@@ -2,39 +2,37 @@ import { useState, lazy, Suspense, useEffect, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Tab, Tabs } from "@heroui/react";
 import { useTranslation } from "react-i18next";
-import { AppWindow, Bell, Blocks, Cloud, FlaskConical, Gamepad2, Monitor, RefreshCw, User } from "lucide-react";
+import {
+  AppWindow,
+  Bell,
+  Blocks,
+  Cloud,
+  Download,
+  FlaskConical,
+  Gamepad2,
+  Monitor,
+  RefreshCw,
+  User,
+} from "lucide-react";
 import { AutostartCard } from "@features/settings/AutostartCard";
 import { BigPictureModeCard } from "@features/settings/BigPictureModeCard";
 import { ConfigSection } from "@features/settings/ConfigSection";
-import { CreateConfigModal } from "@features/settings/CreateConfigModal";
 import { ExperimentalFeaturesCard } from "@features/settings/ExperimentalFeaturesCard";
 import { LocalBackupInfoCard } from "@features/settings/LocalBackupInfoCard";
 import { NotificationsCard } from "@features/settings/NotificationsCard";
 import { ProfileStartupBehaviorCard } from "@features/settings/ProfileStartupBehaviorCard";
 import { ReleaseNotesCard } from "@features/settings/ReleaseNotesCard";
-import { RestoreConfigModal } from "@features/settings/RestoreConfigModal";
-import { ResetSteamCatalogModal } from "@features/settings/ResetSteamCatalogModal";
-import { ResetCloudSeedModal } from "@features/settings/ResetCloudSeedModal";
-import { PullFriendConfigModal } from "@/features/settings/PullFriendConfigModal";
 import { UpdatesCard } from "@features/settings/UpdatesCard";
 import { useSettingsPage } from "@/hooks/useSettingsPage";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigationStore } from "@features/input/store";
-import { PluginsSettingsSection } from "@features/settings/plugins/PluginsSettingsSection";
 import { DeveloperModeCard } from "@features/settings/DeveloperModeCard";
-import { SourceInstallSettingsCard } from "@features/settings/SourceInstallSettingsCard";
-import { ProxySettingsCard } from "@features/settings/ProxySettingsCard";
-import { EmulatorIntegrationsCard } from "@features/settings/EmulatorIntegrationsCard";
 import { GamepadTesterCard } from "@features/settings/GamepadTesterCard";
-import { VoiceCommandsCard } from "@features/voice-commands";
 import { GameModeCard } from "@features/settings/GameModeCard";
 import { LowPerformanceModeCard } from "@features/settings/LowPerformanceModeCard";
 import { DisableHardwareAccelerationCard } from "@features/settings/DisableHardwareAccelerationCard";
 import { LanguageSettingsCard } from "@features/settings/LanguageSettingsCard";
-import { AudioOutputSettingsCard } from "@features/settings/AudioOutputSettingsCard";
-import { HealthObservabilityCard } from "@features/settings/HealthObservabilityCard";
-import { CloudDashboardPanel } from "@features/settings/CloudDashboardPanel";
 import { SettingsSidebarAnimatedPanel } from "@features/settings/SettingsSidebarAnimatedPanel";
 import { SettingsSidebar, type SettingsTabKey } from "@features/settings/SettingsSidebar";
 import { useSettingsSidebarPanelDirection } from "@features/settings/useSettingsSidebarPanelDirection";
@@ -43,6 +41,54 @@ import {
   SAVECLOUD_SETTINGS_SELECT_TAB_EVENT,
   type SavecloudSettingsSelectTabPayload,
 } from "@/constants/savecloudCrossWindow";
+import {
+  SourcesTabSkeleton,
+  IntegrationsTabSkeleton,
+  CloudTabSkeleton,
+  PluginsTabSkeleton,
+  ObservabilityCardSkeleton,
+} from "@/features/settings/SettingsTabSkeletons";
+
+const CloudDashboardPanelLazy = lazy(() =>
+  import("@features/settings/CloudDashboardPanel").then((m) => ({ default: m.CloudDashboardPanel }))
+);
+const HealthObservabilityCardLazy = lazy(() =>
+  import("@features/settings/HealthObservabilityCard").then((m) => ({ default: m.HealthObservabilityCard }))
+);
+const PluginsSettingsSectionLazy = lazy(() =>
+  import("@features/settings/plugins/PluginsSettingsSection").then((m) => ({ default: m.PluginsSettingsSection }))
+);
+const CreateConfigModalLazy = lazy(() =>
+  import("@features/settings/CreateConfigModal").then((m) => ({ default: m.CreateConfigModal }))
+);
+const RestoreConfigModalLazy = lazy(() =>
+  import("@features/settings/RestoreConfigModal").then((m) => ({ default: m.RestoreConfigModal }))
+);
+const ResetSteamCatalogModalLazy = lazy(() =>
+  import("@features/settings/ResetSteamCatalogModal").then((m) => ({ default: m.ResetSteamCatalogModal }))
+);
+const ResetCloudSeedModalLazy = lazy(() =>
+  import("@features/settings/ResetCloudSeedModal").then((m) => ({ default: m.ResetCloudSeedModal }))
+);
+const PullFriendConfigModalLazy = lazy(() =>
+  import("@/features/settings/PullFriendConfigModal").then((m) => ({ default: m.PullFriendConfigModal }))
+);
+
+const SourceInstallSettingsCardLazy = lazy(() =>
+  import("@features/settings/SourceInstallSettingsCard").then((m) => ({ default: m.SourceInstallSettingsCard }))
+);
+const ProxySettingsCardLazy = lazy(() =>
+  import("@features/settings/ProxySettingsCard").then((m) => ({ default: m.ProxySettingsCard }))
+);
+const EmulatorIntegrationsCardLazy = lazy(() =>
+  import("@features/settings/EmulatorIntegrationsCard").then((m) => ({ default: m.EmulatorIntegrationsCard }))
+);
+const VoiceCommandsCardLazy = lazy(() =>
+  import("@features/voice-commands").then((m) => ({ default: m.VoiceCommandsCard }))
+);
+const AudioOutputSettingsCardLazy = lazy(() =>
+  import("@features/settings/AudioOutputSettingsCard").then((m) => ({ default: m.AudioOutputSettingsCard }))
+);
 
 const ReleaseNotesDialogLazy = lazy(() =>
   import("@features/settings/ReleaseNotesDialog").then((module) => ({ default: module.ReleaseNotesDialog }))
@@ -57,6 +103,7 @@ const SETTINGS_TABS: Array<{
   { key: "cloud", label: "Nube", icon: <Cloud size={17} className="opacity-90" /> },
   { key: "app", label: "Inicio y app", icon: <AppWindow size={17} className="opacity-90" /> },
   { key: "big-picture", label: "Big Picture", icon: <Monitor size={17} className="opacity-90" /> },
+  { key: "sources", label: "Fuentes", icon: <Download size={17} className="opacity-90" /> },
   { key: "integrations", label: "Integraciones", icon: <Bell size={17} className="opacity-90" /> },
   { key: "gamepad", label: "Mando", icon: <Gamepad2 size={17} className="opacity-90" /> },
   { key: "plugins", label: "Plugins", icon: <Blocks size={17} className="opacity-90" /> },
@@ -260,7 +307,11 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
           />
         );
       case "cloud":
-        return <CloudDashboardPanel onSelectAccountTab={() => setSettingsTab("account")} />;
+        return (
+          <Suspense fallback={<CloudTabSkeleton />}>
+            <CloudDashboardPanelLazy onSelectAccountTab={() => setSettingsTab("account")} />
+          </Suspense>
+        );
       case "app":
         return (
           <div className="space-y-3">
@@ -282,13 +333,12 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
             <BigPictureModeCard />
           </div>
         );
-      case "integrations":
+      case "sources":
         return (
-          <div className="grid gap-4 xl:grid-cols-2 items-start">
-            {/* Columna 1: Red y Descarga de Fuentes */}
+          <Suspense fallback={<SourcesTabSkeleton />}>
             <div className="space-y-4">
-              <ProxySettingsCard proxyUrl={proxyUrl} onProxyUrlChange={setProxyUrl} onSave={handleSaveProxyUrl} />
-              <SourceInstallSettingsCard
+              <ProxySettingsCardLazy proxyUrl={proxyUrl} onProxyUrlChange={setProxyUrl} onSave={handleSaveProxyUrl} />
+              <SourceInstallSettingsCardLazy
                 sourceUrl={sourceUrl}
                 remoteSourceUrl={remoteSourceUrl}
                 defaultDownloadDir={defaultSourceDownloadDir}
@@ -320,18 +370,21 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
                 onAutoExtractDownloadsChange={handleAutoExtractDownloadsChange}
               />
             </div>
-
-            {/* Columna 2: Dispositivo e Integraciones de Sistema */}
+          </Suspense>
+        );
+      case "integrations":
+        return (
+          <Suspense fallback={<IntegrationsTabSkeleton />}>
             <div className="space-y-4">
-              <AudioOutputSettingsCard />
+              <AudioOutputSettingsCardLazy />
               <NotificationsCard
                 testingNotification={testingNotification}
                 onTestNotification={handleTestNotification}
               />
-              <VoiceCommandsCard />
-              <EmulatorIntegrationsCard />
+              <VoiceCommandsCardLazy />
+              <EmulatorIntegrationsCardLazy />
             </div>
-          </div>
+          </Suspense>
         );
       case "gamepad":
         return (
@@ -340,7 +393,11 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
           </div>
         );
       case "plugins":
-        return <PluginsSettingsSection />;
+        return (
+          <Suspense fallback={<PluginsTabSkeleton />}>
+            <PluginsSettingsSectionLazy />
+          </Suspense>
+        );
       case "updates":
         return (
           <div className="grid gap-3 xl:grid-cols-2">
@@ -351,7 +408,9 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
       case "advanced": {
         return (
           <div className="space-y-3">
-            <HealthObservabilityCard />
+            <Suspense fallback={<ObservabilityCardSkeleton />}>
+              <HealthObservabilityCardLazy />
+            </Suspense>
             <LocalBackupInfoCard />
             <DeveloperModeCard enabled={!!activeProfile?.developerMode} onEnabledChange={handleDeveloperModeChange} />
             <ExperimentalFeaturesCard
@@ -418,55 +477,75 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
           </Tabs>
         </>
       )}
-      <CreateConfigModal
-        isOpen={createConfigModalOpen}
-        apiBaseUrl={createApiBaseUrl}
-        wsBaseUrl={createWsBaseUrl}
-        apiKey={createApiKey}
-        userId={createUserId}
-        steamWebApiKey={createSteamWebApiKey}
-        error={createConfigError}
-        creating={creatingConfig}
-        onApiBaseUrlChange={setCreateApiBaseUrl}
-        onWsBaseUrlChange={setCreateWsBaseUrl}
-        onApiKeyChange={setCreateApiKey}
-        onUserIdChange={setCreateUserId}
-        onSteamWebApiKeyChange={setCreateSteamWebApiKey}
-        onClose={() => setCreateConfigModalOpen(false)}
-        onSubmit={handleCreateConfigFile}
-      />
-      <RestoreConfigModal
-        isOpen={restoreConfirmOpen}
-        restoring={restoringConfig}
-        onCancel={() => setRestoreConfirmOpen(false)}
-        onConfirm={async () => {
-          await performRestoreConfigFromCloud();
-          setRestoreConfirmOpen(false);
-        }}
-      />
-      <ResetSteamCatalogModal
-        isOpen={resetSteamCatalogConfirmOpen}
-        busy={steamCatalogBusy}
-        onCancel={() => setResetSteamCatalogConfirmOpen(false)}
-        onConfirm={confirmResetSteamCatalogSync}
-      />
-      <ResetCloudSeedModal
-        isOpen={resetCloudSeedModalOpen}
-        busy={steamSeedBusy}
-        onCancel={() => setResetCloudSeedModalOpen(false)}
-        onConfirm={async () => {
-          await handleResetCloudSeed();
-          setResetCloudSeedModalOpen(false);
-        }}
-      />
-      <PullFriendConfigModal
-        isOpen={pullFriendConfigModalOpen}
-        userId={pullFriendUserId}
-        pulling={pullingFriendConfig}
-        onChangeUserId={setPullFriendUserId}
-        onClose={() => setPullFriendConfigModalOpen(false)}
-        onSubmit={handlePullFriendConfig}
-      />
+      {createConfigModalOpen && (
+        <Suspense fallback={null}>
+          <CreateConfigModalLazy
+            isOpen={createConfigModalOpen}
+            apiBaseUrl={createApiBaseUrl}
+            wsBaseUrl={createWsBaseUrl}
+            apiKey={createApiKey}
+            userId={createUserId}
+            steamWebApiKey={createSteamWebApiKey}
+            error={createConfigError}
+            creating={creatingConfig}
+            onApiBaseUrlChange={setCreateApiBaseUrl}
+            onWsBaseUrlChange={setCreateWsBaseUrl}
+            onApiKeyChange={setCreateApiKey}
+            onUserIdChange={setCreateUserId}
+            onSteamWebApiKeyChange={setCreateSteamWebApiKey}
+            onClose={() => setCreateConfigModalOpen(false)}
+            onSubmit={handleCreateConfigFile}
+          />
+        </Suspense>
+      )}
+      {restoreConfirmOpen && (
+        <Suspense fallback={null}>
+          <RestoreConfigModalLazy
+            isOpen={restoreConfirmOpen}
+            restoring={restoringConfig}
+            onCancel={() => setRestoreConfirmOpen(false)}
+            onConfirm={async () => {
+              await performRestoreConfigFromCloud();
+              setRestoreConfirmOpen(false);
+            }}
+          />
+        </Suspense>
+      )}
+      {resetSteamCatalogConfirmOpen && (
+        <Suspense fallback={null}>
+          <ResetSteamCatalogModalLazy
+            isOpen={resetSteamCatalogConfirmOpen}
+            busy={steamCatalogBusy}
+            onCancel={() => setResetSteamCatalogConfirmOpen(false)}
+            onConfirm={confirmResetSteamCatalogSync}
+          />
+        </Suspense>
+      )}
+      {resetCloudSeedModalOpen && (
+        <Suspense fallback={null}>
+          <ResetCloudSeedModalLazy
+            isOpen={resetCloudSeedModalOpen}
+            busy={steamSeedBusy}
+            onCancel={() => setResetCloudSeedModalOpen(false)}
+            onConfirm={async () => {
+              await handleResetCloudSeed();
+              setResetCloudSeedModalOpen(false);
+            }}
+          />
+        </Suspense>
+      )}
+      {pullFriendConfigModalOpen && (
+        <Suspense fallback={null}>
+          <PullFriendConfigModalLazy
+            isOpen={pullFriendConfigModalOpen}
+            userId={pullFriendUserId}
+            pulling={pullingFriendConfig}
+            onChangeUserId={setPullFriendUserId}
+            onClose={() => setPullFriendConfigModalOpen(false)}
+            onSubmit={handlePullFriendConfig}
+          />
+        </Suspense>
+      )}
       {releaseNotesOpen && (
         <Suspense fallback={null}>
           <ReleaseNotesDialogLazy isOpen={releaseNotesOpen} onClose={() => setReleaseNotesOpen(false)} />

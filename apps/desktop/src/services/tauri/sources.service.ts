@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 export type DownloadProtocol = "http" | "torrentMagnet" | "torrentFile" | "peerLan" | "unknown";
 export type SourceJobStatus = "queued" | "running" | "extracting" | "paused" | "cancelled" | "completed" | "failed";
@@ -97,6 +98,7 @@ export interface SourceDownloadJob {
   etaSeconds?: number | null;
   error?: string | null;
   externalId?: string | null;
+  statusDetail?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -112,6 +114,7 @@ export interface SourceProgressPayload {
   etaSeconds?: number | null;
   externalId?: string | null;
   error?: string | null;
+  statusDetail?: string | null;
 }
 
 export interface SourceMatchCandidate {
@@ -258,4 +261,23 @@ export function sourcesFindMatchForGame(gameName: string, threshold?: number | n
 export function sourcesFindMatchesBatch(gameNames: string[], threshold?: number | null): Promise<SourceBestMatch[]> {
   if (!gameNames.length) return Promise.resolve([]);
   return invoke<SourceBestMatch[]>("sources_find_matches_batch", { gameNames, threshold: threshold ?? null });
+}
+
+export interface SourceSyncProgressPayload {
+  inProgress: boolean;
+  currentIndex: number;
+  totalSources: number;
+  sourceId: string | null;
+  sourceUrl: string | null;
+  sourceName: string | null;
+  stage: string;
+  statusDetail: string | null;
+  itemsCount: number | null;
+  error: string | null;
+}
+
+export function onSourceSyncProgress(cb: (payload: SourceSyncProgressPayload) => void): Promise<() => void> {
+  return listen<SourceSyncProgressPayload>("sources-sync-progress", (event) => {
+    cb(event.payload);
+  });
 }

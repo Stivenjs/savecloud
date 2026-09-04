@@ -132,6 +132,9 @@ pub struct SourceDownloadJob {
     /// Nombre de archivo en disco para descargas HTTP (tras resolver URI).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_file_name: Option<String>,
+    /// Detalle o fase del estado en tiempo real (ejemplo: etapa del crawler durante bypass).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status_detail: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

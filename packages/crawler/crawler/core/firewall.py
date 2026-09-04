@@ -3,7 +3,18 @@
 import json
 import sys
 
-from crawler.config import FIREWALL_KEYWORDS
+from crawler.config import (
+    FIREWALL_KEYWORDS,
+    TURNSTILE_CHECKBOX_OFFSET_X,
+    TURNSTILE_CHECKBOX_OFFSET_Y,
+    TURNSTILE_CHECKBOX_SELECTORS,
+    TURNSTILE_FRAME_SUBSTRING,
+    TURNSTILE_OVERLAY_SELECTORS,
+    TURNSTILE_READY_DOWNLOAD_SELECTORS,
+    TURNSTILE_RESPONSE_INPUT,
+)
+from crawler.core.reporter import CrawlerReporter
+from crawler.utils.dom import DomHelper
 from crawler.utils.json_cleaner import clean_json_from_html
 
 
@@ -62,91 +73,104 @@ class TurnstileSolver:
     """Interacts with embedded Cloudflare Turnstile iframes to complete challenges."""
 
     @staticmethod
-    def solve(page) -> bool:
+    def solve(page, reported: bool = False) -> bool:
         try:
-            target_selectors = [
-                "a#download-link",
-                "#download-btn",
-                ".download-button",
-                "a.download-btn",
-            ]
-            for sel in target_selectors:
-                try:
-                    if (
-                        page.locator(sel).count() > 0
-                        and page.locator(sel).first.is_visible()
-                    ):
-                        return True
-                except Exception:
-                    pass
+            # If download action is already visible, challenge is bypassed
+            if DomHelper.is_any_visible(page, TURNSTILE_READY_DOWNLOAD_SELECTORS):
+                return True
 
-            cf_frame = None
-            for frame in page.frames:
-                if "challenges.cloudflare.com" in frame.url:
-                    cf_frame = frame
-                    break
+            cf_frame = next(
+                (f for f in page.frames if TURNSTILE_FRAME_SUBSTRING in f.url), None
+            )
 
-            if cf_frame:
+            if not reported:
+                CrawlerReporter.report("turnstile", "Resolving Cloudflare Turnstile...")
                 sys.stderr.write(
                     "Found embedded Cloudflare Turnstile iframe, attempting to solve...\n"
                 )
-                try:
-                    page.evaluate(
-                        'document.querySelectorAll(\'#dontfoid, div[id^="dontfo"]\')'
-                        ".forEach(el => el.remove())"
-                    )
-                except Exception:
-                    pass
 
-                try:
-                    checkbox = cf_frame.locator(".tIReV4 input").first
-                    if checkbox.count() > 0 and checkbox.is_visible():
-                        checkbox.hover(timeout=2000)
-                        page.wait_for_timeout(200)
-                        checkbox.click(timeout=3000)
+            # Remove overlays or anti-click layers if present
+            DomHelper.remove_elements(page, TURNSTILE_OVERLAY_SELECTORS)
+
+            # 1. Try to click checkbox inside frame with shadow DOM piercing
+            if cf_frame:
+                for selector in TURNSTILE_CHECKBOX_SELECTORS:
+                    try:
+                        loc = cf_frame.locator(selector).first
+                        if loc.count() > 0 and loc.is_visible():
+                            if DomHelper.smooth_click_locator(page, loc):
+                                page.wait_for_timeout(1500)
+                                return True
+                    except Exception:
+                        continue
+
+            # 2. Fallback: click directly on the iframe at standard checkbox coordinates
+            try:
+                iframe_loc = page.locator(
+                    f"iframe[src*='{TURNSTILE_FRAME_SUBSTRING}']:visible"
+                ).first
+                if iframe_loc.count() > 0:
+                    if DomHelper.smooth_click_locator(
+                        page,
+                        iframe_loc,
+                        offset_x=TURNSTILE_CHECKBOX_OFFSET_X,
+                        offset_y=TURNSTILE_CHECKBOX_OFFSET_Y,
+                    ):
                         page.wait_for_timeout(2000)
                         return True
-                except Exception:
-                    pass
+            except Exception as e:
+                sys.stderr.write(f"Error clicking iframe locator: {e}\n")
 
-                try:
-                    iframe_locator = page.locator(
-                        "iframe[src*='challenges.cloudflare.com']:visible"
-                    ).first
-                    if iframe_locator.count() > 0:
-                        iframe_locator.click(
-                            position={"x": 180, "y": 32}, timeout=2000
-                        )
-                        page.wait_for_timeout(2000)
-                        return True
-                except Exception:
-                    pass
         except Exception as e:
             sys.stderr.write(f"Error in solve_embedded_turnstile: {e}\n")
         return False
 
     @classmethod
-    def solve_if_present(cls, page, timeout_seconds: int = 10) -> bool:
+    def is_solved(cls, page) -> bool:
+        """Checks if Turnstile has already been successfully solved on the page."""
+        return DomHelper.has_input_value(page, TURNSTILE_RESPONSE_INPUT, min_length=20)
+
+    @classmethod
+    def solve_if_present(cls, page, timeout_seconds: int = 15) -> bool:
         """Quickly detects if Turnstile is present and attempts to solve it."""
         try:
-            for sec in range(timeout_seconds):
-                has_turnstile = page.evaluate("""() => {
-                    const hasIframe = Array.from(document.querySelectorAll('iframe')).some(
-                        f => (f.src || '').includes('challenges.cloudflare.com')
-                    );
-                    const hasInput = !!document.querySelector('input[name="cf-turnstile-response"]');
-                    return hasIframe || hasInput;
-                }""")
-                if not has_turnstile and sec >= 2:
-                    return False
+            
+            if getattr(page, "_turnstile_handled", False):
+                return True
 
-                cls.solve(page)
-                has_token = page.evaluate(
-                    "() => document.querySelector('input[name=\"cf-turnstile-response\"]')?.value?.length > 20"
-                )
-                if has_token:
+            has_turnstile = (
+                DomHelper.has_iframe_src(page, TURNSTILE_FRAME_SUBSTRING)
+                or DomHelper.exists(page, TURNSTILE_RESPONSE_INPUT)
+            )
+            if not has_turnstile:
+                return False
+
+            reported = False
+            for sec in range(timeout_seconds):
+                if not reported:
+                    reported = True
+                    CrawlerReporter.report("turnstile", "Resolving Cloudflare Turnstile...")
+
+                if cls.is_solved(page):
+                    CrawlerReporter.report(
+                        "turnstile_solved", "Cloudflare Turnstile verified successfully"
+                    )
                     sys.stderr.write("[Turnstile] Verified successfully!\n")
+                    setattr(page, "_turnstile_handled", True)
+                    page.wait_for_timeout(600)
                     return True
+
+                cls.solve(page, reported=True)
+
+                if cls.is_solved(page):
+                    CrawlerReporter.report(
+                        "turnstile_solved", "Cloudflare Turnstile verified successfully"
+                    )
+                    sys.stderr.write("[Turnstile] Verified successfully!\n")
+                    setattr(page, "_turnstile_handled", True)
+                    page.wait_for_timeout(600)
+                    return True
+
                 page.wait_for_timeout(1000)
         except Exception:
             pass

@@ -8,6 +8,7 @@ export type SettingsTabKey =
   | "cloud"
   | "app"
   | "big-picture"
+  | "sources"
   | "integrations"
   | "gamepad"
   | "plugins"
@@ -55,6 +56,8 @@ export function SettingsSidebar({ tabs, selectedTab, onSelectTab }: SettingsSide
         return t("settings.tabs.app");
       case "big-picture":
         return t("settings.tabs.bigPicture");
+      case "sources":
+        return t("settings.tabs.sources");
       case "integrations":
         return t("settings.tabs.integrations");
       case "gamepad":

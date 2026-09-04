@@ -185,12 +185,21 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
     match job.protocol {
         DownloadProtocol::Http => {
             let cancel_flag = state.create_cancel_flag(job_id);
+            let pause_flag = state.create_pause_flag(job_id);
+            let app_for_status = app.clone();
+            let job_id_for_status = job_id.to_string();
+            let on_status_detail = Arc::new(move |status_detail: Option<String>| {
+                let state = app_for_status.state::<SourcesState>();
+                emit_job_status_detail(&app_for_status, &state, &job_id_for_status, status_detail)
+            });
+
             let result = http_runner::run_http_download(
                 app,
                 &job.title,
                 &job.destination_dir,
                 &job.selected_uri,
                 cancel_flag,
+                pause_flag,
                 |output_file_name| {
                     let mut current = find_job(state, job_id)?;
                     current.output_file_name = Some(output_file_name.to_string());
@@ -210,6 +219,7 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
                         eta_seconds,
                     )
                 },
+                on_status_detail,
             )
             .await;
 
@@ -219,6 +229,7 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
                     done_job.loaded = done.loaded;
                     done_job.total = done.total;
                     done_job.output_file_name = Some(done.output_file_name.clone());
+                    done_job.status_detail = None;
                     done_job.updated_at = now_iso();
                     state.upsert_job(done_job.clone())?;
 
@@ -243,6 +254,17 @@ async fn run_job(app: &AppHandle, state: &SourcesState, job_id: &str) -> Result<
                         emit_terminal(app, &current);
                     }
                     return Err(err);
+                }
+                Err(err) if err == "paused_by_user" => {
+                    let mut paused_job = find_job(state, job_id)?;
+                    paused_job.status = SourceJobStatus::Paused;
+                    paused_job.status_detail = None;
+                    paused_job.download_speed_bytes = 0;
+                    paused_job.eta_seconds = None;
+                    paused_job.updated_at = now_iso();
+                    state.upsert_job(paused_job.clone())?;
+                    emit_progress(app, &paused_job);
+                    return Ok(());
                 }
                 Err(err) => return Err(err),
             }
@@ -464,6 +486,21 @@ fn emit_job_download_progress(
             current.eta_seconds = crate::utils::transfer_metrics::compute_eta(total, loaded, speed);
         }
     }
+    current.updated_at = now_iso();
+    state.upsert_job(current.clone())?;
+    emit_progress(app, &current);
+    Ok(())
+}
+
+fn emit_job_status_detail(
+    app: &AppHandle,
+    state: &SourcesState,
+    job_id: &str,
+    status_detail: Option<String>,
+) -> Result<(), String> {
+    log::info!("[Sources] emit_job_status_detail for {job_id}: {status_detail:?}");
+    let mut current = find_job(state, job_id)?;
+    current.status_detail = status_detail;
     current.updated_at = now_iso();
     state.upsert_job(current.clone())?;
     emit_progress(app, &current);

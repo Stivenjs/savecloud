@@ -4,6 +4,7 @@ import sys
 
 from crawler.core.browser import BrowserManager
 from crawler.core.network import is_json_url
+from crawler.core.reporter import CrawlerReporter
 from crawler.extractors.base import ExtractionContext
 from crawler.extractors.registry import ExtractorRegistry
 from crawler.strategies.fast_fetch import FastFetchStrategy
@@ -30,13 +31,16 @@ class CrawlerEngine:
         if not getattr(extractor, "requires_browser", False):
             fast_result = self.fast_strategy.execute(context, extractor)
             if fast_result:
+                CrawlerReporter.report("resolved", "Resolved via fast connection")
                 return fast_result
 
         # 2. Tier-2 Stealth Headless Browser
+        CrawlerReporter.report("init", f"Switching to stealth browser for {extractor.name}...")
         errors: list[str] = []
         try:
             browser_result = self.stealth_strategy.execute(context, extractor)
             if browser_result:
+                CrawlerReporter.report("resolved", "Resolved via stealth browser")
                 return browser_result
         except Exception as e:
             sys.stderr.write(f"Stealth browser attempt failed: {e}\n")

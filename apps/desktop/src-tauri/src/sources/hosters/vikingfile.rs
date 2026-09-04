@@ -231,6 +231,7 @@ pub async fn resolve(
     client: &Client,
     url: &str,
     cancel_flag: Option<Arc<AtomicBool>>,
+    on_event: Option<crate::sources::commands::fetch::CrawlerEventCallback>,
 ) -> Result<(String, String, Option<String>), HosterError> {
     let hash = extract_file_hash(url)?;
     let mut file_name = None;
@@ -252,9 +253,12 @@ pub async fn resolve(
 
     if let Some(app) = app {
         log::info!("vikingfile: ejecutando Scrapling crawler para resolver Turnstile y enlace directo");
-        if let Ok(scraped) =
-            crate::sources::commands::fetch::run_scrapling_fetch(app, url, cancel_flag.clone())
-        {
+        if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch_with_progress(
+            app,
+            url,
+            cancel_flag.clone(),
+            on_event,
+        ) {
             let trimmed = scraped.trim();
             if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
                 log::info!("vikingfile: Scrapling resolvió URL directa: {trimmed}");

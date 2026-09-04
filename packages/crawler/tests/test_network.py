@@ -64,5 +64,17 @@ class TestNetworkUtils(unittest.TestCase):
         self.assertFalse(is_ignored_download_url("https://example.com/game.zip"))
 
 
+class TestSessionManager(unittest.TestCase):
+    def test_save_and_retrieve_playwright_cookies(self):
+        from crawler.core.session import SessionManager
+        url = "https://datanodes.to/download/test"
+        cookies = [
+            {"name": "cf_clearance", "value": "secret_token_123", "domain": "datanodes.to", "path": "/"}
+        ]
+        SessionManager.save_session(url, cookies, user_agent="TestUA", ttl_seconds=60)
+        retrieved = SessionManager.get_cookie_list_for_playwright(url)
+        self.assertTrue(any(c["name"] == "cf_clearance" and c["value"] == "secret_token_123" for c in retrieved))
+
+
 if __name__ == "__main__":
     unittest.main()

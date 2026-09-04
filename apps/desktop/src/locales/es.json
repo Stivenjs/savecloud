@@ -1067,6 +1067,7 @@
       "cloud": "Nube",
       "app": "Inicio y app",
       "bigPicture": "Big Picture",
+      "sources": "Fuentes y descargas",
       "integrations": "Integraciones",
       "gamepad": "Mando",
       "plugins": "Plugins",
@@ -2155,6 +2156,15 @@
       "completed": "Completado",
       "failed": "Error"
     },
+    "crawler": {
+      "init": "Iniciando navegador sigiloso…",
+      "fast_fetch": "Comprobando conexión rápida…",
+      "navigating": "Conectando con el hoster…",
+      "turnstile": "Resolviendo Cloudflare Turnstile…",
+      "turnstile_solved": "Verificación completada",
+      "waiting_download": "Buscando enlace de descarga…",
+      "resolved": "Enlace directo obtenido…"
+    },
     "preparingDownload": "Preparando descarga…",
     "defaultLabel": "Descarga",
     "torrentLabel": "Torrent"
@@ -2559,5 +2569,19 @@
     "navigateShortcut": "Navegar",
     "openShortcut": "Abrir",
     "closeShortcut": "Cerrar"
+  },
+  "sources": {
+    "sync": {
+      "title": "Sincronizando fuentes",
+      "starting": "Iniciando sincronización…",
+      "checking": "Comprobando catálogo…",
+      "saved": "Guardado ({{count}} juegos)",
+      "unchanged": "Sin cambios",
+      "failed": "Error al sincronizar",
+      "completed": "Sincronización completada",
+      "sourceDefault": "Fuente",
+      "sourcesCountLabel": "fuentes",
+      "gamesLabel": "juegos"
+    }
   }
 }

@@ -1,5 +1,5 @@
 import { Button, Dropdown, DropdownTrigger, Tooltip } from "@heroui/react";
-import { Ellipsis, Film, Gamepad2, Network, Play } from "lucide-react";
+import { Download, Ellipsis, Film, Gamepad2, Network, Play } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import type { GameActionsMenuModelProps } from "@features/games/game-actions";
 import { GameActionsDropdownMenu } from "@features/games/game-actions";
@@ -8,6 +8,8 @@ import { useTranslation } from "react-i18next";
 export type GameDetailActionsProps = Omit<GameActionsMenuModelProps, "surface"> & {
   /** Lanza el archivo configurado en el drawer (Ejecución). Deshabilitado si no hay ruta. */
   onPlay?: (game: ConfiguredGame) => void;
+  /** Permite instalar el juego si no está instalado o proviene del catálogo. */
+  onInstall?: () => void;
   /** Indica si la app está en proceso de lanzar el juego (esperando respuesta del backend/SO). */
   isStartingPlay?: boolean;
   /** Abre el mapa visual del juego. */
@@ -23,6 +25,7 @@ export function GameDetailActions({
   isDownloading,
   isFullBackupUploading,
   onPlay,
+  onInstall,
   onOpenGraph,
   ...menuProps
 }: GameDetailActionsProps) {
@@ -36,6 +39,16 @@ export function GameDetailActions({
       : undefined;
 
   const getPlayButtonContent = () => {
+    if (!canPlay && onInstall) {
+      return {
+        label: t("library.detail.install", "Instalar"),
+        icon: <Download size={20} />,
+        isLoading: false,
+        color: "primary" as const,
+        variant: "solid" as const,
+        isInstall: true,
+      };
+    }
     if (isStartingPlay) {
       return {
         label: t("library.starting"),
@@ -43,6 +56,7 @@ export function GameDetailActions({
         isLoading: true,
         color: "primary" as const,
         variant: "solid" as const,
+        isInstall: false,
       };
     }
     if (isGameRunning) {
@@ -52,6 +66,7 @@ export function GameDetailActions({
         isLoading: false,
         color: "success" as const,
         variant: "flat" as const,
+        isInstall: false,
       };
     }
     return {
@@ -60,6 +75,7 @@ export function GameDetailActions({
       isLoading: false,
       color: "primary" as const,
       variant: "solid" as const,
+      isInstall: false,
     };
   };
 
@@ -78,23 +94,25 @@ export function GameDetailActions({
     onOpenGraph
   );
 
-  if (!onPlay && !hasActions) {
+  const showPrimaryButton = Boolean(onPlay || (onInstall && !canPlay));
+
+  if (!showPrimaryButton && !hasActions) {
     return null;
   }
 
   return (
     <div className="flex items-center gap-2">
-      {onPlay && (
+      {showPrimaryButton && (
         <Button
           color={playConfig.color}
           variant={playConfig.variant}
           size="lg"
           isLoading={playConfig.isLoading}
           startContent={playConfig.icon}
-          isDisabled={playDisabled}
-          title={playTitle}
+          isDisabled={playConfig.isInstall ? false : playDisabled}
+          title={playConfig.isInstall ? undefined : playTitle}
           className="h-11 min-w-32 gap-2 px-6 text-sm font-bold shadow-md shadow-primary/20 transition-all duration-200 active:scale-[0.97]"
-          onPress={() => onPlay(game)}>
+          onPress={() => (playConfig.isInstall ? onInstall?.() : onPlay?.(game))}>
           {playConfig.label}
         </Button>
       )}

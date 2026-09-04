@@ -112,6 +112,25 @@ class DomHelper:
         return False
 
     @classmethod
+    def click_and_wait_navigation(
+        cls,
+        page: Any,
+        selector: str,
+        timeout_seconds: int = 15,
+        fallback_indicators: str | Iterable[str] = (),
+    ) -> bool:
+        """Clicks an element matching selector and safely awaits navigation or DOM change."""
+        try:
+            with page.expect_navigation(timeout=int(timeout_seconds * 1000)):
+                cls.click(page, selector)
+            return True
+        except Exception:
+            cls.click(page, selector, force_enable=True)
+            if fallback_indicators:
+                return cls.wait_for_text(page, fallback_indicators, timeout_seconds=timeout_seconds)
+            return False
+
+    @classmethod
     def click_button_with_text(
         cls,
         page: Any,
@@ -278,3 +297,105 @@ class DomHelper:
             page.wait_for_timeout(int(poll_interval * 1000))
 
         return getattr(context, "captured_download_url", None) if context else None
+
+    @classmethod
+    def is_any_visible(cls, page: Any, selectors: Iterable[str]) -> bool:
+        """Checks if any element matching the given selectors exists and is visible."""
+        for sel in selectors:
+            try:
+                locator = page.locator(sel)
+                if locator.count() > 0 and locator.first.is_visible():
+                    return True
+            except Exception:
+                continue
+        return False
+
+    @staticmethod
+    def remove_elements(page: Any, selectors: Iterable[str]) -> None:
+        """Removes all elements matching the given selectors from the DOM."""
+        try:
+            combined = ", ".join(selectors)
+            page.evaluate(
+                """(sel) => {
+                    document.querySelectorAll(sel).forEach(el => el.remove());
+                }""",
+                combined,
+            )
+        except Exception:
+            pass
+
+    @staticmethod
+    def has_iframe_src(page: Any, substring: str) -> bool:
+        """Checks if any iframe on the page has a src containing substring."""
+        try:
+            return bool(page.evaluate(
+                """(sub) => Array.from(document.querySelectorAll('iframe')).some(
+                    f => (f.src || '').includes(sub)
+                )""",
+                substring,
+            ))
+        except Exception:
+            return False
+
+    @staticmethod
+    def has_input_value(page: Any, selector: str, min_length: int = 1) -> bool:
+        """Checks if an element matching selector has value length >= min_length."""
+        try:
+            return bool(page.evaluate(
+                """({ sel, minLen }) => {
+                    const el = document.querySelector(sel);
+                    return !!el && (el.value || '').length >= minLen;
+                }""",
+                {"sel": selector, "minLen": min_length},
+            ))
+        except Exception:
+            return False
+
+    @staticmethod
+    def smooth_click_point(
+        page: Any,
+        x: float,
+        y: float,
+        steps: int = 5,
+        pre_delay_ms: int = 100,
+    ) -> None:
+        """Moves mouse organically to (x, y) with multiple steps and performs a click."""
+        try:
+            page.mouse.move(x, y, steps=steps)
+            if pre_delay_ms > 0:
+                page.wait_for_timeout(pre_delay_ms)
+            page.mouse.click(x, y)
+        except Exception:
+            pass
+
+    @classmethod
+    def smooth_click_locator(
+        cls,
+        page: Any,
+        locator: Any,
+        offset_x: float | None = None,
+        offset_y: float | None = None,
+        steps: int = 5,
+        fallback_timeout_ms: int = 2000,
+    ) -> bool:
+        """Moves mouse organically to locator bounding box and clicks, or falls back to locator.click()."""
+        try:
+            box = locator.bounding_box()
+            if box:
+                if offset_x is not None:
+                    target_x = box["x"] + min(offset_x, box["width"] / 2)
+                else:
+                    target_x = box["x"] + box["width"] / 2
+
+                if offset_y is not None:
+                    target_y = box["y"] + min(offset_y, box["height"] / 2)
+                else:
+                    target_y = box["y"] + box["height"] / 2
+
+                cls.smooth_click_point(page, target_x, target_y, steps=steps)
+                return True
+
+            locator.click(timeout=fallback_timeout_ms)
+            return True
+        except Exception:
+            return False

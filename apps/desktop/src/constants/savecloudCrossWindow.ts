@@ -11,8 +11,10 @@ const VALID_SETTINGS_TAB_KEYS = new Set<SettingsTabKey>([
   "cloud",
   "app",
   "big-picture",
+  "sources",
   "integrations",
   "gamepad",
+  "plugins",
   "updates",
   "advanced",
 ]);

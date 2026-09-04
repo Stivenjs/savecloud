@@ -29,7 +29,11 @@ export function GameDetailActionStrip({ stats, isGameRunning, ...actionsProps }:
 
   const hasMeta = !!stats;
   const hasActions = Boolean(
-    actionsProps.onPlay || actionsProps.onOpenGraph || actionsProps.onEdit || actionsProps.onRemove
+    actionsProps.onPlay ||
+    actionsProps.onInstall ||
+    actionsProps.onOpenGraph ||
+    actionsProps.onEdit ||
+    actionsProps.onRemove
   );
 
   if (!hasActions && !hasMeta) {

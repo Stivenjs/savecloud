@@ -87,6 +87,31 @@ COMBINED_VISIBLE_SELECTORS: str = (
     "a.download-btn, button#download-button, a[hx-get*='download'], [hx-get*='download']"
 )
 
+# Cloudflare Turnstile automation constants
+TURNSTILE_FRAME_SUBSTRING: str = "challenges.cloudflare.com"
+TURNSTILE_RESPONSE_INPUT: str = "input[name='cf-turnstile-response']"
+TURNSTILE_CHECKBOX_OFFSET_X: float = 28.0
+TURNSTILE_CHECKBOX_OFFSET_Y: float = 32.0
+TURNSTILE_CHECKBOX_SELECTORS: tuple[str, ...] = (
+    "input[type='checkbox']",
+    "input",
+    "#cf-stage input",
+    "label.ctp-checkbox-label",
+    ".ctp-checkbox-label",
+    "#challenge-stage",
+    "body",
+)
+TURNSTILE_OVERLAY_SELECTORS: tuple[str, ...] = (
+    "#dontfoid",
+    "div[id^='dontfo']",
+)
+TURNSTILE_READY_DOWNLOAD_SELECTORS: tuple[str, ...] = (
+    "a#download-link",
+    "#download-btn",
+    ".download-button",
+    "a.download-btn",
+)
+
 JS_STREAM_FETCH: str = """async (targetUrl) => {
     try {
         const r = await fetch(targetUrl, {
@@ -106,3 +131,21 @@ JS_STREAM_FETCH: str = """async (targetUrl) => {
         return result;
     } catch(e) { return null; }
 }"""
+
+# Banderas de optimización agresiva para el arranque ultrarrápido de Chromium
+CHROMIUM_OPTIMIZATION_FLAGS: tuple[str, ...] = (
+    "--mute-audio",
+    "--disable-extensions",
+    "--disable-default-apps",
+    "--disable-background-networking",
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-breakpad",
+    "--disable-component-update",
+    "--disable-domain-reliability",
+    "--disable-sync",
+    "--disable-ipc-flooding-protection",
+    "--disable-renderer-backgrounding",
+    "--no-first-run",
+    "--metrics-recording-only",
+)

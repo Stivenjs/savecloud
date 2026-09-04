@@ -272,3 +272,19 @@ img {
   transform: translateZ(0);
   backface-visibility: hidden;
 }
+
+@keyframes download-text-swap {
+  0% {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-text-swap {
+  animation: download-text-swap 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}

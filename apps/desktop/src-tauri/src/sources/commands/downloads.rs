@@ -87,6 +87,7 @@ pub async fn start_source_download(
         error: None,
         external_id: None,
         output_file_name: None,
+        status_detail: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -134,6 +135,7 @@ pub async fn start_peer_game_download_inner(
         error: None,
         external_id: Some(target_device_id),
         output_file_name: None,
+        status_detail: None,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -184,9 +186,15 @@ pub async fn cancel_source_download(
             }
         }
         DownloadProtocol::Http => {
+            cancel_job(&state, &job_id);
             if let Some(ref name) = job.output_file_name {
-                let path = std::path::PathBuf::from(&job.destination_dir).join(name);
+                let dest = std::path::PathBuf::from(&job.destination_dir);
+                let path = dest.join(name);
+                let part_path = dest.join(format!("{name}.part"));
+                let meta_path = dest.join(format!("{name}.part.meta"));
                 let _ = tokio::fs::remove_file(path).await;
+                let _ = tokio::fs::remove_file(part_path).await;
+                let _ = tokio::fs::remove_file(meta_path).await;
             }
         }
         DownloadProtocol::PeerLan => {
@@ -206,7 +214,7 @@ pub async fn cancel_source_download(
     Ok(())
 }
 
-/// Pausa un job torrent.
+/// Pausa un job de descarga.
 #[tauri::command]
 pub async fn pause_source_download(job_id: String, app: AppHandle) -> Result<(), String> {
     let sources = app.state::<SourcesState>();
@@ -215,10 +223,6 @@ pub async fn pause_source_download(job_id: String, app: AppHandle) -> Result<(),
         .into_iter()
         .find(|j| j.job_id == job_id)
         .ok_or_else(|| "Job no encontrado".to_string())?;
-
-    if job.protocol == DownloadProtocol::Http {
-        return Err("Las descargas HTTP no se pueden pausar. Usa cancelar.".to_string());
-    }
 
     if job.status != SourceJobStatus::Running && job.status != SourceJobStatus::Queued {
         return Err("La descarga no está en curso".to_string());
@@ -240,7 +244,7 @@ pub async fn pause_source_download(job_id: String, app: AppHandle) -> Result<(),
                 });
             }
         }
-        DownloadProtocol::PeerLan => {
+        DownloadProtocol::PeerLan | DownloadProtocol::Http => {
             sources.request_pause(&job_id);
         }
         _ => {}
@@ -253,7 +257,7 @@ pub async fn pause_source_download(job_id: String, app: AppHandle) -> Result<(),
     Ok(())
 }
 
-/// Reanuda un job torrent pausado.
+/// Reanuda un job de descarga pausado.
 #[tauri::command]
 pub async fn resume_source_download(job_id: String, app: AppHandle) -> Result<(), String> {
     let sources = app.state::<SourcesState>();
@@ -263,12 +267,6 @@ pub async fn resume_source_download(job_id: String, app: AppHandle) -> Result<()
         .find(|j| j.job_id == job_id)
         .ok_or_else(|| "Job no encontrado".to_string())?;
 
-    if job.protocol == DownloadProtocol::Http {
-        return Err(
-            "Las descargas HTTP no se pueden reanudar. Inicia la descarga de nuevo.".to_string(),
-        );
-    }
-
     if job.status != SourceJobStatus::Paused {
         return Err("La descarga no está en pausa".to_string());
     }
@@ -277,7 +275,7 @@ pub async fn resume_source_download(job_id: String, app: AppHandle) -> Result<()
     job.updated_at = now_iso();
     sources.upsert_job(job.clone())?;
 
-    if job.protocol == DownloadProtocol::PeerLan {
+    if job.protocol == DownloadProtocol::PeerLan || job.protocol == DownloadProtocol::Http {
         sources.reset_pause_flag(&job_id);
         spawn_job(app, job_id);
         return Ok(());

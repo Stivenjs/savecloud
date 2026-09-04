@@ -18,12 +18,12 @@ export function SettingsSidebarAnimatedPanel({
   panelKey,
   direction,
   children,
-  className,
+  className = "",
 }: SettingsSidebarAnimatedPanelProps) {
   const prefersReducedMotion = useReducedMotion();
 
   return (
-    <div className={className ?? "relative min-h-0"}>
+    <div className={`relative min-h-0 w-full ${className}`}>
       <AnimatePresence initial={false} custom={direction} mode="popLayout">
         <motion.div
           key={panelKey}
@@ -34,8 +34,8 @@ export function SettingsSidebarAnimatedPanel({
           animate="center"
           exit="exit"
           transition={prefersReducedMotion ? { duration: 0.01 } : SETTINGS_SIDEBAR_PANEL_TRANSITION}
-          className="will-change-transform"
-          style={prefersReducedMotion ? undefined : { willChange: "opacity, transform", transform: "translateZ(0)" }}>
+          className="w-full will-change-transform"
+          style={prefersReducedMotion ? undefined : { willChange: "opacity, transform" }}>
           <DeferredContent fallback={<div className="min-h-32 opacity-0" aria-hidden="true" />}>
             {children}
           </DeferredContent>

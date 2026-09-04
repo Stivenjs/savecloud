@@ -169,6 +169,7 @@ pub async fn resolve(
     client: &reqwest::Client,
     url: &str,
     cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    on_event: Option<crate::sources::commands::fetch::CrawlerEventCallback>,
 ) -> Result<(String, String), HosterError> {
     let page_url = normalize_page_url(url)?;
     let parsed =
@@ -192,10 +193,11 @@ pub async fn resolve(
 
             if let Some(app) = app {
                 log::info!("1fichier: intento nativo falló ({native_err:?}), intentando Scrapling fallback");
-                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch(
+                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch_with_progress(
                     app,
                     &page_url,
                     cancel_flag,
+                    on_event,
                 ) {
                     let trimmed = scraped.trim();
                     if (trimmed.starts_with("http://") || trimmed.starts_with("https://"))

@@ -1,12 +1,15 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { useSyncStore } from "@store/SyncStore";
 import { useUnsyncedSaves } from "@hooks/useUnsyncedSaves";
-import { UnsyncedSavesModal } from "@features/games/UnsyncedSavesModal";
 import { syncUploadGame, createAndUploadFullBackup } from "@services/tauri";
 import { toastError, toastSuccess, toastSyncResult } from "@utils/toast";
 import { notifyUploadError, notifyFullBackupError } from "@utils/notification";
 import { formatGameDisplayName } from "@utils/gameImage";
+
+const UnsyncedSavesModalLazy = lazy(() =>
+  import("@features/games/UnsyncedSavesModal").then((m) => ({ default: m.UnsyncedSavesModal }))
+);
 
 export function UnsyncedSavesModalWithProgress() {
   const { t } = useTranslation();
@@ -67,16 +70,20 @@ export function UnsyncedSavesModalWithProgress() {
     [refetchUnsynced, setSyncOperation, t]
   );
 
+  if (!showUnsyncedModal) return null;
+
   return (
-    <UnsyncedSavesModal
-      isOpen={showUnsyncedModal}
-      onClose={closeModal}
-      gameIds={unsyncedGameIds}
-      onUploadAll={handleUploadAll}
-      onUploadGame={handleUploadGame}
-      onFullBackupGame={handleFullBackupGame}
-      isLoadingAll={isUploading}
-      loadingGameId={loadingGameId}
-    />
+    <Suspense fallback={null}>
+      <UnsyncedSavesModalLazy
+        isOpen={showUnsyncedModal}
+        onClose={closeModal}
+        gameIds={unsyncedGameIds}
+        onUploadAll={handleUploadAll}
+        onUploadGame={handleUploadGame}
+        onFullBackupGame={handleFullBackupGame}
+        isLoadingAll={isUploading}
+        loadingGameId={loadingGameId}
+      />
+    </Suspense>
   );
 }
