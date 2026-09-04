@@ -26,7 +26,6 @@ import {
   isGameActionItemHidden,
   runGameAction,
 } from "@features/games/game-actions/gameActionMenuModel";
-import { getKenneyGamepadAssetUrl, kenneyFaceAssetId } from "@/lib/kenneyGamepadAssets";
 import type { GamepadLayoutKind } from "@/lib/gamepadLabelMaps";
 
 const CONSOLE_ACTIONS_LAYER = "game-console-actions";
@@ -137,14 +136,21 @@ export function GameConsoleActionsModal(props: GameConsoleActionsModalProps) {
     return "xbox";
   }, [preferredLayout]);
 
-  const selectUrl = useMemo(
-    () => getKenneyGamepadAssetUrl(layoutKind, kenneyFaceAssetId(layoutKind, "South")),
-    [layoutKind]
-  );
-  const backUrl = useMemo(
-    () => getKenneyGamepadAssetUrl(layoutKind, kenneyFaceAssetId(layoutKind, "East")),
-    [layoutKind]
-  );
+  const { data: buttonAssets } = useQuery({
+    queryKey: ["game-console-actions-gamepad-assets", layoutKind],
+    queryFn: async () => {
+      const { getKenneyGamepadAssetUrl, kenneyFaceAssetId } = await import("@/lib/kenneyGamepadAssets");
+      return {
+        selectUrl: getKenneyGamepadAssetUrl(layoutKind, kenneyFaceAssetId(layoutKind, "South")),
+        backUrl: getKenneyGamepadAssetUrl(layoutKind, kenneyFaceAssetId(layoutKind, "East")),
+      };
+    },
+    enabled: isOpen,
+    staleTime: Infinity,
+  });
+
+  const selectUrl = buttonAssets?.selectUrl;
+  const backUrl = buttonAssets?.backUrl;
 
   const actionItems: ActionItemDef[] = useMemo(() => {
     const items: ActionItemDef[] = [];

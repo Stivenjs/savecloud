@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { Button, Card, CardBody, Code } from "@heroui/react";
 import { FolderSearch, Gamepad2, PlusCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -11,11 +11,14 @@ import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
 import { useGameMediaBatch, getIsResolvingIds } from "@hooks/useGameMedia";
 import { needsSteamSearch } from "@utils/gameImage";
 import { GameCard } from "@features/games/GameCard";
-import { GameConsoleActionsModal } from "@features/games/GameConsoleActionsModal";
 import { GamesListMotionContainer, GamesListMotionItem } from "@features/games/GamesListMotion";
 import { GamesViewControls } from "@features/games/Gamesviewcontrols";
 import { useGamesViewPreferences } from "@hooks/useGamesViewPreferences";
 import { useGamesSorter } from "@hooks/Usegamessorter";
+
+const GameConsoleActionsModal = lazy(() =>
+  import("@features/games/GameConsoleActionsModal").then((m) => ({ default: m.GameConsoleActionsModal }))
+);
 
 type SyncStatus = "pending_upload" | "pending_download" | "in_sync" | null;
 
@@ -302,24 +305,26 @@ export function GamesList({
       </GamesListMotionContainer>
 
       {consoleActionsGame && (
-        <GameConsoleActionsModal
-          isOpen={!!consoleActionsGame}
-          onClose={() => setConsoleActionsGame(null)}
-          game={consoleActionsGame}
-          surface="list"
-          isGameRunning={gameRunningStatus[consoleActionsGame.id] ?? false}
-          onEdit={onEdit}
-          onTorrent={onTorrent}
-          onOpenFolder={onOpenFolder}
-          onSync={onSync}
-          onFullBackupUpload={onFullBackupUpload}
-          onRecoverFromCloud={onRecoverFromCloud}
-          onShare={onShare}
-          onRemove={onRemove}
-          isSyncing={syncingId === consoleActionsGame.id || syncingId === "all"}
-          isDownloading={downloadingId === consoleActionsGame.id || downloadingId === "all"}
-          isFullBackupUploading={fullBackupUploadingGameId === consoleActionsGame.id}
-        />
+        <Suspense fallback={null}>
+          <GameConsoleActionsModal
+            isOpen={!!consoleActionsGame}
+            onClose={() => setConsoleActionsGame(null)}
+            game={consoleActionsGame}
+            surface="list"
+            isGameRunning={gameRunningStatus[consoleActionsGame.id] ?? false}
+            onEdit={onEdit}
+            onTorrent={onTorrent}
+            onOpenFolder={onOpenFolder}
+            onSync={onSync}
+            onFullBackupUpload={onFullBackupUpload}
+            onRecoverFromCloud={onRecoverFromCloud}
+            onShare={onShare}
+            onRemove={onRemove}
+            isSyncing={syncingId === consoleActionsGame.id || syncingId === "all"}
+            isDownloading={downloadingId === consoleActionsGame.id || downloadingId === "all"}
+            isFullBackupUploading={fullBackupUploadingGameId === consoleActionsGame.id}
+          />
+        </Suspense>
       )}
     </div>
   );
