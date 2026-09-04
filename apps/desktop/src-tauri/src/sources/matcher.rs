@@ -6,7 +6,27 @@
 
 use std::collections::HashMap;
 
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+
+static RE_TRAILING_RELEASE_NOISE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)\s*[-–—,]\s*(?:v\.?\d+|build\b|patch\b|update\b|\+\s*\d+|\+?\s*all\s+dlc).*$")
+        .unwrap()
+});
+
+static RE_VERSION_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)\b(?:v|ver|version)\.?\s*\d+[a-z0-9._-]*\b").unwrap());
+
+static RE_BUILD_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)\bbuild\s*[-_]?\s*\d+\b").unwrap());
+
+static RE_DLC_BONUS_PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"(?i)\+\s*\d*\s*(?:dlcs?|bonuses?|bonus|ost|soundtrack|fix|multi\d*|online|emu[a-z]*)\b.*",
+    )
+    .unwrap()
+});
 
 /// Configuración global de umbrales y palabras vacías para el motor de coincidencia.
 #[derive(Debug, Clone)]
@@ -194,11 +214,18 @@ pub fn strip_brackets_and_scene_noise(raw: &str) -> String {
     }
 
     let trimmed = result.trim();
-    if trimmed.is_empty() && !in_bracket_content.is_empty() {
-        return in_bracket_content;
-    }
+    let base = if trimmed.is_empty() && !in_bracket_content.is_empty() {
+        in_bracket_content
+    } else {
+        trimmed.to_string()
+    };
 
-    trimmed.to_string()
+    let no_trailing = RE_TRAILING_RELEASE_NOISE.replace(&base, "");
+    let no_versions = RE_VERSION_PATTERN.replace_all(&no_trailing, " ");
+    let no_builds = RE_BUILD_PATTERN.replace_all(&no_versions, " ");
+    let no_dlc = RE_DLC_BONUS_PATTERN.replace_all(&no_builds, " ");
+
+    no_dlc.trim().to_string()
 }
 
 /// Elimina sufijos de ediciones estándar comerciales (ej. "Deluxe Edition", "GOTY", "Remastered").
@@ -213,11 +240,12 @@ pub fn strip_brackets_and_scene_noise(raw: &str) -> String {
 pub fn strip_edition_tags(input: &str) -> String {
     let lowercase = input.to_lowercase();
     let edition_patterns = [
+        "premium deluxe edition",
+        "digital deluxe edition",
         "game of the year edition",
         "game of the year",
         "goty edition",
         "goty",
-        "digital deluxe edition",
         "deluxe edition",
         "ultimate edition",
         "complete edition",
@@ -242,6 +270,7 @@ pub fn strip_edition_tags(input: &str) -> String {
         "bonus content",
         "all dlcs",
         "next gen update",
+        "free download",
     ];
 
     let mut clean = lowercase;
@@ -361,9 +390,12 @@ pub fn tokenize_sorted_filtered(normalized: &str, stopwords: &[u64]) -> Vec<u64>
 /// `Some(u32)` si se localiza un número o año válido, o `None`.
 pub fn extract_sequel_number(normalized: &str) -> Option<u32> {
     normalized.split_whitespace().find_map(|t| {
+        if t.starts_with('0') && t.len() > 1 {
+            return None;
+        }
         t.parse::<u32>()
             .ok()
-            .filter(|&n| n <= 99 || (1970..=2099).contains(&n))
+            .filter(|&n| (1..=99).contains(&n) || (1970..=2099).contains(&n))
     })
 }
 
@@ -677,5 +709,73 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].item_title, "Cyberpunk 2077 [FitGirl Repack]");
         assert_eq!(results[0].score, 1.0);
+    }
+
+    #[test]
+    fn test_monster_hunter_wilds_fitgirl_and_dodi_match() {
+        let fitgirl_title =
+            "Monster Hunter Wilds: Premium Deluxe Edition – v1.041.03.00 + 191 DLCs/Bonuses";
+        let dodi_title = "Monster Hunter Wilds: Premium Deluxe Edition (Build 22195748 + All DLCs + High Resolution Textures Pack + MULTi15) (From 77.7 GB) (Hypervisor) [DODI / DenuvOwO Repack]";
+
+        let norm_fitgirl = normalize_title(fitgirl_title);
+        let norm_dodi = normalize_title(dodi_title);
+
+        assert_eq!(norm_fitgirl, "monster hunter wilds");
+        assert_eq!(norm_dodi, "monster hunter wilds");
+
+        let entry_fitgirl = IndexEntry {
+            source_id: "fitgirl".to_string(),
+            source_name: "FitGirl".to_string(),
+            item_id: "fg-1".to_string(),
+            item_title: fitgirl_title.to_string(),
+            normalized_title: norm_fitgirl.clone(),
+            clean_aliases: vec![norm_fitgirl.clone()],
+            token_hashes: tokenize_sorted_filtered(&norm_fitgirl, &[]),
+            protocols: vec![],
+            file_size: Some("61.1 GB".to_string()),
+            uris: vec![],
+        };
+
+        let entry_dodi = IndexEntry {
+            source_id: "dodi".to_string(),
+            source_name: "DODI".to_string(),
+            item_id: "dodi-1".to_string(),
+            item_title: dodi_title.to_string(),
+            normalized_title: norm_dodi.clone(),
+            clean_aliases: vec![norm_dodi.clone()],
+            token_hashes: tokenize_sorted_filtered(&norm_dodi, &[]),
+            protocols: vec![],
+            file_size: Some("99.7 GB".to_string()),
+            uris: vec![],
+        };
+
+        let index = MatchIndex::build(vec![entry_fitgirl, entry_dodi]);
+        let config = MatchConfig {
+            threshold: 0.60,
+            stopwords: vec![],
+        };
+
+        let norm_query = normalize_title("Monster Hunter Wilds");
+        let hashes = tokenize_sorted_filtered(&norm_query, &[]);
+        let results = find_best_per_source(
+            "Monster Hunter Wilds",
+            &norm_query,
+            &hashes,
+            &config,
+            &index,
+        );
+
+        assert_eq!(
+            results.len(),
+            2,
+            "Both FitGirl and DODI should match Monster Hunter Wilds"
+        );
+        for r in &results {
+            assert!(
+                r.score >= 0.90,
+                "Score should be >= 0.90 for both, got {}",
+                r.score
+            );
+        }
     }
 }
