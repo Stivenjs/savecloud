@@ -9,7 +9,7 @@ import { InputMode } from "@features/input/types";
 export function getGamepadFocusClass(isFocused: boolean, mode: InputMode, baseClasses: string = "") {
   const focusClasses =
     isFocused && mode === "gamepad"
-      ? "ring-4 ring-primary ring-offset-2 ring-offset-background scale-105 z-10 transform-gpu will-change-transform [backface-visibility:hidden]"
+      ? "ring-4 ring-primary ring-offset-[3px] ring-offset-black scale-[1.02] z-20 shadow-xl shadow-primary/20 transform-gpu will-change-transform [backface-visibility:hidden]"
       : "transform-gpu [backface-visibility:hidden]";
 
   return `${baseClasses} transition-all duration-200 ease-out ${focusClasses}`.trim();

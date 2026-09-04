@@ -28,5 +28,5 @@ export interface GamesListMotionItemProps {
 }
 
 export function GamesListMotionItem({ children }: GamesListMotionItemProps) {
-  return <div className="[content-visibility:auto] [contain-intrinsic-size:auto_280px]">{children}</div>;
+  return <div className="[content-visibility:auto] [contain-intrinsic-size:auto_280px] p-2 -m-2">{children}</div>;
 }

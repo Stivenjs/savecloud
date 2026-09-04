@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { HashRouter, useNavigate } from "react-router-dom";
@@ -16,6 +16,8 @@ import {
   type SavecloudOpenRestoreFromCloudPayload,
 } from "@/constants/savecloudCrossWindow";
 import { useShellUiStore } from "@store/ShellUiStore";
+import { useStreamingMetricsStore } from "@store/StreamingMetricsStore";
+import { StreamingOverlay } from "@components/streaming/StreamingOverlay";
 
 function AppContent({ hideTitleBar }: { hideTitleBar: boolean }) {
   const navigate = useNavigate();
@@ -76,25 +78,25 @@ interface AppRuntimeProps {
   hideTitleBar?: boolean;
 }
 
-import { lazy, Suspense } from "react";
-import { StreamingOverlay } from "@components/streaming/StreamingOverlay";
-
 const StreamingDryRunMetricsModalLazy = lazy(() =>
-  import("@features/streaming").then((m) => ({ default: m.StreamingDryRunMetricsModal }))
+  import("@features/streaming/StreamingDryRunMetricsModal").then((m) => ({ default: m.StreamingDryRunMetricsModal }))
 );
 
 export function AppRuntime({ hideTitleBar = false }: AppRuntimeProps) {
   useProfileSessionHydration();
   useAppInitialization();
+  const isStreamingMetricsOpen = useStreamingMetricsStore((s) => s.isModalOpen);
 
   return (
     <>
       <TrayActionsListener />
       <UnsyncedSavesModalWithProgress />
       <StreamingOverlay />
-      <Suspense fallback={null}>
-        <StreamingDryRunMetricsModalLazy />
-      </Suspense>
+      {isStreamingMetricsOpen && (
+        <Suspense fallback={null}>
+          <StreamingDryRunMetricsModalLazy />
+        </Suspense>
+      )}
 
       <HashRouter>
         <AppContent hideTitleBar={hideTitleBar} />

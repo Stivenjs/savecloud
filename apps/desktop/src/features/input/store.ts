@@ -26,6 +26,8 @@ interface NavigationState {
   confirmFocusedNodeFromHud: () => boolean;
 }
 
+const nodesByLayer = new Map<string, Map<string, FocusNode>>();
+
 export const useNavigationStore = create<NavigationState>((set, get) => ({
   inputMode: "mouse",
   setInputMode: (mode) => set({ inputMode: mode }),
@@ -36,9 +38,12 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   pushLayer: (layerId, initialFocusId: string | null = null) => {
     set((state) => {
       if (state.layers.some((l) => l.id === layerId)) return state;
+      const existing = nodesByLayer.get(layerId);
+      const layerNodes = new Map(existing ? Array.from(existing.entries()) : []);
+      const activeFocus = initialFocusId ?? (layerNodes.size > 0 ? Array.from(layerNodes.keys())[0] : null);
       return {
-        layers: [...state.layers, { id: layerId, nodes: new Map(), previousFocusId: state.focusedId }],
-        focusedId: initialFocusId,
+        layers: [...state.layers, { id: layerId, nodes: layerNodes, previousFocusId: state.focusedId }],
+        focusedId: activeFocus,
       };
     });
   },
@@ -68,11 +73,24 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   },
 
   registerNode: (layerId, node) => {
+    let layerMap = nodesByLayer.get(layerId);
+    if (!layerMap) {
+      layerMap = new Map();
+      nodesByLayer.set(layerId, layerMap);
+    }
+    layerMap.set(node.id, node);
+
     set((state) => {
       const layer = state.layers.find((l) => l.id === layerId);
       if (layer) layer.nodes.set(node.id, node);
 
-      if (state.inputMode === "gamepad" && !state.focusedId && layerId === "root" && layer?.nodes.size === 1) {
+      const activeLayer = state.layers[state.layers.length - 1];
+      if (
+        state.inputMode === "gamepad" &&
+        !state.focusedId &&
+        activeLayer?.id === layerId &&
+        (layer?.nodes.size === 1 || activeLayer?.nodes.size === 1)
+      ) {
         return { focusedId: node.id };
       }
       return state;
@@ -80,6 +98,9 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   },
 
   unregisterNode: (layerId, nodeId) => {
+    const layerMap = nodesByLayer.get(layerId);
+    if (layerMap) layerMap.delete(nodeId);
+
     set((state) => {
       const layer = state.layers.find((l) => l.id === layerId);
       if (layer) layer.nodes.delete(nodeId);
@@ -89,17 +110,16 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
 
   setFocus: (id) => {
     set((state) => {
-      if (state.inputMode !== "gamepad") return state;
-
       const activeLayer = state.layers[state.layers.length - 1];
       const targetNode = activeLayer.nodes.get(id);
 
-      const element = targetNode?.getElement();
-      if (element) {
-        element.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      if (state.inputMode === "gamepad") {
+        const element = targetNode?.getElement();
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+        playSound(Sounds.navigate);
       }
-
-      playSound(Sounds.navigate);
 
       return { focusedId: id };
     });
@@ -113,14 +133,25 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     if (activeLayer.nodes.size === 0) return;
 
     if (!focusedId || !activeLayer.nodes.has(focusedId)) {
-      const firstNodeId = Array.from(activeLayer.nodes.keys())[0];
+      const allKeys = Array.from(activeLayer.nodes.keys());
+      const firstGameKey = allKeys.find((k) => k.startsWith("game-card-"));
+      const firstNodeId = firstGameKey ?? allKeys[0];
       setFocus(firstNodeId);
       return;
     }
 
     const currentNode = activeLayer.nodes.get(focusedId);
-    const currentElement = currentNode?.getElement();
-    if (!currentElement) return;
+    let currentElement = currentNode?.getElement();
+    if (!currentElement) {
+      for (const node of activeLayer.nodes.values()) {
+        const el = node.getElement();
+        if (el) {
+          setFocus(node.id);
+          return;
+        }
+      }
+      return;
+    }
 
     const nextNodeId = findNextNode(currentElement, Array.from(activeLayer.nodes.values()), direction);
     if (nextNodeId) setFocus(nextNodeId);

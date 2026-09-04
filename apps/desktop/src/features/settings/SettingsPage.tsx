@@ -28,7 +28,6 @@ import { useProfileSession } from "@hooks/useProfileSession";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useNavigationStore } from "@features/input/store";
 import { DeveloperModeCard } from "@features/settings/DeveloperModeCard";
-import { GamepadTesterCard } from "@features/settings/GamepadTesterCard";
 import { GameModeCard } from "@features/settings/GameModeCard";
 import { LowPerformanceModeCard } from "@features/settings/LowPerformanceModeCard";
 import { DisableHardwareAccelerationCard } from "@features/settings/DisableHardwareAccelerationCard";
@@ -92,6 +91,9 @@ const AudioOutputSettingsCardLazy = lazy(() =>
 
 const ReleaseNotesDialogLazy = lazy(() =>
   import("@features/settings/ReleaseNotesDialog").then((module) => ({ default: module.ReleaseNotesDialog }))
+);
+const GamepadTesterCardLazy = lazy(() =>
+  import("@features/settings/GamepadTesterCard").then((m) => ({ default: m.GamepadTesterCard }))
 );
 
 const SETTINGS_TABS: Array<{
@@ -388,9 +390,11 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
         );
       case "gamepad":
         return (
-          <div className="space-y-3">
-            <GamepadTesterCard />
-          </div>
+          <Suspense fallback={null}>
+            <div className="space-y-3">
+              <GamepadTesterCardLazy />
+            </div>
+          </Suspense>
         );
       case "plugins":
         return (

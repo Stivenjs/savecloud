@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { Button, Card, CardBody, Code } from "@heroui/react";
 import { FolderSearch, Gamepad2, PlusCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -15,6 +15,10 @@ import { GamesListMotionContainer, GamesListMotionItem } from "@features/games/G
 import { GamesViewControls } from "@features/games/Gamesviewcontrols";
 import { useGamesViewPreferences } from "@hooks/useGamesViewPreferences";
 import { useGamesSorter } from "@hooks/Usegamessorter";
+
+const GameConsoleActionsModal = lazy(() =>
+  import("@features/games/GameConsoleActionsModal").then((m) => ({ default: m.GameConsoleActionsModal }))
+);
 
 type SyncStatus = "pending_upload" | "pending_download" | "in_sync" | null;
 
@@ -99,6 +103,8 @@ interface GamesListProps {
   hasSyncConfig?: boolean;
   /** Big Picture / mando: barra de orden y vista más grande. */
   consoleMode?: boolean;
+  /** Callback para abrir el menú de acciones adaptado a consola (mando). */
+  onOpenConsoleActions?: (game: ConfiguredGame) => void;
 }
 
 export function GamesList({
@@ -121,6 +127,7 @@ export function GamesList({
   onShare,
   hasSyncConfig = false,
   consoleMode = false,
+  onOpenConsoleActions,
 }: GamesListProps) {
   const { t } = useTranslation();
   const { layout, cardOrientation, sortBy, sortDir, setLayout, setCardOrientation, setSortBy, setSortDir } =
@@ -156,6 +163,18 @@ export function GamesList({
   const handleActionsMenuOpenChange = useCallback((open: boolean, gameId: string) => {
     setOpenActionsGameId(open ? gameId : null);
   }, []);
+
+  const [consoleActionsGame, setConsoleActionsGame] = useState<ConfiguredGame | null>(null);
+  const handleOpenConsoleActions = useCallback(
+    (game: ConfiguredGame) => {
+      if (onOpenConsoleActions) {
+        onOpenConsoleActions(game);
+      } else {
+        setConsoleActionsGame(game);
+      }
+    },
+    [onOpenConsoleActions]
+  );
 
   if (games.length === 0) {
     const isEmptyState = !emptyFilterMessage;
@@ -277,12 +296,36 @@ export function GamesList({
               onEdit={onEdit}
               onTorrent={onTorrent}
               onShare={onShare}
+              onOpenConsoleActions={handleOpenConsoleActions}
               actionsMenuOpen={openActionsGameId === game.id}
               onActionsMenuOpenChange={handleActionsMenuOpenChange}
             />
           </GamesListMotionItem>
         ))}
       </GamesListMotionContainer>
+
+      {consoleActionsGame && (
+        <Suspense fallback={null}>
+          <GameConsoleActionsModal
+            isOpen={!!consoleActionsGame}
+            onClose={() => setConsoleActionsGame(null)}
+            game={consoleActionsGame}
+            surface="list"
+            isGameRunning={gameRunningStatus[consoleActionsGame.id] ?? false}
+            onEdit={onEdit}
+            onTorrent={onTorrent}
+            onOpenFolder={onOpenFolder}
+            onSync={onSync}
+            onFullBackupUpload={onFullBackupUpload}
+            onRecoverFromCloud={onRecoverFromCloud}
+            onShare={onShare}
+            onRemove={onRemove}
+            isSyncing={syncingId === consoleActionsGame.id || syncingId === "all"}
+            isDownloading={downloadingId === consoleActionsGame.id || downloadingId === "all"}
+            isFullBackupUploading={fullBackupUploadingGameId === consoleActionsGame.id}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
