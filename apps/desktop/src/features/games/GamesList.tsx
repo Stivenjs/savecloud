@@ -11,6 +11,7 @@ import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
 import { useGameMediaBatch, getIsResolvingIds } from "@hooks/useGameMedia";
 import { needsSteamSearch } from "@utils/gameImage";
 import { GameCard } from "@features/games/GameCard";
+import { GameConsoleActionsModal } from "@features/games/GameConsoleActionsModal";
 import { GamesListMotionContainer, GamesListMotionItem } from "@features/games/GamesListMotion";
 import { GamesViewControls } from "@features/games/Gamesviewcontrols";
 import { useGamesViewPreferences } from "@hooks/useGamesViewPreferences";
@@ -99,6 +100,8 @@ interface GamesListProps {
   hasSyncConfig?: boolean;
   /** Big Picture / mando: barra de orden y vista más grande. */
   consoleMode?: boolean;
+  /** Callback para abrir el menú de acciones adaptado a consola (mando). */
+  onOpenConsoleActions?: (game: ConfiguredGame) => void;
 }
 
 export function GamesList({
@@ -121,6 +124,7 @@ export function GamesList({
   onShare,
   hasSyncConfig = false,
   consoleMode = false,
+  onOpenConsoleActions,
 }: GamesListProps) {
   const { t } = useTranslation();
   const { layout, cardOrientation, sortBy, sortDir, setLayout, setCardOrientation, setSortBy, setSortDir } =
@@ -156,6 +160,18 @@ export function GamesList({
   const handleActionsMenuOpenChange = useCallback((open: boolean, gameId: string) => {
     setOpenActionsGameId(open ? gameId : null);
   }, []);
+
+  const [consoleActionsGame, setConsoleActionsGame] = useState<ConfiguredGame | null>(null);
+  const handleOpenConsoleActions = useCallback(
+    (game: ConfiguredGame) => {
+      if (onOpenConsoleActions) {
+        onOpenConsoleActions(game);
+      } else {
+        setConsoleActionsGame(game);
+      }
+    },
+    [onOpenConsoleActions]
+  );
 
   if (games.length === 0) {
     const isEmptyState = !emptyFilterMessage;
@@ -277,12 +293,34 @@ export function GamesList({
               onEdit={onEdit}
               onTorrent={onTorrent}
               onShare={onShare}
+              onOpenConsoleActions={handleOpenConsoleActions}
               actionsMenuOpen={openActionsGameId === game.id}
               onActionsMenuOpenChange={handleActionsMenuOpenChange}
             />
           </GamesListMotionItem>
         ))}
       </GamesListMotionContainer>
+
+      {consoleActionsGame && (
+        <GameConsoleActionsModal
+          isOpen={!!consoleActionsGame}
+          onClose={() => setConsoleActionsGame(null)}
+          game={consoleActionsGame}
+          surface="list"
+          isGameRunning={gameRunningStatus[consoleActionsGame.id] ?? false}
+          onEdit={onEdit}
+          onTorrent={onTorrent}
+          onOpenFolder={onOpenFolder}
+          onSync={onSync}
+          onFullBackupUpload={onFullBackupUpload}
+          onRecoverFromCloud={onRecoverFromCloud}
+          onShare={onShare}
+          onRemove={onRemove}
+          isSyncing={syncingId === consoleActionsGame.id || syncingId === "all"}
+          isDownloading={downloadingId === consoleActionsGame.id || downloadingId === "all"}
+          isFullBackupUploading={fullBackupUploadingGameId === consoleActionsGame.id}
+        />
+      )}
     </div>
   );
 }

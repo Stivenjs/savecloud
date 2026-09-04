@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, startTransition, addTransitionType, ViewTransition } from "react";
+import { memo, useCallback, useEffect, useMemo, startTransition, addTransitionType, ViewTransition } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Skeleton } from "@heroui/react";
 import { GameCardHoverMotion } from "@features/games/GameCardHoverMotion";
@@ -14,6 +14,8 @@ import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { useGameMedia } from "@hooks/useGameMedia";
 import { useSyncStore } from "@store/SyncStore";
 import { useGameDetailHoverPrefetch } from "@hooks/useGameDetailHoverPrefetch";
+import { useNavigable } from "@features/input/useNavigable";
+import { getGamepadFocusClass } from "@features/input/styles";
 import type { ConfiguredGame } from "@app-types/config";
 import type { GameStats } from "@services/tauri";
 import type { SteamAppdetailsMediaResult } from "@services/tauri";
@@ -73,6 +75,8 @@ export interface GameCardProps {
   variant?: "library" | "catalog";
   /** Carga prioritaria para las primeras tarjetas visibles */
   priority?: boolean;
+  /** Callback para abrir el menú de acciones adaptado a consola (mando). */
+  onOpenConsoleActions?: (game: ConfiguredGame) => void;
 }
 
 function MaybeViewTransition({
@@ -109,6 +113,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     onActionsMenuOpenChange: onActionsMenuFromParent,
     cardTitle,
     onCardNavigate,
+    onOpenConsoleActions,
     variant = "library",
     orientation = "vertical",
     priority = false,
@@ -160,7 +165,45 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     });
   }, [navigate, game, location.pathname, location.search, onCardNavigate, resolvedSteamAppId, isLowPerf]);
 
+  const navId = `game-card-${game.id}`;
+  const { isFocused, inputMode, navProps } = useNavigable({
+    id: navId,
+    layerId: "root",
+    onPress: handleCardClick,
+  });
+
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
+
+  useEffect(() => {
+    if (isFocused) {
+      onHoverStart();
+      return () => {
+        onHoverEnd();
+      };
+    }
+  }, [isFocused, onHoverStart, onHoverEnd]);
+
+  useEffect(() => {
+    if (!isFocused) return;
+
+    const handleActionX = () => {
+      if (cardRest.onSync && !isUploadTooLarge && !cardRest.isSyncing && !isGameRunning) {
+        cardRest.onSync(game);
+      }
+    };
+
+    const handleActionY = () => {
+      onOpenConsoleActions?.(game);
+    };
+
+    window.addEventListener("gamepad_action_x", handleActionX);
+    window.addEventListener("gamepad_action_y", handleActionY);
+
+    return () => {
+      window.removeEventListener("gamepad_action_x", handleActionX);
+      window.removeEventListener("gamepad_action_y", handleActionY);
+    };
+  }, [isFocused, cardRest, game, isUploadTooLarge, isGameRunning, onOpenConsoleActions]);
 
   const handleActionsMenuOpenChange = useCallback(
     (open: boolean) => {
@@ -178,11 +221,19 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
   }
 
   const cardContent = (
-    <GameCardHoverMotion disableMotion={isCatalog}>
+    <GameCardHoverMotion disableMotion={isCatalog} className="rounded-xl">
       <div
-        className={`cursor-pointer relative bg-[#0e0f14] shadow-md transition-colors duration-300 overflow-hidden rounded-xl ${aspectClass} w-full group/card`}
+        {...navProps}
+        className={getGamepadFocusClass(
+          isFocused,
+          inputMode,
+          `cursor-pointer relative bg-[#0e0f14] shadow-md overflow-hidden rounded-xl ${aspectClass} w-full group/card hover:shadow-lg`
+        )}
         onClick={handleCardClick}
-        onMouseEnter={onHoverStart}
+        onMouseEnter={() => {
+          navProps.onMouseEnter?.();
+          onHoverStart();
+        }}
         onMouseLeave={onHoverEnd}
         role="link"
         tabIndex={0}

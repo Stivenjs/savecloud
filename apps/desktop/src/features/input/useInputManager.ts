@@ -18,6 +18,12 @@ function ensureGamepadShellMode(setInputMode: (m: "gamepad" | "mouse") => void) 
   }
 }
 
+function isTypingInInput(target: EventTarget | null): boolean {
+  if (!target || !(target instanceof HTMLElement)) return false;
+  const tag = target.tagName.toLowerCase();
+  return tag === "input" || tag === "textarea" || target.isContentEditable;
+}
+
 /**
  * Atajos de teclado (además del mando):
  * - Menú lateral: F10, Alt+M, o Ctrl+Shift+M.
@@ -76,6 +82,21 @@ export function useInputManager() {
           e.preventDefault();
           e.stopPropagation();
           useShellUiStore.getState().requestProfileOpen();
+          return;
+        }
+      }
+
+      if (!isTypingInInput(e.target) && !e.ctrlKey && !e.altKey && !e.metaKey && !e.repeat) {
+        if (e.key === "x" || e.key === "X") {
+          e.preventDefault();
+          ensureGamepadShellMode(setInputMode);
+          window.dispatchEvent(new CustomEvent("gamepad_action_x"));
+          return;
+        }
+        if (e.key === "y" || e.key === "Y") {
+          e.preventDefault();
+          ensureGamepadShellMode(setInputMode);
+          window.dispatchEvent(new CustomEvent("gamepad_action_y"));
           return;
         }
       }
@@ -155,6 +176,14 @@ export function useInputManager() {
         case "back":
           ensureGamepadShellMode(setInputMode);
           dispatchBackAction();
+          return;
+        case "action_x":
+          ensureGamepadShellMode(setInputMode);
+          window.dispatchEvent(new CustomEvent("gamepad_action_x"));
+          return;
+        case "action_y":
+          ensureGamepadShellMode(setInputMode);
+          window.dispatchEvent(new CustomEvent("gamepad_action_y"));
           return;
         case "page_left":
           ensureGamepadShellMode(setInputMode);

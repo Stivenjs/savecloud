@@ -9,6 +9,10 @@ pub enum SemanticAction {
     NavigateRight,
     Confirm,
     Back,
+    /// Botón X (Xbox) / Cuadrado (PlayStation) / Y (Nintendo).
+    ActionX,
+    /// Botón Y (Xbox) / Triángulo (PlayStation) / X (Nintendo).
+    ActionY,
     Menu,
     /// Start / Opciones (ventana Ajustes en Big Picture desde el cliente).
     Options,

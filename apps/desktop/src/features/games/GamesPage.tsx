@@ -231,6 +231,19 @@ export function GamesPage() {
     resetOnDeps: [debouncedSearchTerm, originFilter],
   });
 
+  const initialFocusSetRef = useRef(false);
+  useEffect(() => {
+    if (loading || filteredGames.length === 0) return;
+    if (!initialFocusSetRef.current) {
+      initialFocusSetRef.current = true;
+      const firstCardId = `game-card-${filteredGames[0].id}`;
+      const timer = setTimeout(() => {
+        useNavigationStore.getState().setFocus(firstCardId);
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, filteredGames]);
+
   if (loading) {
     return <GamesPageSkeleton />;
   }

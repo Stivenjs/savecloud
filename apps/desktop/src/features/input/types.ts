@@ -6,6 +6,8 @@ export type SemanticAction =
   | "navigate_right"
   | "confirm"
   | "back"
+  | "action_x"
+  | "action_y"
   | "menu"
   | "options"
   | "profile"
