@@ -112,6 +112,7 @@ pub fn start_gamepad_loop(app_handle: AppHandle) {
             }
 
             gilrs.inc();
+            let has_gamepads = gilrs.gamepads().any(|(_, gp)| gp.is_connected());
             tester::refresh_gamepad_cache(&gilrs);
             tester::emit_gamepad_state_if_due(
                 &app_handle,
@@ -120,7 +121,12 @@ pub fn start_gamepad_loop(app_handle: AppHandle) {
                 &mut last_telemetry_emit,
             );
 
-            thread::sleep(Duration::from_millis(10));
+            let sleep_duration = if !focused || !has_gamepads {
+                Duration::from_millis(150)
+            } else {
+                Duration::from_millis(10)
+            };
+            thread::sleep(sleep_duration);
         }
     });
 }

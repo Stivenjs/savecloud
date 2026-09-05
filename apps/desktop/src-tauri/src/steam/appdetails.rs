@@ -59,7 +59,7 @@ pub async fn fetch_appdetails_data(
         if code == 429 {
             attempt += 1;
             if attempt >= APPDETAILS_429_MAX_ATTEMPTS {
-                return Err(format!("HTTP Error 429: Steam rate limit"));
+                return Err("HTTP Error 429: Steam rate limit".to_string());
             }
             tokio::time::sleep(Duration::from_millis(300)).await;
             continue;

@@ -1,37 +1,50 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ConfiguredGame } from "@app-types/config";
 import { needsSteamSearch, idToSearchQuery } from "@utils/gameImage";
 import { searchSteamAppIdsBatch } from "@services/tauri";
 
-const STEAM_APP_ID_QUERY_KEY = ["steam-app-id", "batch"] as const;
-
 /**
  * Hook que resuelve Steam App IDs para juegos que no tienen imagen (needsSteamSearch).
- * Usa una sola operación batch en el backend (varias búsquedas en paralelo).
- * TanStack Query cachea el resultado por la lista de juegos a buscar.
+ * Utiliza normalización a nivel de entidad en React Query (["steam-app-id", game.id])
+ * para evitar re-descargar o invalidar toda la biblioteca cuando se añade o modifica un juego.
+ * Solo consulta al backend el delta de juegos que no estén ya en la caché de React Query.
  */
 export function useResolvedSteamAppIds(games: readonly ConfiguredGame[]): Record<string, string | null | undefined> {
+  const queryClient = useQueryClient();
   const gamesToSearch = useMemo(() => games.filter((g) => needsSteamSearch(g)), [games]);
 
-  const queryKey = useMemo(
-    () => [
-      ...STEAM_APP_ID_QUERY_KEY,
-      gamesToSearch
-        .map((g: ConfiguredGame) => g.id)
+  /** Filtrar únicamente los juegos que aún no residen en la caché de React Query */
+  const missingGames = useMemo(() => {
+    return gamesToSearch.filter((game) => queryClient.getQueryData(["steam-app-id", game.id]) === undefined);
+  }, [gamesToSearch, queryClient]);
+
+  const missingIdsKey = useMemo(
+    () =>
+      missingGames
+        .map((g) => g.id)
         .sort()
         .join(","),
-    ],
-    [gamesToSearch]
+    [missingGames]
   );
 
-  const { data: batchResults, isFetched } = useQuery({
-    queryKey,
+  const { data: newlyFetchedDelta } = useQuery({
+    queryKey: ["steam-app-id-batch-delta", missingIdsKey],
     queryFn: async () => {
-      const queries = gamesToSearch.map((g) => idToSearchQuery(g.id));
-      return searchSteamAppIdsBatch(queries);
+      if (missingGames.length === 0) return {};
+      const queries = missingGames.map((g) => idToSearchQuery(g.id));
+      const batchResults = await searchSteamAppIdsBatch(queries);
+
+      const deltaMap: Record<string, string | null> = {};
+      missingGames.forEach((game, i) => {
+        const resolved = batchResults?.[i] ?? null;
+        deltaMap[game.id] = resolved;
+        queryClient.setQueryData(["steam-app-id", game.id], resolved);
+      });
+
+      return deltaMap;
     },
-    enabled: gamesToSearch.length > 0,
+    enabled: missingGames.length > 0,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 24 * 60 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -39,10 +52,18 @@ export function useResolvedSteamAppIds(games: readonly ConfiguredGame[]): Record
 
   return useMemo(() => {
     const result: Record<string, string | null | undefined> = {};
-    gamesToSearch.forEach((game, i) => {
-      const appId = batchResults?.[i] ?? undefined;
-      result[game.id] = isFetched ? (appId ?? null) : undefined;
-    });
+
+    for (const game of gamesToSearch) {
+      const cached = queryClient.getQueryData<string | null>(["steam-app-id", game.id]);
+      if (cached !== undefined) {
+        result[game.id] = cached;
+      } else if (newlyFetchedDelta && game.id in newlyFetchedDelta) {
+        result[game.id] = newlyFetchedDelta[game.id];
+      } else {
+        result[game.id] = undefined;
+      }
+    }
+
     return result;
-  }, [gamesToSearch, batchResults, isFetched]);
+  }, [gamesToSearch, newlyFetchedDelta, queryClient]);
 }

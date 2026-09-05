@@ -11,6 +11,7 @@
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, Ordering};
 #[cfg(target_os = "windows")]
 use std::sync::atomic::AtomicU32;
+use std::sync::{Condvar, Mutex};
 #[cfg(target_os = "windows")]
 use std::time::Duration;
 
@@ -23,7 +24,7 @@ use super::input_relay::{
 #[cfg(target_os = "windows")]
 use super::input_relay::relay_mouse_move;
 
-/// Intervalo de polling para lectura de teclado/ratón en Windows (250 Hz).
+/// Intervalo de polling para lectura de teclado/ratón en Windows durante streaming activo (250 Hz).
 #[cfg(target_os = "windows")]
 const POLL_INTERVAL: Duration = Duration::from_millis(4);
 
@@ -32,6 +33,18 @@ const STREAMING_WINDOW_LABEL: &str = "streaming-window";
 
 /// Estado de ejecución global del listener nativo.
 static IS_LISTENER_RUNNING: AtomicBool = AtomicBool::new(true);
+
+/// Condvar para suspender el hilo de polling cuando la ventana de streaming no esté enfocada.
+/// Evita despertar 250 veces por segundo en reposo (0% CPU).
+static STREAMING_FOCUS_CV: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
+
+pub(crate) fn notify_streaming_focus_change(focused: bool) {
+    let (lock, cvar) = &STREAMING_FOCUS_CV;
+    if let Ok(mut state) = lock.lock() {
+        *state = focused;
+        cvar.notify_all();
+    }
+}
 
 /// Métricas globales de la ventana de streaming, agrupadas en un solo struct
 /// para mantener la cohesión y evitar atomics dispersos.
@@ -122,6 +135,7 @@ pub fn handle_window_event(window: &Window, event: &WindowEvent) {
     match event {
         WindowEvent::Focused(focused) => {
             STREAMING_WINDOW.focused.store(*focused, Ordering::Relaxed);
+            notify_streaming_focus_change(*focused);
 
             if let Ok(pos) = window.outer_position() {
                 STREAMING_WINDOW.update_position(pos.x, pos.y);
@@ -163,6 +177,7 @@ pub fn handle_window_event(window: &Window, event: &WindowEvent) {
         }
         WindowEvent::Destroyed => {
             STREAMING_WINDOW.reset();
+            notify_streaming_focus_change(false);
             #[cfg(target_os = "windows")]
             {
                 windows_listener::release_all_active_keys();
@@ -395,7 +410,9 @@ pub mod windows_listener {
         });
     }
 
-    /// Hilo de polling de teclado, ratón y posición del cursor a 250 Hz.
+    /// Hilo de polling de teclado, ratón y posición del cursor a 250 Hz durante streaming activo.
+    /// Cuando la ventana de streaming no está enfocada, el hilo se suspende en el kernel mediante
+    /// Condvar (`cvar.wait`), reduciendo el uso de CPU al 0.0% en reposo.
     pub(super) fn spawn_input_polling_thread() {
         std::thread::spawn(move || {
             let mut prev_keys = [false; 256];
@@ -407,7 +424,20 @@ pub mod windows_listener {
 
                 if !STREAMING_WINDOW.is_focused() || crate::streaming::is_mirror_mode() {
                     release_keys_if_needed(&mut prev_keys);
-                    std::thread::sleep(POLL_INTERVAL);
+
+                    // Suspensión en kernel mediante Condvar: 0% CPU cuando no hay streaming activo
+                    let (lock, cvar) = &STREAMING_FOCUS_CV;
+                    if let Ok(mut state) = lock.lock() {
+                        while !*state
+                            && IS_LISTENER_RUNNING.load(Ordering::Relaxed)
+                            && (!STREAMING_WINDOW.is_focused() || crate::streaming::is_mirror_mode())
+                        {
+                            match cvar.wait_timeout(state, Duration::from_millis(500)) {
+                                Ok((new_state, _)) => state = new_state,
+                                Err(_) => break,
+                            }
+                        }
+                    }
                     continue;
                 }
 
@@ -814,6 +844,7 @@ pub fn start_native_input_listener() {
 /// Detiene y desinstala inmediatamente los escuchadores nativos de entrada al cerrar la app o destruir la ventana.
 pub fn stop_native_input_listener() {
     IS_LISTENER_RUNNING.store(false, Ordering::SeqCst);
+    notify_streaming_focus_change(true);
     release_all_active_keys();
     #[cfg(target_os = "windows")]
     {

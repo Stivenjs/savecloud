@@ -144,10 +144,10 @@ fn check_conflicts_for_game(
     saves: &[RemoteSaveInfoDto],
 ) -> Vec<DownloadConflictDto> {
     let mut conflicts = Vec::new();
+    let resolver = path_utils::CloudSavePathResolver::new(game_paths);
 
     for save in saves {
-        let Some(dest_path) = path_utils::sync_abs_path_for_cloud_save(game_paths, &save.filename)
-        else {
+        let Some(dest_path) = resolver.resolve(&save.filename) else {
             continue;
         };
 
@@ -298,10 +298,22 @@ pub async fn sync_check_download_conflicts_batch(
 /// la llamada a la API falla.
 #[tauri::command]
 pub async fn sync_check_unsynced_games() -> Result<Vec<UnsyncedGameDto>, String> {
-    let cfg = crate::config::load_config();
     let tolerance_secs = UNSYNCED_LOCAL_NEWER_TOLERANCE_SECS;
     let tolerance = chrono::Duration::seconds(tolerance_secs);
-    let game_ids: Vec<String> = cfg.games.iter().map(|g| g.id.clone()).collect();
+
+    let (game_ids, games_to_check) = crate::config::with_config(|cfg| {
+        let ids: Vec<String> = cfg.games.iter().map(|g| g.id.clone()).collect();
+        let list: Vec<(String, String, Vec<String>)> = cfg
+            .games
+            .iter()
+            .map(|g| (g.id.clone(), g.id.to_lowercase(), g.paths.clone()))
+            .collect();
+        (ids, list)
+    });
+
+    if games_to_check.is_empty() {
+        return Ok(Vec::new());
+    }
 
     let (remote_files_res, remote_backups_res) = tokio::join!(
         api::sync_list_remote_saves(),
@@ -311,90 +323,110 @@ pub async fn sync_check_unsynced_games() -> Result<Vec<UnsyncedGameDto>, String>
     let remote_files = remote_files_res?;
     let remote_backups_map = remote_backups_res?;
 
-    let remote_file_map: HashMap<(String, String), DateTime<Utc>> = remote_files
+    // Mapa anidado: game_id_low -> (filename -> DateTime<Utc>)
+    // Permite lookups directos en O(1) con &str sin clonar Strings en el heap.
+    let mut remote_file_map: HashMap<String, HashMap<String, DateTime<Utc>>> = HashMap::new();
+    for s in remote_files {
+        let dt = match DateTime::parse_from_rfc3339(&s.last_modified)
+            .or_else(|_| DateTime::parse_from_rfc2822(&s.last_modified))
+        {
+            Ok(d) => d.with_timezone(&Utc),
+            Err(_) => continue,
+        };
+        remote_file_map
+            .entry(s.game_id.to_lowercase())
+            .or_default()
+            .insert(s.filename, dt);
+    }
+
+    let remote_file_map = Arc::new(remote_file_map);
+
+    let games_with_backups: Vec<_> = games_to_check
         .into_iter()
-        .filter_map(|s| {
-            let dt = DateTime::parse_from_rfc3339(&s.last_modified)
-                .or_else(|_| DateTime::parse_from_rfc2822(&s.last_modified))
-                .ok()?;
-            Some((
-                (s.game_id.to_lowercase(), s.filename),
-                dt.with_timezone(&Utc),
-            ))
+        .map(|(game_id, game_id_low, paths)| {
+            let last_backup_dt = remote_backups_map.get(&game_id).and_then(|backups| {
+                backups
+                    .iter()
+                    .filter_map(|b| {
+                        DateTime::parse_from_rfc3339(&b.last_modified)
+                            .or_else(|_| DateTime::parse_from_rfc2822(&b.last_modified))
+                            .ok()
+                    })
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .max()
+            });
+            (game_id, game_id_low, paths, last_backup_dt)
         })
         .collect();
 
-    let mut unsynced = Vec::new();
-
-    for game in &cfg.games {
-        let game_id_low = game.id.to_lowercase();
-
-        let last_backup_dt = remote_backups_map.get(&game.id).and_then(|backups| {
-            backups
-                .iter()
-                .filter_map(|b| {
-                    DateTime::parse_from_rfc3339(&b.last_modified)
-                        .or_else(|_| DateTime::parse_from_rfc2822(&b.last_modified))
-                        .ok()
+    // Escaneo en paralelo acotado a 8 tareas concurrentes (máxima velocidad sin saturar IOPS de disco)
+    let mut stream = stream::iter(games_with_backups.into_iter().map(
+        |(game_id, game_id_low, paths, last_backup_dt)| {
+            let remote_map = Arc::clone(&remote_file_map);
+            async move {
+                let local_files = tokio::task::spawn_blocking(move || {
+                    crate::utils::path_utils::list_all_files_with_mtime(&paths)
                 })
-                .map(|dt| dt.with_timezone(&Utc))
-                .max()
-        });
+                .await
+                .unwrap_or_default();
 
-        let paths = game.paths.clone();
-        let local_files = tokio::task::spawn_blocking(move || {
-            crate::utils::path_utils::list_all_files_with_mtime(&paths)
-        })
-        .await
-        .map_err(|e| format!("Error en scan local: {}", e))?;
+                let game_remote_files = remote_map.get(&game_id_low);
+                let mut has_unsynced = false;
 
-        let mut has_unsynced = false;
+                'files: for (_abs, rel, mtime, _size) in local_files {
+                    let Ok(duration) = mtime.duration_since(UNIX_EPOCH) else {
+                        continue;
+                    };
+                    let Some(local_dt) = DateTime::from_timestamp(
+                        duration.as_secs() as i64,
+                        duration.subsec_nanos(),
+                    ) else {
+                        continue;
+                    };
+                    let local_dt = local_dt.with_timezone(&Utc);
 
-        'files: for (_abs, rel, mtime, _size) in local_files {
-            let Ok(duration) = mtime.duration_since(UNIX_EPOCH) else {
-                continue;
-            };
-            let Some(local_dt) =
-                DateTime::from_timestamp(duration.as_secs() as i64, duration.subsec_nanos())
-            else {
-                continue;
-            };
-            let local_dt = local_dt.with_timezone(&Utc);
-
-            let key = (&game_id_low, rel.as_str());
-
-            match remote_file_map.get(&(key.0.clone(), key.1.to_string())) {
-                Some(&cloud_dt) => {
-                    if local_dt > cloud_dt + tolerance {
-                        if let Some(backup_dt) = last_backup_dt {
-                            if local_dt > backup_dt + tolerance {
+                    match game_remote_files.and_then(|m| m.get(rel.as_str())) {
+                        Some(&cloud_dt) => {
+                            if local_dt > cloud_dt + tolerance {
+                                if let Some(backup_dt) = last_backup_dt {
+                                    if local_dt > backup_dt + tolerance {
+                                        has_unsynced = true;
+                                        break 'files;
+                                    }
+                                } else {
+                                    has_unsynced = true;
+                                    break 'files;
+                                }
+                            }
+                        }
+                        None => {
+                            if let Some(backup_dt) = last_backup_dt {
+                                if local_dt > backup_dt + tolerance {
+                                    has_unsynced = true;
+                                    break 'files;
+                                }
+                            } else {
                                 has_unsynced = true;
                                 break 'files;
                             }
-                        } else {
-                            has_unsynced = true;
-                            break 'files;
                         }
                     }
                 }
-                None => {
-                    if let Some(backup_dt) = last_backup_dt {
-                        if local_dt > backup_dt + tolerance {
-                            has_unsynced = true;
-                            break 'files;
-                        }
-                    } else {
-                        has_unsynced = true;
-                        break 'files;
-                    }
+
+                if has_unsynced {
+                    Some(UnsyncedGameDto { game_id })
+                } else {
+                    None
                 }
             }
-        }
+        },
+    ))
+    .buffer_unordered(8);
 
-        if has_unsynced {
-            unsynced.push(UnsyncedGameDto {
-                game_id: game.id.clone(),
-            });
+    let mut unsynced = Vec::new();
+    while let Some(item) = stream.next().await {
+        if let Some(u) = item {
+            unsynced.push(u);
         }
     }
 
