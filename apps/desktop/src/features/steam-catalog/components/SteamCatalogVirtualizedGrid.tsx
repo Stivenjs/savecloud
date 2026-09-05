@@ -19,7 +19,7 @@ export type SteamCatalogVirtualizedGridProps = {
   consoleMode?: boolean;
 };
 
-import { useGamesViewPreferences } from "@hooks/useGamesViewPreferences";
+import { useGamesCardOrientation } from "@hooks/useGamesViewPreferences";
 
 export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualizedGrid({
   items,
@@ -31,7 +31,7 @@ export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualized
   onInstall,
   consoleMode = false,
 }: SteamCatalogVirtualizedGridProps) {
-  const { cardOrientation } = useGamesViewPreferences();
+  const cardOrientation = useGamesCardOrientation();
   const isHorizontal = cardOrientation === "horizontal";
   const minItemWidth = consoleMode ? (isHorizontal ? 320 : 220) : isHorizontal ? 280 : 180;
   const estimatedRowHeight = consoleMode ? (isHorizontal ? 330 : 410) : isHorizontal ? 235 : 330;

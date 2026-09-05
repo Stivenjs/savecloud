@@ -156,6 +156,44 @@ export function initGamesViewPreferences(): () => void {
   };
 }
 
-export function useGamesViewPreferences() {
-  return useGamesViewPreferencesStore();
+import { useShallow } from "zustand/react/shallow";
+
+export function useGamesViewPreferences(): GamesViewPreferencesState;
+export function useGamesViewPreferences<T>(selector: (state: GamesViewPreferencesState) => T): T;
+export function useGamesViewPreferences<T>(
+  selector?: (state: GamesViewPreferencesState) => T
+): T | GamesViewPreferencesState {
+  if (selector) {
+    return useGamesViewPreferencesStore(selector);
+  }
+  return useGamesViewPreferencesStore(
+    useShallow((s) => ({
+      layout: s.layout,
+      cardOrientation: s.cardOrientation,
+      sortBy: s.sortBy,
+      sortDir: s.sortDir,
+      setLayout: s.setLayout,
+      setCardOrientation: s.setCardOrientation,
+      setSortBy: s.setSortBy,
+      setSortDir: s.setSortDir,
+      toggleSort: s.toggleSort,
+    }))
+  );
+}
+
+/**
+ * Selector atómico de alto rendimiento para componentes que solo necesitan
+ * conocer la orientación de las tarjetas (vertical u horizontal).
+ * Evita re-renders cuando cambian layout, sortBy o sortDir.
+ */
+export function useGamesCardOrientation(): GamesCardOrientation {
+  return useGamesViewPreferencesStore((s) => s.cardOrientation);
+}
+
+/**
+ * Selector atómico de alto rendimiento para componentes que solo necesitan
+ * conocer el tipo de layout ('grid-lg' | 'grid-md' | 'list').
+ */
+export function useGamesLayout(): GamesLayout {
+  return useGamesViewPreferencesStore((s) => s.layout);
 }

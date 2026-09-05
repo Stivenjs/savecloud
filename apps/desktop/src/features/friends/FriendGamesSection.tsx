@@ -15,7 +15,7 @@ import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
 import { PlayingStatusBadge } from "@features/games/PlayingStatusBadge";
 import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
 import { useGameMediaBatch, getIsResolvingIds } from "@hooks/useGameMedia";
-import { useGamesViewPreferences } from "@hooks/useGamesViewPreferences";
+import { useGamesCardOrientation } from "@hooks/useGamesViewPreferences";
 
 interface FriendProfileBannerProps {
   userIdDisplay: string;
@@ -230,7 +230,7 @@ export function FriendGamesSection({
     );
   }
 
-  const { cardOrientation } = useGamesViewPreferences();
+  const cardOrientation = useGamesCardOrientation();
   const isHorizontal = cardOrientation === "horizontal";
 
   return (

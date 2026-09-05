@@ -11,31 +11,12 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AppErrorBoundary } from "@components/error/AppErrorBoundary";
 import { queryClient } from "@lib/queryClient";
 import { useShellUiStore } from "@store/ShellUiStore";
-import App from "@/App";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { useDeveloperModeProtection } from "@hooks/useDeveloperModeProtection";
 import { useBackgroundPause } from "@hooks/Usebackgroundpause";
 import { useEffect } from "react";
 import { preloadHls } from "@utils/hls";
 import "@/styles/index.css";
-
-if (typeof window !== "undefined") {
-  if ("requestIdleCallback" in window) {
-    (
-      window as Window & { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number }
-    ).requestIdleCallback(() => preloadHls(), { timeout: 3000 });
-  } else {
-    setTimeout(preloadHls, 2000);
-  }
-}
-
-/** Configuración del tema */
-const THEME_CONFIG = {
-  attribute: "class" as const,
-  defaultTheme: "dark",
-  storageKey: "savecloud-theme",
-  enableSystem: true,
-} as const;
 
 type RenderMode =
   | "overlay"
@@ -46,6 +27,39 @@ type RenderMode =
   | "streamingWindow"
   | "shutdownWindow"
   | "main";
+
+function detectRenderMode(): RenderMode {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("overlay") === "true") return "overlay";
+  if (params.get("streamViewer") === "true") return "streamViewer";
+  if (params.get("friendsWindow") === "true") return "friendsWindow";
+  if (params.get("settingsWindow") === "true") return "settingsWindow";
+  if (params.get("bigPictureWindow") === "true") return "bigPictureWindow";
+  if (params.get("streamingWindow") === "true") return "streamingWindow";
+  if (params.get("shutdownWindow") === "true") return "shutdownWindow";
+  return "main";
+}
+
+if (typeof window !== "undefined") {
+  const startupMode = detectRenderMode();
+  if (startupMode === "main" || startupMode === "streamViewer") {
+    if ("requestIdleCallback" in window) {
+      (
+        window as Window & { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number }
+      ).requestIdleCallback(() => preloadHls(), { timeout: 3000 });
+    } else {
+      setTimeout(preloadHls, 2000);
+    }
+  }
+}
+
+/** Configuración del tema */
+const THEME_CONFIG = {
+  attribute: "class" as const,
+  defaultTheme: "dark",
+  storageKey: "savecloud-theme",
+  enableSystem: true,
+} as const;
 
 /**
  * Obtiene el elemento root del DOM de forma segura
@@ -112,18 +126,6 @@ function MainAppWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-function detectRenderMode(): RenderMode {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get("overlay") === "true") return "overlay";
-  if (params.get("streamViewer") === "true") return "streamViewer";
-  if (params.get("friendsWindow") === "true") return "friendsWindow";
-  if (params.get("settingsWindow") === "true") return "settingsWindow";
-  if (params.get("bigPictureWindow") === "true") return "bigPictureWindow";
-  if (params.get("streamingWindow") === "true") return "streamingWindow";
-  if (params.get("shutdownWindow") === "true") return "shutdownWindow";
-  return "main";
-}
-
 /** Webview nueva: sin residuos de contadores IPC que disparan toggle al montar React. */
 function resetShellUiForBigPictureWindowEntry(): void {
   useShellUiStore.setState({
@@ -174,6 +176,7 @@ async function renderFriendsWindowApp(): Promise<void> {
 }
 
 async function renderMainApp(): Promise<void> {
+  const { default: App } = await import("@/App");
   await renderMainWrapped(<App />);
   await maybeOpenStartupBigPicture();
 }

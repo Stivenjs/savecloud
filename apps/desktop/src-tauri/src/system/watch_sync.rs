@@ -185,6 +185,10 @@ pub fn spawn_watcher(app: AppHandle, tray_state: Arc<crate::tray::tray_state::Tr
         let _kept_alive_watcher = watcher;
 
         let mut pending_uploads: HashMap<String, Instant> = HashMap::new();
+        // Registro para regular (throttle) notificaciones a plugins Lua y evitar picos de contención de locks
+        let mut last_plugin_notify: HashMap<String, Instant> = HashMap::new();
+        const PLUGIN_NOTIFY_THROTTLE: Duration = Duration::from_millis(500);
+
         // Registro de juegos que se están subiendo actualmente para evitar bucles infinitos
         let active_syncs: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
 
@@ -207,13 +211,22 @@ pub fn spawn_watcher(app: AppHandle, tray_state: Arc<crate::tray::tray_state::Tr
                                     pending_uploads.insert(game_id.clone(), Instant::now() + debounce_duration);
                                 }
 
-                                if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
-                                    let pm = pm.inner().clone();
-                                    let gid = game_id.clone();
-                                    let path_str = path.to_string_lossy().to_string();
-                                    tauri::async_runtime::spawn(async move {
-                                        pm.lock().await.execute_save_detected(&gid, &path_str);
-                                    });
+                                // Regular el disparo de plugins Lua a un máximo de 1 por cada 500 ms por juego
+                                let should_notify_plugin = match last_plugin_notify.get(&game_id) {
+                                    Some(last) => last.elapsed() >= PLUGIN_NOTIFY_THROTTLE,
+                                    None => true,
+                                };
+
+                                if should_notify_plugin {
+                                    last_plugin_notify.insert(game_id.clone(), Instant::now());
+                                    if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
+                                        let pm = pm.inner().clone();
+                                        let gid = game_id.clone();
+                                        let path_str = path.to_string_lossy().to_string();
+                                        tauri::async_runtime::spawn(async move {
+                                            pm.lock().await.execute_save_detected(&gid, &path_str);
+                                        });
+                                    }
                                 }
                             }
                         }
@@ -224,6 +237,11 @@ pub fn spawn_watcher(app: AppHandle, tray_state: Arc<crate::tray::tray_state::Tr
                 _ = tokio::time::sleep(audit_interval) => {
                     let now = Instant::now();
                     let mut games_to_process = Vec::new();
+
+                    // Limpieza periódica de la caché de throttle de plugins si creció
+                    if last_plugin_notify.len() > 64 {
+                        last_plugin_notify.retain(|_, last| last.elapsed() < Duration::from_secs(60));
+                    }
 
                     // Recolectamos solo los que ya expiraron
                     for (game_id, deadline) in &pending_uploads {
