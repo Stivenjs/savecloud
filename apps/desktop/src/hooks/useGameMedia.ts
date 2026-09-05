@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSteamAppdetailsMedia, getSteamAppdetailsMediaBatch } from "@services/tauri";
 import {
   getGameImageUrl,
@@ -299,6 +299,8 @@ export function useGameMediaBatch({
   resolvedSteamAppIds,
   isResolvingIds,
 }: UseGameMediaBatchOptions): UseGameMediaBatchResult {
+  const queryClient = useQueryClient();
+
   /** IDs únicos y ordenados para una query key estable. */
   const steamAppIdsForBatch = useMemo(() => {
     const ids = games
@@ -307,14 +309,57 @@ export function useGameMediaBatch({
     return [...new Set(ids)].sort();
   }, [games, resolvedSteamAppIds]);
 
-  const { data: mediaBySteamAppId = null } = useQuery({
-    queryKey: ["steam-appdetails-media-batch", steamAppIdsForBatch.join(",")],
-    queryFn: () => getSteamAppdetailsMediaBatch(steamAppIdsForBatch),
-    enabled: steamAppIdsForBatch.length > 0 && !isResolvingIds,
+  /**
+   * Filtrar únicamente los IDs que aún no residen en la caché de React Query.
+   * Evita invalidar o re-descargar los datos de juegos existentes al añadir o filtrar títulos.
+   */
+  const missingAppIds = useMemo(() => {
+    return steamAppIdsForBatch.filter(
+      (id) =>
+        queryClient.getQueryData(["steam-appdetails-media", id]) === undefined &&
+        queryClient.getQueryData(["steam-media", id]) === undefined
+    );
+  }, [steamAppIdsForBatch, queryClient]);
+
+  const { data: newlyFetchedBatch } = useQuery({
+    queryKey: ["steam-appdetails-media-batch-delta", missingAppIds.join(",")],
+    queryFn: async () => {
+      if (missingAppIds.length === 0) return {};
+      const batchResult = await getSteamAppdetailsMediaBatch(missingAppIds);
+      for (const [id, media] of Object.entries(batchResult)) {
+        if (media) {
+          queryClient.setQueryData(["steam-appdetails-media", id], media);
+          queryClient.setQueryData(["steam-media", id], media);
+        }
+      }
+      return batchResult;
+    },
+    enabled: missingAppIds.length > 0 && !isResolvingIds,
     staleTime: 60 * 60 * 1000,
     gcTime: 24 * 60 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
+
+  /** Reconstruir el mapa de medios consolidado a partir de la caché de entidades. */
+  const mediaBySteamAppId = useMemo(() => {
+    if (steamAppIdsForBatch.length === 0) return null;
+    const result: Record<string, SteamAppdetailsMediaResult> = {};
+    let hasAny = false;
+
+    for (const id of steamAppIdsForBatch) {
+      const cached =
+        queryClient.getQueryData<SteamAppdetailsMediaResult>(["steam-appdetails-media", id]) ??
+        queryClient.getQueryData<SteamAppdetailsMediaResult>(["steam-media", id]) ??
+        newlyFetchedBatch?.[id];
+
+      if (cached) {
+        result[id] = cached;
+        hasAny = true;
+      }
+    }
+
+    return hasAny ? result : null;
+  }, [steamAppIdsForBatch, newlyFetchedBatch, queryClient]);
 
   return { mediaBySteamAppId };
 }

@@ -52,8 +52,10 @@ export interface GameCardProps {
   onTorrent?: (game: ConfiguredGame) => void;
   /** Callback para compartir por link (genera URL y copia al portapapeles). */
   onShare?: (game: ConfiguredGame) => void;
-  /** Estado de sincronización con la nube (para mostrar badge). */
+  /** Estado de sincronización con la nube (para mostrar badge). Opcional si se pasa isUnsynced. */
   syncStatus?: "pending_upload" | "pending_download" | "in_sync" | null;
+  /** Si el juego tiene guardados locales sin subir. Alternativa eficiente a closures externas. */
+  isUnsynced?: boolean;
   /** Número de backups completos (empaquetados) en la nube para este juego. Se muestra un badge si > 0. */
   cloudBackupCount?: number;
   /** Progreso de subida/descarga de un solo juego (muestra barra inline en la tarjeta). */
@@ -77,6 +79,30 @@ export interface GameCardProps {
   priority?: boolean;
   /** Callback para abrir el menú de acciones adaptado a consola (mando). */
   onOpenConsoleActions?: (game: ConfiguredGame) => void;
+}
+
+/** Diferencia en ms por debajo de la cual consideramos local y nube "en sync" (precisión, reloj). */
+const SYNC_TOLERANCE_MS = 15_000;
+/** Si la nube es más reciente que local pero por menos de esto, lo tratamos como "en sync" */
+const CLOUD_NEWER_AS_SYNC_MS = 120_000;
+
+export function deriveGameSyncStatus(
+  isUnsynced: boolean | undefined,
+  stats: GameStats | null | undefined,
+  cloudBackupCount: number
+): "pending_upload" | "pending_download" | "in_sync" | null {
+  if (isUnsynced) {
+    if (cloudBackupCount > 0) return null;
+    return "pending_upload";
+  }
+  if (!stats?.cloudLastModified) return null;
+  const cloud = new Date(stats.cloudLastModified).getTime();
+  const local = stats.localLastModified ? new Date(stats.localLastModified).getTime() : 0;
+  const diff = cloud - local;
+  if (diff > CLOUD_NEWER_AS_SYNC_MS) return "pending_download";
+  if (local > 0 || Math.abs(diff) <= SYNC_TOLERANCE_MS || (diff > 0 && diff <= CLOUD_NEWER_AS_SYNC_MS))
+    return "in_sync";
+  return null;
 }
 
 function MaybeViewTransition({
@@ -106,7 +132,8 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     isGameRunning,
     resolvedSteamAppId,
     isLoading: externalLoading,
-    syncStatus,
+    syncStatus: syncStatusProp,
+    isUnsynced = false,
     cloudBackupCount = 0,
     mediaBySteamAppId,
     mediaFromBatch = false,
@@ -119,6 +146,11 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     priority = false,
     ...cardRest
   } = props;
+
+  const effectiveSyncStatus = useMemo(() => {
+    if (syncStatusProp !== undefined) return syncStatusProp;
+    return deriveGameSyncStatus(isUnsynced, stats, cloudBackupCount);
+  }, [syncStatusProp, isUnsynced, stats, cloudBackupCount]);
 
   const isCatalog = variant === "catalog";
   const isHorizontal = orientation === "horizontal";
@@ -268,7 +300,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
             <div className="absolute inset-0 bg-linear-to-t from-[#0e0f14]/90 via-transparent to-transparent pointer-events-none z-10" />
             <GameCardSyncBadge
               gameId={game.id}
-              syncStatus={syncStatus}
+              syncStatus={effectiveSyncStatus}
               isGameRunning={isGameRunning}
               cloudBackupCount={cloudBackupCount}
               localSizeBytes={stats?.localSizeBytes}

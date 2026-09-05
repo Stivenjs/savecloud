@@ -119,3 +119,28 @@ export const SteamSeedBatchesQuerySchema = Type.Object({
   cursor: Type.Optional(Type.String({ minLength: 1 })),
 });
 export type SteamSeedBatchesQuery = Static<typeof SteamSeedBatchesQuerySchema>;
+
+export const GameSaveResponseSchema = Type.Object({
+  gameId: Type.String(),
+  key: Type.String(),
+  filename: Type.String(),
+  lastModified: Type.String(),
+  size: Type.Optional(Type.Number()),
+});
+export const ListSavesResponseSchema = Type.Array(GameSaveResponseSchema);
+export type ListSavesResponse = Static<typeof ListSavesResponseSchema>;
+
+export const GameSummaryItemResponseSchema = Type.Object({
+  gameId: Type.String(),
+  fileCount: Type.Integer(),
+  totalSizeBytes: Type.Integer(),
+  lastModified: Type.Union([Type.String(), Type.Null()]),
+});
+export const GameSummaryResponseSchema = Type.Array(GameSummaryItemResponseSchema);
+export type GameSummaryResponse = Static<typeof GameSummaryResponseSchema>;
+
+export const ErrorResponseSchema = Type.Object({
+  error: Type.String(),
+  message: Type.String(),
+});
+export type ErrorResponse = Static<typeof ErrorResponseSchema>;

@@ -20,25 +20,6 @@ const GameConsoleActionsModal = lazy(() =>
   import("@features/games/GameConsoleActionsModal").then((m) => ({ default: m.GameConsoleActionsModal }))
 );
 
-type SyncStatus = "pending_upload" | "pending_download" | "in_sync" | null;
-
-/** Diferencia en ms por debajo de la cual consideramos local y nube "en sync" (precisión, reloj). */
-const SYNC_TOLERANCE_MS = 15_000;
-/** Si la nube es más reciente que local pero por menos de esto, lo tratamos como "en sync" */
-const CLOUD_NEWER_AS_SYNC_MS = 120_000;
-
-function getSyncStatus(gameId: string, stats: GameStats | undefined, unsyncedGameIds: string[]): SyncStatus {
-  if (unsyncedGameIds.includes(gameId)) return "pending_upload";
-  if (!stats?.cloudLastModified) return null;
-  const cloud = new Date(stats.cloudLastModified).getTime();
-  const local = stats.localLastModified ? new Date(stats.localLastModified).getTime() : 0;
-  const diff = cloud - local;
-  if (diff > CLOUD_NEWER_AS_SYNC_MS) return "pending_download";
-  if (local > 0 || Math.abs(diff) <= SYNC_TOLERANCE_MS || (diff > 0 && diff <= CLOUD_NEWER_AS_SYNC_MS))
-    return "in_sync";
-  return null;
-}
-
 function getGridClass(layout: "grid-lg" | "grid-md" | "list", orientation: "vertical" | "horizontal"): string {
   if (orientation === "horizontal") {
     switch (layout) {
@@ -149,6 +130,7 @@ export function GamesList({
   const { statsByGameId } = useGameStats(games.length > 0);
   const { countByGameId: cloudBackupCountByGameId } = useCloudBackupCounts(gameIds, hasSyncConfig && games.length > 0);
   const gameRunningStatus = useGameRunningStatus(gameIds);
+  const unsyncedSet = useMemo(() => new Set(unsyncedGameIds), [unsyncedGameIds]);
 
   const sortedGames = useGamesSorter(games, statsByGameId as unknown as Map<string, GameStats>, sortBy, sortDir);
 
@@ -273,16 +255,7 @@ export function GamesList({
               mediaBySteamAppId={mediaBySteamAppId ?? null}
               mediaFromBatch
               isGameRunning={gameRunningStatus[game.id] ?? false}
-              syncStatus={(() => {
-                const status = getSyncStatus(
-                  game.id,
-                  statsByGameId.get(game.id) as GameStats | undefined,
-                  unsyncedGameIds
-                );
-                const cloudBackups = cloudBackupCountByGameId[game.id] ?? 0;
-                if (status === "pending_upload" && cloudBackups > 0) return null;
-                return status;
-              })()}
+              isUnsynced={unsyncedSet.has(game.id)}
               cloudBackupCount={cloudBackupCountByGameId[game.id] ?? 0}
               isLoading={needsSteamSearch(game) && resolvedSteamAppIds[game.id] === undefined}
               onRemove={onRemove}
