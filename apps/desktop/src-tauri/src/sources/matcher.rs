@@ -199,9 +199,7 @@ pub fn strip_brackets_and_scene_noise(raw: &str) -> String {
                 in_bracket_content.clear();
             }
             ']' | ')' | '}' => {
-                if depth > 0 {
-                    depth -= 1;
-                }
+                depth = depth.saturating_sub(1);
             }
             c => {
                 if depth == 0 {

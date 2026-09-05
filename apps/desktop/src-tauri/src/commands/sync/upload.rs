@@ -33,12 +33,16 @@ use futures_util::stream::{self, Stream, StreamExt};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufReader, Read};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::mpsc;
 
 /// Emitir progreso cada N bytes para no saturar el frontend (usado por `file_stream_with_progress`).
 #[allow(dead_code)]
 const PROGRESS_CHUNK_BYTES: usize = 256 * 1024;
+
+/// Intervalo mínimo entre emisiones de progreso de subida para evitar saturar IPC/UI.
+const UPLOAD_PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(180);
 
 /// Cuántos PUTs simples se ejecutan en paralelo.
 const SIMPLE_PUT_CONCURRENCY: usize = 24;
@@ -88,7 +92,8 @@ fn file_stream_with_progress(
 
         let mut reader = BufReader::with_capacity(PROGRESS_CHUNK_BYTES, file);
         let mut loaded: u64 = 0;
-        let mut last_emit: u64 = 0;
+        let mut last_emit_bytes: u64 = 0;
+        let mut last_emit_time = Instant::now();
         let mut buf = vec![0u8; PROGRESS_CHUNK_BYTES];
 
         loop {
@@ -96,10 +101,15 @@ fn file_stream_with_progress(
                 Ok(0) => break,
                 Ok(n) => {
                     loaded += n as u64;
-                    if loaded - last_emit >= PROGRESS_CHUNK_BYTES as u64
-                        || (total > 0 && loaded >= total)
-                    {
-                        last_emit = loaded;
+                    let now = Instant::now();
+                    let is_complete = total > 0 && loaded >= total;
+                    let should_emit = is_complete
+                        || (loaded.saturating_sub(last_emit_bytes) >= PROGRESS_CHUNK_BYTES as u64
+                            && now.duration_since(last_emit_time) >= UPLOAD_PROGRESS_EMIT_INTERVAL);
+
+                    if should_emit {
+                        last_emit_bytes = loaded;
+                        last_emit_time = now;
                         emit_sync_upload_progress(
                             &app,
                             SyncProgressPayload {
@@ -121,7 +131,7 @@ fn file_stream_with_progress(
                         );
                     }
 
-                    let chunk = Bytes::from(buf[..n].to_vec());
+                    let chunk = Bytes::copy_from_slice(&buf[..n]);
                     if tx.blocking_send(Ok(chunk)).is_err() {
                         break;
                     }
@@ -535,7 +545,8 @@ pub(crate) async fn sync_upload_game_impl(
                     };
 
                     if put_res.status().is_success() {
-                        let now = filetime::FileTime::from_system_time(std::time::SystemTime::now());
+                        let now =
+                            filetime::FileTime::from_system_time(std::time::SystemTime::now());
                         let _ = filetime::set_file_mtime(std::path::Path::new(&absolute), now);
                         Ok((relative, total))
                     } else {
@@ -545,6 +556,8 @@ pub(crate) async fn sync_upload_game_impl(
                 }
             })
             .buffer_unordered(SIMPLE_PUT_CONCURRENCY);
+
+        let mut last_progress_emit = Instant::now();
 
         while let Some(result) = stream.next().await {
             if let Some(ref t) = tray_inner {
@@ -565,25 +578,32 @@ pub(crate) async fn sync_upload_game_impl(
                 Ok((relative, uploaded_bytes)) => {
                     ok_count += 1;
                     loaded_bytes_total = loaded_bytes_total.saturating_add(uploaded_bytes);
-                    emit_sync_upload_progress(
-                        &app,
-                        SyncProgressPayload {
-                            operation_id: Some(format!("sync-upload-{}", game_id)),
-                            status: Some("running".to_string()),
-                            game_id: game_id.clone(),
-                            filename: relative,
-                            loaded: loaded_bytes_total.min(total_size),
-                            total: total_size,
-                            downloaded_bytes: Some(loaded_bytes_total.min(total_size)),
-                            total_bytes: Some(total_size),
-                            can_pause: None,
-                            can_cancel: None,
-                            can_resume: None,
-                            strategy: Some(SyncOperationStrategy::Simple),
-                            state: None,
-                            reason_code: None,
-                        },
-                    );
+                    let now = Instant::now();
+                    let is_last = put_count >= total_simple;
+                    if is_last
+                        || now.duration_since(last_progress_emit) >= UPLOAD_PROGRESS_EMIT_INTERVAL
+                    {
+                        last_progress_emit = now;
+                        emit_sync_upload_progress(
+                            &app,
+                            SyncProgressPayload {
+                                operation_id: Some(format!("sync-upload-{}", game_id)),
+                                status: Some("running".to_string()),
+                                game_id: game_id.clone(),
+                                filename: relative,
+                                loaded: loaded_bytes_total.min(total_size),
+                                total: total_size,
+                                downloaded_bytes: Some(loaded_bytes_total.min(total_size)),
+                                total_bytes: Some(total_size),
+                                can_pause: None,
+                                can_cancel: None,
+                                can_resume: None,
+                                strategy: Some(SyncOperationStrategy::Simple),
+                                state: None,
+                                reason_code: None,
+                            },
+                        );
+                    }
                 }
                 Err((relative, absolute, _uploaded_bytes, err_msg)) => {
                     crate::commands::logs::sync_logger::log_error(

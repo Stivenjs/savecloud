@@ -8,12 +8,20 @@ use super::profile_storage;
 use super::profiles::DEFAULT_PROFILE_ID;
 use keyring::Entry;
 use once_cell::sync::Lazy;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
 
 static CONFIG_CACHE: Lazy<RwLock<Option<Config>>> = Lazy::new(|| RwLock::new(None));
+static CONFIG_REVISION: AtomicU64 = AtomicU64::new(1);
+
+/// Versión incremental de la configuración para detectar modificaciones sin I/O.
+pub fn config_revision() -> u64 {
+    CONFIG_REVISION.load(Ordering::Relaxed)
+}
 
 /// Invalida la caché en memoria de la configuración global para forzar su recarga en el próximo acceso.
 pub fn invalidate_config_cache() {
+    CONFIG_REVISION.fetch_add(1, Ordering::Relaxed);
     if let Ok(mut lock) = CONFIG_CACHE.write() {
         *lock = None;
     }
@@ -21,6 +29,7 @@ pub fn invalidate_config_cache() {
 
 /// Actualiza directamente la caché en memoria con una instancia de configuración conocida.
 pub fn update_config_cache(config: Config) {
+    CONFIG_REVISION.fetch_add(1, Ordering::Relaxed);
     if let Ok(mut lock) = CONFIG_CACHE.write() {
         *lock = Some(config);
     }
@@ -496,4 +505,21 @@ pub fn load_config() -> Config {
         *lock = Some(config.clone());
     }
     config
+}
+
+/// Permite inspeccionar la configuración activa mediante una referencia prestada (`&Config`),
+/// evitando la clonación profunda de colecciones (juegos, historiales) en bucles periódicos.
+pub fn with_config<R>(f: impl FnOnce(&Config) -> R) -> R {
+    if let Ok(lock) = CONFIG_CACHE.read() {
+        if let Some(cached) = lock.as_ref() {
+            return f(cached);
+        }
+    }
+
+    let config = get_combined_config();
+    let res = f(&config);
+    if let Ok(mut lock) = CONFIG_CACHE.write() {
+        *lock = Some(config);
+    }
+    res
 }

@@ -133,8 +133,7 @@ pub async fn safe_rename_with_retry(from: &Path, to: &Path) -> Result<(), std::i
     }
 
     Err(last_err.unwrap_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
+        std::io::Error::other(
             "Fallo desconocido al renombrar archivo",
         )
     }))

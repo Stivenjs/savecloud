@@ -152,12 +152,11 @@ pub async fn resolve(
             on_event,
         ) {
             let trimmed = scraped.trim();
-            if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-                if !trimmed.contains("freedownloadmanager.org") && !trimmed.ends_with("/download") {
+            if (trimmed.starts_with("http://") || trimmed.starts_with("https://"))
+                && !trimmed.contains("freedownloadmanager.org") && !trimmed.ends_with("/download") {
                     log::info!("filekeeper: Scrapling resolvió URL directa: {trimmed}");
                     return Ok((trimmed.to_string(), page_url));
                 }
-            }
         }
     }
 

@@ -43,7 +43,7 @@ pub fn list_catalog_trending_hero(
     conn: &Connection,
     limit: u32,
 ) -> Result<Vec<CatalogListItem>, rusqlite::Error> {
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare_cached(
         "SELECT a.app_id, a.name \
          FROM steam_catalog_trending tr \
          JOIN steam_catalog_apps a ON a.app_id = tr.app_id \
@@ -347,8 +347,8 @@ pub fn filter_facets(conn: &Connection) -> Result<CatalogFilterFacets, rusqlite:
 
 /// Nombre del listado local (`steam_catalog_apps.name`), distinto del título localizado de Store API.
 pub fn get_catalog_listing_name(conn: &Connection, app_id: u32) -> Result<Option<String>, rusqlite::Error> {
-    match conn.query_row(
-        "SELECT name FROM steam_catalog_apps WHERE app_id = ?1",
+    let mut stmt = conn.prepare_cached("SELECT name FROM steam_catalog_apps WHERE app_id = ?1")?;
+    match stmt.query_row(
         [app_id],
         |row| row.get::<_, String>(0),
     ) {
@@ -363,7 +363,7 @@ fn collect_facet_rows(
     sql: &str,
     limit: usize,
 ) -> Result<Vec<CatalogFilterFacet>, rusqlite::Error> {
-    let mut stmt = conn.prepare(sql)?;
+    let mut stmt = conn.prepare_cached(sql)?;
     let rows = stmt.query_map([limit as i64], |row| {
         Ok(CatalogFilterFacet {
             label: row.get(0)?,

@@ -12,19 +12,22 @@ use tauri::{AppHandle, Emitter, Listener};
 
 /// Inicia la escucha de eventos de procesos en segundo plano para
 /// subir los guardados automáticamente cuando un juego se cierra.
-pub fn spawn_exit_watcher(app: AppHandle, tray_state: Arc<crate::tray::tray_state::TrayStateInner>) {
+pub fn spawn_exit_watcher(
+    app: AppHandle,
+    tray_state: Arc<crate::tray::tray_state::TrayStateInner>,
+) {
     let was_running: Arc<Mutex<HashMap<String, bool>>> = Arc::new(Mutex::new(HashMap::new()));
 
     let app_clone = app.clone();
 
     app.listen("games-running-status", move |event| {
-        let cfg = config::load_config();
-        if cfg
-            .api_base_url
-            .as_ref()
-            .is_none_or(|s| s.trim().is_empty())
-            || cfg.user_id.as_ref().is_none_or(|s| s.trim().is_empty())
-        {
+        let is_configured = config::with_config(|cfg| {
+            cfg.api_base_url
+                .as_ref()
+                .is_some_and(|s| !s.trim().is_empty())
+                && cfg.user_id.as_ref().is_some_and(|s| !s.trim().is_empty())
+        });
+        if !is_configured {
             return;
         }
 

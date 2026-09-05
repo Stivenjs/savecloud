@@ -506,7 +506,7 @@ pub async fn search_steam_app_ids_batch(queries: Vec<String>) -> Vec<Option<Stri
             search_steam_app_id_impl(q).await
         }
     }))
-    .buffer_unordered(5);
+    .buffered(5);
 
     stream.collect().await
 }

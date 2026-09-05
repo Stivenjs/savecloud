@@ -247,8 +247,7 @@ pub fn catalog_exists_for_url(url: &str) -> Result<bool, String> {
     let db = get_db()?;
     db.with_conn(|conn| {
         auto_migrate_legacy_json_if_needed(conn).map_err(|e| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
                 e,
             )))
         })?;
@@ -267,8 +266,7 @@ pub fn load_sources() -> Result<Vec<SourceCatalog>, String> {
     let db = get_db()?;
     db.with_conn(|conn| {
         auto_migrate_legacy_json_if_needed(conn).map_err(|e| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
                 e,
             )))
         })?;
@@ -368,8 +366,7 @@ pub fn load_sources_summary() -> Result<Vec<SourceCatalogSummary>, String> {
     let db = get_db()?;
     db.with_conn(|conn| {
         auto_migrate_legacy_json_if_needed(conn).map_err(|e| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
                 e,
             )))
         })?;
@@ -411,8 +408,7 @@ pub fn load_source_items_page(
     let db = get_db()?;
     db.with_conn(|conn| {
         auto_migrate_legacy_json_if_needed(conn).map_err(|e| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
                 e,
             )))
         })?;
@@ -487,8 +483,7 @@ pub fn save_sources(sources: &[SourceCatalog]) -> Result<(), String> {
     let db = get_db()?;
     db.with_conn(|conn| {
         save_sources_to_conn(conn, sources).map_err(|e| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
                 e,
             )))
         })
@@ -549,8 +544,7 @@ pub fn upsert_catalog(
     let db = get_db()?;
     db.with_conn(|conn| {
         auto_migrate_legacy_json_if_needed(conn).map_err(|e| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
                 e,
             )))
         })?;
@@ -579,8 +573,7 @@ pub fn upsert_catalog(
         }
 
         insert_catalog_in_tx(&tx, &catalog).map_err(|e| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
                 e,
             )))
         })?;

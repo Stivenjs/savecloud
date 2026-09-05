@@ -16,6 +16,7 @@ use crate::shutdown::{ShutdownBus, ShutdownCoordinator, ShutdownGuard};
 use crate::sources::commands;
 use crate::sources::queue;
 use crate::sqlite::AppDb;
+use crate::steam_cache::init_steam_cache_db;
 use crate::steam_catalog::commands::listing::preload_facets_background;
 use crate::steam_catalog::trending::sync_store_trending;
 use crate::streaming::session::{StreamingState, SunshineShutdownGuard};
@@ -69,6 +70,8 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     // 3. Inicialización de la base de datos SQLite
     let db = AppDb::open()?;
     db.ping()?;
+
+    init_steam_cache_db(db.clone());
 
     let db_for_maintenance = db.clone();
     preload_facets_background(db.clone());

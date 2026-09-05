@@ -206,12 +206,14 @@ pub fn scan_games_running_with_config(
         }
     }
 
+    if names_by_game.is_empty() {
+        return (result, processes_out);
+    }
+
     let mut sys = get_sys();
     sys.refresh_processes_specifics(
         ProcessesToUpdate::All,
-        ProcessRefreshKind::new()
-            .with_exe(UpdateKind::OnlyIfNotSet)
-            .with_memory(),
+        ProcessRefreshKind::new().with_exe(UpdateKind::OnlyIfNotSet),
     );
 
     #[derive(Clone)]
@@ -242,7 +244,7 @@ pub fn scan_games_running_with_config(
                 .push(CpuBoostCand {
                     pid: pid.as_u32(),
                     exe_lc: exe_lc.clone(),
-                    rss: process.memory(),
+                    rss: 0,
                 });
             matched_root_pids
                 .entry(game_id.clone())
@@ -252,27 +254,46 @@ pub fn scan_games_running_with_config(
     }
 
     // Subprocesos directos del árbol: padre coincide con exe del juego (un solo nivel).
-    for (pid, process) in sys.processes() {
-        let exe_lc = process.name().to_string_lossy().to_lowercase();
-        let rss = process.memory();
-        let Some(ppid_u32) = process.parent().map(Pid::as_u32) else {
-            continue;
-        };
-        for game_id in game_ids {
-            let Some(roots) = matched_root_pids.get(game_id) else {
+    if !matched_root_pids.is_empty() {
+        for (pid, process) in sys.processes() {
+            let exe_lc = process.name().to_string_lossy().to_lowercase();
+            let Some(ppid_u32) = process.parent().map(Pid::as_u32) else {
                 continue;
             };
-            if !roots.contains(&ppid_u32) {
-                continue;
+            for game_id in game_ids {
+                let Some(roots) = matched_root_pids.get(game_id) else {
+                    continue;
+                };
+                if !roots.contains(&ppid_u32) {
+                    continue;
+                }
+                pools
+                    .entry(game_id.clone())
+                    .or_default()
+                    .push(CpuBoostCand {
+                        pid: pid.as_u32(),
+                        exe_lc: exe_lc.clone(),
+                        rss: 0,
+                    });
             }
-            pools
-                .entry(game_id.clone())
-                .or_default()
-                .push(CpuBoostCand {
-                    pid: pid.as_u32(),
-                    exe_lc: exe_lc.clone(),
-                    rss,
-                });
+        }
+    }
+
+    if cfg.game_mode_boost_detected_game_cpu && !pools.is_empty() {
+        let pids_to_refresh: Vec<Pid> = pools
+            .values()
+            .flat_map(|cands| cands.iter().map(|c| Pid::from_u32(c.pid)))
+            .collect();
+        sys.refresh_processes_specifics(
+            ProcessesToUpdate::Some(&pids_to_refresh),
+            ProcessRefreshKind::new().with_memory(),
+        );
+        for cands in pools.values_mut() {
+            for c in cands.iter_mut() {
+                if let Some(proc) = sys.process(Pid::from_u32(c.pid)) {
+                    c.rss = proc.memory();
+                }
+            }
         }
     }
 
@@ -341,6 +362,9 @@ pub fn start_process_watcher(app: AppHandle) {
 pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationToken) {
     let mut previous_state: HashMap<String, bool> = HashMap::new();
     let mut last_checkpoint: HashMap<String, Instant> = HashMap::new();
+    let mut last_config_rev = 0u64;
+    let mut cached_game_ids: Vec<String> = Vec::new();
+    let mut cached_boost_detected = false;
 
     loop {
         // Punto de salida al inicio de cada ciclo (sin coste si no está cancelado).
@@ -349,12 +373,20 @@ pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationTok
             break;
         }
 
-        let cfg = config::load_config();
-        let game_ids: Vec<String> = cfg.games.iter().map(|g| g.id.clone()).collect();
-        let (current, pid_candidates) = scan_games_running_with_config(&cfg, &game_ids);
+        let current_rev = config::config_revision();
+        if current_rev != last_config_rev {
+            last_config_rev = current_rev;
+            config::with_config(|cfg| {
+                cached_game_ids = cfg.games.iter().map(|g| g.id.clone()).collect();
+                cached_boost_detected = cfg.game_mode_boost_detected_game_cpu;
+            });
+        }
+
+        let (current, pid_candidates) =
+            config::with_config(|cfg| scan_games_running_with_config(cfg, &cached_game_ids));
 
         sync_detected_game_cpu_boost(
-            cfg.game_mode_boost_detected_game_cpu,
+            cached_boost_detected,
             current.values().any(|&r| r),
             &pid_candidates,
         );
@@ -401,7 +433,9 @@ pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationTok
                     let gid = game_id.clone();
                     let gname = game_id.clone();
                     tauri::async_runtime::spawn(async move {
-                        pm.lock().await.execute_game_exit(&gid, &gname, duration_secs);
+                        pm.lock()
+                            .await
+                            .execute_game_exit(&gid, &gname, duration_secs);
                     });
                 }
             }

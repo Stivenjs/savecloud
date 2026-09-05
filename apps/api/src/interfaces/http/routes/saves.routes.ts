@@ -32,6 +32,9 @@ import {
   type SteamSeedBatchDownloadUrlBody,
   SteamSeedBatchesQuerySchema,
   type SteamSeedBatchesQuery,
+  ListSavesResponseSchema,
+  GameSummaryResponseSchema,
+  ErrorResponseSchema,
 } from "@interfaces/schema/saves";
 import type { GetUploadUrlUseCase } from "@application/use-cases/GetUploadUrlUseCase";
 import type { GetUploadUrlsUseCase } from "@application/use-cases/GetUploadUrlsUseCase";
@@ -55,8 +58,9 @@ import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository"
 import type { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
 import { getUserId, getErrorMessage } from "@shared/utils";
 import { TtlCache } from "@shared/ttlCache";
+import { computeSavesEtag, computeSummaryEtag, send304IfNotModified, type SummaryEtagItem } from "@shared/etag";
 
-const savesSummaryCache = new TtlCache<string, unknown[]>({ ttlMs: 20_000, maxEntries: 200 });
+const savesSummaryCache = new TtlCache<string, SummaryEtagItem[]>({ ttlMs: 20_000, maxEntries: 200 });
 const backupsListCache = new TtlCache<string, ListBackupsOutput>({ ttlMs: 10_000, maxEntries: 300 });
 const CLOUD_HOST_HEADER = "x-cloud-host-user-id";
 
@@ -130,44 +134,62 @@ export async function registerSavesRoutes(
     return scope.storageUserId;
   }
 
-  app.get("/saves", async (request, reply) => {
-    const requesterUserId = getUserId(request);
-    const query: unknown = request.query;
-    const raw = query && typeof query === "object" ? (query as Record<string, unknown>) : {};
-    const gameId = typeof raw.gameId === "string" ? raw.gameId.trim() : undefined;
-    const targetUserIdRaw = typeof raw.targetUserId === "string" ? raw.targetUserId.trim() : undefined;
+  app.get(
+    "/saves",
+    {
+      schema: {
+        response: {
+          200: ListSavesResponseSchema,
+          403: ErrorResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const requesterUserId = getUserId(request);
+      const query: unknown = request.query;
+      const raw = query && typeof query === "object" ? (query as Record<string, unknown>) : {};
+      const gameId = typeof raw.gameId === "string" ? raw.gameId.trim() : undefined;
+      const targetUserIdRaw = typeof raw.targetUserId === "string" ? raw.targetUserId.trim() : undefined;
 
-    let userId: string;
-    if (!targetUserIdRaw || targetUserIdRaw === requesterUserId) {
-      userId = await getStorageUserIdFromRequest(request);
-    } else {
-      if (!deps.cloudInviteRepository || !deps.resolveCloudStorageScopeUseCase) {
-        return reply.status(403).send({
-          error: "Forbidden",
-          message: "targetUserId requires cloud invite support",
-        });
+      let userId: string;
+      if (!targetUserIdRaw || targetUserIdRaw === requesterUserId) {
+        userId = await getStorageUserIdFromRequest(request);
+      } else {
+        if (!deps.cloudInviteRepository || !deps.resolveCloudStorageScopeUseCase) {
+          return reply.status(403).send({
+            error: "Forbidden",
+            message: "targetUserId requires cloud invite support",
+          });
+        }
+        userId = await resolveTargetStorageUserId(
+          targetUserIdRaw,
+          deps.resolveCloudStorageScopeUseCase,
+          deps.cloudInviteRepository
+        );
       }
-      userId = await resolveTargetStorageUserId(
-        targetUserIdRaw,
-        deps.resolveCloudStorageScopeUseCase,
-        deps.cloudInviteRepository
-      );
+
+      const saves = await deps.listSavesUseCase.execute({ userId, gameId });
+      const etag = computeSavesEtag(saves);
+      if (send304IfNotModified(request, reply, etag)) return;
+
+      return reply.send(saves);
     }
+  );
 
-    const saves = await deps.listSavesUseCase.execute({ userId, gameId });
-    return reply.send(saves);
-  });
-
-  app.get("/saves/summary", async (request, reply) => {
+  app.get("/saves/summary", { schema: { response: { 200: GameSummaryResponseSchema } } }, async (request, reply) => {
     const userId = await getStorageUserIdFromRequest(request);
     const cached = savesSummaryCache.get(userId);
-    if (cached) return reply.send(cached);
+    if (cached) {
+      const etag = computeSummaryEtag(cached);
+      if (send304IfNotModified(request, reply, etag)) return;
+      return reply.send(cached);
+    }
 
-    let summary;
+    let summary: SummaryEtagItem[];
 
     if (deps.getGameSummaryUseCase) {
-      summary = await deps.getGameSummaryUseCase.execute(userId);
-      summary = summary.map((s) => ({
+      const rawSummary = await deps.getGameSummaryUseCase.execute(userId);
+      summary = rawSummary.map((s) => ({
         gameId: s.gameId,
         fileCount: s.fileCount,
         totalSizeBytes: s.totalSizeBytes,
@@ -202,6 +224,8 @@ export async function registerSavesRoutes(
     }
 
     savesSummaryCache.set(userId, summary);
+    const etag = computeSummaryEtag(summary);
+    if (send304IfNotModified(request, reply, etag)) return;
     return reply.send(summary);
   });
 
@@ -324,15 +348,20 @@ export async function registerSavesRoutes(
     "/saves/upload-url",
     { schema: { body: UploadUrlSchema } },
     async (request, reply) => {
-      const userId = await getStorageUserIdFromRequest(request);
-      const { gameId, filename } = request.body;
+      try {
+        const userId = await getStorageUserIdFromRequest(request);
+        const { gameId, filename } = request.body;
 
-      const result = await deps.getUploadUrlUseCase.execute({
-        userId,
-        gameId: gameId.trim(),
-        filename: filename.trim(),
-      });
-      return reply.send(result);
+        const result = await deps.getUploadUrlUseCase.execute({
+          userId,
+          gameId: gameId.trim(),
+          filename: filename.trim(),
+        });
+        return reply.send(result);
+      } catch (err) {
+        request.log.error({ err }, "upload-url failed");
+        return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
+      }
     }
   );
 

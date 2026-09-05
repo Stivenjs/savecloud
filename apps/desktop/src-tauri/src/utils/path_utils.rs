@@ -110,6 +110,105 @@ pub fn compute_sync_multi_root_prefixes(paths: &[String]) -> Vec<String> {
     out
 }
 
+/// Prefijos más largos primero por si un nombre es prefijo del otro.
+fn longest_prefix_match<'a>(rf: &'a str, prefs: &[(usize, String)]) -> Option<(usize, &'a str)> {
+    let mut best: Option<(usize, &'a str, usize)> = None;
+    for &(idx, ref pref) in prefs {
+        if rf.starts_with(pref.as_str()) {
+            let len = pref.len();
+            if best.is_none_or(|(_, _, l)| len > l) {
+                best = Some((idx, &rf[len..], len));
+            }
+        }
+    }
+    best.map(|(i, tail, _)| (i, tail))
+}
+
+fn join_logical_base(base_norm: &Path, tail: &str) -> Option<PathBuf> {
+    let tail = tail.trim_matches(['/', '\\']);
+    let mut pb = base_norm.to_path_buf();
+    if tail.is_empty() {
+        return Some(pb);
+    }
+    for seg in tail.split(['/', '\\']).filter(|s| !s.is_empty()) {
+        if seg == ".." {
+            return None;
+        }
+        pb.push(seg);
+    }
+    Some(pb)
+}
+
+#[derive(Clone, Debug)]
+struct MultiRootResolverState {
+    bases: Vec<Option<PathBuf>>,
+    keyed_prefixes: Vec<(usize, String)>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CloudSavePathResolver {
+    single_base: Option<PathBuf>,
+    multi: Option<MultiRootResolverState>,
+}
+
+impl CloudSavePathResolver {
+    pub fn new(game_paths: &[String]) -> Self {
+        if game_paths.len() <= 1 {
+            let single_base = game_paths
+                .first()
+                .and_then(|p| expand_path(p.trim()))
+                .map(PathBuf::from);
+            Self {
+                single_base,
+                multi: None,
+            }
+        } else {
+            let bases: Vec<Option<PathBuf>> = game_paths
+                .iter()
+                .map(|p| expand_path(p.trim()).map(PathBuf::from))
+                .collect();
+            let mut keyed: Vec<(usize, String)> = Vec::new();
+            let folder_prefs = compute_sync_multi_root_prefixes(game_paths);
+            for (i, p) in folder_prefs.into_iter().enumerate() {
+                keyed.push((i, p));
+            }
+            for i in 0..game_paths.len() {
+                keyed.push((i, format!("sync-root-{}/", i)));
+            }
+            Self {
+                single_base: None,
+                multi: Some(MultiRootResolverState {
+                    bases,
+                    keyed_prefixes: keyed,
+                }),
+            }
+        }
+    }
+
+    pub fn resolve(&self, remote_filename: &str) -> Option<PathBuf> {
+        let rf = remote_filename.trim().trim_start_matches(['/', '\\']);
+        if rf.is_empty() {
+            return None;
+        }
+
+        if let Some(ref base) = self.single_base {
+            let clean_rf = rf.strip_prefix("sync-root-0/").unwrap_or(rf);
+            return join_logical_base(base, clean_rf);
+        }
+
+        if let Some(ref multi) = self.multi {
+            let (idx, tail) = match longest_prefix_match(rf, &multi.keyed_prefixes) {
+                Some((i, tail)) => (i, tail),
+                None => (0usize, rf),
+            };
+            let base = multi.bases.get(idx).and_then(|b| b.as_ref())?;
+            return join_logical_base(base, tail);
+        }
+
+        None
+    }
+}
+
 /// Resuelve la ruta absoluta local donde debe escribirse un objeto listado como `remote_filename`
 /// (`filename` desde la API, normalmente después de `{user}/{gameId}/`).
 ///
@@ -120,70 +219,7 @@ pub fn sync_abs_path_for_cloud_save(
     game_paths: &[String],
     remote_filename: &str,
 ) -> Option<PathBuf> {
-    if game_paths.is_empty() {
-        return None;
-    }
-    let rf = remote_filename.trim().trim_start_matches(['/', '\\']);
-    if rf.is_empty() {
-        return None;
-    }
-
-    fn join_logical_base(base_norm: PathBuf, tail: &str) -> Option<PathBuf> {
-        let tail = tail.trim_matches(['/', '\\']);
-        let mut pb = base_norm;
-        if tail.is_empty() {
-            return Some(pb);
-        }
-        for seg in tail.split(['/', '\\']).filter(|s| !s.is_empty()) {
-            if seg == ".." {
-                return None;
-            }
-            pb.push(seg);
-        }
-        Some(pb)
-    }
-
-    if game_paths.len() == 1 {
-        let b = expand_path(game_paths[0].trim())?;
-        let clean_rf = rf.strip_prefix("sync-root-0/").unwrap_or(rf);
-        return join_logical_base(PathBuf::from(b), clean_rf);
-    }
-
-    // Prefijos más largos primero por si un nombre es prefijo del otro.
-    fn longest_prefix_match<'a>(
-        rf: &'a str,
-        prefs: &[(usize, String)],
-    ) -> Option<(usize, &'a str)> {
-        let mut best: Option<(usize, &'a str, usize)> = None;
-        for &(idx, ref pref) in prefs {
-            if rf.starts_with(pref.as_str()) {
-                let len = pref.len();
-                if best.is_none_or(|(_, _, l)| len > l) {
-                    best = Some((idx, &rf[len..], len));
-                }
-            }
-        }
-        best.map(|(i, tail, _)| (i, tail))
-    }
-
-    let mut keyed: Vec<(usize, String)> = Vec::new();
-    let folder_prefs = compute_sync_multi_root_prefixes(game_paths);
-    for (i, p) in folder_prefs.into_iter().enumerate() {
-        keyed.push((i, p));
-    }
-    for i in 0..game_paths.len() {
-        keyed.push((i, format!("sync-root-{}/", i)));
-    }
-
-    let (idx, tail) = match longest_prefix_match(rf, &keyed) {
-        Some((i, tail)) => (i, tail),
-        None => {
-            // Retrocompatibilidad con datos sin prefijo multi-raíz.
-            (0usize, rf)
-        }
-    };
-    let base = expand_path(game_paths[idx].trim())?;
-    join_logical_base(PathBuf::from(base), tail)
+    CloudSavePathResolver::new(game_paths).resolve(remote_filename)
 }
 
 pub fn collect_files_with_mtime(
@@ -200,14 +236,18 @@ pub fn collect_files_with_mtime(
             continue;
         }
 
-        let full = e.path();
-        let Ok(meta) = e.metadata() else {
+        let Ok(file_type) = e.file_type() else {
             continue;
         };
 
-        if meta.is_dir() {
+        let full = e.path();
+
+        if file_type.is_dir() {
             collect_files_with_mtime(&full, base, out);
-        } else if meta.is_file() {
+        } else if file_type.is_file() {
+            let Ok(meta) = e.metadata() else {
+                continue;
+            };
             if let Ok(rel) = full.strip_prefix(base) {
                 let rel_str = rel.to_string_lossy().replace('\\', "/");
                 let mtime = meta.modified().unwrap_or(UNIX_EPOCH);

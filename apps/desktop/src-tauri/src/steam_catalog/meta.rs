@@ -26,24 +26,21 @@ pub const META_RANK_SCORE_BACKFILL: &str = "rank_score_backfill";
 pub const RANK_SCORE_BACKFILL_VERSION: &str = "0.1.3";
 
 pub fn get_meta(conn: &Connection, key: &str) -> Result<Option<String>, rusqlite::Error> {
-    conn.query_row(
-        "SELECT value FROM catalog_sync_meta WHERE key = ?1",
-        [key],
-        |row| row.get(0),
-    )
-    .optional()
+    let mut stmt = conn.prepare_cached("SELECT value FROM catalog_sync_meta WHERE key = ?1")?;
+    stmt.query_row([key], |row| row.get(0)).optional()
 }
 
 pub fn set_meta(conn: &Connection, key: &str, value: &str) -> Result<(), rusqlite::Error> {
-    conn.execute(
+    let mut stmt = conn.prepare_cached(
         "INSERT INTO catalog_sync_meta (key, value) VALUES (?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        [key, value],
     )?;
+    stmt.execute([key, value])?;
     Ok(())
 }
 
 pub fn delete_meta(conn: &Connection, key: &str) -> Result<(), rusqlite::Error> {
-    conn.execute("DELETE FROM catalog_sync_meta WHERE key = ?1", [key])?;
+    let mut stmt = conn.prepare_cached("DELETE FROM catalog_sync_meta WHERE key = ?1")?;
+    stmt.execute([key])?;
     Ok(())
 }
