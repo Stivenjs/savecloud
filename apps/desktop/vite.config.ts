@@ -108,11 +108,12 @@ export default defineConfig(() => ({
         manualChunks(id, { getModuleInfo }) {
           if (!id.includes("node_modules")) return;
 
-          const info = getModuleInfo(id);
-          if (info?.dynamicImporters?.length) {
-            return "lazy";
+          if (id.includes("three")) {
+            return "vendor-three";
           }
-
+          if (id.includes("reactflow") || id.includes("dagre")) {
+            return "vendor-flow";
+          }
           if (id.includes("hls.js")) {
             return "vendor-media";
           }
@@ -121,6 +122,11 @@ export default defineConfig(() => ({
           }
           if (id.includes("@tauri-apps")) {
             return "vendor-tauri";
+          }
+
+          const info = getModuleInfo(id);
+          if (info?.dynamicImporters?.length) {
+            return "lazy";
           }
         },
       },
