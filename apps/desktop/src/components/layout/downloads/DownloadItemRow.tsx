@@ -1,6 +1,7 @@
-import { Progress } from "@heroui/react";
-import { Clock, Pause, Play, Upload, Users, X, Zap } from "lucide-react";
+import { Progress, cn } from "@heroui/react";
+import { Clock, Layers, Pause, Play, Upload, Users, X, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
 import { formatBytes } from "@utils/format";
 import { formatEta, formatSpeed } from "@utils/progress";
 import type { SourceSyncProgressPayload } from "@services/tauri";
@@ -36,8 +37,31 @@ export function DownloadItemRow({
       className={`group border border-default-200/40 bg-default-50/80 transition-colors hover:bg-default-100/60 ${
         consoleMode ? "rounded-2xl p-4" : "rounded-xl p-3"
       }`}>
-      {/* Título, subtítulo y porcentaje */}
-      <div className={`flex items-start justify-between ${consoleMode ? "mb-2.5 gap-3" : "mb-2 gap-2"}`}>
+      {/* Título, subtítulo, porcentaje y carátula del juego */}
+      <div className={`flex items-center ${consoleMode ? "mb-3 gap-3.5" : "mb-2.5 gap-2.5"}`}>
+        {/* Carátula del juego o icono según tipo de descarga */}
+        {row.id === "remote-sources-sync" ? (
+          <div
+            className={cn(
+              "flex shrink-0 items-center justify-center bg-primary/10 text-primary border border-primary/20",
+              consoleMode ? "h-12 w-20 rounded-xl" : "h-9 w-14 rounded-lg"
+            )}>
+            <Layers size={consoleMode ? 20 : 16} />
+          </div>
+        ) : (
+          <PlayingGameThumbnail
+            gameId={row.gameId}
+            gameName={row.gameName || row.label}
+            steamAppId={row.steamAppId}
+            imageUrl={row.imageUrl}
+            size={consoleMode ? "lg" : "md"}
+            className={cn(
+              "shrink-0 object-cover shadow-xs border border-default-200/60 dark:border-white/10",
+              consoleMode ? "h-12 w-20 rounded-xl" : "h-9 w-14 rounded-lg"
+            )}
+          />
+        )}
+
         <div className="min-w-0 flex-1">
           <p
             className={`truncate leading-tight ${

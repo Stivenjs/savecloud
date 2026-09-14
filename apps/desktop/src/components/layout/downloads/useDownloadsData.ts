@@ -11,6 +11,7 @@ import {
 import { useSourcesDownloadsStore } from "@store/SourcesDownloadsStore";
 import { useSyncStore } from "@store/SyncStore";
 import { useTorrentStore } from "@store/TorrentStore";
+import { useDownloadMetadataStore } from "@store/DownloadMetadataStore";
 import { formatSourcesSyncSubtitle, mapTorrentState } from "@utils/format";
 import { formatGameDisplayName } from "@utils/gameImage";
 import type { DownloadRow, DownloadsAggregateData } from "./types";
@@ -73,6 +74,7 @@ export function useDownloadsData() {
   const sourcesAggregate = useSourcesDownloadsStore((s) => s.aggregateProgress);
   const sourcesSyncProgress = useSourcesDownloadsStore((s) => s.syncProgress);
   const torrentTasks = useTorrentStore((s) => s.activeByHash);
+  const metadataByKey = useDownloadMetadataStore((s) => s.metadataByKey);
 
   const metricsRef = useRef<Record<string, { startMs: number; lastLoaded: number; gameId: string; filename: string }>>(
     {}
@@ -178,12 +180,19 @@ export function useDownloadsData() {
     const syncRows: DownloadRow[] = Object.entries(syncTasks).map(([id, task]) => {
       const value = task.total > 0 ? Math.min(100, Math.round((task.loaded / task.total) * 100)) : 0;
       const gameName = task.gameId ? formatGameDisplayName(task.gameId) : t("downloads.defaultLabel");
+      const meta =
+        (task.gameId ? metadataByKey[task.gameId] : undefined) ??
+        (task.operationId ? metadataByKey[task.operationId] : undefined);
       return {
         id,
         label: gameName,
         subtitle: task.filename,
         value,
         source: "sync",
+        gameId: task.gameId,
+        gameName: meta?.gameName || (task.gameId ? gameName : undefined),
+        steamAppId: meta?.steamAppId,
+        imageUrl: meta?.imageUrl,
         canPause: !!task.canPause,
         canCancel: !!task.canCancel,
         loaded: task.loaded,
@@ -206,30 +215,42 @@ export function useDownloadsData() {
 
     const torrentRows: DownloadRow[] = Object.values(torrentTasks)
       .filter((task) => !sourceTorrentHashes.has(task.infoHash))
-      .map((task) => ({
-        id: `torrent-${task.infoHash}`,
-        infoHash: task.infoHash,
-        label: task.name || t("downloads.torrentLabel"),
-        subtitle: mapTorrentState(task.state),
-        value: Math.max(0, Math.min(100, Math.round(task.progressPercent))),
-        source: "torrent",
-        isPaused: task.state === "paused",
-        canPause: task.state !== "completed",
-        canCancel: task.state !== "completed",
-        loaded: task.downloadedBytes,
-        total: task.totalBytes,
-        speedBps: task.downloadSpeedBytes,
-        etaSeconds: task.etaSeconds,
-        torrentExtra: {
-          uploadSpeedBytes: task.uploadSpeedBytes,
-          peersConnected: task.peersConnected,
-          state: task.state,
-        },
-      }));
+      .map((task) => {
+        const meta = metadataByKey[task.infoHash];
+        return {
+          id: `torrent-${task.infoHash}`,
+          infoHash: task.infoHash,
+          label: task.name || t("downloads.torrentLabel"),
+          subtitle: mapTorrentState(task.state),
+          value: Math.max(0, Math.min(100, Math.round(task.progressPercent))),
+          source: "torrent",
+          gameId: meta?.gameId,
+          gameName: meta?.gameName || task.name,
+          steamAppId: meta?.steamAppId,
+          imageUrl: meta?.imageUrl,
+          isPaused: task.state === "paused",
+          canPause: task.state !== "completed",
+          canCancel: task.state !== "completed",
+          loaded: task.downloadedBytes,
+          total: task.totalBytes,
+          speedBps: task.downloadSpeedBytes,
+          etaSeconds: task.etaSeconds,
+          torrentExtra: {
+            uploadSpeedBytes: task.uploadSpeedBytes,
+            peersConnected: task.peersConnected,
+            state: task.state,
+          },
+        };
+      });
 
     const sourceRows: DownloadRow[] = Object.values(sourcesTasks).map((task) => {
       const isTorrentBacked = task.protocol === "torrentMagnet" || task.protocol === "torrentFile";
       const torrent = isTorrentBacked && task.externalId ? torrentTasks[task.externalId] : undefined;
+
+      const meta =
+        metadataByKey[task.jobId] ??
+        (task.externalId ? metadataByKey[task.externalId] : undefined) ??
+        (task.itemId ? metadataByKey[task.itemId] : undefined);
 
       let loaded = task.loaded;
       let total = task.total;
@@ -264,6 +285,10 @@ export function useDownloadsData() {
         subtitle,
         value,
         source: "sources",
+        gameId: meta?.gameId,
+        gameName: meta?.gameName || task.title,
+        steamAppId: meta?.steamAppId,
+        imageUrl: meta?.imageUrl,
         isPaused: task.status === "paused",
         canPause:
           (task.protocol === "peerLan" || task.protocol === "torrentMagnet" || task.protocol === "torrentFile") &&
@@ -308,7 +333,7 @@ export function useDownloadsData() {
       : [];
 
     return [...syncSourcesRow, ...syncRows, ...sourceRows, ...torrentRows];
-  }, [syncTasks, syncMetrics, sourcesTasks, torrentTasks, sourcesSyncProgress, t]);
+  }, [syncTasks, syncMetrics, sourcesTasks, torrentTasks, sourcesSyncProgress, metadataByKey, t]);
 
   const aggregateData: DownloadsAggregateData = useMemo(() => {
     const totalLoaded = aggregate.loaded + sourcesAggregate.loaded;

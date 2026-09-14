@@ -9,6 +9,7 @@ import { usePeerInstallOffers } from "@hooks/usePeerInstallOffers";
 import { pickCandidate } from "@utils/sourceMatch";
 import { toastError, toastSuccess } from "@utils/toast";
 import { useConfig } from "@hooks/useConfig";
+import { useDownloadMetadataStore } from "@store/DownloadMetadataStore";
 import type { ConfiguredGame } from "@app-types/config";
 import { InstallModal } from "@features/steam-catalog/components/InstallModal";
 import { SteamCatalogVirtualizedGrid } from "@features/steam-catalog/components/SteamCatalogVirtualizedGrid";
@@ -84,13 +85,21 @@ export function SteamCatalogGrid({
       const { name, chosen } = installingGame;
 
       try {
-        await startSourceDownload({
+        const jobId = await startSourceDownload({
           sourceId: chosen.source_id,
           itemId: chosen.item_id,
           destinationDir: selectedPath.trim(),
           preferredProtocol: null,
           selectedUri: selectedUri ?? null,
         });
+
+        if (jobId) {
+          useDownloadMetadataStore.getState().setMetadata(jobId, {
+            gameName: name,
+            steamAppId: installingGame.game.steamAppId || undefined,
+            imageUrl: installingGame.game.imageUrl || undefined,
+          });
+        }
 
         toastSuccess(t("steamCatalog.grid.downloadStarted"), t("steamCatalog.grid.downloadStartedDesc", { name }));
       } catch (e) {
@@ -106,7 +115,7 @@ export function SteamCatalogGrid({
       const { name } = installingGame;
 
       try {
-        await startPeerGameDownload({
+        const jobId = await startPeerGameDownload({
           gameKey: peerOffersHook.gameKey,
           title: name,
           destinationDir: selectedPath.trim(),
@@ -114,6 +123,14 @@ export function SteamCatalogGrid({
           targetDeviceId: offer.deviceId,
           manifestHash: offer.manifestHash,
         });
+
+        if (jobId) {
+          useDownloadMetadataStore.getState().setMetadata(jobId, {
+            gameName: name,
+            steamAppId: installingGame.game.steamAppId || undefined,
+            imageUrl: installingGame.game.imageUrl || undefined,
+          });
+        }
 
         toastSuccess(
           t("steamCatalog.grid.transferStarted"),

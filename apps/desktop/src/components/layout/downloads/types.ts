@@ -12,6 +12,10 @@ export interface DownloadRow {
   subtitle: string;
   value: number;
   source: DownloadSourceKind;
+  gameId?: string;
+  gameName?: string;
+  steamAppId?: string;
+  imageUrl?: string;
   jobId?: string;
   infoHash?: string;
   isPaused?: boolean;

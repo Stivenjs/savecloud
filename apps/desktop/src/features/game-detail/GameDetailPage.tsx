@@ -35,6 +35,7 @@ import type { DownloadConflict, SourceBestMatch } from "@services/tauri";
 import { sourcesFindMatchForGame, startSourceDownload, startPeerGameDownload } from "@services/tauri";
 import type { PeerInstallOffer } from "@services/tauri/inventory.service";
 import { usePeerInstallOffers } from "@hooks/usePeerInstallOffers";
+import { useDownloadMetadataStore } from "@store/DownloadMetadataStore";
 import { createShareLink } from "@/services/tauri/share.service";
 import { toastError, toastSuccess } from "@utils/toast";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
@@ -456,19 +457,29 @@ export function GameDetailPage() {
       if (!chosen) return;
 
       try {
-        await startSourceDownload({
+        const jobId = await startSourceDownload({
           sourceId: chosen.source_id,
           itemId: chosen.item_id,
           destinationDir: selectedPath.trim(),
           preferredProtocol: null,
           selectedUri: selectedUri ?? null,
         });
+
+        if (jobId) {
+          useDownloadMetadataStore.getState().setMetadata(jobId, {
+            gameId: game?.id,
+            gameName: displayName,
+            steamAppId: steamAppId ?? undefined,
+            imageUrl: game?.imageUrl ?? undefined,
+          });
+        }
+
         toastSuccess(t("library.toast.downloadStarted"), t("library.toast.downloadStartedDesc", { displayName }));
       } catch (e) {
         toastError(t("library.toast.cannotStart"), e instanceof Error ? e.message : t("library.toast.unexpectedError"));
       }
     },
-    [sourceCandidates, selectedSourceKey, displayName, t]
+    [sourceCandidates, selectedSourceKey, displayName, game?.id, game?.imageUrl, steamAppId, t]
   );
 
   const handleConfirmPeerInstall = useCallback(
@@ -476,7 +487,7 @@ export function GameDetailPage() {
       if (!peerOffersHook.gameKey) return;
 
       try {
-        await startPeerGameDownload({
+        const jobId = await startPeerGameDownload({
           gameKey: peerOffersHook.gameKey,
           title: displayName,
           destinationDir: selectedPath.trim(),
@@ -484,6 +495,16 @@ export function GameDetailPage() {
           targetDeviceId: offer.deviceId,
           manifestHash: offer.manifestHash,
         });
+
+        if (jobId) {
+          useDownloadMetadataStore.getState().setMetadata(jobId, {
+            gameId: game?.id,
+            gameName: displayName,
+            steamAppId: steamAppId ?? undefined,
+            imageUrl: game?.imageUrl ?? undefined,
+          });
+        }
+
         toastSuccess(
           t("library.toast.transferStarted"),
           t("library.toast.transferStartedDesc", { displayName, deviceName: offer.deviceName })
@@ -492,7 +513,7 @@ export function GameDetailPage() {
         toastError(t("library.toast.cannotTransfer"), e instanceof Error ? e.message : String(e));
       }
     },
-    [peerOffersHook.gameKey, displayName, t]
+    [peerOffersHook.gameKey, displayName, game?.id, game?.imageUrl, steamAppId, t]
   );
 
   if (isLoading) {

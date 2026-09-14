@@ -183,23 +183,109 @@ export function needsSteamSearch(game: ConfiguredGame): boolean {
   return true;
 }
 
+const CURRENT_YEAR = new Date().getFullYear();
+const MIN_PLAUSIBLE_YEAR = 1970;
+const MAX_PLAUSIBLE_YEAR = CURRENT_YEAR + 2;
+
+function looksLikeYear(digits: string): boolean {
+  if (digits.length !== 4) return false;
+  const n = Number(digits);
+  return n >= MIN_PLAUSIBLE_YEAR && n <= MAX_PLAUSIBLE_YEAR;
+}
+
+/** Elimina un AppID de Steam al final, cuidando no confundirlo con un año. */
+function stripTrailingAppId(input: string): string {
+  return input.replace(/[-_ ](\d{4,10})$/, (match, digits: string) => (looksLikeYear(digits) ? match : ""));
+}
+
+/** Elimina contenido entre [ ] o ( ): suele llevar grupo, idiomas, tamaño, etc. */
+function stripBracketedNoise(input: string): string {
+  return input.replace(/\s*[\[(][^\])]*[\])]\s*/g, " ");
+}
+
+function normalizeWhitespace(input: string): string {
+  return input
+    .replace(/\s+/g, " ")
+    .replace(/[-_.\s]+$/, "")
+    .trim();
+}
+
+// Sufijos técnicos/piratas genéricos: pueden ir seguidos de más ruido,
+// por eso terminan en ".*$". No dependen de conocer el nombre del grupo.
+const STRUCTURAL_NOISE_PATTERN =
+  /[-_ .]+(?:v\d+(?:\.\d+)*|version\d+(?:\.\d+)*|build[-_ ]?\d+|update[-_ ]?\d+|multi\d*|x64|x86|repack|rip|p2p|proper|crack(?:ed)?)\b.*$/i;
+
+// Grupos de escena/repack conocidos. Solo se eliminan si son el ÚLTIMO
+// token del string (con extensión de archivo opcional después), nunca en
+// medio de un título, para evitar romper juegos cuyo nombre coincida con
+// alguno de estos tokens.
+const KNOWN_RELEASE_GROUPS = [
+  "codex",
+  "reloaded",
+  "skidrow",
+  "flt",
+  "plaza",
+  "empress",
+  "tenoke",
+  "goldberg",
+  "elamigos",
+  "fitgirl",
+  "dodi",
+  "kaos",
+  "hoodlum",
+  "razor1911",
+  "darksiders",
+  "cpy",
+  "prophet",
+  "hi2u",
+  "gog",
+  "steamrip",
+  "onlinefix",
+  "fairlight",
+  "3dm",
+  "tinyiso",
+  "kazumi",
+].join("|");
+
+const GROUP_TAG_AT_END_PATTERN = new RegExp(
+  String.raw`[-_ .]+(?:${KNOWN_RELEASE_GROUPS})(?:\.(?:iso|rar|zip|7z|exe|torrent))?$`,
+  "i"
+);
+
 /**
  * Convierte el id del juego a un término de búsqueda para Steam.
- * Limpia el ruido estructural (sufijos, versiones, tags) sin importar el grupo que lo subió,
- * y sustituye guiones por espacios.
+ * Limpia el ruido estructural (AppID, versiones, tags técnicos, nombre de
+ * grupo) sin importar quién lo subió, y sustituye separadores por espacios.
  */
 export function idToSearchQuery(id: string): string {
-  let cleaned = id.trim();
+  const original = id.trim();
+  if (!original) return original;
 
-  // 1. Eliminar Steam AppIDs al final (ej: "resident-evil-4-2050650" -> "resident-evil-4")
-  cleaned = cleaned.replace(/-\d{4,10}$/, "");
+  let cleaned = original;
+  cleaned = stripTrailingAppId(cleaned);
+  cleaned = cleaned.replace(STRUCTURAL_NOISE_PATTERN, "");
+  cleaned = cleaned.replace(GROUP_TAG_AT_END_PATTERN, "");
+  cleaned = normalizeWhitespace(cleaned.replace(/[-_.]/g, " "));
 
-  // 2. Eliminar sufijos técnicos/piratas genéricos (sin importar quién lo subió)
-  // Atrapa cosas como: -crack, -repack, -v1.0.3, -build-234, -multi12, -p2p, -rip
-  cleaned = cleaned.replace(/-(crack|repack|rip|p2p|x64|x86|v\d+[.\d]*|build-?\d+|multi\d+).*$/i, "");
+  // Fallback: si la limpieza dejó la cadena vacía (coincidencia agresiva),
+  // usar el original con separadores convertidos a espacios.
+  return cleaned || normalizeWhitespace(original.replace(/[-_.]/g, " "));
+}
 
-  // 3. Reemplazar los guiones restantes por espacios
-  return cleaned.replace(/-/g, " ").trim() || id.replace(/-/g, " ");
+/**
+ * Limpia títulos de descargas (torrents, fuentes de catálogo, releases de
+ * escena) eliminando corchetes, puntos, nombres de grupos, versiones y tags
+ * técnicos para búsquedas óptimas en Steam.
+ */
+export function cleanDownloadTitleForSearch(title: string): string {
+  const original = title.trim();
+  if (!original) return original;
+
+  let cleaned = stripBracketedNoise(original);
+  cleaned = stripTrailingAppId(cleaned);
+
+  // Reutiliza el mismo motor de limpieza que idToSearchQuery.
+  return idToSearchQuery(cleaned) || idToSearchQuery(original);
 }
 
 const displayNameCache = new Map<string, string>();
