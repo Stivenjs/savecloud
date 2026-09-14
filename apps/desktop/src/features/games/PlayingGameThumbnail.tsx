@@ -1,9 +1,9 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { Gamepad2 } from "lucide-react";
 import { Skeleton } from "@heroui/react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConfig } from "@hooks/useConfig";
-import { searchSteamAppId } from "@services/tauri";
+import { searchSteamAppId, type SteamAppdetailsMediaResult } from "@services/tauri";
 import { globalFailedImages, globalLoadedImages } from "@hooks/useGameMedia";
 import {
   extractAppIdFromId,
@@ -12,7 +12,7 @@ import {
   getSteamThumbnailCandidates,
   getSteamCdnCandidates,
   formatGameDisplayName,
-  idToSearchQuery,
+  cleanDownloadTitleForSearch,
   findConfiguredGame,
 } from "@utils/gameImage";
 
@@ -22,6 +22,7 @@ export interface PlayingGameThumbnailProps {
   imageUrl?: string | null;
   steamAppId?: string | null;
   size?: "xs" | "sm" | "md" | "lg";
+  orientation?: "horizontal" | "vertical";
   className?: string;
   showGlow?: boolean;
 }
@@ -46,10 +47,12 @@ export function PlayingGameThumbnail({
   imageUrl,
   steamAppId,
   size = "sm",
+  orientation = "horizontal",
   className = "",
   showGlow = false,
 }: PlayingGameThumbnailProps) {
   const { config } = useConfig();
+  const queryClient = useQueryClient();
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [hasError, setHasError] = useState(false);
 
@@ -70,8 +73,11 @@ export function PlayingGameThumbnail({
     }
 
     if (gameName?.trim()) {
+      if (isSteamAppId(gameName)) return gameName.trim();
       const fromName = extractAppIdFromFolderName(gameName);
       if (fromName) return fromName;
+      const fromId = extractAppIdFromId(gameName);
+      if (fromId) return fromId;
     }
 
     return null;
@@ -83,7 +89,7 @@ export function PlayingGameThumbnail({
     if (customCover || resolvedSteamAppId) return null;
     const raw = (gameName?.trim() || (gameId ? formatGameDisplayName(gameId) : "")).trim();
     if (!raw) return null;
-    return idToSearchQuery(raw);
+    return cleanDownloadTitleForSearch(raw);
   }, [customCover, resolvedSteamAppId, gameName, gameId]);
 
   const { data: searchedSteamAppId, isLoading: isSearchingAppId } = useQuery({
@@ -105,13 +111,26 @@ export function PlayingGameThumbnail({
     }
 
     if (effectiveSteamAppId) {
+      // Comprobar si ya existe media en caché de React Query (p. ej. visitado en catálogo o detalle)
+      const cachedDetails = queryClient.getQueryData<SteamAppdetailsMediaResult>([
+        "steam-appdetails-media",
+        effectiveSteamAppId,
+      ]);
+      if (cachedDetails?.capsuleImage?.trim()) {
+        urls.push(cachedDetails.capsuleImage.trim());
+      }
+      if (cachedDetails?.mediaUrls?.length) {
+        const firstMedia = cachedDetails.mediaUrls[0];
+        if (firstMedia?.trim()) urls.push(firstMedia.trim());
+      }
+
       urls.push(...getSteamThumbnailCandidates(effectiveSteamAppId));
-      urls.push(...getSteamCdnCandidates(effectiveSteamAppId));
+      urls.push(...getSteamCdnCandidates(effectiveSteamAppId, orientation));
     }
 
     const unique = [...new Set(urls.filter(Boolean))];
     return unique.filter((url) => !globalFailedImages.has(url));
-  }, [customCover, effectiveSteamAppId]);
+  }, [customCover, effectiveSteamAppId, orientation, queryClient]);
 
   useEffect(() => {
     setCandidateIndex(0);
