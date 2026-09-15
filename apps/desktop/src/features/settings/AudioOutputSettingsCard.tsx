@@ -10,6 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastError, toastSuccess } from "@utils/toast";
+import { AudioOutputCardSkeleton } from "./SettingsTabSkeletons";
 
 export interface AudioOutputDeviceItem {
   name: string;
@@ -86,7 +87,8 @@ export function AudioOutputSettingsCard() {
     },
   });
 
-  const loading = loadingDevices || loadingActive || updating;
+  const initialLoading = loadingDevices || loadingActive;
+  const loading = updating;
 
   const selectOptions: SelectOption[] = useMemo(() => {
     const defaultSuffix = t("settings.audioOutput.defaultSuffix", " (Predeterminado)");
@@ -101,6 +103,11 @@ export function AudioOutputSettingsCard() {
     }
     return options;
   }, [devices, t]);
+
+  // Mantener el skeleton hasta que la data llegue para evitar el salto visual
+  if (initialLoading) {
+    return <AudioOutputCardSkeleton />;
+  }
 
   return (
     <Card>
