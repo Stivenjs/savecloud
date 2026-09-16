@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { useOverlaySoundSettings } from "@hooks/useOverlaySoundSettings";
 import type { OverlayPosition } from "@services/tauri";
 import { toastError } from "@utils/toast";
+import { OverlaySoundCardSkeleton } from "./SettingsTabSkeletons";
 
 const POSITION_OPTIONS: Array<{
   value: OverlayPosition;
@@ -107,6 +108,11 @@ export function OverlaySoundSettingsCard() {
       setIsPlayingTest(false);
     }
   }, [enabled, currentVolume]);
+
+  // Mantener el skeleton hasta que la data llegue para evitar el salto visual
+  if (isLoading) {
+    return <OverlaySoundCardSkeleton />;
+  }
 
   const volumePercentage = Math.round(currentVolume * 100);
 
