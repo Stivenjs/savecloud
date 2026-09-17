@@ -42,6 +42,7 @@ export interface CreateMultipartUploadResult {
 export interface UploadPartUrl {
   partNumber: number;
   url: string;
+  uploadUrl?: string;
 }
 
 /** Parte completada (ETag devuelto por S3 al subir la parte). */

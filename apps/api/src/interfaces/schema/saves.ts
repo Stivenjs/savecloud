@@ -201,7 +201,8 @@ export type InitMultipartResponse = Static<typeof InitMultipartResponseSchema>;
 
 export const MultipartPartUrlItemSchema = Type.Object({
   partNumber: Type.Integer(),
-  uploadUrl: Type.String(),
+  url: Type.Optional(Type.String()),
+  uploadUrl: Type.Optional(Type.String()),
 });
 
 export const InitMultipartWithPartUrlsResponseSchema = Type.Object({

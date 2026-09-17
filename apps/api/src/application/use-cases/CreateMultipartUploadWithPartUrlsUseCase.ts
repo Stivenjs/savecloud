@@ -12,7 +12,7 @@ export interface CreateMultipartUploadWithPartUrlsInput {
 export interface CreateMultipartUploadWithPartUrlsOutput {
   uploadId: string;
   key: string;
-  partUrls: { partNumber: number; url: string }[];
+  partUrls: { partNumber: number; url: string; uploadUrl?: string }[];
 }
 
 /**

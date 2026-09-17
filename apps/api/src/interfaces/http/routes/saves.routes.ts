@@ -538,7 +538,14 @@ export async function registerSavesRoutes(
         filename: filename.trim(),
         partCount,
       });
-      return reply.send(result);
+      return reply.send({
+        ...result,
+        partUrls: result.partUrls.map((p) => ({
+          partNumber: p.partNumber,
+          url: p.url,
+          uploadUrl: p.uploadUrl ?? p.url,
+        })),
+      });
     }
   );
 
@@ -560,7 +567,13 @@ export async function registerSavesRoutes(
         uploadId: uploadId.trim(),
         partNumbers,
       });
-      return reply.send(result);
+      return reply.send({
+        partUrls: result.partUrls.map((p) => ({
+          partNumber: p.partNumber,
+          url: p.url,
+          uploadUrl: p.uploadUrl ?? p.url,
+        })),
+      });
     }
   );
 

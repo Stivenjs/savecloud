@@ -275,7 +275,7 @@ export class S3SaveRepository implements SaveRepository {
           PartNumber: partNumber,
         });
         const url = await getSignedUrl(this.presignS3, command, options);
-        return { partNumber, url };
+        return { partNumber, url, uploadUrl: url };
       })
     );
   }
