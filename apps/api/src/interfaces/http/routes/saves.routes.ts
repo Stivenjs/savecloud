@@ -430,9 +430,13 @@ export async function registerSavesRoutes(
       try {
         const requesterUserId = getUserId(request);
         const userId = await getStorageUserIdFromRequest(request);
-        const { gameId, key, range } = request.body;
+        const rawKey = request.body.key ?? request.body.backupKey;
+        if (!rawKey || !rawKey.trim()) {
+          return reply.status(400).send({ error: "Bad Request", message: "key is required" });
+        }
+        const { gameId, range } = request.body;
         const trimmedGameId = gameId.trim();
-        const trimmedKey = key.trim();
+        const trimmedKey = rawKey.trim();
         if (
           deps.cloudInviteRepository &&
           trimmedKey.startsWith(`${requesterUserId}/${trimmedGameId}/`) &&
