@@ -10,6 +10,7 @@ export interface GetDownloadUrlInput {
 
 export interface GetDownloadUrlOutput {
   downloadUrl: string;
+  key: string;
 }
 
 /**
@@ -26,6 +27,6 @@ export class GetDownloadUrlUseCase {
       throw new Error("Invalid key: must belong to user and game");
     }
     const downloadUrl = await this.saveRepository.getDownloadUrl(input.userId, input.gameId, input.key, input.range);
-    return { downloadUrl };
+    return { downloadUrl, key: input.key };
   }
 }
