@@ -78,9 +78,14 @@ function extractEventInput(eventBody: unknown): ProcessS3EventInput | null {
   const eventTime = eventTimeRaw ? new Date(eventTimeRaw) : undefined;
 
   const detailObject = payload.detail?.object;
-  const s3Key: string | undefined = detailObject?.key;
+  const rawKey: string | undefined = detailObject?.key;
 
-  if (!s3Key || !rawDetailType) return null;
+  if (!rawKey || !rawDetailType) return null;
+
+  let s3Key = rawKey;
+  try {
+    s3Key = decodeURIComponent(rawKey.replace(/\+/g, " "));
+  } catch {}
 
   const detailType: "Object Created" | "Object Deleted" =
     rawDetailType === "Object Deleted" ? "Object Deleted" : "Object Created";

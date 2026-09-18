@@ -322,7 +322,7 @@ function buildSavesRouteUseCases(deps: AppDependencies): SavesRouteUseCases {
     renameGameInCloudUseCase: new RenameGameInCloudUseCase(deps.saveRepository),
     listSavesUseCase: new ListSavesUseCase(deps.saveRepository, deps.saveFileIndexRepository),
     getGameSummaryUseCase: deps.gameStatRepository ? new GetGameSummaryUseCase(deps.gameStatRepository) : undefined,
-    listBackupsUseCase: new ListBackupsUseCase(deps.saveRepository),
+    listBackupsUseCase: new ListBackupsUseCase(deps.saveRepository, deps.saveFileIndexRepository),
     deleteBackupUseCase: new DeleteBackupUseCase(deps.saveRepository),
     renameBackupUseCase: new RenameBackupUseCase(deps.saveRepository),
     createMultipartUploadUseCase: new CreateMultipartUploadUseCase(deps.saveRepository),

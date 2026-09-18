@@ -16,12 +16,16 @@ interface AggregatedGameDelta {
   lastModified?: Date | null;
 }
 
-const IGNORED_SEGMENTS = new Set([
+/**
+ * Prefijos a nivel de raíz del bucket S3 que corresponden a servicios auxiliares
+ * (invitaciones, tokens, inventario, notificaciones, papelera, clips globales, etc.)
+ * y no a identificadores de usuario (userId).
+ */
+const ROOT_SYSTEM_PREFIXES = new Set([
   "assets",
   "public",
   "static",
   "share-tokens",
-  "backups",
   "cloud-invites",
   "cloud-invites-memberships",
   "cloud-invites-shared-games",
@@ -32,29 +36,53 @@ const IGNORED_SEGMENTS = new Set([
   "steam-seed-manifest",
   "clips",
   "clips-meta",
-  "__config__",
-  "__torrent__",
-  "__tmp__",
-  "__temp__",
+  "trash",
   "temp",
   "tmp",
+  "__tmp__",
+  "__temp__",
+  "backups", // Si existiese en la raíz sin userId
 ]);
 
 /**
- * Determina si una clave S3 corresponde a archivos de sistema, metadatos, clips o backups
- * que no deben ser indexados como archivos de guardado ni sumar en GameStats.
+ * Segmentos especiales dentro de userId/gameId/ que NO son archivos de guardado
+ * (metadatos de torrents, configuraciones internas, clips o archivos temporales).
+ *
+ * NOTA: Los backups empaquetados (`userId/gameId/backups/*.tar`) SÍ son archivos
+ * de guardado legítimos ("juegos empaquetados") y DEBEN ser indexados en DynamoDB.
  */
-function isIgnoredS3Key(s3Key: string, parts: string[]): boolean {
-  if (parts.some((segment) => IGNORED_SEGMENTS.has(segment.toLowerCase()))) {
+const GAME_SYSTEM_SEGMENTS = new Set(["__torrent__", "__config__", "__tmp__", "__temp__", "clips", "clips-meta"]);
+
+/**
+ * Determina si una clave S3 corresponde a archivos de sistema, metadatos, clips
+ * o marcadores de directorio que no deben ser indexados como archivos de guardado.
+ */
+export function isIgnoredS3Key(s3Key: string, parts: string[]): boolean {
+  if (!s3Key || s3Key.endsWith("/")) {
+    return true;
+  }
+
+  if (parts.length < 3) {
+    return true;
+  }
+
+  const rootPrefix = parts[0]?.toLowerCase();
+  if (rootPrefix && ROOT_SYSTEM_PREFIXES.has(rootPrefix)) {
+    return true;
+  }
+
+  const gameSubSegment = parts[2]?.toLowerCase();
+  if (gameSubSegment && GAME_SYSTEM_SEGMENTS.has(gameSubSegment)) {
     return true;
   }
 
   if (
-    s3Key.includes("/backups/") ||
     s3Key.includes("/__torrent__/") ||
     s3Key.includes("/__config__/") ||
     s3Key.includes("/clips/") ||
-    s3Key.includes("/clips-meta/")
+    s3Key.includes("/clips-meta/") ||
+    s3Key.includes("/__tmp__/") ||
+    s3Key.includes("/__temp__/")
   ) {
     return true;
   }
@@ -123,7 +151,8 @@ export class ProcessS3EventUseCase {
         const existing = await this.saveFileIndexRepo.getByObjectKey(userId, s3Key);
 
         const previousSize = existing?.size ?? 0;
-        const nextSize = size ?? 0;
+        const resolvedSize = size ?? existing?.size;
+        const nextSize = resolvedSize ?? 0;
         deltaFileCount = existing ? 0 : 1;
         deltaSizeBytes = nextSize - previousSize;
 
@@ -131,7 +160,7 @@ export class ProcessS3EventUseCase {
           userId,
           gameId,
           objectKey: s3Key,
-          size,
+          size: resolvedSize,
           lastModified: eventTime,
         });
       }
