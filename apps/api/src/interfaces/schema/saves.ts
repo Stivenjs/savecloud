@@ -49,7 +49,8 @@ export type UploadUrlsBatchBody = Static<typeof UploadUrlsBatchSchema>;
 
 export const DownloadUrlSchema = Type.Object({
   gameId: Type.String({ minLength: 1 }),
-  key: Type.String({ minLength: 1 }),
+  key: Type.Optional(Type.String({ minLength: 1 })),
+  backupKey: Type.Optional(Type.String({ minLength: 1 })),
   range: Type.Optional(
     Type.Object({
       start: Type.Integer({ minimum: 0 }),
@@ -165,7 +166,7 @@ export type UploadUrlsBatchResponse = Static<typeof UploadUrlsBatchResponseSchem
 
 export const DownloadUrlResponseSchema = Type.Object({
   downloadUrl: Type.String(),
-  key: Type.String(),
+  key: Type.Optional(Type.String()),
 });
 export type DownloadUrlResponse = Static<typeof DownloadUrlResponseSchema>;
 
@@ -200,7 +201,8 @@ export type InitMultipartResponse = Static<typeof InitMultipartResponseSchema>;
 
 export const MultipartPartUrlItemSchema = Type.Object({
   partNumber: Type.Integer(),
-  uploadUrl: Type.String(),
+  url: Type.Optional(Type.String()),
+  uploadUrl: Type.Optional(Type.String()),
 });
 
 export const InitMultipartWithPartUrlsResponseSchema = Type.Object({
