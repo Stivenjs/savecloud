@@ -95,7 +95,7 @@ class StealthBrowserStrategy(FetchStrategy):
             "page_action": page_action,
             "google_search": False,
             "dns_over_https": True,
-            "disable_ads": True,
+            "block_ads": True,
             "extra_flags": list(CHROMIUM_OPTIMIZATION_FLAGS),
         }
         if cached_cookies:
