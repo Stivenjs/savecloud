@@ -168,6 +168,18 @@ class TestExtractors(unittest.TestCase):
         self.assertEqual(context.captured_download_url, "https://tunnel5.dlproxy.uk/download/game.zip")
         download.cancel.assert_called_once()
 
+    def test_datanodes_on_response_json(self):
+        from crawler.extractors.datanodes import DataNodesExtractor
+        ext = DataNodesExtractor()
+        context = ExtractionContext(target_url="https://datanodes.to/rpmce0vlrxy1")
+
+        resp = MagicMock()
+        resp.url = "https://datanodes.to/download"
+        resp.headers = {"content-type": "application/json"}
+        resp.text.return_value = '{"url": "https%3A%2F%2Ftunnel5.dlproxy.uk%2Fdownload%2Fabc123xyz"}'
+        ext.on_response(resp, context)
+        self.assertEqual(context.captured_download_url, "https://tunnel5.dlproxy.uk/download/abc123xyz")
+
     def test_gofile_matches(self):
         from crawler.extractors.gofile import GofileExtractor
         ext = GofileExtractor()
