@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { cn, Dropdown, DropdownTrigger } from "@heroui/react";
+import { createPortal } from "react-dom";
+import { cn } from "@heroui/react";
 import type { ConfiguredGame } from "@app-types/config";
 import type { GameStats, SteamAppdetailsMediaResult } from "@services/tauri";
 import { GameCard } from "@features/games/GameCard";
@@ -7,8 +8,7 @@ import { needsSteamSearch } from "@utils/gameImage";
 import { useNativeVirtualGrid } from "@hooks/useNativeVirtualGrid";
 import { useShellUiStore } from "@store/ShellUiStore";
 import type { GamesCardOrientation, GamesLayout } from "@hooks/useGamesViewPreferences";
-import { GameActionsDropdownMenu } from "@features/games/game-actions";
-import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";
+import { GameCardContextMenuPortal } from "@features/games/GameCardContextMenuPortal";
 
 export interface GamesVirtualizedGridProps {
   games: readonly ConfiguredGame[];
@@ -164,9 +164,8 @@ export const GamesVirtualizedGrid = memo(function GamesVirtualizedGrid({
     (e: React.MouseEvent, game: ConfiguredGame) => {
       e.preventDefault();
       e.stopPropagation();
-      const x = Math.min(e.clientX, window.innerWidth - 260);
-      const y = Math.min(e.clientY, window.innerHeight - 380);
-      setContextMenu({ game, x: Math.max(8, x), y: Math.max(8, y) });
+
+      setContextMenu({ game, x: e.clientX, y: e.clientY });
       onActionsMenuOpenChange?.(true, game.id);
     },
     [onActionsMenuOpenChange]
@@ -236,73 +235,27 @@ export const GamesVirtualizedGrid = memo(function GamesVirtualizedGrid({
         ))}
       </div>
 
-      {contextMenu && (
-        <div
-          style={{
-            position: "fixed",
-            left: `${contextMenu.x}px`,
-            top: `${contextMenu.y}px`,
-            width: 1,
-            height: 1,
-            pointerEvents: "none",
-            zIndex: 9999,
-          }}>
-          <Dropdown
-            isOpen={true}
-            onOpenChange={(open) => {
-              if (!open) handleCloseContextMenu();
-            }}
-            placement="bottom-start"
-            offset={4}>
-            <DropdownTrigger>
-              <span className="sr-only" aria-hidden="true" />
-            </DropdownTrigger>
-            <GameActionsDropdownMenu
-              surface="list"
-              game={contextMenu.game}
-              isGameRunning={gameRunningStatus[contextMenu.game.id] ?? false}
-              isUploadTooLarge={
-                (statsByGameId.get(contextMenu.game.id)?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES
-              }
-              isSyncing={syncingId === contextMenu.game.id || syncingId === "all"}
-              isDownloading={downloadingId === contextMenu.game.id || downloadingId === "all"}
-              isFullBackupUploading={fullBackupUploadingGameId === contextMenu.game.id}
-              onEdit={(g) => {
-                handleCloseContextMenu();
-                onEdit?.(g);
-              }}
-              onTorrent={(g) => {
-                handleCloseContextMenu();
-                onTorrent?.(g);
-              }}
-              onOpenFolder={(g) => {
-                handleCloseContextMenu();
-                onOpenFolder?.(g);
-              }}
-              onSync={(g) => {
-                handleCloseContextMenu();
-                onSync?.(g);
-              }}
-              onFullBackupUpload={(g) => {
-                handleCloseContextMenu();
-                onFullBackupUpload?.(g);
-              }}
-              onRecoverFromCloud={(g) => {
-                handleCloseContextMenu();
-                onRecoverFromCloud?.(g);
-              }}
-              onShare={(g) => {
-                handleCloseContextMenu();
-                onShare?.(g);
-              }}
-              onRemove={(g) => {
-                handleCloseContextMenu();
-                onRemove?.(g);
-              }}
-            />
-          </Dropdown>
-        </div>
-      )}
+      {contextMenu &&
+        createPortal(
+          <GameCardContextMenuPortal
+            contextMenu={contextMenu}
+            onClose={handleCloseContextMenu}
+            gameRunningStatus={gameRunningStatus}
+            statsByGameId={statsByGameId}
+            syncingId={syncingId}
+            downloadingId={downloadingId}
+            fullBackupUploadingGameId={fullBackupUploadingGameId}
+            onEdit={onEdit}
+            onTorrent={onTorrent}
+            onOpenFolder={onOpenFolder}
+            onSync={onSync}
+            onFullBackupUpload={onFullBackupUpload}
+            onRecoverFromCloud={onRecoverFromCloud}
+            onShare={onShare}
+            onRemove={onRemove}
+          />,
+          document.body
+        )}
     </div>
   );
 });
