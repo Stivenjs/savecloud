@@ -93,9 +93,8 @@ export function buildGameMediaCoverCandidates(
   const urls: string[] = [];
   if (displayImageUrl?.trim()) urls.push(displayImageUrl.trim());
   if (capsuleImage?.trim()) urls.push(capsuleImage.trim());
-  for (const url of mediaUrls) {
-    if (url?.trim()) urls.push(url.trim());
-  }
+  const firstMedia = mediaUrls[0]?.trim();
+  if (firstMedia) urls.push(firstMedia);
 
   const appId = getSteamAppId(game, resolvedSteamAppId);
   if (appId) {
@@ -336,7 +335,7 @@ export function useGameMediaBatch({
     },
     enabled: missingAppIds.length > 0 && !isResolvingIds,
     staleTime: 60 * 60 * 1000,
-    gcTime: 24 * 60 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 

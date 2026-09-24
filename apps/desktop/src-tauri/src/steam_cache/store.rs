@@ -11,9 +11,10 @@ use crate::steam_cache::types::{
     SteamAppdetailsMedia,
 };
 
-/// Capacidad por defecto: equilibrio entre memoria y aciertos en bibliotecas medianas.
-const MEDIA_CACHE_CAPACITY: u64 = 4096;
-const DETAILS_CACHE_CAPACITY: u64 = 2048;
+/// Capacidad acotada: suficiente para vistas activas sin sobrecargar el heap.
+const MEDIA_CACHE_CAPACITY: u64 = 512;
+const DETAILS_CACHE_CAPACITY: u64 = 128;
+const CACHE_IDLE_DURATION_SECS: u64 = 30 * 60; // 30 minutos
 
 static INSTANCE: LazyLock<SteamApiCache> = LazyLock::new(SteamApiCache::new);
 static SQLITE_DB: OnceLock<AppDb> = OnceLock::new();
@@ -40,9 +41,13 @@ pub struct SteamApiCache {
 impl SteamApiCache {
     fn new() -> Self {
         Self {
-            media: Cache::builder().max_capacity(MEDIA_CACHE_CAPACITY).build(),
+            media: Cache::builder()
+                .max_capacity(MEDIA_CACHE_CAPACITY)
+                .time_to_idle(std::time::Duration::from_secs(CACHE_IDLE_DURATION_SECS))
+                .build(),
             details: Cache::builder()
                 .max_capacity(DETAILS_CACHE_CAPACITY)
+                .time_to_idle(std::time::Duration::from_secs(CACHE_IDLE_DURATION_SECS))
                 .build(),
         }
     }
