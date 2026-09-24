@@ -254,7 +254,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
         className={getGamepadFocusClass(
           isFocused,
           inputMode,
-          `cursor-pointer relative bg-[#0e0f14] shadow-md overflow-hidden rounded-xl ${aspectClass} w-full group/card hover:shadow-lg`
+          `cursor-pointer relative isolate bg-[#0e0f14] shadow-md overflow-hidden rounded-xl ${aspectClass} w-full group/card`
         )}
         onClick={handleCardClick}
         onContextMenu={(e) => {
@@ -294,7 +294,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
         {!isCatalog && syncProgress && <GameCardSyncProgress progress={syncProgress} />}
 
         <MaybeViewTransition name={`game-hero-${game.id}`} share="hero-morph" disabled={isLowPerf || isCatalog}>
-          <div className="relative size-full overflow-hidden bg-zinc-950 rounded-xl">
+          <div className="relative isolate size-full overflow-hidden bg-zinc-950 rounded-xl">
             {isEffectivelyLoading ? (
               <Skeleton className="absolute inset-0 z-10 size-full rounded-xl" />
             ) : (
@@ -302,7 +302,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
                 alt={game.id}
                 candidates={coverCandidates}
                 fallbackTitle={cardTitle ?? formatGameDisplayName(game.id)}
-                className="size-full object-cover object-center transition-[transform,opacity] duration-200 ease-out group-hover:scale-[1.02] subpixel-antialiased transform-gpu rounded-xl"
+                className="size-full object-cover object-center transition-[transform,opacity] duration-200 ease-out group-hover/card:scale-[1.03] subpixel-antialiased transform-gpu rounded-xl"
                 showSkeleton={!isCatalog}
                 priority={priority}
               />
