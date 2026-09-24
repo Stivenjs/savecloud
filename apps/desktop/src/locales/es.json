@@ -1007,14 +1007,14 @@
       "compression": {
         "title": "Compresión del backup empaquetado (Zstd)",
         "desc": "Solo aplica al backup completo en <strong>modo streaming</strong> (incluido el modo prueba): el flujo empaqueta con Zstd antes de subir. Si el streaming está desactivado, el backup clásico sigue siendo un <code>.tar</code> sin compresión Zstd por fuera.",
-        "levelLabel": "Nivel Zstd (1–máx. 22):",
+        "levelLabel": "Nivel Zstd (1–máx. 12):",
         "defaultSuffix": "(predeterminado de la app: {{default}})",
         "restoreDefault": "Restaurar predeterminado",
         "debounceHint": "El valor en disco se actualiza al soltar o dejar de mover un momento (debounce). «Restaurar» guarda al instante.",
         "prosConsTitle": "Ventajas y contras",
         "lowLevels": "Niveles bajos (aprox. 1–5):",
         "lowLevelsDesc": "menos CPU y backup más corto; la subida termina antes. Ideal si priorizas tiempo y estabilidad.",
-        "highLevels": "Niveles altos (aprox. 10–22):",
+        "highLevels": "Niveles altos (aprox. 10–12):",
         "highLevelsDesc": "archivo más pequeño en la nube y menos ancho de banda; mucho más lento y puede calentar el equipo al empaquetar.",
         "gameDataHint": "Muchos juegos ya traen datos comprimidos (p. ej. <code>.pak</code>, texturas); en esos casos subir el nivel aporta poco tamaño extra a cambio de mucho tiempo."
       },
@@ -2269,7 +2269,9 @@
       "downloadFailed": "No se pudo iniciar",
       "transferStarted": "Transferencia iniciada",
       "transferStartedDesc": "Trayendo {{name}} desde {{device}}.",
-      "transferFailed": "No se pudo transferir"
+      "transferFailed": "No se pudo transferir",
+      "addToLibrary": "Añadir a la biblioteca",
+      "contextMenuAria": "Acciones del catálogo"
     },
     "pagination": {
       "ariaLabel": "Páginas del catálogo",

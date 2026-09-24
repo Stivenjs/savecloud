@@ -147,7 +147,7 @@ impl Write for ChannelWriter {
 ///
 /// - `paths`: lista de rutas sin expandir asociadas al juego. Se toma posesión para `'static`.
 /// - `channel_capacity`: capacidad del canal mpsc. Debe ser `strategy.tar_channel_capacity`.
-/// - `zstd_compression_level`: nivel de compresión Zstandard (1..=22).
+/// - `zstd_compression_level`: nivel de compresión Zstandard (1..=12). Valores superiores se clampean a 12.
 ///
 /// # Return
 ///
@@ -199,11 +199,24 @@ fn run_tar_pipeline(
     // Pipeline: tar::Builder -> ProgressWrapper -> zstd::Encoder -> ChannelWriter -> mpsc
     let writer = ChannelWriter::new(tx, original_counter.clone());
 
-    let level = zstd_compression_level.clamp(1, 22);
+    // Límite de seguridad: niveles > 12 consumen gigabytes de memoria por hilo y saturan la CPU al 100%.
+    // Clampeamos a 1..=12 para streaming seguro en segundo plano.
+    let level = zstd_compression_level.clamp(1, 12);
     let mut encoder = zstd::Encoder::new(writer, level)
         .map_err(|e| format!("fallo al inicializar encoder Zstd: {}", e))?;
 
-    let threads = (num_cpus::get() - 1).max(1) as u32;
+    // Asignación controlada de hilos:
+    // Nunca saturar todos los núcleos para que la UI, audio y Windows no se congelen.
+    // En niveles altos (>=7), cada hilo de Zstd reserva una ventana grande de RAM; limitamos hilos concurrentes.
+    let total_cpus = num_cpus::get();
+    let max_threads = if level >= 10 {
+        2
+    } else if level >= 7 {
+        4
+    } else {
+        (total_cpus.saturating_sub(1)).max(1) as u32
+    };
+    let threads = ((total_cpus / 2).max(1) as u32).min(max_threads);
 
     encoder
         .multithread(threads)

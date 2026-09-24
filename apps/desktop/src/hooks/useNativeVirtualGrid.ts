@@ -13,6 +13,12 @@ export interface UseNativeVirtualGridOptions<T> {
   overscan?: number;
   /** Initial scroll position if restoring from a previously saved scroll */
   initialScrollY?: number;
+  /** Optional estimated container top offset from document top (in pixels) for initial scroll calculation */
+  containerTopOffset?: number;
+  /** Optional custom columns calculation function given container width */
+  computeColumns?: (containerWidth: number) => number;
+  /** Optional custom row height calculation given column width and container width (must include row gap) */
+  computeRowHeight?: (columnWidth: number, containerWidth: number) => number;
 }
 
 export interface VisibleGridItem<T> {
@@ -37,6 +43,9 @@ export function useNativeVirtualGrid<T>({
   estimatedRowHeight = 235,
   overscan = 8,
   initialScrollY = 0,
+  containerTopOffset,
+  computeColumns,
+  computeRowHeight,
 }: UseNativeVirtualGridOptions<T>): UseNativeVirtualGridResult<T> {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -66,22 +75,29 @@ export function useNativeVirtualGrid<T>({
   }, []);
 
   const columns = useMemo(() => {
+    if (computeColumns && containerWidth > 0) {
+      return Math.max(1, computeColumns(containerWidth));
+    }
     if (containerWidth <= 0 || minItemWidth <= 0) return 1;
     const computed = Math.floor((containerWidth + gap) / (minItemWidth + gap));
     return Math.max(1, computed);
-  }, [containerWidth, minItemWidth, gap]);
+  }, [containerWidth, minItemWidth, gap, computeColumns]);
 
   const rowHeight = useMemo(() => {
     if (containerWidth <= 0 || columns <= 0) {
       return estimatedRowHeight;
     }
     const columnWidth = (containerWidth - (columns - 1) * gap) / columns;
+    if (computeRowHeight) {
+      const computed = computeRowHeight(columnWidth, containerWidth);
+      return computed > 0 ? computed : estimatedRowHeight;
+    }
     const imageHeight = Math.round(columnWidth * (215 / 460));
     const bottomActionHeight = minItemWidth >= 320 ? 104 : 72;
     const cardGap = 8;
     const computed = imageHeight + cardGap + bottomActionHeight + gap;
     return computed > 100 ? computed : estimatedRowHeight;
-  }, [containerWidth, columns, gap, minItemWidth, estimatedRowHeight]);
+  }, [containerWidth, columns, gap, minItemWidth, estimatedRowHeight, computeRowHeight]);
 
   const totalRows = useMemo(() => {
     if (columns <= 0 || items.length === 0) return 0;
@@ -99,7 +115,7 @@ export function useNativeVirtualGrid<T>({
           : 0;
 
     if (targetY > 0) {
-      const estimatedContainerTop = minItemWidth >= 320 ? 120 : 450;
+      const estimatedContainerTop = containerTopOffset ?? (minItemWidth >= 320 ? 120 : 450);
       const relativeScrollY = Math.max(0, targetY - estimatedContainerTop);
       const start = Math.max(0, Math.floor(relativeScrollY / estimatedRowHeight) - overscan);
       const end = start + 16 + overscan * 2;
@@ -107,7 +123,7 @@ export function useNativeVirtualGrid<T>({
     }
     return {
       startRow: 0,
-      endRow: Math.min(totalRows > 0 ? totalRows : 24, 24),
+      endRow: Math.min(totalRows > 0 ? totalRows : 5, 5),
     };
   });
 

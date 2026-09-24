@@ -20,6 +20,7 @@ export type CatalogGridItemProps = {
   isMatchingPending: boolean;
   onPickChange: (gameName: string, key: string) => void;
   onInstall: (gameName: string) => void;
+  onCatalogContextMenu?: (e: React.MouseEvent, game: ConfiguredGame, item: CatalogListItem) => void;
   consoleMode?: boolean;
   orientation?: GamesCardOrientation;
   priority?: boolean;

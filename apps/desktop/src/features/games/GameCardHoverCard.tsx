@@ -47,6 +47,8 @@ export interface GameCardHoverCardProps {
   stats?: GameStats | null;
   /** Tipo de tarjeta: biblioteca o catálogo. */
   variant?: "library" | "catalog";
+  /** Si el menú contextual de acciones está abierto, inhibe el hovercard */
+  isContextMenuOpen?: boolean;
 }
 
 /**
@@ -64,6 +66,7 @@ export function GameCardHoverCard({
   storeName,
   stats,
   variant = "library",
+  isContextMenuOpen = false,
 }: GameCardHoverCardProps) {
   const { t } = useTranslation();
   const isLowPerf = useLowPerformanceMode();
@@ -222,7 +225,21 @@ export function GameCardHoverCard({
     setFailedUrls((prev) => new Set(prev).add(url));
   }, []);
 
+  useEffect(() => {
+    if (isContextMenuOpen) {
+      isHoveringRef.current = false;
+      if (hoverOpenRef.current) {
+        clearTimeout(hoverOpenRef.current);
+        hoverOpenRef.current = null;
+      }
+      if (showHovercard) {
+        setShowHovercard(false);
+      }
+    }
+  }, [isContextMenuOpen, showHovercard]);
+
   const openHovercard = useCallback(() => {
+    if (isContextMenuOpen) return;
     isHoveringRef.current = true;
 
     if (hoverCloseRef.current) {
@@ -237,7 +254,7 @@ export function GameCardHoverCard({
       hoverOpenRef.current = null;
       setShowHovercard(true);
     }, HOVER_OPEN_DELAY_MS);
-  }, []);
+  }, [isContextMenuOpen]);
 
   const closeHovercard = useCallback(() => {
     isHoveringRef.current = false;

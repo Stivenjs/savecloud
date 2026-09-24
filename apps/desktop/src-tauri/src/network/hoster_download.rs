@@ -315,6 +315,9 @@ pub fn get_hoster_download_client() -> Client {
         .cookie_store(true)
         .connect_timeout(CONNECT_TIMEOUT)
         .read_timeout(DOWNLOAD_READ_TIMEOUT)
+        .tcp_keepalive(Some(Duration::from_secs(15)))
+        .pool_max_idle_per_host(10)
+        .pool_idle_timeout(Duration::from_secs(90))
         .tcp_nodelay(true);
 
     let client = build_client_with_proxy(builder, &current_proxy);

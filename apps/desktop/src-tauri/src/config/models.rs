@@ -47,7 +47,7 @@ pub struct AppSettings {
     pub full_backup_streaming: Option<bool>,
     #[serde(default)]
     pub full_backup_streaming_dry_run: Option<bool>,
-    /// Nivel Zstd (1–22) para backups completos en modo streaming empaquetado. `None` = 5 (histórico en la app).
+    /// Nivel Zstd (1–12) para backups completos en modo streaming empaquetado. `None` = 5 (histórico en la app).
     #[serde(default)]
     pub full_backup_packaged_compression_level: Option<i32>,
     #[serde(default)]

@@ -17,41 +17,54 @@ export function useGamesSorter(
   sortDir: GamesSortDir
 ): ConfiguredGame[] {
   return useMemo(() => {
-    const sorted = [...games].sort((a, b) => {
-      let cmp = 0;
+    if (games.length <= 1) return [...games];
 
-      switch (sortBy) {
-        case "title": {
-          const nameA = formatGameDisplayName(a.id).toLowerCase();
-          const nameB = formatGameDisplayName(b.id).toLowerCase();
-          cmp = nameA.localeCompare(nameB, undefined, { sensitivity: "base" });
-          break;
-        }
-        case "lastModified": {
-          const statsA = statsByGameId.get(a.id);
-          const statsB = statsByGameId.get(b.id);
-          const tsA = statsA?.localLastModified ? new Date(statsA.localLastModified).getTime() : 0;
-          const tsB = statsB?.localLastModified ? new Date(statsB.localLastModified).getTime() : 0;
-          cmp = tsA - tsB;
-          break;
-        }
-        case "playtime": {
-          const statsA = statsByGameId.get(a.id);
-          const statsB = statsByGameId.get(b.id);
-          cmp = (statsA?.playtimeSeconds ?? 0) - (statsB?.playtimeSeconds ?? 0);
-          break;
-        }
-        case "size": {
-          const statsA = statsByGameId.get(a.id);
-          const statsB = statsByGameId.get(b.id);
-          cmp = (statsA?.localSizeBytes ?? 0) - (statsB?.localSizeBytes ?? 0);
-          break;
-        }
+    if (sortBy === "title") {
+      const titles = new Map<string, string>();
+      for (const g of games) {
+        titles.set(g.id, formatGameDisplayName(g.id).toLowerCase());
       }
+      return [...games].sort((a, b) => {
+        const nameA = titles.get(a.id) ?? "";
+        const nameB = titles.get(b.id) ?? "";
+        const cmp = nameA.localeCompare(nameB, undefined, { sensitivity: "base" });
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    }
 
-      return sortDir === "asc" ? cmp : -cmp;
-    });
+    if (sortBy === "lastModified") {
+      const timestamps = new Map<string, number>();
+      for (const g of games) {
+        const stats = statsByGameId.get(g.id);
+        const ts = stats?.localLastModified ? Date.parse(stats.localLastModified) || 0 : 0;
+        timestamps.set(g.id, ts);
+      }
+      return [...games].sort((a, b) => {
+        const tsA = timestamps.get(a.id) ?? 0;
+        const tsB = timestamps.get(b.id) ?? 0;
+        const cmp = tsA - tsB;
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    }
 
-    return sorted;
+    if (sortBy === "playtime") {
+      return [...games].sort((a, b) => {
+        const ptA = statsByGameId.get(a.id)?.playtimeSeconds ?? 0;
+        const ptB = statsByGameId.get(b.id)?.playtimeSeconds ?? 0;
+        const cmp = ptA - ptB;
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    }
+
+    if (sortBy === "size") {
+      return [...games].sort((a, b) => {
+        const sizeA = statsByGameId.get(a.id)?.localSizeBytes ?? 0;
+        const sizeB = statsByGameId.get(b.id)?.localSizeBytes ?? 0;
+        const cmp = sizeA - sizeB;
+        return sortDir === "asc" ? cmp : -cmp;
+      });
+    }
+
+    return [...games];
   }, [games, statsByGameId, sortBy, sortDir]);
 }

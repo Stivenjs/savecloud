@@ -9,42 +9,15 @@ import { useGameStats } from "@hooks/useGameStats";
 import { useGameRunningStatus } from "@hooks/useGameRunningStatus";
 import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
 import { useGameMediaBatch, getIsResolvingIds } from "@hooks/useGameMedia";
-import { needsSteamSearch } from "@utils/gameImage";
-import { GameCard } from "@features/games/GameCard";
-import { GamesListMotionContainer, GamesListMotionItem } from "@features/games/GamesListMotion";
+import { GamesListMotionContainer } from "@features/games/GamesListMotion";
 import { GamesViewControls } from "@features/games/Gamesviewcontrols";
 import { useGamesViewPreferences } from "@hooks/useGamesViewPreferences";
 import { useGamesSorter } from "@hooks/Usegamessorter";
+import { GamesVirtualizedGrid } from "@features/games/GamesVirtualizedGrid";
 
 const GameConsoleActionsModal = lazy(() =>
   import("@features/games/GameConsoleActionsModal").then((m) => ({ default: m.GameConsoleActionsModal }))
 );
-
-function getGridClass(layout: "grid-lg" | "grid-md" | "list", orientation: "vertical" | "horizontal"): string {
-  if (orientation === "horizontal") {
-    switch (layout) {
-      case "grid-lg":
-        return "grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5";
-
-      case "grid-md":
-        return "grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-5";
-
-      case "list":
-        return "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4";
-    }
-  }
-
-  switch (layout) {
-    case "grid-lg":
-      return "grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-5";
-
-    case "grid-md":
-      return "grid grid-cols-[repeat(auto-fill,minmax(165px,1fr))] gap-4";
-
-    case "list":
-      return "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4";
-  }
-}
 
 interface GamesListProps {
   games: readonly ConfiguredGame[];
@@ -134,11 +107,9 @@ export function GamesList({
 
   const sortedGames = useGamesSorter(games, statsByGameId as unknown as Map<string, GameStats>, sortBy, sortDir);
 
-  const sortedGamesIds = useMemo(() => sortedGames.map((g) => g.id).join(","), [sortedGames]);
-
   const stableListKey = useMemo(
-    () => [animationKey ?? "", layout, cardOrientation, sortBy, sortDir, sortedGamesIds].join("|"),
-    [animationKey, layout, cardOrientation, sortBy, sortDir, sortedGamesIds]
+    () => [animationKey ?? "", layout, cardOrientation, sortBy, sortDir].join("|"),
+    [animationKey, layout, cardOrientation, sortBy, sortDir]
   );
 
   const [openActionsGameId, setOpenActionsGameId] = useState<string | null>(null);
@@ -243,38 +214,33 @@ export function GamesList({
       </div>
 
       {/* Game grid / list */}
-      <GamesListMotionContainer className={getGridClass(layout, cardOrientation)} listKey={stableListKey}>
-        {sortedGames.map((game, index) => (
-          <GamesListMotionItem key={game.id}>
-            <GameCard
-              game={game}
-              orientation={cardOrientation}
-              priority={index < 12}
-              stats={statsByGameId.get(game.id) as GameStats | undefined}
-              resolvedSteamAppId={resolvedSteamAppIds[game.id]}
-              mediaBySteamAppId={mediaBySteamAppId ?? null}
-              mediaFromBatch
-              isGameRunning={gameRunningStatus[game.id] ?? false}
-              isUnsynced={unsyncedSet.has(game.id)}
-              cloudBackupCount={cloudBackupCountByGameId[game.id] ?? 0}
-              isLoading={needsSteamSearch(game) && resolvedSteamAppIds[game.id] === undefined}
-              onRemove={onRemove}
-              onSync={onSync}
-              isSyncing={syncingId === game.id || syncingId === "all"}
-              isDownloading={downloadingId === game.id || downloadingId === "all"}
-              onOpenFolder={onOpenFolder}
-              onRecoverFromCloud={onRecoverFromCloud}
-              onFullBackupUpload={onFullBackupUpload}
-              isFullBackupUploading={fullBackupUploadingGameId === game.id}
-              onEdit={onEdit}
-              onTorrent={onTorrent}
-              onShare={onShare}
-              onOpenConsoleActions={handleOpenConsoleActions}
-              actionsMenuOpen={openActionsGameId === game.id}
-              onActionsMenuOpenChange={handleActionsMenuOpenChange}
-            />
-          </GamesListMotionItem>
-        ))}
+      <GamesListMotionContainer listKey={stableListKey}>
+        <GamesVirtualizedGrid
+          games={sortedGames}
+          layout={layout}
+          cardOrientation={cardOrientation}
+          consoleMode={consoleMode}
+          statsByGameId={statsByGameId as unknown as Map<string, GameStats>}
+          resolvedSteamAppIds={resolvedSteamAppIds}
+          mediaBySteamAppId={mediaBySteamAppId ?? null}
+          gameRunningStatus={gameRunningStatus}
+          unsyncedSet={unsyncedSet}
+          cloudBackupCountByGameId={cloudBackupCountByGameId}
+          onRemove={onRemove}
+          onSync={onSync}
+          syncingId={syncingId}
+          downloadingId={downloadingId}
+          onOpenFolder={onOpenFolder}
+          onRecoverFromCloud={onRecoverFromCloud}
+          onFullBackupUpload={onFullBackupUpload}
+          fullBackupUploadingGameId={fullBackupUploadingGameId}
+          onEdit={onEdit}
+          onTorrent={onTorrent}
+          onShare={onShare}
+          onOpenConsoleActions={handleOpenConsoleActions}
+          openActionsGameId={openActionsGameId}
+          onActionsMenuOpenChange={handleActionsMenuOpenChange}
+        />
       </GamesListMotionContainer>
 
       {consoleActionsGame && (

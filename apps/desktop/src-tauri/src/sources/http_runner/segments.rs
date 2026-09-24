@@ -135,48 +135,127 @@ where
         let pause_flag = Arc::clone(&pause_flag);
 
         tasks.spawn(async move {
-            let start = seg.current;
+            let mut curr = seg.current;
             let end = seg.end;
-            let range = format!("bytes={start}-{end}");
-            let req = client.get(&uri).header("Range", range);
-            let req = apply_profile(req, &profile);
-            let res = req
-                .send()
-                .await
-                .map_err(|e| format!("Error conectando segmento {seg_idx}: {e}"))?;
+            let mut retries = 0usize;
+            const MAX_RETRIES: usize = 6;
 
-            if !res.status().is_success() && res.status() != reqwest::StatusCode::PARTIAL_CONTENT {
-                return Err(format!(
-                    "El servidor rechazó rango HTTP en segmento {seg_idx} (código {})",
-                    res.status()
-                ));
-            }
-
-            let mut stream = res.bytes_stream();
-            let mut curr = start;
-
-            while let Some(chunk_res) = stream.next().await {
+            while curr <= end {
                 if cancel_flag.load(Ordering::Relaxed) || pause_flag.load(Ordering::Relaxed) {
                     break;
                 }
 
-                let chunk = chunk_res
-                    .map_err(|e| format!("Error en stream del segmento {seg_idx}: {e}"))?;
-                write_at(&file_arc, &chunk, curr)
-                    .map_err(|e| format!("Error de disco en segmento {seg_idx}: {e}"))?;
+                let range = format!("bytes={curr}-{end}");
+                let req = client
+                    .get(&uri)
+                    .header("Range", range)
+                    .header("Accept-Encoding", "identity");
+                let req = apply_profile(req, &profile);
 
-                let chunk_len = chunk.len() as u64;
-                curr += chunk_len;
-                loaded_atomic.fetch_add(chunk_len, Ordering::Relaxed);
+                let res = match req.send().await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        retries += 1;
+                        if retries > MAX_RETRIES || cancel_flag.load(Ordering::Relaxed) || pause_flag.load(Ordering::Relaxed) {
+                            return Err(format!("Error conectando segmento {seg_idx} tras {retries} intentos: {e}"));
+                        }
+                        let backoff = Duration::from_millis(500 * (1 << retries.min(4)));
+                        log::warn!(
+                            "Segmento {seg_idx} fallo de conexión ({e}), reintentando {retries}/{MAX_RETRIES} en {backoff:?}..."
+                        );
+                        tokio::time::sleep(backoff).await;
+                        continue;
+                    }
+                };
 
-                if let Ok(mut guard) = segments_state.try_lock() {
+                let status = res.status();
+                if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE && curr >= end {
+                    break;
+                }
+
+                if !status.is_success() && status != reqwest::StatusCode::PARTIAL_CONTENT {
+                    retries += 1;
+                    if retries > MAX_RETRIES || cancel_flag.load(Ordering::Relaxed) || pause_flag.load(Ordering::Relaxed) {
+                        return Err(format!(
+                            "El servidor rechazó rango HTTP en segmento {seg_idx} tras {retries} intentos (código {status})"
+                        ));
+                    }
+                    let backoff = Duration::from_millis(500 * (1 << retries.min(4)));
+                    log::warn!(
+                        "Segmento {seg_idx} código HTTP {status}, reintentando {retries}/{MAX_RETRIES} en {backoff:?}..."
+                    );
+                    tokio::time::sleep(backoff).await;
+                    continue;
+                }
+
+                let mut stream = res.bytes_stream();
+                let mut stream_error = None;
+
+                while let Some(chunk_res) = stream.next().await {
+                    if cancel_flag.load(Ordering::Relaxed) || pause_flag.load(Ordering::Relaxed) {
+                        break;
+                    }
+
+                    match chunk_res {
+                        Ok(chunk) => {
+                            if let Err(e) = write_at(&file_arc, &chunk, curr) {
+                                return Err(format!("Error de disco en segmento {seg_idx}: {e}"));
+                            }
+
+                            let chunk_len = chunk.len() as u64;
+                            curr += chunk_len;
+                            loaded_atomic.fetch_add(chunk_len, Ordering::Relaxed);
+
+                            if let Ok(mut guard) = segments_state.try_lock() {
+                                guard[seg_idx].current = curr;
+                            }
+
+                            retries = 0;
+                        }
+                        Err(e) => {
+                            stream_error = Some(e);
+                            break;
+                        }
+                    }
+                }
+
+                {
+                    let mut guard = segments_state.lock().await;
                     guard[seg_idx].current = curr;
                 }
-            }
 
-            {
-                let mut guard = segments_state.lock().await;
-                guard[seg_idx].current = curr;
+                if cancel_flag.load(Ordering::Relaxed) || pause_flag.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                if let Some(err) = stream_error {
+                    retries += 1;
+                    if retries > MAX_RETRIES {
+                        return Err(format!(
+                            "Error en stream del segmento {seg_idx} ({curr}/{end} bytes tras {MAX_RETRIES} reintentos): {err}"
+                        ));
+                    }
+                    let backoff = Duration::from_millis(500 * (1 << retries.min(4)));
+                    log::warn!(
+                        "Corte de stream en segmento {seg_idx} ({curr}/{end} bytes, error: {err}), reanudando automáticamente ({retries}/{MAX_RETRIES}) en {backoff:?}..."
+                    );
+                    tokio::time::sleep(backoff).await;
+                    continue;
+                }
+
+                if curr <= end {
+                    retries += 1;
+                    if retries > MAX_RETRIES {
+                        return Err(format!(
+                            "Stream del segmento {seg_idx} se cerró prematuramente ({curr}/{end} bytes tras {MAX_RETRIES} intentos)"
+                        ));
+                    }
+                    log::info!(
+                        "Stream del segmento {seg_idx} completó conexión en {curr}/{end} bytes, continuando segmento..."
+                    );
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                    continue;
+                }
             }
 
             Ok::<(), String>(())

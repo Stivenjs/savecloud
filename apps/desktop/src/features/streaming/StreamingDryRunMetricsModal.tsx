@@ -12,10 +12,8 @@ import {
   Gauge,
   HardDrive,
   Layers,
-  Sparkles,
   Zap,
 } from "lucide-react";
-import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useStreamingMetricsStore } from "@store/StreamingMetricsStore";
 import { formatGameDisplayName } from "@utils/gameImage";
@@ -49,30 +47,30 @@ export function StreamingDryRunMetricsModal() {
     const saved = formatBytes(currentMetrics.savedBytes);
 
     const report = [
-      `# 📊 SaveCloud - Reporte de Simulación Streaming TAR`,
-      `**Juego:** ${gameName} (\`${currentMetrics.gameId}\`)`,
-      `**Archivo:** \`${currentMetrics.filename}\``,
+      `# Reporte de Simulación Streaming TAR - SaveCloud`,
+      `Juego: ${gameName} (${currentMetrics.gameId})`,
+      `Archivo: ${currentMetrics.filename}`,
       ``,
-      `### 🗜️ Métricas de Compresión`,
-      `- **Tamaño Original:** ${orig}`,
-      `- **Tamaño Comprimido:** ${comp}`,
-      `- **Espacio Ahorrado:** ${saved} (-${currentMetrics.savedPercentage.toFixed(1)}%)`,
-      `- **Ratio de Compresión:** ${currentMetrics.savedRatio.toFixed(2)}x`,
-      `- **Nivel Zstd:** ${currentMetrics.zstdLevel} (${currentMetrics.threads} hilos CPU)`,
+      `## Métricas de Compresión`,
+      `- Tamaño original: ${orig}`,
+      `- Tamaño comprimido: ${comp}`,
+      `- Espacio ahorrado: ${saved} (-${currentMetrics.savedPercentage.toFixed(1)}%)`,
+      `- Ratio de compresión: ${currentMetrics.savedRatio.toFixed(2)}x`,
+      `- Nivel Zstd: ${currentMetrics.zstdLevel} (${currentMetrics.threads} hilos CPU)`,
       ``,
-      `### ⚡ Rendimiento`,
-      `- **Tiempo Total:** ${formattedDuration}`,
-      `- **Velocidad de Procesamiento:** ${currentMetrics.throughputMbS.toFixed(1)} MB/s`,
-      `- **Tasa de Stream de Salida:** ${currentMetrics.outputThroughputMbS.toFixed(1)} MB/s`,
+      `## Rendimiento`,
+      `- Tiempo total: ${formattedDuration}`,
+      `- Velocidad de procesamiento: ${currentMetrics.throughputMbS.toFixed(1)} MB/s`,
+      `- Tasa de stream de salida: ${currentMetrics.outputThroughputMbS.toFixed(1)} MB/s`,
       ``,
-      `### 📁 Estructura del Backup`,
-      `- **Archivos empaquetados:** ${currentMetrics.totalFiles.toLocaleString()}`,
-      `- **Carpetas:** ${currentMetrics.totalDirs.toLocaleString()}`,
-      `- **Enlaces simbólicos:** ${currentMetrics.totalSymlinks.toLocaleString()}`,
-      `- **Chunks de stream:** ${currentMetrics.chunksCount.toLocaleString()}`,
-      `- **Simulación S3 Multipart:** ${currentMetrics.simulatedPartsCount} partes de ${formatBytes(currentMetrics.simulatedPartSize)} c/u`,
+      `## Estructura del Backup`,
+      `- Archivos empaquetados: ${currentMetrics.totalFiles.toLocaleString()}`,
+      `- Carpetas: ${currentMetrics.totalDirs.toLocaleString()}`,
+      `- Enlaces simbólicos: ${currentMetrics.totalSymlinks.toLocaleString()}`,
+      `- Chunks de stream: ${currentMetrics.chunksCount.toLocaleString()}`,
+      `- Simulación S3 Multipart: ${currentMetrics.simulatedPartsCount} partes de ${formatBytes(currentMetrics.simulatedPartSize)} c/u`,
       ``,
-      `*Generado en SaveCloud (${new Date(currentMetrics.timestamp ?? Date.now()).toLocaleString()})*`,
+      `Generado en SaveCloud (${new Date(currentMetrics.timestamp ?? Date.now()).toLocaleString()})`,
     ].join("\n");
 
     try {
@@ -80,7 +78,7 @@ export function StreamingDryRunMetricsModal() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      // Fallback si falla portapapeles
+      // Fallback silencioso si falla portapapeles
     }
   }, [currentMetrics, gameName, formattedDuration]);
 
@@ -103,100 +101,80 @@ export function StreamingDryRunMetricsModal() {
         if (!open) closeMetricsModal();
       }}
       size="2xl"
-      scrollBehavior="inside"
-      backdrop="blur"
-      classNames={{
-        base: "bg-zinc-950/95 border border-white/10 shadow-2xl backdrop-blur-xl",
-        header: "border-b border-white/10 pb-3",
-        footer: "border-t border-white/10 pt-3",
-      }}>
+      scrollBehavior="inside">
       <ModalContent>
-        <ModalHeader className="flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary border border-primary/30 shadow-inner">
-                <Gauge size={20} />
-              </div>
-              <div>
-                <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-                  {t("streaming.metrics.title", "Métricas de Streaming TAR")}
-                  <Chip
-                    size="sm"
-                    color="warning"
-                    variant="flat"
-                    className="text-[10px] font-semibold uppercase tracking-wider h-5">
-                    {t("streaming.metrics.dryRunBadge", "Modo Prueba")}
-                  </Chip>
-                </h2>
-                <p className="text-xs text-default-400">
-                  {gameName ? `${gameName} · ` : ""}
-                  {t("streaming.metrics.subtitle", "Resultados del empaquetado y compresión sin subida")}
-                </p>
-              </div>
+        <ModalHeader className="flex items-center justify-between gap-3 border-b border-default-200/60 pb-3">
+          <div className="flex items-center gap-2.5">
+            <Gauge size={20} className="text-primary shrink-0" />
+            <div>
+              <h2 className="text-base font-semibold text-foreground">
+                {t("streaming.metrics.title", "Métricas de compresión")}
+              </h2>
+              <p className="text-xs text-default-500 font-normal">
+                {gameName ? `${gameName} · ` : ""}
+                {t("streaming.metrics.subtitle", "Simulación de empaquetado y compresión sin subida")}
+              </p>
             </div>
-            <Chip size="sm" color="success" variant="dot" className="border-none text-xs">
-              ZSTD Lv.{currentMetrics.zstdLevel}
-            </Chip>
           </div>
+          <Chip size="sm" color="primary" variant="flat" className="font-semibold text-xs shrink-0">
+            Zstd Nivel {currentMetrics.zstdLevel}
+          </Chip>
         </ModalHeader>
 
-        <ModalBody className="py-4 space-y-4 text-foreground">
-          {/* HERO COMPARISON CARD */}
-          <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-linear-to-br from-primary/10 via-default-900/40 to-background p-4 shadow-lg">
+        <ModalBody className="py-4 space-y-4">
+          {/* COMPARACIÓN ORIGINAL VS COMPRIMIDO */}
+          <div className="rounded-xl border border-default-200 bg-default-100/50 p-4 space-y-3">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              {/* Original */}
+              {/* Tamaño Original */}
               <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
-                <span className="text-xs font-medium uppercase tracking-wider text-default-400 flex items-center gap-1.5">
-                  <HardDrive size={13} className="text-default-400" />
-                  {t("streaming.metrics.originalSize", "Tamaño Original")}
+                <span className="text-xs font-medium text-default-500 flex items-center gap-1.5">
+                  <HardDrive size={14} className="text-default-400" />
+                  {t("streaming.metrics.originalSize", "Tamaño original")}
                 </span>
-                <span className="mt-1 text-2xl font-bold font-mono text-foreground">{originalFormatted}</span>
-                <span className="text-[11px] text-default-500">
+                <span className="mt-1 text-xl font-bold font-mono text-foreground">{originalFormatted}</span>
+                <span className="text-[11px] text-default-400">
                   {currentMetrics.totalFiles} {t("streaming.metrics.filesLabel", "archivos")}
                 </span>
               </div>
 
-              {/* Arrow transformation */}
+              {/* Indicador de Ratio */}
               <div className="flex flex-col items-center justify-center">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20 text-primary border border-primary/40 shadow-sm animate-pulse">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-default-200 text-default-600">
                   <ArrowRight size={16} />
                 </div>
-                <span className="mt-1 text-[10px] font-semibold text-primary uppercase tracking-wider">
+                <span className="mt-1 text-xs font-semibold text-primary">
                   {currentMetrics.savedRatio.toFixed(2)}x {t("streaming.metrics.ratioLabel", "ratio")}
                 </span>
               </div>
 
-              {/* Compressed */}
+              {/* Tamaño Comprimido */}
               <div className="flex flex-col items-center sm:items-end text-center sm:text-right">
-                <span className="text-xs font-medium uppercase tracking-wider text-primary flex items-center gap-1.5">
-                  <Archive size={13} className="text-primary" />
+                <span className="text-xs font-medium text-default-500 flex items-center gap-1.5">
+                  <Archive size={14} className="text-primary" />
                   {t("streaming.metrics.compressedSize", "Comprimido (TAR.ZST)")}
                 </span>
-                <span className="mt-1 text-2xl font-bold font-mono text-emerald-400">{compressedFormatted}</span>
+                <span className="mt-1 text-xl font-bold font-mono text-primary">{compressedFormatted}</span>
                 <Chip size="sm" color="success" variant="flat" className="mt-1 font-semibold text-xs h-5">
                   -{savedFormatted} (-{currentMetrics.savedPercentage.toFixed(1)}%)
                 </Chip>
               </div>
             </div>
 
-            {/* Visual ratio bar */}
-            <div className="mt-4">
-              <div className="flex items-center justify-between text-[11px] text-default-400 mb-1">
-                <span>{t("streaming.metrics.compressionRatioBar", "Reducción de espacio")}</span>
-                <span className="font-semibold text-emerald-400">
+            {/* Barra de progreso de compresión */}
+            <div className="pt-2 border-t border-default-200/60">
+              <div className="flex items-center justify-between text-xs text-default-500 mb-1.5">
+                <span>{t("streaming.metrics.compressionRatioBar", "Ocupación tras compresión")}</span>
+                <span className="font-medium text-foreground">
                   {t("streaming.metrics.spaceSavedLabel", "Ahorro")}: {currentMetrics.savedPercentage.toFixed(1)}%
                 </span>
               </div>
-              <div className="h-3 w-full rounded-full bg-default-200/20 overflow-hidden relative border border-white/5">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${percentageWidth}%` }}
-                  transition={{ duration: 0.8, ease: "easeOut" }}
-                  className="h-full rounded-full bg-linear-to-r from-primary to-emerald-400 relative">
-                  <div className="absolute inset-0 bg-white/20 animate-pulse" />
-                </motion.div>
+              <div className="h-2 w-full rounded-full bg-default-200 overflow-hidden">
+                <div
+                  style={{ width: `${percentageWidth}%` }}
+                  className="h-full rounded-full bg-primary transition-all duration-500"
+                />
               </div>
-              <div className="flex items-center justify-between text-[10px] text-default-500 mt-1">
+              <div className="flex items-center justify-between text-[11px] text-default-400 mt-1">
                 <span>
                   {compressedFormatted} ({percentageWidth}%)
                 </span>
@@ -205,105 +183,97 @@ export function StreamingDryRunMetricsModal() {
             </div>
           </div>
 
-          {/* METRICS GRID */}
+          {/* CUADRÍCULA DE RENDIMIENTO */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {/* Duración */}
-            <div className="rounded-xl border border-white/10 bg-default-100/40 p-3 flex flex-col justify-between">
-              <div className="flex items-center justify-between text-default-400">
-                <span className="text-[11px] font-medium uppercase tracking-wider">
-                  {t("streaming.metrics.duration", "Tiempo")}
-                </span>
-                <Clock size={14} className="text-amber-400" />
+            <div className="rounded-xl border border-default-200 bg-default-50 p-3 flex flex-col justify-between">
+              <div className="flex items-center justify-between text-default-500">
+                <span className="text-xs font-medium">{t("streaming.metrics.duration", "Tiempo")}</span>
+                <Clock size={14} className="text-default-400" />
               </div>
               <div className="mt-2">
-                <span className="text-lg font-bold font-mono text-foreground">{formattedDuration}</span>
-                <p className="text-[10px] text-default-500">
-                  {t("streaming.metrics.packagingTime", "Empaquetado y zstd")}
+                <span className="text-base font-bold font-mono text-foreground">{formattedDuration}</span>
+                <p className="text-[11px] text-default-400">
+                  {t("streaming.metrics.packagingTime", "Empaquetado total")}
                 </p>
               </div>
             </div>
 
-            {/* Throughput */}
-            <div className="rounded-xl border border-white/10 bg-default-100/40 p-3 flex flex-col justify-between">
-              <div className="flex items-center justify-between text-default-400">
-                <span className="text-[11px] font-medium uppercase tracking-wider">
-                  {t("streaming.metrics.speed", "Velocidad")}
-                </span>
+            {/* Velocidad de lectura */}
+            <div className="rounded-xl border border-default-200 bg-default-50 p-3 flex flex-col justify-between">
+              <div className="flex items-center justify-between text-default-500">
+                <span className="text-xs font-medium">{t("streaming.metrics.speed", "Lectura")}</span>
                 <Zap size={14} className="text-primary" />
               </div>
               <div className="mt-2">
-                <span className="text-lg font-bold font-mono text-primary">
-                  {currentMetrics.throughputMbS.toFixed(1)} <span className="text-xs">MB/s</span>
+                <span className="text-base font-bold font-mono text-foreground">
+                  {currentMetrics.throughputMbS.toFixed(1)} <span className="text-xs text-default-500">MB/s</span>
                 </span>
-                <p className="text-[10px] text-default-500">{t("streaming.metrics.rawThroughput", "Entrada cruda")}</p>
+                <p className="text-[11px] text-default-400">{t("streaming.metrics.rawThroughput", "Entrada cruda")}</p>
               </div>
             </div>
 
-            {/* Output Throughput */}
-            <div className="rounded-xl border border-white/10 bg-default-100/40 p-3 flex flex-col justify-between">
-              <div className="flex items-center justify-between text-default-400">
-                <span className="text-[11px] font-medium uppercase tracking-wider">
-                  {t("streaming.metrics.streamRate", "Stream")}
-                </span>
-                <Sparkles size={14} className="text-emerald-400" />
+            {/* Salida comprimida */}
+            <div className="rounded-xl border border-default-200 bg-default-50 p-3 flex flex-col justify-between">
+              <div className="flex items-center justify-between text-default-500">
+                <span className="text-xs font-medium">{t("streaming.metrics.streamRate", "Salida")}</span>
+                <Archive size={14} className="text-default-400" />
               </div>
               <div className="mt-2">
-                <span className="text-lg font-bold font-mono text-emerald-400">
-                  {currentMetrics.outputThroughputMbS.toFixed(1)} <span className="text-xs">MB/s</span>
+                <span className="text-base font-bold font-mono text-foreground">
+                  {currentMetrics.outputThroughputMbS.toFixed(1)} <span className="text-xs text-default-500">MB/s</span>
                 </span>
-                <p className="text-[10px] text-default-500">
-                  {t("streaming.metrics.streamThroughput", "Salida comprimida")}
+                <p className="text-[11px] text-default-400">
+                  {t("streaming.metrics.streamThroughput", "Flujo comprimido")}
                 </p>
               </div>
             </div>
 
-            {/* CPU Threads */}
-            <div className="rounded-xl border border-white/10 bg-default-100/40 p-3 flex flex-col justify-between">
-              <div className="flex items-center justify-between text-default-400">
-                <span className="text-[11px] font-medium uppercase tracking-wider">
-                  {t("streaming.metrics.threads", "Hilos CPU")}
-                </span>
-                <Cpu size={14} className="text-cyan-400" />
+            {/* Hilos CPU */}
+            <div className="rounded-xl border border-default-200 bg-default-50 p-3 flex flex-col justify-between">
+              <div className="flex items-center justify-between text-default-500">
+                <span className="text-xs font-medium">{t("streaming.metrics.threads", "Hilos CPU")}</span>
+                <Cpu size={14} className="text-default-400" />
               </div>
               <div className="mt-2">
-                <span className="text-lg font-bold font-mono text-foreground">
-                  {currentMetrics.threads} <span className="text-xs">hilos</span>
+                <span className="text-base font-bold font-mono text-foreground">
+                  {currentMetrics.threads} <span className="text-xs text-default-500">hilos</span>
                 </span>
-                <p className="text-[10px] text-default-500">Zstd multithread</p>
+                <p className="text-[11px] text-default-400">Paralelismo Zstd</p>
               </div>
             </div>
           </div>
 
-          {/* DETAILED STATS SECTION */}
-          <div className="rounded-xl border border-white/10 bg-default-100/30 p-3 space-y-2.5">
-            <h3 className="text-xs font-semibold text-default-400 uppercase tracking-wider flex items-center gap-1.5">
+          {/* DETALLES DE ESTRUCTURA */}
+          <div className="rounded-xl border border-default-200 bg-default-50 p-3 space-y-2.5">
+            <h3 className="text-xs font-semibold text-default-500 uppercase tracking-wider flex items-center gap-1.5">
               <Layers size={13} className="text-default-400" />
-              {t("streaming.metrics.detailsHeader", "Detalles de Estructura y Simulación S3")}
+              {t("streaming.metrics.detailsHeader", "Estructura del empaquetado")}
             </h3>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-default-100/50">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-default-100/60 border border-default-200/40">
                 <FileCode size={16} className="text-primary shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-default-400 text-[10px]">{t("streaming.metrics.files", "Archivos procesados")}</p>
+                  <p className="text-default-400 text-[11px]">{t("streaming.metrics.files", "Archivos procesados")}</p>
                   <p className="font-semibold text-foreground font-mono">
                     {currentMetrics.totalFiles.toLocaleString()}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-default-100/50">
-                <FolderTree size={16} className="text-amber-400 shrink-0" />
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-default-100/60 border border-default-200/40">
+                <FolderTree size={16} className="text-default-500 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-default-400 text-[10px]">{t("streaming.metrics.folders", "Directorios")}</p>
+                  <p className="text-default-400 text-[11px]">{t("streaming.metrics.folders", "Directorios")}</p>
                   <p className="font-semibold text-foreground font-mono">{currentMetrics.totalDirs.toLocaleString()}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-default-100/50">
-                <Archive size={16} className="text-emerald-400 shrink-0" />
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-default-100/60 border border-default-200/40">
+                <Archive size={16} className="text-default-500 shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-default-400 text-[10px]">
+                  <p className="text-default-400 text-[11px]">
                     {t("streaming.metrics.s3Parts", "Partes S3 estimadas")}
                   </p>
                   <p className="font-semibold text-foreground font-mono">
@@ -315,15 +285,14 @@ export function StreamingDryRunMetricsModal() {
           </div>
         </ModalBody>
 
-        <ModalFooter className="flex items-center justify-between gap-2">
+        <ModalFooter className="flex items-center justify-between gap-2 border-t border-default-200/60 pt-3">
           <Button
             size="sm"
             variant="flat"
-            color="default"
             startContent={copied ? <Check size={16} className="text-success" /> : <Copy size={16} />}
             onPress={handleCopyReport}
             className="text-xs">
-            {copied ? t("common.copied", "Copiado!") : t("streaming.metrics.copyReport", "Copiar reporte")}
+            {copied ? t("common.copied", "Copiado") : t("streaming.metrics.copyReport", "Copiar reporte")}
           </Button>
 
           <Button size="sm" color="primary" onPress={closeMetricsModal} className="text-xs font-semibold px-4">
