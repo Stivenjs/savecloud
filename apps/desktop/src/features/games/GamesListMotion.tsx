@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 
 export interface GamesListMotionContainerProps {
   children: ReactNode;
@@ -10,17 +10,19 @@ export interface GamesListMotionContainerProps {
  * Contenedor de la lista de juegos con micro-fade de entrada acelerado 100% por CSS nativo en GPU.
  */
 export function GamesListMotionContainer({ children, className, listKey }: GamesListMotionContainerProps) {
-  const [animating, setAnimating] = useState(true);
+  const counterRef = useRef(0);
+  const prevKeyRef = useRef(listKey);
 
-  useEffect(() => {
-    setAnimating(false);
-    const raf = requestAnimationFrame(() => {
-      setAnimating(true);
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [listKey]);
+  if (prevKeyRef.current !== listKey) {
+    prevKeyRef.current = listKey;
+    counterRef.current += 1;
+  }
 
-  return <div className={`${className ?? ""} ${animating ? "animate-games-list-enter" : "opacity-0"}`}>{children}</div>;
+  return (
+    <div key={counterRef.current} className={`${className ?? ""} animate-games-list-enter`}>
+      {children}
+    </div>
+  );
 }
 
 export interface GamesListMotionItemProps {

@@ -7,6 +7,7 @@ import { GameCard } from "@features/games/GameCard";
 import { needsSteamSearch } from "@utils/gameImage";
 import { useNativeVirtualGrid } from "@hooks/useNativeVirtualGrid";
 import { useShellUiStore } from "@store/ShellUiStore";
+import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import type { GamesCardOrientation, GamesLayout } from "@hooks/useGamesViewPreferences";
 import { GameCardContextMenuPortal } from "@features/games/GameCardContextMenuPortal";
 
@@ -35,6 +36,8 @@ export interface GamesVirtualizedGridProps {
   onOpenConsoleActions?: (game: ConfiguredGame) => void;
   openActionsGameId?: string | null;
   onActionsMenuOpenChange?: (open: boolean, gameId: string) => void;
+  /** Modo bajo rendimiento opcional */
+  isLowPerf?: boolean;
 }
 
 export function getGridClass(layout: GamesLayout, orientation: GamesCardOrientation): string {
@@ -88,9 +91,13 @@ export const GamesVirtualizedGrid = memo(function GamesVirtualizedGrid({
   onOpenConsoleActions,
   openActionsGameId,
   onActionsMenuOpenChange,
+  isLowPerf: isLowPerfProp,
 }: GamesVirtualizedGridProps) {
   const isHorizontal = cardOrientation === "horizontal";
-  const libraryScrollPosition = useShellUiStore((state) => state.getScrollPosition("library"));
+  const hookLowPerf = useLowPerformanceMode();
+  const isLowPerf = isLowPerfProp ?? hookLowPerf;
+
+  const [initialLibraryScrollY] = useState(() => useShellUiStore.getState().getScrollPosition("library"));
 
   const gap = useMemo(() => {
     if (layout === "list") return 16;
@@ -146,13 +153,13 @@ export const GamesVirtualizedGrid = memo(function GamesVirtualizedGrid({
     [isHorizontal, gap]
   );
 
-  const { containerRef, visibleItems, topPadding, bottomPadding, columns } = useNativeVirtualGrid({
+  const { containerRef, visibleItems, topPadding, bottomPadding, columns, totalHeight } = useNativeVirtualGrid({
     items: games as ConfiguredGame[],
     minItemWidth,
     gap,
     estimatedRowHeight,
-    overscan: 3,
-    initialScrollY: libraryScrollPosition,
+    overscan: 5,
+    initialScrollY: initialLibraryScrollY,
     containerTopOffset: consoleMode ? 140 : 280,
     computeColumns,
     computeRowHeight,
@@ -193,7 +200,7 @@ export const GamesVirtualizedGrid = memo(function GamesVirtualizedGrid({
   }, [contextMenu, handleCloseContextMenu]);
 
   return (
-    <div ref={containerRef} className="w-full">
+    <div ref={containerRef} className="w-full" style={{ minHeight: totalHeight > 0 ? `${totalHeight}px` : undefined }}>
       <div
         style={{
           paddingTop: `${topPadding}px`,
@@ -207,6 +214,7 @@ export const GamesVirtualizedGrid = memo(function GamesVirtualizedGrid({
               game={game}
               orientation={cardOrientation}
               priority={index < 8}
+              isLowPerf={isLowPerf}
               stats={statsByGameId.get(game.id)}
               resolvedSteamAppId={resolvedSteamAppIds[game.id]}
               mediaBySteamAppId={mediaBySteamAppId}

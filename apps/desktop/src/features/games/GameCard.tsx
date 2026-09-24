@@ -80,6 +80,8 @@ export interface GameCardProps {
   onOpenConsoleActions?: (game: ConfiguredGame) => void;
   /** Callback al hacer click derecho en la tarjeta para abrir el menú contextual de acciones. */
   onContextMenu?: (e: React.MouseEvent, game: ConfiguredGame) => void;
+  /** Modo bajo rendimiento opcional para evitar useQuery repetido en cada tarjeta. */
+  isLowPerf?: boolean;
 }
 
 /** Diferencia en ms por debajo de la cual consideramos local y nube "en sync" (precisión, reloj). */
@@ -126,7 +128,8 @@ function MaybeViewTransition({
 }
 
 export const GameCard = memo(function GameCard(props: GameCardProps) {
-  const isLowPerf = useLowPerformanceMode();
+  const hookLowPerf = useLowPerformanceMode();
+  const isLowPerf = props.isLowPerf ?? hookLowPerf;
   const {
     game,
     stats,
@@ -293,7 +296,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
         }}>
         {!isCatalog && syncProgress && <GameCardSyncProgress progress={syncProgress} />}
 
-        <MaybeViewTransition name={`game-hero-${game.id}`} share="hero-morph" disabled={isLowPerf || isCatalog}>
+        <MaybeViewTransition name={`game-hero-${game.id}`} share="hero-morph" disabled={false}>
           <div className="relative isolate size-full overflow-hidden bg-zinc-950 rounded-xl">
             {isEffectivelyLoading ? (
               <Skeleton className="absolute inset-0 z-10 size-full rounded-xl" />
@@ -334,7 +337,8 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
       genres={genres}
       storeName={steamStoreName || undefined}
       stats={stats}
-      isContextMenuOpen={actionsMenuOpen}>
+      isContextMenuOpen={actionsMenuOpen}
+      isLowPerf={isLowPerf}>
       {cardContent}
     </GameCardHoverCard>
   );

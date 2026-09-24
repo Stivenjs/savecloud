@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { getConfig } from "@services/tauri";
-import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { queryClient } from "@lib/queryClient";
 
@@ -16,11 +15,11 @@ function registerConfigListener() {
   });
 }
 
-export function useConfig() {
-  useEffect(() => {
-    registerConfigListener();
-  }, []);
+if (typeof window !== "undefined") {
+  registerConfigListener();
+}
 
+export function useConfig() {
   const {
     data: config,
     isLoading: loading,

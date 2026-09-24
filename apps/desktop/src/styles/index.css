@@ -273,6 +273,14 @@ img {
   backface-visibility: hidden;
 }
 
+/* Desactiva eventos de puntero, micro-animaciones y transiciones hover durante el scroll para garantizar 60/120+ fps nativos */
+.sg-is-scrolling,
+.sg-is-scrolling * {
+  pointer-events: none !important;
+  transition: none !important;
+  animation-play-state: paused !important;
+}
+
 @keyframes download-text-swap {
   0% {
     opacity: 0;

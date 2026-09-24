@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useScrollPointerOptimizer } from "./useScrollPointerOptimizer";
 
 export interface UseNativeVirtualGridOptions<T> {
   /** Array of items to virtualize */
@@ -65,6 +66,7 @@ export function useNativeVirtualGrid<T>({
       if (entry) {
         const width = entry.contentRect.width || el.clientWidth;
         if (width > 0) {
+          containerTopRef.current = null;
           setContainerWidth((prev) => (Math.abs(prev - width) > 2 ? width : prev));
         }
       }
@@ -129,6 +131,15 @@ export function useNativeVirtualGrid<T>({
 
   const rowRangeRef = useRef(rowRange);
 
+  const containerTopRef = useRef<number | null>(null);
+
+  const measureContainerTop = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    containerTopRef.current = rect.top + (window.scrollY || document.documentElement.scrollTop || 0);
+  }, []);
+
   const updateRange = useCallback(() => {
     const container = containerRef.current;
     if (!container || totalRows === 0) {
@@ -139,8 +150,7 @@ export function useNativeVirtualGrid<T>({
       return;
     }
 
-    const rect = container.getBoundingClientRect();
-    let windowScrollY = window.scrollY || document.documentElement.scrollTop;
+    let windowScrollY = window.scrollY || document.documentElement.scrollTop || 0;
 
     if (pendingRestoreYRef.current > 0) {
       if (windowScrollY === 0) {
@@ -150,9 +160,15 @@ export function useNativeVirtualGrid<T>({
       }
     }
 
-    const containerTop = rect.top + (window.scrollY || document.documentElement.scrollTop);
-    const viewportHeight = window.innerHeight || 800;
+    // Cachear containerTop: nunca llamar getBoundingClientRect() en el hot path del scroll para evitar layout thrashing
+    let containerTop = containerTopRef.current;
+    if (containerTop === null) {
+      const rect = container.getBoundingClientRect();
+      containerTop = rect.top + windowScrollY;
+      containerTopRef.current = containerTop;
+    }
 
+    const viewportHeight = window.innerHeight || 800;
     const relativeScrollY = Math.max(0, windowScrollY - containerTop);
 
     const start = Math.max(0, Math.floor(relativeScrollY / rowHeight) - overscan);
@@ -178,19 +194,26 @@ export function useNativeVirtualGrid<T>({
       });
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    window.addEventListener("resize", handleScroll, { passive: true });
+    const handleResize = () => {
+      containerTopRef.current = null;
+      measureContainerTop();
+      handleScroll();
+    };
 
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", handleResize, { passive: true });
+
+    measureContainerTop();
     updateRange();
 
     return () => {
       window.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("resize", handleScroll);
+      window.removeEventListener("resize", handleResize);
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId);
       }
     };
-  }, [updateRange]);
+  }, [measureContainerTop, updateRange]);
 
   useLayoutEffect(() => {
     updateRange();
@@ -216,6 +239,8 @@ export function useNativeVirtualGrid<T>({
     }
     return slice;
   }, [items, startIndex, endIndex]);
+
+  useScrollPointerOptimizer(containerRef);
 
   return {
     containerRef,
