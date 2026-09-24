@@ -41,7 +41,11 @@ export function useNavigable({
     inputMode,
     navProps: {
       "data-nav-id": id,
-      onMouseEnter: () => setFocus(id),
+      onMouseEnter: () => {
+        if (useNavigationStore.getState().inputMode !== "mouse") {
+          setFocus(id);
+        }
+      },
     },
   };
 }

@@ -1,3 +1,4 @@
+import { startTransition } from "react";
 import { create } from "zustand";
 
 export type GamesLayout = "grid-lg" | "grid-md" | "list";
@@ -70,7 +71,9 @@ const initialPrefs = readFromStorage();
 export const useGamesViewPreferencesStore = create<GamesViewPreferencesState>((set, get) => ({
   ...initialPrefs,
   setLayout: (layout) => {
-    set({ layout });
+    startTransition(() => {
+      set({ layout });
+    });
     writeToStorage({
       layout,
       cardOrientation: get().cardOrientation,
@@ -79,7 +82,9 @@ export const useGamesViewPreferencesStore = create<GamesViewPreferencesState>((s
     });
   },
   setCardOrientation: (cardOrientation) => {
-    set({ cardOrientation });
+    startTransition(() => {
+      set({ cardOrientation });
+    });
     writeToStorage({
       layout: get().layout,
       cardOrientation,

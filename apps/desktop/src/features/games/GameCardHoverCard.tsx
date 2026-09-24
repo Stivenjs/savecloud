@@ -49,6 +49,8 @@ export interface GameCardHoverCardProps {
   variant?: "library" | "catalog";
   /** Si el menú contextual de acciones está abierto, inhibe el hovercard */
   isContextMenuOpen?: boolean;
+  /** Modo bajo rendimiento opcional para evitar useQuery repetido en cada tarjeta */
+  isLowPerf?: boolean;
 }
 
 /**
@@ -67,9 +69,11 @@ export function GameCardHoverCard({
   stats,
   variant = "library",
   isContextMenuOpen = false,
+  isLowPerf: isLowPerfProp,
 }: GameCardHoverCardProps) {
   const { t } = useTranslation();
-  const isLowPerf = useLowPerformanceMode();
+  const hookLowPerf = useLowPerformanceMode();
+  const isLowPerf = isLowPerfProp ?? hookLowPerf;
   const { isVisible } = useAppVisibility();
 
   const [showHovercard, setShowHovercard] = useState(false);

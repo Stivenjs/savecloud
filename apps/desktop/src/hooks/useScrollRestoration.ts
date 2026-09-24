@@ -16,7 +16,6 @@ export function useScrollRestoration(
   const getPosition = useShellUiStore((state) => state.getScrollPosition);
   const setPosition = useShellUiStore((state) => state.setScrollPosition);
 
-  // Leer la posición guardada para esta vista
   const targetScrollY = getPosition(key);
   const targetScrollYRef = useRef(targetScrollY);
   const hasRestoredRef = useRef(false);
@@ -24,32 +23,33 @@ export function useScrollRestoration(
   const lastScrollYRef = useRef(targetScrollY);
   const isUnmountingRef = useRef(false);
 
-  // Mantener callback actualizado en ref para evitar recrear listeners en cada render
   const onScrollRef = useRef(options?.onScroll);
   onScrollRef.current = options?.onScroll;
 
-  // Desactivar scrollRestoration automático del navegador
   useLayoutEffect(() => {
     if (typeof history !== "undefined" && "scrollRestoration" in history) {
       history.scrollRestoration = "manual";
     }
   }, []);
 
-  // Escuchar scroll del usuario
   useEffect(() => {
     isUnmountingRef.current = false;
+    let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const handleScroll = () => {
-      // Ignorar eventos de scroll durante la restauración automática o el desmontaje hacia otra página
       if (isRestoringRef.current || isUnmountingRef.current) return;
 
       const currentScrollY = window.scrollY || document.documentElement.scrollTop || 0;
       const isScrollingUp = currentScrollY < lastScrollYRef.current;
       lastScrollYRef.current = currentScrollY;
 
-      // Solo guardamos si el componente sigue activo y el usuario realmente scrolleó
       if (currentScrollY >= 0) {
-        setPosition(key, currentScrollY);
+        if (saveTimeout) clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+          if (!isUnmountingRef.current) {
+            setPosition(key, currentScrollY);
+          }
+        }, 150);
       }
 
       onScrollRef.current?.(currentScrollY, isScrollingUp);
@@ -58,13 +58,17 @@ export function useScrollRestoration(
     window.addEventListener("scroll", handleScroll, { passive: true });
 
     return () => {
-      // Marcar desmontaje para que ningún scrollTo(0) de la página entrante borre el scroll
       isUnmountingRef.current = true;
+      if (saveTimeout) {
+        clearTimeout(saveTimeout);
+      }
+      if (lastScrollYRef.current >= 0) {
+        setPosition(key, lastScrollYRef.current);
+      }
       window.removeEventListener("scroll", handleScroll);
     };
   }, [key, setPosition]);
 
-  // Restauración síncrona y continua hasta que el DOM alcance la altura requerida
   useLayoutEffect(() => {
     if (hasRestoredRef.current || !isReady) return;
 
@@ -77,17 +81,15 @@ export function useScrollRestoration(
 
     isRestoringRef.current = true;
 
-    // Intentar aplicar scroll inmediatamente
     window.scrollTo({ top: targetY, behavior: "instant" });
 
     let attempts = 0;
-    const maxAttempts = 12; // ~200ms a 60fps
+    const maxAttempts = 12;
 
     const checkAndRestore = () => {
       const currentY = window.scrollY || document.documentElement.scrollTop || 0;
       const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
 
-      // Si el DOM ya creció lo suficiente o alcanzamos el target
       if (Math.abs(currentY - targetY) < 4 || (maxScroll >= targetY && attempts > 1)) {
         window.scrollTo({ top: targetY, behavior: "instant" });
         hasRestoredRef.current = true;
@@ -102,7 +104,6 @@ export function useScrollRestoration(
         window.scrollTo({ top: targetY, behavior: "instant" });
         requestAnimationFrame(checkAndRestore);
       } else {
-        // Fallback final tras agotar intentos
         window.scrollTo({ top: targetY, behavior: "instant" });
         hasRestoredRef.current = true;
         setTimeout(() => {
@@ -115,7 +116,6 @@ export function useScrollRestoration(
     return () => cancelAnimationFrame(rafId);
   }, [isReady]);
 
-  // Resetear la posición si cambian las dependencias de filtro/búsqueda
   useEffect(() => {
     if (options?.resetOnDeps && options.resetOnDeps.length > 0) {
       targetScrollYRef.current = 0;

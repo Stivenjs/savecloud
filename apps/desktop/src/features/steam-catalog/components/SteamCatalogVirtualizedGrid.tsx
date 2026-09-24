@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { cn } from "@heroui/react";
 import type { CatalogListItem, SteamAppdetailsMediaResult, SourceBestMatch } from "@services/tauri";
 import type { ConfiguredGame } from "@app-types/config";
@@ -35,15 +35,15 @@ export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualized
   const isHorizontal = cardOrientation === "horizontal";
   const minItemWidth = consoleMode ? (isHorizontal ? 320 : 220) : isHorizontal ? 280 : 180;
   const estimatedRowHeight = consoleMode ? (isHorizontal ? 330 : 410) : isHorizontal ? 235 : 330;
-  const catalogScrollPosition = useShellUiStore((state) => state.getScrollPosition("catalog"));
+  const [initialCatalogScrollY] = useState(() => useShellUiStore.getState().getScrollPosition("catalog"));
 
-  const { containerRef, visibleItems, topPadding, bottomPadding } = useNativeVirtualGrid({
+  const { containerRef, visibleItems, topPadding, bottomPadding, totalHeight } = useNativeVirtualGrid({
     items,
     minItemWidth,
     gap: 20,
     estimatedRowHeight,
-    overscan: 8,
-    initialScrollY: catalogScrollPosition,
+    overscan: 4,
+    initialScrollY: initialCatalogScrollY,
     computeRowHeight: (columnWidth) => {
       const imageHeight = Math.round(columnWidth * (isHorizontal ? 215 / 460 : 1.5));
       const bottomActionHeight = minItemWidth >= 320 ? 104 : 72;
@@ -53,7 +53,7 @@ export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualized
   });
 
   return (
-    <div ref={containerRef} className="w-full">
+    <div ref={containerRef} className="w-full" style={{ minHeight: totalHeight > 0 ? `${totalHeight}px` : undefined }}>
       <div
         style={{
           paddingTop: `${topPadding}px`,

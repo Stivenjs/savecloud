@@ -52,9 +52,9 @@ export function GameCardStatsPanel({ stats, editionLabel }: GameCardStatsPanelPr
       <div aria-hidden className={`pointer-events-none absolute inset-0 z-10 bg-black/35 ${scrimMotion}`} />
 
       {/* Wrapper ESTÁTICO que recorta: la hoja se desliza dentro y nunca puede salirse */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 overflow-hidden">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 overflow-hidden transform-gpu contain-[layout_paint]">
         <div
-          className={`flex flex-col gap-1.5 bg-linear-to-t from-[#0e0f14] via-[#0e0f14]/95 to-[#0e0f14]/0 px-3 pb-3 pt-6 ${sheetMotion}`}>
+          className={`flex flex-col gap-1.5 bg-linear-to-t from-[#0e0f14] via-[#0e0f14]/95 to-[#0e0f14]/0 px-3 pb-3 pt-6 transform-gpu ${sheetMotion}`}>
           <Row step={0}>
             <span className={label}>{t("library.gameCardStats.saved")}</span>
             <span className="font-bold font-mono text-zinc-200">{formatBytes(stats.localSizeBytes)}</span>
