@@ -9,6 +9,7 @@ import { useStreamingMetricsStore } from "@store/StreamingMetricsStore";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { formatBytes } from "@utils/format";
 import { toastError, toastSuccess } from "@utils/toast";
+import type { ConfiguredGame } from "@app-types/config";
 
 /** Coincide con `FULL_BACKUP_PACKAGED_ZSTD_DEFAULT` en el backend (histórico antes de esta opción). */
 const PACKAGED_ZSTD_DEFAULT = 5;
@@ -178,12 +179,12 @@ export function ExperimentalFeaturesCard({
               id="packaged-zstd-level"
               type="range"
               min={1}
-              max={22}
+              max={12}
               step={1}
               value={localZstdLevel}
               className="mt-2 h-2 w-full cursor-pointer accent-primary"
               aria-valuemin={1}
-              aria-valuemax={22}
+              aria-valuemax={12}
               aria-valuenow={localZstdLevel}
               onChange={(e) => {
                 const n = Number(e.target.value);
@@ -261,7 +262,7 @@ export function ExperimentalFeaturesCard({
                       if (selected) setSelectedGameId(String(selected));
                     }}
                     className="max-w-full">
-                    {games.map((g) => (
+                    {games.map((g: ConfiguredGame) => (
                       <SelectItem key={g.id} textValue={formatGameDisplayName(g.id)}>
                         {formatGameDisplayName(g.id)}
                       </SelectItem>

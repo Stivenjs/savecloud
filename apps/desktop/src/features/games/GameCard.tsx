@@ -6,7 +6,6 @@ import { formatGameDisplayName, getSteamAppId } from "@utils/gameImage";
 import { GameCardHoverCard } from "@features/games/GameCardHoverCard";
 import { GameCardSyncProgress } from "@features/games/GameCardSyncProgress";
 import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";
-import { GameCardActions } from "@features/games/GameCardActions";
 import { GameCardSyncBadge } from "@features/games/GameCardSyncBadge";
 import { GameCardStatsPanel } from "@features/games/GameCardStatsPanel";
 import { CatalogCoverImage } from "@features/steam-catalog/components/CatalogCoverImage";
@@ -79,6 +78,8 @@ export interface GameCardProps {
   priority?: boolean;
   /** Callback para abrir el menú de acciones adaptado a consola (mando). */
   onOpenConsoleActions?: (game: ConfiguredGame) => void;
+  /** Callback al hacer click derecho en la tarjeta para abrir el menú contextual de acciones. */
+  onContextMenu?: (e: React.MouseEvent, game: ConfiguredGame) => void;
 }
 
 /** Diferencia en ms por debajo de la cual consideramos local y nube "en sync" (precisión, reloj). */
@@ -137,10 +138,11 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     cloudBackupCount = 0,
     mediaBySteamAppId,
     mediaFromBatch = false,
-    onActionsMenuOpenChange: onActionsMenuFromParent,
     cardTitle,
     onCardNavigate,
     onOpenConsoleActions,
+    onContextMenu,
+    actionsMenuOpen,
     variant = "library",
     orientation = "vertical",
     priority = false,
@@ -237,13 +239,6 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     };
   }, [isFocused, cardRest, game, isUploadTooLarge, isGameRunning, onOpenConsoleActions]);
 
-  const handleActionsMenuOpenChange = useCallback(
-    (open: boolean) => {
-      onActionsMenuFromParent?.(open, game.id);
-    },
-    [game.id, onActionsMenuFromParent]
-  );
-
   if (externalLoading) {
     return (
       <div className="shadow-md overflow-hidden bg-[#0e0f14] rounded-xl">
@@ -262,6 +257,13 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
           `cursor-pointer relative bg-[#0e0f14] shadow-md overflow-hidden rounded-xl ${aspectClass} w-full group/card hover:shadow-lg`
         )}
         onClick={handleCardClick}
+        onContextMenu={(e) => {
+          if (!onContextMenu) return;
+          e.preventDefault();
+          e.stopPropagation();
+          onHoverEnd();
+          onContextMenu(e, game);
+        }}
         onMouseEnter={() => {
           navProps.onMouseEnter?.();
           onHoverStart();
@@ -269,17 +271,26 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
         onMouseLeave={onHoverEnd}
         role="link"
         tabIndex={0}
-        onKeyDown={(e) => e.key === "Enter" && handleCardClick()}>
-        {!isCatalog && (
-          <GameCardActions
-            {...cardRest}
-            game={game}
-            isGameRunning={isGameRunning}
-            isUploadTooLarge={isUploadTooLarge}
-            onActionsMenuOpenChange={onActionsMenuFromParent ? handleActionsMenuOpenChange : undefined}
-          />
-        )}
-
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            handleCardClick();
+          } else if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
+            if (!onContextMenu) return;
+            e.preventDefault();
+            e.stopPropagation();
+            onHoverEnd();
+            const rect = e.currentTarget.getBoundingClientRect();
+            onContextMenu?.(
+              {
+                clientX: rect.left + rect.width / 2,
+                clientY: rect.top + rect.height / 2,
+                preventDefault: () => {},
+                stopPropagation: () => {},
+              } as unknown as React.MouseEvent,
+              game
+            );
+          }
+        }}>
         {!isCatalog && syncProgress && <GameCardSyncProgress progress={syncProgress} />}
 
         <MaybeViewTransition name={`game-hero-${game.id}`} share="hero-morph" disabled={isLowPerf || isCatalog}>
@@ -322,7 +333,8 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
       videoUrl={videoUrl}
       genres={genres}
       storeName={steamStoreName || undefined}
-      stats={stats}>
+      stats={stats}
+      isContextMenuOpen={actionsMenuOpen}>
       {cardContent}
     </GameCardHoverCard>
   );

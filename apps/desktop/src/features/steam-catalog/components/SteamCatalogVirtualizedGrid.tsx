@@ -44,6 +44,12 @@ export const SteamCatalogVirtualizedGrid = memo(function SteamCatalogVirtualized
     estimatedRowHeight,
     overscan: 8,
     initialScrollY: catalogScrollPosition,
+    computeRowHeight: (columnWidth) => {
+      const imageHeight = Math.round(columnWidth * (isHorizontal ? 215 / 460 : 1.5));
+      const bottomActionHeight = minItemWidth >= 320 ? 104 : 72;
+      const cardGap = 8;
+      return imageHeight + cardGap + bottomActionHeight + 20;
+    },
   });
 
   return (

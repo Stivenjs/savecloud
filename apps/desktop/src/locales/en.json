@@ -1007,14 +1007,14 @@
       "compression": {
         "title": "Packaged Backup Compression (Zstd)",
         "desc": "Only applies to full backup in <strong>streaming mode</strong> (including dry run mode): the stream packages with Zstd before uploading. If streaming is disabled, the classic backup remains a <code>.tar</code> without external Zstd compression.",
-        "levelLabel": "Zstd Level (1–max 22):",
+        "levelLabel": "Zstd Level (1–max 12):",
         "defaultSuffix": "(app default: {{default}})",
         "restoreDefault": "Restore Default",
         "debounceHint": "The disk value updates after you stop dragging for a moment (debounce). \"Restore\" saves instantly.",
         "prosConsTitle": "Pros & Cons",
         "lowLevels": "Low Levels (approx. 1–5):",
         "lowLevelsDesc": "less CPU and shorter backup time; upload finishes sooner. Ideal if you prioritize speed and stability.",
-        "highLevels": "High Levels (approx. 10–22):",
+        "highLevels": "High Levels (approx. 10–12):",
         "highLevelsDesc": "smaller file in the cloud and less bandwidth; much slower and may heat up the device during packaging.",
         "gameDataHint": "Many games already contain compressed data (e.g., <code>.pak</code>, textures); in those cases, increasing the level yields little size reduction for a lot of time."
       },
@@ -2269,7 +2269,9 @@
       "downloadFailed": "Could not start download",
       "transferStarted": "Transfer started",
       "transferStartedDesc": "Getting {{name}} from {{device}}.",
-      "transferFailed": "Could not transfer"
+      "transferFailed": "Could not transfer",
+      "addToLibrary": "Add to Library",
+      "contextMenuAria": "Catalog Actions"
     },
     "pagination": {
       "ariaLabel": "Catalog pages",

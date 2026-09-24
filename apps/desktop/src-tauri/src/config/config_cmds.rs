@@ -277,12 +277,12 @@ pub fn set_full_backup_streaming_dry_run(enabled: bool) -> Result<(), String> {
     config::save_settings(&settings)
 }
 
-/// Nivel Zstd (1–22) para backups completos empaquetados en modo streaming. `None` en disco restaura el valor por defecto (5).
+/// Nivel Zstd (1–12) para backups completos empaquetados en modo streaming. `None` en disco restaura el valor por defecto (5).
 #[tauri::command]
 pub fn set_full_backup_packaged_compression_level(level: Option<i32>) -> Result<(), String> {
     if let Some(n) = level {
-        if !(1..=22).contains(&n) {
-            return Err("El nivel debe estar entre 1 y 22 (Zstd).".to_string());
+        if !(1..=12).contains(&n) {
+            return Err("El nivel debe estar entre 1 y 12 (Zstd).".to_string());
         }
     }
     let mut settings = config::load_settings();
