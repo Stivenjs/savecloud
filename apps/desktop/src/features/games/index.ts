@@ -19,7 +19,6 @@ export { GamesPageHeader } from "./GamesPageHeader";
 export { OperationErrorCard } from "./OperationErrorCard";
 export { BulkActionConfirmModal } from "./BulkActionConfirmModal";
 export { RemoveGameModal } from "./RemoveGameModal";
-export { ScanModal } from "./ScanModal";
 export { PlayingGameThumbnail } from "./PlayingGameThumbnail";
 export { PlayingStatusBadge } from "./PlayingStatusBadge";
 export { GamesVirtualizedGrid } from "./GamesVirtualizedGrid";
