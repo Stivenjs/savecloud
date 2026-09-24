@@ -21,6 +21,7 @@ use crate::steam_catalog::commands::listing::preload_facets_background;
 use crate::steam_catalog::trending::sync_store_trending;
 use crate::streaming::session::{StreamingState, SunshineShutdownGuard};
 use crate::system::game_exit_sync;
+use crate::system::memory;
 use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray::tray_state::TrayState;
@@ -92,6 +93,7 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
         }
     });
 
+    let db_post_boot = db.clone();
     app.manage(db);
 
     // 4. Hilo de mantenimiento de la base de datos (periódico + cierre limpio)
@@ -115,6 +117,8 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
                             AppDb::DEFAULT_MIN_PAGES_FOR_COMPACTION,
                             AppDb::DEFAULT_FRAGMENTATION_THRESHOLD_PERCENT,
                         );
+                        let _ = db_for_maintenance.shrink_memory();
+                        memory::trim_working_set();
                         guard.complete();
                         break;
                     }
@@ -123,9 +127,17 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
                             AppDb::DEFAULT_MIN_PAGES_FOR_COMPACTION,
                             AppDb::DEFAULT_FRAGMENTATION_THRESHOLD_PERCENT,
                         );
+                        let _ = db_for_maintenance.shrink_memory();
+                        memory::trim_working_set();
                     }
                 }
             }
+        });
+
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+            let _ = db_post_boot.shrink_memory();
+            memory::trim_working_set();
         });
     }
 

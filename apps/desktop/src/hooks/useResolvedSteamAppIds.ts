@@ -46,7 +46,7 @@ export function useResolvedSteamAppIds(games: readonly ConfiguredGame[]): Record
     },
     enabled: missingGames.length > 0,
     staleTime: Number.POSITIVE_INFINITY,
-    gcTime: 24 * 60 * 60 * 1000,
+    gcTime: 2 * 60 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 

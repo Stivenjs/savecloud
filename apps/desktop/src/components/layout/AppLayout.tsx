@@ -273,7 +273,9 @@ export function AppLayout({ navItems, games = [], onMenuGameClick, children, hid
       </Suspense>
 
       {/* Buscador global / Paleta de comandos */}
-      <CommandPaletteModal isOpen={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} />
+      {isCommandPaletteOpen && (
+        <CommandPaletteModal isOpen={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} />
+      )}
     </div>
   );
 }

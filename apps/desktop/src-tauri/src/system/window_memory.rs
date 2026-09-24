@@ -117,11 +117,9 @@ pub fn set_webview_memory_target(window: &WebviewWindow, level: MemoryLevel) {
         }
     }
 
-    // Fallback para otras plataformas no soportadas
-    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
-    {
-        let _ = window;
-        let _ = level;
+    // Podar el working set del proceso host si el nivel solicitado es bajo
+    if level.is_low() {
+        crate::system::memory::trim_working_set();
     }
 }
 

@@ -210,6 +210,13 @@ pub fn scan_games_running_with_config(
         return (result, processes_out);
     }
 
+    let mut games_by_exe: HashMap<String, Vec<String>> = HashMap::new();
+    for (game_id, names) in &names_by_game {
+        for name in names {
+            games_by_exe.entry(name.clone()).or_default().push(game_id.clone());
+        }
+    }
+
     let mut sys = get_sys();
     sys.refresh_processes_specifics(
         ProcessesToUpdate::All,
@@ -230,26 +237,22 @@ pub fn scan_games_running_with_config(
 
     for (pid, process) in sys.processes() {
         let exe_lc = process.name().to_string_lossy().to_lowercase();
-        for game_id in game_ids {
-            let Some(names) = names_by_game.get(game_id) else {
-                continue;
-            };
-            if !names.contains(&exe_lc) {
-                continue;
+        if let Some(matched_game_ids) = games_by_exe.get(&exe_lc) {
+            for game_id in matched_game_ids {
+                *result.entry(game_id.clone()).or_insert(false) = true;
+                pools
+                    .entry(game_id.clone())
+                    .or_default()
+                    .push(CpuBoostCand {
+                        pid: pid.as_u32(),
+                        exe_lc: exe_lc.clone(),
+                        rss: 0,
+                    });
+                matched_root_pids
+                    .entry(game_id.clone())
+                    .or_default()
+                    .insert(pid.as_u32());
             }
-            *result.entry(game_id.clone()).or_insert(false) = true;
-            pools
-                .entry(game_id.clone())
-                .or_default()
-                .push(CpuBoostCand {
-                    pid: pid.as_u32(),
-                    exe_lc: exe_lc.clone(),
-                    rss: 0,
-                });
-            matched_root_pids
-                .entry(game_id.clone())
-                .or_default()
-                .insert(pid.as_u32());
         }
     }
 
