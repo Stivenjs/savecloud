@@ -5,13 +5,12 @@ import {
   getConfig,
   getSteamAppDetails,
   getSteamCatalogListingName,
-  getGameStat,
   type SteamAppDetailsResult,
   type SteamAppdetailsMediaResult,
-  type GameStats,
 } from "@services/tauri";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { useGameRunningStatus } from "@hooks/useGameRunningStatus";
+import { useGameStat } from "@hooks/useGameStat";
 import { getGameLibraryHeroUrl, getSteamAppId, isSteamMoviePosterUrl, isSteamAppId } from "@utils/gameImage";
 import { configuredGameFromSteamCatalogRouteId, isSteamCatalogRouteGameId } from "@utils/steamCatalogGameId";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
@@ -80,13 +79,7 @@ export function useGameDetail() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: stats = null } = useQuery<GameStats | null>({
-    queryKey: ["game-stats", gameId],
-    queryFn: () => getGameStat(gameId!),
-    enabled: !!gameId && !isCatalogRoute,
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-  });
+  const { data: stats = null } = useGameStat(gameId, !isCatalogRoute);
 
   const runningByGame = useGameRunningStatus(gameId ? [gameId] : []);
   const isGameRunning = gameId ? (runningByGame[gameId] ?? false) : false;

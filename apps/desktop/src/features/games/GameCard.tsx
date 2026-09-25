@@ -1,4 +1,13 @@
-import { memo, useCallback, useEffect, useMemo, startTransition, addTransitionType, ViewTransition } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  startTransition,
+  addTransitionType,
+  ViewTransition,
+} from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Skeleton } from "@heroui/react";
 import { GameCardHoverMotion } from "@features/games/GameCardHoverMotion";
@@ -13,6 +22,7 @@ import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { useGameMedia } from "@hooks/useGameMedia";
 import { useSyncStore } from "@store/SyncStore";
 import { useGameDetailHoverPrefetch } from "@hooks/useGameDetailHoverPrefetch";
+import { useGameStat } from "@hooks/useGameStat";
 import { useNavigable } from "@features/input/useNavigable";
 import { getGamepadFocusClass } from "@features/input/styles";
 import type { ConfiguredGame } from "@app-types/config";
@@ -132,7 +142,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
   const isLowPerf = props.isLowPerf ?? hookLowPerf;
   const {
     game,
-    stats,
+    stats: providedStats,
     isGameRunning,
     resolvedSteamAppId,
     isLoading: externalLoading,
@@ -151,11 +161,6 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     priority = false,
     ...cardRest
   } = props;
-
-  const effectiveSyncStatus = useMemo(() => {
-    if (syncStatusProp !== undefined) return syncStatusProp;
-    return deriveGameSyncStatus(isUnsynced, stats, cloudBackupCount);
-  }, [syncStatusProp, isUnsynced, stats, cloudBackupCount]);
 
   const isCatalog = variant === "catalog";
   const isHorizontal = orientation === "horizontal";
@@ -208,6 +213,15 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     layerId: "root",
     onPress: handleCardClick,
   });
+
+  const [isPointerOver, setIsPointerOver] = useState(false);
+  const { data: queriedStats } = useGameStat(game.id, !providedStats && !isCatalog && (isPointerOver || isFocused));
+  const stats = providedStats ?? queriedStats ?? null;
+
+  const effectiveSyncStatus = useMemo(() => {
+    if (syncStatusProp !== undefined) return syncStatusProp;
+    return deriveGameSyncStatus(isUnsynced, stats, cloudBackupCount);
+  }, [syncStatusProp, isUnsynced, stats, cloudBackupCount]);
 
   const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
 
@@ -268,10 +282,14 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
           onContextMenu(e, game);
         }}
         onMouseEnter={() => {
+          setIsPointerOver(true);
           navProps.onMouseEnter?.();
           onHoverStart();
         }}
-        onMouseLeave={onHoverEnd}
+        onMouseLeave={() => {
+          setIsPointerOver(false);
+          onHoverEnd();
+        }}
         role="link"
         tabIndex={0}
         onKeyDown={(e) => {

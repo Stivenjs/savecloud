@@ -458,6 +458,13 @@ pub fn load_library() -> GameLibrary {
         .unwrap_or_default()
 }
 
+pub fn load_game(game_id: &str) -> Result<Option<ConfiguredGame>, String> {
+    let Some(path) = scoped_or_legacy_path(paths::LIBRARY_FILE_NAME) else {
+        return Ok(None);
+    };
+    super::library_reader::load_game(&path, game_id)
+}
+
 pub fn save_library(library: &GameLibrary) -> Result<(), String> {
     let path = scoped_data_path(paths::LIBRARY_FILE_NAME).ok_or("Ruta no disponible")?;
     save_json(&path, library)?;

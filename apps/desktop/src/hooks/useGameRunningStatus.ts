@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { checkGamesRunning } from "@services/tauri";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
+import { GAME_STATS_QUERY_KEY } from "@hooks/useGameStat";
 import { useGameSessionStore } from "@store/GameSessionStore";
 
 /**
@@ -12,7 +13,6 @@ import { useGameSessionStore } from "@store/GameSessionStore";
  * independientemente de qué instancia del hook registró el listener.
  */
 export const RUNNING_STATUS_KEY = ["game-running-status"] as const;
-const GAME_STATS_QUERY_KEY = ["game-stats"] as const;
 
 interface PlaytimePayload {
   gameId: string;
@@ -80,6 +80,10 @@ export function useGameRunningStatus(gameIds: readonly string[]): Record<string,
           if (!oldStats) return oldStats;
           return oldStats.map((s) => (s.gameId === gameId ? { ...s, playtimeSeconds: newTime } : s));
         });
+
+        queryClient.setQueryData([...GAME_STATS_QUERY_KEY, gameId], (oldStats: any | null | undefined) =>
+          oldStats ? { ...oldStats, playtimeSeconds: newTime } : oldStats
+        );
       });
 
       if (cancelled) {

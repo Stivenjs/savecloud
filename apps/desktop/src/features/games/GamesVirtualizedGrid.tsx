@@ -251,7 +251,6 @@ export const GamesVirtualizedGrid = memo(function GamesVirtualizedGrid({
             contextMenu={contextMenu}
             onClose={handleCloseContextMenu}
             gameRunningStatus={gameRunningStatus}
-            statsByGameId={statsByGameId}
             syncingId={syncingId}
             downloadingId={downloadingId}
             fullBackupUploadingGameId={fullBackupUploadingGameId}

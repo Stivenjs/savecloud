@@ -126,7 +126,7 @@ export function GamesPage() {
     /* handleRetryOperationError, */
   } = useGamesPage();
 
-  const { statsByGameId } = useGameStats(!!config?.games?.length);
+  const { statsByGameId } = useGameStats(!!config?.games?.length && bulkConfirm?.type === "sync");
 
   const bigPictureConsole = useMemo(
     () => typeof document !== "undefined" && document.documentElement.classList.contains("savecloud-big-picture"),
