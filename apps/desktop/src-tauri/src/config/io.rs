@@ -4,14 +4,12 @@
 //! delgada hacia la persistencia por perfil y la configuración combinada.
 
 use super::models::*;
+use super::library;
 use super::profile_storage;
 use super::profiles::DEFAULT_PROFILE_ID;
 use keyring::Entry;
-use once_cell::sync::Lazy;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::RwLock;
 
-static CONFIG_CACHE: Lazy<RwLock<Option<Config>>> = Lazy::new(|| RwLock::new(None));
 static CONFIG_REVISION: AtomicU64 = AtomicU64::new(1);
 
 /// Versión incremental de la configuración para detectar modificaciones sin I/O.
@@ -22,17 +20,11 @@ pub fn config_revision() -> u64 {
 /// Invalida la caché en memoria de la configuración global para forzar su recarga en el próximo acceso.
 pub fn invalidate_config_cache() {
     CONFIG_REVISION.fetch_add(1, Ordering::Relaxed);
-    if let Ok(mut lock) = CONFIG_CACHE.write() {
-        *lock = None;
-    }
 }
 
-/// Actualiza directamente la caché en memoria con una instancia de configuración conocida.
-pub fn update_config_cache(config: Config) {
+/// Marca la configuración como modificada sin conservar una copia profunda en memoria.
+pub fn update_config_cache(_config: Config) {
     CONFIG_REVISION.fetch_add(1, Ordering::Relaxed);
-    if let Ok(mut lock) = CONFIG_CACHE.write() {
-        *lock = Some(config);
-    }
 }
 
 pub const KEYRING_SERVICE: &str = "savecloud_api";
@@ -329,11 +321,11 @@ pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
 }
 
 pub fn load_library() -> GameLibrary {
-    profile_storage::load_library()
+    library::all().unwrap_or_default()
 }
 
-pub fn save_library(library: &GameLibrary) -> Result<(), String> {
-    let res = profile_storage::save_library(library);
+pub fn save_library(game_library: &GameLibrary) -> Result<(), String> {
+    let res = library::replace(game_library);
     invalidate_config_cache();
     res
 }
@@ -510,32 +502,12 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
 /// Utiliza una caché en memoria para evitar accesos repetitivos a disco y consultas
 /// al almacén de credenciales del sistema operativo (Keyring) en bucles en segundo plano.
 pub fn load_config() -> Config {
-    if let Ok(lock) = CONFIG_CACHE.read() {
-        if let Some(cached) = lock.as_ref() {
-            return cached.clone();
-        }
-    }
-
-    let config = get_combined_config();
-    if let Ok(mut lock) = CONFIG_CACHE.write() {
-        *lock = Some(config.clone());
-    }
-    config
+    get_combined_config()
 }
 
 /// Permite inspeccionar la configuración activa mediante una referencia prestada (`&Config`),
 /// evitando la clonación profunda de colecciones (juegos, historiales) en bucles periódicos.
 pub fn with_config<R>(f: impl FnOnce(&Config) -> R) -> R {
-    if let Ok(lock) = CONFIG_CACHE.read() {
-        if let Some(cached) = lock.as_ref() {
-            return f(cached);
-        }
-    }
-
     let config = get_combined_config();
-    let res = f(&config);
-    if let Ok(mut lock) = CONFIG_CACHE.write() {
-        *lock = Some(config);
-    }
-    res
+    f(&config)
 }

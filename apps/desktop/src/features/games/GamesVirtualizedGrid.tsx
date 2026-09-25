@@ -38,6 +38,9 @@ export interface GamesVirtualizedGridProps {
   onActionsMenuOpenChange?: (open: boolean, gameId: string) => void;
   /** Modo bajo rendimiento opcional */
   isLowPerf?: boolean;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
 }
 
 export function getGridClass(layout: GamesLayout, orientation: GamesCardOrientation): string {
@@ -92,6 +95,9 @@ export const GamesVirtualizedGrid = memo(function GamesVirtualizedGrid({
   openActionsGameId,
   onActionsMenuOpenChange,
   isLowPerf: isLowPerfProp,
+  onLoadMore,
+  hasMore = false,
+  loadingMore = false,
 }: GamesVirtualizedGridProps) {
   const isHorizontal = cardOrientation === "horizontal";
   const hookLowPerf = useLowPerformanceMode();
@@ -164,6 +170,14 @@ export const GamesVirtualizedGrid = memo(function GamesVirtualizedGrid({
     computeColumns,
     computeRowHeight,
   });
+
+  useEffect(() => {
+    if (!hasMore || loadingMore || !onLoadMore || visibleItems.length === 0) return;
+    const lastVisibleIndex = visibleItems[visibleItems.length - 1]?.index ?? 0;
+    if (lastVisibleIndex >= games.length - Math.max(columns * 2, 12)) {
+      onLoadMore();
+    }
+  }, [columns, games.length, hasMore, loadingMore, onLoadMore, visibleItems]);
 
   const [contextMenu, setContextMenu] = useState<{ game: ConfiguredGame; x: number; y: number } | null>(null);
 

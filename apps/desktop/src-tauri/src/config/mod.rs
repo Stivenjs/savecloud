@@ -7,6 +7,7 @@
 pub mod config_cmds;
 pub mod gamification;
 pub mod io;
+pub mod library;
 pub mod models;
 pub mod paths;
 pub mod profile_cmds;

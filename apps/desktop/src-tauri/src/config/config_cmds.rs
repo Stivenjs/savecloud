@@ -8,7 +8,6 @@ use crate::commands::sync::api::{api_request, get_download_urls, sync_list_remot
 use crate::commands::sync::context::resolve_api_context;
 use crate::config::gamification::GamificationStateDto;
 use crate::config::{self, Config, ConfigDto, ConfiguredGame, GameDto, OperationLogEntryDto};
-use crate::steam;
 use crate::time;
 use crate::utils::launch_exe;
 use base64::Engine;
@@ -65,9 +64,6 @@ fn expand_path(raw: &str) -> Option<PathBuf> {
 #[tauri::command]
 pub fn get_config() -> ConfigDto {
     let settings = config::load_settings();
-    let library = config::load_library();
-
-    let steam_map = steam::get_steam_path_to_appid_map();
 
     ConfigDto {
         api_base_url: settings.api_base_url.clone(),
@@ -121,44 +117,28 @@ pub fn get_config() -> ConfigDto {
         torrent_seeding_mode: settings.torrent_seeding_mode,
         auto_sync_on_game_exit: settings.auto_sync_on_game_exit,
         overlay_notification_position: settings.overlay_notification_position,
-        games: library
-            .games
-            .into_iter()
-            .map(|game| {
-                let ConfiguredGame {
-                    id,
-                    paths,
-                    steam_app_id,
-                    image_url,
-                    executable_names,
-                    edition_label,
-                    source_url,
-                    magnet_link,
-                    launch_executable_path,
-                    playtime_seconds,
-                } = game;
-                let steam_app_id = steam_app_id.or_else(|| {
-                    if image_url.is_none() {
-                        steam::resolve_app_id_for_game(&paths, &steam_map)
-                    } else {
-                        None
-                    }
-                });
-                GameDto {
-                    id,
-                    paths,
-                    steam_app_id,
-                    image_url,
-                    edition_label,
-                    source_url,
-                    magnet_link,
-                    executable_names,
-                    launch_executable_path,
-                    playtime_seconds,
-                }
-            })
-            .collect(),
+        // La biblioteca se consulta mediante get_library_page/get_library_game.
+        // Mantener este campo vacío evita serializar toda la biblioteca en cada refresh de configuración.
+        games: Vec::new(),
     }
+}
+
+/// Devuelve una página de la biblioteca sin cargarla completa en el frontend.
+#[tauri::command]
+pub fn get_library_page(
+    offset: Option<u32>,
+    limit: Option<u32>,
+    search: Option<String>,
+) -> Result<config::library::LibraryPage, String> {
+    let offset = offset.unwrap_or(0) as usize;
+    let limit = limit.unwrap_or(100).clamp(1, 250) as usize;
+    config::library::page(offset, limit, search.as_deref())
+}
+
+/// Devuelve un juego concreto de la biblioteca por identificador.
+#[tauri::command]
+pub fn get_library_game(game_id: String) -> Result<Option<ConfiguredGame>, String> {
+    config::library::get(game_id.trim())
 }
 
 /// Devuelve la ubicación absoluta del directorio de configuración de la app en disco.
@@ -723,7 +703,6 @@ pub fn add_game(
     steam_app_id: Option<String>,
     image_url: Option<String>,
 ) -> Result<(), String> {
-    let mut library = config::load_library();
     let game_id = game_id.trim().to_string();
 
     let paths: Vec<String> = paths
@@ -739,43 +718,52 @@ pub fn add_game(
     let trim_opt =
         |opt: Option<String>| opt.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
 
-    if let Some(g) = library
-        .games
-        .iter_mut()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
-    {
-        for p in paths {
-            if !g.paths.contains(&p) {
-                g.paths.push(p);
-            }
-        }
-        if let Some(label) = trim_opt(edition_label) {
-            g.edition_label = Some(label);
-        }
-        if let Some(url) = trim_opt(source_url) {
-            g.source_url = Some(url);
-        }
-        if let Some(app_id) = trim_opt(steam_app_id) {
-            g.steam_app_id = Some(app_id);
-        }
-        if let Some(img) = trim_opt(image_url) {
-            g.image_url = Some(img);
-        }
+    let existing_game = config::library::get(&game_id)?;
+    let mut game = if let Some(existing) = existing_game.clone() {
+        existing
     } else {
-        library.games.push(ConfiguredGame {
-            id: game_id,
-            paths,
-            steam_app_id: trim_opt(steam_app_id),
-            image_url: trim_opt(image_url),
+        ConfiguredGame {
+            id: game_id.clone(),
+            paths: Vec::new(),
+            steam_app_id: None,
+            image_url: None,
             executable_names: None,
-            edition_label: trim_opt(edition_label),
-            source_url: trim_opt(source_url),
+            edition_label: None,
+            source_url: None,
             magnet_link: None,
             launch_executable_path: None,
             playtime_seconds: 0,
-        });
+        }
+    };
+
+    if existing_game.is_some() {
+        for p in paths {
+            if !game.paths.contains(&p) {
+                game.paths.push(p);
+            }
+        }
+        if let Some(label) = trim_opt(edition_label) {
+            game.edition_label = Some(label);
+        }
+        if let Some(url) = trim_opt(source_url) {
+            game.source_url = Some(url);
+        }
+        if let Some(app_id) = trim_opt(steam_app_id) {
+            game.steam_app_id = Some(app_id);
+        }
+        if let Some(img) = trim_opt(image_url) {
+            game.image_url = Some(img);
+        }
+    } else {
+        game.paths = paths;
+        game.steam_app_id = trim_opt(steam_app_id);
+        game.image_url = trim_opt(image_url);
+        game.edition_label = trim_opt(edition_label);
+        game.source_url = trim_opt(source_url);
     }
-    config::save_library(&library)
+    config::library::upsert(&game)?;
+    config::invalidate_config_cache();
+    Ok(())
 }
 
 /// Transacciona metadatos de un nodo de juego preexistente.
@@ -792,7 +780,6 @@ pub fn update_game(
     steam_app_id: Option<String>,
     image_url: Option<String>,
 ) -> Result<(), String> {
-    let mut library = config::load_library();
     let game_id = game_id.trim();
     if game_id.is_empty() {
         return Err("Requiere un identificador de juego".to_string());
@@ -806,25 +793,22 @@ pub fn update_game(
 
     let trim_opt =
         |opt: Option<String>| opt.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    let g = library
-        .games
-        .iter_mut()
-        .find(|g| g.id.eq_ignore_ascii_case(game_id))
+    let mut game = config::library::get(game_id)?
         .ok_or_else(|| format!("Nodo huérfano: {}", game_id))?;
+    game.paths = paths;
+    game.edition_label = trim_opt(edition_label);
+    game.source_url = trim_opt(source_url);
+    game.steam_app_id = trim_opt(steam_app_id);
+    game.image_url = trim_opt(image_url);
 
-    g.paths = paths;
-    g.edition_label = trim_opt(edition_label);
-    g.source_url = trim_opt(source_url);
-    g.steam_app_id = trim_opt(steam_app_id);
-    g.image_url = trim_opt(image_url);
-
-    config::save_library(&library)
+    config::library::upsert(&game)?;
+    config::invalidate_config_cache();
+    Ok(())
 }
 
 /// Altera el identificador lógico de una entidad de guardado.
 #[tauri::command]
 pub fn rename_game(old_game_id: String, new_game_id: String) -> Result<(), String> {
-    let mut library = config::load_library();
     let old_id = old_game_id.trim();
     let new_id = new_game_id.trim().to_string();
 
@@ -834,46 +818,41 @@ pub fn rename_game(old_game_id: String, new_game_id: String) -> Result<(), Strin
     if old_id == new_id {
         return Ok(());
     }
-    if library
-        .games
-        .iter()
-        .any(|g| g.id.eq_ignore_ascii_case(&new_id) && !g.id.eq_ignore_ascii_case(old_id))
-    {
+    if config::library::get(&new_id)?.is_some() && !new_id.eq_ignore_ascii_case(old_id) {
         return Err(format!("Colisión de clave primaria '{}'", new_id));
     }
 
-    let g = library
-        .games
-        .iter_mut()
-        .find(|g| g.id.eq_ignore_ascii_case(old_id))
+    let mut game = config::library::get(old_id)?
         .ok_or_else(|| format!("No localizable: {}", old_id))?;
-    g.id = new_id;
-    config::save_library(&library)
+    game.id = new_id;
+    config::library::upsert(&game)?;
+    config::library::delete(old_id)?;
+    config::invalidate_config_cache();
+    Ok(())
 }
 
 /// Elimina un nodo de la biblioteca o expulsa una ruta de su lista de monitoreo.
 #[tauri::command]
 pub fn remove_game(game_id: String, path: Option<String>) -> Result<(), String> {
-    let mut library = config::load_library();
     let game_id = game_id.trim();
     let path = path.as_deref().map(|s| s.trim());
 
-    let idx = library
-        .games
-        .iter()
-        .position(|g| g.id.eq_ignore_ascii_case(game_id))
+    let mut game = config::library::get(game_id)?
         .ok_or_else(|| format!("Nodo ausente: {}", game_id))?;
 
     if let Some(p) = path {
-        library.games[idx].paths.retain(|x| x != p);
-        if library.games[idx].paths.is_empty() {
-            library.games.remove(idx);
+        game.paths.retain(|entry| entry != p);
+        if game.paths.is_empty() {
+            config::library::delete(game_id)?;
+        } else {
+            config::library::upsert(&game)?;
         }
     } else {
-        library.games.remove(idx);
+        config::library::delete(game_id)?;
     }
 
-    config::save_library(&library)
+    config::invalidate_config_cache();
+    Ok(())
 }
 
 /// Lista procesos en ejecución (nombre + icono asociado al binario donde el SO lo permite).
@@ -886,12 +865,8 @@ pub fn list_running_processes_for_pick() -> Vec<crate::system::process_check::Ru
 /// Inicia el recurso configurado para este juego (ruta absoluta: .exe, .jar, script, etc.).
 #[tauri::command]
 pub fn launch_game(game_id: String) -> Result<(), String> {
-    let library = config::load_library();
     let game_id = game_id.trim();
-    let game = library
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(game_id))
+    let game = config::library::get(game_id)?
         .ok_or_else(|| "Juego no encontrado".to_string())?;
     let path = game
         .launch_executable_path
@@ -951,53 +926,45 @@ pub fn launch_game(game_id: String) -> Result<(), String> {
 /// Guarda la ruta para abrir el juego desde la app (`.exe`, `.jar`, script, etc.; `None` o cadena vacía borra).
 #[tauri::command]
 pub fn set_game_launch_executable(game_id: String, path: Option<String>) -> Result<(), String> {
-    let mut library = config::load_library();
     let game_id = game_id.trim();
-    let g = library
-        .games
-        .iter_mut()
-        .find(|g| g.id.eq_ignore_ascii_case(game_id))
+    let mut game = config::library::get(game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
-    g.launch_executable_path = path
+    game.launch_executable_path = path
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
-    config::save_library(&library)
+    config::library::upsert(&game)?;
+    config::invalidate_config_cache();
+    Ok(())
 }
 
 /// Fija los nombres de proceso usados para detectar si el juego está en ejecución.
 /// Lista vacía restaura la detección automática por nombre del juego.
 #[tauri::command]
 pub fn set_game_executable_names(game_id: String, names: Vec<String>) -> Result<(), String> {
-    let mut library = config::load_library();
     let game_id = game_id.trim();
-    let g = library
-        .games
-        .iter_mut()
-        .find(|g| g.id.eq_ignore_ascii_case(game_id))
+    let mut game = config::library::get(game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
     let filtered: Vec<String> = names
         .into_iter()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect();
-    g.executable_names = if filtered.is_empty() {
+    game.executable_names = if filtered.is_empty() {
         None
     } else {
         Some(filtered)
     };
-    config::save_library(&library)
+    config::library::upsert(&game)?;
+    config::invalidate_config_cache();
+    Ok(())
 }
 
 /// Deriva el path físico final a partir de la primera entrada enmascarada del registro.
 #[tauri::command]
 pub fn get_game_save_path(game_id: String) -> Result<String, String> {
-    let library = config::load_library();
-    let game = library
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+    let game = config::library::get(&game_id)?
         .ok_or_else(|| format!("Registro nulo: {}", game_id))?;
     let first = game.paths.first().ok_or("Entidad sin rutas vinculadas")?;
 

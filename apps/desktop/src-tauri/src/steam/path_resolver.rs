@@ -249,16 +249,3 @@ pub fn resolve_steam_install_dir(app_id: &str) -> Option<PathBuf> {
         .map(|(path, _)| path)
 }
 
-/// Resuelve el Steam AppID para un juego.
-pub fn resolve_app_id_for_game(
-    game_paths: &[String],
-    path_to_appid: &HashMap<PathBuf, String>,
-) -> Option<String> {
-    for path in game_paths {
-        if let Some(appid) = resolve_steam_app_id_from_map(path_to_appid, path) {
-            return Some(appid);
-        }
-    }
-
-    None
-}

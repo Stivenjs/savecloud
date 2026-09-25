@@ -120,6 +120,9 @@ export function GamesPage() {
     handleRefresh,
     refreshing,
     filteredGames,
+    loadMoreLibrary,
+    hasMoreLibrary,
+    loadingMoreLibrary,
     emptyFilterMessage,
     unsyncedGameIds,
     /* handleDismissOperationError, */
@@ -564,6 +567,9 @@ export function GamesPage() {
               onTorrent={setGameForTorrent}
               onShare={hasSyncConfig ? handleShare : undefined}
               hasSyncConfig={hasSyncConfig}
+              onLoadMore={loadMoreLibrary}
+              hasMore={hasMoreLibrary}
+              loadingMore={loadingMoreLibrary}
             />
           </section>
         </motion.div>

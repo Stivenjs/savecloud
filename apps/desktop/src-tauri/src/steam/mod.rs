@@ -9,6 +9,6 @@ mod path_resolver;
 pub mod steam_search;
 
 pub use path_resolver::{
-    get_steam_path_to_appid_map, resolve_app_id_for_game, resolve_steam_install_dir,
+    get_steam_path_to_appid_map, resolve_steam_install_dir,
     resolve_steam_app_id_from_map, steam_path_candidates,
 };

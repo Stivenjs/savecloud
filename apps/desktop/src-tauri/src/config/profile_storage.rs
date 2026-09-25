@@ -17,6 +17,12 @@ fn active_profile() -> Option<super::profiles::Profile> {
     index.get_active_profile().cloned()
 }
 
+pub fn active_profile_id() -> String {
+    active_profile()
+        .map(|profile| profile.id)
+        .unwrap_or_else(|| DEFAULT_PROFILE_ID.to_string())
+}
+
 fn profile_file_path(profile_id: &str, file_name: &str) -> Option<PathBuf> {
     paths::data_dir().map(|dir| dir.join("profiles").join(profile_id.trim()).join(file_name))
 }
@@ -447,20 +453,6 @@ pub fn delete_profile_storage(profile_id: &str) -> Result<(), String> {
     if profile_dir.exists() {
         fs::remove_dir_all(&profile_dir).map_err(|e| e.to_string())?;
     }
-
-    Ok(())
-}
-
-pub fn load_library() -> GameLibrary {
-    scoped_or_legacy_path(paths::LIBRARY_FILE_NAME)
-        .and_then(|path| fs::read_to_string(path).ok())
-        .and_then(|content| serde_json::from_str(&content).ok())
-        .unwrap_or_default()
-}
-
-pub fn save_library(library: &GameLibrary) -> Result<(), String> {
-    let path = scoped_data_path(paths::LIBRARY_FILE_NAME).ok_or("Ruta no disponible")?;
-    save_json(&path, library)?;
 
     Ok(())
 }
