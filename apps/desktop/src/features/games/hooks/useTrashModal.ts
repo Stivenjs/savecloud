@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import { listTrash, restoreFromTrash, deleteFromTrash, emptyTrash } from "@services/tauri";
 import { formatGameDisplayName } from "@/utils/gameImage";
 import { toastSuccess, toastError } from "@utils/toast";
-import { useConfig } from "@hooks/useConfig";
+import { useLibrary } from "@hooks/useLibrary";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
 import { useGameMediaBatch, getIsResolvingIds } from "@hooks/useGameMedia";
@@ -46,7 +46,7 @@ export interface UseTrashModalResult {
 
 export function useTrashModal({ isOpen, onRestored }: UseTrashModalOptions): UseTrashModalResult {
   const { t } = useTranslation();
-  const { config } = useConfig();
+  const { games } = useLibrary();
   const queryClient = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -132,7 +132,7 @@ export function useTrashModal({ isOpen, onRestored }: UseTrashModalOptions): Use
   // Mapeamos los items buscando si ya existían en la config local o creamos el objeto correspondiente
   const gamesList = useMemo<ConfiguredGame[]>(() => {
     const configuredMap = new Map<string, ConfiguredGame>();
-    for (const g of config?.games ?? []) {
+    for (const g of games) {
       configuredMap.set(g.id, g);
     }
     return items.map((it: TrashGameItem): ConfiguredGame => {
@@ -140,7 +140,7 @@ export function useTrashModal({ isOpen, onRestored }: UseTrashModalOptions): Use
       if (existing) return existing;
       return { id: it.gameId, paths: [] };
     });
-  }, [items, config?.games]);
+  }, [items, games]);
 
   const gamesById = useMemo<Map<string, ConfiguredGame>>(() => {
     const map = new Map<string, ConfiguredGame>();

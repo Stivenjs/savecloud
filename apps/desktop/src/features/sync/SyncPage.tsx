@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Button, Card, CardBody, Spinner } from "@heroui/react";
 import { CloudUpload, RefreshCw } from "lucide-react";
 import { useConfig } from "@hooks/useConfig";
+import { useLibrary } from "@hooks/useLibrary";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { syncUploadGame, type SyncResult } from "@services/tauri";
 import type { ConfiguredGame } from "@app-types/config";
@@ -15,6 +16,7 @@ interface SyncPageProps {
 
 export function SyncPage({ onNavigateToSettings }: SyncPageProps) {
   const { config, loading, error, refetch } = useConfig();
+  const { games } = useLibrary();
   const { activeProfile } = useProfileSession();
   const [syncing, setSyncing] = useState<string | "all" | null>(null);
   const [lastResult, setLastResult] = useState<{
@@ -45,12 +47,12 @@ export function SyncPage({ onNavigateToSettings }: SyncPageProps) {
   };
 
   const handleSyncAll = async () => {
-    if (!config?.games?.length) return;
+    if (!games.length) return;
     setSyncing("all");
     setLastResult(null);
     setAllResults([]);
     const results: { gameId: string; result: SyncResult }[] = [];
-    for (const game of config.games) {
+    for (const game of games) {
       try {
         const result = await syncUploadGame(game.id);
         results.push({ gameId: game.id, result });
@@ -89,7 +91,6 @@ export function SyncPage({ onNavigateToSettings }: SyncPageProps) {
     );
   }
 
-  const games = config?.games ?? [];
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
   const hasConfig = hasUsableCloudConnection(cloudConfig);
 

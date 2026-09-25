@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Config } from "@app-types/config";
+import type { AppSettingsConfig } from "@app-types/config";
 import { queryClient } from "@lib/queryClient";
 import { getConfig } from "@services/tauri/config.service";
 import { getActiveProfileCmd } from "@services/tauri/profile.service";
@@ -32,7 +32,7 @@ interface ProfileSessionStore {
 
 let hydrationPromise: Promise<void> | null = null;
 
-function toDefaultProfile(config: Config): ActiveProfileSession {
+function toDefaultProfile(config: AppSettingsConfig): ActiveProfileSession {
   return {
     id: "default-config-profile",
     name: "Default",
@@ -57,7 +57,7 @@ export const useProfileSessionStore = create<ProfileSessionStore>((set) => ({
       set({ loading: true, error: null });
 
       try {
-        const cachedConfig = queryClient.getQueryData<Config>(CONFIG_QUERY_KEY);
+        const cachedConfig = queryClient.getQueryData<AppSettingsConfig>(CONFIG_QUERY_KEY);
         const configPromise =
           cachedConfig != null
             ? Promise.resolve(cachedConfig)

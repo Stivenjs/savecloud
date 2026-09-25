@@ -26,6 +26,7 @@ import {
 import { extractShareTokenFromUrl, resolveShareToken } from "@/services/tauri/share.service";
 import { toastError, toastInfo, toastSyncResult } from "@utils/toast";
 import { useConfig } from "@hooks/useConfig";
+import { useLibrary } from "@hooks/useLibrary";
 import { useQueryClient } from "@tanstack/react-query";
 import { getUnknownErrorMessage } from "@utils/errorMessage";
 import { formatGameDisplayName, findConfiguredGame } from "@utils/gameImage";
@@ -239,6 +240,7 @@ export function useFriendsPage() {
   } = state;
 
   const { config: ourConfig } = useConfig();
+  const { games: ourGames } = useLibrary();
   const activeCloudHostUserId = ourConfig?.activeCloudHostUserId?.trim() || null;
 
   useEffect(() => {
@@ -298,11 +300,11 @@ export function useFriendsPage() {
 
   const ourGameIds = useMemo(() => {
     const set = new Set<string>();
-    for (const g of ourConfig?.games ?? []) {
+    for (const g of ourGames) {
       if (g.id) set.add(g.id.toLowerCase());
     }
     return set;
-  }, [ourConfig?.games]);
+  }, [ourGames]);
 
   const loadFriendProfileById = useCallback(async (userId: string) => {
     const inputId = userId.trim();

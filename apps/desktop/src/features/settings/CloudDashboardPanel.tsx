@@ -19,6 +19,7 @@ import { Cloud, CloudOff, Database, Gamepad2, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { SAVECLOUD_OPEN_RESTORE_FROM_CLOUD_EVENT } from "@/constants/savecloudCrossWindow";
 import { CONFIG_QUERY_KEY, useConfig } from "@hooks/useConfig";
+import { useLibrary } from "@hooks/useLibrary";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { LAST_SYNC_QUERY_KEY, useLastSyncInfo, type CloudGameSummary } from "@hooks/useLastSyncInfo";
 import { useGameMedia, useGameMediaBatch, getIsResolvingIds } from "@hooks/useGameMedia";
@@ -43,6 +44,7 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { config, loading: configLoading } = useConfig();
+  const { games } = useLibrary();
   const { activeProfile } = useProfileSession();
 
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
@@ -61,11 +63,8 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
 
   const [sortKey, setSortKey] = useState<SortKey>("modified");
 
-  const gamesCount = config?.games?.length ?? 0;
-  const localGameIdsLower = useMemo(
-    () => new Set((config?.games ?? []).map((g: ConfiguredGame) => g.id.toLowerCase())),
-    [config?.games]
-  );
+  const gamesCount = games.length;
+  const localGameIdsLower = useMemo(() => new Set(games.map((g: ConfiguredGame) => g.id.toLowerCase())), [games]);
 
   const sortedGames = useMemo(() => {
     const list = [...cloudGames];
@@ -94,10 +93,10 @@ export function CloudDashboardPanel({ onSelectAccountTab }: CloudDashboardPanelP
 
   const gamesForCloudTableMedia = useMemo((): ConfiguredGame[] => {
     return sortedGames.map((row: CloudGameSummary) => {
-      const fromLibrary = findConfiguredGame(config?.games, row.gameId);
+      const fromLibrary = findConfiguredGame(games, row.gameId);
       return fromLibrary ?? ({ id: row.gameId, paths: [] } as ConfiguredGame);
     });
-  }, [sortedGames, config?.games]);
+  }, [sortedGames, games]);
 
   const resolvedSteamAppIds = useResolvedSteamAppIds(gamesForCloudTableMedia);
   const isResolvingIds = getIsResolvingIds(gamesForCloudTableMedia, resolvedSteamAppIds);

@@ -1,9 +1,9 @@
 import { Button, Card, CardBody, Select, SelectItem, Switch } from "@heroui/react";
 import { Beaker, Gauge, Play, Sparkles } from "lucide-react";
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { useTranslation, Trans } from "react-i18next";
-import { useConfig } from "@hooks/useConfig";
+import { useLibrary } from "@hooks/useLibrary";
 import { testStreamingFullBackup } from "@services/tauri";
 import { useStreamingMetricsStore } from "@store/StreamingMetricsStore";
 import { formatGameDisplayName } from "@utils/gameImage";
@@ -43,8 +43,7 @@ export function ExperimentalFeaturesCard({
   onFullBackupPackagedCompressionLevelChange,
 }: ExperimentalFeaturesCardProps) {
   const { t } = useTranslation();
-  const { config } = useConfig();
-  const games = useMemo(() => config?.games ?? [], [config?.games]);
+  const { games } = useLibrary();
 
   const currentMetrics = useStreamingMetricsStore((s) => s.currentMetrics);
   const openMetricsModal = useStreamingMetricsStore((s) => s.openMetricsModal);

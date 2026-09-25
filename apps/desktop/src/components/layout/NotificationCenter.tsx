@@ -37,7 +37,7 @@ import type { NotificationRecord } from "@services/tauri/notifications.service";
 import { formatShortRelativeDate } from "@utils/format";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { formatGameDisplayName, detectGameFromText } from "@utils/gameImage";
-import { useConfig } from "@hooks/useConfig";
+import { useLibrary } from "@hooks/useLibrary";
 import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
 import { openOrFocusSettingsWindow } from "@/windows/settingsWindow";
 
@@ -116,15 +116,15 @@ function NotificationRow({
   onDismiss: (id: string) => void;
 }) {
   const { t } = useTranslation();
-  const { config } = useConfig();
+  const { games } = useLibrary();
   const unread = !n.readAt || !n.readAt.trim();
   const downloadDir = getDownloadDir(n);
   const downloadUri = getDownloadUri(n);
   const isAchievement = isAchievementNotification(n);
 
   const detectedGameId = useMemo(
-    () => detectGameFromText({ gameId: n.gameId, title: n.title, body: n.body, games: config?.games }),
-    [n.gameId, n.body, n.title, config?.games]
+    () => detectGameFromText({ gameId: n.gameId, title: n.title, body: n.body, games }),
+    [n.gameId, n.body, n.title, games]
   );
 
   let displayBody = n.body;

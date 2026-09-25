@@ -8,7 +8,7 @@ import type { PeerInstallOffer } from "@services/tauri/inventory.service";
 import { usePeerInstallOffers } from "@hooks/usePeerInstallOffers";
 import { pickCandidate } from "@utils/sourceMatch";
 import { toastError, toastSuccess } from "@utils/toast";
-import { useConfig } from "@hooks/useConfig";
+import { useLibrary } from "@hooks/useLibrary";
 import { useDownloadMetadataStore } from "@store/DownloadMetadataStore";
 import type { ConfiguredGame } from "@app-types/config";
 import { InstallModal } from "@features/steam-catalog/components/InstallModal";
@@ -33,7 +33,7 @@ export function SteamCatalogGrid({
   isMatchingPending,
   consoleMode = false,
 }: SteamCatalogGridProps) {
-  const { config } = useConfig();
+  const { games } = useLibrary();
   const { t } = useTranslation();
   const [pickByGame, setPickByGame] = useState<PickByGame>({});
   const { isOpen, onOpen, onOpenChange } = useDisclosure();
@@ -145,13 +145,12 @@ export function SteamCatalogGrid({
 
   const libraryGamesMap = useMemo(() => {
     const map = new Map<string, ConfiguredGame>();
-    if (!config?.games) return map;
-    for (const g of config.games) {
+    for (const g of games) {
       if (g.steamAppId) map.set(String(g.steamAppId), g);
       map.set(g.id.toLowerCase(), g);
     }
     return map;
-  }, [config?.games]);
+  }, [games]);
 
   return (
     <>

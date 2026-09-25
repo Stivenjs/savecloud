@@ -11,6 +11,7 @@ import {
 import { useProfileSession } from "@hooks/useProfileSession";
 import { useGameRunningStatus } from "@hooks/useGameRunningStatus";
 import { useGameStat } from "@hooks/useGameStat";
+import { useLibrary } from "@hooks/useLibrary";
 import { getGameLibraryHeroUrl, getSteamAppId, isSteamMoviePosterUrl, isSteamAppId } from "@utils/gameImage";
 import { configuredGameFromSteamCatalogRouteId, isSteamCatalogRouteGameId } from "@utils/steamCatalogGameId";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
@@ -38,13 +39,14 @@ export function useGameDetail() {
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
+  const { games, loading: isLibraryLoading } = useLibrary();
 
   const game: ConfiguredGame | undefined = useMemo(() => {
     if (!gameId) return undefined;
-    const fromConfig = config?.games.find((g) => g.id === gameId);
+    const fromConfig = games.find((g) => g.id === gameId);
     if (fromConfig) return fromConfig;
     return configuredGameFromSteamCatalogRouteId(gameId) ?? undefined;
-  }, [config?.games, gameId]);
+  }, [games, gameId]);
 
   const steamAppId = useMemo(
     () => (game ? getSteamAppId(game, navState?.resolvedSteamAppId) : null),
@@ -99,7 +101,9 @@ export function useGameDetail() {
   }, [game, navState?.resolvedSteamAppId]);
 
   const isLoading =
-    !gameId || (!isCatalogRoute && isConfigLoading) || (!!steamAppId && isSteamLoading && !catalogMedia);
+    !gameId ||
+    (!isCatalogRoute && (isConfigLoading || isLibraryLoading)) ||
+    (!!steamAppId && isSteamLoading && !catalogMedia);
 
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
 

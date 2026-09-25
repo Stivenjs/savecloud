@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { checkGamesRunning } from "@services/tauri";
-import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
+import { LIBRARY_QUERY_KEY } from "@hooks/useLibrary";
 import { GAME_STATS_QUERY_KEY } from "@hooks/useGameStat";
 import { useGameSessionStore } from "@store/GameSessionStore";
 
@@ -68,13 +68,9 @@ export function useGameRunningStatus(gameIds: readonly string[]): Record<string,
       const unlistenTime = await listen<PlaytimePayload>("playtime-updated", (event) => {
         const { gameId, newTime } = event.payload;
 
-        queryClient.setQueryData(CONFIG_QUERY_KEY, (oldConfig: any) => {
-          if (!oldConfig) return oldConfig;
-          return {
-            ...oldConfig,
-            games: oldConfig.games.map((g: any) => (g.id === gameId ? { ...g, playtimeSeconds: newTime } : g)),
-          };
-        });
+        queryClient.setQueryData(LIBRARY_QUERY_KEY, (oldGames: any[] | undefined) =>
+          oldGames?.map((game) => (game.id === gameId ? { ...game, playtimeSeconds: newTime } : game))
+        );
 
         queryClient.setQueryData(GAME_STATS_QUERY_KEY, (oldStats: any[] | undefined) => {
           if (!oldStats) return oldStats;
@@ -93,10 +89,9 @@ export function useGameRunningStatus(gameIds: readonly string[]): Record<string,
       unlisteners.push(unlistenTime);
 
       const unlistenTotal = await listen<number>("total-playtime-updated", (event) => {
-        queryClient.setQueryData(CONFIG_QUERY_KEY, (oldConfig: any) => {
-          if (!oldConfig) return oldConfig;
-          return { ...oldConfig, totalPlaytime: event.payload };
-        });
+        queryClient.setQueryData(["config"], (oldConfig: any) =>
+          oldConfig ? { ...oldConfig, totalPlaytime: event.payload } : oldConfig
+        );
       });
 
       if (cancelled) {

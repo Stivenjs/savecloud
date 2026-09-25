@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSyncStore } from "@store/SyncStore";
-import { getConfig, syncDownloadAllGames, syncUploadAllGames, createAndUploadFullBackup } from "@services/tauri";
+import { getLibrary, syncDownloadAllGames, syncUploadAllGames, createAndUploadFullBackup } from "@services/tauri";
 import { toastDownloadResult, toastError, toastSuccess, toastSyncResult } from "@utils/toast";
 import {
   notifyBatchDownloadDone,
@@ -72,12 +72,12 @@ export function TrayActionsListener() {
     const unsubBackup = listen("tray-action-backup-first", async () => {
       let config;
       try {
-        config = await getConfig();
+        config = await getLibrary();
       } catch {
         toastError(t("common.error"), t("tray.readConfigError"));
         return;
       }
-      const firstGameId = config?.games?.[0]?.id;
+      const firstGameId = config[0]?.id;
       if (!firstGameId) {
         toastError(t("tray.noGamesTitle"), t("tray.noGamesDesc"));
         return;

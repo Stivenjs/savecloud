@@ -13,7 +13,7 @@ import {
   type SyncResult,
   type UnsyncedGame,
 } from "@services/tauri";
-import type { ConfiguredGame, Config } from "@savecloud/types";
+import type { ConfiguredGame } from "@savecloud/types";
 import { formatGameDisplayName, findConfiguredGame } from "@utils/gameImage";
 import {
   notifyBatchDownloadDone,
@@ -26,6 +26,7 @@ import { toastDownloadResult, toastError, toastSuccess, toastSyncResult } from "
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSyncStore } from "@store/SyncStore";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
+import { LIBRARY_QUERY_KEY } from "@hooks/useLibrary";
 import { GAMIFICATION_QUERY_KEY } from "@hooks/useGamification";
 import i18n from "@lib/i18n";
 
@@ -42,7 +43,7 @@ export interface DownloadConflictItem {
 }
 
 interface UseGamesSyncActionsProps {
-  config: Config | null | undefined;
+  games: readonly ConfiguredGame[];
   hasSyncConfig: boolean;
   refetchConfig?: () => Promise<unknown> | void;
   refetchLastSync?: () => void;
@@ -54,7 +55,7 @@ interface UseGamesSyncActionsProps {
 }
 
 export function useGamesSyncActions({
-  config,
+  games,
   hasSyncConfig,
   refetchConfig,
   refetchLastSync,
@@ -94,6 +95,7 @@ export function useGamesSyncActions({
         refetchConfig?.(),
         refetchLastSync?.(),
         queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY, type: "active" }),
+        queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY, type: "active" }),
         queryClient.invalidateQueries({ queryKey: ["game-stats"], type: "active" }),
         queryClient.invalidateQueries({ queryKey: ["unsynced-games"], type: "active" }),
         queryClient.invalidateQueries({ queryKey: ["last-sync-info"], type: "active" }),
@@ -140,7 +142,7 @@ export function useGamesSyncActions({
 
   const handleRetryOperationError = (gameId: string, opType: "sync" | "download") => {
     setOperationResult(null);
-    const game = findConfiguredGame(config?.games, gameId);
+    const game = findConfiguredGame(games, gameId);
     if (game) {
       setSyncPreview(game, opType === "sync" ? "upload" : "download");
     }
@@ -219,7 +221,7 @@ export function useGamesSyncActions({
   };
 
   const restoreWizardTriggerDownload = (gameId: string) => {
-    const game = findConfiguredGame(config?.games, gameId);
+    const game = findConfiguredGame(games, gameId);
     if (!game) {
       toastError(i18n.t("library.toast.gameNotFoundAfterLink"), i18n.t("library.toast.gameNotFoundAfterLinkDesc"));
       return;
@@ -304,7 +306,7 @@ export function useGamesSyncActions({
   };
 
   const executeSyncAll = async () => {
-    if (!config?.games?.length) return;
+    if (!games.length) return;
     setSyncing("all");
     setSyncOperation({ type: "upload", mode: "batch", gameId: null, operationId: "sync-upload-batch" });
     setOperationResult(null);
@@ -339,7 +341,7 @@ export function useGamesSyncActions({
   };
 
   const executeDownloadAll = async () => {
-    if (!config?.games?.length) return;
+    if (!games.length) return;
     setSyncOperation({ type: "download", mode: "batch", gameId: null, operationId: "sync-download-batch" });
     let totalResult = { okCount: 0, errCount: 0, errors: [] as string[] };
     try {
@@ -372,11 +374,11 @@ export function useGamesSyncActions({
   };
 
   const handleDownloadAll = async () => {
-    if (!config?.games?.length) return;
+    if (!games.length) return;
     setDownloading("all");
     setOperationResult(null);
     try {
-      const batchResults = await syncCheckDownloadConflictsBatch(config.games.map((g: ConfiguredGame) => g.id));
+      const batchResults = await syncCheckDownloadConflictsBatch(games.map((g) => g.id));
       const gamesWithConflicts = batchResults
         .filter((r) => r.conflicts.length > 0)
         .map((r) => ({

@@ -1,5 +1,6 @@
 import { useMemo, useCallback } from "react";
 import { useConfig, CONFIG_QUERY_KEY } from "@hooks/useConfig";
+import { LIBRARY_QUERY_KEY, useLibrary } from "@hooks/useLibrary";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
@@ -19,6 +20,7 @@ export type { OperationResult } from "@features/games/hooks/useGamesSyncActions"
 export function useGamesPage() {
   const queryClient = useQueryClient();
   const { config, loading, error, refetch } = useConfig();
+  const { games } = useLibrary();
   const { activeProfile } = useProfileSession();
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
   const hasSyncConfig = hasUsableCloudConnection(cloudConfig);
@@ -35,13 +37,14 @@ export function useGamesPage() {
 
   const invalidateConfig = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+    queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY });
     refetch?.();
   }, [queryClient, refetch]);
 
-  const filtering = useGamesFiltering(config?.games ?? [], cloudGames.length);
+  const filtering = useGamesFiltering(games, cloudGames.length);
 
   const modals = useGamesModals({
-    gamesCount: config?.games?.length ?? 0,
+    gamesCount: games.length,
     onRefresh: () => syncActions.handleRefresh(),
     onInvalidateConfig: invalidateConfig,
   });
@@ -55,7 +58,7 @@ export function useGamesPage() {
   );
 
   const syncActions = useGamesSyncActions({
-    config,
+    games,
     hasSyncConfig,
     refetchConfig: refetch,
     refetchLastSync,
@@ -68,6 +71,7 @@ export function useGamesPage() {
 
   return {
     config,
+    games,
     loading,
     error,
     refetch,

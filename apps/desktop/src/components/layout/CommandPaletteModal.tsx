@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Modal, ModalContent, Kbd, Spinner } from "@heroui/react";
 import { Search, Gamepad2, ArrowRight, Settings, Users, History, Library, LayoutGrid, ShieldAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useConfig } from "@hooks/useConfig";
+import { useLibrary } from "@hooks/useLibrary";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
 import { useGameMedia, useGameMediaBatch, getIsResolvingIds } from "@hooks/useGameMedia";
@@ -92,7 +92,7 @@ function CommandPaletteGameThumbnail({
 export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { config } = useConfig();
+  const { games } = useLibrary();
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -110,7 +110,7 @@ export function CommandPaletteModal({ isOpen, onClose }: CommandPaletteModalProp
     }
   }, [isOpen]);
 
-  const configuredGames: readonly ConfiguredGame[] = useMemo(() => config?.games ?? [], [config?.games]);
+  const configuredGames: readonly ConfiguredGame[] = useMemo(() => games, [games]);
 
   useEffect(() => {
     const trimmed = query.trim();

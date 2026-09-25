@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useCallback } from "react";
 import { Gamepad2 } from "lucide-react";
 import { Skeleton } from "@heroui/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useConfig } from "@hooks/useConfig";
+import { useLibrary } from "@hooks/useLibrary";
 import { searchSteamAppId, type SteamAppdetailsMediaResult } from "@services/tauri";
 import { globalFailedImages, globalLoadedImages } from "@hooks/useGameMedia";
 import {
@@ -51,14 +51,14 @@ export function PlayingGameThumbnail({
   className = "",
   showGlow = false,
 }: PlayingGameThumbnailProps) {
-  const { config } = useConfig();
+  const { games } = useLibrary();
   const queryClient = useQueryClient();
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [hasError, setHasError] = useState(false);
 
   const configuredGame = useMemo(() => {
-    return findConfiguredGame(config?.games, gameId) || findConfiguredGame(config?.games, gameName);
-  }, [config?.games, gameId, gameName]);
+    return findConfiguredGame(games, gameId) || findConfiguredGame(games, gameName);
+  }, [games, gameId, gameName]);
 
   const resolvedSteamAppId = useMemo(() => {
     if (steamAppId?.trim()) return steamAppId.trim();

@@ -42,12 +42,13 @@ import { PlayingStatusBadge } from "@features/games/PlayingStatusBadge";
 import { useGameSessionStore } from "@store/GameSessionStore";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Config } from "@app-types/config";
+import type { AppSettingsConfig } from "@app-types/config";
 import type { GamificationState } from "@app-types/gamification";
 import type { ConnectionStatus } from "@hooks/useLastSyncInfo";
 import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
 import { useProfileSession } from "@hooks/useProfileSession";
+import { useLibrary } from "@hooks/useLibrary";
 import {
   readImageAsDataUrl,
   scheduleConfigBackupToCloud,
@@ -65,7 +66,7 @@ import { useTranslation } from "react-i18next";
 interface ProfileDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  config: Config | null;
+  config: AppSettingsConfig | null;
   gamification?: GamificationState | null;
   hasSyncConfig?: boolean;
   connectionStatus?: ConnectionStatus;
@@ -112,6 +113,7 @@ export function ProfileDrawer({
   const { t } = useTranslation();
   const bp = bigPictureConsole;
   const { activeProfile } = useProfileSession();
+  const { games } = useLibrary();
   const queryClient = useQueryClient();
   const [bg, setBg] = useState("");
   const [avatar, setAvatar] = useState("");
@@ -131,7 +133,7 @@ export function ProfileDrawer({
     setShareVisualWithMembers(config.shareVisualProfileWithMembers ?? false);
   }, [activeProfile?.localUserId, config, isOpen]);
 
-  const gamesCount = config?.games?.length ?? 0;
+  const gamesCount = games.length;
   const totalSeconds = config?.totalPlaytime ?? 0;
   const userId = activeProfile?.localUserId?.trim() || config?.userId?.trim() || "";
   const displayName = userId || t("profile.selector.noUser");

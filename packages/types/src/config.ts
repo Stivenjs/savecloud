@@ -90,3 +90,6 @@ export interface Config {
   /** Posición de las notificaciones de overlay en pantalla. */
   readonly overlayNotificationPosition?: "bottom-right" | "top-right" | "top-left" | "bottom-left";
 }
+
+/** Preferencias y credenciales del perfil activo, sin la biblioteca de juegos. */
+export type AppSettingsConfig = Omit<Config, "games">;

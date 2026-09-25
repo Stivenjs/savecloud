@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useConfig } from "@hooks/useConfig";
+import { useLibrary } from "@hooks/useLibrary";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
@@ -44,6 +45,7 @@ interface CloudIncomingMessage {
  */
 export function useCloudWebSockets() {
   const { config, loading: configLoading, refetch } = useConfig();
+  const { games } = useLibrary();
   const { activeProfile, loading: profileLoading } = useProfileSession();
   const queryClient = useQueryClient();
 
@@ -73,8 +75,8 @@ export function useCloudWebSockets() {
   const activeUserId = activeProfile?.localUserId?.trim() ?? "";
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
 
-  const gamesRef = useRef<readonly ConfiguredGame[] | undefined>(config?.games);
-  gamesRef.current = config?.games;
+  const gamesRef = useRef<readonly ConfiguredGame[]>(games);
+  gamesRef.current = games;
 
   const lastActiveUserIdRef = useRef(activeUserId);
   if (lastActiveUserIdRef.current !== activeUserId) {

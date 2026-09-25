@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getConfig } from "@services/tauri";
 import { listen } from "@tauri-apps/api/event";
 import { queryClient } from "@lib/queryClient";
+import { LIBRARY_QUERY_KEY } from "@hooks/useLibrary";
 
 export const CONFIG_QUERY_KEY = ["config"] as const;
 
@@ -12,6 +13,7 @@ function registerConfigListener() {
   isConfigListenerRegistered = true;
   void listen("config-changed", () => {
     void queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+    void queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY });
   });
 }
 

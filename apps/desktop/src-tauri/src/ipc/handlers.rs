@@ -14,6 +14,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::torrent::commands::download_torrent_from_cloud,
         crate::torrent::commands::delete_cloud_torrent,
         crate::config::config_cmds::get_config,
+        crate::config::config_cmds::get_library,
         crate::config::config_cmds::get_config_path,
         crate::config::config_cmds::create_config_file,
         crate::config::config_cmds::set_keep_backups_per_game,

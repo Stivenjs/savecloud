@@ -58,16 +58,11 @@ fn expand_path(raw: &str) -> Option<PathBuf> {
 
 /// Extrae y compone el objeto de configuración principal para ser entregado a la UI.
 ///
-/// — Una sola lectura de disco vía `load_settings()` + `load_library()`.
-/// — El mapa Steam se construye una única vez y se reutiliza para todos los juegos.
-/// — Los campos `profile_*` y las claves enmascaradas se extraen del mismo `settings`
-///   sin necesidad de una segunda llamada a `get_combined_config`.
+/// — Lee solo ajustes del perfil activo; la biblioteca tiene su propio comando.
+/// — Evita cargar la lista completa de juegos para consultar preferencias globales.
 #[tauri::command]
 pub fn get_config() -> ConfigDto {
     let settings = config::load_settings();
-    let library = config::load_library();
-
-    let steam_map = steam::get_steam_path_to_appid_map();
 
     ConfigDto {
         api_base_url: settings.api_base_url.clone(),
@@ -121,44 +116,50 @@ pub fn get_config() -> ConfigDto {
         torrent_seeding_mode: settings.torrent_seeding_mode,
         auto_sync_on_game_exit: settings.auto_sync_on_game_exit,
         overlay_notification_position: settings.overlay_notification_position,
-        games: library
-            .games
-            .into_iter()
-            .map(|game| {
-                let ConfiguredGame {
-                    id,
-                    paths,
-                    steam_app_id,
-                    image_url,
-                    executable_names,
-                    edition_label,
-                    source_url,
-                    magnet_link,
-                    launch_executable_path,
-                    playtime_seconds,
-                } = game;
-                let steam_app_id = steam_app_id.or_else(|| {
-                    if image_url.is_none() {
-                        steam::resolve_app_id_for_game(&paths, &steam_map)
-                    } else {
-                        None
-                    }
-                });
-                GameDto {
-                    id,
-                    paths,
-                    steam_app_id,
-                    image_url,
-                    edition_label,
-                    source_url,
-                    magnet_link,
-                    executable_names,
-                    launch_executable_path,
-                    playtime_seconds,
-                }
-            })
-            .collect(),
     }
+}
+
+/// Obtiene la biblioteca del perfil activo sin incluirla en `get_config`.
+#[tauri::command]
+pub fn get_library() -> Vec<GameDto> {
+    let steam_map = steam::get_steam_path_to_appid_map();
+    config::load_library()
+        .games
+        .into_iter()
+        .map(|game| {
+            let ConfiguredGame {
+                id,
+                paths,
+                steam_app_id,
+                image_url,
+                executable_names,
+                edition_label,
+                source_url,
+                magnet_link,
+                launch_executable_path,
+                playtime_seconds,
+            } = game;
+            let steam_app_id = steam_app_id.or_else(|| {
+                if image_url.is_none() {
+                    steam::resolve_app_id_for_game(&paths, &steam_map)
+                } else {
+                    None
+                }
+            });
+            GameDto {
+                id,
+                paths,
+                steam_app_id,
+                image_url,
+                edition_label,
+                source_url,
+                magnet_link,
+                executable_names,
+                launch_executable_path,
+                playtime_seconds,
+            }
+        })
+        .collect()
 }
 
 /// Devuelve la ubicación absoluta del directorio de configuración de la app en disco.

@@ -208,6 +208,10 @@ async function renderShutdownWindowApp(): Promise<void> {
 async function showMainWindow(): Promise<void> {
   const appWindow = getCurrentWindow();
   await appWindow.show();
+  if (await appWindow.isMinimized()) {
+    await appWindow.unminimize();
+  }
+  await appWindow.setFocus();
 }
 
 async function maybeOpenStartupBigPicture(): Promise<void> {
