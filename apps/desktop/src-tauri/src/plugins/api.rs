@@ -335,10 +335,10 @@ fn register_games_module(lua: &Lua, parent_table: &Table, _app_handle: AppHandle
     let games_table = lua.create_table()?;
 
     let get_all = lua.create_function(|lua, ()| {
-        let cfg = config::load_config();
+        let library = config::load_library();
         let list = lua.create_table()?;
 
-        for (idx, game) in cfg.games.iter().enumerate() {
+        for (idx, game) in library.games.iter().enumerate() {
             let item = lua.create_table()?;
             item.set("id", game.id.clone())?;
             item.set("name", game.id.clone())?;
@@ -356,12 +356,7 @@ fn register_games_module(lua: &Lua, parent_table: &Table, _app_handle: AppHandle
     })?;
 
     let get = lua.create_function(|lua, game_id: String| {
-        let cfg = config::load_config();
-        if let Some(game) = cfg
-            .games
-            .iter()
-            .find(|g| g.id.eq_ignore_ascii_case(&game_id))
-        {
+        if let Ok(Some(game)) = config::load_game(&game_id) {
             let item = lua.create_table()?;
             item.set("id", game.id.clone())?;
             item.set("name", game.id.clone())?;
@@ -378,12 +373,7 @@ fn register_games_module(lua: &Lua, parent_table: &Table, _app_handle: AppHandle
     })?;
 
     let is_running = lua.create_function(|_, game_id: String| {
-        let cfg = config::load_config();
-        if let Some(game) = cfg
-            .games
-            .iter()
-            .find(|g| g.id.eq_ignore_ascii_case(&game_id))
-        {
+        if let Ok(Some(game)) = config::load_game(&game_id) {
             Ok(crate::system::process_check::is_game_running(
                 &game.id,
                 &game.paths,

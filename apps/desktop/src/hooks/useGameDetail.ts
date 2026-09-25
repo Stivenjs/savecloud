@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "react-router-dom";
 import {
-  getConfig,
   getSteamAppDetails,
   getSteamCatalogListingName,
   type SteamAppDetailsResult,
@@ -12,6 +11,7 @@ import { useProfileSession } from "@hooks/useProfileSession";
 import { useGameRunningStatus } from "@hooks/useGameRunningStatus";
 import { useGameStat } from "@hooks/useGameStat";
 import { useLibrary } from "@hooks/useLibrary";
+import { useConfig } from "@hooks/useConfig";
 import { getGameLibraryHeroUrl, getSteamAppId, isSteamMoviePosterUrl, isSteamAppId } from "@utils/gameImage";
 import { configuredGameFromSteamCatalogRouteId, isSteamCatalogRouteGameId } from "@utils/steamCatalogGameId";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
@@ -33,17 +33,12 @@ export function useGameDetail() {
   const { activeProfile } = useProfileSession();
   const queryClient = useQueryClient();
 
-  const { data: config, isLoading: isConfigLoading } = useQuery({
-    queryKey: ["config"],
-    queryFn: getConfig,
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
-  });
+  const { config, loading: isConfigLoading } = useConfig();
   const { games, loading: isLibraryLoading } = useLibrary();
 
   const game: ConfiguredGame | undefined = useMemo(() => {
     if (!gameId) return undefined;
-    const fromConfig = games.find((g) => g.id === gameId);
+    const fromConfig = games.find((g: ConfiguredGame) => g.id === gameId);
     if (fromConfig) return fromConfig;
     return configuredGameFromSteamCatalogRouteId(gameId) ?? undefined;
   }, [games, gameId]);
@@ -90,7 +85,7 @@ export function useGameDetail() {
   const mediaUrls = useMemo(() => {
     const raw = steamDetails?.media.mediaUrls?.length ? steamDetails.media.mediaUrls : catalogMedia?.mediaUrls;
     if (!raw?.length) return [];
-    return raw.slice(1).filter((u) => !isSteamMoviePosterUrl(u));
+    return raw.slice(1).filter((u: string) => !isSteamMoviePosterUrl(u));
   }, [steamDetails, catalogMedia]);
 
   const videoUrl = steamDetails?.media.videoUrl ?? catalogMedia?.videoUrl ?? null;

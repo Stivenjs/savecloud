@@ -90,9 +90,9 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
             .map_err(|e| e.to_string())?
             .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
 
-    let cfg = crate::config::load_config();
+    let library = crate::config::load_library();
     let mut priority_ids = trending_ids;
-    for g in cfg.games {
+    for g in library.games {
         if let Some(ref sa_id) = g.steam_app_id {
             if let Ok(id) = sa_id.trim().parse::<u32>() {
                 if id > 0 && !priority_ids.contains(&id) {

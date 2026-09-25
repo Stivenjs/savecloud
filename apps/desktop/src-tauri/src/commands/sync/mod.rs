@@ -26,11 +26,7 @@ use models::SaveFileDto;
 /// Lista archivos de guardado de un juego configurado.
 #[tauri::command]
 pub async fn list_save_files(game_id: String) -> Result<Vec<SaveFileDto>, String> {
-    let cfg = crate::config::load_config();
-    let game = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+    let game = crate::config::load_game(&game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     let files = crate::utils::path_utils::list_all_files_from_paths(&game.paths);
@@ -43,12 +39,7 @@ pub async fn list_save_files(game_id: String) -> Result<Vec<SaveFileDto>, String
 /// Comprueba si el juego está en ejecución (para mostrar advertencia en la UI).
 #[tauri::command]
 pub fn check_game_running(game_id: String) -> bool {
-    let cfg = crate::config::load_config();
-    let Some(game) = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
-    else {
+    let Ok(Some(game)) = crate::config::load_game(&game_id) else {
         return false;
     };
     crate::system::process_check::is_game_running(&game_id, &game.paths)

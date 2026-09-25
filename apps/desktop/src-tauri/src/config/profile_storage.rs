@@ -452,10 +452,13 @@ pub fn delete_profile_storage(profile_id: &str) -> Result<(), String> {
 }
 
 pub fn load_library() -> GameLibrary {
-    scoped_or_legacy_path(paths::LIBRARY_FILE_NAME)
-        .and_then(|path| fs::read_to_string(path).ok())
-        .and_then(|content| serde_json::from_str(&content).ok())
-        .unwrap_or_default()
+    let Some(path) = scoped_or_legacy_path(paths::LIBRARY_FILE_NAME) else {
+        return GameLibrary::default();
+    };
+    let Ok(file) = fs::File::open(path) else {
+        return GameLibrary::default();
+    };
+    serde_json::from_reader(std::io::BufReader::new(file)).unwrap_or_default()
 }
 
 pub fn load_game(game_id: &str) -> Result<Option<ConfiguredGame>, String> {

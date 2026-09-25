@@ -312,11 +312,7 @@ pub(crate) async fn sync_upload_game_impl(
     tray_inner: Option<std::sync::Arc<crate::tray::tray_state::TrayStateInner>>,
 ) -> Result<SyncResultDto, String> {
     let api_ctx = super::context::resolve_api_context()?;
-    let cfg = crate::config::load_config();
-    let game = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+    let game = crate::config::load_game(&game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     if crate::system::process_check::is_game_running(&game_id, &game.paths) {
@@ -326,7 +322,8 @@ pub(crate) async fn sync_upload_game_impl(
         ));
     }
 
-    let user_id = cfg
+    let settings = crate::config::load_settings();
+    let user_id = settings
         .user_id
         .as_deref()
         .filter(|s| !s.trim().is_empty())
@@ -663,7 +660,7 @@ pub async fn sync_upload_all_games(
     tray_state: State<'_, TrayState>,
 ) -> Result<Vec<GameSyncResultDto>, String> {
     let _ = super::context::resolve_api_context()?;
-    let cfg = crate::config::load_config();
+    let cfg = crate::config::load_settings();
     let _ = cfg
         .user_id
         .as_deref()
@@ -677,7 +674,8 @@ pub async fn sync_upload_all_games(
 
     let mut results_by_id: HashMap<String, GameSyncResultDto> = HashMap::new();
 
-    for game in &cfg.games {
+    let library = crate::config::load_library();
+    for game in &library.games {
         if crate::system::process_check::is_game_running(&game.id, &game.paths) {
             let game_id = game.id.clone();
             results_by_id.insert(
@@ -697,7 +695,7 @@ pub async fn sync_upload_all_games(
         }
     }
 
-    let to_sync: Vec<String> = cfg
+    let to_sync: Vec<String> = library
         .games
         .iter()
         .filter(|g| !results_by_id.contains_key(&g.id))
@@ -756,7 +754,7 @@ pub async fn sync_upload_all_games(
         );
     }
 
-    let results: Vec<GameSyncResultDto> = cfg
+    let results: Vec<GameSyncResultDto> = library
         .games
         .iter()
         .map(|g| results_by_id.get(&g.id).cloned().expect("result per game"))

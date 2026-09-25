@@ -648,7 +648,7 @@ mod windows_scanners {
     }
 }
 
-fn base_scan_jobs(cfg: &config::Config, env: &EnvContext) -> Vec<(String, String)> {
+fn base_scan_jobs(cfg: &config::AppSettings, env: &EnvContext) -> Vec<(String, String)> {
     let mut jobs: Vec<(String, String)> = paths::base_scan_templates()
         .iter()
         .filter_map(|entry| expand_path(&entry.path, env).map(|exp| (exp, entry.label.clone())))
@@ -822,7 +822,7 @@ fn build_official_path_index(candidates: &[PathCandidateDto]) -> HashSet<String>
 pub fn scan_path_candidates_sync(
     manifest_index: Option<crate::manifest::ManifestIndex>,
 ) -> Vec<PathCandidateDto> {
-    let cfg = config::load_config();
+    let cfg = config::load_settings();
     let env = EnvContext::resolve();
     let mut list = CandidateList::new();
 

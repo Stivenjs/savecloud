@@ -247,14 +247,10 @@ pub async fn upload_game_clip(
     let api_key = api_ctx.api_key;
     let user_id = api_ctx.user_id;
 
-    let cfg = crate::config::load_config();
-    let found_game = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id));
+    let found_game = crate::config::load_game(&game_id).ok().flatten();
 
     let detected_steam_id: Option<String> =
-        found_game.and_then(|g| g.steam_app_id.clone()).or_else(|| {
+        found_game.as_ref().and_then(|g| g.steam_app_id.clone()).or_else(|| {
             if game_id.chars().all(|c| c.is_ascii_digit()) {
                 Some(game_id.clone())
             } else if let Some(pos) = game_id.rfind('-') {
@@ -270,6 +266,7 @@ pub async fn upload_game_clip(
         });
 
     let detected_poster_url: Option<String> = found_game
+        .as_ref()
         .and_then(|g| g.image_url.clone())
         .or_else(|| {
             detected_steam_id.as_ref().map(|id| {

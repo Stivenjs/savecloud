@@ -53,6 +53,7 @@ pub async fn set_active_profile_cmd(profile_id: String) -> Result<ProfileDTO, St
     let mut index = ProfileManager::load_profiles()?;
     let profile = ProfileManager::set_active_profile(&mut index, &profile_id)?;
     super::io::invalidate_config_cache();
+    super::io::invalidate_library_index();
     Ok(merge_profile_dto_disk_session(ProfileDTO::from(&profile)))
 }
 

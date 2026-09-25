@@ -155,12 +155,73 @@ pub fn are_games_running(game_ids: &[String]) -> HashMap<String, bool> {
 pub fn scan_games_running(
     game_ids: &[String],
 ) -> (HashMap<String, bool>, Vec<DetectedGameProcess>) {
-    let cfg = config::load_config();
-    scan_games_running_with_config(&cfg, game_ids)
+    if game_ids.is_empty() {
+        return (HashMap::new(), Vec::new());
+    }
+
+    let settings = config::load_settings();
+    let tracked_games = if let [game_id] = game_ids {
+        config::load_game(game_id)
+            .ok()
+            .flatten()
+            .map(|game| {
+                vec![TrackedGameExecutables::from_game(
+                    &game.id,
+                    game.executable_names.as_deref(),
+                )]
+            })
+            .unwrap_or_default()
+    } else {
+        config::load_library()
+            .games
+            .iter()
+            .map(|game| {
+                TrackedGameExecutables::from_game(&game.id, game.executable_names.as_deref())
+            })
+            .collect()
+    };
+    scan_games_running_with_index(
+        &tracked_games,
+        settings.game_mode_boost_detected_game_cpu,
+        game_ids,
+    )
 }
 
-pub fn scan_games_running_with_config(
-    cfg: &config::Config,
+#[derive(Clone)]
+struct TrackedGameExecutables {
+    game_id: String,
+    executable_names: Vec<String>,
+}
+
+impl TrackedGameExecutables {
+    fn from_game(game_id: &str, configured_names: Option<&[String]>) -> Self {
+        let configured = configured_names
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|name| {
+                let trimmed = name.trim();
+                (!trimmed.is_empty()).then(|| ensure_exe_ext(trimmed).to_lowercase())
+            })
+            .collect::<Vec<_>>();
+        let executable_names = if configured.is_empty() {
+            infer_exe_candidates(game_id)
+                .into_iter()
+                .map(|name| name.to_lowercase())
+                .collect()
+        } else {
+            configured
+        };
+
+        Self {
+            game_id: game_id.to_string(),
+            executable_names,
+        }
+    }
+}
+
+fn scan_games_running_with_index(
+    tracked_games: &[TrackedGameExecutables],
+    boost_detected_game_cpu: bool,
     game_ids: &[String],
 ) -> (HashMap<String, bool>, Vec<DetectedGameProcess>) {
     let mut result: HashMap<String, bool> = HashMap::with_capacity(game_ids.len());
@@ -175,33 +236,12 @@ pub fn scan_games_running_with_config(
     for id in game_ids {
         result.insert(id.clone(), false);
 
-        if let Some(game) = cfg.games.iter().find(|g| g.id.eq_ignore_ascii_case(id)) {
-            let mut names: Vec<String> = Vec::new();
-
-            if let Some(ref execs) = game.executable_names {
-                if !execs.is_empty() {
-                    names = execs
-                        .iter()
-                        .filter_map(|s| {
-                            let t = s.trim();
-                            if t.is_empty() {
-                                None
-                            } else {
-                                Some(ensure_exe_ext(t))
-                            }
-                        })
-                        .collect();
-                }
-            }
-
-            if names.is_empty() {
-                names = infer_exe_candidates(id);
-            }
-
-            if !names.is_empty() {
-                let names_lower: Vec<String> =
-                    names.into_iter().map(|n| n.to_lowercase()).collect();
-                names_by_game.insert(game.id.clone(), names_lower);
+        if let Some(game) = tracked_games
+            .iter()
+            .find(|game| game.game_id.eq_ignore_ascii_case(id))
+        {
+            if !game.executable_names.is_empty() {
+                names_by_game.insert(game.game_id.clone(), game.executable_names.clone());
             }
         }
     }
@@ -282,7 +322,7 @@ pub fn scan_games_running_with_config(
         }
     }
 
-    if cfg.game_mode_boost_detected_game_cpu && !pools.is_empty() {
+    if boost_detected_game_cpu && !pools.is_empty() {
         let pids_to_refresh: Vec<Pid> = pools
             .values()
             .flat_map(|cands| cands.iter().map(|c| Pid::from_u32(c.pid)))
@@ -366,7 +406,9 @@ pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationTok
     let mut previous_state: HashMap<String, bool> = HashMap::new();
     let mut last_checkpoint: HashMap<String, Instant> = HashMap::new();
     let mut last_config_rev = 0u64;
+    let mut last_library_rev = 0u64;
     let mut cached_game_ids: Vec<String> = Vec::new();
+    let mut cached_game_index: Vec<TrackedGameExecutables> = Vec::new();
     let mut cached_boost_detected = false;
 
     loop {
@@ -379,14 +421,31 @@ pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationTok
         let current_rev = config::config_revision();
         if current_rev != last_config_rev {
             last_config_rev = current_rev;
-            config::with_config(|cfg| {
-                cached_game_ids = cfg.games.iter().map(|g| g.id.clone()).collect();
-                cached_boost_detected = cfg.game_mode_boost_detected_game_cpu;
-            });
+            cached_boost_detected = config::load_settings().game_mode_boost_detected_game_cpu;
         }
 
-        let (current, pid_candidates) =
-            config::with_config(|cfg| scan_games_running_with_config(cfg, &cached_game_ids));
+        let current_library_rev = config::library_revision();
+        if current_library_rev != last_library_rev {
+            last_library_rev = current_library_rev;
+            let library = config::load_library();
+            cached_game_ids = library.games.iter().map(|game| game.id.clone()).collect();
+            cached_game_index = library
+                .games
+                .iter()
+                .map(|game| {
+                    TrackedGameExecutables::from_game(
+                        &game.id,
+                        game.executable_names.as_deref(),
+                    )
+                })
+                .collect();
+        }
+
+        let (current, pid_candidates) = scan_games_running_with_index(
+            &cached_game_index,
+            cached_boost_detected,
+            &cached_game_ids,
+        );
 
         sync_detected_game_cpu_boost(
             cached_boost_detected,
@@ -485,26 +544,15 @@ struct Payload {
 /// # Returns
 /// Una lista de nombres de ejecutables a monitorear para el juego.
 fn get_executable_names_to_check(game_id: &str) -> Vec<String> {
-    let cfg = config::load_config();
-    if let Some(game) = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(game_id))
-    {
-        if let Some(ref names) = game.executable_names {
-            if !names.is_empty() {
-                return names
-                    .iter()
-                    .filter_map(|s| {
-                        let t = s.trim().to_string();
-                        if t.is_empty() {
-                            None
-                        } else {
-                            Some(ensure_exe_ext(&t))
-                        }
-                    })
-                    .collect();
-            }
+    if let Ok(Some(game)) = config::load_game(game_id) {
+        if let Some(names) = game.executable_names.filter(|names| !names.is_empty()) {
+            return names
+                .iter()
+                .filter_map(|name| {
+                    let trimmed = name.trim();
+                    (!trimmed.is_empty()).then(|| ensure_exe_ext(trimmed))
+                })
+                .collect();
         }
     }
     infer_exe_candidates(game_id)

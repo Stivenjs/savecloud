@@ -174,11 +174,7 @@ fn build_edge(source: &str, target: &str, relation: &str, animated: bool) -> Sav
 }
 
 async fn build_game_save_graph(game_id: &str) -> Result<GameSaveGraphDto, String> {
-    let cfg = config::load_config();
-    let game = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(game_id))
+    let game = config::load_game(game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     let history = config::load_history();
@@ -386,9 +382,9 @@ fn local_stats_for_paths(paths: &[String]) -> (u64, Option<std::time::SystemTime
 
 #[tauri::command]
 pub async fn get_game_stats() -> Result<Vec<GameStatsDto>, String> {
-    let cfg = config::load_config();
+    let library = config::load_library();
 
-    let playtime_map: HashMap<String, u64> = cfg
+    let playtime_map: HashMap<String, u64> = library
         .games
         .iter()
         .map(|g| (g.id.to_lowercase(), g.playtime_seconds))
@@ -425,8 +421,8 @@ pub async fn get_game_stats() -> Result<Vec<GameStatsDto>, String> {
             Err(_) => HashMap::new(),
         };
 
-    let mut handles = Vec::with_capacity(cfg.games.len());
-    for game in &cfg.games {
+    let mut handles = Vec::with_capacity(library.games.len());
+    for game in &library.games {
         let id = game.id.clone();
         let paths = game.paths.clone();
         handles.push(tokio::task::spawn_blocking(move || {

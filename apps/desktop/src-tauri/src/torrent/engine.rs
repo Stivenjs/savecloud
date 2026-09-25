@@ -194,10 +194,10 @@ impl TorrentEngine {
     /// El segundo intento se realiza sin `fastresume` para evitar cargar
     /// cualquier otro estado persistente potencialmente dañado.
     pub async fn new(output_folder: PathBuf) -> Result<Self, TorrentError> {
-        let initial_limits = crate::config::with_config(|cfg| {
+        let initial_limits = crate::config::with_settings(|settings| {
             build_limits_config(
-                cfg.torrent_download_limit_kbs,
-                cfg.torrent_upload_limit_kbs,
+                settings.torrent_download_limit_kbs,
+                settings.torrent_upload_limit_kbs,
             )
         });
 
@@ -967,8 +967,8 @@ pub fn spawn_progress_monitor(
                     crate::sources::torrent_complete_notify(&app, &info_hash, total_bytes);
                 }
 
-                let seeding_mode = crate::config::with_config(|cfg| {
-                    cfg.torrent_seeding_mode.clone()
+                let seeding_mode = crate::config::with_settings(|settings| {
+                    settings.torrent_seeding_mode.clone()
                 });
 
                 let should_stop_seeding = if seeding_mode == "seed_ratio_1" {

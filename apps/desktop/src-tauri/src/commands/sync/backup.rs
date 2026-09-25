@@ -74,11 +74,7 @@ fn copy_recursive_to(
 /// Lista los backups locales disponibles para un juego.
 #[tauri::command]
 pub fn list_backups(game_id: String) -> Result<Vec<BackupInfoDto>, String> {
-    let cfg = crate::config::load_config();
-    let _ = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+    let _game = crate::config::load_game(&game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     let backup_root = crate::config::config_dir()
@@ -135,11 +131,7 @@ pub fn list_backups(game_id: String) -> Result<Vec<BackupInfoDto>, String> {
 /// Restaura un backup local sobre los guardados del juego.
 #[tauri::command]
 pub fn restore_backup(game_id: String, backup_id: String) -> Result<SyncResultDto, String> {
-    let cfg = crate::config::load_config();
-    let game = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+    let game = crate::config::load_game(&game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     if crate::system::process_check::is_game_running(&game_id, &game.paths) {
@@ -188,7 +180,7 @@ pub const DEFAULT_KEEP_BACKUPS_PER_GAME: u32 = 10;
 /// Devuelve cuántos backups se borraron y en cuántos juegos.
 #[tauri::command]
 pub fn cleanup_old_backups(keep_last_n: u32) -> Result<CleanupBackupsResultDto, String> {
-    let cfg = crate::config::load_config();
+    let library = crate::config::load_library();
     let backup_root = crate::config::config_dir()
         .ok_or("No se pudo obtener directorio de configuración")?
         .join("backups");
@@ -203,7 +195,7 @@ pub fn cleanup_old_backups(keep_last_n: u32) -> Result<CleanupBackupsResultDto, 
     let mut total_deleted = 0u32;
     let mut games_affected = 0u32;
 
-    for game in &cfg.games {
+    for game in &library.games {
         let game_backup_dir = backup_root.join(&game.id);
         if !game_backup_dir.exists() || !game_backup_dir.is_dir() {
             continue;
