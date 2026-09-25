@@ -29,18 +29,6 @@ fn sources_path() -> Result<PathBuf, String> {
     Ok(path)
 }
 
-fn jobs_path() -> Result<PathBuf, String> {
-    let Some(path) =
-        crate::config::profile_storage::scoped_or_legacy_path(paths::ACTIVE_JOBS_FILE_NAME)
-    else {
-        return Err("No se pudo resolver active_jobs_path".to_string());
-    };
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    Ok(path)
-}
-
 fn remote_sources_path() -> Result<PathBuf, String> {
     let Some(path) =
         crate::config::profile_storage::scoped_or_legacy_path(paths::REMOTE_SOURCES_FILE_NAME)
@@ -605,19 +593,121 @@ pub fn remove_catalog(source_id: &str) -> Result<(), String> {
 
 /// Carga jobs activos/históricos.
 pub fn load_jobs() -> Result<Vec<SourceDownloadJob>, String> {
-    let path = resolve_read_path(paths::active_jobs_path(), paths::legacy_active_jobs_path())?;
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-    serde_json::from_slice(&bytes).map_err(|e| format!("No se pudo parsear active_jobs.json: {e}"))
+    let db = get_db()?;
+    db.with_conn(|conn| {
+        auto_migrate_legacy_jobs_if_needed(conn).map_err(to_sqlite_error)?;
+        let mut stmt = conn.prepare(JOB_SELECT)?;
+        let rows = stmt.query_map([], map_job)?;
+        rows.collect::<Result<Vec<_>, _>>()
+    })
+    .map_err(|e| e.to_string())
 }
 
-/// Guarda jobs.
-pub fn save_jobs(jobs: &[SourceDownloadJob]) -> Result<(), String> {
-    let path = jobs_path()?;
-    let payload = serde_json::to_vec_pretty(jobs).map_err(|e| e.to_string())?;
-    write_bytes_if_changed(&path, &payload)
+pub fn upsert_job(job: &SourceDownloadJob) -> Result<(), String> {
+    let db = get_db()?;
+    db.with_conn(|conn| {
+        auto_migrate_legacy_jobs_if_needed(conn).map_err(to_sqlite_error)?;
+        let tx = conn.unchecked_transaction()?;
+        upsert_job_in_tx(&tx, job)?;
+        tx.commit()
+    })
+    .map_err(|e| e.to_string())
+}
+
+pub fn load_job(job_id: &str) -> Result<Option<SourceDownloadJob>, String> {
+    let db = get_db()?;
+    db.with_conn(|conn| {
+        auto_migrate_legacy_jobs_if_needed(conn).map_err(to_sqlite_error)?;
+        conn.query_row(
+            &format!("{JOB_SELECT} WHERE job_id = ?1"),
+            rusqlite::params![job_id],
+            map_job,
+        )
+        .optional()
+    })
+    .map_err(|e| e.to_string())
+}
+
+pub fn delete_job(job_id: &str) -> Result<(), String> {
+    let db = get_db()?;
+    db.with_conn(|conn| {
+        auto_migrate_legacy_jobs_if_needed(conn).map_err(to_sqlite_error)?;
+        conn.execute("DELETE FROM download_jobs WHERE job_id = ?1", rusqlite::params![job_id])
+    })
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
+const JOB_SELECT: &str = "SELECT job_id, source_id, item_id, title, destination_dir, selected_uri, protocol, status, loaded, total, download_speed_bytes, eta_seconds, error, external_id, output_file_name, status_detail, created_at, updated_at FROM download_jobs";
+
+fn to_sqlite_error(error: String) -> rusqlite::Error {
+    rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(error)))
+}
+
+fn enum_json<T: serde::Serialize>(value: &T) -> Result<String, rusqlite::Error> {
+    serde_json::to_value(value)
+        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
+        .and_then(|value| value.as_str().map(str::to_owned).ok_or_else(|| {
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
+                "enum job invalido",
+            )))
+        }))
+}
+
+fn upsert_job_in_tx(
+    tx: &rusqlite::Transaction<'_>,
+    job: &SourceDownloadJob,
+) -> Result<(), rusqlite::Error> {
+    let protocol = enum_json(&job.protocol)?;
+    let status = enum_json(&job.status)?;
+    tx.execute(
+        "INSERT INTO download_jobs (job_id, source_id, item_id, title, destination_dir, selected_uri, protocol, status, loaded, total, download_speed_bytes, eta_seconds, error, external_id, output_file_name, status_detail, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+         ON CONFLICT(job_id) DO UPDATE SET source_id=excluded.source_id, item_id=excluded.item_id, title=excluded.title, destination_dir=excluded.destination_dir, selected_uri=excluded.selected_uri, protocol=excluded.protocol, status=excluded.status, loaded=excluded.loaded, total=excluded.total, download_speed_bytes=excluded.download_speed_bytes, eta_seconds=excluded.eta_seconds, error=excluded.error, external_id=excluded.external_id, output_file_name=excluded.output_file_name, status_detail=excluded.status_detail, created_at=excluded.created_at, updated_at=excluded.updated_at",
+        rusqlite::params![job.job_id, job.source_id, job.item_id, job.title, job.destination_dir, job.selected_uri, protocol, status, job.loaded as i64, job.total as i64, job.download_speed_bytes as i64, job.eta_seconds.map(|value| value as i64), job.error, job.external_id, job.output_file_name, job.status_detail, job.created_at, job.updated_at],
+    )?;
+    Ok(())
+}
+
+fn map_job(row: &rusqlite::Row<'_>) -> Result<SourceDownloadJob, rusqlite::Error> {
+    let protocol: String = row.get(6)?;
+    let status: String = row.get(7)?;
+    let protocol = serde_json::from_value(serde_json::Value::String(protocol))
+        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(6, rusqlite::types::Type::Text, Box::new(e)))?;
+    let status = serde_json::from_value(serde_json::Value::String(status))
+        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(7, rusqlite::types::Type::Text, Box::new(e)))?;
+    let loaded: i64 = row.get(8)?;
+    let total: i64 = row.get(9)?;
+    let download_speed_bytes: i64 = row.get(10)?;
+    let eta_seconds: Option<i64> = row.get(11)?;
+    Ok(SourceDownloadJob {
+        job_id: row.get(0)?, source_id: row.get(1)?, item_id: row.get(2)?, title: row.get(3)?, destination_dir: row.get(4)?, selected_uri: row.get(5)?, protocol, status,
+        loaded: loaded.max(0) as u64, total: total.max(0) as u64, download_speed_bytes: download_speed_bytes.max(0) as u64, eta_seconds: eta_seconds.map(|value| value.max(0) as u64), error: row.get(12)?, external_id: row.get(13)?, output_file_name: row.get(14)?, status_detail: row.get(15)?, created_at: row.get(16)?, updated_at: row.get(17)?,
+    })
+}
+
+fn auto_migrate_legacy_jobs_if_needed(conn: &rusqlite::Connection) -> Result<(), String> {
+    let path = resolve_read_path(paths::active_jobs_path(), paths::legacy_active_jobs_path())?;
+    if !path.exists() {
+        return Ok(());
+    }
+    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let jobs: Vec<SourceDownloadJob> = serde_json::from_slice(&bytes)
+        .map_err(|e| format!("No se pudo parsear active_jobs.json: {e}"))?;
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    for job in &jobs {
+        upsert_job_in_tx(&tx, job).map_err(|e| e.to_string())?;
+    }
+    tx.commit().map_err(|e| e.to_string())?;
+    let migrated_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM download_jobs", [], |row| row.get(0))
+        .map_err(|e| e.to_string())?;
+    if migrated_count < jobs.len() as i64 {
+        return Err("La migración de active_jobs.json no verificó todos los jobs".to_string());
+    }
+    let backup = path.with_extension("json.migrated");
+    std::fs::rename(path, backup).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Exporta todas las fuentes de SQLite a un String JSON con formato legible.

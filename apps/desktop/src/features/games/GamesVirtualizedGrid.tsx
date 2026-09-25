@@ -158,7 +158,7 @@ export const GamesVirtualizedGrid = memo(function GamesVirtualizedGrid({
     minItemWidth,
     gap,
     estimatedRowHeight,
-    overscan: 5,
+    overscan: layout === "grid-md" ? 2 : 3,
     initialScrollY: initialLibraryScrollY,
     containerTopOffset: consoleMode ? 140 : 280,
     computeColumns,
@@ -209,7 +209,9 @@ export const GamesVirtualizedGrid = memo(function GamesVirtualizedGrid({
         }}
         className={cn(getGridClass(layout, cardOrientation))}>
         {visibleItems.map(({ item: game, index }) => (
-          <div key={game.id} className="w-full sg-card-containment">
+          <div
+            key={game.id}
+            className="w-full sg-card-containment [content-visibility:auto] [contain-intrinsic-size:auto_320px]">
             <GameCard
               game={game}
               orientation={cardOrientation}
