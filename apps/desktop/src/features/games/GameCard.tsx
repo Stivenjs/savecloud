@@ -1,0 +1,345 @@
+import { memo, useCallback, useEffect, useMemo, startTransition, addTransitionType, ViewTransition } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Skeleton } from "@heroui/react";
+import { GameCardHoverMotion } from "@features/games/GameCardHoverMotion";
+import { formatGameDisplayName, getSteamAppId } from "@utils/gameImage";
+import { GameCardHoverCard } from "@features/games/GameCardHoverCard";
+import { GameCardSyncProgress } from "@features/games/GameCardSyncProgress";
+import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";
+import { GameCardSyncBadge } from "@features/games/GameCardSyncBadge";
+import { GameCardStatsPanel } from "@features/games/GameCardStatsPanel";
+import { CatalogCoverImage } from "@features/steam-catalog/components/CatalogCoverImage";
+import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
+import { useGameMedia } from "@hooks/useGameMedia";
+import { useSyncStore } from "@store/SyncStore";
+import { useGameDetailHoverPrefetch } from "@hooks/useGameDetailHoverPrefetch";
+import { useNavigable } from "@features/input/useNavigable";
+import { getGamepadFocusClass } from "@features/input/styles";
+import type { ConfiguredGame } from "@app-types/config";
+import type { GameStats } from "@services/tauri";
+import type { SteamAppdetailsMediaResult } from "@services/tauri";
+
+export interface GameCardProps {
+  game: ConfiguredGame;
+  /** Estadísticas del juego (tamaño, últimas modificaciones). Opcional. */
+  stats?: GameStats | null;
+  /** Si el juego está en ejecución (mostrar advertencia, deshabilitar sync/download). */
+  isGameRunning?: boolean;
+  /** Steam App ID resuelto dinámicamente (por búsqueda). Opcional. */
+  resolvedSteamAppId?: string | null;
+  /** Muestra skeleton mientras se resuelve Steam ID o carga la imagen. */
+  isLoading?: boolean;
+  /** Callback al eliminar el juego. Si no se pasa, no se muestra el botón. */
+  onRemove?: (game: ConfiguredGame) => void;
+  /** Callback al sincronizar (subir) el juego. Si no se pasa, no se muestra el botón. */
+  onSync?: (game: ConfiguredGame) => void;
+  /** Muestra spinner en el botón de sincronizar. */
+  isSyncing?: boolean;
+  /** Muestra spinner en Traer guardados cuando hay descarga en curso para esta tarjeta. */
+  isDownloading?: boolean;
+  /** Callback al abrir la carpeta de guardados. Si no se pasa, no se muestra el botón. */
+  onOpenFolder?: (game: ConfiguredGame) => void;
+  /** Abre el modal Traer guardados (nube + copias locales + snapshots). */
+  onRecoverFromCloud?: (game: ConfiguredGame) => void;
+  /** Callback para empaquetar y subir (backup completo en la nube). */
+  onFullBackupUpload?: (game: ConfiguredGame) => void;
+  /** Muestra spinner en empaquetar y subir. */
+  isFullBackupUploading?: boolean;
+  /** Callback para editar el juego. Si no se pasa, no se muestra el botón. */
+  onEdit?: (game: ConfiguredGame) => void;
+  /** Callback para abrir el panel de torrent. */
+  onTorrent?: (game: ConfiguredGame) => void;
+  /** Callback para compartir por link (genera URL y copia al portapapeles). */
+  onShare?: (game: ConfiguredGame) => void;
+  /** Estado de sincronización con la nube (para mostrar badge). Opcional si se pasa isUnsynced. */
+  syncStatus?: "pending_upload" | "pending_download" | "in_sync" | null;
+  /** Si el juego tiene guardados locales sin subir. Alternativa eficiente a closures externas. */
+  isUnsynced?: boolean;
+  /** Número de backups completos (empaquetados) en la nube para este juego. Se muestra un badge si > 0. */
+  cloudBackupCount?: number;
+  /** Progreso de subida/descarga de un solo juego (muestra barra inline en la tarjeta). */
+  /** Medios por Steam App ID (de una petición batch). Si se pasa, no se hace useQuery individual. */
+  mediaBySteamAppId?: Record<string, SteamAppdetailsMediaResult> | null;
+  /** Si true, los medios vienen solo del batch (no hacer useQuery individual aunque el batch siga cargando). */
+  mediaFromBatch?: boolean;
+  /** Control del menú de acciones: un solo desplegable abierto en listas con muchas tarjetas. */
+  actionsMenuOpen?: boolean;
+  /** Callback estable desde la lista; incluye gameId para no crear closures por tarjeta en cada render. */
+  onActionsMenuOpenChange?: (isOpen: boolean, gameId: string) => void;
+  /** Título del pie de tarjeta (si no, se deriva de `game.id`). Útil para catálogo Steam con nombre oficial. */
+  cardTitle?: string;
+  /** Navegación al pulsar la tarjeta; por defecto va a `/games/:id`. */
+  onCardNavigate?: (game: ConfiguredGame) => void;
+  /** Orientación de la tarjeta: vertical (póster 2:3) u horizontal (cápsula 460x215). Por defecto vertical. */
+  orientation?: "vertical" | "horizontal";
+  /** `catalog`: sin menú ni barra de sync; sin tilt/sombra ni overlay de stats del pie; el desplegable de medios (imágenes/vídeo) se mantiene. */
+  variant?: "library" | "catalog";
+  /** Carga prioritaria para las primeras tarjetas visibles */
+  priority?: boolean;
+  /** Callback para abrir el menú de acciones adaptado a consola (mando). */
+  onOpenConsoleActions?: (game: ConfiguredGame) => void;
+  /** Callback al hacer click derecho en la tarjeta para abrir el menú contextual de acciones. */
+  onContextMenu?: (e: React.MouseEvent, game: ConfiguredGame) => void;
+  /** Modo bajo rendimiento opcional para evitar useQuery repetido en cada tarjeta. */
+  isLowPerf?: boolean;
+}
+
+/** Diferencia en ms por debajo de la cual consideramos local y nube "en sync" (precisión, reloj). */
+const SYNC_TOLERANCE_MS = 15_000;
+/** Si la nube es más reciente que local pero por menos de esto, lo tratamos como "en sync" */
+const CLOUD_NEWER_AS_SYNC_MS = 120_000;
+
+export function deriveGameSyncStatus(
+  isUnsynced: boolean | undefined,
+  stats: GameStats | null | undefined,
+  cloudBackupCount: number
+): "pending_upload" | "pending_download" | "in_sync" | null {
+  if (isUnsynced) {
+    if (cloudBackupCount > 0) return null;
+    return "pending_upload";
+  }
+  if (!stats?.cloudLastModified) return null;
+  const cloud = new Date(stats.cloudLastModified).getTime();
+  const local = stats.localLastModified ? new Date(stats.localLastModified).getTime() : 0;
+  const diff = cloud - local;
+  if (diff > CLOUD_NEWER_AS_SYNC_MS) return "pending_download";
+  if (local > 0 || Math.abs(diff) <= SYNC_TOLERANCE_MS || (diff > 0 && diff <= CLOUD_NEWER_AS_SYNC_MS))
+    return "in_sync";
+  return null;
+}
+
+function MaybeViewTransition({
+  name,
+  share,
+  disabled,
+  children,
+}: {
+  name: string;
+  share?: string;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  if (disabled) return <>{children}</>;
+  return (
+    <ViewTransition name={name} share={share} default="none">
+      {children}
+    </ViewTransition>
+  );
+}
+
+export const GameCard = memo(function GameCard(props: GameCardProps) {
+  const hookLowPerf = useLowPerformanceMode();
+  const isLowPerf = props.isLowPerf ?? hookLowPerf;
+  const {
+    game,
+    stats,
+    isGameRunning,
+    resolvedSteamAppId,
+    isLoading: externalLoading,
+    syncStatus: syncStatusProp,
+    isUnsynced = false,
+    cloudBackupCount = 0,
+    mediaBySteamAppId,
+    mediaFromBatch = false,
+    cardTitle,
+    onCardNavigate,
+    onOpenConsoleActions,
+    onContextMenu,
+    actionsMenuOpen,
+    variant = "library",
+    orientation = "vertical",
+    priority = false,
+    ...cardRest
+  } = props;
+
+  const effectiveSyncStatus = useMemo(() => {
+    if (syncStatusProp !== undefined) return syncStatusProp;
+    return deriveGameSyncStatus(isUnsynced, stats, cloudBackupCount);
+  }, [syncStatusProp, isUnsynced, stats, cloudBackupCount]);
+
+  const isCatalog = variant === "catalog";
+  const isHorizontal = orientation === "horizontal";
+  const aspectClass = isHorizontal ? "aspect-460/215" : "aspect-2/3";
+
+  const syncProgress = useSyncStore((state) => {
+    if (state.syncOperation?.mode === "single" && state.syncOperation.gameId === game.id) {
+      return state.progress;
+    }
+    return null;
+  });
+
+  const { mediaUrls, videoUrl, genres, steamStoreName, isEffectivelyLoading, coverCandidates } = useGameMedia({
+    game,
+    resolvedSteamAppId,
+    externalLoading,
+    mediaBySteamAppId,
+    mediaFromBatch,
+    orientation,
+  });
+
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const steamAppId = useMemo(() => getSteamAppId(game, resolvedSteamAppId), [game, resolvedSteamAppId]);
+  const { onHoverStart, onHoverEnd } = useGameDetailHoverPrefetch(steamAppId);
+
+  const handleCardClick = useCallback(() => {
+    if (onCardNavigate) {
+      onCardNavigate(game);
+      return;
+    }
+    if (isLowPerf) {
+      navigate(`/games/${game.id}`, {
+        state: { resolvedSteamAppId, from: `${location.pathname}${location.search}` },
+      });
+      return;
+    }
+    startTransition(() => {
+      addTransitionType("game-detail");
+      navigate(`/games/${game.id}`, {
+        state: { resolvedSteamAppId, from: `${location.pathname}${location.search}` },
+      });
+    });
+  }, [navigate, game, location.pathname, location.search, onCardNavigate, resolvedSteamAppId, isLowPerf]);
+
+  const navId = `game-card-${game.id}`;
+  const { isFocused, inputMode, navProps } = useNavigable({
+    id: navId,
+    layerId: "root",
+    onPress: handleCardClick,
+  });
+
+  const isUploadTooLarge = (stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES;
+
+  useEffect(() => {
+    if (isFocused) {
+      onHoverStart();
+      return () => {
+        onHoverEnd();
+      };
+    }
+  }, [isFocused, onHoverStart, onHoverEnd]);
+
+  useEffect(() => {
+    if (!isFocused) return;
+
+    const handleActionX = () => {
+      if (cardRest.onSync && !isUploadTooLarge && !cardRest.isSyncing && !isGameRunning) {
+        cardRest.onSync(game);
+      }
+    };
+
+    const handleActionY = () => {
+      onOpenConsoleActions?.(game);
+    };
+
+    window.addEventListener("gamepad_action_x", handleActionX);
+    window.addEventListener("gamepad_action_y", handleActionY);
+
+    return () => {
+      window.removeEventListener("gamepad_action_x", handleActionX);
+      window.removeEventListener("gamepad_action_y", handleActionY);
+    };
+  }, [isFocused, cardRest, game, isUploadTooLarge, isGameRunning, onOpenConsoleActions]);
+
+  if (externalLoading) {
+    return (
+      <div className="shadow-md overflow-hidden bg-[#0e0f14] rounded-xl">
+        <Skeleton className={`${aspectClass} w-full bg-zinc-800 rounded-xl`} />
+      </div>
+    );
+  }
+
+  const cardContent = (
+    <GameCardHoverMotion disableMotion={isCatalog} className="rounded-xl">
+      <div
+        {...navProps}
+        className={getGamepadFocusClass(
+          isFocused,
+          inputMode,
+          `cursor-pointer relative isolate bg-[#0e0f14] shadow-md overflow-hidden rounded-xl ${aspectClass} w-full group/card`
+        )}
+        onClick={handleCardClick}
+        onContextMenu={(e) => {
+          if (!onContextMenu) return;
+          e.preventDefault();
+          e.stopPropagation();
+          onHoverEnd();
+          onContextMenu(e, game);
+        }}
+        onMouseEnter={() => {
+          navProps.onMouseEnter?.();
+          onHoverStart();
+        }}
+        onMouseLeave={onHoverEnd}
+        role="link"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            handleCardClick();
+          } else if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
+            if (!onContextMenu) return;
+            e.preventDefault();
+            e.stopPropagation();
+            onHoverEnd();
+            const rect = e.currentTarget.getBoundingClientRect();
+            onContextMenu?.(
+              {
+                clientX: rect.left + rect.width / 2,
+                clientY: rect.top + rect.height / 2,
+                preventDefault: () => {},
+                stopPropagation: () => {},
+              } as unknown as React.MouseEvent,
+              game
+            );
+          }
+        }}>
+        {!isCatalog && syncProgress && <GameCardSyncProgress progress={syncProgress} />}
+
+        <MaybeViewTransition name={`game-hero-${game.id}`} share="hero-morph" disabled={false}>
+          <div className="relative isolate size-full overflow-hidden bg-zinc-950 rounded-xl">
+            {isEffectivelyLoading ? (
+              <Skeleton className="absolute inset-0 z-10 size-full rounded-xl" />
+            ) : (
+              <CatalogCoverImage
+                alt={game.id}
+                candidates={coverCandidates}
+                fallbackTitle={cardTitle ?? formatGameDisplayName(game.id)}
+                className="size-full object-cover object-center transition-[transform,opacity] duration-200 ease-out group-hover/card:scale-[1.03] subpixel-antialiased transform-gpu rounded-xl"
+                showSkeleton={!isCatalog}
+                priority={priority}
+              />
+            )}
+            {/* Soft bottom shading to integrate image with card background */}
+            <div className="absolute inset-0 bg-linear-to-t from-[#0e0f14]/90 via-transparent to-transparent pointer-events-none z-10" />
+            <GameCardSyncBadge
+              gameId={game.id}
+              syncStatus={effectiveSyncStatus}
+              isGameRunning={isGameRunning}
+              cloudBackupCount={cloudBackupCount}
+              localSizeBytes={stats?.localSizeBytes}
+            />
+          </div>
+        </MaybeViewTransition>
+
+        {/* Sliding detailed stats panel */}
+        {!isCatalog && stats && <GameCardStatsPanel stats={stats} editionLabel={game.editionLabel} />}
+      </div>
+    </GameCardHoverMotion>
+  );
+
+  return (
+    <GameCardHoverCard
+      game={game}
+      variant={variant}
+      mediaUrls={mediaUrls}
+      videoUrl={videoUrl}
+      genres={genres}
+      storeName={steamStoreName || undefined}
+      stats={stats}
+      isContextMenuOpen={actionsMenuOpen}
+      isLowPerf={isLowPerf}>
+      {cardContent}
+    </GameCardHoverCard>
+  );
+});

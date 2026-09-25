@@ -1,0 +1,223 @@
+//! 1fichier: GET de página + POST estándar para revelar el enlace directo.
+
+use crate::network::{get, post_form_urlencoded, ProfilePreset};
+use tauri::AppHandle;
+
+use super::error::{ensure_resolve, HosterError};
+use super::html_utils::{extract_download_link, has_password_field};
+
+const PAGE_HOST_MARKERS: &[&str] = &["1fichier.com", "dl4free.com"];
+const DOWNLOAD_TEXT_MARKERS: &[&str] = &[
+    "download",
+    "télécharger",
+    "telecharger",
+    "start",
+    "click here",
+];
+
+fn normalize_page_url(url: &str) -> Result<String, HosterError> {
+    let parsed = reqwest::Url::parse(url).map_err(|_| HosterError::InvalidUrl(url.to_string()))?;
+    if parsed.host_str().is_none() {
+        return Err(HosterError::InvalidUrl(url.to_string()));
+    }
+    Ok(parsed.to_string())
+}
+
+fn has_1fichier_file_id(url: &reqwest::Url) -> bool {
+    url.query().map(|q| !q.trim().is_empty()).unwrap_or(false)
+}
+
+fn is_direct_1fichier_cdn_url(url: &str) -> bool {
+    let Ok(parsed) = reqwest::Url::parse(url) else {
+        return false;
+    };
+    let host = parsed.host_str().unwrap_or("").to_ascii_lowercase();
+    let path = parsed.path().to_ascii_lowercase();
+
+    if path.contains("console")
+        || path.contains("tarifs")
+        || path.contains("login")
+        || path.contains("register")
+        || path.contains("hlp")
+        || path.contains("cgu")
+        || path.contains("abus")
+        || path.contains("contact")
+    {
+        return false;
+    }
+
+    if parsed.query().is_some() && path == "/" {
+        return false;
+    }
+
+    let is_storage_subdomain = host.starts_with("a-")
+        || host.starts_with("s-")
+        || host.starts_with("dl-")
+        || host.starts_with("a1")
+        || host.starts_with("s1");
+
+    if is_storage_subdomain && (host.contains("1fichier.com") || host.contains("dl4free.com")) {
+        return true;
+    }
+
+    if path.starts_with("/c") && path.len() > 3 && !path.contains('.') {
+        return true;
+    }
+
+    if path.contains("/dl/") {
+        return true;
+    }
+
+    false
+}
+
+fn check_rate_limit(html: &str) -> Result<(), HosterError> {
+    if let Some(pos) = html.find("You must wait ") {
+        let snippet = &html[pos..html.len().min(pos + 60)];
+        let clean = snippet.split('<').next().unwrap_or(snippet).trim();
+        return Err(HosterError::ResolutionFailed(format!(
+            "1fichier: {clean} (límite de descarga gratuita alcanzado)"
+        )));
+    }
+    if let Some(pos) = html.find("devez attendre ") {
+        let snippet = &html[pos..html.len().min(pos + 60)];
+        let clean = snippet.split('<').next().unwrap_or(snippet).trim();
+        return Err(HosterError::ResolutionFailed(format!(
+            "1fichier: {clean} (límite de descarga gratuita alcanzado)"
+        )));
+    }
+    if html.contains("reserved access to the subscribers") {
+        return Err(HosterError::ResolutionFailed(
+            "1fichier: el archivo requiere suscripción Premium".into(),
+        ));
+    }
+    Ok(())
+}
+
+async fn resolve_native(client: &reqwest::Client, page_url: &str) -> Result<String, HosterError> {
+    let response = get(
+        client,
+        page_url,
+        ProfilePreset::BrowserSameOrigin {
+            referer: "https://1fichier.com/".to_string(),
+        },
+    )
+    .await?;
+
+    let response = ensure_resolve(response)?;
+    let response_url = response.url().to_string();
+    if response_url != page_url && is_direct_1fichier_cdn_url(&response_url) {
+        return Ok(response_url);
+    }
+    let page_html = response.text().await?;
+
+    if has_password_field(&page_html) {
+        return Err(HosterError::ResolutionFailed(
+            "1fichier: el enlace requiere contraseña; ábrelo en el navegador e introdúcela manualmente.".into(),
+        ));
+    }
+    check_rate_limit(&page_html)?;
+
+    let post_response = post_form_urlencoded(
+        client,
+        page_url,
+        ProfilePreset::BrowserSameOrigin {
+            referer: page_url.to_string(),
+        },
+        &[("dl_no_ssl", "on"), ("dlinline", "on")],
+    )
+    .await?;
+
+    let post_response = ensure_resolve(post_response)?;
+    let post_response_url = post_response.url().to_string();
+    if post_response_url != page_url && is_direct_1fichier_cdn_url(&post_response_url) {
+        return Ok(post_response_url);
+    }
+
+    let post_html = post_response.text().await?;
+    check_rate_limit(&post_html)?;
+
+    if let Some(direct) = extract_download_link(
+        &post_html,
+        &post_response_url,
+        PAGE_HOST_MARKERS,
+        DOWNLOAD_TEXT_MARKERS,
+    ) {
+        if is_direct_1fichier_cdn_url(&direct) {
+            return Ok(direct);
+        }
+    }
+
+    if let Some(direct) = extract_download_link(
+        &page_html,
+        page_url,
+        PAGE_HOST_MARKERS,
+        DOWNLOAD_TEXT_MARKERS,
+    ) {
+        if is_direct_1fichier_cdn_url(&direct) {
+            return Ok(direct);
+        }
+    }
+
+    Err(HosterError::ResolutionFailed(
+        "1fichier: no se pudo extraer el enlace directo de la página".into(),
+    ))
+}
+
+pub async fn resolve(
+    app: Option<&AppHandle>,
+    client: &reqwest::Client,
+    url: &str,
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    on_event: Option<crate::sources::commands::fetch::CrawlerEventCallback>,
+) -> Result<(String, String), HosterError> {
+    let page_url = normalize_page_url(url)?;
+    let parsed =
+        reqwest::Url::parse(&page_url).map_err(|_| HosterError::InvalidUrl(url.to_string()))?;
+    if !has_1fichier_file_id(&parsed) {
+        return Err(HosterError::ResolutionFailed(
+            "1fichier: la URL no parece contener un identificador de archivo".into(),
+        ));
+    }
+
+    match resolve_native(client, &page_url).await {
+        Ok(direct) => Ok((direct, page_url)),
+        Err(native_err) => {
+            let err_msg = native_err.to_string();
+            if err_msg.contains("límite de descarga")
+                || err_msg.contains("You must wait")
+                || err_msg.contains("contraseña")
+            {
+                return Err(native_err);
+            }
+
+            if let Some(app) = app {
+                log::info!("1fichier: intento nativo falló ({native_err:?}), intentando Scrapling fallback");
+                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch_with_progress(
+                    app,
+                    &page_url,
+                    cancel_flag,
+                    on_event,
+                ) {
+                    let trimmed = scraped.trim();
+                    if (trimmed.starts_with("http://") || trimmed.starts_with("https://"))
+                        && is_direct_1fichier_cdn_url(trimmed)
+                    {
+                        return Ok((trimmed.to_string(), page_url));
+                    }
+                    if let Some(direct) = extract_download_link(
+                        trimmed,
+                        &page_url,
+                        PAGE_HOST_MARKERS,
+                        DOWNLOAD_TEXT_MARKERS,
+                    ) {
+                        if is_direct_1fichier_cdn_url(&direct) {
+                            return Ok((direct, page_url));
+                        }
+                    }
+                }
+            }
+            Err(native_err)
+        }
+    }
+}

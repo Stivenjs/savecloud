@@ -1,0 +1,38 @@
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.ini
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.db
+*.db-journal
+*.db-wal
+
+# Build & Spec files
+build
+build/
+*.spec
+
+# Compiled Crawler Resources
+src-tauri/resources/scrapling_fetch.exe
+src-tauri/resources/scrapling_fetch
+src-tauri/resources/savecloud_crawler.exe
+src-tauri/resources/savecloud_crawler

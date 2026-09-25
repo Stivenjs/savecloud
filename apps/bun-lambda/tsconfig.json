@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "rootDir": "./",
+    "outDir": "./dist",
+    "target": "ESNext",
+    "moduleResolution": "node",
+    "types": ["bun-types"],
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "strict": true
+  }
+}

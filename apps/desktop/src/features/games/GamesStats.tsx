@@ -1,0 +1,250 @@
+import {
+  Button,
+  Card,
+  CardBody,
+  Code,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  Spinner,
+  useDisclosure,
+} from "@heroui/react";
+import { Cloud, CloudOff, Gamepad2, HardDrive, Info, Clock } from "lucide-react";
+import { formatGameDisplayName } from "@utils/gameImage";
+import { formatLastSync, formatPlaytime, formatSize } from "@utils/format";
+import type { CloudGameSummary } from "@hooks/useLastSyncInfo";
+import { useTranslation } from "react-i18next";
+
+interface GamesStatsProps {
+  gamesCount: number;
+  lastSyncAt: Date | null;
+  /** Nombre del último juego sincronizado (opcional). */
+  lastSyncGameId?: string | null;
+  /** Cargando datos de última sincronización / nube. */
+  lastSyncLoading?: boolean;
+  /** Si hay config de sync, mostrar card y detalle de la nube. */
+  hasSyncConfig?: boolean;
+  /** Juegos en la nube con conteo y tamaño (solo si hasSyncConfig). */
+  cloudGames?: CloudGameSummary[];
+  localGameIdsLower?: ReadonlySet<string>;
+  /** Tamaño total en la nube en bytes. */
+  totalCloudSize?: number;
+  /** Tiempo total de juego en segundos. */
+  totalPlaytimeSeconds?: number;
+  /** Cargando datos de tiempo de juego. */
+  playtimeLoading?: boolean;
+  /** Asistente explícito «traer desde la nube» (carpeta + descarga opcional). */
+  onRestoreFromCloud?: (gameId: string) => void;
+}
+
+export function GamesStats({
+  gamesCount,
+  lastSyncAt,
+  lastSyncGameId,
+  lastSyncLoading = false,
+  hasSyncConfig = false,
+  cloudGames = [],
+  localGameIdsLower,
+  totalCloudSize = 0,
+  totalPlaytimeSeconds = 0,
+  playtimeLoading = false,
+  onRestoreFromCloud,
+}: GamesStatsProps) {
+  const { t } = useTranslation();
+  const showCloudSection = hasSyncConfig;
+  const hasCloudGames = cloudGames.length > 0;
+  const useModal = cloudGames.length > 8;
+  const { isOpen, onOpen, onOpenChange } = useDisclosure();
+
+  // Contenido compartido para el detalle de la nube (Popover o Modal)
+  const cloudDetailContent = (
+    <ul className="space-y-2">
+      {cloudGames.map((g: CloudGameSummary) => {
+        const inLibrary = localGameIdsLower?.has(g.gameId.toLowerCase()) ?? false;
+        return (
+          <li key={g.gameId} className="flex flex-col gap-1 rounded-lg bg-default-100 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-sm font-medium text-foreground">{formatGameDisplayName(g.gameId)}</span>
+              <span className="shrink-0 text-xs text-default-500">
+                {t("library.restoreBackup.fileCount", { count: g.fileCount })} · {formatSize(g.totalSize)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <Code size="sm" className="max-w-50 truncate text-[10px]">
+                {g.gameId}
+              </Code>
+              {onRestoreFromCloud &&
+                (inLibrary ? (
+                  <span className="text-xs text-default-400">{t("library.gamesStats.alreadyInLibrary")}</span>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="flat"
+                    color="primary"
+                    className="h-7 text-xs"
+                    title={t("library.gamesStats.bringToDeviceTooltip")}
+                    onPress={() => onRestoreFromCloud(g.gameId)}>
+                    {t("library.gamesStats.bringToDeviceButton")}
+                  </Button>
+                ))}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Grid responsivo: cambia de 3 a 4 columnas según si hay config de nube */}
+      <div
+        className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${showCloudSection ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+        {/* CARD: Juegos Locales */}
+        <Card className="border border-default-200 shadow-sm">
+          <CardBody className="flex flex-row items-center gap-4 py-5">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+              <Gamepad2 size={24} className="text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm text-default-500">{t("library.gamesStats.localGamesCard")}</p>
+              <p className="text-2xl font-semibold text-foreground">{gamesCount}</p>
+            </div>
+          </CardBody>
+        </Card>
+
+        {/* CARD: Tiempo Total  */}
+        <Card className="border border-default-200 shadow-sm">
+          <CardBody className="flex flex-row items-center gap-4 py-5">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-warning/10">
+              {playtimeLoading ? <Spinner size="sm" color="warning" /> : <Clock size={24} className="text-warning" />}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm text-default-500">{t("library.gamesStats.totalPlaytimeCard")}</p>
+              <p className="text-2xl font-semibold text-foreground">
+                {playtimeLoading ? "..." : formatPlaytime(totalPlaytimeSeconds)}
+              </p>
+            </div>
+          </CardBody>
+        </Card>
+
+        {/* CARD: Última Sincronización */}
+        <Card className="border border-default-200 shadow-sm">
+          <CardBody className="flex flex-row items-center gap-4 py-5">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-default-100">
+              {lastSyncLoading ? (
+                <Spinner size="sm" color="primary" />
+              ) : lastSyncAt ? (
+                <Cloud size={24} className="text-primary" />
+              ) : (
+                <CloudOff size={24} className="text-default-500" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-default-500">{t("library.gamesStats.syncCard")}</p>
+              <p className="truncate text-lg font-medium text-foreground">
+                {lastSyncLoading
+                  ? "..."
+                  : lastSyncAt
+                    ? formatLastSync(lastSyncAt)
+                    : t("library.gamesStats.neverSynced")}
+              </p>
+              {lastSyncAt && lastSyncGameId && !lastSyncLoading && (
+                <p className="truncate text-xs text-default-400">{formatGameDisplayName(lastSyncGameId)}</p>
+              )}
+            </div>
+          </CardBody>
+        </Card>
+
+        {/* CARD: Espacio en la Nube */}
+        {showCloudSection && (
+          <Card className="border border-default-200 shadow-sm">
+            <CardBody className="flex flex-row items-center gap-4 py-5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary/10">
+                {lastSyncLoading ? (
+                  <Spinner size="sm" color="secondary" />
+                ) : (
+                  <HardDrive size={24} className="text-secondary" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-default-500">{t("library.gamesStats.inCloudCard")}</p>
+                <div className="flex items-baseline gap-1">
+                  <p className="text-lg font-medium text-foreground">
+                    {lastSyncLoading ? "..." : formatSize(totalCloudSize)}
+                  </p>
+                  {!lastSyncLoading && hasCloudGames && (
+                    <span className="text-xs text-default-400">
+                      {t("library.gamesStats.gamesCountSuffix", { count: cloudGames.length })}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Gatillo para ver el desglose */}
+              {hasCloudGames && !lastSyncLoading && (
+                <div className="shrink-0">
+                  {useModal ? (
+                    <Button
+                      isIconOnly
+                      size="sm"
+                      variant="light"
+                      onPress={onOpen}
+                      className="text-default-400 hover:text-foreground">
+                      <Info size={18} />
+                    </Button>
+                  ) : (
+                    <Popover placement="bottom-end" showArrow>
+                      <PopoverTrigger>
+                        <Button isIconOnly size="sm" variant="light" className="text-default-400 hover:text-foreground">
+                          <Info size={18} />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-0">
+                        <div className="border-b border-default-200 px-4 py-3">
+                          <p className="text-sm font-medium text-foreground">
+                            {t("library.gamesStats.cloudDetailTitle")}
+                          </p>
+                        </div>
+                        <div className="max-h-72 overflow-y-auto p-3">{cloudDetailContent}</div>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        )}
+      </div>
+
+      {/* Modal para cuando hay muchos juegos en la nube */}
+      {useModal && (
+        <Modal isOpen={isOpen} onOpenChange={onOpenChange} size="2xl" scrollBehavior="inside" backdrop="blur">
+          <ModalContent>
+            <ModalHeader className="flex flex-col gap-1">
+              <p className="text-lg font-medium">{t("library.gamesStats.cloudGamesModalTitle")}</p>
+              <p className="text-xs font-normal text-default-500">
+                {t("library.gamesStats.totalFilesAndWeight", {
+                  count: cloudGames.reduce((acc, curr) => acc + curr.fileCount, 0 as number),
+                  size: formatSize(totalCloudSize),
+                })}
+              </p>
+            </ModalHeader>
+            <ModalBody>
+              <div className="pb-4">{cloudDetailContent}</div>
+            </ModalBody>
+            <ModalFooter>
+              <Button variant="flat" onPress={() => onOpenChange()}>
+                {t("library.gamesStats.close")}
+              </Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+      )}
+    </div>
+  );
+}

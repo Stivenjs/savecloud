@@ -37,7 +37,7 @@ jobs:
       - name: Build CLI (Windows x64)
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          bun build src/cli/index.ts --compile --outfile dist/savecloud-windows-x64.exe --define $env:DEFINE_API_URL --define $env:DEFINE_API_KEY --minify --windows-icon assets/icon.ico
+          bun build apps/cli/index.ts --compile --outfile dist/savecloud-windows-x64.exe --define $env:DEFINE_API_URL --define $env:DEFINE_API_KEY --minify --windows-icon assets/icon.ico
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -70,17 +70,17 @@ jobs:
       - name: Build CLI (Linux x64)
         run: |
           mkdir -p dist
-          bun build src/cli/index.ts --compile --target=bun-linux-x64 --outfile dist/savecloud-linux-x64 \
+          bun build apps/cli/index.ts --compile --target=bun-linux-x64 --outfile dist/savecloud-linux-x64 \
             --define "$DEFINE_API_URL" --define "$DEFINE_API_KEY" --minify
 
       - name: Build CLI (macOS arm64)
         run: |
-          bun build src/cli/index.ts --compile --target=bun-darwin-arm64 --outfile dist/savecloud-darwin-arm64 \
+          bun build apps/cli/index.ts --compile --target=bun-darwin-arm64 --outfile dist/savecloud-darwin-arm64 \
             --define "$DEFINE_API_URL" --define "$DEFINE_API_KEY" --minify
 
       - name: Build CLI (macOS x64)
         run: |
-          bun build src/cli/index.ts --compile --target=bun-darwin-x64 --outfile dist/savecloud-darwin-x64 \
+          bun build apps/cli/index.ts --compile --target=bun-darwin-x64 --outfile dist/savecloud-darwin-x64 \
             --define "$DEFINE_API_URL" --define "$DEFINE_API_KEY" --minify
 
       - name: Upload artifact
@@ -107,15 +107,22 @@ jobs:
             artifactName: desktop-macos-universal
             args: "--target universal-apple-darwin"
             rustTargets: "aarch64-apple-darwin x86_64-apple-darwin"
+
     runs-on: ${{ matrix.platform }}
+
     env:
       SYNC_GAMES_API_URL: ${{ secrets.SYNC_GAMES_API_URL }}
       SYNC_GAMES_API_KEY: ${{ secrets.SYNC_GAMES_API_KEY }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+      CMAKEFLAGS: "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -127,36 +134,57 @@ jobs:
         with:
           targets: ${{ matrix.rustTargets || '' }}
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Sync version from tag
         run: bun run scripts/sync-version.ts
         env:
           GITHUB_REF: ${{ github.ref }}
 
+      - name: Install dependencies (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: brew install opus pkg-config
+
+      # Build deps on Ubuntu; runtime deps for installers live in tauri.conf.json:
+      # bundle.linux.deb.depends (apt/dpkg), bundle.linux.rpm.depends (dnf/rpm).
+      # AUR / pacman: no .deb/.rpm metadata — mirror the same libs in PKGBUILD depends (see those lists).
       - name: Install dependencies (Ubuntu)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y pkg-config libasound2-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev build-essential curl wget file libxdo-dev libssl-dev
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
-        working-directory: apps/savecloud-desktop
+
+      - name: NSIS branding (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: bun run nsis-branding
+        working-directory: apps/desktop
+
+      - name: Build Scrapling Binary
+        run: bun run build-scrapling
+        working-directory: apps/desktop
 
       - name: Build Tauri
         run: bun run tauri build ${{ matrix.args }}
-        working-directory: apps/savecloud-desktop
+        working-directory: apps/desktop
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifactName }}
-          path: apps/savecloud-desktop/src-tauri/target/**/release/bundle/
+          path: apps/desktop/src-tauri/target/**/release/bundle/
 
   release:
     needs: [build-cli-windows, build-cli-unix, build-desktop]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -175,7 +203,7 @@ jobs:
           find cli-windows -type f -exec cp {} release/ \;
           find cli-unix -type f -exec cp {} release/ \;
           for dir in desktop-*; do
-            [ -d "$dir" ] && find "$dir" -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.dmg" -o -name "*.sig" -o -name "*.app.tar.gz" \) -exec cp {} release/ \;
+            [ -d "$dir" ] && find "$dir" -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.dmg" -o -name "*.sig" -o -name "*.app.tar.gz" -o -name "*.tar.gz" -o -name "*.zip" \) -exec cp {} release/ \;
           done
 
       - name: Generate updater latest.json
@@ -188,6 +216,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: release/*
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -10,6 +10,7 @@
  */
 
 import { resolve } from "path";
+import { Glob } from "bun";
 
 const argVersion = process.argv[2];
 const envVersion = process.env.VERSION || process.env.GITHUB_REF?.replace(/^refs\/tags\//, "");
@@ -21,16 +22,22 @@ const root = process.cwd();
 
 const jsonFiles = [
   "package.json",
-  "apps/savecloud-desktop/package.json",
-  "apps/savecloud-desktop/src-tauri/tauri.conf.json",
+  "packages/types/package.json",
+  "apps/api/package.json",
+  "apps/cli/package.json",
+  "apps/desktop/package.json",
+  "apps/desktop/src-tauri/tauri.conf.json",
+  "apps/web/package.json",
+  "packages/crawler/package.json",
 ];
 
-const tomlFiles = ["apps/savecloud-desktop/src-tauri/Cargo.toml"];
-
-const changelogFiles = ["RELEASE_NOTES.md"];
+const tomlFiles = ["apps/desktop/src-tauri/Cargo.toml"];
 
 let updatedCount = 0;
 
+/**
+ * JSON files
+ */
 for (const relPath of jsonFiles) {
   const fullPath = resolve(root, relPath);
   const file = Bun.file(fullPath);
@@ -47,6 +54,9 @@ for (const relPath of jsonFiles) {
   updatedCount++;
 }
 
+/**
+ * TOML files
+ */
 for (const relPath of tomlFiles) {
   const fullPath = resolve(root, relPath);
   const file = Bun.file(fullPath);
@@ -64,23 +74,32 @@ for (const relPath of tomlFiles) {
   updatedCount++;
 }
 
-for (const relPath of changelogFiles) {
-  const fullPath = resolve(root, relPath);
-  const file = Bun.file(fullPath);
+const notesGlob = new Glob("**/RELEASE_NOTES.md");
 
-  if (!(await file.exists())) {
-    console.warn(`[Advertencia] Archivo no encontrado: ${relPath}`);
-    continue;
-  }
+const releaseVersionRegex = /(?<=^(?:##\s+|###\s+|- Versión\s+|Version\s+))v?\d+\.\d+\.\d+/gim;
+
+let notesUpdated = false;
+
+for (const match of notesGlob.scanSync({ cwd: root, absolute: true })) {
+  if (!match.includes("desktop")) continue;
+
+  const file = Bun.file(match);
+
+  if (!(await file.exists())) continue;
 
   let content = await file.text();
 
-  const releaseVersionRegex = /(?<=^(?:##\s+|###\s+|- Versión\s+|Version\s+))v?\d+\.\d+\.\d+/gim;
+  const updatedContent = content.replace(releaseVersionRegex, version);
 
-  content = content.replace(releaseVersionRegex, version);
+  if (updatedContent !== content) {
+    await Bun.write(match, updatedContent);
+    updatedCount++;
+    notesUpdated = true;
+  }
+}
 
-  await Bun.write(fullPath, content);
-  updatedCount++;
+if (!notesUpdated) {
+  console.warn("[Advertencia] No se encontró o no se pudo actualizar RELEASE_NOTES.md");
 }
 
 if (updatedCount === 0) {

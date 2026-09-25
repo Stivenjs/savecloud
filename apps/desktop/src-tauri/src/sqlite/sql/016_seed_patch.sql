@@ -1,0 +1,1 @@
+-- Archivo vaciado intencionalmente en v18 para evitar la creación de índices duplicados.

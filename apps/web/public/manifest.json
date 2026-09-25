@@ -1,0 +1,28 @@
+{
+  "name": "SaveCloud",
+  "short_name": "SaveCloud",
+  "description": "Servidor de guardado en la nube personal para videojuegos (S3 + Lambda) y aplicación para sincronizar partidas. 100% privado y open source.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "orientation": "portrait-primary",
+  "lang": "es",
+  "categories": ["utilities", "games", "productivity"],
+  "icons": [
+    {
+      "src": "/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false,
+  "related_applications": [
+    {
+      "platform": "windows",
+      "url": "https://github.com/Stivenjs/savecloud/releases/latest"
+    }
+  ]
+}

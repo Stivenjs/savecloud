@@ -2,8 +2,13 @@ node_modules/
 dist/
 .serverless/
 .esbuild/
+.build/
 .env
 .env.*
 !.env.example
 *.log
 .DS_Store
+*.db
+*.db-journal
+*.db-wal
+__pycache__

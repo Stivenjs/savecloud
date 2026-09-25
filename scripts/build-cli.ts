@@ -32,10 +32,11 @@ console.log(`   Bytecode: activado (arranque rápido)`);
 console.log(`   Sourcemap: vinculado\n`);
 
 const result = await Bun.build({
-  entrypoints: ["src/cli/index.ts"],
+  entrypoints: ["apps/cli/index.ts"],
   minify: true,
+  target: "bun",
   bytecode: true,
-  sourcemap: "linked",
+  sourcemap: "none",
   define: {
     "process.env.SYNC_GAMES_API_URL": JSON.stringify(apiUrl),
     "process.env.SYNC_GAMES_API_KEY": JSON.stringify(apiKey),

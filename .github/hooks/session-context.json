@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "bun .github/hooks/session-context.js",
+        "cwd": ".",
+        "timeout": 5
+      }
+    ]
+  }
+}

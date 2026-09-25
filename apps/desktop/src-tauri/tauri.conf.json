@@ -1,0 +1,121 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "macOSPrivateApi": true,
+    "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "**"
+        ]
+      },
+      "csp": {
+        "img-src": "'self' data: blob: https: http: asset: http://asset.localhost https://asset.localhost",
+        "media-src": "'self' data: blob: https: http: asset: http://asset.localhost https://asset.localhost"
+      }
+    },
+    "windows": [
+      {
+        "decorations": false,
+        "label": "main",
+        "maximized": true,
+        "resizable": true,
+        "title": "SaveCloud",
+        "transparent": true,
+        "visible": false
+      }
+    ],
+    "withGlobalTauri": false
+  },
+  "build": {
+    "beforeBuildCommand": "bun run build",
+    "beforeDevCommand": "bun run dev",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "bundle": {
+    "active": true,
+    "copyright": "Copyright (c) Stivenjs 2026. All rights reserved.",
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "longDescription": "SaveCloud es una aplicación de escritorio para administrar tu almacenamiento en la nube. Permite subir, descargar y gestionar tus archivos en la nube. Es una aplicación simple y fácil de usar que te permite administrar tu almacenamiento en la nube en unos pocos clicks.",
+    "shortDescription": "SaveCloud es una aplicación de escritorio para administrar tu almacenamiento en la nube.",
+    "targets": [
+      "nsis",
+      "deb",
+      "rpm",
+      "dmg",
+      "app"
+    ],
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0",
+          "libayatana-appindicator3-1",
+          "libasound2",
+          "librsvg2-2",
+          "libudev1",
+          "libxdo3",
+          "libnotify4",
+          "libsecret-1-0"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "webkitgtk4.1",
+          "gtk3",
+          "libayatana-appindicator-gtk3",
+          "alsa-lib",
+          "librsvg2",
+          "systemd-libs",
+          "libxdo",
+          "libnotify",
+          "libsecret"
+        ]
+      }
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "silent": true,
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "compression": "lzma",
+        "displayLanguageSelector": false,
+        "headerImage": "windows/nsis/header.bmp",
+        "sidebarImage": "windows/nsis/sidebar.bmp",
+        "uninstallerHeaderImage": "windows/nsis/uninstaller-header.bmp",
+        "installerIcon": "icons/icon.ico",
+        "languages": [
+          "SpanishInternational",
+          "English"
+        ],
+        "startMenuFolder": "SaveCloud",
+        "installerHooks": "windows/nsis/hooks.nsh"
+      }
+    },
+    "resources": [
+      "resources/oye_cloud.rpw",
+      "resources/savecloud_crawler*",
+      "resources/verified_sources.json"
+    ]
+  },
+  "identifier": "com.savecloud.desktop",
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/Stivenjs/savecloud/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM2MzZEOUM0OTJEOTc1NDUKUldSRmRkbVN4TmsyTnJEQ2NOYUZVZzRyajNFbWo3eWdmSllJcCtxb0RxcE1MMXFIbFZqTzNYdEwK"
+    }
+  },
+  "productName": "SaveCloud",
+  "version": "26.9.1"
+}

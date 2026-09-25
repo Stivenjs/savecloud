@@ -1,0 +1,298 @@
+@import "tailwindcss";
+@config "../../tailwind.config.js";
+@import "sileo/styles.css";
+
+[data-sileo-viewport] {
+  color-scheme: only light;
+  background: transparent !important;
+}
+
+[data-sileo-toast],
+[data-sileo-toast]:hover,
+[data-sileo-toast]:focus,
+[data-sileo-toast]:focus-visible {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+[data-sileo-canvas],
+[data-sileo-canvas] [data-sileo-svg] {
+  background: transparent !important;
+}
+
+@layer utilities {
+  @keyframes sg-fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .sg-animate-fade-in-up {
+    animation: sg-fade-in-up 0.16s ease-out both;
+  }
+
+  @keyframes sg-shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .sg-animate-shimmer {
+    animation: sg-shimmer 1.5s ease-in-out infinite;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.25);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.5);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+html.savecloud-big-picture {
+  --savecloud-bp-library-header-h: calc(max(0px, env(safe-area-inset-top)) + 3.775rem);
+}
+
+html.savecloud-big-picture,
+html.savecloud-big-picture * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html.savecloud-big-picture *::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+html.savecloud-big-picture *::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.sm-bp-console-scope {
+  font-size: 1rem;
+}
+
+.sm-bp-console-scope [data-slot="input-wrapper"] {
+  min-height: 2.75rem !important;
+}
+
+.sm-bp-console-scope [data-slot="input"] {
+  font-size: 0.9375rem !important;
+}
+
+.sm-bp-console-scope [data-slot="label"] {
+  font-size: 0.9375rem !important;
+}
+
+.sm-bp-console-scope button {
+  min-height: 2.5rem;
+  font-size: 0.9375rem;
+}
+
+.sm-bp-console-scope [data-slot="base"] {
+  padding: 1.125rem;
+}
+
+.sm-bp-console-scope [data-slot="chip"] {
+  font-size: 0.8125rem;
+  min-height: 1.625rem;
+}
+
+.sm-bp-console-scope p,
+.sm-bp-console-scope span {
+  line-height: 1.6;
+}
+
+.sm-bp-console-scope .rounded-2xl {
+  padding: 1.25rem;
+}
+
+.sm-bp-console-scope hr,
+.sm-bp-console-scope [data-slot="separator"] {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+video::-webkit-media-controls-fullscreen-button {
+  display: none;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+html.paused-bg *,
+html.paused-bg *::before,
+html.paused-bg *::after {
+  animation-play-state: paused !important;
+  transition-delay: 0s !important;
+  transition-duration: 0ms !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+}
+
+html.paused-bg * {
+  will-change: auto !important;
+}
+
+html.low-perf *,
+html.low-perf *::before,
+html.low-perf *::after {
+  animation-delay: 0s !important;
+  animation-duration: 0s !important;
+  animation-play-state: paused !important;
+  animation-iteration-count: 1 !important;
+  transition-delay: 0s !important;
+  transition-duration: 0ms !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+  will-change: auto !important;
+}
+
+.sg-catalog-pagination,
+.sg-catalog-pagination__wrapper {
+  cursor: default;
+}
+
+.sg-catalog-pagination__wrapper {
+  gap: 0.25rem;
+}
+
+.sg-catalog-pagination__item,
+.sg-catalog-pagination__nav {
+  min-width: 2.25rem;
+  height: 2.25rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.sg-catalog-pagination__nav[data-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.sg-catalog-pagination__active {
+  min-width: 2.25rem;
+  height: 2.25rem;
+  cursor: pointer;
+  font-weight: 700;
+  background: var(--heroui-primary, #006fee) !important;
+  color: var(--heroui-primary-foreground, #fff) !important;
+  border-color: var(--heroui-primary, #006fee) !important;
+}
+
+@keyframes sg-hero-ken-burns {
+  0% {
+    transform: scale(1.02) translate(0%, 0%);
+  }
+  100% {
+    transform: scale(1.1) translate(-1.8%, -1.2%);
+  }
+}
+
+@keyframes sg-hero-mesh-drift {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: translate3d(-4%, 0, 0) scale(1.05);
+  }
+  50% {
+    opacity: 0.75;
+    transform: translate3d(5%, 0, 0) scale(1.12);
+  }
+}
+
+.sg-hero-ken-burns {
+  animation: sg-hero-ken-burns 22s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.sg-hero-mesh {
+  animation: sg-hero-mesh-drift 14s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes sg-thumb-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.sg-thumb-progress-bar {
+  transform-origin: left center;
+  animation: sg-thumb-progress var(--sg-thumb-duration, 5.5s) linear forwards;
+}
+
+/* Supresión de bordes e icono nativo de imagen rota del navegador */
+img {
+  text-indent: -9999px;
+  color: transparent;
+}
+
+/* Aislamiento estricto de layout y aceleración por GPU para tarjetas */
+.sg-card-containment {
+  contain: layout paint style;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Desactiva eventos de puntero, micro-animaciones y transiciones hover durante el scroll para garantizar 60/120+ fps nativos */
+.sg-is-scrolling,
+.sg-is-scrolling * {
+  pointer-events: none !important;
+  transition: none !important;
+  animation-play-state: paused !important;
+}
+
+@keyframes download-text-swap {
+  0% {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-text-swap {
+  animation: download-text-swap 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}

@@ -1,0 +1,1014 @@
+//! Motor de descargas torrent construido sobre [`librqbit`] y expuesto al
+//! frontend de Tauri a través de un conjunto de comandos asíncronos.
+//!
+//! # Arquitectura
+//!
+//! [`TorrentEngine`] posee una única [`Session`] compartida (vía [`Arc`]) con
+//! cada tarea en segundo plano que monitorea el progreso de las descargas.
+//! Cada torrent activo se identifica por su info-hash en hexadecimal para que
+//! el frontend pueda dirigir operaciones (pausa, reanudación, cancelación) sin
+//! conocer el identificador numérico interno asignado por librqbit.
+//!
+//! Las actualizaciones de progreso se envían al frontend mediante eventos de
+//! Tauri: una tarea [`tokio`] dedicada por torrent llama a
+//! [`spawn_progress_monitor`] y emite [`TORRENT_PROGRESS_EVENT`] a intervalos
+//! fijos hasta que el torrent finaliza o es eliminado.
+//!
+//! # Estrategia de descubrimiento de peers
+//!
+//! El motor implementa un sistema de tres fases para maximizar la velocidad
+//! de descarga desde el primer momento:
+//!
+//! 1. **Precalentamiento**: al inicializar el engine, los trackers del tier
+//!    `Best` se obtienen en segundo plano y se almacenan en caché. Cuando el
+//!    usuario inicia una descarga, los trackers ya están disponibles sin espera.
+//!
+//! 2. **Arranque con dos tiers en paralelo**: al añadir un torrent se solicitan
+//!    `Best` y `AllUdp` simultáneamente con [`tokio::join!`], duplicando el
+//!    conjunto de trackers disponibles desde el primer segundo sin overhead
+//!    adicional de latencia.
+//!
+//! 3. **Escalado dinámico**: [`spawn_progress_monitor`] evalúa el número de
+//!    peers conectados cada tick. Si tras [`TRACKER_ESCALATION_SECS`] segundos
+//!    hay menos de [`TRACKER_ESCALATION_MIN_PEERS`] peers vivos, inyecta el
+//!    tier `All` para maximizar la red de peers disponibles.
+
+use std::collections::HashSet;
+use std::num::NonZeroU32;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use librqbit::api::TorrentIdOrHash;
+use librqbit::limits::LimitsConfig;
+use librqbit::{AddTorrent, AddTorrentOptions, Session, SessionOptions, TorrentStatsState};
+use tauri::{AppHandle, Emitter, Manager};
+use tokio::sync::Mutex;
+
+use super::errors::TorrentError;
+use super::models::{TorrentDownloadState, TorrentProgressPayload};
+use super::torrent_enrichment::{
+    build_magnet_from_info_hash, enrich_magnet, fetch_trackers, TrackerTier,
+};
+use crate::commands::logs::sync_logger;
+use crate::setup::TorrentShutdownGuard;
+use crate::utils::transfer_metrics::compute_eta;
+
+fn build_limits_config(
+    download_limit_kbs: Option<u32>,
+    upload_limit_kbs: Option<u32>,
+) -> LimitsConfig {
+    LimitsConfig {
+        download_bps: download_limit_kbs
+            .filter(|&k| k > 0)
+            .and_then(|k| NonZeroU32::new(k.saturating_mul(1024))),
+        upload_bps: upload_limit_kbs
+            .filter(|&k| k > 0)
+            .and_then(|k| NonZeroU32::new(k.saturating_mul(1024))),
+    }
+}
+
+/// Evento emitido periódicamente mientras un torrent está activo.
+///
+/// El payload es de tipo [`TorrentProgressPayload`] y contiene métricas de
+/// velocidad, progreso, ETA y estado actual del torrent.
+const TORRENT_PROGRESS_EVENT: &str = "torrent-download-progress";
+
+/// Evento emitido una sola vez cuando el torrent alcanza el 100 % y librqbit
+/// lo marca como finalizado.
+///
+/// El frontend debe usar este evento como señal autoritativa de finalización en
+/// lugar de inspeccionar `progress_percent`, ya que el tick final de progreso y
+/// el flag `finished` son observados de forma conjunta antes de emitirlo.
+const TORRENT_DONE_EVENT: &str = "torrent-download-done";
+
+/// Evento emitido cuando el usuario cancela un torrent y éste es eliminado de
+/// la sesión.
+///
+/// El frontend debe ocultar cualquier UI de progreso al recibir este evento.
+/// Dado que puede existir un tick de progreso en vuelo en el momento de la
+/// cancelación, este evento actúa como señal definitiva que anula cualquier
+/// payload obsoleto que llegue concurrentemente.
+pub const TORRENT_CANCELLED_EVENT: &str = "torrent-download-cancelled";
+
+/// Intervalo entre muestreos de estadísticas y emisiones de progreso al frontend.
+///
+/// 800 ms es un compromiso deliberado: suficientemente corto para que la
+/// velocidad y el ETA se perciban responsivos en la UI, y suficientemente largo
+/// para no presionar el read-lock interno de la sesión en hardware de gama baja.
+const PROGRESS_INTERVAL: std::time::Duration = std::time::Duration::from_millis(800);
+
+/// Rango de puertos TCP en los que la sesión escucha conexiones entrantes de peers.
+///
+/// Un rango más amplio (69 puertos frente a los 19 originales) reduce la
+/// probabilidad de que todos los candidatos estén ocupados por otra aplicación
+/// o bloqueados por una regla de firewall. El rango comienza en el puerto
+/// asignado por la IANA para BitTorrent (6881) y es lo suficientemente grande
+/// como para sobrevivir a la mayoría de perfiles de firewall predeterminados
+/// sin requerir configuración manual de reenvío de puertos.
+const LISTEN_PORT_RANGE: std::ops::Range<u16> = 6881..6950;
+
+/// Segundos desde el inicio de la descarga tras los cuales el monitor evalúa
+/// si el número de peers conectados es suficiente para escalar al tier `All`.
+///
+/// 45 segundos es tiempo suficiente para que DHT y los trackers iniciales
+/// respondan en condiciones normales. Si para entonces hay pocos peers, es
+/// indicativo de que los trackers `Best` y `AllUdp` no son suficientes para
+/// este torrent en particular.
+const TRACKER_ESCALATION_SECS: u64 = 45;
+
+/// Umbral mínimo de peers vivos por debajo del cual se activa el escalado.
+///
+/// Con menos de 3 peers simultáneos la velocidad de descarga raramente supera
+/// unos pocos KB/s. Escalar en ese punto tiene un coste de red bajo y un
+/// beneficio potencial alto.
+const TRACKER_ESCALATION_MIN_PEERS: u32 = 3;
+
+/// Timeout máximo para el precalentamiento de trackers al inicializar el engine.
+///
+/// Si la red no responde en este tiempo, el caché quedará vacío y la primera
+/// descarga solicitará los trackers de forma síncrona. Esto es preferible a
+/// bloquear el arranque de la aplicación indefinidamente.
+const WARMUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Estado global del subsistema de descargas torrent.
+///
+/// Existe exactamente una instancia de `TorrentEngine` por proceso, almacenada
+/// detrás de un `Mutex` en el estado gestionado de Tauri. Todos los métodos
+/// públicos de este tipo son invocados desde comandos Tauri y deben ser `Send`.
+pub struct TorrentEngine {
+    /// La sesión de librqbit que gestiona todos los torrents activos.
+    session: Arc<Session>,
+
+    /// Info-hashes de torrents que han sido añadidos y aún no han completado
+    /// ni sido cancelados. Permite detectar adiciones duplicadas y realizar
+    /// operaciones masivas como pausar todo al suspender la aplicación.
+    active: HashSet<String>,
+
+    /// Caché de trackers precalentado durante la inicialización del engine.
+    ///
+    /// Contiene la unión de los tiers `Best` y `AllUdp` deduplicada. Al estar
+    /// disponible antes de que el usuario inicie cualquier descarga, elimina
+    /// la latencia de red del camino crítico de [`add_magnet_to_session`] y
+    /// [`add_file_to_session`]. Si el precalentamiento falló por timeout o
+    /// error de red, el vector estará vacío y las funciones de adición
+    /// solicitarán los trackers de forma síncrona como fallback.
+    cached_trackers: Vec<String>,
+}
+
+impl TorrentEngine {
+    /// Crea un nuevo motor, inicializa la sesión subyacente de librqbit y
+    /// precalienta el caché de trackers en paralelo.
+    ///
+    /// La sesión se configura para maximizar la accesibilidad a peers:
+    ///
+    /// - Un rango de puertos amplio aumenta la probabilidad de que al menos
+    ///   uno sea alcanzable desde internet sin reenvío manual.
+    /// - UPnP/NAT-PMP permite al router abrir el puerto elegido
+    ///   automáticamente en redes que lo soporten, habilitando conexiones
+    ///   entrantes no solicitadas.
+    /// - DHT inicializa el descubrimiento de peers de forma independiente a
+    ///   cualquier tracker, algo crítico cuando el tracker embebido en un
+    ///   archivo `.torrent` está offline o aplicando rate-limiting.
+    /// - `concurrent_init_limit` se mantiene en 3 para evitar que múltiples
+    ///   torrents compitan por ancho de banda durante su fase de handshake,
+    ///   que es cuando los slots de peer y el establecimiento de conexión
+    ///   dominan el rendimiento.
+    ///
+    /// # Precalentamiento del caché de trackers
+    ///
+    /// Tras crear la sesión, se solicitan los tiers `Best` y `AllUdp` en
+    /// paralelo con un timeout de [`WARMUP_TIMEOUT`]. El resultado se almacena
+    /// en `cached_trackers` para que las descargas subsiguientes no tengan que
+    /// esperar la resolución HTTP de ngosang. Si el precalentamiento no
+    /// completa a tiempo, el caché queda vacío y las descargas solicitarán los
+    /// trackers de forma síncrona sin impacto funcional.
+    ///
+    /// # Recuperación ante estado DHT corrupto
+    ///
+    /// Si la aplicación se cierra abruptamente mientras hay torrents activos,
+    /// el archivo de estado persistente del DHT puede quedar en un estado
+    /// inválido. En ese caso librqbit devuelve un error `SessionInit` al
+    /// intentar cargarlo. Esta función detecta ese escenario, elimina el
+    /// directorio de sesión corrupto y reintenta la inicialización con un
+    /// directorio limpio, garantizando que la app siempre arranque.
+    /// El segundo intento se realiza sin `fastresume` para evitar cargar
+    /// cualquier otro estado persistente potencialmente dañado.
+    pub async fn new(output_folder: PathBuf) -> Result<Self, TorrentError> {
+        let initial_limits = crate::config::with_config(|cfg| {
+            build_limits_config(
+                cfg.torrent_download_limit_kbs,
+                cfg.torrent_upload_limit_kbs,
+            )
+        });
+
+        let options = SessionOptions {
+            listen_port_range: Some(LISTEN_PORT_RANGE),
+            enable_upnp_port_forwarding: true,
+            fastresume: true,
+            concurrent_init_limit: Some(3),
+            ratelimits: initial_limits,
+            ..Default::default()
+        };
+
+        let session = match Session::new_with_opts(output_folder.clone(), options).await {
+            Ok(s) => s,
+            Err(initial_err) => {
+                // El estado DHT persistente ha quedado corrupto tras un cierre
+                // abrupto. Se elimina el directorio de sesión y se reintenta
+                // con configuración limpia para garantizar que la app arranque.
+                sync_logger::log_error(
+                    "TorrentEngine::new",
+                    &format!(
+                        "Fallo en la inicialización de la sesión: {}. Intentando recuperación.",
+                        initial_err
+                    ),
+                    "El estado DHT persistente está corrupto. Limpiando y reintentando.",
+                );
+
+                if output_folder.exists() {
+                    std::fs::remove_dir_all(&output_folder).map_err(|e| {
+                        TorrentError::SessionInit(format!(
+                            "No se pudo limpiar el directorio de sesión corrupto: {e}"
+                        ))
+                    })?;
+                }
+
+                // El segundo intento arranca sin fastresume para evitar cargar
+                // cualquier otro estado persistente potencialmente dañado.
+                let recovery_options = SessionOptions {
+                    listen_port_range: Some(LISTEN_PORT_RANGE),
+                    enable_upnp_port_forwarding: true,
+                    fastresume: false,
+                    concurrent_init_limit: Some(3),
+                    ratelimits: initial_limits,
+                    ..Default::default()
+                };
+
+                Session::new_with_opts(output_folder, recovery_options)
+                    .await
+                    .map_err(|e| {
+                        TorrentError::SessionInit(format!(
+                            "Fallo irrecuperable tras limpiar estado DHT: {e}"
+                        ))
+                    })?
+            }
+        };
+
+        // Precalentar el caché de trackers en paralelo con un timeout estricto.
+        // Se solicitan los tiers Best y AllUdp simultáneamente para que la primera
+        // descarga tenga la lista completa sin espera adicional. Si la red no
+        // responde a tiempo, el vector queda vacío y las descargas obtienen los
+        // trackers de forma síncrona sin impacto funcional.
+        let cached_trackers = match tokio::time::timeout(WARMUP_TIMEOUT, async {
+            let (best, udp) = tokio::join!(
+                fetch_trackers(TrackerTier::Best),
+                fetch_trackers(TrackerTier::AllUdp),
+            );
+            merge_tracker_lists(best, udp)
+        })
+        .await
+        {
+            Ok(trackers) => {
+                sync_logger::log_operation(
+                    "TorrentEngine::new",
+                    &format!(
+                        "Caché de trackers precalentado: {} entradas disponibles.",
+                        trackers.len()
+                    ),
+                );
+                trackers
+            }
+            Err(_) => {
+                // El timeout expiró antes de que la red respondiera.
+                // La primera descarga solicitará los trackers de forma síncrona.
+                sync_logger::log_error(
+                        "TorrentEngine::new",
+                        "Timeout al precalentar trackers. La primera descarga los obtendrá de forma síncrona.",
+                        "Precalentamiento de trackers incompleto por timeout de red.",
+                    );
+                Vec::new()
+            }
+        };
+
+        Ok(Self {
+            session,
+            active: HashSet::new(),
+            cached_trackers,
+        })
+    }
+
+    /// Devuelve un clon del handle de sesión envuelto en [`Arc`].
+    ///
+    /// Los llamadores que necesiten realizar operaciones de sesión desde una
+    /// tarea en segundo plano deben clonar el `Arc` aquí en lugar de mantener
+    /// un borrow sobre `TorrentEngine`, que vive detrás de un `Mutex`.
+    pub fn session(&self) -> Arc<Session> {
+        self.session.clone()
+    }
+
+    /// Registra `info_hash` como descarga activa.
+    ///
+    /// Debe llamarse inmediatamente después de que un torrent se haya añadido
+    /// con éxito a la sesión. El hash es usado por [`unregister_active`] y por
+    /// cualquier operación masiva futura que necesite enumerar las descargas en
+    /// curso.
+    pub fn register_active(&mut self, info_hash: String) {
+        self.active.insert(info_hash);
+    }
+
+    /// Elimina `info_hash` del conjunto de descargas activas.
+    ///
+    /// Debe llamarse cuando un torrent completa, es cancelado o encuentra un
+    /// error fatal. Llamar a este método con un hash desconocido es una
+    /// operación sin efecto.
+    pub fn unregister_active(&mut self, info_hash: &str) {
+        self.active.remove(info_hash);
+    }
+
+    /// Devuelve una copia de los info-hashes de todas las descargas activas.
+    pub fn active_hashes(&self) -> Vec<String> {
+        self.active.iter().cloned().collect()
+    }
+
+    /// Devuelve un clon del caché de trackers precalentado.
+    ///
+    /// Si el precalentamiento falló o todavía no se ha completado, devuelve un
+    /// vector vacío. Las funciones de adición de torrents deben tratar un
+    /// vector vacío como señal para solicitar los trackers de forma síncrona.
+    pub fn cached_trackers(&self) -> Vec<String> {
+        self.cached_trackers.clone()
+    }
+
+    /// Actualiza dinámicamente los límites de velocidad de descarga y subida en la sesión activa.
+    pub fn update_rate_limits(
+        &self,
+        download_limit_kbs: Option<u32>,
+        upload_limit_kbs: Option<u32>,
+    ) {
+        let download_bps = download_limit_kbs
+            .filter(|&k| k > 0)
+            .and_then(|k| NonZeroU32::new(k.saturating_mul(1024)));
+        let upload_bps = upload_limit_kbs
+            .filter(|&k| k > 0)
+            .and_then(|k| NonZeroU32::new(k.saturating_mul(1024)));
+
+        self.session.ratelimits.set_download_bps(download_bps);
+        self.session.ratelimits.set_upload_bps(upload_bps);
+
+        sync_logger::log_operation(
+            "TorrentEngine::update_rate_limits",
+            &format!(
+                "Límites actualizados: bajada={:?} B/s, subida={:?} B/s",
+                download_bps, upload_bps
+            ),
+        );
+    }
+}
+
+/// Combina dos listas de trackers en una sola eliminando duplicados.
+///
+/// El orden de inserción se preserva: los trackers de `primary` aparecen
+/// primero, seguidos de los de `secondary` que no estuvieran ya presentes.
+/// Usar un `HashSet` como índice de deduplicación garantiza que la operación
+/// sea O(n) en lugar de O(n²).
+fn merge_tracker_lists(primary: Vec<String>, secondary: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::with_capacity(primary.len() + secondary.len());
+    let mut merged = Vec::with_capacity(primary.len() + secondary.len());
+
+    for tracker in primary.into_iter().chain(secondary) {
+        if seen.insert(tracker.clone()) {
+            merged.push(tracker);
+        }
+    }
+
+    merged
+}
+
+/// Obtiene la lista de trackers para una nueva descarga, priorizando el caché.
+///
+/// Si el engine tiene trackers precalentados, los devuelve directamente sin
+/// ninguna llamada de red. Si el caché está vacío (porque el precalentamiento
+/// falló o expiró su timeout), solicita los tiers `Best` y `AllUdp` en
+/// paralelo de forma síncrona. En ambos casos el resultado es la unión
+/// deduplicada de ambos tiers.
+async fn resolve_trackers_for_download(cached: Vec<String>) -> Vec<String> {
+    if !cached.is_empty() {
+        sync_logger::log_operation(
+            "resolve_trackers_for_download",
+            &format!(
+                "Usando {} trackers del caché precalentado. Sin espera de red.",
+                cached.len()
+            ),
+        );
+        return cached;
+    }
+
+    // El caché no está disponible: solicitar ambos tiers en paralelo para
+    // minimizar la latencia frente a solicitarlos secuencialmente.
+    sync_logger::log_operation(
+        "resolve_trackers_for_download",
+        "Caché vacío. Obteniendo trackers Best y AllUdp en paralelo.",
+    );
+
+    let (best, udp) = tokio::join!(
+        fetch_trackers(TrackerTier::Best),
+        fetch_trackers(TrackerTier::AllUdp),
+    );
+
+    merge_tracker_lists(best, udp)
+}
+
+/// Parsea un info-hash en hexadecimal a un [`TorrentIdOrHash`].
+///
+/// Devuelve [`TorrentError::NotFound`] si la cadena no es un digest SHA-1 o
+/// SHA-256 hexadecimal válido de 40 o 64 caracteres respectivamente.
+fn parse_info_hash(info_hash: &str) -> Result<TorrentIdOrHash, TorrentError> {
+    TorrentIdOrHash::try_from(info_hash)
+        .map_err(|_| TorrentError::NotFound(format!("info_hash inválido: {info_hash}")))
+}
+
+/// Convierte una velocidad expresada en megabits por segundo a bytes por segundo.
+///
+/// librqbit expone las velocidades a través de un campo llamado `mbps` cuya
+/// unidad son **megabits por segundo** (Mbps), no megabytes. La conversión es:
+///
+/// ```text
+/// bytes/s = Mbps × 1_000_000 ÷ 8  =  Mbps × 125_000
+/// ```
+///
+/// Casos límite manejados explícitamente:
+/// - `NaN` y valores negativos producen `0` en lugar de un entero sin sentido
+///   tras el cast `as u64`.
+/// - Valores que desborden `u64` se limitan a `u64::MAX`. En la práctica este
+///   umbral (~147 Pbps) es inalcanzable, pero el clamp previene comportamiento
+///   indefinido si librqbit emitiera una medición corrupta.
+#[inline]
+fn mbps_to_bytes_per_sec(mbps: f64) -> u64 {
+    if mbps <= 0.0 || mbps.is_nan() {
+        return 0;
+    }
+    (mbps * 125_000.0).min(u64::MAX as f64) as u64
+}
+
+/// Comprueba si una carpeta de destino contiene archivos descargables.
+///
+/// Se usa para decidir si librqbit debe ejecutar su fase de verificación de
+/// piezas al añadir un torrent. La lógica es conservadora: cualquier archivo
+/// regular encontrado en cualquier nivel de profundidad de `save_path` es
+/// suficiente para concluir que puede haber progreso previo que merece ser
+/// verificado. Si la carpeta no existe o está vacía, la verificación es
+/// innecesaria y se omite para que la descarga arranque sin demora.
+///
+/// # Comportamiento ante errores de I/O
+///
+/// Si el sistema de archivos devuelve un error al listar el directorio (por
+/// ejemplo, por falta de permisos), la función devuelve `false` de forma
+/// conservadora. Esto garantiza que el caso de error nunca bloquee el inicio
+/// de una descarga, aunque pueda resultar en una verificación omitida en
+/// situaciones excepcionales.
+fn save_path_has_existing_files(save_path: &str) -> bool {
+    let path = std::path::Path::new(save_path);
+
+    if !path.exists() {
+        return false;
+    }
+
+    // Iteramos en profundidad para detectar archivos anidados dentro de
+    // subcarpetas que librqbit haya creado en descargas anteriores.
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return false;
+    };
+
+    for entry in entries.flatten() {
+        let entry_path = entry.path();
+
+        if entry_path.is_file() {
+            return true;
+        }
+
+        // Si hay subcarpetas, buscamos recursivamente al menos un archivo.
+        if entry_path.is_dir() {
+            let Ok(sub_entries) = std::fs::read_dir(&entry_path) else {
+                continue;
+            };
+            if sub_entries.flatten().any(|e| e.path().is_file()) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+/// Construye las [`AddTorrentOptions`] apropiadas para `save_path`.
+///
+/// Cuando la carpeta de destino está limpia (sin archivos previos), se pasa
+/// `overwrite: false`. Esto evita que librqbit entre en su fase de
+/// verificación de piezas, que abre cada archivo y comprueba los hashes SHA-1
+/// incluso cuando no hay nada que verificar. El resultado es que la descarga
+/// pasa de `Initializing` a `Downloading` de forma casi instantánea en lugar
+/// de tardar varios segundos.
+///
+/// Cuando la carpeta ya contiene archivos (descarga interrumpida o reanudada),
+/// se pasa `overwrite: true` para que librqbit verifique el progreso existente
+/// y reanude desde el punto correcto en lugar de re-descargar piezas ya escritas.
+fn build_add_options(save_path: &str) -> AddTorrentOptions {
+    let has_files = save_path_has_existing_files(save_path);
+
+    if has_files {
+        sync_logger::log_operation(
+            "build_add_options",
+            &format!(
+                "Archivos previos detectados en '{}'. Activando verificación de piezas.",
+                save_path
+            ),
+        );
+    } else {
+        sync_logger::log_operation(
+            "build_add_options",
+            &format!(
+                "Carpeta limpia detectada en '{}'. Omitiendo verificación de piezas.",
+                save_path
+            ),
+        );
+    }
+
+    AddTorrentOptions {
+        output_folder: Some(save_path.into()),
+        // `overwrite: true` solo cuando ya hay archivos en disco. Si la
+        // carpeta está vacía, `false` evita la verificación innecesaria y
+        // reduce el tiempo hasta el primer byte descargado.
+        overwrite: has_files,
+        ..Default::default()
+    }
+}
+
+/// Emite un evento `torrent-download-progress` inicial con métricas en cero.
+///
+/// Llamar a esta función inmediatamente después de añadir un torrent garantiza
+/// que el frontend transite al estado visual "iniciando" antes de que llegue el
+/// primer tick de progreso real, que puede tardar varios segundos mientras
+/// librqbit resuelve los peers iniciales.
+pub fn emit_starting_event(app: &AppHandle, info_hash: &str, name: &str) {
+    let payload = TorrentProgressPayload {
+        info_hash: info_hash.to_string(),
+        name: name.to_string(),
+        progress_percent: 0.0,
+        download_speed_bytes: 0,
+        upload_speed_bytes: 0,
+        state: TorrentDownloadState::Starting,
+        total_bytes: 0,
+        downloaded_bytes: 0,
+        eta_seconds: None,
+        peers_connected: 0,
+    };
+    let _ = app.emit(TORRENT_PROGRESS_EVENT, &payload);
+}
+
+/// Elimina un torrent de la sesión sin borrar los archivos descargados.
+///
+/// El segundo argumento de [`Session::delete`] controla el borrado de archivos;
+/// pasar `false` conserva lo que ya se haya escrito en disco, que corresponde
+/// a la semántica habitual de "cancelar descarga" en clientes torrent.
+pub async fn cancel_via_session(
+    session: &Arc<Session>,
+    info_hash: &str,
+) -> Result<(), TorrentError> {
+    let id = parse_info_hash(info_hash)?;
+    let handle = session
+        .get(id)
+        .ok_or_else(|| TorrentError::NotFound(info_hash.to_string()))?;
+
+    let _ = session.pause(&handle).await;
+
+    let delete_future = session.delete(TorrentIdOrHash::Id(handle.id()), false);
+
+    match tokio::time::timeout(std::time::Duration::from_secs(3), delete_future).await {
+        Ok(result) => result.map_err(|e| TorrentError::Cancel(e.to_string())),
+        Err(_) => {
+            sync_logger::log_error(
+                "cancel_via_session",
+                "Timeout al eliminar torrent de la sesión, forzando cierre",
+                &format!("El torrent {} tardó demasiado en eliminarse", info_hash),
+            );
+            Ok(())
+        }
+    }
+}
+
+/// Suspende la actividad de I/O y peers del torrent indicado sin eliminarlo.
+///
+/// El torrent permanece en la sesión y sus metadatos se conservan, por lo que
+/// [`resume_via_session`] puede reiniciarlo sin necesidad de añadirlo de nuevo.
+pub async fn pause_via_session(
+    session: &Arc<Session>,
+    info_hash: &str,
+) -> Result<(), TorrentError> {
+    let id = parse_info_hash(info_hash)?;
+    let handle = session
+        .get(id)
+        .ok_or_else(|| TorrentError::NotFound(info_hash.to_string()))?;
+    session
+        .pause(&handle)
+        .await
+        .map_err(|e| TorrentError::Pause(e.to_string()))
+}
+
+/// Reanuda un torrent previamente pausado.
+///
+/// librqbit reconectará a los peers y continuará desde el último estado de
+/// fast-resume guardado, por lo que ninguna pieza ya en disco será
+/// re-descargada.
+pub async fn resume_via_session(
+    session: &Arc<Session>,
+    info_hash: &str,
+) -> Result<(), TorrentError> {
+    let id = parse_info_hash(info_hash)?;
+    let handle = session
+        .get(id)
+        .ok_or_else(|| TorrentError::NotFound(info_hash.to_string()))?;
+    session
+        .unpause(&handle)
+        .await
+        .map_err(|e| TorrentError::Resume(e.to_string()))
+}
+
+/// Añade un magnet link a la sesión y devuelve su información de identidad.
+///
+/// La tupla devuelta es `(info_hash, nombre_visible, id_numérico)`.
+/// `nombre_visible` se deriva del parámetro `dn=` del URI magnet cuando está
+/// disponible; de lo contrario, se usa el info-hash en hexadecimal como
+/// fallback.
+///
+/// # Estrategia de trackers
+///
+/// Se utiliza [`resolve_trackers_for_download`] que prioriza el caché
+/// precalentado. Si el caché contiene datos, la adición del torrent no
+/// incurre en ninguna latencia de red adicional. Si el caché está vacío,
+/// se solicitan `Best` y `AllUdp` en paralelo antes de añadir el torrent.
+/// En ambos casos el magnet es enriquecido con la lista completa antes de
+/// entregarse a librqbit.
+pub async fn add_magnet_to_session(
+    session: &Arc<Session>,
+    magnet_link: &str,
+    save_path: &str,
+    cached_trackers: Vec<String>,
+) -> Result<(String, String, usize), TorrentError> {
+    let trackers = resolve_trackers_for_download(cached_trackers).await;
+    let enriched_magnet = enrich_magnet(magnet_link, &trackers);
+
+    // Las opciones se construyen en función de si ya hay archivos en disco.
+    // Una carpeta limpia omite la verificación de piezas para arrancar más rápido.
+    let add_options = build_add_options(save_path);
+
+    let response = session
+        .add_torrent(AddTorrent::from_url(&enriched_magnet), Some(add_options))
+        .await
+        .map_err(|e| TorrentError::AddMagnet(e.to_string()))?;
+
+    let handle = response.into_handle().ok_or(TorrentError::ListOnly)?;
+    let info_hash = handle.info_hash().as_string();
+    let name = handle
+        .name()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| info_hash.clone());
+    let id = handle.id();
+
+    Ok((info_hash, name, id))
+}
+
+/// Añade un archivo `.torrent` local a la sesión y devuelve su identidad.
+///
+/// La tupla devuelta es `(info_hash, nombre_visible, id_numérico)`.
+///
+/// `wait_until_initialized()` **no** se invoca intencionalmente. Ese método
+/// bloquea hasta que librqbit sale del estado `Initializing`, lo que puede
+/// tardar varios minutos con peers lentos o torrents grandes. Esperarlo dentro
+/// de un comando Tauri bloquearía el hilo IPC completo. El frontend recibe
+/// actualizaciones de estado incrementales a través de [`spawn_progress_monitor`]
+/// y es responsable de renderizar el estado `Starting` de forma apropiada.
+///
+/// # Estrategia de trackers y fallback
+///
+/// El flujo preferido construye un magnet link enriquecido a partir del
+/// info-hash del archivo `.torrent`, aprovechando los trackers del caché
+/// o solicitándolos en paralelo si el caché está vacío. Si ese intento falla
+/// (por ejemplo, porque el magnet no resuelve a tiempo), se reintenta añadiendo
+/// directamente el archivo `.torrent` como fallback. En ambos casos se aplica
+/// la misma detección de carpeta limpia para omitir la verificación innecesaria.
+pub async fn add_file_to_session(
+    session: &Arc<Session>,
+    file_path: &str,
+    save_path: &str,
+    cached_trackers: Vec<String>,
+) -> Result<(String, String, usize), TorrentError> {
+    let bytes =
+        std::fs::read(file_path).map_err(|e| TorrentError::ReadTorrentFile(e.to_string()))?;
+
+    let torrent_meta: librqbit::TorrentMetaV1<Vec<u8>> = librqbit::torrent_from_bytes(&bytes)
+        .map_err(|e| TorrentError::ReadTorrentFile(e.to_string()))?;
+
+    let info_hash = torrent_meta.info_hash.as_string();
+
+    let base_magnet = build_magnet_from_info_hash(&info_hash);
+    let trackers = resolve_trackers_for_download(cached_trackers).await;
+    let enriched_magnet = enrich_magnet(&base_magnet, &trackers);
+
+    // Las opciones se construyen en función de si ya hay archivos en disco.
+    // Una carpeta limpia omite la verificación de piezas para arrancar más rápido.
+    // Se clonan las opciones para poder usarlas en el fallback sin mover el valor.
+    let add_options_main = build_add_options(save_path);
+    let add_options_fallback = build_add_options(save_path);
+
+    let add_request = AddTorrent::from_url(&enriched_magnet);
+    let response_result = session
+        .add_torrent(add_request, Some(add_options_main))
+        .await;
+
+    let response = match response_result {
+        Ok(res) => res,
+        Err(_) => {
+            // El magnet enriquecido no pudo resolverse. Se reintenta con el
+            // archivo .torrent original para no bloquear la descarga.
+            sync_logger::log_error(
+                "add_file_to_session",
+                "Fallo al usar magnet enriquecido. Retrocediendo a archivo .torrent.",
+                "No se pudo usar el magnet enriquecido. Retrocediendo a archivo .torrent.",
+            );
+            let fallback_add = AddTorrent::from_local_filename(file_path)
+                .map_err(|e| TorrentError::ReadTorrentFile(e.to_string()))?;
+
+            session
+                .add_torrent(fallback_add, Some(add_options_fallback))
+                .await
+                .map_err(|e| TorrentError::AddTorrent(e.to_string()))?
+        }
+    };
+
+    let handle = response.into_handle().ok_or(TorrentError::ListOnly)?;
+    let final_info_hash = handle.info_hash().as_string();
+    let name = handle
+        .name()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| final_info_hash.clone());
+    let id = handle.id();
+
+    Ok((final_info_hash, name, id))
+}
+
+/// Lanza una tarea en segundo plano que emite eventos de progreso periódicamente
+/// y escala el conjunto de trackers si la conectividad inicial es insuficiente.
+///
+/// La tarea itera a [`PROGRESS_INTERVAL`], muestrea las estadísticas del torrent
+/// desde la sesión y emite un [`TORRENT_PROGRESS_EVENT`] al frontend de Tauri.
+/// Cuando el torrent finaliza, emite adicionalmente [`TORRENT_DONE_EVENT`] y
+/// abandona el bucle. Si el torrent es eliminado de la sesión mientras la tarea
+/// está en ejecución (por ejemplo, a través de [`cancel_via_session`]), la única
+/// llamada a `session.get()` en cada tick devuelve `None` y la tarea termina
+/// limpiamente.
+///
+/// # Escalado dinámico de trackers
+///
+/// Tras [`TRACKER_ESCALATION_SECS`] segundos, si el número de peers vivos es
+/// inferior a [`TRACKER_ESCALATION_MIN_PEERS`], se solicita el tier `All` y se
+/// re-enriquece el magnet. Esta estrategia cubre el caso en que los trackers de
+/// arranque no tienen suficientes peers registrados para este torrent concreto,
+/// lo cual es común en torrents poco populares o en redes con restricciones UDP.
+/// El escalado ocurre como máximo una vez por sesión de descarga para no saturar
+/// la red de anuncios.
+///
+/// # Seguridad ante cancelación
+///
+/// Se usa deliberadamente una sola llamada a `session.get()` por tick. El patrón
+/// original de dos llamadas (una para estadísticas, otra para verificar
+/// eliminación) introducía una condición de carrera TOCTOU: el torrent podía ser
+/// eliminado entre ambas llamadas, haciendo que se emitiera un evento de progreso
+/// obsoleto tras la cancelación y que la barra de progreso reapareciera
+/// momentáneamente. Con una sola llamada, ambas verificaciones se resuelven de
+/// forma atómica.
+pub fn spawn_progress_monitor(
+    session: Arc<Session>,
+    torrent_id: usize,
+    info_hash: String,
+    name: String,
+    app: AppHandle,
+    engine_state: Option<Arc<Mutex<TorrentEngine>>>,
+) {
+    tokio::spawn(async move {
+        let id = TorrentIdOrHash::Id(torrent_id);
+        let mut interval = tokio::time::interval(PROGRESS_INTERVAL);
+        let start = tokio::time::Instant::now();
+
+        // Bandera que garantiza que el escalado de trackers ocurre como máximo
+        // una vez durante toda la vida de esta tarea de monitoreo.
+        let mut tracker_escalation_done = false;
+        let mut done_notified = false;
+
+        loop {
+            interval.tick().await;
+
+            // Si el motor ya no considera este torrent como activo (porque ha sido
+            // cancelado), detenemos el monitor de inmediato para evitar enviar
+            // eventos de progreso "fantasma" (ej. estado Pausado) al frontend.
+            if let Some(engine) = &engine_state {
+                let is_active = {
+                    let eng = engine.lock().await;
+                    eng.active.contains(&info_hash)
+                };
+                if !is_active {
+                    break;
+                }
+            }
+
+            let managed = match session.get(id) {
+                Some(m) => m,
+                None => break,
+            };
+
+            let stats = managed.stats();
+
+            // El snapshot `live` solo está presente mientras el torrent tiene
+            // actividad de red. Si está ausente, todas las métricas de red se
+            // reportan como cero para no mostrar valores desactualizados.
+            let (download_speed_bytes, upload_speed_bytes, peers_connected) =
+                if let Some(live) = &stats.live {
+                    (
+                        mbps_to_bytes_per_sec(live.download_speed.mbps),
+                        mbps_to_bytes_per_sec(live.upload_speed.mbps),
+                        live.snapshot.peer_stats.live as u32,
+                    )
+                } else {
+                    (0, 0, 0)
+                };
+
+            // Evaluar si procede el escalado de trackers al tier `All`.
+            // Condiciones: el tiempo de escalado ha transcurrido, aún no se ha
+            // escalado en esta sesión, y los peers conectados están por debajo
+            // del umbral mínimo que garantiza una velocidad aceptable.
+            if !tracker_escalation_done
+                && start.elapsed().as_secs() >= TRACKER_ESCALATION_SECS
+                && peers_connected < TRACKER_ESCALATION_MIN_PEERS
+            {
+                tracker_escalation_done = true;
+
+                // El escalado se ejecuta en su propia tarea para no bloquear
+                // el tick actual del monitor mientras se resuelven los trackers.
+                let session_clone = session.clone();
+                let info_hash_clone = info_hash.clone();
+
+                tokio::spawn(async move {
+                    sync_logger::log_operation(
+                        "spawn_progress_monitor",
+                        &format!(
+                            "Torrent {} lleva {}s con menos de {} peers. Escalando a TrackerTier::All.",
+                            info_hash_clone,
+                            TRACKER_ESCALATION_SECS,
+                            TRACKER_ESCALATION_MIN_PEERS,
+                        ),
+                    );
+
+                    let all_trackers = fetch_trackers(TrackerTier::All).await;
+
+                    // Re-enriquecer el magnet con el tier completo y re-añadir el
+                    // torrent a la sesión. librqbit detectará que ya existe por
+                    // info-hash y fusionará los nuevos trackers con los existentes
+                    // sin duplicar la descarga.
+                    let enriched = enrich_magnet(
+                        &build_magnet_from_info_hash(&info_hash_clone),
+                        &all_trackers,
+                    );
+
+                    // Se usa `overwrite: false` para no interrumpir la descarga
+                    // en curso. El objetivo es únicamente anunciar a más trackers.
+                    let opts = AddTorrentOptions {
+                        overwrite: false,
+                        ..Default::default()
+                    };
+
+                    match session_clone
+                        .add_torrent(AddTorrent::from_url(&enriched), Some(opts))
+                        .await
+                    {
+                        Ok(_) => {
+                            sync_logger::log_operation(
+                                "spawn_progress_monitor",
+                                &format!(
+                                    "Escalado de trackers completado para {}. {} trackers adicionales inyectados.",
+                                    info_hash_clone,
+                                    all_trackers.len(),
+                                ),
+                            );
+                        }
+                        Err(e) => {
+                            // Un error aquí no es crítico: la descarga continúa con
+                            // los trackers originales. Se registra para diagnóstico.
+                            sync_logger::log_error(
+                                "spawn_progress_monitor",
+                                &format!("Error al escalar trackers para {}: {}", info_hash_clone, e),
+                                "No se pudieron inyectar trackers adicionales. La descarga continúa.",
+                            );
+                        }
+                    }
+                });
+            }
+
+            let total_bytes = stats.total_bytes;
+            let downloaded_bytes = stats.progress_bytes;
+
+            // Se limita a 100.0 para absorber pequeñas imprecisiones de punto
+            // flotante que podrían producir valores como 100.0000001.
+            let progress_percent = if total_bytes > 0 {
+                ((downloaded_bytes as f64 / total_bytes as f64) * 100.0).min(100.0) as f32
+            } else {
+                0.0
+            };
+
+            let eta_seconds = compute_eta(total_bytes, downloaded_bytes, download_speed_bytes);
+
+            // El flag `finished` tiene prioridad sobre `stats.state` porque
+            // librqbit puede reportar un estado intermedio en el tick exacto en
+            // que el último piece es verificado y escrito.
+            let is_finished = stats.finished;
+            let state = if is_finished {
+                TorrentDownloadState::Completed
+            } else {
+                match stats.state {
+                    TorrentStatsState::Paused => TorrentDownloadState::Paused,
+                    TorrentStatsState::Initializing => TorrentDownloadState::Starting,
+                    _ => TorrentDownloadState::Downloading,
+                }
+            };
+
+            let payload = TorrentProgressPayload {
+                info_hash: info_hash.clone(),
+                name: name.clone(),
+                progress_percent,
+                download_speed_bytes,
+                upload_speed_bytes,
+                state: state.clone(),
+                total_bytes,
+                downloaded_bytes,
+                eta_seconds,
+                peers_connected,
+            };
+
+            // Si el torrent está terminado de descargar:
+            if is_finished {
+                if !done_notified {
+                    done_notified = true;
+                    let done_payload = TorrentProgressPayload {
+                        state: TorrentDownloadState::Completed,
+                        ..payload.clone()
+                    };
+                    let _ = app.emit(TORRENT_DONE_EVENT, &done_payload);
+                    crate::notifications::writer::try_record_torrent_done(&app, &name, &info_hash);
+
+                    // Notificar al sistema de sources que este torrent ha completado su descarga
+                    crate::sources::torrent_complete_notify(&app, &info_hash, total_bytes);
+                }
+
+                let seeding_mode = crate::config::with_config(|cfg| {
+                    cfg.torrent_seeding_mode.clone()
+                });
+
+                let should_stop_seeding = if seeding_mode == "seed_ratio_1" {
+                    stats.uploaded_bytes >= total_bytes
+                } else {
+                    true
+                };
+
+                if should_stop_seeding {
+                    if let Some(engine) = &engine_state {
+                        let mut eng = engine.lock().await;
+                        eng.unregister_active(&info_hash);
+
+                        if eng.active_hashes().is_empty() {
+                            if let Some(guard_state) = app.try_state::<TorrentShutdownGuard>() {
+                                if let Ok(mut g) = guard_state.0.lock() {
+                                    if let Some(guard) = g.take() {
+                                        guard.complete();
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Liberar el torrent de la sesión para que no mantenga los archivos
+                    // abiertos. Esto permite que el usuario instale el juego de inmediato.
+                    let _ = session.delete(id, false).await;
+                    break;
+                } else {
+                    // Modo seed_ratio_1 activo: seguimos compartiendo hasta alcanzar ratio 1.0
+                    let seeding_payload = TorrentProgressPayload {
+                        state: TorrentDownloadState::Seeding,
+                        ..payload
+                    };
+                    let _ = app.emit(TORRENT_PROGRESS_EVENT, &seeding_payload);
+                    continue;
+                }
+            }
+
+            let _ = app.emit(TORRENT_PROGRESS_EVENT, &payload);
+        }
+    });
+}

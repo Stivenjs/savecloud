@@ -1,0 +1,524 @@
+import { lazy, useMemo, useState, Suspense } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Button,
+  Input,
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  Spinner,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@heroui/react";
+import { FolderOpen, Plus, Search, HardDrive, Gamepad2, MoreVertical, EyeOff, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { scanPathCandidates, searchSteamAppIdsBatch } from "@services/tauri";
+import type { PathCandidate } from "@services/tauri";
+import type { ConfiguredGame } from "@app-types/config";
+import { useDebouncedValue } from "@hooks/useDebouncedValue";
+import { useResolvedCandidateNames } from "@hooks/useResolvedCandidateNames";
+import { useDismissedCandidates } from "@hooks/useDismissedCandidates";
+import { extractAppIdFromFolderName, toGameId } from "@utils/gameImage";
+import { dedupePreserveGamePaths, mergeScanPathsWithConfigured, normPathKey } from "@utils/gameSavePaths";
+import { useNavigable } from "@features/input/useNavigable";
+import { getGamepadFocusClass } from "@features/input/styles";
+import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
+import { CatalogCoverImage } from "@features/steam-catalog/components/CatalogCoverImage";
+import { useGameMedia, useGameMediaBatch } from "@hooks/useGameMedia";
+
+const MagicRings = lazy(() => import("@components/external/MagicRings"));
+
+interface ScanModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSelectCandidate: (paths: string[], suggestedId: string) => void;
+  /** Para listar todas las rutas ya guardadas en config cuando coincide un candidato. */
+  configuredGames?: readonly ConfiguredGame[];
+}
+
+function CandidateMenu({ onDismiss }: { onDismiss: () => void }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover isOpen={open} onOpenChange={setOpen} placement="bottom-end" offset={4}>
+      <PopoverTrigger>
+        <Button
+          isIconOnly
+          size="sm"
+          variant="light"
+          aria-label={t("library.scan.moreOptions")}
+          className="text-default-400 hover:text-default-600 shrink-0"
+          onPress={() => setOpen((v) => !v)}>
+          <MoreVertical size={15} />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="min-w-47.5 border border-default-200/80 p-1 shadow-sm">
+        <button
+          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-default-100"
+          onClick={() => {
+            onDismiss();
+            setOpen(false);
+          }}>
+          <EyeOff size={14} className="shrink-0 text-default-400" />
+          <div>
+            <p className="font-medium leading-tight text-foreground">{t("library.scan.notAGame")}</p>
+            <p className="mt-0.5 text-[11px] leading-tight text-default-400">{t("library.scan.dontShowAgain")}</p>
+          </div>
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+import type { SteamAppdetailsMediaResult } from "@services/tauri";
+
+function CandidateRow({
+  candidate,
+  resolvedName,
+  displayPaths,
+  mergedFromConfigured,
+  onAdd,
+  onDismiss,
+  index,
+  mediaBySteamAppId,
+  resolvedAppIdsMap,
+}: {
+  candidate: PathCandidate;
+  resolvedName: string | null | undefined;
+  /** Rutas fusionadas scan + configuración donde aplique (sin duplicar). */
+  displayPaths: readonly string[];
+  mergedFromConfigured: boolean;
+  onAdd: () => void;
+  onDismiss: () => void;
+  index: number;
+  mediaBySteamAppId: Record<string, SteamAppdetailsMediaResult> | null;
+  resolvedAppIdsMap?: Record<string, string> | null;
+}) {
+  const { t } = useTranslation();
+  const appId =
+    candidate.steamAppId ||
+    (candidate.folderName && resolvedAppIdsMap?.[candidate.folderName]) ||
+    extractAppIdFromFolderName(candidate.folderName ?? "");
+  const hasAppId = !!appId;
+  const displayName = hasAppId && resolvedName ? resolvedName : candidate.folderName;
+  const isLoading = hasAppId && resolvedName === undefined;
+
+  const game = useMemo<ConfiguredGame>(() => {
+    return {
+      id: candidate.path,
+      name: displayName ?? candidate.folderName,
+      steamAppId: appId || undefined,
+      imageUrl: undefined,
+      savePaths: [],
+      paths: [],
+      backupSavesCount: 0,
+      tags: [],
+      notes: "",
+      syncEnabled: false,
+      updatedAt: "",
+    };
+  }, [candidate.path, candidate.folderName, displayName, appId]);
+
+  const { coverCandidates } = useGameMedia({
+    game,
+    resolvedSteamAppId: appId,
+    mediaBySteamAppId,
+    mediaFromBatch: true,
+  });
+
+  const navAdd = useNavigable({
+    id: `scan-row-add-${index}`,
+    layerId: "scan-modal",
+    onPress: onAdd,
+  });
+
+  return (
+    <li
+      className={`flex flex-col gap-3 rounded-lg border border-default-200/70 px-4 py-3 transition-colors hover:border-default-300 hover:bg-default-50 outline-none focus-within:ring-0 focus-within:border-default-200/70 sm:flex-row sm:items-center sm:justify-between ${
+        navAdd.isFocused && navAdd.inputMode === "gamepad" ? "border-primary/40 bg-primary/5" : ""
+      }`}>
+      <div className="flex flex-1 items-start gap-3.5 min-w-0">
+        <div className="h-11 w-24 shrink-0 overflow-hidden rounded-md bg-default-100 dark:bg-default-50/50 flex items-center justify-center border border-default-200/50">
+          {appId ? (
+            <CatalogCoverImage
+              alt={displayName ?? ""}
+              candidates={coverCandidates}
+              className="h-full w-full object-cover"
+              fallbackClassName="flex h-full w-full items-center justify-center text-default-400"
+            />
+          ) : (
+            <Gamepad2 size={18} className="text-default-400" />
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <div className="truncate text-sm font-medium text-foreground">
+              {displayName}
+              {isLoading && <Spinner size="sm" className="ml-2 inline-block" color="default" />}
+            </div>
+          </div>
+          <div className="mt-1.5 flex flex-col gap-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-default-400">
+                {t("library.scan.path", { count: displayPaths.length })}
+              </span>
+              {mergedFromConfigured && (
+                <span className="text-[10px] text-primary" title={t("library.scan.includesConfiguredPaths")}>
+                  {t("library.scan.localConfigSuffix")}
+                </span>
+              )}
+            </div>
+            <ul className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-md border border-default-100/80 bg-default-50/80 px-2 py-1.5 dark:border-default-100/15 dark:bg-default-50/10">
+              {displayPaths.map((absPath, i) => (
+                <li
+                  key={`${normPathKey(absPath)}:${i}`}
+                  className="flex items-start gap-1.5 text-[11px] leading-snug text-default-500">
+                  <HardDrive size={11} className="mt-0.5 shrink-0 text-default-400" aria-hidden />
+                  <span className="min-w-0 break-all" title={absPath}>
+                    {absPath}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1.5 justify-end">
+        <Button
+          size="sm"
+          color="primary"
+          variant="flat"
+          startContent={<Plus size={14} />}
+          onPress={onAdd}
+          className={getGamepadFocusClass(navAdd.isFocused, navAdd.inputMode)}
+          {...navAdd.navProps}>
+          {t("library.scan.add")}
+        </Button>
+        <CandidateMenu onDismiss={onDismiss} />
+      </div>
+    </li>
+  );
+}
+
+export function ScanModal({ isOpen, onClose, onSelectCandidate, configuredGames = [] }: ScanModalProps) {
+  const { t } = useTranslation();
+  const isLowPerf = useLowPerformanceMode();
+
+  const {
+    data: candidates,
+    isLoading,
+    refetch,
+  } = useQuery({
+    queryKey: ["scan-candidates"],
+    queryFn: scanPathCandidates,
+    enabled: isOpen,
+  });
+
+  const { dismissed, dismiss, clearAll } = useDismissedCandidates();
+  const resolvedNames = useResolvedCandidateNames(candidates);
+
+  const queriesToResolve = useMemo(() => {
+    if (!candidates) return [];
+    const queries = candidates
+      .filter((c) => !c.steamAppId)
+      .map((c) => c.folderName)
+      .filter(Boolean) as string[];
+    return [...new Set(queries)];
+  }, [candidates]);
+
+  const { data: resolvedAppIdsMap = null } = useQuery({
+    queryKey: ["scan-resolved-appids-batch", queriesToResolve.join(",")],
+    queryFn: async () => {
+      if (queriesToResolve.length === 0) return {};
+      const results = await searchSteamAppIdsBatch(queriesToResolve);
+      const map: Record<string, string> = {};
+      queriesToResolve.forEach((q, index) => {
+        const id = results[index];
+        if (id) {
+          map[q] = id;
+        }
+      });
+      return map;
+    },
+    enabled: isOpen && queriesToResolve.length > 0,
+    staleTime: 1000 * 60 * 60,
+  });
+
+  const mockGames = useMemo<ConfiguredGame[]>(() => {
+    if (!candidates) return [];
+    return candidates.map((c) => {
+      const appId =
+        c.steamAppId ||
+        (c.folderName && resolvedAppIdsMap?.[c.folderName]) ||
+        extractAppIdFromFolderName(c.folderName ?? "");
+      return {
+        id: c.path,
+        name: c.folderName,
+        steamAppId: appId || undefined,
+        imageUrl: undefined,
+        savePaths: [],
+        paths: [],
+        backupSavesCount: 0,
+        tags: [],
+        notes: "",
+        syncEnabled: false,
+        updatedAt: "",
+      };
+    });
+  }, [candidates, resolvedAppIdsMap]);
+
+  const { mediaBySteamAppId } = useGameMediaBatch({
+    games: mockGames,
+    resolvedSteamAppIds: {},
+    isResolvingIds: false,
+  });
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebouncedValue(searchQuery.trim().toLowerCase(), 300);
+
+  const visibleCandidates = useMemo(() => {
+    if (!candidates?.length) return [];
+    return candidates.filter((c: PathCandidate) => !dismissed.has(c.path));
+  }, [candidates, dismissed]);
+
+  const displayPathsMetaByCandidatePath = useMemo(() => {
+    const map = new Map<string, { paths: readonly string[]; mergedFromConfigured: boolean }>();
+    const gamesList = [...configuredGames];
+    for (const c of candidates ?? []) {
+      const { paths, mergedFromConfigured } = mergeScanPathsWithConfigured(c, gamesList);
+      map.set(c.path, { paths, mergedFromConfigured });
+    }
+    return map;
+  }, [candidates, configuredGames]);
+
+  const filteredCandidates = useMemo(() => {
+    if (!visibleCandidates.length) return [];
+    if (!debouncedSearch) return visibleCandidates;
+    return visibleCandidates.filter((c: PathCandidate) => {
+      const resolvedName = resolvedNames[c.path];
+      const hasAppId =
+        !!c.steamAppId ||
+        !!(c.folderName && resolvedAppIdsMap?.[c.folderName]) ||
+        !!extractAppIdFromFolderName(c.folderName ?? "");
+      const displayName = hasAppId && resolvedName ? resolvedName : (c.folderName ?? "");
+      const merged = displayPathsMetaByCandidatePath.get(c.path)?.paths ?? [c.path];
+      const searchIn = [displayName, c.folderName ?? "", c.path, c.basePath ?? "", ...merged].join(" ");
+      return searchIn.toLowerCase().includes(debouncedSearch);
+    });
+  }, [visibleCandidates, debouncedSearch, resolvedNames, displayPathsMetaByCandidatePath, resolvedAppIdsMap]);
+
+  const dismissedCount = useMemo(
+    () => (candidates ?? []).filter((c: PathCandidate) => dismissed.has(c.path)).length,
+    [candidates, dismissed]
+  );
+
+  const handleAdd = (candidate: PathCandidate) => {
+    const resolvedName = resolvedNames[candidate.path];
+    const baseName = resolvedName?.trim() || candidate.folderName;
+    const gameId = toGameId(baseName);
+    const pathsToAdd = candidate.paths?.length ? candidate.paths : [candidate.path];
+    onSelectCandidate(pathsToAdd, gameId);
+    onClose();
+  };
+
+  const navSearch = useNavigable({
+    id: "scan-search-input",
+    layerId: "scan-modal",
+    onPress: () => document.querySelector<HTMLInputElement>('[data-nav-id="scan-search-input"]')?.focus(),
+  });
+
+  const navRefetch = useNavigable({ id: "scan-btn-refetch", layerId: "scan-modal", onPress: () => refetch() });
+  const navClose = useNavigable({ id: "scan-btn-close", layerId: "scan-modal", onPress: onClose });
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onOpenChange={(open) => !open && onClose()}
+      size="2xl"
+      autoFocus={false}
+      scrollBehavior="inside"
+      classNames={{
+        header: "border-b border-default-200/80 pb-3",
+        footer: "border-t border-default-200/80 pt-3",
+        body: "py-3",
+        closeButton: "hidden",
+      }}>
+      <ModalContent>
+        <ModalHeader className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <FolderOpen size={15} className="text-secondary" />
+            {t("library.scan.autoScanTitle")}
+          </div>
+          <Button isIconOnly size="sm" variant="light" className="size-7 min-w-0 text-default-400" onPress={onClose}>
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" width="12" height="12">
+              <path d="M2 2l8 8M10 2l-8 8" />
+            </svg>
+          </Button>
+        </ModalHeader>
+
+        <ModalBody>
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center gap-4 py-8">
+              {isLowPerf ? (
+                <div className="flex flex-col items-center justify-center py-10 gap-3">
+                  <Spinner size="lg" color="secondary" />
+                  <p className="max-w-md text-center text-sm text-default-500">{t("library.scan.scanningPcDesc")}</p>
+                </div>
+              ) : (
+                <>
+                  <div
+                    style={{ width: "600px", height: "250px", position: "relative" }}
+                    className="flex items-center justify-center">
+                    <Suspense>
+                      <MagicRings
+                        color="#fc42ff"
+                        colorTwo="#42fcff"
+                        ringCount={6}
+                        speed={1.5}
+                        attenuation={10}
+                        lineThickness={2}
+                        baseRadius={0.35}
+                        radiusStep={0.1}
+                        scaleRate={0.1}
+                        opacity={1}
+                        blur={0}
+                        noiseAmount={0.1}
+                        rotation={0}
+                        ringGap={1.5}
+                        fadeIn={0.7}
+                        fadeOut={0.5}
+                        followMouse={true}
+                        mouseInfluence={0}
+                        hoverScale={1}
+                        parallax={0}
+                        clickBurst={false}
+                      />
+                    </Suspense>
+                  </div>
+                  <p className="max-w-md animate-pulse text-center text-sm text-default-500">
+                    {t("library.scan.scanningPcDesc")}
+                    <br />
+                    <span className="text-xs text-default-400">{t("library.scan.scanningHintSeconds")}</span>
+                  </p>
+                </>
+              )}
+            </div>
+          ) : candidates && candidates.length > 0 ? (
+            <div className="flex flex-col gap-3">
+              {/* Buscador */}
+              <div
+                className={`rounded-lg transition-all ${navSearch.isFocused && navSearch.inputMode === "gamepad" ? "ring-2 ring-primary/30" : ""}`}
+                {...navSearch.navProps}>
+                <Input
+                  aria-label={t("library.scan.searchAriaLabel")}
+                  placeholder={t("library.scan.searchPlaceholder")}
+                  size="sm"
+                  radius="lg"
+                  startContent={<Search size={13} className="text-default-400" />}
+                  value={searchQuery}
+                  onValueChange={setSearchQuery}
+                  classNames={{
+                    inputWrapper:
+                      "bg-default-100/60 border border-default-200/80 shadow-none data-[hover=true]:border-default-300 data-[focus-within=true]:!border-default-300 data-[focus=true]:!border-default-300",
+                  }}
+                />
+              </div>
+
+              {/* Banner descartados */}
+              {dismissedCount > 0 && (
+                <div className="flex items-center justify-between rounded-lg border border-default-200/70 bg-default-50 px-3 py-2 text-xs">
+                  <div className="flex items-center gap-2 text-default-500">
+                    <EyeOff size={13} className="shrink-0" />
+                    <span>{t("library.scan.hidden", { count: dismissedCount })}</span>
+                  </div>
+                  <button
+                    className="flex items-center gap-1 font-medium text-primary transition-colors hover:text-primary/70"
+                    onClick={clearAll}>
+                    <Trash2 size={12} />
+                    {t("library.scan.restoreAll")}
+                  </button>
+                </div>
+              )}
+
+              {/* Lista */}
+              <ul className="flex flex-col gap-2 overflow-y-auto pr-0.5 max-h-[55vh] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-default-300 hover:[&::-webkit-scrollbar-thumb]:bg-default-400">
+                {filteredCandidates.length > 0 ? (
+                  filteredCandidates.map((c: PathCandidate, idx: number) => {
+                    const meta = displayPathsMetaByCandidatePath.get(c.path);
+                    const displayPaths = meta?.paths ?? dedupePreserveGamePaths(c.paths?.length ? c.paths : [c.path]);
+                    return (
+                      <CandidateRow
+                        key={c.path}
+                        candidate={c}
+                        resolvedName={resolvedNames[c.path]}
+                        displayPaths={displayPaths}
+                        mergedFromConfigured={meta?.mergedFromConfigured ?? false}
+                        onAdd={() => handleAdd(c)}
+                        onDismiss={() => dismiss(c.path)}
+                        index={idx}
+                        mediaBySteamAppId={mediaBySteamAppId}
+                      />
+                    );
+                  })
+                ) : debouncedSearch ? (
+                  <li className="py-8 text-center text-sm text-default-400">
+                    {t("library.scan.noMatches", { query: searchQuery })}
+                  </li>
+                ) : (
+                  <li className="flex flex-col items-center gap-3 py-10 text-center">
+                    <EyeOff size={28} className="text-default-300" />
+                    <p className="text-sm text-default-400">{t("library.scan.allHidden")}</p>
+                    {dismissedCount > 0 && (
+                      <button
+                        className="text-xs font-medium text-primary transition-colors hover:text-primary/70"
+                        onClick={clearAll}>
+                        {t("library.scan.restoreHiddenEntries")}
+                      </button>
+                    )}
+                  </li>
+                )}
+              </ul>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3 py-12 text-center">
+              <FolderOpen size={36} className="text-default-300" />
+              <p className="text-sm text-default-500">{t("library.scan.noCandidates")}</p>
+              <p className="text-xs text-default-400">{t("library.scan.addManuallyHint")}</p>
+            </div>
+          )}
+        </ModalBody>
+
+        <ModalFooter className="flex items-center justify-between">
+          <span className="text-xs text-default-400">
+            {!isLoading && candidates ? t("library.scan.found", { count: visibleCandidates.length }) : ""}
+          </span>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="flat"
+              onPress={() => refetch()}
+              isDisabled={isLoading}
+              className={getGamepadFocusClass(navRefetch.isFocused, navRefetch.inputMode)}
+              {...navRefetch.navProps}>
+              {t("library.scan.rescan")}
+            </Button>
+            <Button
+              size="sm"
+              variant="flat"
+              onPress={onClose}
+              className={getGamepadFocusClass(navClose.isFocused, navClose.inputMode)}
+              {...navClose.navProps}>
+              {t("library.scan.close")}
+            </Button>
+          </div>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  );
+}

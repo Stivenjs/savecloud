@@ -1,0 +1,376 @@
+Resources:
+  # Bucket principal para saves en Producción
+  SavesBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AccelerateConfiguration:
+        AccelerationStatus: Suspended
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ["Content-Type", "x-user-id", "x-api-key"]
+            AllowedMethods: [GET, PUT, HEAD]
+            AllowedOrigins: ["*"]
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireShareTokens7Days
+            Status: Enabled
+            Prefix: share-tokens/
+            ExpirationInDays: 7
+          - Id: ExpirePendingCloudInvites30Days
+            Status: Enabled
+            Prefix: cloud-invites/
+            ExpirationInDays: 30
+          - Id: ExpireNotifications30Days
+            Status: Enabled
+            Prefix: notifications/
+            ExpirationInDays: 30
+          - Id: ExpireOldGameInventory90Days
+            Status: Enabled
+            Prefix: game-inventory/
+            ExpirationInDays: 90
+          - Id: ExpireTrash30Days
+            Status: Enabled
+            Prefix: trash/
+            ExpirationInDays: 30
+          - Id: AbortIncompleteMultipartUploads3Days
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 3
+
+  CloudFrontOriginAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment:
+          Fn::Sub: "Access identity for CloudFront to reach ${SavesBucket}"
+
+  SavesBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: { Ref: SavesBucket }
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontAccess
+            Effect: Allow
+            Principal:
+              CanonicalUser:
+                Fn::GetAtt: [CloudFrontOriginAccessIdentity, S3CanonicalUserId]
+            Action: "s3:GetObject"
+            Resource:
+              Fn::Sub: "arn:aws:s3:::${SavesBucket}/*"
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: "CloudFront Distribution para SaveCloud (${sls:stage})"
+        Enabled: true
+        HttpVersion: http3
+        Origins:
+          - Id: S3Origin
+            DomainName:
+              Fn::GetAtt: [SavesBucket, RegionalDomainName]
+            S3OriginConfig:
+              OriginAccessIdentity:
+                Fn::Join: ["", ["origin-access-identity/cloudfront/", Ref: CloudFrontOriginAccessIdentity]]
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          DefaultTTL: 31536000
+          MaxTTL: 31536000
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN:
+                Fn::GetAtt: [CloudFrontAllowBackupsOnlyFunction, FunctionARN]
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+      Tags:
+        - Key: Name
+          Value: "savecloud-distro-${sls:stage}"
+
+  CloudFrontAllowBackupsOnlyFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name:
+        Fn::Sub: "savecloud-allow-backups-only-${sls:stage, 'dev'}"
+      AutoPublish: true
+      FunctionConfig:
+        Comment: "Block all CloudFront paths except */backups/*"
+        Runtime: cloudfront-js-1.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          var uri = request.uri || "";
+          if (uri.indexOf("/backups/") !== -1 || uri.indexOf("/clips/") !== -1) {
+            return request;
+          }
+
+          return {
+            statusCode: 403,
+            statusDescription: "Forbidden",
+            headers: {
+              "cache-control": { value: "no-store" },
+              "content-type": { value: "text/plain; charset=utf-8" }
+            },
+            body: "Forbidden"
+          };
+        }
+
+  # Tabla Efímera para WebSockets
+  ActiveConnectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-ActiveConnections
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: connectionId
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: connectionId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  GameStatsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-GameStats
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: gameId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: gameId
+          KeyType: RANGE
+
+  SaveFilesIndexTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-SaveFilesIndex
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: objectKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: objectKey
+          KeyType: RANGE
+
+  ClipsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-Clips
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+        - AttributeName: clipId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: createdAt
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: ClipIdIndex
+          KeySchema:
+            - AttributeName: clipId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  NotificationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-Notifications
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: userId
+          KeyType: HASH
+        - AttributeName: id
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAtEpoch
+        Enabled: true
+
+  ShareTokensTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-ShareTokens
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: token
+          AttributeType: S
+      KeySchema:
+        - AttributeName: token
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAtEpoch
+        Enabled: true
+
+  CloudInvitesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-CloudInvites
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: gsi1pk
+          AttributeType: S
+        - AttributeName: gsi1sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: gsi1pk
+              KeyType: HASH
+            - AttributeName: gsi1sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: expiresAtEpoch
+        Enabled: true
+
+  GameInventoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${sls:stage}-GameInventory
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: gsi1pk
+          AttributeType: S
+        - AttributeName: gsi1sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: gsi1pk
+              KeyType: HASH
+            - AttributeName: gsi1sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: expiresAtEpoch
+        Enabled: true
+
+  # Cola SQS para procesamiento por lotes de eventos S3 (syncGameStats)
+  SyncGameStatsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: ${sls:stage}-SyncGameStatsQueue
+      VisibilityTimeout: 180
+      MessageRetentionPeriod: 86400
+
+  SyncGameStatsQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - Ref: SyncGameStatsQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowEventBridgeToSendMessage
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource:
+              Fn::GetAtt: [SyncGameStatsQueue, Arn]
+
+  SyncGameStatsEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: ${sls:stage}-SyncGameStatsRule
+      Description: "Captura eventos de archivos en S3 y los enruta hacia la cola SQS para procesamiento por lotes"
+      EventPattern:
+        Fn::Sub: >
+          {
+            "source": ["aws.s3"],
+            "detail-type": ["Object Created", "Object Deleted"],
+            "detail": {
+              "bucket": {
+                "name": ["${SavesBucket}"]
+              }
+            }
+          }
+      Targets:
+        - Id: SyncGameStatsQueueTarget
+          Arn:
+            Fn::GetAtt: [SyncGameStatsQueue, Arn]
+
+Outputs:
+  CloudFrontDistributionDomainName:
+    Description: CloudFront domain for backup downloads
+    Value:
+      Fn::GetAtt:
+        - CloudFrontDistribution
+        - DomainName
+  CloudFrontDistributionUrl:
+    Description: CloudFront URL for backup downloads
+    Value:
+      Fn::Join:
+        - ""
+        - - "https://"
+          - Fn::GetAtt:
+              - CloudFrontDistribution
+              - DomainName

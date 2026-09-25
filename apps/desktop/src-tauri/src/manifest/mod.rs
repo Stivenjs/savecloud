@@ -1,0 +1,488 @@
+//! Módulo de integración con el manifiesto de Ludusavi para detectar rutas de guardados
+//! de juegos (Steam y otros).
+//!
+//! Contiene las estructuras de datos y funciones para:
+//!
+//! - Cargar el manifiesto de Ludusavi.
+//! - Buscar juegos en el manifiesto de Ludusavi.
+//! - Obtener el ID de Steam del juego.
+//! - Obtener el nombre del juego.
+//!
+//! Fuente: https://github.com/mtkennerly/ludusavi-manifest
+//! Licencia del manifiesto: MIT (mtkennerly).
+
+use crate::network::API_CLIENT;
+use serde::{de::IgnoredAny, Deserialize};
+use std::collections::HashMap;
+use std::path::Path;
+use tokio::fs;
+
+const MANIFEST_URL: &str =
+    "https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/master/data/manifest.yaml";
+
+#[derive(Clone, Debug)]
+pub struct GameManifestEntry {
+    pub name: String,
+    pub save_paths: Vec<PathTemplate>,
+    #[cfg(target_os = "windows")]
+    pub registry_path: Option<String>,
+    pub steam_app_id: Option<String>,
+    pub install_dirs: Vec<String>,
+}
+
+impl GameManifestEntry {
+    /// Ruta del Registro de Windows asociada al juego, si está definida.
+    #[cfg(target_os = "windows")]
+    pub fn registry_path(&self) -> Option<&str> {
+        self.registry_path.as_deref()
+    }
+
+    /// Nombres de carpetas de instalación conocidas asociadas al juego.
+    pub fn install_dirs(&self) -> &[String] {
+        &self.install_dirs
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum PathTemplate {
+    Absolute(String),
+    RelativeToInstall(String),
+}
+
+pub type ManifestIndex = HashMap<String, GameManifestEntry>;
+
+#[derive(Deserialize, Debug)]
+struct ManifestGame {
+    files: Option<HashMap<String, FileEntry>>,
+    steam: Option<SteamEntry>,
+    #[serde(rename = "steamExtra")]
+    steam_extra: Option<Vec<SteamId>>,
+    #[cfg(target_os = "windows")]
+    registry: Option<HashMap<String, IgnoredAny>>,
+    #[serde(rename = "installDir")]
+    install_dir: Option<HashMap<String, IgnoredAny>>,
+}
+
+#[derive(Deserialize, Debug)]
+struct FileEntry {
+    tags: Option<Vec<String>>,
+    when: Option<Vec<WhenCondition>>,
+}
+
+#[derive(Deserialize, Debug)]
+struct SteamEntry {
+    id: Option<SteamId>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+enum SteamId {
+    Num(u64),
+    Str(String),
+}
+
+impl SteamId {
+    fn into_string(self) -> String {
+        match self {
+            SteamId::Num(n) => n.to_string(),
+            SteamId::Str(s) => s,
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
+struct WhenCondition {
+    os: Option<String>,
+}
+
+async fn ensure_manifest_cached(cache_path: &Path) -> Result<(), String> {
+    let parent = cache_path
+        .parent()
+        .ok_or_else(|| "No parent dir for manifest".to_string())?;
+
+    fs::create_dir_all(parent)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let etag_path = cache_path.with_extension("etag");
+
+    let mut request = API_CLIENT.get(MANIFEST_URL);
+
+    if cache_path.exists() && etag_path.exists() {
+        if let Ok(etag) = fs::read_to_string(&etag_path).await {
+            request = request.header(reqwest::header::IF_NONE_MATCH, etag.trim());
+        }
+    }
+
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("Error de red: {}", e))?;
+
+    if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+        return Ok(());
+    }
+
+    if !response.status().is_success() {
+        if cache_path.exists() {
+            return Ok(());
+        }
+        return Err(format!("Error HTTP: {}", response.status()));
+    }
+
+    let new_etag = response
+        .headers()
+        .get(reqwest::header::ETAG)
+        .and_then(|val| val.to_str().ok())
+        .map(|s| s.to_string());
+
+    let body = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Error leyendo bytes: {}", e))?;
+
+    fs::write(cache_path, &body)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if let Some(etag_val) = new_etag {
+        let _ = fs::write(&etag_path, etag_val).await;
+    }
+
+    Ok(())
+}
+
+pub async fn load_manifest_index_async() -> Result<ManifestIndex, String> {
+    let cache_dir = crate::config::config_dir()
+        .ok_or_else(|| "No se pudo obtener el directorio de config".to_string())?;
+    let cache_path = cache_dir.join("ludusavi-manifest.yaml");
+
+    ensure_manifest_cached(&cache_path).await?;
+
+    tokio::task::spawn_blocking(move || {
+        let content = std::fs::read_to_string(&cache_path).map_err(|e| e.to_string())?;
+        parse_manifest_yaml(&content)
+    })
+    .await
+    .map_err(|e| format!("Error en el hilo bloqueante: {}", e))?
+}
+
+fn when_has_windows(when_list: &Option<Vec<WhenCondition>>) -> bool {
+    let conditions = match when_list {
+        Some(c) => c,
+        None => return true,
+    };
+
+    if conditions.is_empty() {
+        return true;
+    }
+
+    conditions.iter().any(|cond| {
+        cond.os
+            .as_deref()
+            .is_none_or(|o| o.eq_ignore_ascii_case("windows"))
+    })
+}
+
+fn parse_manifest_yaml(content: &str) -> Result<ManifestIndex, String> {
+    let root: HashMap<String, ManifestGame> = match serde_yaml::from_str(content) {
+        Ok(r) => r,
+        Err(e) => {
+            println!(
+                "\n[ERROR CRÍTICO] ¡Fallo al leer la base de datos YAML!: {}",
+                e
+            );
+            return Err(format!("Fallo YAML: {}", e));
+        }
+    };
+
+    let mut index = ManifestIndex::with_capacity(root.len());
+
+    for (game_name, game_data) in root {
+        if game_name.trim().is_empty() {
+            continue;
+        }
+
+        let mut steam_ids = Vec::new();
+        if let Some(steam) = game_data.steam.and_then(|s| s.id) {
+            let id_str = steam.into_string();
+            if !id_str.is_empty() {
+                steam_ids.push(id_str);
+            }
+        }
+
+        if let Some(extra_ids) = game_data.steam_extra {
+            for id in extra_ids {
+                let id_str = id.into_string();
+                if !id_str.is_empty() {
+                    steam_ids.push(id_str);
+                }
+            }
+        }
+
+        let mut save_paths = Vec::new();
+        if let Some(files) = game_data.files {
+            for (path_str, entry) in files {
+                let path_str = path_str.trim();
+                if path_str.is_empty() {
+                    continue;
+                }
+
+                let has_save_or_config = entry.tags.as_ref().is_none_or(|tags| {
+                    tags.iter()
+                        .any(|t| t.eq_ignore_ascii_case("save") || t.eq_ignore_ascii_case("config"))
+                });
+
+                if !has_save_or_config || !when_has_windows(&entry.when) {
+                    continue;
+                }
+
+                let template = if path_str.starts_with("<base>") {
+                    let rel_path = path_str
+                        .strip_prefix("<base>/")
+                        .unwrap_or(path_str)
+                        .replace("<base>", "");
+                    PathTemplate::RelativeToInstall(rel_path)
+                } else {
+                    PathTemplate::Absolute(path_str.to_string())
+                };
+
+                save_paths.push(template);
+            }
+        }
+
+        let mut install_dirs = Vec::new();
+        if let Some(dirs) = game_data.install_dir {
+            for (dir_name, _) in dirs {
+                if !dir_name.trim().is_empty() {
+                    install_dirs.push(dir_name.clone());
+                }
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        let registry_path = game_data
+            .registry
+            .and_then(|reg| reg.keys().next().cloned());
+
+        let steam_app_id = steam_ids.first().cloned();
+
+        let entry = GameManifestEntry {
+            name: game_name.clone(),
+            save_paths,
+            #[cfg(target_os = "windows")]
+            registry_path,
+            steam_app_id,
+            install_dirs,
+        };
+
+        index.insert(game_name.to_lowercase(), entry.clone());
+
+        for id in steam_ids {
+            index.insert(id, entry.clone());
+        }
+    }
+
+    Ok(index)
+}
+
+fn expand_ludusavi_placeholders(s: &str) -> String {
+    let mut result = s.to_string();
+
+    #[cfg(target_os = "windows")]
+    {
+        if result.contains("<winAppData>") {
+            if let Ok(val) = std::env::var("APPDATA") {
+                result = result.replace("<winAppData>", &val);
+            }
+        }
+        if result.contains("<winLocalAppData>") {
+            if let Ok(val) = std::env::var("LOCALAPPDATA") {
+                result = result.replace("<winLocalAppData>", &val);
+            }
+        }
+        if result.contains("<winDocuments>") {
+            if let Ok(val) = std::env::var("USERPROFILE") {
+                result = result.replace("<winDocuments>", &format!("{}\\Documents", val));
+            }
+        }
+        if result.contains("<winPublic>") {
+            if let Ok(val) = std::env::var("PUBLIC") {
+                result = result.replace("<winPublic>", &val);
+            } else {
+                result = result.replace("<winPublic>", "C:\\Users\\Public");
+            }
+        }
+        if result.contains("<home>") {
+            if let Ok(val) = std::env::var("USERPROFILE") {
+                result = result.replace("<home>", &val);
+            }
+        }
+        if result.contains("<osUserName>") {
+            if let Ok(val) = std::env::var("USERNAME") {
+                result = result.replace("<osUserName>", &val);
+            }
+        }
+
+        result = result.replace('/', "\\");
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        if result.contains("<home>") {
+            if let Ok(home) = std::env::var("HOME") {
+                result = result.replace("<home>", &home);
+            }
+        }
+        if result.contains("<osUserName>") {
+            if let Ok(val) = std::env::var("USER") {
+                result = result.replace("<osUserName>", &val);
+            }
+        }
+    }
+
+    if result.contains('%') {
+        #[cfg(target_os = "windows")]
+        {
+            let mut temp = String::with_capacity(result.len() + 32);
+            let mut remaining = result.as_str();
+
+            while let Some(start) = remaining.find('%') {
+                temp.push_str(&remaining[..start]);
+                remaining = &remaining[start + 1..];
+
+                if let Some(end) = remaining.find('%') {
+                    let var_name = &remaining[..end];
+                    if let Ok(val) = std::env::var(var_name) {
+                        temp.push_str(&val);
+                    } else {
+                        temp.push('%');
+                        temp.push_str(var_name);
+                        temp.push('%');
+                    }
+                    remaining = &remaining[end + 1..];
+                } else {
+                    temp.push('%');
+                    break;
+                }
+            }
+            temp.push_str(remaining);
+            result = temp;
+        }
+    }
+
+    result
+}
+
+pub fn resolve_path_template(template: &PathTemplate, install_dir: Option<&str>) -> String {
+    match template {
+        PathTemplate::Absolute(s) => expand_ludusavi_placeholders(s),
+        PathTemplate::RelativeToInstall(rel) => {
+            let rel_expanded = expand_ludusavi_placeholders(rel);
+            let rel_trim = rel_expanded.trim_start_matches([' ', '\\', '/']);
+
+            if let Some(base) = install_dir.filter(|s| !s.is_empty()) {
+                let base = base.trim_end_matches(['/', '\\']);
+                format!("{}{}{}", base, std::path::MAIN_SEPARATOR, rel_trim)
+            } else {
+                String::new()
+            }
+        }
+    }
+}
+
+pub fn get_entry_for_steam_app(
+    index: &ManifestIndex,
+    steam_app_id: &str,
+    install_dir: Option<&str>,
+) -> Option<(GameManifestEntry, Vec<String>)> {
+    let entry = index.get(steam_app_id)?;
+    let mut resolved = Vec::new();
+
+    #[allow(unused_mut)]
+    let mut proton_prefix: Option<std::path::PathBuf> = None;
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(dir) = install_dir {
+            let path = Path::new(dir);
+            if let Some(common_parent) = path.parent() {
+                if let Some(steamapps) = common_parent.parent() {
+                    let pfx = steamapps.join("compatdata").join(steam_app_id).join("pfx");
+                    if pfx.exists() && pfx.is_dir() {
+                        proton_prefix = Some(pfx);
+                    }
+                }
+            }
+        }
+    }
+
+    for template in &entry.save_paths {
+        let path = if let Some(ref pfx_path) = proton_prefix {
+            resolve_path_template_for_proton(template, install_dir, pfx_path)
+        } else {
+            resolve_path_template(template, install_dir)
+        };
+        if !path.is_empty() {
+            resolved.push(path);
+        }
+    }
+
+    Some((entry.clone(), resolved))
+}
+
+fn resolve_path_template_for_proton(
+    template: &PathTemplate,
+    install_dir: Option<&str>,
+    pfx_path: &Path,
+) -> String {
+    match template {
+        PathTemplate::Absolute(s) => {
+            let mut result = s.clone();
+
+            let steamuser_profile = pfx_path.join("drive_c").join("users").join("steamuser");
+            let steamuser_str = steamuser_profile.to_string_lossy().to_string();
+
+            result = result.replace("<home>", &steamuser_str);
+            result = result.replace("<osUserName>", "steamuser");
+            result = result.replace("%USERPROFILE%", &steamuser_str);
+            result = result.replace("%HOMEPATH%", &steamuser_str);
+
+            let appdata_profile = steamuser_profile.join("AppData").join("Roaming");
+            let appdata_str = appdata_profile.to_string_lossy().to_string();
+            result = result.replace("%APPDATA%", &appdata_str);
+            result = result.replace("<winAppData>", &appdata_str);
+
+            let localappdata_profile = steamuser_profile.join("AppData").join("Local");
+            let localappdata_str = localappdata_profile.to_string_lossy().to_string();
+            result = result.replace("%LOCALAPPDATA%", &localappdata_str);
+            result = result.replace("<winLocalAppData>", &localappdata_str);
+
+            let documents_profile = steamuser_profile.join("Documents");
+            let documents_str = documents_profile.to_string_lossy().to_string();
+            result = result.replace("<winDocuments>", &documents_str);
+
+            let saved_games_profile = steamuser_profile.join("Saved Games");
+            let saved_games_str = saved_games_profile.to_string_lossy().to_string();
+            result = result.replace("<savedGames>", &saved_games_str);
+
+            let public_profile = pfx_path.join("drive_c").join("users").join("Public");
+            let public_str = public_profile.to_string_lossy().to_string();
+            result = result.replace("%PUBLIC%", &public_str);
+            result = result.replace("<winPublic>", &public_str);
+
+            let programdata_profile = pfx_path.join("drive_c").join("ProgramData");
+            let programdata_str = programdata_profile.to_string_lossy().to_string();
+            result = result.replace("%PROGRAMDATA%", &programdata_str);
+            result = result.replace("%ALLUSERSPROFILE%", &programdata_str);
+
+            if result.starts_with("C:") || result.starts_with("c:") {
+                let drive_c = pfx_path.join("drive_c");
+                let drive_c_str = drive_c.to_string_lossy().to_string();
+                result = format!("{}{}", drive_c_str, &result[2..]);
+            }
+
+            result.replace('\\', "/")
+        }
+        PathTemplate::RelativeToInstall(_rel) => resolve_path_template(template, install_dir),
+    }
+}

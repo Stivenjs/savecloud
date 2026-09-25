@@ -1,0 +1,72 @@
+@import "tailwindcss";
+@import "@heroui/react/styles";
+@config "../../tailwind.config.js";
+
+@theme {
+  --color-background: #0a0a0a;
+  --color-divider: rgba(255, 255, 255, 0.15);
+  --color-default-50: #18181b;
+  --color-default-100: #27272a;
+  --color-default-200: #3f3f46;
+  --color-default-300: #52525b;
+  --color-default-400: #a1a1aa;
+  --color-default-500: #71717a;
+  --color-default-600: #a1a1aa;
+  --color-default-700: #d4d4d8;
+  --color-default-800: #e4e4e7;
+  --color-default-900: #f4f4f5;
+  --color-primary: #4f46e5;
+}
+
+:root,
+html,
+body,
+.dark,
+[data-theme="dark"] {
+  --background: #0a0a0a;
+}
+
+html,
+body {
+  background-color: #0a0a0a !important;
+  color: #ededed;
+}
+
+:root {
+  font-family:
+    "Plus Jakarta Sans",
+    "Inter",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background-color: #0a0a0a;
+  color: #ededed;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.25);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.5);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

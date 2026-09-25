@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "savecloud-crawler"
+version = "26.8.23"
+description = "Modular crawler and hoster extraction engine for SaveCloud"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "SaveCloud Team" }]
+dependencies = ["scrapling[fetchers]>=0.2.0", "patchright>=1.49.0", "curl_cffi>=0.7.0"]
+
+[project.scripts]
+savecloud-crawler = "crawler.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["crawler*"]

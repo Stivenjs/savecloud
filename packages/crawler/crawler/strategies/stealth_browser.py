@@ -1,0 +1,205 @@
+"""Stealth headless browser fetch strategy using Scrapling and Patchright."""
+
+import sys
+
+from crawler.config import BROWSER_TIMEOUT_MS, CHROMIUM_OPTIMIZATION_FLAGS
+from crawler.core.browser import BrowserManager
+from crawler.core.firewall import FirewallDetector
+from crawler.core.network import RouteInterceptor, is_ad_domain
+from crawler.core.reporter import CrawlerReporter
+from crawler.core.session import SessionManager
+from crawler.extractors.base import BaseExtractor, ExtractionContext
+from crawler.strategies.base import FetchStrategy
+from crawler.utils.page_utils import extract_body
+
+
+class StealthBrowserStrategy(FetchStrategy):
+    """Level 2: Undetectable headless browser with Cloudflare bypass and network listeners."""
+
+    def execute(self, context: ExtractionContext, extractor: BaseExtractor) -> str | None:
+        CrawlerReporter.report("init", "Starting stealth browser...")
+        stealthy_fetcher = BrowserManager.get_stealthy_fetcher()
+        if stealthy_fetcher is None:
+            return None
+
+        url = context.target_url
+        cached_cookies = SessionManager.get_cookie_list_for_playwright(url)
+
+        def page_setup(page):
+            # Inyectar cookies previas (ej. cf_clearance) para bypass instantáneo de Turnstile
+            if cached_cookies:
+                try:
+                    page.context.add_cookies(cached_cookies)
+                    sys.stderr.write(
+                        f"[StealthBrowser] Injected {len(cached_cookies)} cached session cookies for {url}\n"
+                    )
+                except Exception as e:
+                    sys.stderr.write(f"[StealthBrowser] Warning injecting cached cookies: {e}\n")
+
+            # Route interception for ads and heavy assets (can be disabled by extractors)
+            if getattr(extractor, "intercept_routes", True):
+                RouteInterceptor.setup_routes(page, url, context.expect_json)
+
+            def on_response(response):
+                extractor.on_response(response, context)
+
+            def on_download(download):
+                CrawlerReporter.report("resolved", "Direct download event captured")
+                extractor.on_download(download, context)
+
+            def on_popup(popup):
+                try:
+                    popup.on("download", on_download)
+                except Exception:
+                    pass
+
+            extractor.on_setup(page, context)
+
+            try:
+                page.on("response", on_response)
+                page.on("download", on_download)
+                page.on("popup", on_popup)
+            except Exception:
+                pass
+
+        def page_action(page):
+            CrawlerReporter.report("waiting_download", "Resolving hoster download link...")
+            try:
+                cookies = page.context.cookies()
+                ua = page.evaluate("navigator.userAgent")
+                if cookies and ua:
+                    SessionManager.save_session(url, cookies, ua)
+            except Exception as e:
+                sys.stderr.write(f"[StealthBrowser] Warning capturing cookies: {e}\n")
+
+            if context.expect_json and not context.fetched_text:
+                try:
+                    inner = page.evaluate("() => document.body ? document.body.innerText : ''")
+                    if inner and inner.strip().startswith(("{", "[")):
+                        context.fetched_text = inner.strip()
+                except Exception:
+                    pass
+
+            action_result = extractor.page_action(page, context)
+            if action_result:
+                context.captured_download_url = action_result
+
+        browser_timeout = getattr(extractor, "browser_timeout_ms", BROWSER_TIMEOUT_MS)
+
+        kwargs = {
+            "headless": True,
+            "network_idle": False,
+            "solve_cloudflare": context.solve_cloudflare,
+            "timeout": browser_timeout,
+            "page_setup": page_setup,
+            "page_action": page_action,
+            "google_search": False,
+            "dns_over_https": True,
+            "block_ads": True,
+            "extra_flags": list(CHROMIUM_OPTIMIZATION_FLAGS),
+        }
+        if cached_cookies:
+            kwargs["cookies"] = cached_cookies
+
+        CrawlerReporter.report("navigating", "Connecting to hoster page...")
+        try:
+            page = stealthy_fetcher.fetch(url, **kwargs)
+        except Exception as exc:
+            if BrowserManager.is_missing_browser_error(exc):
+                CrawlerReporter.report("init", "Installing browser engine...")
+                sys.stderr.write(
+                    f"[Scrapling] Browser error detected: {exc}\nDownloading Chromium...\n"
+                )
+                BrowserManager.ensure_browsers_installed()
+                page = stealthy_fetcher.fetch(url, **kwargs)
+            else:
+                raise
+
+        # 1. Check if direct download URL was captured
+        if context.captured_download_url:
+            CrawlerReporter.report("resolved", "Download URL resolved successfully")
+            return context.captured_download_url
+
+        # 2. Check captured responses in reverse order
+        for response in reversed(context.captured_responses):
+            try:
+                status = getattr(response, "status", None)
+                if status and int(status) not in (200,):
+                    continue
+
+                body_method = getattr(response, "body", None)
+                if callable(body_method):
+                    try:
+                        body_bytes = body_method() or b""
+                        if body_bytes:
+                            decoded = body_bytes.decode("utf-8", "replace")
+                            valid = FirewallDetector.validate_content(
+                                decoded,
+                                context.expect_json,
+                                ignore_turnstile=context.solve_cloudflare,
+                            )
+                            if valid:
+                                extracted = extractor.extract_from_content(valid, context)
+                                if extracted:
+                                    return extracted
+                                if context.captured_download_url:
+                                    return context.captured_download_url
+                                if extractor.name == "generic":
+                                    return valid
+                    except Exception:
+                        pass
+
+                text_method = getattr(response, "text", None)
+                if callable(text_method):
+                    try:
+                        body_text = text_method() or ""
+                        if body_text:
+                            valid = FirewallDetector.validate_content(
+                                body_text,
+                                context.expect_json,
+                                ignore_turnstile=context.solve_cloudflare,
+                            )
+                            if valid:
+                                extracted = extractor.extract_from_content(valid, context)
+                                if extracted:
+                                    return extracted
+                                if context.captured_download_url:
+                                    return context.captured_download_url
+                                if extractor.name == "generic":
+                                    return valid
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        # 3. Check text extracted during page_action
+        if context.fetched_text:
+            valid = FirewallDetector.validate_content(
+                context.fetched_text,
+                context.expect_json,
+                ignore_turnstile=context.solve_cloudflare,
+            )
+            if valid:
+                extracted = extractor.extract_from_content(valid, context)
+                if extracted:
+                    return extracted
+                if context.captured_download_url:
+                    return context.captured_download_url
+                if extractor.name == "generic":
+                    return valid
+
+        # 4. Fallback to final page body
+        body = extract_body(page)
+        valid = FirewallDetector.validate_content(
+            body, context.expect_json, ignore_turnstile=context.solve_cloudflare
+        )
+        if valid:
+            extracted = extractor.extract_from_content(valid, context)
+            if extracted:
+                return extracted
+            if context.captured_download_url:
+                return context.captured_download_url
+            if extractor.name == "generic":
+                return valid
+
+        return context.captured_download_url

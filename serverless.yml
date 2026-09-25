@@ -2,26 +2,66 @@ service: sync-games
 
 frameworkVersion: "4"
 
+package:
+  individually: true
+
 # Stage = entorno separado: cada uno tiene su propio stack (API Gateway, Lambda, S3 bucket).
 # deploy --stage dev  → stack sync-games-dev, bucket y API de desarrollo.
 # deploy --stage live → stack sync-games-live, bucket y API de producción.
 
 provider:
   name: aws
-  runtime: nodejs22.x
+  runtime: nodejs24.x
   region: us-east-2
   stage: ${opt:stage, 'dev'}
+  architecture: arm64
   environment:
     BUCKET_NAME: { Ref: SavesBucket }
     API_KEY: ${env:SYNC_GAMES_API_KEY, ''}
     DOWNLOAD_BASE_URL: ${self:custom.downloadBaseUrl.${sls:stage}, ''}
+    CONNECTIONS_TABLE: { Ref: ActiveConnectionsTable }
+    GAME_STATS_TABLE: { Ref: GameStatsTable }
+    SAVE_FILES_INDEX_TABLE: { Ref: SaveFilesIndexTable }
+    CLIPS_TABLE: { Ref: ClipsTable }
+    NOTIFICATIONS_TABLE: { Ref: NotificationsTable }
+    SHARE_TOKENS_TABLE: { Ref: ShareTokensTable }
+    CLOUD_INVITES_TABLE: { Ref: CloudInvitesTable }
+    GAME_INVENTORY_TABLE: { Ref: GameInventoryTable }
+    WS_ENDPOINT:
+      Fn::Join:
+        - ""
+        - - "https://"
+          - Ref: WebsocketsApi
+          - ".execute-api.${self:provider.region}.amazonaws.com/${sls:stage}"
+
   httpApi:
+    cors:
+      allowedOrigins:
+        - "*"
+      allowedHeaders:
+        - Content-Type
+        - x-api-key
+        - x-user-id
+        - x-cloud-host-user-id
+        - Authorization
+      allowedMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - HEAD
+        - OPTIONS
     authorizers:
       apiKeyAuthorizer:
         type: request
         functionName: apiAuthorizer
         enableSimpleResponses: true
-        resultTtlInSeconds: 0
+        authorizerPayloadFormatVersion: "2.0"
+        resultTtlInSeconds: 300
+        identitySource:
+          - "$request.header.x-api-key"
+          - "$request.header.x-user-id"
+
   iam:
     role:
       statements:
@@ -39,32 +79,107 @@ provider:
             - Fn::Sub: "arn:aws:s3:::${SavesBucket}"
             - Fn::Sub: "arn:aws:s3:::${SavesBucket}/*"
 
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:GetItem
+            - dynamodb:DeleteItem
+            - dynamodb:UpdateItem
+            - dynamodb:Query
+            - dynamodb:BatchWriteItem
+            - dynamodb:BatchGetItem
+          Resource:
+            - Fn::GetAtt: [ActiveConnectionsTable, Arn]
+            - Fn::Join: ["/", [Fn::GetAtt: [ActiveConnectionsTable, Arn], "index", "*"]]
+            - Fn::GetAtt: [GameStatsTable, Arn]
+            - Fn::GetAtt: [SaveFilesIndexTable, Arn]
+            - Fn::GetAtt: [ClipsTable, Arn]
+            - Fn::Join: ["/", [Fn::GetAtt: [ClipsTable, Arn], "index", "*"]]
+            - Fn::GetAtt: [NotificationsTable, Arn]
+            - Fn::GetAtt: [ShareTokensTable, Arn]
+            - Fn::GetAtt: [CloudInvitesTable, Arn]
+            - Fn::Join: ["/", [Fn::GetAtt: [CloudInvitesTable, Arn], "index", "*"]]
+            - Fn::GetAtt: [GameInventoryTable, Arn]
+            - Fn::Join: ["/", [Fn::GetAtt: [GameInventoryTable, Arn], "index", "*"]]
+
+        - Effect: Allow
+          Action:
+            - execute-api:ManageConnections
+          Resource:
+            - "arn:aws:execute-api:*:*:**/@connections/*"
+
+        - Effect: Allow
+          Action:
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+          Resource:
+            - Fn::GetAtt: [SyncGameStatsQueue, Arn]
+
 build:
   esbuild:
     bundle: true
-    sourcemap: true
-    target: node22
+    minify: true
+    sourcemap: false
+    target: "node24"
 
 custom:
   downloadBaseUrl:
     dev: ""
-    live:
-      Fn::Join:
-        - ""
-        - - "https://"
-          - Fn::GetAtt: [CloudFrontDistribution, DomainName]
+    live: ${cf:sync-games-live.CloudFrontDistributionUrl, ''}
+  # Seed Steam: dev sin schedule por defecto; live con regla (ajustar rate si hace falta).
+  steamSeedScheduleEnabled:
+    dev: false
+    live: true
+  steamSeedScheduleRate:
+    dev: rate(24 hours)
+    live: rate(5 minutes)
+  # Valor por defecto de filtros appdetails.
+  steamSeedFiltersDefault: "basic,developers,publishers,genres,categories,release_date,screenshots,movies"
+
+resources:
+  - ${file(infra/resources.${sls:stage, 'dev'}.yml)}
 
 functions:
   apiAuthorizer:
-    handler: src/interfaces/lambda/authorizer.handler
+    handler: apps/api/src/interfaces/lambda/authorizer.handler
     description: Autorizador por API key para savecloud - entorno ${sls:stage, 'dev'}
     environment:
       API_KEY: ${env:SYNC_GAMES_API_KEY, ''}
+
   api:
-    handler: src/interfaces/lambda/handler.handler
+    handler: apps/api/src/interfaces/lambda/handler.handler
     description: API de guardados en la nube (savecloud) - entorno ${sls:stage, 'dev'}
-    timeout: 60
+    timeout: 30
+    memorySize: 1536
     events:
+      # Rutas públicas (Acceso libre para links compartidos, streaming y health checks)
+      - httpApi:
+          path: /health
+          method: GET
+      - httpApi:
+          path: /share/{token}
+          method: GET
+      - httpApi:
+          path: /v/{clipId}
+          method: GET
+      - httpApi:
+          path: /clip/{clipId}
+          method: GET
+      - httpApi:
+          path: /api/clips/{clipId}
+          method: GET
+      - httpApi:
+          path: /invites/accept-token
+          method: POST
+      - httpApi:
+          path: /webhooks/minio
+          method: POST
+      - httpApi:
+          path: /favicon.ico
+          method: GET
+
+      # Rutas protegidas (Con authorizer y caché de 5 minutos)
       - httpApi:
           path: /{proxy+}
           method: ANY
@@ -76,4 +191,54 @@ functions:
           authorizer:
             name: apiKeyAuthorizer
 
-resources: ${file(./resources.${sls:stage}.yml)}
+  steamSeedWorker:
+    handler: apps/api/src/interfaces/lambda/steam-seed/handler.handler
+    description: Seed incremental Steam appdetails (S3 + EventBridge) - ${sls:stage, 'dev'}
+    timeout: 900
+    memorySize: 256
+    reservedConcurrency: 1
+    environment:
+      STEAM_SEED_PREFIX: steam-seed
+      STEAM_DELAY_MS: "1200"
+      STEAM_BATCH_SIZE: "60"
+      STEAM_MAX_CONCURRENCY: "4"
+      STEAM_429_RETRIES: "2"
+      STEAM_429_BASE_DELAY_MS: "1500"
+      STEAM_BACKOFF_MINUTES: "30"
+      STEAM_LANG: spanish
+    events:
+      - schedule:
+          rate: ${self:custom.steamSeedScheduleRate.${sls:stage}, 'rate(15 minutes)'}
+          enabled: ${self:custom.steamSeedScheduleEnabled.${sls:stage}, false}
+
+  syncGameStats:
+    handler: apps/api/src/interfaces/lambda/s3-events/syncGameStats.handler
+    description: Actualiza DynamoDB cuando se sube/borra un save en S3 procesando lotes desde SQS - ${sls:stage}
+    timeout: 30
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt: [SyncGameStatsQueue, Arn]
+          batchSize: 25
+          maximumBatchingWindow: 5
+
+  wsConnect:
+    handler: apps/api/src/interfaces/lambda/websocket/connect.handler
+    description: Maneja conexiones WebSocket entrantes - ${sls:stage}
+    events:
+      - websocket:
+          route: $connect
+
+  wsDisconnect:
+    handler: apps/api/src/interfaces/lambda/websocket/disconnect.handler
+    description: Limpia conexiones en DynamoDB - ${sls:stage}
+    events:
+      - websocket:
+          route: $disconnect
+
+  wsBroadcast:
+    handler: apps/api/src/interfaces/lambda/websocket/broadcast.handler
+    description: Recibe el evento "playing" y lo reparte a amigos - ${sls:stage}
+    events:
+      - websocket:
+          route: broadcast

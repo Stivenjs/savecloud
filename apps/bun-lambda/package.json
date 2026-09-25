@@ -1,0 +1,23 @@
+{
+  "name": "@savecloud/bun-lambda",
+  "private": true,
+  "devDependencies": {
+    "@oclif/core": "^4.2.0",
+    "@types/bun": "latest",
+    "jszip": "^3.10.1"
+  },
+  "dependencies": {
+    "aws4fetch": "^1.0.17"
+  },
+  "scripts": {
+    "build-layer": "bun scripts/build-layer.ts",
+    "publish-layer": "bun scripts/publish-layer.ts",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
+  },
+  "overrides": {
+    "braces": "^3.0.3",
+    "axios": "^1.18.0",
+    "brace-expansion": "^2.1.4"
+  }
+}

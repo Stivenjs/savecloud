@@ -1,41 +1,47 @@
 {
   "editor.formatOnSave": true,
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
-  "rust-analyzer.linkedProjects": [
-    "apps/savecloud-desktop/src-tauri/Cargo.toml"
-  ],
-  "[rust]": {
-    "editor.defaultFormatter": "rust-lang.rust-analyzer"
-  },
+  "editor.defaultFormatter": "oxc.oxc-vscode",
+  "rust-analyzer.linkedProjects": ["apps/desktop/src-tauri/Cargo.toml"],
+  "rust-analyzer.server.path": "rust-analyzer",
   "[typescript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.codeActionsOnSave": {
       "source.organizeImports": "never"
-    },
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
   },
   "[typescriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.codeActionsOnSave": {
       "source.organizeImports": "never"
-    },
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
   },
   "[javascript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.codeActionsOnSave": {
       "source.organizeImports": "never"
-    },
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
   },
   "[javascriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.codeActionsOnSave": {
       "source.organizeImports": "never"
-    },
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
   },
   "[json]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.codeActionsOnSave": {
       "source.organizeImports": "never"
-    },
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
   },
-  "typescript.tsdk": "node_modules\\typescript\\lib"
+  "js/ts.experimental.useTsgo": true,
+  "typescript.enablePromptUseWorkspaceTsdk": false,
+  "[dockerfile]": {
+    "editor.defaultFormatter": "ms-azuretools.vscode-containers"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  }
 }

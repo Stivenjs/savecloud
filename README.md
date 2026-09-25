@@ -1,4 +1,9 @@
-# SaveCloud
+<h1>
+  <img src="/assets/icon.ico" width="60" style="vertical-align: middle; margin-right: 10px;" />
+  SaveCloud
+</h1>
+
+Servidor de guardado en la nube para juegos (S3 + Lambda) y app de escritorio para sincronizar guardados.
 
 ![Bun](https://img.shields.io/badge/runtime-bun-black)
 ![Node](https://img.shields.io/badge/node-20-green)
@@ -10,15 +15,21 @@
 ![React](https://img.shields.io/badge/frontend-react-61dafb)
 ![Rust](https://img.shields.io/badge/backend-rust-orange)
 
-Servidor de guardado en la nube para juegos (S3 + Lambda) y app de escritorio para sincronizar guardados. Clean Architecture en backend y CLI.
+---
 
-## Guía de despliegue
+## Vista de la aplicación
 
-La infraestructura backend y la configuración completa del proyecto se explican en la guía de despliegue disponible en:
+<p align="center">
+  <img src="/doc/images/preview.png" width="800" /></p>
 
-[Guía de despliegue](./doc/DEPLOYMENT.md)
+---
 
-Esta guía cubre la preparación del entorno, generación de API keys, configuración del archivo `.env`, despliegue en AWS (dev y live), configuración de la aplicación de escritorio y verificación del sistema.
+## Guía de despliegue y Self-Hosting
+
+SaveCloud puede desplegarse en **AWS Cloud** o autohospedarse en tu propio servidor/NAS mediante **Docker Compose**:
+
+- 🐳 **[Guía de despliegue rápido con Docker](./doc/DOCKER.md)** — Autohospedaje local en 2 minutos (Fastify + MinIO + DynamoDB Local).
+- ☁️ **[Guía de despliegue en AWS Cloud](./doc/DEPLOYMENT.md)** — Despliegue en producción serverless con AWS Lambda, API Gateway y S3.
 
 ## Contenido del repositorio
 
@@ -42,7 +53,7 @@ Esta guía cubre la preparación del entorno, generación de API keys, configura
 ## Estructura del backend (Clean Architecture)
 
 ```
-src/
+apps/api/src/
 ├── domain/                 # Entidades y reglas de negocio
 │   ├── entities/
 │   └── ports/

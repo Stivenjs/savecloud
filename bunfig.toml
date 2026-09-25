@@ -1,0 +1,12 @@
+# Configuración global de Bun para el monorepo SaveCloud
+
+[install]
+# Modo 'isolated' (aislado) para evitar dependencias fantasma entre workspaces
+linker = "isolated"
+
+# Controla si se guardan versiones exactas (false = usar prefijo ^ por defecto)
+exact = false
+
+[test]
+# Configuración del ejecutor de pruebas nativo de Bun
+coverage = false

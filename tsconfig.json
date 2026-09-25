@@ -1,35 +1,34 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
-    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": "./",
+    "types": ["node", "bun"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "moduleResolution": "node",
-    "baseUrl": ".",
     "paths": {
-      "@domain/*": ["src/domain/*"],
-      "@application/*": ["src/application/*"],
-      "@infrastructure/*": ["src/infrastructure/*"],
-      "@interfaces/*": ["src/interfaces/*"],
-      "@cli/*": ["src/cli/*"],
-      "@cli/domain/*": ["src/cli/domain/*"],
-      "@cli/application/*": ["src/cli/application/*"],
-      "@cli/infrastructure/*": ["src/cli/infrastructure/*"],
-      "@cli/interfaces/*": ["src/cli/interfaces/*"],
-      "@cli/use-cases/*": ["src/cli/use-cases/*"],
-      "@cli/entities/*": ["src/cli/entities/*"],
-      "@cli/ports/*": ["src/cli/ports/*"]
+      "@domain/*": ["./apps/api/src/domain/*"],
+      "@application/*": ["./apps/api/src/application/*"],
+      "@adapters/*": ["./apps/api/src/adapters/*"],
+      "@infrastructure/*": ["./apps/api/src/infrastructure/*"],
+      "@interfaces/*": ["./apps/api/src/interfaces/*"],
+      "@shared/*": ["./apps/api/src/shared/*"],
+      "@cli/*": ["./apps/cli/*"],
+      "@savecloud/types": ["./packages/types/src/index.ts"]
     }
   },
-  "include": ["src/**/*"],
+  "include": [
+    "apps/api/src/**/*",
+    "apps/cli/**/*",
+    "packages/types/src/**/*",
+    "scripts/**/*.ts",
+    "tests/**/*.ts",
+    "apps/desktop/scripts/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }
