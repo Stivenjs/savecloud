@@ -8,7 +8,7 @@ import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { formatGameDisplayName } from "@utils/gameImage";
 import type { ConfiguredGame } from "@app-types/config";
-import { getFriendConfig, setCloudHostWsUrl } from "@services/tauri/config.service";
+import { checkGamesRunning, getFriendConfig, setCloudHostWsUrl } from "@services/tauri";
 import { useGameSessionStore } from "@store/GameSessionStore";
 import i18n from "@lib/i18n";
 
@@ -280,7 +280,7 @@ export function useCloudWebSockets() {
     if (!initialReplayDoneRef.current) {
       initialReplayDoneRef.current = true;
 
-      invoke<Record<string, boolean>>("get_running_games_status")
+      checkGamesRunning((gamesRef.current ?? []).map((game) => game.id))
         .then((currentStatus) => {
           for (const [gameId, isRunning] of Object.entries(currentStatus)) {
             if (isRunning) {
