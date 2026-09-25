@@ -80,32 +80,29 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     }
     layerMap.set(node.id, node);
 
-    set((state) => {
-      const layer = state.layers.find((l) => l.id === layerId);
-      if (layer) layer.nodes.set(node.id, node);
+    const state = get();
+    const layer = state.layers.find((entry) => entry.id === layerId);
+    if (layer) layer.nodes.set(node.id, node);
 
-      const activeLayer = state.layers[state.layers.length - 1];
-      if (
-        state.inputMode === "gamepad" &&
-        !state.focusedId &&
-        activeLayer?.id === layerId &&
-        (layer?.nodes.size === 1 || activeLayer?.nodes.size === 1)
-      ) {
-        return { focusedId: node.id };
-      }
-      return state;
-    });
+    const activeLayer = state.layers[state.layers.length - 1];
+    if (
+      state.inputMode === "gamepad" &&
+      !state.focusedId &&
+      activeLayer?.id === layerId &&
+      (layer?.nodes.size === 1 || activeLayer?.nodes.size === 1)
+    ) {
+      set({ focusedId: node.id });
+    }
   },
 
   unregisterNode: (layerId, nodeId) => {
     const layerMap = nodesByLayer.get(layerId);
     if (layerMap) layerMap.delete(nodeId);
 
-    set((state) => {
-      const layer = state.layers.find((l) => l.id === layerId);
-      if (layer) layer.nodes.delete(nodeId);
-      return state;
-    });
+    const state = get();
+    const layer = state.layers.find((entry) => entry.id === layerId);
+    if (layer) layer.nodes.delete(nodeId);
+    if (state.focusedId === nodeId) set({ focusedId: null });
   },
 
   setFocus: (id) => {
