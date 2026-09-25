@@ -5,7 +5,7 @@ import {
   getConfig,
   getSteamAppDetails,
   getSteamCatalogListingName,
-  getGameStats,
+  getGameStat,
   type SteamAppDetailsResult,
   type SteamAppdetailsMediaResult,
   type GameStats,
@@ -80,14 +80,13 @@ export function useGameDetail() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: allStats } = useQuery<GameStats[]>({
-    queryKey: ["game-stats"],
-    queryFn: getGameStats,
+  const { data: stats = null } = useQuery<GameStats | null>({
+    queryKey: ["game-stats", gameId],
+    queryFn: () => getGameStat(gameId!),
+    enabled: !!gameId && !isCatalogRoute,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
-
-  const stats = useMemo(() => allStats?.find((s) => s.gameId === gameId) ?? null, [allStats, gameId]);
 
   const runningByGame = useGameRunningStatus(gameId ? [gameId] : []);
   const isGameRunning = gameId ? (runningByGame[gameId] ?? false) : false;

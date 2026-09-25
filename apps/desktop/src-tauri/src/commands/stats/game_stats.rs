@@ -468,6 +468,56 @@ pub async fn get_game_stats() -> Result<Vec<GameStatsDto>, String> {
     Ok(result)
 }
 
+/// Obtiene estadísticas locales y cloud de un único juego.
+#[tauri::command]
+pub async fn get_game_stat(game_id: String) -> Result<Option<GameStatsDto>, String> {
+    let requested_id = game_id.trim();
+    if requested_id.is_empty() {
+        return Err("El gameId no puede estar vacío".to_string());
+    }
+
+    let library = config::load_library();
+    let Some(game) = library
+        .games
+        .into_iter()
+        .find(|game| game.id.eq_ignore_ascii_case(requested_id))
+    else {
+        return Ok(None);
+    };
+
+    let game_id = game.id;
+    let playtime_seconds = game.playtime_seconds;
+    let paths = game.paths;
+    let (local_size_bytes, local_mtime) =
+        tokio::task::spawn_blocking(move || local_stats_for_paths(&paths))
+            .await
+            .map_err(|e| format!("Error en tarea de estadísticas: {e}"))?;
+
+    let local_last_modified = local_mtime.and_then(|mtime| {
+        let duration = mtime.duration_since(UNIX_EPOCH).ok()?;
+        chrono::DateTime::from_timestamp(duration.as_secs() as i64, duration.subsec_nanos())
+            .map(|d| d.to_rfc3339())
+    });
+
+    let cloud_last_modified =
+        match sync::api::sync_list_remote_saves_for_game(game_id.clone()).await {
+            Ok(remote) => remote
+                .into_iter()
+                .filter_map(|save| parse_timestamp(&save.last_modified))
+                .max()
+                .map(|date| date.to_rfc3339()),
+            Err(_) => None,
+        };
+
+    Ok(Some(GameStatsDto {
+        game_id,
+        local_size_bytes,
+        local_last_modified,
+        cloud_last_modified,
+        playtime_seconds,
+    }))
+}
+
 /// Devuelve el mapa visual de guardados de un juego concreto.
 #[tauri::command]
 pub async fn get_game_save_graph(game_id: String) -> Result<GameSaveGraphDto, String> {

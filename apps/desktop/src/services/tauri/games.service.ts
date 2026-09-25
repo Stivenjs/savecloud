@@ -125,6 +125,11 @@ export async function getGameStats(): Promise<GameStats[]> {
   return invoke<GameStats[]>("get_game_stats");
 }
 
+/** Obtiene estadísticas de un juego configurado sin recorrer el resto de la biblioteca. */
+export async function getGameStat(gameId: string): Promise<GameStats | null> {
+  return invoke<GameStats | null>("get_game_stat", { gameId });
+}
+
 /** Devuelve el mapa visual de guardados de un juego concreto. */
 export async function getGameSaveGraph(gameId: string): Promise<GameSaveGraph> {
   return invoke<GameSaveGraph>("get_game_save_graph", { gameId });
