@@ -15,7 +15,7 @@ pub fn list_notifications(
     db: State<'_, AppDb>,
     params: ListNotificationsParams,
 ) -> Result<Vec<NotificationRecordDto>, String> {
-    let user_id = match config::load_config()
+    let user_id = match config::load_settings()
         .user_id
         .filter(|s| !s.trim().is_empty())
     {
@@ -40,7 +40,7 @@ pub fn list_notifications(
 
 #[tauri::command]
 pub fn notification_unread_count(db: State<'_, AppDb>) -> Result<i64, String> {
-    let user_id = match config::load_config()
+    let user_id = match config::load_settings()
         .user_id
         .filter(|s| !s.trim().is_empty())
     {
@@ -56,7 +56,7 @@ pub fn notification_unread_count(db: State<'_, AppDb>) -> Result<i64, String> {
 
 #[tauri::command]
 pub fn mark_notification_read(db: State<'_, AppDb>, id: String) -> Result<(), String> {
-    let user_id = config::load_config()
+    let user_id = config::load_settings()
         .user_id
         .filter(|s| !s.trim().is_empty())
         .ok_or("Configura tu usuario en Configuración")?;
@@ -74,7 +74,7 @@ pub fn mark_notification_read(db: State<'_, AppDb>, id: String) -> Result<(), St
 
 #[tauri::command]
 pub fn mark_all_notifications_read(db: State<'_, AppDb>) -> Result<(), String> {
-    let user_id = config::load_config()
+    let user_id = config::load_settings()
         .user_id
         .filter(|s| !s.trim().is_empty())
         .ok_or("Configura tu usuario en Configuración")?;
@@ -98,7 +98,7 @@ pub fn mark_all_notifications_read(db: State<'_, AppDb>) -> Result<(), String> {
 
 #[tauri::command]
 pub fn dismiss_notification(db: State<'_, AppDb>, id: String) -> Result<(), String> {
-    let user_id = config::load_config()
+    let user_id = config::load_settings()
         .user_id
         .filter(|s| !s.trim().is_empty())
         .ok_or("Configura tu usuario en Configuración")?;
@@ -116,7 +116,7 @@ pub fn dismiss_notification(db: State<'_, AppDb>, id: String) -> Result<(), Stri
 
 #[tauri::command]
 pub fn dismiss_all_notifications(db: State<'_, AppDb>) -> Result<(), String> {
-    let user_id = config::load_config()
+    let user_id = config::load_settings()
         .user_id
         .filter(|s| !s.trim().is_empty())
         .ok_or("Configura tu usuario en Configuración")?;
@@ -144,7 +144,7 @@ pub async fn sync_notifications_push(db: State<'_, AppDb>) -> Result<usize, Stri
 }
 
 async fn sync_notifications_push_internal(db: &AppDb) -> Result<usize, String> {
-    let user_id = config::load_config()
+    let user_id = config::load_settings()
         .user_id
         .filter(|s| !s.trim().is_empty())
         .ok_or("Configura tu usuario en Configuración")?;
@@ -174,7 +174,7 @@ pub async fn sync_notifications_pull(
 }
 
 async fn sync_notifications_pull_internal(app: &AppHandle, db: &AppDb, emit: bool) -> Result<usize, String> {
-    let user_id = config::load_config()
+    let user_id = config::load_settings()
         .user_id
         .filter(|s| !s.trim().is_empty())
         .ok_or("Configura tu usuario en Configuración")?;
@@ -231,7 +231,7 @@ pub async fn sync_notifications_full(
     let _ = sync_notifications_pull_internal(&app, &db, false).await;
 
     // 3. Get latest data
-    let user_id = config::load_config()
+    let user_id = config::load_settings()
         .user_id
         .filter(|s| !s.trim().is_empty())
         .ok_or("Configura tu usuario en Configuración")?;

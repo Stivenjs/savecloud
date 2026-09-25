@@ -402,12 +402,7 @@ pub async fn download_and_restore_full_backup_impl(
     emit_done: bool,
 ) -> Result<(), String> {
     let ctx = get_api_context()?;
-    let cfg = config::load_config();
-
-    let game = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+    let game = config::load_game(&game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     if game.paths.is_empty() {
@@ -579,12 +574,8 @@ pub async fn create_and_upload_full_backup(
     tray_state: State<'_, TrayState>,
 ) -> Result<String, String> {
     let ctx = get_api_context()?;
-    let cfg = config::load_config();
-
-    let game = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+    let cfg = config::load_settings();
+    let game = config::load_game(&game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     if game.paths.is_empty() {
@@ -928,12 +919,8 @@ pub async fn test_streaming_full_backup(
     app: AppHandle,
     tray_state: State<'_, TrayState>,
 ) -> Result<streaming::multipart::StreamingDryRunMetrics, String> {
-    let cfg = config::load_config();
-
-    let game = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+    let cfg = config::load_settings();
+    let game = config::load_game(&game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     if game.paths.is_empty() {

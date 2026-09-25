@@ -52,6 +52,7 @@ struct OverlayRuntimeState {
 }
 
 static OVERLAY_STATE: OnceLock<Mutex<OverlayRuntimeState>> = OnceLock::new();
+static OVERLAY_WINDOW_LOCK: Mutex<()> = Mutex::new(());
 
 fn overlay_state() -> &'static Mutex<OverlayRuntimeState> {
     OVERLAY_STATE.get_or_init(|| {
@@ -207,6 +208,13 @@ fn flush_pending_notifications(app: &AppHandle) {
 }
 
 fn recreate_overlay_window(app: &AppHandle) -> Result<(), String> {
+    let _window_guard = OVERLAY_WINDOW_LOCK
+        .lock()
+        .map_err(|_| "No se pudo bloquear la recuperación de la ventana overlay".to_string())?;
+    recreate_overlay_window_locked(app)
+}
+
+fn recreate_overlay_window_locked(app: &AppHandle) -> Result<(), String> {
     sync_logger::log_operation(
         "overlay_recovery_started",
         "reason=unhealthy_or_emit_failed",
@@ -229,18 +237,28 @@ fn recreate_overlay_window(app: &AppHandle) -> Result<(), String> {
 }
 
 fn ensure_overlay_healthy(app: &AppHandle) -> Result<(), String> {
+    let _window_guard = OVERLAY_WINDOW_LOCK
+        .lock()
+        .map_err(|_| "No se pudo bloquear la inicialización de la ventana overlay".to_string())?;
+
     if app.get_webview_window("overlay").is_none() {
         sync_logger::log_operation("overlay_recovery_started", "reason=missing_window");
         return setup_overlay_window(app).map_err(|e| e.to_string());
     }
 
+    // Una ventana recién creada permanece `ready = false` mientras carga el
+    // frontend del overlay. Varias notificaciones concurrentes pueden llegar
+    // durante ese intervalo; recrearla aquí destruye la ventana antes de que
+    // emita `overlay-ready` y deja las notificaciones esperando indefinidamente.
+    // La recuperación inmediata por fallo de emisión ya se realiza en
+    // `show_overlay_notification`; aquí solo recuperamos tras fallos repetidos.
     let should_recover = overlay_state()
         .lock()
-        .map(|state| !state.ready || !state.healthy || state.consecutive_emit_errors >= 2)
-        .unwrap_or(true);
+        .map(|state| state.consecutive_emit_errors >= 2)
+        .unwrap_or(false);
 
     if should_recover {
-        recreate_overlay_window(app)?;
+        recreate_overlay_window_locked(app)?;
     }
 
     Ok(())

@@ -111,13 +111,14 @@ fn path_to_game_id(path: &Path, watch_roots: &[(PathBuf, String)]) -> Option<Str
 /// * `app` - Handle principal de Tauri para despachar notificaciones a la interfaz.
 /// * `tray_state` - Referencia atómica al estado del ícono de bandeja del sistema.
 pub fn spawn_watcher(app: AppHandle, tray_state: Arc<crate::tray::tray_state::TrayStateInner>) {
-    let cfg = config::load_config();
+    let settings = config::load_settings();
+    let library = config::load_library();
 
-    if cfg
+    if settings
         .api_base_url
         .as_ref()
         .is_none_or(|s| s.trim().is_empty())
-        || cfg.user_id.as_ref().is_none_or(|s| s.trim().is_empty())
+        || settings.user_id.as_ref().is_none_or(|s| s.trim().is_empty())
     {
         return;
     }
@@ -126,7 +127,7 @@ pub fn spawn_watcher(app: AppHandle, tray_state: Arc<crate::tray::tray_state::Tr
     let mut unique_dirs: HashSet<PathBuf> = HashSet::new();
 
     // Resolver y normalizar las rutas objetivo configuradas
-    for game in &cfg.games {
+    for game in &library.games {
         for raw in &game.paths {
             let Some(expanded) = expand_path(raw.trim()) else {
                 continue;

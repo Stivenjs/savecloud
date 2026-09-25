@@ -13,13 +13,9 @@ use crate::utils::path_utils;
 /// threadpool de bloqueo sin interferir con el executor async.
 #[tauri::command]
 pub async fn preview_upload(game_id: String) -> Result<PreviewUploadDto, String> {
-    let cfg = crate::config::load_config();
-    let game = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+    let game = crate::config::load_game(&game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?
-        .clone();
+        ;
 
     let result = tokio::task::spawn_blocking(move || {
         let files = path_utils::list_all_files_with_mtime(&game.paths);
@@ -50,10 +46,10 @@ pub async fn preview_upload(game_id: String) -> Result<PreviewUploadDto, String>
 pub async fn preview_upload_batch(
     game_ids: Vec<String>,
 ) -> Result<std::collections::HashMap<String, PreviewUploadDto>, String> {
-    let cfg = crate::config::load_config();
+    let library = crate::config::load_library();
     let mut resolved_games = Vec::new();
     for game_id in game_ids {
-        if let Some(game) = cfg
+        if let Some(game) = library
             .games
             .iter()
             .find(|g| g.id.eq_ignore_ascii_case(&game_id))
@@ -96,13 +92,9 @@ pub async fn preview_upload_batch(
 /// Previsualiza qué archivos se descargarían y cuáles conflictuarían con locales más recientes.
 #[tauri::command]
 pub async fn preview_download(game_id: String) -> Result<PreviewDownloadDto, String> {
-    let cfg = crate::config::load_config();
-    let game = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+    let game = crate::config::load_game(&game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?
-        .clone();
+        ;
 
     // Lanza ambas operaciones de red en paralelo en vez de secuencial,
     // reduciendo la latencia total a max(t_saves, t_conflicts) en vez de su suma.

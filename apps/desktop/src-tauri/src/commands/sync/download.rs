@@ -200,11 +200,7 @@ fn check_conflicts_for_game(
 pub async fn sync_check_download_conflicts(
     game_id: String,
 ) -> Result<DownloadConflictsResultDto, String> {
-    let cfg = crate::config::load_config();
-    let game = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+    let game = crate::config::load_game(&game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     if game.paths.is_empty() {
@@ -241,12 +237,12 @@ pub async fn sync_check_download_conflicts_batch(
         return Ok(Vec::new());
     }
 
-    let cfg = crate::config::load_config();
+    let library = crate::config::load_library();
     let all = api::sync_list_remote_saves().await?;
     let mut results = Vec::with_capacity(game_ids.len());
 
     for game_id in game_ids {
-        let game = match cfg
+        let game = match library
             .games
             .iter()
             .find(|g| g.id.eq_ignore_ascii_case(&game_id))
@@ -301,15 +297,13 @@ pub async fn sync_check_unsynced_games() -> Result<Vec<UnsyncedGameDto>, String>
     let tolerance_secs = UNSYNCED_LOCAL_NEWER_TOLERANCE_SECS;
     let tolerance = chrono::Duration::seconds(tolerance_secs);
 
-    let (game_ids, games_to_check) = crate::config::with_config(|cfg| {
-        let ids: Vec<String> = cfg.games.iter().map(|g| g.id.clone()).collect();
-        let list: Vec<(String, String, Vec<String>)> = cfg
-            .games
-            .iter()
-            .map(|g| (g.id.clone(), g.id.to_lowercase(), g.paths.clone()))
-            .collect();
-        (ids, list)
-    });
+    let library = crate::config::load_library();
+    let games_to_check: Vec<(String, String, Vec<String>)> = library
+        .games
+        .into_iter()
+        .map(|game| (game.id.clone(), game.id.to_lowercase(), game.paths))
+        .collect();
+    let game_ids: Vec<String> = games_to_check.iter().map(|(id, _, _)| id.clone()).collect();
 
     if games_to_check.is_empty() {
         return Ok(Vec::new());
@@ -725,11 +719,8 @@ pub(crate) async fn sync_download_game_impl(
     prefetched_saves: Option<Vec<RemoteSaveInfoDto>>,
 ) -> Result<SyncResultDto, String> {
     let api_ctx = super::context::resolve_api_context()?;
-    let cfg = crate::config::load_config();
-    let game = cfg
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(&game_id))
+    let cfg = crate::config::load_settings();
+    let game = crate::config::load_game(&game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     if crate::system::process_check::is_game_running(&game_id, &game.paths) {
@@ -744,7 +735,8 @@ pub(crate) async fn sync_download_game_impl(
         pm.execute_pre_download(&game_id);
     }
 
-    let user_id = cfg
+    let settings = crate::config::load_settings();
+    let user_id = settings
         .user_id
         .as_deref()
         .filter(|s| !s.trim().is_empty())
@@ -900,7 +892,8 @@ pub async fn sync_download_all_games(
     tray_state: State<'_, TrayState>,
 ) -> Result<Vec<GameSyncResultDto>, String> {
     let api_ctx = super::context::resolve_api_context()?;
-    let cfg = crate::config::load_config();
+    let cfg = crate::config::load_settings();
+    let library = crate::config::load_library();
 
     let user_id = cfg
         .user_id
@@ -914,7 +907,7 @@ pub async fn sync_download_all_games(
     tray_state.0.update_tooltip();
 
     // Marca como error los juegos que están en ejecución antes de intentar nada.
-    let mut results_by_id: HashMap<String, GameSyncResultDto> = cfg
+    let mut results_by_id: HashMap<String, GameSyncResultDto> = library
         .games
         .iter()
         .filter(|g| crate::system::process_check::is_game_running(&g.id, &g.paths))
@@ -934,7 +927,7 @@ pub async fn sync_download_all_games(
         })
         .collect();
 
-    let to_process: Vec<String> = cfg
+    let to_process: Vec<String> = library
         .games
         .iter()
         .filter(|g| !results_by_id.contains_key(&g.id))
@@ -1057,7 +1050,7 @@ pub async fn sync_download_all_games(
                     );
                 }
                 emit_sync_download_done(&app);
-                return Ok(cfg
+                return Ok(library
                     .games
                     .iter()
                     .filter_map(|g| results_by_id.get(&g.id).cloned())
@@ -1098,7 +1091,7 @@ pub async fn sync_download_all_games(
     }
 
     // Reordena los resultados según el orden de la configuración para consistencia.
-    let results: Vec<GameSyncResultDto> = cfg
+    let results: Vec<GameSyncResultDto> = library
         .games
         .iter()
         .map(|g| results_by_id.get(&g.id).cloned().expect("result per game"))

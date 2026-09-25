@@ -80,7 +80,7 @@ pub fn try_record_source_download_terminal(app: &AppHandle, job: &SourceDownload
     let Some(db) = app.try_state::<AppDb>() else {
         return;
     };
-    let cfg = config::load_config();
+    let cfg = config::load_settings();
     let Some(user_id) = cfg.user_id.filter(|s| !s.trim().is_empty()) else {
         return;
     };
@@ -187,7 +187,7 @@ pub fn try_record_sync_terminal(
     let Some(db) = app.try_state::<AppDb>() else {
         return;
     };
-    let cfg = config::load_config();
+    let cfg = config::load_settings();
     let Some(user_id) = cfg.user_id.filter(|s| !s.trim().is_empty()) else {
         return;
     };
@@ -277,7 +277,7 @@ pub fn try_record_auto_sync_done(app: &AppHandle, game_id: &str, ok_count: u32, 
     let Some(db) = app.try_state::<AppDb>() else {
         return;
     };
-    let cfg = config::load_config();
+    let cfg = config::load_settings();
     let Some(user_id) = cfg.user_id.filter(|s| !s.trim().is_empty()) else {
         return;
     };
@@ -346,7 +346,7 @@ pub fn try_record_auto_sync_error(app: &AppHandle, game_id: &str, error: &str) {
     let Some(db) = app.try_state::<AppDb>() else {
         return;
     };
-    let cfg = config::load_config();
+    let cfg = config::load_settings();
     let Some(user_id) = cfg.user_id.filter(|s| !s.trim().is_empty()) else {
         return;
     };
@@ -398,7 +398,7 @@ pub fn try_record_torrent_done(app: &AppHandle, name: &str, info_hash: &str) {
     let Some(db) = app.try_state::<AppDb>() else {
         return;
     };
-    let cfg = config::load_config();
+    let cfg = config::load_settings();
     let Some(user_id) = cfg.user_id.filter(|s| !s.trim().is_empty()) else {
         return;
     };
@@ -446,7 +446,7 @@ pub fn try_record_torrent_cancelled(app: &AppHandle, name: &str, info_hash: &str
     let Some(db) = app.try_state::<AppDb>() else {
         return;
     };
-    let cfg = config::load_config();
+    let cfg = config::load_settings();
     let Some(user_id) = cfg.user_id.filter(|s| !s.trim().is_empty()) else {
         return;
     };

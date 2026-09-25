@@ -10,7 +10,7 @@ use super::models::NotificationRecordDto;
 const DEDUP_WINDOW_SECS: i64 = 10;
 
 pub fn get_or_create_device_id(db: &AppDb) -> Result<String, crate::sqlite::error::SqliteError> {
-    let user_id = crate::config::load_config().user_id.unwrap_or_default();
+    let user_id = crate::config::load_settings().user_id.unwrap_or_default();
     let user_key = if user_id.trim().is_empty() {
         "device_id".to_string()
     } else {

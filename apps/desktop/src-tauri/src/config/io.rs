@@ -9,29 +9,33 @@ use super::profiles::DEFAULT_PROFILE_ID;
 use keyring::Entry;
 use once_cell::sync::Lazy;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::sync::RwLock;
 
-static CONFIG_CACHE: Lazy<RwLock<Option<Config>>> = Lazy::new(|| RwLock::new(None));
+static SETTINGS_CACHE: Lazy<RwLock<Option<(u64, Arc<AppSettings>)>>> = Lazy::new(|| RwLock::new(None));
 static CONFIG_REVISION: AtomicU64 = AtomicU64::new(1);
+static LIBRARY_REVISION: AtomicU64 = AtomicU64::new(1);
 
 /// Versión incremental de la configuración para detectar modificaciones sin I/O.
 pub fn config_revision() -> u64 {
     CONFIG_REVISION.load(Ordering::Relaxed)
 }
 
-/// Invalida la caché en memoria de la configuración global para forzar su recarga en el próximo acceso.
-pub fn invalidate_config_cache() {
-    CONFIG_REVISION.fetch_add(1, Ordering::Relaxed);
-    if let Ok(mut lock) = CONFIG_CACHE.write() {
-        *lock = None;
-    }
+/// Revisión de la biblioteca para los índices pequeños derivados de los juegos.
+pub fn library_revision() -> u64 {
+    LIBRARY_REVISION.load(Ordering::Relaxed)
 }
 
-/// Actualiza directamente la caché en memoria con una instancia de configuración conocida.
-pub fn update_config_cache(config: Config) {
+/// Indica que cambió el perfil activo y la biblioteca debe volver a indexarse.
+pub fn invalidate_library_index() {
+    LIBRARY_REVISION.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Invalida los ajustes en memoria y avanza la revisión para los índices derivados.
+pub fn invalidate_config_cache() {
     CONFIG_REVISION.fetch_add(1, Ordering::Relaxed);
-    if let Ok(mut lock) = CONFIG_CACHE.write() {
-        *lock = Some(config);
+    if let Ok(mut lock) = SETTINGS_CACHE.write() {
+        *lock = None;
     }
 }
 
@@ -141,7 +145,6 @@ pub fn delete_secure_api_key_for_cloud_host_in_profile(
     let _ = delete_secret(KEYRING_SERVICE, &account);
     Ok(())
 }
-
 pub fn delete_secure_api_key_for_cloud_host(host_user_id: &str) -> Result<(), String> {
     let host = host_user_id.trim();
     if host.is_empty() {
@@ -318,13 +321,54 @@ pub fn delete_secure_steam_web_api_key_for_profile(profile_id: &str) -> Result<(
     Ok(())
 }
 
+fn load_settings_snapshot() -> Arc<AppSettings> {
+    loop {
+        let revision = config_revision();
+        if let Ok(lock) = SETTINGS_CACHE.read() {
+            if let Some((cached_revision, settings)) = lock.as_ref() {
+                if *cached_revision == revision {
+                    return settings.clone();
+                }
+            }
+        }
+
+        let settings = Arc::new(profile_storage::load_settings());
+        if config_revision() != revision {
+            continue;
+        }
+
+        match SETTINGS_CACHE.write() {
+            Ok(mut lock) if config_revision() == revision => {
+                *lock = Some((revision, settings.clone()));
+                return settings;
+            }
+            Ok(_) => continue,
+            Err(_) => return settings,
+        }
+    }
+}
+
 pub fn load_settings() -> AppSettings {
-    profile_storage::load_settings()
+    load_settings_snapshot().as_ref().clone()
+}
+
+/// Lee una preferencia usando una referencia compartida, sin clonar la estructura
+/// ni volver a consultar el keyring en loops de fondo.
+pub fn with_settings<R>(f: impl FnOnce(&AppSettings) -> R) -> R {
+    let settings = load_settings_snapshot();
+    f(settings.as_ref())
 }
 
 pub fn save_settings(settings: &AppSettings) -> Result<(), String> {
     let res = profile_storage::save_settings(settings);
-    invalidate_config_cache();
+    if res.is_ok() {
+        let revision = CONFIG_REVISION.fetch_add(1, Ordering::Relaxed) + 1;
+        if let Ok(mut lock) = SETTINGS_CACHE.write() {
+            *lock = Some((revision, Arc::new(settings.clone())));
+        }
+    } else {
+        invalidate_config_cache();
+    }
     res
 }
 
@@ -338,7 +382,9 @@ pub fn load_game(game_id: &str) -> Result<Option<ConfiguredGame>, String> {
 
 pub fn save_library(library: &GameLibrary) -> Result<(), String> {
     let res = profile_storage::save_library(library);
-    invalidate_config_cache();
+    if res.is_ok() {
+        LIBRARY_REVISION.fetch_add(1, Ordering::Relaxed);
+    }
     res
 }
 
@@ -347,9 +393,7 @@ pub fn load_history() -> OperationHistory {
 }
 
 pub fn save_history(history: &OperationHistory) -> Result<(), String> {
-    let res = profile_storage::save_history(history);
-    invalidate_config_cache();
-    res
+    profile_storage::save_history(history)
 }
 
 pub fn load_gamification() -> GamificationConfig {
@@ -357,9 +401,7 @@ pub fn load_gamification() -> GamificationConfig {
 }
 
 pub fn save_gamification(gamification: &GamificationConfig) -> Result<(), String> {
-    let res = profile_storage::save_gamification(gamification);
-    invalidate_config_cache();
-    res
+    profile_storage::save_gamification(gamification)
 }
 
 pub fn append_operation_log(
@@ -368,9 +410,7 @@ pub fn append_operation_log(
     file_count: u32,
     err_count: u32,
 ) -> Result<(), String> {
-    let res = profile_storage::append_operation_log(kind, game_id, file_count, err_count);
-    invalidate_config_cache();
-    res
+    profile_storage::append_operation_log(kind, game_id, file_count, err_count)
 }
 
 pub fn get_combined_config() -> Config {
@@ -505,41 +545,5 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
     })?;
     save_gamification(&cfg.gamification)?;
 
-    update_config_cache(cfg.clone());
     Ok(())
-}
-
-/// Obtiene la configuración consolidada activa.
-///
-/// Utiliza una caché en memoria para evitar accesos repetitivos a disco y consultas
-/// al almacén de credenciales del sistema operativo (Keyring) en bucles en segundo plano.
-pub fn load_config() -> Config {
-    if let Ok(lock) = CONFIG_CACHE.read() {
-        if let Some(cached) = lock.as_ref() {
-            return cached.clone();
-        }
-    }
-
-    let config = get_combined_config();
-    if let Ok(mut lock) = CONFIG_CACHE.write() {
-        *lock = Some(config.clone());
-    }
-    config
-}
-
-/// Permite inspeccionar la configuración activa mediante una referencia prestada (`&Config`),
-/// evitando la clonación profunda de colecciones (juegos, historiales) en bucles periódicos.
-pub fn with_config<R>(f: impl FnOnce(&Config) -> R) -> R {
-    if let Ok(lock) = CONFIG_CACHE.read() {
-        if let Some(cached) = lock.as_ref() {
-            return f(cached);
-        }
-    }
-
-    let config = get_combined_config();
-    let res = f(&config);
-    if let Ok(mut lock) = CONFIG_CACHE.write() {
-        *lock = Some(config);
-    }
-    res
 }

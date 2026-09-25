@@ -42,7 +42,7 @@ pub fn start_gamepad_loop(app_handle: AppHandle) {
 
         loop {
             let focused = tester::relevant_app_focus(&app_handle);
-            let ignore_bg = crate::config::with_config(|cfg| cfg.gamepad_ignore_background);
+            let ignore_bg = crate::config::with_settings(|settings| settings.gamepad_ignore_background);
             let active_input = if ignore_bg { focused } else { true };
 
             tester::drain_ff_queue(&mut gilrs, &ff_rx);
