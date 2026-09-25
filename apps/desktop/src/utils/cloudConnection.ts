@@ -1,4 +1,4 @@
-import type { Config } from "@app-types/config";
+import type { AppSettingsConfig } from "@app-types/config";
 
 /**
  * Verifica si la configuración tiene una conexión cloud válida y utilizable.
@@ -31,7 +31,7 @@ import type { Config } from "@app-types/config";
  *   userId: "user123"
  * }); // false
  */
-export function hasUsableCloudConnection(config: Config | null | undefined): boolean {
+export function hasUsableCloudConnection(config: AppSettingsConfig | null | undefined): boolean {
   const hasUser = !!config?.userId?.trim();
   if (!hasUser) return false;
 

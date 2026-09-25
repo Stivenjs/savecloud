@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { AnimatePresence, motion } from "framer-motion";
 import { Gamepad2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useConfig } from "@hooks/useConfig";
+import { useLibrary } from "@hooks/useLibrary";
 import { detectGameFromText, formatTextWithGameNames } from "@utils/gameImage";
 import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
 import { useOverlaySoundSettings } from "@hooks/useOverlaySoundSettings";
@@ -43,21 +43,21 @@ interface NotificationCardProps extends OverlayNotification {
 
 const NotificationCard: React.FC<NotificationCardProps> = React.memo(
   ({ id, title, body, avatar, gameId, imageUrl, steamAppId, isLeft = false }) => {
-    const { config } = useConfig();
+    const { games } = useLibrary();
 
     const detectedGameId = useMemo(
-      () => detectGameFromText({ gameId, title, body, games: config?.games }),
-      [gameId, body, title, config?.games]
+      () => detectGameFromText({ gameId, title, body, games }),
+      [gameId, body, title, games]
     );
 
     const formattedTitle = useMemo(
-      () => formatTextWithGameNames(title, detectedGameId, config?.games),
-      [title, detectedGameId, config?.games]
+      () => formatTextWithGameNames(title, detectedGameId, games),
+      [title, detectedGameId, games]
     );
 
     const formattedBody = useMemo(
-      () => formatTextWithGameNames(body, detectedGameId, config?.games),
-      [body, detectedGameId, config?.games]
+      () => formatTextWithGameNames(body, detectedGameId, games),
+      [body, detectedGameId, games]
     );
 
     const slideX = isLeft ? -280 : 280;

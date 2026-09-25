@@ -476,12 +476,7 @@ pub async fn get_game_stat(game_id: String) -> Result<Option<GameStatsDto>, Stri
         return Err("El gameId no puede estar vacío".to_string());
     }
 
-    let library = config::load_library();
-    let Some(game) = library
-        .games
-        .into_iter()
-        .find(|game| game.id.eq_ignore_ascii_case(requested_id))
-    else {
+    let Some(game) = config::load_game(requested_id)? else {
         return Ok(None);
     };
 

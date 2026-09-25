@@ -100,7 +100,8 @@ export function GamesList({
   const resolvedSteamAppIds = useResolvedSteamAppIds(games);
   const isResolvingIds = getIsResolvingIds(games, resolvedSteamAppIds);
   const { mediaBySteamAppId } = useGameMediaBatch({ games, resolvedSteamAppIds, isResolvingIds });
-  const { statsByGameId } = useGameStats(games.length > 0);
+  const needsLibraryWideStats = sortBy === "lastModified" || sortBy === "size";
+  const { statsByGameId } = useGameStats(games.length > 0 && needsLibraryWideStats);
   const { countByGameId: cloudBackupCountByGameId } = useCloudBackupCounts(gameIds, hasSyncConfig && games.length > 0);
   const gameRunningStatus = useGameRunningStatus(gameIds);
   const unsyncedSet = useMemo(() => new Set(unsyncedGameIds), [unsyncedGameIds]);

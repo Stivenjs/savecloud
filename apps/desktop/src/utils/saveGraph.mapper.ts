@@ -2,7 +2,7 @@ import dagre from "dagre";
 import { MarkerType, type Edge, type Node } from "reactflow";
 import { formatBytes, formatPlaytime, formatRelativeDate } from "@utils/format";
 import { formatGameDisplayName } from "@utils/gameImage";
-import type { Config } from "@app-types/config";
+import type { ConfiguredGame } from "@app-types/config";
 import type { CloudBackupInfo, CloudSavesSummary, GameStats, OperationLogEntry } from "@services/tauri";
 import type { GameSaveGraph, SaveGraphEdge, SaveGraphModel, SaveGraphNode, SaveGraphTone } from "@app-types/saveGraph";
 import i18n from "@lib/i18n";
@@ -16,7 +16,7 @@ export interface SaveGraphFlowNodeData extends SaveGraphNode {
 }
 
 interface BuildLibrarySaveGraphModelArgs {
-  config: Config | null;
+  games: readonly ConfiguredGame[];
   stats: GameStats[];
   history: OperationLogEntry[];
   remoteSummary: CloudSavesSummary[];
@@ -140,13 +140,12 @@ export function mapGameSaveGraphToModel(graph: GameSaveGraph): SaveGraphModel {
  * Construye el grafo general de la biblioteca a partir de las fuentes disponibles.
  */
 export function buildLibrarySaveGraphModel({
-  config,
+  games,
   stats,
   history,
   remoteSummary,
   fullBackupsByGame,
 }: BuildLibrarySaveGraphModelArgs): SaveGraphModel {
-  const games = config?.games ?? [];
   const statsByGameId = new Map(stats.map((item) => [item.gameId.toLowerCase(), item]));
   const remoteByGameId = new Map(remoteSummary.map((item) => [item.gameId.toLowerCase(), item]));
   const historyByGameId = new Map<string, OperationLogEntry[]>();

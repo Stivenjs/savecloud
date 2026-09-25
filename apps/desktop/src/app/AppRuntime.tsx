@@ -8,7 +8,7 @@ import { NAV_ITEMS } from "@components/navigation/navItems";
 import { TrayActionsListener } from "@components/sync/TrayActionsListener";
 import { UnsyncedSavesModalWithProgress } from "@features/games";
 import { useAppInitialization } from "@hooks/useAppInitialization";
-import { useConfig } from "@hooks/useConfig";
+import { useLibrary } from "@hooks/useLibrary";
 import { useProfileSessionHydration } from "@hooks/useProfileSession";
 import type { ConfiguredGame } from "@app-types/config";
 import {
@@ -21,9 +21,7 @@ import { StreamingOverlay } from "@components/streaming/StreamingOverlay";
 
 function AppContent({ hideTitleBar }: { hideTitleBar: boolean }) {
   const navigate = useNavigate();
-  const { config } = useConfig();
-
-  const games = config?.games ?? [];
+  const { games } = useLibrary();
 
   const handleMenuGameClick = (game: ConfiguredGame) => {
     navigate(`/games/${game.id}`);

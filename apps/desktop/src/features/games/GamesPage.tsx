@@ -59,7 +59,7 @@ export function GamesPage() {
   const popLayer = useNavigationStore((state) => state.popLayer);
 
   const {
-    config,
+    games,
     loading,
     error,
     refetch,
@@ -126,7 +126,7 @@ export function GamesPage() {
     /* handleRetryOperationError, */
   } = useGamesPage();
 
-  const { statsByGameId } = useGameStats(!!config?.games?.length);
+  const { statsByGameId } = useGameStats(games.length > 0 && bulkConfirm?.type === "sync");
 
   const bigPictureConsole = useMemo(
     () => typeof document !== "undefined" && document.documentElement.classList.contains("savecloud-big-picture"),
@@ -298,7 +298,7 @@ export function GamesPage() {
                   <GamesPageHeader
                     density="unified"
                     hasSyncConfig={hasSyncConfig}
-                    gamesCount={config?.games?.length ?? 0}
+                    gamesCount={games.length}
                     syncing={syncing}
                     downloading={downloading}
                     onScanPress={() => {
@@ -368,7 +368,7 @@ export function GamesPage() {
                 popLayer();
               }}
               onSelectCandidate={handleScanSelect}
-              configuredGames={config?.games ?? []}
+              configuredGames={games}
             />
           </Suspense>
         )}
@@ -412,9 +412,9 @@ export function GamesPage() {
               type={bulkConfirm?.type ?? "sync"}
               count={bulkConfirm?.count ?? 0}
               gamesOverSizeThreshold={
-                bulkConfirm?.type === "sync" && config?.games?.length
+                bulkConfirm?.type === "sync" && games.length
                   ? countGamesOverSizeThreshold(
-                      config.games.map((g: ConfiguredGame) => g.id),
+                      games.map((g: ConfiguredGame) => g.id),
                       statsByGameId as unknown as Map<string, { localSizeBytes: number }>
                     )
                   : 0

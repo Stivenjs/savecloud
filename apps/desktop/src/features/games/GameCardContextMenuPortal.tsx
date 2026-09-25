@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from "react";
 import { Dropdown, DropdownTrigger } from "@heroui/react";
 import type { ConfiguredGame } from "@app-types/config";
-import type { GameStats } from "@services/tauri";
+import { useGameStat } from "@hooks/useGameStat";
 import { GameActionsDropdownMenu } from "@features/games/game-actions";
 import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";
 
@@ -9,7 +9,6 @@ export interface GameCardContextMenuPortalProps {
   contextMenu: { game: ConfiguredGame; x: number; y: number };
   onClose: () => void;
   gameRunningStatus: Record<string, boolean>;
-  statsByGameId: Map<string, GameStats>;
   syncingId?: string | null;
   downloadingId?: string | null;
   fullBackupUploadingGameId?: string | null;
@@ -27,7 +26,6 @@ export function GameCardContextMenuPortal({
   contextMenu,
   onClose,
   gameRunningStatus,
-  statsByGameId,
   syncingId,
   downloadingId,
   fullBackupUploadingGameId,
@@ -40,6 +38,7 @@ export function GameCardContextMenuPortal({
   onShare,
   onRemove,
 }: GameCardContextMenuPortalProps) {
+  const { data: stats } = useGameStat(contextMenu.game.id);
   const { game, x: cursorX, y: cursorY } = contextMenu;
 
   // Close when the page scrolls away
@@ -106,7 +105,7 @@ export function GameCardContextMenuPortal({
             surface="list"
             game={game}
             isGameRunning={gameRunningStatus[game.id] ?? false}
-            isUploadTooLarge={(statsByGameId.get(game.id)?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES}
+            isUploadTooLarge={(stats?.localSizeBytes ?? 0) >= LARGE_GAME_BLOCK_SIZE_BYTES}
             isSyncing={syncingId === game.id || syncingId === "all"}
             isDownloading={downloadingId === game.id || downloadingId === "all"}
             isFullBackupUploading={fullBackupUploadingGameId === game.id}

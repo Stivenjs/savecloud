@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Config } from "@savecloud/types";
+import type { AppSettingsConfig, Config, ConfiguredGame } from "@savecloud/types";
 
 // Re-exports de servicios modulares por dominio para mantener 100% de retrocompatibilidad
 export * from "./games.service";
@@ -11,8 +11,13 @@ export * from "./torrent.service";
 export * from "./plugins.service";
 
 /** Obtiene la configuración desde el archivo compartido con el CLI */
-export async function getConfig(): Promise<Config> {
-  return invoke<Config>("get_config");
+export async function getConfig(): Promise<AppSettingsConfig> {
+  return invoke<AppSettingsConfig>("get_config");
+}
+
+/** Obtiene la biblioteca local del perfil activo por separado de sus ajustes. */
+export async function getLibrary(): Promise<readonly ConfiguredGame[]> {
+  return invoke<ConfiguredGame[]>("get_library");
 }
 
 /** Ruta del archivo de configuración (para mostrar al usuario) */

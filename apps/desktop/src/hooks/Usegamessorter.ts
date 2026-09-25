@@ -1,7 +1,7 @@
 /**
  * useGamesSorter
  * Ordena una lista de ConfiguredGame según el campo y dirección elegidos.
- * Requiere GameStats para ordenar por lastModified, playtime y size.
+ * Usa los metadatos locales disponibles y estadísticas bajo demanda para campos costosos.
  */
 
 import { useMemo } from "react";
@@ -49,8 +49,8 @@ export function useGamesSorter(
 
     if (sortBy === "playtime") {
       return [...games].sort((a, b) => {
-        const ptA = statsByGameId.get(a.id)?.playtimeSeconds ?? 0;
-        const ptB = statsByGameId.get(b.id)?.playtimeSeconds ?? 0;
+        const ptA = a.playtimeSeconds ?? 0;
+        const ptB = b.playtimeSeconds ?? 0;
         const cmp = ptA - ptB;
         return sortDir === "asc" ? cmp : -cmp;
       });

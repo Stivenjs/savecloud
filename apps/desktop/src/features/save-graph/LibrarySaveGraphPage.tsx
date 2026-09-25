@@ -21,9 +21,9 @@ export function LibrarySaveGraphPage() {
   const selectedNodeId = useSaveGraphStore((state) => state.selectedNodeId);
   const windowDays = useSaveGraphStore((state) => state.filters.windowDays);
   const setSelectedNodeId = useSaveGraphStore((state) => state.setSelectedNodeId);
-  const { configQuery, statsQuery, historyQuery, remoteSummaryQuery, fullBackupsQuery, model } =
+  const { libraryQuery, statsQuery, historyQuery, remoteSummaryQuery, fullBackupsQuery, model } =
     useLibrarySaveGraphData();
-  const hasGames = (configQuery.data?.games.length ?? 0) > 0;
+  const hasGames = (libraryQuery.data?.length ?? 0) > 0;
 
   useEffect(() => {
     setSelectedNodeId(null);
@@ -44,7 +44,7 @@ export function LibrarySaveGraphPage() {
   const summaryCards = [
     {
       label: "Juegos",
-      value: `${configQuery.data?.games.length ?? 0}`,
+      value: `${libraryQuery.data?.length ?? 0}`,
       hint: "Catálogo visible en biblioteca",
     },
     {
@@ -88,8 +88,8 @@ export function LibrarySaveGraphPage() {
                 radius="full"
                 color="primary"
                 startContent={<Network size={16} />}
-                onPress={() => navigate("/games/" + (configQuery.data?.games[0]?.id ?? ""))}
-                isDisabled={!configQuery.data?.games.length}>
+                onPress={() => navigate("/games/" + (libraryQuery.data?.[0]?.id ?? ""))}
+                isDisabled={!libraryQuery.data?.length}>
                 Abrir un juego
               </Button>
             </div>
@@ -112,7 +112,7 @@ export function LibrarySaveGraphPage() {
             <SaveGraphLegend />
             <Card className="border border-divider bg-content1">
               <CardBody className="p-3">
-                {configQuery.isPending ||
+                {libraryQuery.isLoading ||
                 statsQuery.isPending ||
                 historyQuery.isPending ||
                 remoteSummaryQuery.isPending ||
@@ -123,7 +123,7 @@ export function LibrarySaveGraphPage() {
                   </div>
                 ) : null}
 
-                {configQuery.isError ||
+                {Boolean(libraryQuery.error) ||
                 statsQuery.isError ||
                 historyQuery.isError ||
                 remoteSummaryQuery.isError ||
@@ -133,7 +133,7 @@ export function LibrarySaveGraphPage() {
                   </div>
                 ) : null}
 
-                {!configQuery.isPending &&
+                {!libraryQuery.isLoading &&
                 !statsQuery.isPending &&
                 !historyQuery.isPending &&
                 !remoteSummaryQuery.isPending &&

@@ -39,6 +39,7 @@ import { useDownloadMetadataStore } from "@store/DownloadMetadataStore";
 import { createShareLink } from "@/services/tauri/share.service";
 import { toastError, toastSuccess } from "@utils/toast";
 import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
+import { LIBRARY_QUERY_KEY } from "@hooks/useLibrary";
 import { RUNNING_STATUS_KEY } from "@hooks/useGameRunningStatus";
 import { LAST_SYNC_QUERY_KEY } from "@hooks/useLastSyncInfo";
 import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";
@@ -354,6 +355,7 @@ export function GameDetailPage() {
         );
         await Promise.all([
           queryClient.refetchQueries({ queryKey: CONFIG_QUERY_KEY }),
+          queryClient.refetchQueries({ queryKey: LIBRARY_QUERY_KEY }),
           queryClient.refetchQueries({ queryKey: LAST_SYNC_QUERY_KEY }),
         ]);
         navigate("/");
@@ -602,6 +604,7 @@ export function GameDetailPage() {
             onSuccess={() => {
               scheduleConfigBackupToCloud();
               void queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+              void queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY });
               setGameToEdit(null);
             }}
             mode="edit"
@@ -653,6 +656,7 @@ export function GameDetailPage() {
             onSuccess={() => {
               void queryClient.invalidateQueries({ queryKey: ["game-stats"] });
               void queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+              void queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY });
             }}
           />
         </Suspense>

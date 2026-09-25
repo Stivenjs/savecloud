@@ -344,7 +344,6 @@ pub struct ConfigDto {
     pub active_cloud_host_user_id: Option<String>,
     #[serde(default)]
     pub cloud_host_ws_base_urls: BTreeMap<String, String>,
-    pub games: Vec<GameDto>,
     pub custom_scan_paths: Vec<String>,
     pub keep_backups_per_game: Option<u32>,
     pub full_backup_streaming: Option<bool>,

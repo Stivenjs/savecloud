@@ -332,6 +332,10 @@ pub fn load_library() -> GameLibrary {
     profile_storage::load_library()
 }
 
+pub fn load_game(game_id: &str) -> Result<Option<ConfiguredGame>, String> {
+    profile_storage::load_game(game_id)
+}
+
 pub fn save_library(library: &GameLibrary) -> Result<(), String> {
     let res = profile_storage::save_library(library);
     invalidate_config_cache();
