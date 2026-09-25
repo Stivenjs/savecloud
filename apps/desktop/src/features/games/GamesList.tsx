@@ -59,6 +59,9 @@ interface GamesListProps {
   consoleMode?: boolean;
   /** Callback para abrir el menú de acciones adaptado a consola (mando). */
   onOpenConsoleActions?: (game: ConfiguredGame) => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
 }
 
 export function GamesList({
@@ -82,6 +85,9 @@ export function GamesList({
   hasSyncConfig = false,
   consoleMode = false,
   onOpenConsoleActions,
+  onLoadMore,
+  hasMore = false,
+  loadingMore = false,
 }: GamesListProps) {
   const { t } = useTranslation();
   const { layout, cardOrientation, sortBy, sortDir, setLayout, setCardOrientation, setSortBy, setSortDir } =
@@ -240,6 +246,9 @@ export function GamesList({
           onOpenConsoleActions={handleOpenConsoleActions}
           openActionsGameId={openActionsGameId}
           onActionsMenuOpenChange={handleActionsMenuOpenChange}
+          onLoadMore={onLoadMore}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
         />
       </GamesListMotionContainer>
 

@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation } from "react-router-dom";
 import {
-  getConfig,
+  getLibraryGame,
   getSteamAppDetails,
   getSteamCatalogListingName,
   getGameStats,
@@ -10,6 +10,7 @@ import {
   type SteamAppdetailsMediaResult,
   type GameStats,
 } from "@services/tauri";
+import { useConfig } from "@hooks/useConfig";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { useGameRunningStatus } from "@hooks/useGameRunningStatus";
 import { getGameLibraryHeroUrl, getSteamAppId, isSteamMoviePosterUrl, isSteamAppId } from "@utils/gameImage";
@@ -33,10 +34,13 @@ export function useGameDetail() {
   const { activeProfile } = useProfileSession();
   const queryClient = useQueryClient();
 
-  const { data: config, isLoading: isConfigLoading } = useQuery({
-    queryKey: ["config"],
-    queryFn: getConfig,
-    staleTime: 30_000,
+  const { config, loading: isConfigLoading } = useConfig();
+
+  const { data: libraryGame, isLoading: isLibraryGameLoading } = useQuery({
+    queryKey: ["library-game", gameId],
+    queryFn: () => getLibraryGame(gameId!),
+    enabled: !!gameId,
+    staleTime: 10 * 60_000,
     refetchOnWindowFocus: false,
   });
 
@@ -44,8 +48,9 @@ export function useGameDetail() {
     if (!gameId) return undefined;
     const fromConfig = config?.games.find((g) => g.id === gameId);
     if (fromConfig) return fromConfig;
+    if (libraryGame) return libraryGame;
     return configuredGameFromSteamCatalogRouteId(gameId) ?? undefined;
-  }, [config?.games, gameId]);
+  }, [config?.games, gameId, libraryGame]);
 
   const steamAppId = useMemo(
     () => (game ? getSteamAppId(game, navState?.resolvedSteamAppId) : null),
@@ -107,7 +112,9 @@ export function useGameDetail() {
   }, [game, navState?.resolvedSteamAppId]);
 
   const isLoading =
-    !gameId || (!isCatalogRoute && isConfigLoading) || (!!steamAppId && isSteamLoading && !catalogMedia);
+    !gameId ||
+    (!isCatalogRoute && (isConfigLoading || isLibraryGameLoading)) ||
+    (!!steamAppId && isSteamLoading && !catalogMedia);
 
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
 

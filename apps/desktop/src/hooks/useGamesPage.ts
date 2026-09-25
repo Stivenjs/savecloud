@@ -6,8 +6,10 @@ import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGamesFiltering } from "@features/games/hooks/useGamesFiltering";
+import { filterGames } from "@features/games/GamesFilters";
 import { useGamesModals } from "@features/games/hooks/useGamesModals";
 import { useGamesSyncActions } from "@features/games/hooks/useGamesSyncActions";
+import { useLibraryPage } from "@hooks/useLibraryPage";
 import type { ConfiguredGame } from "@savecloud/types";
 
 export type { OperationResult } from "@features/games/hooks/useGamesSyncActions";
@@ -38,10 +40,27 @@ export function useGamesPage() {
     refetch?.();
   }, [queryClient, refetch]);
 
-  const filtering = useGamesFiltering(config?.games ?? [], cloudGames.length);
+  const filtering = useGamesFiltering([], cloudGames.length);
+  const libraryPage = useLibraryPage(filtering.debouncedSearchTerm);
+  const libraryGames = useMemo(
+    () => filterGames(libraryPage.games, "", filtering.originFilter),
+    [libraryPage.games, filtering.originFilter]
+  );
+  const libraryConfig = useMemo(
+    () => (config ? { ...config, games: libraryPage.games } : null),
+    [config, libraryPage.games]
+  );
+  const emptyFilterMessage =
+    libraryPage.total > 0 &&
+    (filtering.debouncedSearchTerm !== "" || filtering.originFilter !== "all") &&
+    libraryGames.length === 0
+      ? "No se encontraron juegos con los filtros aplicados."
+      : libraryPage.total === 0 && cloudGames.length > 0
+        ? "No hay juegos configurados, pero tienes guardados en la nube. Añade de nuevo cada juego con el mismo identificador y la ruta local para poder descargar sus backups."
+        : undefined;
 
   const modals = useGamesModals({
-    gamesCount: config?.games?.length ?? 0,
+    gamesCount: libraryPage.total,
     onRefresh: () => syncActions.handleRefresh(),
     onInvalidateConfig: invalidateConfig,
   });
@@ -67,10 +86,10 @@ export function useGamesPage() {
   });
 
   return {
-    config,
-    loading,
-    error,
-    refetch,
+    config: libraryConfig,
+    loading: loading || libraryPage.loading,
+    error: error ?? libraryPage.error,
+    refetch: libraryPage.refetch,
     hasSyncConfig,
     lastSyncAt,
     lastSyncGameId,
@@ -81,6 +100,11 @@ export function useGamesPage() {
     connectionError,
     refetchLastSync,
     ...filtering,
+    filteredGames: libraryGames,
+    emptyFilterMessage,
+    loadMoreLibrary: libraryPage.loadMore,
+    hasMoreLibrary: libraryPage.hasMore,
+    loadingMoreLibrary: libraryPage.loadingMore,
     ...modals,
     ...syncActions,
   };

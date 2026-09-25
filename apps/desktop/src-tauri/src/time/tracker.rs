@@ -13,39 +13,27 @@ use crate::config::{self, gamification::apply_playtime_delta};
 
 /// Añade segundos al contador de un juego específico.
 pub fn add_playtime(game_id: &str, seconds: u64) -> Result<(), String> {
-    let mut library = config::load_library();
-    let game = library
-        .games
-        .iter_mut()
-        .find(|g| g.id.eq_ignore_ascii_case(game_id))
-        .ok_or_else(|| format!("No se encontró el juego con ID: {}", game_id))?;
-
-    game.playtime_seconds += seconds;
-    let total: u64 = library.games.iter().map(|g| g.playtime_seconds).sum();
+    let total = config::library::add_playtime(game_id, seconds)?;
 
     let mut gamification = config::load_gamification();
     apply_playtime_delta(&mut gamification, seconds, total);
 
-    config::save_library(&library)?;
     config::save_gamification(&gamification)?;
     Ok(())
 }
 
 /// Obtiene el tiempo de un juego en segundos.
 pub fn get_game_playtime(game_id: &str) -> u64 {
-    let library = config::load_library();
-    library
-        .games
-        .iter()
-        .find(|g| g.id.eq_ignore_ascii_case(game_id))
-        .map(|g| g.playtime_seconds)
+    config::library::get(game_id)
+        .ok()
+        .flatten()
+        .map(|game| game.playtime_seconds)
         .unwrap_or(0)
 }
 
 /// Obtiene la suma de tiempo de todos los juegos.
 pub fn get_total_playtime() -> u64 {
-    let library = config::load_library();
-    library.games.iter().map(|g| g.playtime_seconds).sum()
+    config::library::total_playtime().unwrap_or(0)
 }
 
 /// Utilidad para convertir segundos a formato legible (ej: "1h 20m" o "45m").

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Config } from "@savecloud/types";
+import type { ConfiguredGame } from "@savecloud/types";
 
 // Re-exports de servicios modulares por dominio para mantener 100% de retrocompatibilidad
 export * from "./games.service";
@@ -13,6 +14,29 @@ export * from "./plugins.service";
 /** Obtiene la configuración desde el archivo compartido con el CLI */
 export async function getConfig(): Promise<Config> {
   return invoke<Config>("get_config");
+}
+
+export interface LibraryPage {
+  games: ConfiguredGame[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export async function getLibraryPage(params?: {
+  offset?: number;
+  limit?: number;
+  search?: string;
+}): Promise<LibraryPage> {
+  return invoke<LibraryPage>("get_library_page", {
+    offset: params?.offset ?? 0,
+    limit: params?.limit ?? 100,
+    search: params?.search?.trim() || null,
+  });
+}
+
+export async function getLibraryGame(gameId: string): Promise<ConfiguredGame | null> {
+  return invoke<ConfiguredGame | null>("get_library_game", { gameId });
 }
 
 /** Ruta del archivo de configuración (para mostrar al usuario) */
