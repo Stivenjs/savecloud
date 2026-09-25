@@ -17,7 +17,6 @@ use super::torrent_runner;
 
 /// Estado global del módulo `sources`.
 pub struct SourcesState {
-    jobs: Mutex<Vec<SourceDownloadJob>>,
     cancel_flags: Mutex<HashMap<String, Arc<AtomicBool>>>,
     pause_flags: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
@@ -25,41 +24,25 @@ pub struct SourcesState {
 impl SourcesState {
     /// Construye el estado rehidratando jobs desde disco.
     pub fn new_from_disk() -> Self {
-        let jobs = store::load_jobs().unwrap_or_default();
         Self {
-            jobs: Mutex::new(jobs),
             cancel_flags: Mutex::new(HashMap::new()),
             pause_flags: Mutex::new(HashMap::new()),
         }
     }
 
-    /// Lista jobs en memoria.
+    /// Lista jobs consultando SQLite; no mantiene la colección en memoria.
     pub fn list_jobs(&self) -> Vec<SourceDownloadJob> {
-        self.jobs.lock().map(|g| g.clone()).unwrap_or_default()
+        store::load_jobs().unwrap_or_default()
     }
 
-    /// Inserta o actualiza un job, persistiendo cambios.
+    /// Inserta o actualiza un job directamente en SQLite.
     pub fn upsert_job(&self, next: SourceDownloadJob) -> Result<(), String> {
-        let mut guard = self
-            .jobs
-            .lock()
-            .map_err(|_| "Mutex de jobs envenenado".to_string())?;
-        if let Some(existing) = guard.iter_mut().find(|j| j.job_id == next.job_id) {
-            *existing = next;
-        } else {
-            guard.push(next);
-        }
-        store::save_jobs(&guard)
+        store::upsert_job(&next)
     }
 
-    /// Elimina un job del estado y del almacenamiento persistente.
+    /// Elimina un job de SQLite.
     pub fn remove_job(&self, job_id: &str) -> Result<(), String> {
-        let mut guard = self
-            .jobs
-            .lock()
-            .map_err(|_| "Mutex de jobs envenenado".to_string())?;
-        guard.retain(|j| j.job_id != job_id);
-        store::save_jobs(&guard)
+        store::delete_job(job_id)
     }
 
     /// Marca cancelación solicitada para un job.
@@ -451,12 +434,9 @@ pub(crate) fn spawn_inventory_rescan_after_download() {
     });
 }
 
-pub(crate) fn find_job(state: &SourcesState, job_id: &str) -> Result<SourceDownloadJob, String> {
-    state
-        .list_jobs()
-        .into_iter()
-        .find(|j| j.job_id == job_id)
-        .ok_or_else(|| format!("Job no encontrado: {job_id}"))
+pub(crate) fn find_job(_state: &SourcesState, job_id: &str) -> Result<SourceDownloadJob, String> {
+    store::load_job(job_id)
+        .and_then(|job| job.ok_or_else(|| format!("Job no encontrado: {job_id}")))
 }
 
 fn emit_job_download_progress(

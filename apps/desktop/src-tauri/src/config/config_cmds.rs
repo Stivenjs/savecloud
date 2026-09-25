@@ -124,25 +124,37 @@ pub fn get_config() -> ConfigDto {
         games: library
             .games
             .into_iter()
-            .map(|g| {
-                let steam_app_id = g.steam_app_id.clone().or_else(|| {
-                    if g.image_url.is_none() {
-                        steam::resolve_app_id_for_game(&g.paths, &steam_map)
+            .map(|game| {
+                let ConfiguredGame {
+                    id,
+                    paths,
+                    steam_app_id,
+                    image_url,
+                    executable_names,
+                    edition_label,
+                    source_url,
+                    magnet_link,
+                    launch_executable_path,
+                    playtime_seconds,
+                } = game;
+                let steam_app_id = steam_app_id.or_else(|| {
+                    if image_url.is_none() {
+                        steam::resolve_app_id_for_game(&paths, &steam_map)
                     } else {
                         None
                     }
                 });
                 GameDto {
-                    id: g.id,
-                    paths: g.paths,
+                    id,
+                    paths,
                     steam_app_id,
-                    image_url: g.image_url,
-                    edition_label: g.edition_label,
-                    source_url: g.source_url,
-                    magnet_link: g.magnet_link,
-                    executable_names: g.executable_names.clone(),
-                    launch_executable_path: g.launch_executable_path.clone(),
-                    playtime_seconds: g.playtime_seconds,
+                    image_url,
+                    edition_label,
+                    source_url,
+                    magnet_link,
+                    executable_names,
+                    launch_executable_path,
+                    playtime_seconds,
                 }
             })
             .collect(),
