@@ -390,8 +390,21 @@ pub async fn get_game_stats() -> Result<Vec<GameStatsDto>, String> {
         .map(|g| (g.id.to_lowercase(), g.playtime_seconds))
         .collect();
 
+    let remote_saves = sync::api::sync_list_remote_saves_summary();
+
+    let mut handles = Vec::with_capacity(library.games.len());
+    for game in &library.games {
+        let id = game.id.clone();
+        let paths = game.paths.clone();
+        handles.push(tokio::task::spawn_blocking(move || {
+            let (local_size, local_mtime) = local_stats_for_paths(&paths);
+            (id, local_size, local_mtime)
+        }));
+    }
+
+    let (joined, remote_saves) = tokio::join!(join_all(handles), remote_saves);
     let cloud_by_game: HashMap<String, Option<String>> =
-        match sync::api::sync_list_remote_saves_summary().await {
+        match remote_saves {
             Ok(remote) => {
                 let mut map: HashMap<String, Option<chrono::DateTime<chrono::Utc>>> =
                     HashMap::new();
@@ -421,17 +434,6 @@ pub async fn get_game_stats() -> Result<Vec<GameStatsDto>, String> {
             Err(_) => HashMap::new(),
         };
 
-    let mut handles = Vec::with_capacity(library.games.len());
-    for game in &library.games {
-        let id = game.id.clone();
-        let paths = game.paths.clone();
-        handles.push(tokio::task::spawn_blocking(move || {
-            let (local_size, local_mtime) = local_stats_for_paths(&paths);
-            (id, local_size, local_mtime)
-        }));
-    }
-
-    let joined = join_all(handles).await;
     let mut result = Vec::with_capacity(joined.len());
 
     for join_res in joined {

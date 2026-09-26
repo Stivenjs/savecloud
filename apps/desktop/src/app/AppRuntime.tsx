@@ -5,7 +5,6 @@ import { HashRouter, useNavigate } from "react-router-dom";
 import { AppLayout, TransferOverlayRouter } from "@components/layout";
 import { AppRoutes } from "@router/AppRoutes";
 import { NAV_ITEMS } from "@components/navigation/navItems";
-import { TrayActionsListener } from "@components/sync/TrayActionsListener";
 import { UnsyncedSavesModalWithProgress } from "@features/games";
 import { useAppInitialization } from "@hooks/useAppInitialization";
 import { useLibrary } from "@hooks/useLibrary";
@@ -87,7 +86,6 @@ export function AppRuntime({ hideTitleBar = false }: AppRuntimeProps) {
 
   return (
     <>
-      <TrayActionsListener />
       <UnsyncedSavesModalWithProgress />
       <StreamingOverlay />
       {isStreamingMetricsOpen && (

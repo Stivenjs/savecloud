@@ -101,12 +101,19 @@ export function GamesList({
   const isResolvingIds = getIsResolvingIds(games, resolvedSteamAppIds);
   const { mediaBySteamAppId } = useGameMediaBatch({ games, resolvedSteamAppIds, isResolvingIds });
   const needsLibraryWideStats = sortBy === "lastModified" || sortBy === "size";
-  const { statsByGameId } = useGameStats(games.length > 0 && needsLibraryWideStats);
+  const {
+    statsByGameId,
+    isLoading: isLoadingStats,
+    isError: statsError,
+  } = useGameStats(games.length > 0 && needsLibraryWideStats);
   const { countByGameId: cloudBackupCountByGameId } = useCloudBackupCounts(gameIds, hasSyncConfig && games.length > 0);
   const gameRunningStatus = useGameRunningStatus(gameIds);
   const unsyncedSet = useMemo(() => new Set(unsyncedGameIds), [unsyncedGameIds]);
 
-  const sortedGames = useGamesSorter(games, statsByGameId as unknown as Map<string, GameStats>, sortBy, sortDir);
+  const hasStatsForEveryGame = games.every((game) => statsByGameId.has(game.id));
+  const isWaitingForSortStats = needsLibraryWideStats && !statsError && (isLoadingStats || !hasStatsForEveryGame);
+  const sortedGamesByStats = useGamesSorter(games, statsByGameId as unknown as Map<string, GameStats>, sortBy, sortDir);
+  const sortedGames = isWaitingForSortStats || statsError ? [...games] : sortedGamesByStats;
 
   const stableListKey = useMemo(
     () => [animationKey ?? "", layout, cardOrientation, sortBy, sortDir].join("|"),

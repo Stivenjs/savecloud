@@ -4,17 +4,14 @@
 //!
 //! - Crear el tray.
 //! - Mostrar el tray.
-//! - Subir todo.
-//! - Descargar todo.
-//! - Backup completo (primer juego).
 //! - Salir.    
 
 pub mod tray_state;
 pub mod tray_tooltip;
 
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{App, Emitter, Manager};
+use tauri::{App, Manager};
 
 use tray_state::TrayState;
 
@@ -34,34 +31,11 @@ pub fn create_tray(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let show_item = MenuItem::with_id(app, "show", "Mostrar", true, None::<&str>)?;
-    let upload_all_item =
-        MenuItem::with_id(app, "upload_all", "Subir todo ahora", true, None::<&str>)?;
-    let download_all_item = MenuItem::with_id(
-        app,
-        "download_all",
-        "Descargar todo ahora",
-        true,
-        None::<&str>,
-    )?;
-    let backup_first_item = MenuItem::with_id(
-        app,
-        "backup_first",
-        "Backup completo (primer juego)",
-        true,
-        None::<&str>,
-    )?;
+    let minimize_item = MenuItem::with_id(app, "minimize", "Minimizar", true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "Salir", true, None::<&str>)?;
 
-    let menu = Menu::with_items(
-        app,
-        &[
-            &show_item,
-            &upload_all_item,
-            &download_all_item,
-            &backup_first_item,
-            &quit_item,
-        ],
-    )?;
+    let menu = Menu::with_items(app, &[&show_item, &minimize_item, &separator, &quit_item])?;
 
     let builder = TrayIconBuilder::new()
         .icon(icon)
@@ -87,29 +61,19 @@ pub fn create_tray(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
 
+                "minimize" => {
+                    if let Some(window) = app.get_webview_window("main") {
+                        if let Err(e) = window.hide() {
+                            eprintln!("Error minimizando a la bandeja: {}", e);
+                        }
+                    }
+                }
+
                 "quit" => {
                     let handle = app.app_handle().clone();
                     tauri::async_runtime::spawn(async move {
                         crate::shutdown::hooks::quit_from_tray_with_splash(handle).await;
                     });
-                }
-
-                "upload_all" => {
-                    if let Err(e) = app.emit("tray-action-upload-all", ()) {
-                        eprintln!("Error emitiendo upload_all: {}", e);
-                    }
-                }
-
-                "download_all" => {
-                    if let Err(e) = app.emit("tray-action-download-all", ()) {
-                        eprintln!("Error emitiendo download_all: {}", e);
-                    }
-                }
-
-                "backup_first" => {
-                    if let Err(e) = app.emit("tray-action-backup-first", ()) {
-                        eprintln!("Error emitiendo backup_first: {}", e);
-                    }
                 }
 
                 _ => {}
