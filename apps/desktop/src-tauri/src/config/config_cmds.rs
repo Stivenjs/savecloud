@@ -246,6 +246,19 @@ pub fn create_config_file(
     Ok(get_config_path())
 }
 
+/// Guarda la clave Steam Web API únicamente en el almacén seguro del perfil activo.
+#[tauri::command]
+pub fn set_steam_web_api_key(api_key: String) -> Result<(), String> {
+    let key = api_key.trim();
+    if key.is_empty() {
+        return Err("La clave Steam Web API no puede estar vacía".into());
+    }
+
+    let mut settings = config::load_settings();
+    settings.steam_web_api_key = Some(key.to_string());
+    config::save_settings(&settings)
+}
+
 #[tauri::command]
 pub fn set_active_cloud_host_user_id(host_user_id: Option<String>) -> Result<(), String> {
     let mut settings = config::load_settings();

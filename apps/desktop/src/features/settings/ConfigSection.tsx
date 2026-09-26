@@ -5,6 +5,7 @@ import { Trans, useTranslation } from "react-i18next";
 import type { SteamCatalogSyncProgressPayload, SteamSeedImportProgressPayload } from "@services/tauri";
 import type { ReactNode } from "react";
 import { ConfigEncryptionModal } from "@features/settings/ConfigEncryptionModal";
+import { SteamApiKeySettings } from "@features/settings/SteamApiKeySettings";
 import type { ConfigEncryptionDialogMode } from "@features/settings/configExport";
 
 interface ConfigSectionProps {
@@ -261,22 +262,7 @@ export function ConfigSection({
                     description={t("settings.configSection.catalogDesc")}
                   />
 
-                  <div className="rounded-xl border border-default-200/70 bg-default-50/55 px-3 py-2.5 dark:border-default-100/15 dark:bg-default-50/10">
-                    <span className="text-xs font-medium text-default-500">
-                      {t("settings.configSection.steamKeyLabel")}
-                    </span>
-                    {isLoadingData ? (
-                      <Skeleton className="mt-1 h-4 w-40 rounded-lg" />
-                    ) : (
-                      <p className="mt-1 text-sm font-medium text-foreground">
-                        {hasSteamWebApiKey ? (
-                          <span className="text-success-600">{t("settings.configSection.steamKeyConfigured")}</span>
-                        ) : (
-                          <span className="italic text-default-400">{t("settings.configSection.steamKeyMissing")}</span>
-                        )}
-                      </p>
-                    )}
-                  </div>
+                  <SteamApiKeySettings hasApiKey={hasSteamWebApiKey} isLoading={isLoadingData} />
 
                   <div className="flex flex-wrap gap-2">
                     <Button

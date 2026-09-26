@@ -34,16 +34,20 @@ export async function createConfigFile(
   apiBaseUrl: string,
   wsBaseUrl: string,
   apiKey: string,
-  userId: string,
-  steamWebApiKey?: string | null
+  userId: string
 ): Promise<string> {
   return invoke<string>("create_config_file", {
     apiBaseUrl: apiBaseUrl.trim() || null,
     wsBaseUrl: wsBaseUrl.trim() || null,
     apiKey: apiKey.trim() || null,
     userId: userId.trim() || null,
-    steamWebApiKey: steamWebApiKey === undefined || steamWebApiKey === null ? null : steamWebApiKey.trim() || null,
+    steamWebApiKey: null,
   });
+}
+
+/** Guarda la clave Steam Web API en el almacén seguro del perfil activo. */
+export async function setSteamWebApiKey(apiKey: string): Promise<void> {
+  await invoke("set_steam_web_api_key", { apiKey: apiKey.trim() });
 }
 
 /** Guarda fondo, avatar y marco del perfil (vacío o null borra cada campo). */

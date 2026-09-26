@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { relaunch } from "@tauri-apps/plugin-process";
 import {
   backupConfigToCloud,
   createConfigFile,
@@ -46,7 +47,6 @@ export function useConfigManagement() {
   const [createWsBaseUrl, setCreateWsBaseUrl] = useState("");
   const [createApiKey, setCreateApiKey] = useState("");
   const [createUserId, setCreateUserId] = useState("");
-  const [createSteamWebApiKey, setCreateSteamWebApiKey] = useState("");
   const [creatingConfig, setCreatingConfig] = useState(false);
   const [createConfigError, setCreateConfigError] = useState<string | null>(null);
 
@@ -80,13 +80,21 @@ export function useConfigManagement() {
       setCreateWsBaseUrl(config.wsBaseUrl ?? "");
       setCreateApiKey(config.apiKey ?? "");
       setCreateUserId(activeUserId || config.userId || "");
-      setCreateSteamWebApiKey(config.steamWebApiKey ?? "");
     }
   }, [createConfigModalOpen, activeUserId, config]);
 
   const handleExportConfig = () => {
     setConfigEncryptionError(null);
     setConfigEncryptionDialog({ kind: "export" });
+  };
+
+  const relaunchAfterConfigImport = async () => {
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 900));
+    try {
+      await relaunch();
+    } catch {
+      window.location.reload();
+    }
   };
 
   const handleImportConfig = async (mode: "merge" | "replace") => {
@@ -106,7 +114,7 @@ export function useConfigManagement() {
           i18n.t("settings.toast.importSuccess"),
           mode === "merge" ? i18n.t("settings.toast.gamesMerged") : i18n.t("settings.toast.configReplaced")
         );
-        window.location.reload();
+        await relaunchAfterConfigImport();
       }
     } catch (e) {
       if (importPath && String(e).includes(CONFIG_PASSWORD_REQUIRED_MARKER)) {
@@ -167,7 +175,7 @@ export function useConfigManagement() {
       );
       setConfigEncryptionDialog(null);
       setPendingEncryptedImportPath(null);
-      window.location.reload();
+      await relaunchAfterConfigImport();
     } catch (e) {
       setConfigEncryptionError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -222,7 +230,7 @@ export function useConfigManagement() {
     }
   };
 
-  const handleCreateConfigFile = async (restoreAfter: boolean = false) => {
+  const handleCreateConfigFile = async () => {
     setCreatingConfig(true);
     setCreateConfigError(null);
     try {
@@ -232,26 +240,13 @@ export function useConfigManagement() {
             ? ""
             : (config?.apiKey ?? "")
           : createApiKey;
-      const steamUnchanged = createSteamWebApiKey === MASKED_CONFIG_SECRET || createSteamWebApiKey === "********";
-      const steamWebApiKeyArg = steamUnchanged ? null : createSteamWebApiKey.trim() || null;
-      const path = await createConfigFile(
-        createApiBaseUrl,
-        createWsBaseUrl,
-        apiKeyToSave ?? "",
-        createUserId,
-        steamWebApiKeyArg
-      );
+      const path = await createConfigFile(createApiBaseUrl, createWsBaseUrl, apiKeyToSave ?? "", createUserId);
       setCreateConfigModalOpen(false);
 
       queryClient.invalidateQueries({ queryKey: ["config"] });
       queryClient.invalidateQueries({ queryKey: ["configPath"] });
 
-      if (restoreAfter) {
-        toastSuccess(i18n.t("settings.toast.connectionConfigured"), i18n.t("settings.toast.recoveringFromCloud"));
-        await performRestoreConfigFromCloud();
-      } else {
-        toastSuccess(i18n.t("settings.toast.connectionSaved"), path);
-      }
+      toastSuccess(i18n.t("settings.toast.connectionSaved"), path);
     } catch (e) {
       setCreateConfigError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -287,8 +282,6 @@ export function useConfigManagement() {
     setCreateApiKey,
     createUserId,
     setCreateUserId,
-    createSteamWebApiKey,
-    setCreateSteamWebApiKey,
     creatingConfig,
     createConfigError,
     pullFriendConfigModalOpen,

@@ -167,7 +167,6 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
     createWsBaseUrl,
     createApiKey,
     createUserId,
-    createSteamWebApiKey,
     creatingConfig,
     createConfigError,
     pullFriendConfigModalOpen,
@@ -208,7 +207,6 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
     setCreateWsBaseUrl,
     setCreateApiKey,
     setCreateUserId,
-    setCreateSteamWebApiKey,
     setCreateConfigModalOpen,
     setRestoreConfirmOpen,
     setResetSteamCatalogConfirmOpen,
@@ -515,14 +513,12 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
             wsBaseUrl={createWsBaseUrl}
             apiKey={createApiKey}
             userId={createUserId}
-            steamWebApiKey={createSteamWebApiKey}
             error={createConfigError}
             creating={creatingConfig}
             onApiBaseUrlChange={setCreateApiBaseUrl}
             onWsBaseUrlChange={setCreateWsBaseUrl}
             onApiKeyChange={setCreateApiKey}
             onUserIdChange={setCreateUserId}
-            onSteamWebApiKeyChange={setCreateSteamWebApiKey}
             onClose={() => setCreateConfigModalOpen(false)}
             onSubmit={handleCreateConfigFile}
           />
