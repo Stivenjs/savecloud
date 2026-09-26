@@ -1503,6 +1503,8 @@
       "importReplaceDescription": "Enter the copy's password. This will replace your current configuration with the file's contents.",
       "passwordLabel": "Copy password",
       "confirmPasswordLabel": "Confirm password",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
       "passwordWarning": "You will need this password to import the file. SaveCloud cannot recover it; keep it somewhere safe.",
       "passwordTooShort": "Use at least {{count}} characters.",
       "passwordMismatch": "The passwords do not match.",

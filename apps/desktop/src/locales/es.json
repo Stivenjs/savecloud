@@ -1503,6 +1503,8 @@
       "importReplaceDescription": "Introduce la contraseña de la copia. Esta opción reemplazará la configuración actual por la del archivo.",
       "passwordLabel": "Contraseña de la copia",
       "confirmPasswordLabel": "Repite la contraseña",
+      "showPassword": "Mostrar contraseña",
+      "hidePassword": "Ocultar contraseña",
       "passwordWarning": "Necesitarás esta contraseña para importar el archivo. SaveCloud no puede recuperarla; guárdala en un lugar seguro.",
       "passwordTooShort": "Usa al menos {{count}} caracteres.",
       "passwordMismatch": "Las contraseñas no coinciden.",
