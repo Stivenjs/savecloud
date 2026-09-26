@@ -31,7 +31,7 @@ export function GameCardSyncBadge({
 
     if (isGameRunning) {
       return (
-        <div className="absolute bottom-2.5 left-2.5 z-20 flex items-center gap-1.5 bg-zinc-950/90 rounded-md p-0.5 pr-2 border border-white/10 shadow-md select-none">
+        <div className="absolute left-2.5 top-2.5 z-20 flex items-center gap-1.5 rounded-md border border-white/10 bg-zinc-950/90 p-0.5 pr-2 shadow-md select-none">
           <span className="bg-danger text-danger-foreground font-sans text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-sm tracking-wide flex items-center gap-1">
             <span className="relative flex h-1.5 w-1.5 shrink-0">
               <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-danger-foreground"></span>
@@ -72,7 +72,7 @@ export function GameCardSyncBadge({
     if (!badgeText && localSizeBytes == null) return null;
 
     return (
-      <div className="absolute bottom-2.5 left-2.5 z-20 flex items-center gap-1.5 bg-zinc-950/85 backdrop-blur-md rounded-md p-0.5 pr-2 border border-white/10 shadow-lg select-none">
+      <div className="absolute left-2.5 top-2.5 z-20 flex items-center gap-1.5 rounded-md border border-white/10 bg-zinc-950/85 p-0.5 pr-2 shadow-lg backdrop-blur-md select-none">
         {badgeText && <span className={badgeColorClass}>{badgeText}</span>}
         {localSizeBytes != null && (
           <span className="text-zinc-200 font-mono text-[9.5px] font-bold tracking-tight">

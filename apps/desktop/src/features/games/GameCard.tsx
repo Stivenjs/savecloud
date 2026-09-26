@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 import { Skeleton } from "@heroui/react";
 import { Play } from "lucide-react";
 import { GameCardHoverMotion } from "@features/games/GameCardHoverMotion";
-import { formatGameDisplayName, getSteamAppId } from "@utils/gameImage";
+import { formatGameDisplayName, getSteamAppId, getSteamCdnCandidates } from "@utils/gameImage";
 import { GameCardHoverCard } from "@features/games/GameCardHoverCard";
 import { GameCardSyncProgress } from "@features/games/GameCardSyncProgress";
 import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";
@@ -103,6 +103,26 @@ const SYNC_TOLERANCE_MS = 15_000;
 /** Si la nube es más reciente que local pero por menos de esto, lo tratamos como "en sync" */
 const CLOUD_NEWER_AS_SYNC_MS = 120_000;
 
+function getFeaturedCoverCandidates(
+  game: ConfiguredGame,
+  resolvedSteamAppId: string | null | undefined,
+  mediaUrls: readonly string[],
+  fallbackCandidates: readonly string[]
+): string[] {
+  const customSteamAppId = game.imageUrl?.match(/\/apps\/(\d+)\//)?.[1] ?? null;
+  const steamAppId = customSteamAppId ?? getSteamAppId(game, resolvedSteamAppId);
+  if (!steamAppId || (game.imageUrl && !customSteamAppId)) return [...fallbackCandidates];
+
+  const canUseSteamMedia = !game.imageUrl || steamAppId === getSteamAppId(game, resolvedSteamAppId);
+  const highResolutionScreenshots = canUseSteamMedia
+    ? mediaUrls.filter((url) => url.toLowerCase().includes("/ss_") && url.toLowerCase().includes("1920x1080"))
+    : [];
+  const horizontalCandidates = getSteamCdnCandidates(steamAppId, "horizontal");
+  const libraryHeroes = horizontalCandidates.filter((url) => url.includes("/library_hero."));
+
+  return [...new Set([...libraryHeroes, ...highResolutionScreenshots, ...horizontalCandidates, ...fallbackCandidates])];
+}
+
 export function deriveGameSyncStatus(
   isUnsynced: boolean | undefined,
   stats: GameStats | null | undefined,
@@ -170,6 +190,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
 
   const isCatalog = variant === "catalog";
   const isHorizontal = featured || orientation === "horizontal";
+  const mediaOrientation = isHorizontal ? "horizontal" : "vertical";
   const aspectClass = featured ? "aspect-[2.15/1] sm:aspect-[2.45/1]" : isHorizontal ? "aspect-460/215" : "aspect-2/3";
 
   const syncProgress = useSyncStore((state) => {
@@ -185,8 +206,14 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     externalLoading,
     mediaBySteamAppId,
     mediaFromBatch,
-    orientation,
+    orientation: mediaOrientation,
   });
+
+  const featuredCoverCandidates = useMemo(
+    () =>
+      featured ? getFeaturedCoverCandidates(game, resolvedSteamAppId, mediaUrls, coverCandidates) : coverCandidates,
+    [featured, game, resolvedSteamAppId, mediaUrls, coverCandidates]
+  );
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -331,7 +358,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
             ) : (
               <CatalogCoverImage
                 alt={game.id}
-                candidates={coverCandidates}
+                candidates={featured ? featuredCoverCandidates : coverCandidates}
                 fallbackTitle={cardTitle ?? formatGameDisplayName(game.id)}
                 className="size-full object-cover object-center transition-[transform,opacity] duration-200 ease-out group-hover/card:scale-[1.03] subpixel-antialiased transform-gpu rounded-xl"
                 showSkeleton={!isCatalog}
@@ -356,8 +383,8 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
                 </span>
               </div>
             ) : (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-end p-3 sm:p-4">
-                <h3 className="line-clamp-2 max-w-[72%] text-right text-sm font-semibold leading-snug text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] sm:text-base">
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-start p-3 sm:p-4">
+                <h3 className="line-clamp-2 max-w-[92%] text-left text-sm font-semibold leading-snug text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] sm:text-base">
                   {formatGameDisplayName(cardTitle ?? game.id)}
                 </h3>
               </div>
