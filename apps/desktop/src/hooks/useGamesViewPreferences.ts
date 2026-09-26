@@ -16,8 +16,8 @@ export interface GamesViewPreferences {
 const STORAGE_KEY = "savecloud:games-view-prefs";
 
 const DEFAULTS: GamesViewPreferences = {
-  layout: "grid-md",
-  cardOrientation: "vertical",
+  layout: "grid-lg",
+  cardOrientation: "horizontal",
   sortBy: "title",
   sortDir: "asc",
 };

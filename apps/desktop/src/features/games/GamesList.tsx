@@ -192,10 +192,8 @@ export function GamesList({
       {/* Controls bar */}
       <div
         className={[
-          "flex flex-wrap items-center gap-3",
-          consoleMode
-            ? "flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between"
-            : "justify-between",
+          "flex w-full flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between",
+          consoleMode ? "gap-4 sm:flex-row sm:items-center sm:justify-between" : "",
         ].join(" ")}>
         <p className={consoleMode ? "text-base font-semibold text-default-400 md:text-lg" : "text-xs text-default-400"}>
           {t("library.gamesCount", { count: sortedGames.length })}

@@ -111,21 +111,24 @@ export function GamesViewControls({
   return (
     <div
       className={[
-        "flex flex-wrap items-center gap-3",
-        consoleMode ? "w-full gap-4 sm:gap-5 sm:flex-nowrap sm:justify-end" : "sm:flex-nowrap",
+        "items-center gap-2",
+        consoleMode
+          ? "flex w-full flex-col gap-4 sm:flex-row sm:justify-end"
+          : "grid w-full grid-cols-[minmax(0,1fr)_auto] md:flex md:w-auto md:flex-nowrap md:gap-3",
       ].join(" ")}>
-      <div className={`flex items-center gap-2 ${consoleMode ? "min-w-0 w-full sm:w-auto sm:flex-1 sm:max-w-md" : ""}`}>
+      <div
+        className={`flex min-w-0 items-center gap-2 ${consoleMode ? "w-full sm:w-auto sm:flex-1 sm:max-w-md" : "col-span-2 md:col-span-1"}`}>
         <span
           className={[
             "whitespace-nowrap text-default-500",
-            consoleMode ? "inline text-lg font-semibold" : "hidden text-sm sm:inline",
+            consoleMode ? "inline text-lg font-semibold" : "hidden text-sm md:inline",
           ].join(" ")}>
           {t("library.viewControls.sortBy")}
         </span>
         <Select
           selectedKeys={new Set([selectedKey])}
           onSelectionChange={handleSortSelect}
-          className={consoleMode ? "min-w-0 flex-1 sm:min-w-72" : "w-52"}
+          className={consoleMode ? "min-w-0 flex-1 sm:min-w-72" : "w-full min-w-0 md:w-52"}
           size={consoleMode ? "lg" : "sm"}
           variant="bordered"
           aria-label={t("library.viewControls.sortAriaLabel")}
@@ -155,7 +158,7 @@ export function GamesViewControls({
       <div
         className={[
           "w-px shrink-0 bg-default-200",
-          consoleMode ? "block h-12 self-center sm:h-14" : "hidden h-6 sm:block",
+          consoleMode ? "hidden h-12 self-center sm:block sm:h-14" : "hidden h-6 md:block",
         ].join(" ")}
         aria-hidden
       />
@@ -196,7 +199,7 @@ export function GamesViewControls({
           <div
             className={[
               "w-px shrink-0 bg-default-200",
-              consoleMode ? "block h-12 self-center sm:h-14" : "hidden h-6 sm:block",
+              consoleMode ? "hidden h-12 self-center sm:block sm:h-14" : "hidden h-6 md:block",
             ].join(" ")}
             aria-hidden
           />

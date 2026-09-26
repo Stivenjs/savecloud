@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import { useNavigate } from "react-router-dom";
 import { GamesFilters } from "@features/games/GamesFilters";
+import { GameCard } from "@features/games/GameCard";
 import { GamesList } from "@features/games/GamesList";
 import { GamesPageHeader } from "@features/games/GamesPageHeader";
 import { GamesPageSkeleton } from "@features/games/GamesPageSkeleton";
@@ -50,6 +51,8 @@ import { useNavigationStore } from "@features/input/store";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useShellUiStore } from "@store/ShellUiStore";
 import { useScrollRestoration } from "@hooks/useScrollRestoration";
+import { formatPlaytime } from "@utils/format";
+import { useGameSessionStore } from "@store/GameSessionStore";
 
 export function GamesPage() {
   const { t } = useTranslation();
@@ -126,12 +129,22 @@ export function GamesPage() {
     /* handleRetryOperationError, */
   } = useGamesPage();
 
+  const runningSessionStartTimes = useGameSessionStore((state) => state.localSessionStartTimes);
+
   const { statsByGameId } = useGameStats(games.length > 0 && bulkConfirm?.type === "sync");
 
   const bigPictureConsole = useMemo(
     () => typeof document !== "undefined" && document.documentElement.classList.contains("savecloud-big-picture"),
     []
   );
+
+  const spotlightGame = useMemo(() => {
+    if (bigPictureConsole || debouncedSearchTerm.trim() || filteredGames.length < 2) return null;
+    const runningGame = filteredGames.find((game) => runningSessionStartTimes[game.id.trim().toLowerCase()]);
+    if (runningGame) return runningGame;
+    return [...filteredGames].sort((a, b) => (b.playtimeSeconds ?? 0) - (a.playtimeSeconds ?? 0))[0] ?? null;
+  }, [bigPictureConsole, debouncedSearchTerm, filteredGames, runningSessionStartTimes]);
+  const libraryGames = spotlightGame ? filteredGames.filter((game) => game.id !== spotlightGame.id) : filteredGames;
 
   useEffect(() => {
     if (!bigPictureConsole) return;
@@ -268,9 +281,7 @@ export function GamesPage() {
             <div className="mt-4 flex flex-col gap-3 sm:mt-6">
               <div className="flex flex-wrap items-center gap-3 gap-y-4">
                 <div className="flex min-w-0 flex-wrap items-center gap-3">
-                  <h1 className="text-2xl font-semibold text-foreground md:text-[1.875rem]">
-                    {t("library.configuredGames")}
-                  </h1>
+                  <h1 className="text-2xl font-semibold text-foreground md:text-[1.875rem]">{t("library.title")}</h1>
                   {hasSyncConfig && unsyncedGameIds.length > 0 ? (
                     <span className="rounded-full bg-warning/20 px-3 py-1 text-sm font-medium text-warning">
                       {t("library.unsyncedChanges", { count: unsyncedGameIds.length })}
@@ -286,7 +297,7 @@ export function GamesPage() {
               <div className="flex flex-col gap-4">
                 <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
                   <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground">
-                    {t("library.configuredGames")}
+                    {t("library.title")}
                   </h1>
                   {hasSyncConfig && unsyncedGameIds.length > 0 ? (
                     <span className="rounded-full bg-warning/20 px-3 py-1 text-sm font-medium text-warning">
@@ -519,30 +530,50 @@ export function GamesPage() {
           layout={bigPictureConsole ? "position" : false}
           transition={{ layout: layoutShiftTransition }}
           className={`flex flex-col ${bigPictureConsole ? "gap-5" : "gap-6"} ${!bigPictureConsole ? "mt-6 sm:mt-8" : ""}`}>
-          {/* Filtros de la lista */}
-          <section className={bigPictureConsole ? "flex flex-wrap items-center gap-x-4 gap-y-2" : "space-y-2"}>
-            <h2
-              className={`font-medium text-default-500 ${bigPictureConsole ? "shrink-0 text-base md:text-lg" : "text-sm"}`}>
-              {bigPictureConsole
-                ? t("library.filtersSection.filterByOrigin")
-                : t("library.filtersSection.searchAndFilter")}
-            </h2>
-            <GamesFilters
-              searchTerm={searchTerm}
-              onSearchChange={setSearchTerm}
-              originFilter={originFilter}
-              onOriginFilterChange={setOriginFilter}
-              omitSearch={bigPictureConsole}
-              consoleMode={bigPictureConsole}
-            />
-          </section>
-          {/* Lista de juegos */}
-          <section className="space-y-2">
-            <h2 className={`font-medium text-default-500 ${bigPictureConsole ? "text-base md:text-lg" : "text-sm"}`}>
-              {t("library.menu.gamesTitle")}
-            </h2>
+          {spotlightGame ? (
+            <section
+              aria-label={t("library.featuredAria")}
+              className="grid gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(15rem,0.75fr)] lg:items-end">
+              <div className="min-w-0">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                  {t("library.featuredEyebrow")}
+                </p>
+                <GameCard
+                  game={spotlightGame}
+                  featured
+                  priority
+                  isGameRunning={!!runningSessionStartTimes[spotlightGame.id.trim().toLowerCase()]}
+                />
+              </div>
+              <div className="hidden border-l border-default-200/60 py-2 pl-6 lg:block dark:border-white/10">
+                <p className="text-sm font-medium text-default-500">{t("library.featuredPlaytime")}</p>
+                <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+                  {spotlightGame.playtimeSeconds
+                    ? formatPlaytime(spotlightGame.playtimeSeconds)
+                    : t("library.featuredReady")}
+                </p>
+                <p className="mt-2 max-w-xs text-sm leading-relaxed text-default-500">{t("library.featuredHint")}</p>
+              </div>
+            </section>
+          ) : null}
+          <section className="space-y-3">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between md:gap-6">
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                  {t("library.menu.gamesTitle")}
+                </h2>
+              </div>
+              <GamesFilters
+                searchTerm={searchTerm}
+                onSearchChange={setSearchTerm}
+                originFilter={originFilter}
+                onOriginFilterChange={setOriginFilter}
+                omitSearch={bigPictureConsole}
+                consoleMode={bigPictureConsole}
+              />
+            </div>
             <GamesList
-              games={filteredGames}
+              games={libraryGames}
               consoleMode={bigPictureConsole}
               emptyFilterMessage={emptyFilterMessage}
               unsyncedGameIds={unsyncedGameIds}
