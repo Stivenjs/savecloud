@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Gamepad2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLibrary } from "@hooks/useLibrary";
-import { detectGameFromText, formatTextWithGameNames } from "@utils/gameImage";
+import { detectGameFromText, extractDownloadedGameName, formatTextWithGameNames } from "@utils/gameImage";
 import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
 import { useOverlaySoundSettings } from "@hooks/useOverlaySoundSettings";
 
@@ -44,10 +44,11 @@ interface NotificationCardProps extends OverlayNotification {
 const NotificationCard: React.FC<NotificationCardProps> = React.memo(
   ({ id, title, body, avatar, gameId, imageUrl, steamAppId, isLeft = false }) => {
     const { games } = useLibrary();
+    const downloadedGameName = extractDownloadedGameName(title);
 
     const detectedGameId = useMemo(
-      () => detectGameFromText({ gameId, title, body, games }),
-      [gameId, body, title, games]
+      () => gameId ?? downloadedGameName ?? detectGameFromText({ title, body, games }),
+      [downloadedGameName, gameId, body, title, games]
     );
 
     const formattedTitle = useMemo(
@@ -88,6 +89,7 @@ const NotificationCard: React.FC<NotificationCardProps> = React.memo(
               ) : detectedGameId ? (
                 <PlayingGameThumbnail
                   gameId={detectedGameId}
+                  gameName={downloadedGameName}
                   imageUrl={imageUrl}
                   steamAppId={steamAppId}
                   size="md"

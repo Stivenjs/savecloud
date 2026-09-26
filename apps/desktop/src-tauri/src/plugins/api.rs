@@ -308,8 +308,15 @@ fn register_notifications_module(
 
         let handle_overlay = handle_show.clone();
         tauri::async_runtime::spawn(async move {
-            let _ =
-                crate::overlay::show_overlay_notification(handle_overlay, title, Some(body)).await;
+            let _ = crate::overlay::show_overlay_notification(
+                handle_overlay,
+                title,
+                Some(body),
+                None,
+                None,
+                None,
+            )
+            .await;
         });
 
         Ok(())
@@ -319,7 +326,15 @@ fn register_notifications_module(
     let show_overlay = lua.create_function(move |_, (title, body): (String, String)| {
         let handle = handle_overlay.clone();
         tauri::async_runtime::spawn(async move {
-            let _ = crate::overlay::show_overlay_notification(handle, title, Some(body)).await;
+            let _ = crate::overlay::show_overlay_notification(
+                handle,
+                title,
+                Some(body),
+                None,
+                None,
+                None,
+            )
+            .await;
         });
         Ok(())
     })?;

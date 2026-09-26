@@ -502,6 +502,12 @@ export function detectGameFromText({
   return null;
 }
 
+/** Obtiene el nombre del elemento descargado desde el título de una notificación. */
+export function extractDownloadedGameName(title?: string | null): string | null {
+  const match = title?.trim().match(/^(?:descarga completada|download completed):\s*(.+)$/i);
+  return match?.[1]?.trim() || null;
+}
+
 /**
  * Reemplaza identificadores de juegos o el juego detectado dentro de un texto
  * con sus nombres formateados legibles (formatGameDisplayName).

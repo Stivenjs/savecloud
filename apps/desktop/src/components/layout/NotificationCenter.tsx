@@ -36,10 +36,11 @@ import {
 import type { NotificationRecord } from "@services/tauri/notifications.service";
 import { formatShortRelativeDate } from "@utils/format";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
-import { formatGameDisplayName, detectGameFromText } from "@utils/gameImage";
+import { formatGameDisplayName, detectGameFromText, extractDownloadedGameName } from "@utils/gameImage";
 import { useLibrary } from "@hooks/useLibrary";
 import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
 import { openOrFocusSettingsWindow } from "@/windows/settingsWindow";
+import { useDownloadMetadataStore } from "@store/DownloadMetadataStore";
 
 /** Toma el directorio de destino de payloadJson si kind es una descarga terminal, sino null */
 function getDownloadDir(n: NotificationRecord): string | null {
@@ -117,14 +118,24 @@ function NotificationRow({
 }) {
   const { t } = useTranslation();
   const { games } = useLibrary();
+  const downloadMetadata = useDownloadMetadataStore((state) =>
+    n.operationId ? state.metadataByKey[n.operationId] : undefined
+  );
   const unread = !n.readAt || !n.readAt.trim();
   const downloadDir = getDownloadDir(n);
   const downloadUri = getDownloadUri(n);
   const isAchievement = isAchievementNotification(n);
+  const isDownloadNotification = n.kind === "source_download_terminal" || n.kind === "torrent_done";
+  const downloadedGameName = isDownloadNotification
+    ? downloadMetadata?.gameName || extractDownloadedGameName(n.title)
+    : null;
 
   const detectedGameId = useMemo(
-    () => detectGameFromText({ gameId: n.gameId, title: n.title, body: n.body, games }),
-    [n.gameId, n.body, n.title, games]
+    () =>
+      (isDownloadNotification ? downloadMetadata?.gameId : null) ??
+      downloadedGameName ??
+      detectGameFromText({ gameId: n.gameId, title: n.title, body: n.body, games }),
+    [downloadedGameName, downloadMetadata?.gameId, isDownloadNotification, n.gameId, n.body, n.title, games]
   );
 
   let displayBody = n.body;
@@ -150,6 +161,9 @@ function NotificationRow({
         {detectedGameId ? (
           <PlayingGameThumbnail
             gameId={detectedGameId}
+            gameName={downloadedGameName}
+            steamAppId={downloadMetadata?.steamAppId}
+            imageUrl={downloadMetadata?.imageUrl}
             size="md"
             className="h-11 w-11 rounded-lg object-cover shadow-xs bg-default-100 border border-default-200/60 dark:border-default-100/20 shrink-0"
           />

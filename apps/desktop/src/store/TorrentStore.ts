@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getActiveTorrentDownloads } from "@services/tauri/config.service";
 import { formatGameDisplayName } from "@utils/gameImage";
 import i18n from "@lib/i18n";
+import { useDownloadMetadataStore } from "@store/DownloadMetadataStore";
 
 export type TorrentDownloadState = "starting" | "checking" | "downloading" | "paused" | "completed" | "seeding";
 
@@ -154,11 +155,17 @@ export function initTorrentListeners() {
   listen<TorrentProgressState>("torrent-download-done", (ev) => {
     setProgress({ ...ev.payload, state: "completed", progressPercent: 100 });
 
+    const metadata = useDownloadMetadataStore.getState().metadataByKey[ev.payload.infoHash];
     invoke("show_overlay_notification", {
       title: i18n.t("overlay.gameDownloaded", "Juego Descargado"),
-      body: ev.payload.name
-        ? formatGameDisplayName(ev.payload.name)
-        : i18n.t("overlay.downloadFinished", "La descarga ha finalizado."),
+      body:
+        metadata?.gameName ||
+        (ev.payload.name
+          ? formatGameDisplayName(ev.payload.name)
+          : i18n.t("overlay.downloadFinished", "La descarga ha finalizado.")),
+      gameId: metadata?.gameId,
+      imageUrl: metadata?.imageUrl,
+      steamAppId: metadata?.steamAppId,
     }).catch((err) => {
       console.error("Error al mostrar la notificación del overlay:", err);
     });
