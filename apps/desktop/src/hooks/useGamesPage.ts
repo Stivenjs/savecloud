@@ -20,7 +20,7 @@ export type { OperationResult } from "@features/games/hooks/useGamesSyncActions"
 export function useGamesPage() {
   const queryClient = useQueryClient();
   const { config, loading, error, refetch } = useConfig();
-  const { games } = useLibrary();
+  const { games, loading: isLibraryLoading } = useLibrary();
   const { activeProfile } = useProfileSession();
   const cloudConfig = useMemo(() => buildActiveCloudConfig(config, activeProfile), [config, activeProfile]);
   const hasSyncConfig = hasUsableCloudConnection(cloudConfig);
@@ -72,7 +72,7 @@ export function useGamesPage() {
   return {
     config,
     games,
-    loading,
+    loading: loading || isLibraryLoading,
     error,
     refetch,
     hasSyncConfig,

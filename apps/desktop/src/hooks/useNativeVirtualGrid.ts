@@ -50,25 +50,26 @@ export function useNativeVirtualGrid<T>({
 }: UseNativeVirtualGridOptions<T>): UseNativeVirtualGridResult<T> {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const [containerWidth, setContainerWidth] = useState<number>(() => {
-    if (typeof window !== "undefined") {
-      return window.innerWidth;
-    }
-    return 1200;
-  });
+  const [containerWidth, setContainerWidth] = useState(0);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = containerRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
+    if (!el) return;
+
+    const updateContainerWidth = (width: number) => {
+      if (width <= 0) return;
+      containerTopRef.current = null;
+      setContainerWidth((previous) => (Math.abs(previous - width) > 2 ? width : previous));
+    };
+
+    updateContainerWidth(el.clientWidth);
+
+    if (typeof ResizeObserver === "undefined") return;
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) {
-        const width = entry.contentRect.width || el.clientWidth;
-        if (width > 0) {
-          containerTopRef.current = null;
-          setContainerWidth((prev) => (Math.abs(prev - width) > 2 ? width : prev));
-        }
+        updateContainerWidth(entry.contentRect.width || el.clientWidth);
       }
     });
 

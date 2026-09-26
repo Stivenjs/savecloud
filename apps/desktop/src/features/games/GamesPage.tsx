@@ -544,7 +544,6 @@ export function GamesPage() {
             <GamesList
               games={filteredGames}
               consoleMode={bigPictureConsole}
-              animationKey={`${originFilter}|${debouncedSearchTerm}`}
               emptyFilterMessage={emptyFilterMessage}
               unsyncedGameIds={unsyncedGameIds}
               onEmptyScanPress={() => setScanModalOpen(true)}
