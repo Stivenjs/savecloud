@@ -43,7 +43,7 @@ export function useNativeVirtualGrid<T>({
   gap = 20,
   estimatedRowHeight = 235,
   overscan = 8,
-  initialScrollY = 0,
+  initialScrollY,
   containerTopOffset,
   computeColumns,
   computeRowHeight,
@@ -106,15 +106,11 @@ export function useNativeVirtualGrid<T>({
     return Math.ceil(items.length / columns);
   }, [items.length, columns]);
 
-  const pendingRestoreYRef = useRef<number>(initialScrollY > 0 ? initialScrollY : 0);
+  const requestedScrollY = initialScrollY ?? (typeof window !== "undefined" ? window.scrollY || 0 : 0);
+  const pendingRestoreYRef = useRef<number>(requestedScrollY > 0 ? requestedScrollY : 0);
 
   const [rowRange, setRowRange] = useState<{ startRow: number; endRow: number }>(() => {
-    const targetY =
-      initialScrollY > 0
-        ? initialScrollY
-        : typeof window !== "undefined"
-          ? window.scrollY || document.documentElement.scrollTop || 0
-          : 0;
+    const targetY = requestedScrollY;
 
     if (targetY > 0) {
       const estimatedContainerTop = containerTopOffset ?? (minItemWidth >= 320 ? 120 : 450);

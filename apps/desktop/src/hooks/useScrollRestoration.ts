@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { useShellUiStore } from "@store/ShellUiStore";
 
 export interface UseScrollRestorationOptions {
@@ -13,6 +14,8 @@ export function useScrollRestoration(
   isReady = true,
   options?: UseScrollRestorationOptions
 ) {
+  const { pathname } = useLocation();
+  const isActiveRoute = key === "library" ? pathname === "/" : key === "catalog" ? pathname === "/catalog" : true;
   const getPosition = useShellUiStore((state) => state.getScrollPosition);
   const setPosition = useShellUiStore((state) => state.setScrollPosition);
 
@@ -33,6 +36,8 @@ export function useScrollRestoration(
   }, []);
 
   useEffect(() => {
+    if (!isActiveRoute) return;
+
     isUnmountingRef.current = false;
     let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -67,17 +72,19 @@ export function useScrollRestoration(
       }
       window.removeEventListener("scroll", handleScroll);
     };
-  }, [key, setPosition]);
+  }, [isActiveRoute, key, setPosition]);
 
   useLayoutEffect(() => {
-    if (hasRestoredRef.current || !isReady) return;
+    if (hasRestoredRef.current || !isActiveRoute) return;
 
     const targetY = targetScrollYRef.current;
     if (targetY <= 0) {
+      window.scrollTo({ top: 0, behavior: "instant" });
       hasRestoredRef.current = true;
       isRestoringRef.current = false;
       return;
     }
+    if (!isReady) return;
 
     isRestoringRef.current = true;
 
@@ -114,7 +121,7 @@ export function useScrollRestoration(
 
     const rafId = requestAnimationFrame(checkAndRestore);
     return () => cancelAnimationFrame(rafId);
-  }, [isReady]);
+  }, [isActiveRoute, isReady]);
 
   useEffect(() => {
     if (options?.resetOnDeps && options.resetOnDeps.length > 0) {
