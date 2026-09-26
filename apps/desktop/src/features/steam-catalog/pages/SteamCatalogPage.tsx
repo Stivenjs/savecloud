@@ -20,7 +20,7 @@ import { useSteamCatalogGamepadPagination } from "@features/steam-catalog/hooks/
 import { useShellUiStore } from "@store/ShellUiStore";
 import { useScrollRestoration } from "@hooks/useScrollRestoration";
 import { STEAM_CATALOG_PAGE_SIZE } from "@/constants/constants";
-import { useCallback, useDeferredValue, useEffect, useState, useMemo } from "react";
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
 
 export function SteamCatalogPage() {
   const { t } = useTranslation();
@@ -88,6 +88,23 @@ export function SteamCatalogPage() {
 
   const [showStickyToolbar, setShowStickyToolbar] = useState(false);
   const [isPastHeader, setIsPastHeader] = useState(false);
+  const previousCatalogViewRef = useRef({ debouncedSearch, filterSignature, sortOption });
+
+  useLayoutEffect(() => {
+    const previous = previousCatalogViewRef.current;
+    const viewChanged =
+      previous.debouncedSearch !== debouncedSearch ||
+      previous.filterSignature !== filterSignature ||
+      previous.sortOption !== sortOption;
+
+    previousCatalogViewRef.current = { debouncedSearch, filterSignature, sortOption };
+    if (!viewChanged) return;
+
+    window.scrollTo({ top: 0, behavior: "instant" });
+    useShellUiStore.getState().setScrollPosition("catalog", 0);
+    setIsPastHeader(false);
+    setShowStickyToolbar(false);
+  }, [debouncedSearch, filterSignature, sortOption]);
 
   const activeItems = isInfiniteMode ? infiniteQuery.items : items;
   const activeIsLoading = isInfiniteMode ? infiniteQuery.isLoading : isLoading;
