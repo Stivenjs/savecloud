@@ -1,4 +1,5 @@
 import { Button, Input, Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from "@heroui/react";
+import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CONFIG_EXPORT_MIN_PASSWORD_LENGTH, type ConfigEncryptionDialogMode } from "@features/settings/configExport";
@@ -15,6 +16,8 @@ export function ConfigEncryptionModal({ mode, error, isLoading, onClose, onSubmi
   const { t } = useTranslation();
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const dialogKey = mode?.kind === "import" ? `import-${mode.importMode}` : (mode?.kind ?? "closed");
   const isExport = mode?.kind === "export";
@@ -28,6 +31,8 @@ export function ConfigEncryptionModal({ mode, error, isLoading, onClose, onSubmi
   useEffect(() => {
     setPassword("");
     setConfirmation("");
+    setShowPassword(false);
+    setShowConfirmation(false);
     setValidationError(null);
   }, [dialogKey]);
 
@@ -71,19 +76,53 @@ export function ConfigEncryptionModal({ mode, error, isLoading, onClose, onSubmi
           <Input
             autoFocus
             label={t("settings.configEncryptionModal.passwordLabel")}
-            type="password"
+            type={showPassword ? "text" : "password"}
             autoComplete={isExport ? "new-password" : "current-password"}
             value={password}
-            onValueChange={setPassword}
+            onValueChange={(value) => {
+              setPassword(value);
+              setValidationError(null);
+            }}
+            endContent={
+              <button
+                type="button"
+                aria-label={t(
+                  showPassword
+                    ? "settings.configEncryptionModal.hidePassword"
+                    : "settings.configEncryptionModal.showPassword"
+                )}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((visible) => !visible)}
+                className="rounded-md p-1 text-default-500 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary">
+                {showPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+              </button>
+            }
             variant="bordered"
           />
           {isExport ? (
             <Input
               label={t("settings.configEncryptionModal.confirmPasswordLabel")}
-              type="password"
+              type={showConfirmation ? "text" : "password"}
               autoComplete="new-password"
               value={confirmation}
-              onValueChange={setConfirmation}
+              onValueChange={(value) => {
+                setConfirmation(value);
+                setValidationError(null);
+              }}
+              endContent={
+                <button
+                  type="button"
+                  aria-label={t(
+                    showConfirmation
+                      ? "settings.configEncryptionModal.hidePassword"
+                      : "settings.configEncryptionModal.showPassword"
+                  )}
+                  aria-pressed={showConfirmation}
+                  onClick={() => setShowConfirmation((visible) => !visible)}
+                  className="rounded-md p-1 text-default-500 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary">
+                  {showConfirmation ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+                </button>
+              }
               variant="bordered"
             />
           ) : null}
