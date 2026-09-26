@@ -87,6 +87,7 @@ import type { SteamAppdetailsMediaResult } from "@services/tauri";
 export function GameDetailPage() {
   const { t } = useTranslation();
   const isLowPerf = useLowPerformanceMode();
+  const [enteredWhileScrolled] = useState(() => (window.scrollY || document.documentElement.scrollTop || 0) > 0);
   const navigate = useNavigate();
   const bigPictureConsole = useBigPictureConsole();
   const queryClient = useQueryClient();
@@ -557,6 +558,7 @@ export function GameDetailPage() {
         gameId={gameId}
         isLoading={isLoading}
         isCatalog={isSteamCatalogOnly}
+        disableSharedTransition={enteredWhileScrolled}
         onBack={handleBackWithTransition}
       />
 

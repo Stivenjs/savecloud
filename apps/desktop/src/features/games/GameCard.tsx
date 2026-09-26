@@ -193,7 +193,8 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
       onCardNavigate(game);
       return;
     }
-    if (isLowPerf) {
+    const isScrolled = (window.scrollY || document.documentElement.scrollTop || 0) > 0;
+    if (isLowPerf || isScrolled) {
       navigate(`/games/${game.id}`, {
         state: { resolvedSteamAppId, from: `${location.pathname}${location.search}` },
       });
@@ -314,7 +315,9 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
         }}>
         {!isCatalog && syncProgress && <GameCardSyncProgress progress={syncProgress} />}
 
-        <MaybeViewTransition name={`game-hero-${game.id}`} share="hero-morph" disabled={false}>
+        {/* Catalog cards share ids with library cards; only library cards should
+            participate in the shared hero transition to a game detail route. */}
+        <MaybeViewTransition name={`game-hero-${game.id}`} share="hero-morph" disabled={isCatalog}>
           <div className="relative isolate size-full overflow-hidden bg-zinc-950 rounded-xl">
             {isEffectivelyLoading ? (
               <Skeleton className="absolute inset-0 z-10 size-full rounded-xl" />

@@ -83,15 +83,19 @@ export const CatalogGridItem = memo(function CatalogGridItem({
               }
               const from = `${location.pathname}${location.search}`;
               const targetId = libraryGame ? libraryGame.id : game.id;
+              const targetPath = `/games/${targetId}`;
+              const state = {
+                resolvedSteamAppId: item.steamAppId,
+                catalogDisplayName: item.name,
+                from,
+              };
+              if (currentY > 0) {
+                navigate(targetPath, { state });
+                return;
+              }
               startTransition(() => {
                 addTransitionType("game-detail");
-                navigate(`/games/${targetId}`, {
-                  state: {
-                    resolvedSteamAppId: item.steamAppId,
-                    catalogDisplayName: item.name,
-                    from,
-                  },
-                });
+                navigate(targetPath, { state });
               });
             }}
           />

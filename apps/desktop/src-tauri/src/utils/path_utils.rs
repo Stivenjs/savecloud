@@ -305,6 +305,103 @@ pub fn list_all_files_with_mtime(
     results
 }
 
+/// Retorna tan pronto como un archivo satisface el `predicado`, sin recopilar el árbol completo.
+pub fn any_file_with_mtime(
+    paths: &[String],
+    mut predicate: impl FnMut(&str, std::time::SystemTime, u64) -> bool,
+) -> bool {
+    let mut seen = std::collections::HashSet::new();
+    let folder_prefixes = compute_sync_multi_root_prefixes(paths);
+
+    for (root_idx, raw) in paths.iter().enumerate() {
+        let prefix = folder_prefixes.get(root_idx).cloned().unwrap_or_default();
+        let Some(expanded_str) = expand_path(raw.trim()) else {
+            continue;
+        };
+        let expanded = PathBuf::from(expanded_str);
+        let Ok(meta) = fs::metadata(&expanded) else {
+            continue;
+        };
+
+        if meta.is_file() {
+            let abs = expanded.to_string_lossy().to_string();
+            if seen.insert(abs) {
+                let name = expanded
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or_default();
+                let rel = format!("{prefix}{name}");
+                let modified = meta.modified().unwrap_or(UNIX_EPOCH);
+                if predicate(&rel, modified, meta.len()) {
+                    return true;
+                }
+            }
+        } else if meta.is_dir()
+            && any_file_in_directory_with_mtime(
+                &expanded,
+                &expanded,
+                &prefix,
+                &mut seen,
+                &mut predicate,
+            )
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn any_file_in_directory_with_mtime(
+    dir: &Path,
+    base: &Path,
+    prefix: &str,
+    seen: &mut std::collections::HashSet<String>,
+    predicate: &mut impl FnMut(&str, std::time::SystemTime, u64) -> bool,
+) -> bool {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return false;
+    };
+
+    for entry in entries.flatten() {
+        if entry
+            .file_name()
+            .to_str()
+            .is_some_and(|name| name.starts_with('.'))
+        {
+            continue;
+        }
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        let full = entry.path();
+
+        if file_type.is_dir() {
+            if any_file_in_directory_with_mtime(&full, base, prefix, seen, predicate) {
+                return true;
+            }
+        } else if file_type.is_file() {
+            let abs = full.to_string_lossy().to_string();
+            if !seen.insert(abs) {
+                continue;
+            }
+            let Ok(meta) = entry.metadata() else {
+                continue;
+            };
+            let Ok(relative) = full.strip_prefix(base) else {
+                continue;
+            };
+            let relative = format!("{prefix}{}", relative.to_string_lossy().replace('\\', "/"));
+            let modified = meta.modified().unwrap_or(UNIX_EPOCH);
+            if predicate(&relative, modified, meta.len()) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
 pub fn list_all_files_from_paths(paths: &[String]) -> Vec<(String, String)> {
     list_all_files_with_mtime(paths)
         .into_iter()
