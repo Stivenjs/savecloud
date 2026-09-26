@@ -25,6 +25,7 @@ export function useScrollRestoration(
   const isRestoringRef = useRef(targetScrollY > 0);
   const lastScrollYRef = useRef(targetScrollY);
   const isUnmountingRef = useRef(false);
+  const previousResetDepsRef = useRef<unknown[]>(options?.resetOnDeps ? [...options.resetOnDeps] : []);
 
   const onScrollRef = useRef(options?.onScroll);
   onScrollRef.current = options?.onScroll;
@@ -124,10 +125,18 @@ export function useScrollRestoration(
   }, [isActiveRoute, isReady]);
 
   useEffect(() => {
-    if (options?.resetOnDeps && options.resetOnDeps.length > 0) {
-      targetScrollYRef.current = 0;
-      setPosition(key, 0);
-    }
+    const nextDeps = options?.resetOnDeps ?? [];
+    const previousDeps = previousResetDepsRef.current;
+    const hasChanged =
+      previousDeps.length !== nextDeps.length ||
+      nextDeps.some((dependency, index) => !Object.is(dependency, previousDeps[index]));
+
+    previousResetDepsRef.current = [...nextDeps];
+    if (!hasChanged || nextDeps.length === 0) return;
+
+    targetScrollYRef.current = 0;
+    lastScrollYRef.current = 0;
+    setPosition(key, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, options?.resetOnDeps ?? []);
 
