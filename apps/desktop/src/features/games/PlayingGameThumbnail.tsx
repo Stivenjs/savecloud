@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLibrary } from "@hooks/useLibrary";
 import { searchSteamAppId, type SteamAppdetailsMediaResult } from "@services/tauri";
 import { globalFailedImages, globalLoadedImages } from "@hooks/useGameMedia";
+import { useNearViewport } from "@hooks/useNearViewport";
 import {
   extractAppIdFromId,
   extractAppIdFromFolderName,
@@ -25,6 +26,8 @@ export interface PlayingGameThumbnailProps {
   orientation?: "horizontal" | "vertical";
   className?: string;
   showGlow?: boolean;
+  /** Prioriza la imagen cuando el thumbnail está en la primera pantalla. */
+  priority?: boolean;
 }
 
 const SIZE_CLASSES = {
@@ -50,9 +53,11 @@ export function PlayingGameThumbnail({
   orientation = "horizontal",
   className = "",
   showGlow = false,
+  priority = false,
 }: PlayingGameThumbnailProps) {
   const { games } = useLibrary();
   const queryClient = useQueryClient();
+  const { elementRef, isNearViewport } = useNearViewport<HTMLDivElement>(priority);
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [hasError, setHasError] = useState(false);
 
@@ -169,23 +174,25 @@ export function PlayingGameThumbnail({
 
   const sizeClass = SIZE_CLASSES[size] || SIZE_CLASSES.sm;
   const iconSize = ICON_SIZES[size] || ICON_SIZES.sm;
-  const isLoading = isSearchingAppId || (Boolean(currentSrc) && !isLoaded && !hasError);
+  const isLoading = isSearchingAppId || (Boolean(currentSrc) && (!isNearViewport || !isLoaded) && !hasError);
 
   return (
     <div
+      ref={elementRef}
       className={`relative shrink-0 overflow-hidden bg-default-100 dark:bg-zinc-800 shadow-xs select-none ${sizeClass} ${
         showGlow ? "shadow-[0_0_12px_rgba(34,197,94,0.35)] ring-1 ring-emerald-500/40" : ""
       } ${className}`}>
       {/* Skeleton mientras busca el ID o mientras descarga la imagen */}
       {isLoading && <Skeleton className="absolute inset-0 z-10 size-full bg-default-200/50 dark:bg-zinc-700/50" />}
 
-      {currentSrc && !hasError ? (
+      {currentSrc && isNearViewport && !hasError ? (
         <img
           key={currentSrc}
           src={currentSrc}
           alt={gameName || gameId || "Game"}
           className={`size-full object-cover transition-opacity duration-300 ${isLoaded ? "opacity-100" : "opacity-0"}`}
-          loading="eager"
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
           decoding="async"
           onLoad={handleImgLoad}
           onError={handleImgError}
