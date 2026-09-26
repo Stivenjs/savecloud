@@ -20,6 +20,7 @@ import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
 import { listCloudPresence } from "@services/tauri/invites.service";
 import { visibilityManager } from "@hooks/useAppVisibility";
+import { useProfileSession } from "@hooks/useProfileSession";
 import { BigPictureFriendsHeader } from "./BigPictureFriendsHeader";
 import { BigPictureShareLinkSection } from "./BigPictureShareLinkSection";
 import { BigPictureFriendSearchSection } from "./BigPictureFriendSearchSection";
@@ -36,13 +37,8 @@ type FriendsTabKey = "link" | "user" | "invites";
 export function BigPictureFriendsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [friendsTab, setFriendsTab] = useState<FriendsTabKey>(() => {
-    try {
-      return (sessionStorage.getItem("friendsPageTab") as FriendsTabKey) || "link";
-    } catch {
-      return "link";
-    }
-  });
+  const [friendsTab, setFriendsTab] = useState<FriendsTabKey>("link");
+  const { activeProfile } = useProfileSession();
 
   const {
     friendIdInput,
@@ -101,7 +97,7 @@ export function BigPictureFriendsPage() {
   useCloudPresenceRealtimeInvalidation();
 
   const { data: cloudPresence = [] } = useQuery({
-    queryKey: ["cloud-presence"],
+    queryKey: ["cloud-presence", activeProfile?.id ?? "no-profile"],
     queryFn: listCloudPresence,
     refetchInterval: 30_000,
   });
@@ -115,9 +111,6 @@ export function BigPictureFriendsPage() {
       const normalized = userId.trim();
       if (!normalized) return;
       setFriendsTab("user");
-      try {
-        sessionStorage.setItem("friendsPageTab", "user");
-      } catch {}
       void loadFriendProfileById(normalized);
     };
 
@@ -173,9 +166,6 @@ export function BigPictureFriendsPage() {
         onSelectionChange={(k) => {
           const nextTab = (String(k) as FriendsTabKey) || "link";
           setFriendsTab(nextTab);
-          try {
-            sessionStorage.setItem("friendsPageTab", nextTab);
-          } catch {}
           if (nextTab === "invites") {
             void refreshInvitesState();
           }

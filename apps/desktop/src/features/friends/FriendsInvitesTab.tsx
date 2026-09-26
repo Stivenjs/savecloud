@@ -11,6 +11,7 @@ import { useGameSessionDuration } from "@store/GameSessionStore";
 import { getFriendsConfigs } from "@services/tauri";
 import { ProfileAvatar } from "@features/profile";
 import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
+import { useProfileSession } from "@hooks/useProfileSession";
 import {
   CloudMembershipActionConfirmModal,
   type CloudMembershipActionType,
@@ -143,6 +144,7 @@ export function FriendsInvitesTab({
   ourConfig,
 }: FriendsInvitesTabProps) {
   const { t } = useTranslation();
+  const { activeProfile } = useProfileSession();
   const [view, setView] = useState<"requests" | "cloud">("requests");
   const [pendingCloudAction, setPendingCloudAction] = useState<{
     type: CloudMembershipActionType;
@@ -151,7 +153,7 @@ export function FriendsInvitesTab({
   useCloudPresenceRealtimeInvalidation();
 
   const { data: cloudPresence = [], isLoading: cloudPresenceLoading } = useQuery({
-    queryKey: ["cloud-presence"],
+    queryKey: ["cloud-presence", activeProfile?.id ?? "no-profile"],
     queryFn: listCloudPresence,
     refetchInterval: 30_000,
   });
@@ -192,7 +194,7 @@ export function FriendsInvitesTab({
   }, [hostMemberships, memberMemberships, pendingInvites, localUserId]);
 
   const { data: memberAvatarByUser = new Map<string, string | null>() } = useQuery({
-    queryKey: ["cloud-members-avatars", peerUserIds],
+    queryKey: ["cloud-members-avatars", activeProfile?.id ?? "no-profile", peerUserIds],
     enabled: peerUserIds.length > 0,
     queryFn: async () => {
       try {
