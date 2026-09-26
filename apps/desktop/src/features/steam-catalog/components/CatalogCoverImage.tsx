@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Gamepad2 } from "lucide-react";
 import { Skeleton } from "@heroui/react";
 import { globalFailedImages, globalLoadedImages } from "@hooks/useGameMedia";
-import { useNearViewport } from "@hooks/useNearViewport";
 
 export interface CatalogCoverImageProps {
   alt: string;
@@ -32,7 +31,6 @@ export function CatalogCoverImage({
   onLoad,
   onError,
 }: CatalogCoverImageProps) {
-  const { elementRef, isNearViewport } = useNearViewport<HTMLDivElement>(priority);
   const validCandidates = useMemo(() => {
     const unique = [...new Set(candidates.filter((u): u is string => Boolean(u && u.trim())))];
     return unique.filter((url) => !globalFailedImages.has(url));
@@ -76,7 +74,7 @@ export function CatalogCoverImage({
 
   if (!activeUrl || candidateIndex >= validCandidates.length) {
     return (
-      <div ref={elementRef} className={fallbackClassName} aria-hidden>
+      <div className={fallbackClassName} aria-hidden>
         <Gamepad2 size={32} className="text-zinc-600 shrink-0" strokeWidth={1.5} />
         {fallbackTitle ? (
           <span className="text-[10px] font-bold text-zinc-400 select-none line-clamp-2 px-1">{fallbackTitle}</span>
@@ -86,15 +84,13 @@ export function CatalogCoverImage({
   }
 
   return (
-    <div ref={elementRef} className="relative size-full overflow-hidden bg-zinc-950 rounded-xl">
-      {showSkeleton && (!isNearViewport || !isLoaded) ? (
-        <Skeleton className="absolute inset-0 z-10 size-full rounded-xl" />
-      ) : null}
+    <div className="relative size-full overflow-hidden bg-zinc-950 rounded-xl">
+      {showSkeleton && !isLoaded ? <Skeleton className="absolute inset-0 z-10 size-full rounded-xl" /> : null}
       <img
         key={activeUrl}
-        src={isNearViewport ? activeUrl : undefined}
+        src={activeUrl}
         alt={alt}
-        loading="eager"
+        loading={priority ? "eager" : "lazy"}
         fetchPriority={priority ? "high" : "auto"}
         decoding="async"
         draggable={false}
