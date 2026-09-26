@@ -53,10 +53,20 @@ import { useShellUiStore } from "@store/ShellUiStore";
 import { useScrollRestoration } from "@hooks/useScrollRestoration";
 import { formatPlaytime } from "@utils/format";
 import { useGameSessionStore } from "@store/GameSessionStore";
+import { getSteamAppId, getSteamCdnCandidates } from "@utils/gameImage";
 
 function getLastPlayedTimestamp(game: ConfiguredGame): number {
   const timestamp = game.lastPlayedAt ? Date.parse(game.lastPlayedAt) : 0;
   return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function getAmbientArtworkUrl(game: ConfiguredGame | null): string | null {
+  if (!game) return null;
+  const customArtwork = game.imageUrl?.trim();
+  if (customArtwork) return customArtwork;
+
+  const steamAppId = getSteamAppId(game);
+  return steamAppId ? (getSteamCdnCandidates(steamAppId, "horizontal")[0] ?? null) : null;
 }
 
 export function GamesPage() {
@@ -135,6 +145,7 @@ export function GamesPage() {
   } = useGamesPage();
 
   const runningSessionStartTimes = useGameSessionStore((state) => state.localSessionStartTimes);
+  const setLibraryAmbientArtworkUrl = useShellUiStore((state) => state.setLibraryAmbientArtworkUrl);
 
   const { statsByGameId } = useGameStats(games.length > 0 && bulkConfirm?.type === "sync");
 
@@ -154,9 +165,16 @@ export function GamesPage() {
       filteredGames
         .filter((game) => getLastPlayedTimestamp(game) > 0 && game.id !== spotlightGame?.id)
         .sort((a, b) => getLastPlayedTimestamp(b) - getLastPlayedTimestamp(a))
-        .slice(0, 8),
+        .slice(0, 5),
     [filteredGames, spotlightGame]
   );
+  const ambientArtworkUrl = useMemo(() => getAmbientArtworkUrl(spotlightGame), [spotlightGame]);
+
+  useEffect(() => {
+    setLibraryAmbientArtworkUrl(bigPictureConsole ? null : ambientArtworkUrl);
+  }, [ambientArtworkUrl, bigPictureConsole, setLibraryAmbientArtworkUrl]);
+
+  useEffect(() => () => setLibraryAmbientArtworkUrl(null), [setLibraryAmbientArtworkUrl]);
 
   useEffect(() => {
     if (!bigPictureConsole) return;
