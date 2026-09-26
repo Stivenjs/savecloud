@@ -76,6 +76,7 @@ pub fn get_config() -> ConfigDto {
             .map(|_| config::MASKED_API_KEY.to_string()),
         user_id: settings.user_id.clone(),
         active_cloud_host_user_id: settings.active_cloud_host_user_id.clone(),
+        cloud_host_api_base_urls: settings.cloud_host_api_base_urls.clone(),
         cloud_host_ws_base_urls: settings.cloud_host_ws_base_urls.clone(),
         custom_scan_paths: settings.custom_scan_paths.clone(),
         keep_backups_per_game: settings.keep_backups_per_game,
@@ -1117,6 +1118,26 @@ pub fn import_config_from_file(
 
     if mode == "merge" {
         let mut current = config::get_combined_config();
+
+        current.api_base_url = current.api_base_url.or(imported.api_base_url);
+        current.ws_base_url = current.ws_base_url.or(imported.ws_base_url);
+        current.api_key = current.api_key.or(imported.api_key);
+        current.user_id = current.user_id.or(imported.user_id);
+        current.active_cloud_host_user_id = current
+            .active_cloud_host_user_id
+            .or(imported.active_cloud_host_user_id);
+        for (host_id, api_url) in imported.cloud_host_api_base_urls {
+            current
+                .cloud_host_api_base_urls
+                .entry(host_id)
+                .or_insert(api_url);
+        }
+        for (host_id, ws_url) in imported.cloud_host_ws_base_urls {
+            current
+                .cloud_host_ws_base_urls
+                .entry(host_id)
+                .or_insert(ws_url);
+        }
 
         for imp_game in imported.games {
             if let Some(existing) = current

@@ -259,6 +259,8 @@ pub struct Config {
     #[serde(default)]
     pub active_cloud_host_user_id: Option<String>,
     #[serde(default)]
+    pub cloud_host_api_base_urls: BTreeMap<String, String>,
+    #[serde(default)]
     pub cloud_host_ws_base_urls: BTreeMap<String, String>,
     pub custom_scan_paths: Vec<String>,
     pub keep_backups_per_game: Option<u32>,
@@ -345,6 +347,8 @@ pub struct ConfigDto {
     pub user_id: Option<String>,
     #[serde(default)]
     pub active_cloud_host_user_id: Option<String>,
+    #[serde(default)]
+    pub cloud_host_api_base_urls: BTreeMap<String, String>,
     #[serde(default)]
     pub cloud_host_ws_base_urls: BTreeMap<String, String>,
     pub custom_scan_paths: Vec<String>,
