@@ -410,6 +410,7 @@ pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationTok
     let mut cached_game_ids: Vec<String> = Vec::new();
     let mut cached_game_index: Vec<TrackedGameExecutables> = Vec::new();
     let mut cached_boost_detected = false;
+    let mut has_completed_initial_scan = false;
 
     loop {
         // Punto de salida al inicio de cada ciclo (sin coste si no está cancelado).
@@ -452,10 +453,7 @@ pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationTok
             current.values().any(|&r| r),
             &pid_candidates,
         );
-
-        if current != previous_state {
-            let _ = app.emit("games-running-status", &current);
-        }
+        let status_changed = current != previous_state;
 
         for (game_id, &is_running) in &current {
             let was_running = *previous_state.get(game_id).unwrap_or(&false);
@@ -463,6 +461,13 @@ pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationTok
             if is_running {
                 if !was_running {
                     last_checkpoint.insert(game_id.clone(), Instant::now());
+                    if has_completed_initial_scan {
+                        if let Err(error) = time::record_game_launch(game_id) {
+                            log::warn!(
+                                "[process_watcher] No se pudo guardar el inicio de {game_id}: {error}"
+                            );
+                        }
+                    }
                     if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
                         let pm = pm.inner().clone();
                         let gid = game_id.clone();
@@ -504,6 +509,12 @@ pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationTok
         }
 
         previous_state = current;
+        has_completed_initial_scan = true;
+
+        // Emitir después de persistir los inicios para que la UI refresque la biblioteca.
+        if status_changed {
+            let _ = app.emit("games-running-status", &previous_state);
+        }
 
         // Sleep interruptible: si el token se cancela durante la espera,
         // el select! sale de inmediato sin bloquear el shutdown 10 segundos.

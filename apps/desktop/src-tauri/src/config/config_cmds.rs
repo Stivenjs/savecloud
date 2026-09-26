@@ -138,6 +138,7 @@ pub fn get_library() -> Vec<GameDto> {
                 magnet_link,
                 launch_executable_path,
                 playtime_seconds,
+                last_played_at,
             } = game;
             let steam_app_id = steam_app_id.or_else(|| {
                 if image_url.is_none() {
@@ -157,6 +158,7 @@ pub fn get_library() -> Vec<GameDto> {
                 executable_names,
                 launch_executable_path,
                 playtime_seconds,
+                last_played_at,
             }
         })
         .collect()
@@ -774,6 +776,7 @@ pub fn add_game(
             magnet_link: None,
             launch_executable_path: None,
             playtime_seconds: 0,
+            last_played_at: None,
         });
     }
     config::save_library(&library)
@@ -1468,6 +1471,7 @@ pub fn add_games_from_friend(friend_games: Vec<GameDto>) -> Result<usize, String
             magnet_link: None,
             launch_executable_path: g.launch_executable_path.clone(),
             playtime_seconds: 0,
+            last_played_at: None,
         });
         existing_ids.insert(g.id.to_lowercase());
         added += 1;

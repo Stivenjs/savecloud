@@ -57,6 +57,7 @@ export function useGameRunningStatus(gameIds: readonly string[]): Record<string,
           ...(old ?? {}),
           ...event.payload,
         }));
+        void queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY });
       });
 
       if (cancelled) {

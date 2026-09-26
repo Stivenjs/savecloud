@@ -203,6 +203,9 @@ pub struct ConfiguredGame {
     pub launch_executable_path: Option<String>,
     #[serde(default)]
     pub playtime_seconds: u64,
+    /// Último inicio detectado por el monitor nativo, en RFC 3339.
+    #[serde(default)]
+    pub last_played_at: Option<String>,
 }
 
 /// Entrada descriptiva de una operación de sincronización completada.
@@ -455,6 +458,8 @@ pub struct GameDto {
     #[serde(default)]
     pub launch_executable_path: Option<String>,
     pub playtime_seconds: u64,
+    #[serde(default)]
+    pub last_played_at: Option<String>,
 }
 
 /// DTO del historial de operaciones para el frontend.

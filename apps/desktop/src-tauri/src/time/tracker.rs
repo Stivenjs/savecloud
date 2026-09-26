@@ -31,6 +31,19 @@ pub fn add_playtime(game_id: &str, seconds: u64) -> Result<(), String> {
     Ok(())
 }
 
+/// Guarda la fecha del último inicio detectado para un juego de la biblioteca.
+pub fn record_game_launch(game_id: &str) -> Result<(), String> {
+    let mut library = config::load_library();
+    let game = library
+        .games
+        .iter_mut()
+        .find(|game| game.id.eq_ignore_ascii_case(game_id))
+        .ok_or_else(|| format!("No se encontró el juego con ID: {}", game_id))?;
+
+    game.last_played_at = Some(chrono::Utc::now().to_rfc3339());
+    config::save_library(&library)
+}
+
 /// Obtiene el tiempo de un juego en segundos.
 pub fn get_game_playtime(game_id: &str) -> u64 {
     let library = config::load_library();
