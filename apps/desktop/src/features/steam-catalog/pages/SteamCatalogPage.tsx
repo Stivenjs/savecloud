@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Spinner, Drawer, DrawerBody, DrawerContent, DrawerHeader, Button, cn } from "@heroui/react";
+import { Spinner, Drawer, DrawerBody, DrawerContent, DrawerHeader, Button, Chip, cn } from "@heroui/react";
 import { Library, SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
@@ -171,7 +171,8 @@ export function SteamCatalogPage() {
     setPage,
   });
 
-  const showTrendingHero = !bigPictureConsole;
+  const hasActiveFilters = selectedGenres.length > 0 || selectedTags.length > 0;
+  const showTrendingHero = !bigPictureConsole && !debouncedSearch.trim() && !hasActiveFilters;
 
   const {
     items: heroItems,
@@ -227,6 +228,46 @@ export function SteamCatalogPage() {
         )}
       </div>
 
+      {!bigPictureConsole ? (
+        <div
+          className={cn(
+            "transition-all duration-300 ease-out z-30",
+            isPastHeader
+              ? "sticky top-26 backdrop-blur-xl bg-background/90 shadow-2xl border border-default-200/50 dark:border-default-100/20 p-2.5 rounded-2xl"
+              : "",
+            isPastHeader && !showStickyToolbar
+              ? "-translate-y-28 opacity-0 pointer-events-none"
+              : "translate-y-0 opacity-100"
+          )}>
+          <SteamCatalogToolbar
+            searchTerm={searchTerm}
+            onSearchTermChange={setSearchTerm}
+            sortOption={sortOption}
+            onSortOptionChange={setSortOption}
+            paginationMode={paginationMode}
+            onPaginationModeChange={setPaginationMode}
+          />
+        </div>
+      ) : null}
+
+      {hasActiveFilters ? (
+        <div className="flex flex-wrap items-center gap-2" aria-label={t("steamCatalog.filters.activeFilters")}>
+          {selectedGenres.map((genre) => (
+            <Chip key={`genre-${genre}`} size="sm" variant="flat" color="secondary" onClose={() => toggleGenre(genre)}>
+              {genre}
+            </Chip>
+          ))}
+          {selectedTags.map((tag) => (
+            <Chip key={`tag-${tag}`} size="sm" variant="flat" color="success" onClose={() => toggleTag(tag)}>
+              {tag}
+            </Chip>
+          ))}
+          <Button size="sm" variant="light" className="h-7 min-w-0 px-2 text-xs" onPress={clearFilters}>
+            {t("steamCatalog.filters.clearButton")}
+          </Button>
+        </div>
+      ) : null}
+
       {showTrendingHero ? (
         <SteamCatalogTrendingHero
           items={heroItems}
@@ -255,28 +296,6 @@ export function SteamCatalogPage() {
         )}
 
         <div className="min-w-0 flex-1 space-y-4">
-          {!bigPictureConsole && (
-            <div
-              className={cn(
-                "transition-all duration-300 ease-out z-30",
-                isPastHeader
-                  ? "sticky top-26 backdrop-blur-xl bg-background/90 shadow-2xl border border-default-200/50 dark:border-default-100/20 p-2.5 rounded-2xl"
-                  : "",
-                isPastHeader && !showStickyToolbar
-                  ? "-translate-y-28 opacity-0 pointer-events-none"
-                  : "translate-y-0 opacity-100"
-              )}>
-              <SteamCatalogToolbar
-                searchTerm={searchTerm}
-                onSearchTermChange={setSearchTerm}
-                sortOption={sortOption}
-                onSortOptionChange={setSortOption}
-                paginationMode={paginationMode}
-                onPaginationModeChange={setPaginationMode}
-              />
-            </div>
-          )}
-
           {activeIsLoading ? (
             <div className="flex min-h-[40vh] items-center justify-center">
               <Spinner size="lg" color="primary" label={t("steamCatalog.loadingCatalog")} />

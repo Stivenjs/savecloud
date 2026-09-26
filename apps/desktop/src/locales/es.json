@@ -2264,10 +2264,11 @@
       "available_one": "{{count}} disponible",
       "available_other": "{{count}} disponibles",
       "genres": "Géneros",
-      "tags": "Etiquetas"
+      "tags": "Etiquetas",
+      "activeFilters": "Filtros activos"
     },
     "grid": {
-      "inLibrary": "En Biblioteca",
+      "openInLibrary": "Abrir en biblioteca",
       "source": "Fuente",
       "chooseSource": "Elegir fuente para {{name}}",
       "install": "Instalar",

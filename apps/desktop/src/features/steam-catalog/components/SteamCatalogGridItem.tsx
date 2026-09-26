@@ -2,6 +2,7 @@ import { memo, startTransition, addTransitionType } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button, Select, SelectItem, Skeleton, cn } from "@heroui/react";
+import { ArrowUpRight } from "lucide-react";
 import type { CatalogListItem, SteamAppdetailsMediaResult, SourceBestMatch } from "@services/tauri";
 import type { ConfiguredGame } from "@app-types/config";
 import { GameCard } from "@features/games/GameCard";
@@ -59,6 +60,29 @@ export const CatalogGridItem = memo(function CatalogGridItem({
   const candidates = match ?? [];
   const best = candidates.length > 0 ? candidates[0] : undefined;
 
+  const openGame = () => {
+    const currentY = window.scrollY || document.documentElement.scrollTop;
+    if (currentY > 0) {
+      useShellUiStore.getState().setScrollPosition("catalog", currentY);
+    }
+    const targetId = libraryGame ? libraryGame.id : game.id;
+    const state = {
+      resolvedSteamAppId: item.steamAppId,
+      catalogDisplayName: item.name,
+      from: `${location.pathname}${location.search}`,
+    };
+
+    if (currentY > 0) {
+      navigate(`/games/${targetId}`, { state });
+      return;
+    }
+
+    startTransition(() => {
+      addTransitionType("game-detail");
+      navigate(`/games/${targetId}`, { state });
+    });
+  };
+
   return (
     <div className="w-full">
       <div className="space-y-2">
@@ -76,28 +100,7 @@ export const CatalogGridItem = memo(function CatalogGridItem({
             resolvedSteamAppId={item.steamAppId}
             mediaBySteamAppId={mediaBySteamAppId ?? null}
             mediaFromBatch
-            onCardNavigate={() => {
-              const currentY = window.scrollY || document.documentElement.scrollTop;
-              if (currentY > 0) {
-                useShellUiStore.getState().setScrollPosition("catalog", currentY);
-              }
-              const from = `${location.pathname}${location.search}`;
-              const targetId = libraryGame ? libraryGame.id : game.id;
-              const targetPath = `/games/${targetId}`;
-              const state = {
-                resolvedSteamAppId: item.steamAppId,
-                catalogDisplayName: item.name,
-                from,
-              };
-              if (currentY > 0) {
-                navigate(targetPath, { state });
-                return;
-              }
-              startTransition(() => {
-                addTransitionType("game-detail");
-                navigate(targetPath, { state });
-              });
-            }}
+            onCardNavigate={openGame}
           />
         </div>
         <div className={cn("flex flex-col justify-end gap-1.5", consoleMode ? "min-h-26" : "min-h-18")}>
@@ -108,14 +111,13 @@ export const CatalogGridItem = memo(function CatalogGridItem({
               size={consoleMode ? "md" : "sm"}
               color="success"
               variant="flat"
+              onPress={openGame}
+              endContent={<ArrowUpRight size={14} />}
               className={cn(
-                "w-full font-semibold border-success-300/60 dark:border-success-500/30 transition-colors duration-150",
+                "w-full font-semibold border-success-300/60 dark:border-success-500/30 transition-colors duration-150 hover:bg-success/20 active:scale-[0.98]",
                 consoleMode ? "h-11 text-base rounded-xl" : "h-8 text-xs rounded-medium"
               )}>
-              <span className="flex items-center gap-1.5">
-                <span className="size-1.5 rounded-full bg-success-500 animate-pulse" />
-                {t("steamCatalog.grid.inLibrary")}
-              </span>
+              {t("steamCatalog.grid.openInLibrary")}
             </Button>
           ) : best ? (
             <>
