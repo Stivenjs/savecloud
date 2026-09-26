@@ -156,6 +156,8 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
     testingNotification,
     exporting,
     importing,
+    configEncryptionDialog,
+    configEncryptionError,
     checkingUpdate,
     configPath,
     config,
@@ -177,6 +179,8 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
     resetSteamCatalogConfirmOpen,
     handleExportConfig,
     handleImportConfig,
+    handleCloseConfigEncryption,
+    handleSubmitConfigEncryption,
     handleCheckUpdates,
     handleBackupConfigToCloud,
     performRestoreConfigFromCloud,
@@ -294,6 +298,8 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
           <ConfigSection
             exporting={exporting}
             importing={importing}
+            configEncryptionDialog={configEncryptionDialog}
+            configEncryptionError={configEncryptionError}
             backingUpConfig={backingUpConfig}
             restoringConfig={restoringConfig}
             configPath={configPath}
@@ -310,6 +316,8 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
             onExport={handleExportConfig}
             onImportMerge={() => handleImportConfig("merge")}
             onImportReplace={() => handleImportConfig("replace")}
+            onCloseConfigEncryption={handleCloseConfigEncryption}
+            onSubmitConfigEncryption={handleSubmitConfigEncryption}
             onBackupToCloud={handleBackupConfigToCloud}
             onRestoreFromCloud={() => setRestoreConfirmOpen(true)}
             onSyncSteamCatalog={handleSyncSteamCatalog}

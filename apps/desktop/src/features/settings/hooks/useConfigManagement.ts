@@ -16,6 +16,11 @@ import { useProfileSession } from "@hooks/useProfileSession";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastError, toastSuccess } from "@utils/toast";
 import i18n from "@lib/i18n";
+import {
+  CONFIG_EXPORT_MIN_PASSWORD_LENGTH,
+  CONFIG_PASSWORD_REQUIRED_MARKER,
+  type ConfigEncryptionDialogMode,
+} from "@features/settings/configExport";
 
 export function useConfigManagement() {
   const { config, loading: loadingUseConfig } = useConfig();
@@ -31,6 +36,9 @@ export function useConfigManagement() {
   const [backingUpConfig, setBackingUpConfig] = useState(false);
   const [restoringConfig, setRestoringConfig] = useState(false);
   const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
+  const [configEncryptionDialog, setConfigEncryptionDialog] = useState<ConfigEncryptionDialogMode>(null);
+  const [pendingEncryptedImportPath, setPendingEncryptedImportPath] = useState<string | null>(null);
+  const [configEncryptionError, setConfigEncryptionError] = useState<string | null>(null);
 
   // Create/Edit Config modal
   const [createConfigModalOpen, setCreateConfigModalOpen] = useState(false);
@@ -76,35 +84,23 @@ export function useConfigManagement() {
     }
   }, [createConfigModalOpen, activeUserId, config]);
 
-  const handleExportConfig = async () => {
-    setExporting(true);
-    try {
-      const path = await save({
-        title: "Exportar configuración",
-        defaultPath: "SaveCloud-config.json",
-        filters: [{ name: "JSON", extensions: ["json"] }],
-      });
-      if (path) {
-        await exportConfigToFile(path);
-        toastSuccess(i18n.t("settings.toast.exportSuccess"), path);
-      }
-    } catch (e) {
-      toastError(i18n.t("settings.toast.exportError"), e instanceof Error ? e.message : String(e));
-    } finally {
-      setExporting(false);
-    }
+  const handleExportConfig = () => {
+    setConfigEncryptionError(null);
+    setConfigEncryptionDialog({ kind: "export" });
   };
 
   const handleImportConfig = async (mode: "merge" | "replace") => {
     setImporting(true);
+    let importPath: string | null = null;
     try {
       const path = await open({
         title: "Importar configuración",
         directory: false,
         multiple: false,
-        filters: [{ name: "JSON", extensions: ["json"] }],
+        filters: [{ name: "SaveCloud y JSON antiguo", extensions: ["scx", "json"] }],
       });
       if (path && typeof path === "string") {
+        importPath = path;
         await importConfigFromFile(path, mode);
         toastSuccess(
           i18n.t("settings.toast.importSuccess"),
@@ -113,7 +109,67 @@ export function useConfigManagement() {
         window.location.reload();
       }
     } catch (e) {
+      if (importPath && String(e).includes(CONFIG_PASSWORD_REQUIRED_MARKER)) {
+        setPendingEncryptedImportPath(importPath);
+        setConfigEncryptionError(null);
+        setConfigEncryptionDialog({ kind: "import", importMode: mode });
+        return;
+      }
       toastError(i18n.t("settings.toast.importError"), e instanceof Error ? e.message : String(e));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleCloseConfigEncryption = () => {
+    if (exporting || importing) return;
+    setConfigEncryptionDialog(null);
+    setPendingEncryptedImportPath(null);
+    setConfigEncryptionError(null);
+  };
+
+  const handleSubmitConfigEncryption = async (password: string) => {
+    const dialog = configEncryptionDialog;
+    if (!dialog || Array.from(password).length < CONFIG_EXPORT_MIN_PASSWORD_LENGTH) return;
+
+    setConfigEncryptionError(null);
+    if (dialog.kind === "export") {
+      setExporting(true);
+      try {
+        const path = await save({
+          title: i18n.t("settings.configSection.exportDialogTitle"),
+          defaultPath: "SaveCloud-config.scx",
+          filters: [{ name: "SaveCloud cifrado", extensions: ["scx"] }],
+        });
+        if (!path) {
+          setConfigEncryptionDialog(null);
+          return;
+        }
+
+        await exportConfigToFile(path, password);
+        toastSuccess(i18n.t("settings.toast.exportSuccess"), path);
+        setConfigEncryptionDialog(null);
+      } catch (e) {
+        toastError(i18n.t("settings.toast.exportError"), e instanceof Error ? e.message : String(e));
+      } finally {
+        setExporting(false);
+      }
+      return;
+    }
+
+    if (!pendingEncryptedImportPath) return;
+    setImporting(true);
+    try {
+      await importConfigFromFile(pendingEncryptedImportPath, dialog.importMode, password);
+      toastSuccess(
+        i18n.t("settings.toast.importSuccess"),
+        dialog.importMode === "merge" ? i18n.t("settings.toast.gamesMerged") : i18n.t("settings.toast.configReplaced")
+      );
+      setConfigEncryptionDialog(null);
+      setPendingEncryptedImportPath(null);
+      window.location.reload();
+    } catch (e) {
+      setConfigEncryptionError(e instanceof Error ? e.message : String(e));
     } finally {
       setImporting(false);
     }
@@ -215,6 +271,8 @@ export function useConfigManagement() {
     s3TransferEndpointType,
     exporting,
     importing,
+    configEncryptionDialog,
+    configEncryptionError,
     backingUpConfig,
     restoringConfig,
     restoreConfirmOpen,
@@ -240,6 +298,8 @@ export function useConfigManagement() {
     pullingFriendConfig,
     handleExportConfig,
     handleImportConfig,
+    handleCloseConfigEncryption,
+    handleSubmitConfigEncryption,
     handleBackupConfigToCloud,
     performRestoreConfigFromCloud,
     handlePullFriendConfig,

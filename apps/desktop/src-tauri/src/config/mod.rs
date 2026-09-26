@@ -5,6 +5,7 @@
 //! de sincronización.
 
 pub mod config_cmds;
+pub mod encrypted_export;
 pub mod gamification;
 pub mod io;
 mod library_reader;

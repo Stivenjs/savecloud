@@ -4,10 +4,14 @@ import { FileJson, Cloud, HardDrive, FolderOpen, Link2, Library, Zap } from "luc
 import { Trans, useTranslation } from "react-i18next";
 import type { SteamCatalogSyncProgressPayload, SteamSeedImportProgressPayload } from "@services/tauri";
 import type { ReactNode } from "react";
+import { ConfigEncryptionModal } from "@features/settings/ConfigEncryptionModal";
+import type { ConfigEncryptionDialogMode } from "@features/settings/configExport";
 
 interface ConfigSectionProps {
   exporting: boolean;
   importing: boolean;
+  configEncryptionDialog: ConfigEncryptionDialogMode;
+  configEncryptionError: string | null;
   backingUpConfig: boolean;
   restoringConfig: boolean;
   configPath: string;
@@ -26,6 +30,8 @@ interface ConfigSectionProps {
   onExport: () => void | Promise<void>;
   onImportMerge: () => void | Promise<void>;
   onImportReplace: () => void | Promise<void>;
+  onCloseConfigEncryption: () => void;
+  onSubmitConfigEncryption: (password: string) => void | Promise<void>;
   onPullFriendConfig: () => void | Promise<void>;
   onBackupToCloud: () => void | Promise<void>;
   onRestoreFromCloud: () => void | Promise<void>;
@@ -88,6 +94,8 @@ function ProgressStatus({ ariaLabel, message }: ProgressStatusProps) {
 export function ConfigSection({
   exporting,
   importing,
+  configEncryptionDialog,
+  configEncryptionError,
   backingUpConfig,
   restoringConfig,
   configPath,
@@ -103,6 +111,8 @@ export function ConfigSection({
   onExport,
   onImportMerge,
   onImportReplace,
+  onCloseConfigEncryption,
+  onSubmitConfigEncryption,
   onPullFriendConfig,
   onBackupToCloud,
   onRestoreFromCloud,
@@ -478,6 +488,13 @@ export function ConfigSection({
             </div>
           </Tab>
         </Tabs>
+        <ConfigEncryptionModal
+          mode={configEncryptionDialog}
+          error={configEncryptionError}
+          isLoading={exporting || importing}
+          onClose={onCloseConfigEncryption}
+          onSubmit={onSubmitConfigEncryption}
+        />
       </CardBody>
     </Card>
   );
