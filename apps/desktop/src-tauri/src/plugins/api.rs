@@ -315,6 +315,7 @@ fn register_notifications_module(
                 None,
                 None,
                 None,
+                None,
             )
             .await;
         });
@@ -330,6 +331,7 @@ fn register_notifications_module(
                 handle,
                 title,
                 Some(body),
+                None,
                 None,
                 None,
                 None,

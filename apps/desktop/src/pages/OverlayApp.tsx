@@ -17,6 +17,7 @@ interface NotificationPayload {
   body: string;
   avatar?: string;
   gameId?: string;
+  gameName?: string;
   imageUrl?: string;
   steamAppId?: string;
 }
@@ -42,9 +43,9 @@ interface NotificationCardProps extends OverlayNotification {
 }
 
 const NotificationCard: React.FC<NotificationCardProps> = React.memo(
-  ({ id, title, body, avatar, gameId, imageUrl, steamAppId, isLeft = false }) => {
+  ({ id, title, body, avatar, gameId, gameName, imageUrl, steamAppId, isLeft = false }) => {
     const { games } = useLibrary();
-    const downloadedGameName = extractDownloadedGameName(title);
+    const downloadedGameName = gameName || extractDownloadedGameName(title);
 
     const detectedGameId = useMemo(
       () => gameId ?? downloadedGameName ?? detectGameFromText({ title, body, games }),
@@ -86,7 +87,7 @@ const NotificationCard: React.FC<NotificationCardProps> = React.memo(
                 <div className="w-10 h-10 rounded-xl bg-zinc-800/80 overflow-hidden shrink-0 ring-1 ring-white/6">
                   <img src={avatar} alt="" className="w-full h-full object-cover" />
                 </div>
-              ) : detectedGameId ? (
+              ) : detectedGameId || downloadedGameName || imageUrl || steamAppId ? (
                 <PlayingGameThumbnail
                   gameId={detectedGameId}
                   gameName={downloadedGameName}
@@ -212,14 +213,14 @@ export function OverlayApp() {
     const setupListenerAndSignalReady = async () => {
       try {
         unlisten = await listen<NotificationPayload>("show-overlay-notification", (event) => {
-          const { title, body, avatar, gameId, imageUrl, steamAppId } = event.payload;
+          const { title, body, avatar, gameId, gameName, imageUrl, steamAppId } = event.payload;
 
           if (!title?.trim() || !body?.trim()) {
             console.warn("[Overlay] Notificación inválida descartada", event.payload);
             return;
           }
 
-          addNotification({ title, body, avatar, gameId, imageUrl, steamAppId });
+          addNotification({ title, body, avatar, gameId, gameName, imageUrl, steamAppId });
         });
 
         if (mounted && !hasSignaledReadyRef.current) {

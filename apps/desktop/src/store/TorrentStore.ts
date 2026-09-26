@@ -164,6 +164,7 @@ export function initTorrentListeners() {
           ? formatGameDisplayName(ev.payload.name)
           : i18n.t("overlay.downloadFinished", "La descarga ha finalizado.")),
       gameId: metadata?.gameId,
+      gameName: metadata?.gameName,
       imageUrl: metadata?.imageUrl,
       steamAppId: metadata?.steamAppId,
     }).catch((err) => {

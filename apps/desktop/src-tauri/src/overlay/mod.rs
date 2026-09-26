@@ -9,7 +9,8 @@ use {
     windows::Win32::{
         Foundation::HWND,
         UI::WindowsAndMessaging::{
-            SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+            GetForegroundWindow, SetForegroundWindow, SetWindowPos, HWND_TOPMOST,
+            SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
         },
     },
 };
@@ -39,6 +40,7 @@ struct OverlayNotificationPayload {
     title: String,
     body: String,
     game_id: Option<String>,
+    game_name: Option<String>,
     image_url: Option<String>,
     steam_app_id: Option<String>,
 }
@@ -114,7 +116,7 @@ fn register_overlay_ready_listener(app: &AppHandle) {
 
         if pending_count > 0 {
             if let Some(window) = app_clone.get_webview_window("overlay") {
-                let _ = window.show();
+                show_overlay_without_activating(&window);
             }
         }
 
@@ -155,6 +157,7 @@ fn emit_overlay_notification(
             "title": payload.title,
             "body": payload.body,
             "gameId": payload.game_id,
+            "gameName": payload.game_name,
             "imageUrl": payload.image_url,
             "steamAppId": payload.steam_app_id,
         }),
@@ -221,6 +224,40 @@ fn recreate_overlay_window(app: &AppHandle) -> Result<(), String> {
         .lock()
         .map_err(|_| "No se pudo bloquear la recuperación de la ventana overlay".to_string())?;
     recreate_overlay_window_locked(app)
+}
+
+fn show_overlay_without_activating(window: &tauri::WebviewWindow) {
+    #[cfg(target_os = "windows")]
+    if let Ok(handle) = window.window_handle() {
+        if let RawWindowHandle::Win32(handle) = handle.as_raw() {
+            let overlay_hwnd = HWND(handle.hwnd.get() as usize as *mut c_void);
+            let previous_foreground = unsafe { GetForegroundWindow() };
+
+            unsafe {
+                let _ = SetWindowPos(
+                    overlay_hwnd,
+                    HWND_TOPMOST,
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                );
+
+                let foreground = GetForegroundWindow();
+                if foreground == overlay_hwnd
+                    && previous_foreground != overlay_hwnd
+                    && !previous_foreground.0.is_null()
+                {
+                    let _ = SetForegroundWindow(previous_foreground);
+                }
+            }
+            return;
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    let _ = window.show();
 }
 
 fn recreate_overlay_window_locked(app: &AppHandle) -> Result<(), String> {
@@ -317,6 +354,7 @@ pub async fn show_overlay_notification(
     title: String,
     body: Option<String>,
     game_id: Option<String>,
+    game_name: Option<String>,
     image_url: Option<String>,
     steam_app_id: Option<String>,
 ) -> Result<(), String> {
@@ -341,6 +379,7 @@ pub async fn show_overlay_notification(
         title,
         body,
         game_id,
+        game_name,
         image_url,
         steam_app_id,
     };
@@ -356,7 +395,7 @@ pub async fn show_overlay_notification(
     }
 
     if let Ok(false) = window.is_visible() {
-        let _ = window.show();
+        show_overlay_without_activating(&window);
     }
 
     sync_logger::log_operation("overlay_notification_emit_immediate", "overlayReady=true");
