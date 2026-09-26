@@ -53,20 +53,24 @@ import { useShellUiStore } from "@store/ShellUiStore";
 import { useScrollRestoration } from "@hooks/useScrollRestoration";
 import { formatPlaytime } from "@utils/format";
 import { useGameSessionStore } from "@store/GameSessionStore";
-import { getSteamAppId, getSteamCdnCandidates } from "@utils/gameImage";
+import { getGameLibraryHeroUrl, getSteamAppId, getSteamCdnCandidates } from "@utils/gameImage";
 
 function getLastPlayedTimestamp(game: ConfiguredGame): number {
   const timestamp = game.lastPlayedAt ? Date.parse(game.lastPlayedAt) : 0;
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function getAmbientArtworkUrl(game: ConfiguredGame | null): string | null {
-  if (!game) return null;
+function getAmbientArtworkUrls(game: ConfiguredGame | null): string[] {
+  if (!game) return [];
   const customArtwork = game.imageUrl?.trim();
-  if (customArtwork) return customArtwork;
+  if (customArtwork) return [customArtwork];
 
   const steamAppId = getSteamAppId(game);
-  return steamAppId ? (getSteamCdnCandidates(steamAppId, "horizontal")[0] ?? null) : null;
+  if (!steamAppId) return [];
+
+  const libraryHero = getGameLibraryHeroUrl(game);
+  const header = getSteamCdnCandidates(steamAppId, "horizontal")[0];
+  return [...new Set([libraryHero, header].filter((url): url is string => Boolean(url)))];
 }
 
 export function GamesPage() {
@@ -145,7 +149,7 @@ export function GamesPage() {
   } = useGamesPage();
 
   const runningSessionStartTimes = useGameSessionStore((state) => state.localSessionStartTimes);
-  const setLibraryAmbientArtworkUrl = useShellUiStore((state) => state.setLibraryAmbientArtworkUrl);
+  const setLibraryAmbientArtworkUrls = useShellUiStore((state) => state.setLibraryAmbientArtworkUrls);
 
   const { statsByGameId } = useGameStats(games.length > 0 && bulkConfirm?.type === "sync");
 
@@ -168,13 +172,13 @@ export function GamesPage() {
         .slice(0, 5),
     [filteredGames, spotlightGame]
   );
-  const ambientArtworkUrl = useMemo(() => getAmbientArtworkUrl(spotlightGame), [spotlightGame]);
+  const ambientArtworkUrls = useMemo(() => getAmbientArtworkUrls(spotlightGame), [spotlightGame]);
 
   useEffect(() => {
-    setLibraryAmbientArtworkUrl(bigPictureConsole ? null : ambientArtworkUrl);
-  }, [ambientArtworkUrl, bigPictureConsole, setLibraryAmbientArtworkUrl]);
+    setLibraryAmbientArtworkUrls(bigPictureConsole ? [] : ambientArtworkUrls);
+  }, [ambientArtworkUrls, bigPictureConsole, setLibraryAmbientArtworkUrls]);
 
-  useEffect(() => () => setLibraryAmbientArtworkUrl(null), [setLibraryAmbientArtworkUrl]);
+  useEffect(() => () => setLibraryAmbientArtworkUrls([]), [setLibraryAmbientArtworkUrls]);
 
   useEffect(() => {
     if (!bigPictureConsole) return;

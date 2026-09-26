@@ -191,7 +191,11 @@ export function AppLayout({ navItems, games = [], onMenuGameClick, children, hid
 
   const isGameDetail = location.pathname.startsWith("/games/");
   const activeUserId = activeProfile?.localUserId || config?.userId;
-  const libraryAmbientArtworkUrl = useShellUiStore((state) => state.libraryAmbientArtworkUrl);
+  const libraryAmbientArtworkUrls = useShellUiStore((state) => state.libraryAmbientArtworkUrls);
+  const [ambientArtworkIndex, setAmbientArtworkIndex] = useState(0);
+
+  useEffect(() => setAmbientArtworkIndex(0), [libraryAmbientArtworkUrls]);
+  const libraryAmbientArtworkUrl = libraryAmbientArtworkUrls[ambientArtworkIndex];
 
   return (
     <div className="relative min-h-screen bg-background text-foreground">
@@ -202,6 +206,7 @@ export function AppLayout({ navItems, games = [], onMenuGameClick, children, hid
             alt=""
             loading="lazy"
             decoding="async"
+            onError={() => setAmbientArtworkIndex((index) => index + 1)}
             className={`absolute inset-0 size-full scale-110 object-cover opacity-[0.3] ${
               config?.lowPerformanceMode ? "" : "blur-[36px]"
             }`}
