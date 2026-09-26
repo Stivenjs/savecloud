@@ -80,6 +80,14 @@
     },
     "gamesCount_one": "{{count}} game",
     "gamesCount_other": "{{count}} games",
+    "featuredAria": "Featured game",
+    "featuredEyebrow": "One click from playing",
+    "featuredPlaytime": "Total playtime",
+    "featuredReady": "Ready to play",
+    "featuredHint": "Select the artwork to open the game page and launch it from there.",
+    "featuredMostPlayed": "Most played",
+    "featuredInLibrary": "In your library",
+    "featuredOpen": "View game",
     "configuredGames": "Configured Games",
     "unsyncedChanges": "{{count}} with unsynced changes",
     "subtitle": "Manage and sync your game saves in the cloud",
@@ -2256,10 +2264,11 @@
       "available_one": "{{count}} available",
       "available_other": "{{count}} available",
       "genres": "Genres",
-      "tags": "Tags"
+      "tags": "Tags",
+      "activeFilters": "Active filters"
     },
     "grid": {
-      "inLibrary": "In Library",
+      "openInLibrary": "Open in library",
       "source": "Source",
       "chooseSource": "Choose source for {{name}}",
       "install": "Install",

@@ -80,6 +80,14 @@
     },
     "gamesCount_one": "{{count}} juego",
     "gamesCount_other": "{{count}} juegos",
+    "featuredAria": "Juego destacado",
+    "featuredEyebrow": "A un clic de jugar",
+    "featuredPlaytime": "Tiempo acumulado",
+    "featuredReady": "Listo para jugar",
+    "featuredHint": "Selecciona el arte para abrir la ficha del juego y lanzarlo desde ahí.",
+    "featuredMostPlayed": "Más jugado",
+    "featuredInLibrary": "En tu biblioteca",
+    "featuredOpen": "Ver juego",
     "configuredGames": "Juegos configurados",
     "unsyncedChanges": "{{count}} con cambios sin subir",
     "subtitle": "Gestiona y sincroniza tus partidas guardadas en la nube",
@@ -2256,10 +2264,11 @@
       "available_one": "{{count}} disponible",
       "available_other": "{{count}} disponibles",
       "genres": "Géneros",
-      "tags": "Etiquetas"
+      "tags": "Etiquetas",
+      "activeFilters": "Filtros activos"
     },
     "grid": {
-      "inLibrary": "En Biblioteca",
+      "openInLibrary": "Abrir en biblioteca",
       "source": "Fuente",
       "chooseSource": "Elegir fuente para {{name}}",
       "install": "Instalar",

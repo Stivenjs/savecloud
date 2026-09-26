@@ -181,7 +181,7 @@ function OriginSegments({
       role="radiogroup"
       aria-label={t("library.filter.title")}
       className={[
-        "inline-flex w-fit max-w-full flex-wrap items-center gap-1 self-start rounded-xl border border-default-200/70 bg-default-100/30 dark:border-default-100/25 dark:bg-default-50/15",
+        "inline-flex w-fit max-w-full shrink-0 flex-nowrap items-center gap-1 self-start rounded-xl border border-default-200/70 bg-default-100/30 dark:border-default-100/25 dark:bg-default-50/15",
         compact ? "p-0.5" : "p-1",
       ].join(" ")}>
       {segments.map(({ key, label }) => (
@@ -209,7 +209,7 @@ export function GamesFilters({
 }: GamesFiltersProps) {
   const rowLayout = consoleMode
     ? "flex flex-col items-start gap-3"
-    : `flex flex-col gap-4 sm:flex-row sm:items-center ${omitSearch ? "sm:justify-end" : "sm:justify-between"}`;
+    : `flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-center ${omitSearch ? "sm:justify-end" : "sm:justify-between"}`;
 
   return (
     <div className={`${rowLayout} ${rootClassName ?? ""}`}>
@@ -217,7 +217,7 @@ export function GamesFilters({
         <DebouncedGamesSearchInput
           searchTerm={searchTerm}
           onSearchChange={onSearchChange}
-          className={consoleMode ? "max-w-full sm:max-w-md" : "max-w-xs"}
+          className={consoleMode ? "max-w-full sm:max-w-md" : "w-full min-w-0 sm:max-w-xs"}
           size={consoleMode ? "lg" : "md"}
         />
       ) : null}

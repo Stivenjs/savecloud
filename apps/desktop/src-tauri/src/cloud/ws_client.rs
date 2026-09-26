@@ -454,6 +454,10 @@ async fn process_incoming_payload(
                         "{} está jugando {}",
                         data.friend_user_id, data.game_name
                     )),
+                    None,
+                    None,
+                    None,
+                    None,
                 )
                 .await
                 {

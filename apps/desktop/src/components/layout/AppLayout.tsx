@@ -20,7 +20,6 @@ import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { openOrFocusSettingsWindow } from "@/windows/settingsWindow";
-import { CommandPaletteModal } from "@components/layout/CommandPaletteModal";
 import { XboxSidebar } from "@components/layout/XboxSidebar";
 import { XboxTopHeader } from "@components/layout/XboxTopHeader";
 import type { ConfiguredGame } from "@app-types/config";
@@ -30,6 +29,9 @@ import { MenuGamesList } from "@components/layout/Menugameslist";
 import type { StaggeredMenuItem } from "@components/external/StaggeredMenu";
 
 const ProfileDrawer = lazy(() => import("@features/profile/ProfileDrawer").then((m) => ({ default: m.ProfileDrawer })));
+const CommandPaletteModal = lazy(() =>
+  import("@components/layout/CommandPaletteModal").then((m) => ({ default: m.CommandPaletteModal }))
+);
 const StaggeredMenu = lazy(() =>
   import("@components/external/StaggeredMenu").then((m) => ({ default: m.StaggeredMenu }))
 );
@@ -274,7 +276,9 @@ export function AppLayout({ navItems, games = [], onMenuGameClick, children, hid
 
       {/* Buscador global / Paleta de comandos */}
       {isCommandPaletteOpen && (
-        <CommandPaletteModal isOpen={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} />
+        <Suspense fallback={null}>
+          <CommandPaletteModal isOpen={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} />
+        </Suspense>
       )}
     </div>
   );

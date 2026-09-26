@@ -42,7 +42,6 @@ export function SteamCatalogTrendingHero({
 
   const handleSwiper = useCallback((instance: SwiperType) => {
     swiperRef.current = instance;
-
     if (!visibilityManager.isVisible) {
       instance.autoplay?.stop();
     }

@@ -58,8 +58,8 @@ export function SteamCatalogToolbar({
         />
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="w-full shrink-0 sm:w-60">
+      <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+        <div className="min-w-0 flex-1 sm:w-60 sm:flex-none">
           <Select
             aria-label={t("steamCatalog.sort.label")}
             selectedKeys={[sortOption]}

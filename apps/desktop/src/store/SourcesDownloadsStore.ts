@@ -10,6 +10,7 @@ import {
 } from "@services/tauri/sources.service";
 import { formatGameDisplayName } from "@utils/gameImage";
 import i18n from "@lib/i18n";
+import { useDownloadMetadataStore } from "@store/DownloadMetadataStore";
 
 type SourcesAggregate = {
   loaded: number;
@@ -187,11 +188,18 @@ export function initSourcesListeners() {
     useSourcesDownloadsStore.getState().upsertFromPayload(ev.payload);
 
     if (ev.payload.status === "completed") {
+      const metadata = useDownloadMetadataStore.getState().metadataByKey[ev.payload.jobId];
       invoke("show_overlay_notification", {
         title: i18n.t("overlay.gameDownloaded", "Juego Descargado"),
-        body: ev.payload.title
-          ? formatGameDisplayName(ev.payload.title)
-          : i18n.t("overlay.downloadFinished", "La descarga ha finalizado."),
+        body:
+          metadata?.gameName ||
+          (ev.payload.title
+            ? formatGameDisplayName(ev.payload.title)
+            : i18n.t("overlay.downloadFinished", "La descarga ha finalizado.")),
+        gameId: metadata?.gameId,
+        gameName: metadata?.gameName,
+        imageUrl: metadata?.imageUrl,
+        steamAppId: metadata?.steamAppId,
       }).catch((err) => {
         console.error("Error al mostrar la notificación del overlay:", err);
       });

@@ -9,7 +9,6 @@ import { useGameStats } from "@hooks/useGameStats";
 import { useGameRunningStatus } from "@hooks/useGameRunningStatus";
 import { useResolvedSteamAppIds } from "@hooks/useResolvedSteamAppIds";
 import { useGameMediaBatch, getIsResolvingIds } from "@hooks/useGameMedia";
-import { GamesListMotionContainer } from "@features/games/GamesListMotion";
 import { GamesViewControls } from "@features/games/Gamesviewcontrols";
 import { useGamesViewPreferences } from "@hooks/useGamesViewPreferences";
 import { useGamesSorter } from "@hooks/Usegamessorter";
@@ -21,8 +20,6 @@ const GameConsoleActionsModal = lazy(() =>
 
 interface GamesListProps {
   games: readonly ConfiguredGame[];
-  /** Clave para re-ejecutar la animación de entrada al filtrar/buscar, incluso si los IDs no cambian. */
-  animationKey?: string;
   /** Mensaje cuando la lista está vacía por filtros (en lugar del mensaje por defecto). */
   emptyFilterMessage?: string;
   /** Juegos con guardados locales sin subir (para badge). */
@@ -63,7 +60,6 @@ interface GamesListProps {
 
 export function GamesList({
   games,
-  animationKey,
   emptyFilterMessage,
   unsyncedGameIds = [],
   onEmptyScanPress,
@@ -114,11 +110,6 @@ export function GamesList({
   const isWaitingForSortStats = needsLibraryWideStats && !statsError && (isLoadingStats || !hasStatsForEveryGame);
   const sortedGamesByStats = useGamesSorter(games, statsByGameId as unknown as Map<string, GameStats>, sortBy, sortDir);
   const sortedGames = isWaitingForSortStats || statsError ? [...games] : sortedGamesByStats;
-
-  const stableListKey = useMemo(
-    () => [animationKey ?? "", layout, cardOrientation, sortBy, sortDir].join("|"),
-    [animationKey, layout, cardOrientation, sortBy, sortDir]
-  );
 
   const [openActionsGameId, setOpenActionsGameId] = useState<string | null>(null);
   const handleActionsMenuOpenChange = useCallback((open: boolean, gameId: string) => {
@@ -201,10 +192,8 @@ export function GamesList({
       {/* Controls bar */}
       <div
         className={[
-          "flex flex-wrap items-center gap-3",
-          consoleMode
-            ? "flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-between"
-            : "justify-between",
+          "flex w-full flex-col items-stretch gap-3 md:flex-row md:items-center md:justify-between",
+          consoleMode ? "gap-4 sm:flex-row sm:items-center sm:justify-between" : "",
         ].join(" ")}>
         <p className={consoleMode ? "text-base font-semibold text-default-400 md:text-lg" : "text-xs text-default-400"}>
           {t("library.gamesCount", { count: sortedGames.length })}
@@ -222,34 +211,32 @@ export function GamesList({
       </div>
 
       {/* Game grid / list */}
-      <GamesListMotionContainer listKey={stableListKey}>
-        <GamesVirtualizedGrid
-          games={sortedGames}
-          layout={layout}
-          cardOrientation={cardOrientation}
-          consoleMode={consoleMode}
-          statsByGameId={statsByGameId as unknown as Map<string, GameStats>}
-          resolvedSteamAppIds={resolvedSteamAppIds}
-          mediaBySteamAppId={mediaBySteamAppId ?? null}
-          gameRunningStatus={gameRunningStatus}
-          unsyncedSet={unsyncedSet}
-          cloudBackupCountByGameId={cloudBackupCountByGameId}
-          onRemove={onRemove}
-          onSync={onSync}
-          syncingId={syncingId}
-          downloadingId={downloadingId}
-          onOpenFolder={onOpenFolder}
-          onRecoverFromCloud={onRecoverFromCloud}
-          onFullBackupUpload={onFullBackupUpload}
-          fullBackupUploadingGameId={fullBackupUploadingGameId}
-          onEdit={onEdit}
-          onTorrent={onTorrent}
-          onShare={onShare}
-          onOpenConsoleActions={handleOpenConsoleActions}
-          openActionsGameId={openActionsGameId}
-          onActionsMenuOpenChange={handleActionsMenuOpenChange}
-        />
-      </GamesListMotionContainer>
+      <GamesVirtualizedGrid
+        games={sortedGames}
+        layout={layout}
+        cardOrientation={cardOrientation}
+        consoleMode={consoleMode}
+        statsByGameId={statsByGameId as unknown as Map<string, GameStats>}
+        resolvedSteamAppIds={resolvedSteamAppIds}
+        mediaBySteamAppId={mediaBySteamAppId ?? null}
+        gameRunningStatus={gameRunningStatus}
+        unsyncedSet={unsyncedSet}
+        cloudBackupCountByGameId={cloudBackupCountByGameId}
+        onRemove={onRemove}
+        onSync={onSync}
+        syncingId={syncingId}
+        downloadingId={downloadingId}
+        onOpenFolder={onOpenFolder}
+        onRecoverFromCloud={onRecoverFromCloud}
+        onFullBackupUpload={onFullBackupUpload}
+        fullBackupUploadingGameId={fullBackupUploadingGameId}
+        onEdit={onEdit}
+        onTorrent={onTorrent}
+        onShare={onShare}
+        onOpenConsoleActions={handleOpenConsoleActions}
+        openActionsGameId={openActionsGameId}
+        onActionsMenuOpenChange={handleActionsMenuOpenChange}
+      />
 
       {consoleActionsGame && (
         <Suspense fallback={null}>

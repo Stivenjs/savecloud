@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Gamepad2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLibrary } from "@hooks/useLibrary";
-import { detectGameFromText, formatTextWithGameNames } from "@utils/gameImage";
+import { detectGameFromText, extractDownloadedGameName, formatTextWithGameNames } from "@utils/gameImage";
 import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
 import { useOverlaySoundSettings } from "@hooks/useOverlaySoundSettings";
 
@@ -17,6 +17,7 @@ interface NotificationPayload {
   body: string;
   avatar?: string;
   gameId?: string;
+  gameName?: string;
   imageUrl?: string;
   steamAppId?: string;
 }
@@ -42,12 +43,13 @@ interface NotificationCardProps extends OverlayNotification {
 }
 
 const NotificationCard: React.FC<NotificationCardProps> = React.memo(
-  ({ id, title, body, avatar, gameId, imageUrl, steamAppId, isLeft = false }) => {
+  ({ id, title, body, avatar, gameId, gameName, imageUrl, steamAppId, isLeft = false }) => {
     const { games } = useLibrary();
+    const downloadedGameName = gameName || extractDownloadedGameName(title);
 
     const detectedGameId = useMemo(
-      () => detectGameFromText({ gameId, title, body, games }),
-      [gameId, body, title, games]
+      () => gameId ?? downloadedGameName ?? detectGameFromText({ title, body, games }),
+      [downloadedGameName, gameId, body, title, games]
     );
 
     const formattedTitle = useMemo(
@@ -85,9 +87,10 @@ const NotificationCard: React.FC<NotificationCardProps> = React.memo(
                 <div className="w-10 h-10 rounded-xl bg-zinc-800/80 overflow-hidden shrink-0 ring-1 ring-white/6">
                   <img src={avatar} alt="" className="w-full h-full object-cover" />
                 </div>
-              ) : detectedGameId ? (
+              ) : detectedGameId || downloadedGameName || imageUrl || steamAppId ? (
                 <PlayingGameThumbnail
                   gameId={detectedGameId}
+                  gameName={downloadedGameName}
                   imageUrl={imageUrl}
                   steamAppId={steamAppId}
                   size="md"
@@ -210,14 +213,14 @@ export function OverlayApp() {
     const setupListenerAndSignalReady = async () => {
       try {
         unlisten = await listen<NotificationPayload>("show-overlay-notification", (event) => {
-          const { title, body, avatar, gameId, imageUrl, steamAppId } = event.payload;
+          const { title, body, avatar, gameId, gameName, imageUrl, steamAppId } = event.payload;
 
           if (!title?.trim() || !body?.trim()) {
             console.warn("[Overlay] Notificación inválida descartada", event.payload);
             return;
           }
 
-          addNotification({ title, body, avatar, gameId, imageUrl, steamAppId });
+          addNotification({ title, body, avatar, gameId, gameName, imageUrl, steamAppId });
         });
 
         if (mounted && !hasSignaledReadyRef.current) {

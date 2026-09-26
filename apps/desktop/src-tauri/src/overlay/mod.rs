@@ -38,6 +38,10 @@ fn force_topmost(window: &tauri::WebviewWindow) {
 struct OverlayNotificationPayload {
     title: String,
     body: String,
+    game_id: Option<String>,
+    game_name: Option<String>,
+    image_url: Option<String>,
+    steam_app_id: Option<String>,
 }
 
 struct OverlayRuntimeState {
@@ -148,7 +152,14 @@ fn emit_overlay_notification(
     let emit_result = app.emit_to(
         "overlay",
         "show-overlay-notification",
-        serde_json::json!({ "title": payload.title, "body": payload.body }),
+        serde_json::json!({
+            "title": payload.title,
+            "body": payload.body,
+            "gameId": payload.game_id,
+            "gameName": payload.game_name,
+            "imageUrl": payload.image_url,
+            "steamAppId": payload.steam_app_id,
+        }),
     );
 
     match emit_result {
@@ -307,6 +318,10 @@ pub async fn show_overlay_notification(
     app: AppHandle,
     title: String,
     body: Option<String>,
+    game_id: Option<String>,
+    game_name: Option<String>,
+    image_url: Option<String>,
+    steam_app_id: Option<String>,
 ) -> Result<(), String> {
     let body = body.unwrap_or_default();
     let title_preview: String = title.chars().take(80).collect();
@@ -325,7 +340,14 @@ pub async fn show_overlay_notification(
     #[cfg(target_os = "windows")]
     force_topmost(&window);
 
-    let payload = OverlayNotificationPayload { title, body };
+    let payload = OverlayNotificationPayload {
+        title,
+        body,
+        game_id,
+        game_name,
+        image_url,
+        steam_app_id,
+    };
 
     let is_ready = overlay_state()
         .lock()

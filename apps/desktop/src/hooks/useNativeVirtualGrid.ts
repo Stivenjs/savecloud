@@ -43,32 +43,33 @@ export function useNativeVirtualGrid<T>({
   gap = 20,
   estimatedRowHeight = 235,
   overscan = 8,
-  initialScrollY = 0,
+  initialScrollY,
   containerTopOffset,
   computeColumns,
   computeRowHeight,
 }: UseNativeVirtualGridOptions<T>): UseNativeVirtualGridResult<T> {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const [containerWidth, setContainerWidth] = useState<number>(() => {
-    if (typeof window !== "undefined") {
-      return window.innerWidth;
-    }
-    return 1200;
-  });
+  const [containerWidth, setContainerWidth] = useState(0);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = containerRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
+    if (!el) return;
+
+    const updateContainerWidth = (width: number) => {
+      if (width <= 0) return;
+      containerTopRef.current = null;
+      setContainerWidth((previous) => (Math.abs(previous - width) > 2 ? width : previous));
+    };
+
+    updateContainerWidth(el.clientWidth);
+
+    if (typeof ResizeObserver === "undefined") return;
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) {
-        const width = entry.contentRect.width || el.clientWidth;
-        if (width > 0) {
-          containerTopRef.current = null;
-          setContainerWidth((prev) => (Math.abs(prev - width) > 2 ? width : prev));
-        }
+        updateContainerWidth(entry.contentRect.width || el.clientWidth);
       }
     });
 
@@ -106,15 +107,11 @@ export function useNativeVirtualGrid<T>({
     return Math.ceil(items.length / columns);
   }, [items.length, columns]);
 
-  const pendingRestoreYRef = useRef<number>(initialScrollY > 0 ? initialScrollY : 0);
+  const requestedScrollY = initialScrollY ?? (typeof window !== "undefined" ? window.scrollY || 0 : 0);
+  const pendingRestoreYRef = useRef<number>(requestedScrollY > 0 ? requestedScrollY : 0);
 
   const [rowRange, setRowRange] = useState<{ startRow: number; endRow: number }>(() => {
-    const targetY =
-      initialScrollY > 0
-        ? initialScrollY
-        : typeof window !== "undefined"
-          ? window.scrollY || document.documentElement.scrollTop || 0
-          : 0;
+    const targetY = requestedScrollY;
 
     if (targetY > 0) {
       const estimatedContainerTop = containerTopOffset ?? (minItemWidth >= 320 ? 120 : 450);

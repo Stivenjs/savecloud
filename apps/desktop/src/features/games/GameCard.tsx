@@ -9,9 +9,11 @@ import {
   ViewTransition,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Skeleton } from "@heroui/react";
+import { Play } from "lucide-react";
 import { GameCardHoverMotion } from "@features/games/GameCardHoverMotion";
-import { formatGameDisplayName, getSteamAppId } from "@utils/gameImage";
+import { formatGameDisplayName, getSteamAppId, getSteamCdnCandidates } from "@utils/gameImage";
 import { GameCardHoverCard } from "@features/games/GameCardHoverCard";
 import { GameCardSyncProgress } from "@features/games/GameCardSyncProgress";
 import { LARGE_GAME_BLOCK_SIZE_BYTES } from "@utils/packageRecommendation";
@@ -86,6 +88,8 @@ export interface GameCardProps {
   variant?: "library" | "catalog";
   /** Carga prioritaria para las primeras tarjetas visibles */
   priority?: boolean;
+  /** Presentación amplia para destacar un juego en el inicio de Biblioteca. */
+  featured?: boolean;
   /** Callback para abrir el menú de acciones adaptado a consola (mando). */
   onOpenConsoleActions?: (game: ConfiguredGame) => void;
   /** Callback al hacer click derecho en la tarjeta para abrir el menú contextual de acciones. */
@@ -98,6 +102,26 @@ export interface GameCardProps {
 const SYNC_TOLERANCE_MS = 15_000;
 /** Si la nube es más reciente que local pero por menos de esto, lo tratamos como "en sync" */
 const CLOUD_NEWER_AS_SYNC_MS = 120_000;
+
+function getFeaturedCoverCandidates(
+  game: ConfiguredGame,
+  resolvedSteamAppId: string | null | undefined,
+  mediaUrls: readonly string[],
+  fallbackCandidates: readonly string[]
+): string[] {
+  const customSteamAppId = game.imageUrl?.match(/\/apps\/(\d+)\//)?.[1] ?? null;
+  const steamAppId = customSteamAppId ?? getSteamAppId(game, resolvedSteamAppId);
+  if (!steamAppId || (game.imageUrl && !customSteamAppId)) return [...fallbackCandidates];
+
+  const canUseSteamMedia = !game.imageUrl || steamAppId === getSteamAppId(game, resolvedSteamAppId);
+  const highResolutionScreenshots = canUseSteamMedia
+    ? mediaUrls.filter((url) => url.toLowerCase().includes("/ss_") && url.toLowerCase().includes("1920x1080"))
+    : [];
+  const horizontalCandidates = getSteamCdnCandidates(steamAppId, "horizontal");
+  const libraryHeroes = horizontalCandidates.filter((url) => url.includes("/library_hero."));
+
+  return [...new Set([...libraryHeroes, ...highResolutionScreenshots, ...horizontalCandidates, ...fallbackCandidates])];
+}
 
 export function deriveGameSyncStatus(
   isUnsynced: boolean | undefined,
@@ -138,6 +162,7 @@ function MaybeViewTransition({
 }
 
 export const GameCard = memo(function GameCard(props: GameCardProps) {
+  const { t } = useTranslation();
   const hookLowPerf = useLowPerformanceMode();
   const isLowPerf = props.isLowPerf ?? hookLowPerf;
   const {
@@ -159,12 +184,14 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     variant = "library",
     orientation = "vertical",
     priority = false,
+    featured = false,
     ...cardRest
   } = props;
 
   const isCatalog = variant === "catalog";
-  const isHorizontal = orientation === "horizontal";
-  const aspectClass = isHorizontal ? "aspect-460/215" : "aspect-2/3";
+  const isHorizontal = featured || orientation === "horizontal";
+  const mediaOrientation = isHorizontal ? "horizontal" : "vertical";
+  const aspectClass = featured ? "aspect-[2.15/1] sm:aspect-[2.45/1]" : isHorizontal ? "aspect-460/215" : "aspect-2/3";
 
   const syncProgress = useSyncStore((state) => {
     if (state.syncOperation?.mode === "single" && state.syncOperation.gameId === game.id) {
@@ -179,8 +206,14 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     externalLoading,
     mediaBySteamAppId,
     mediaFromBatch,
-    orientation,
+    orientation: mediaOrientation,
   });
+
+  const featuredCoverCandidates = useMemo(
+    () =>
+      featured ? getFeaturedCoverCandidates(game, resolvedSteamAppId, mediaUrls, coverCandidates) : coverCandidates,
+    [featured, game, resolvedSteamAppId, mediaUrls, coverCandidates]
+  );
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -292,6 +325,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
           onHoverEnd();
         }}
         role="link"
+        aria-label={formatGameDisplayName(cardTitle ?? game.id)}
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
@@ -324,7 +358,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
             ) : (
               <CatalogCoverImage
                 alt={game.id}
-                candidates={coverCandidates}
+                candidates={featured ? featuredCoverCandidates : coverCandidates}
                 fallbackTitle={cardTitle ?? formatGameDisplayName(game.id)}
                 className="size-full object-cover object-center transition-[transform,opacity] duration-200 ease-out group-hover/card:scale-[1.03] subpixel-antialiased transform-gpu rounded-xl"
                 showSkeleton={!isCatalog}
@@ -333,6 +367,28 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
             )}
             {/* Soft bottom shading to integrate image with card background */}
             <div className="absolute inset-0 bg-linear-to-t from-[#0e0f14]/90 via-transparent to-transparent pointer-events-none z-10" />
+            {featured ? (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-4 p-4 sm:p-7">
+                <div className="min-w-0">
+                  <span className="mb-1 block text-[11px] font-bold uppercase tracking-[0.18em] text-white/85">
+                    {game.playtimeSeconds ? t("library.featuredMostPlayed") : t("library.featuredInLibrary")}
+                  </span>
+                  <h2 className="line-clamp-2 text-xl font-bold leading-tight text-white drop-shadow sm:text-3xl">
+                    {formatGameDisplayName(cardTitle ?? game.id)}
+                  </h2>
+                </div>
+                <span className="mb-0.5 inline-flex shrink-0 items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-lg sm:px-4 sm:py-2.5">
+                  <Play size={16} fill="currentColor" aria-hidden />
+                  <span className="hidden sm:inline">{t("library.featuredOpen")}</span>
+                </span>
+              </div>
+            ) : (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-start p-3 sm:p-4">
+                <h3 className="line-clamp-2 max-w-[92%] text-left text-sm font-semibold leading-snug text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] sm:text-base">
+                  {formatGameDisplayName(cardTitle ?? game.id)}
+                </h3>
+              </div>
+            )}
             <GameCardSyncBadge
               gameId={game.id}
               syncStatus={effectiveSyncStatus}
