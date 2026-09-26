@@ -41,6 +41,8 @@ interface GameDetailHeroProps {
   isLoading?: boolean;
   /** Si viene del catálogo infinito, desactiva la animación morph pesada. */
   isCatalog?: boolean;
+  /** Si la ruta se abrió con scroll activo, evita una captura de hero en otra posición. */
+  disableSharedTransition?: boolean;
   /** Vuelve a la lista anterior (misma lógica que atrás global / estado `from`). */
   onBack: () => void;
 }
@@ -56,8 +58,9 @@ export function GameDetailHero({
   gameId,
   isLoading,
   isCatalog,
+  disableSharedTransition = false,
 }: GameDetailHeroProps) {
-  const isLowPerf = useLowPerformanceMode() || Boolean(isCatalog);
+  const isLowPerf = useLowPerformanceMode() || Boolean(isCatalog) || disableSharedTransition;
   const [swiper, setSwiper] = useState<SwiperType | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
 

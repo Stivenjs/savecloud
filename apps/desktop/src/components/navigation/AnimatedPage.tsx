@@ -1,4 +1,5 @@
-import { type ReactNode, ViewTransition } from "react";
+import { type ReactNode, useState, ViewTransition } from "react";
+import { useLocation } from "react-router-dom";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { DeferredContent } from "@components/ui/DeferredContent";
 
@@ -8,8 +9,10 @@ interface AnimatedPageProps {
 
 export function AnimatedPage({ children }: AnimatedPageProps) {
   const isLowPerf = useLowPerformanceMode();
+  const { pathname } = useLocation();
+  const [enteredWhileScrolled] = useState(() => (window.scrollY || document.documentElement.scrollTop || 0) > 0);
 
-  if (isLowPerf) {
+  if (isLowPerf || (pathname.startsWith("/games/") && enteredWhileScrolled)) {
     return <>{children}</>;
   }
 
