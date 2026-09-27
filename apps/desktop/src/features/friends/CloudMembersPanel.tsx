@@ -269,6 +269,7 @@ export function CloudMembersPanel({
       <motion.div layout className="w-full">
         <div {...moveProps} className="w-full p-0">
           <CloudMembersHeader
+            key={activeProfile?.id ?? "no-profile"}
             isRefreshing={isRefreshing}
             onRefresh={handleRefresh}
             onClose={onClose}
@@ -315,6 +316,7 @@ export function CloudMembersPanel({
               ) : null}
 
               <CloudMembersSection
+                key={`${activeProfile?.id ?? "no-profile"}-host`}
                 title={t("friends.cloudMembersSection.inYourCloud")}
                 memberships={hostMemberships}
                 presenceMap={presenceByUser}
@@ -330,6 +332,7 @@ export function CloudMembersPanel({
               />
 
               <CloudMembersSection
+                key={`${activeProfile?.id ?? "no-profile"}-member`}
                 title={t("friends.cloudMembersSection.memberOf")}
                 memberships={memberMemberships}
                 presenceMap={presenceByUser}
