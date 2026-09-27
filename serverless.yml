@@ -227,7 +227,7 @@ functions:
           arn:
             Fn::GetAtt: [SyncGameStatsQueue, Arn]
           batchSize: 25
-          maximumBatchingWindow: 1
+          maximumBatchingWindow: 5
 
   wsConnect:
     handler: apps/api/src/interfaces/lambda/websocket/connect.handler
