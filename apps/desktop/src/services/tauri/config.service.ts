@@ -34,16 +34,20 @@ export async function createConfigFile(
   apiBaseUrl: string,
   wsBaseUrl: string,
   apiKey: string,
-  userId: string,
-  steamWebApiKey?: string | null
+  userId: string
 ): Promise<string> {
   return invoke<string>("create_config_file", {
     apiBaseUrl: apiBaseUrl.trim() || null,
     wsBaseUrl: wsBaseUrl.trim() || null,
     apiKey: apiKey.trim() || null,
     userId: userId.trim() || null,
-    steamWebApiKey: steamWebApiKey === undefined || steamWebApiKey === null ? null : steamWebApiKey.trim() || null,
+    steamWebApiKey: null,
   });
+}
+
+/** Guarda la clave Steam Web API en el almacén seguro del perfil activo. */
+export async function setSteamWebApiKey(apiKey: string): Promise<void> {
+  await invoke("set_steam_web_api_key", { apiKey: apiKey.trim() });
 }
 
 /** Guarda fondo, avatar y marco del perfil (vacío o null borra cada campo). */
@@ -67,14 +71,14 @@ export async function setShareVisualProfileWithMembers(enabled: boolean): Promis
   await invoke("set_share_visual_profile_with_members", { enabled });
 }
 
-/** Exporta la configuración a un archivo JSON. Devuelve el path. */
-export async function exportConfigToFile(path: string): Promise<string> {
-  return invoke("export_config_to_file", { path });
+/** Exporta la configuración a un archivo cifrado `.scx`. Devuelve el path. */
+export async function exportConfigToFile(path: string, password: string): Promise<string> {
+  return invoke("export_config_to_file", { path, password });
 }
 
-/** Importa configuración desde archivo. mode: "merge" | "replace" */
-export async function importConfigFromFile(path: string, mode: "merge" | "replace"): Promise<void> {
-  await invoke("import_config_from_file", { path, mode });
+/** Importa una exportación `.scx` o un respaldo JSON antiguo. */
+export async function importConfigFromFile(path: string, mode: "merge" | "replace", password?: string): Promise<void> {
+  await invoke("import_config_from_file", { path, mode, password: password ?? null });
 }
 
 /** Sube config.json a la nube como "__config__/config.json" */

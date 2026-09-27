@@ -6,6 +6,8 @@ export interface ConfiguredGame {
   readonly paths: readonly string[];
   /** Tiempo de juego acumulado localmente en segundos. */
   readonly playtimeSeconds?: number;
+  /** Fecha del último inicio detectado por SaveCloud, en formato ISO 8601. */
+  readonly lastPlayedAt?: string | null;
   /** Steam App ID: si está definido, se usa la imagen del CDN de Steam. */
   readonly steamAppId?: string;
   /** URL personalizada de imagen. Prioridad sobre steamAppId. Para juegos no-Steam. */

@@ -191,9 +191,32 @@ export function AppLayout({ navItems, games = [], onMenuGameClick, children, hid
 
   const isGameDetail = location.pathname.startsWith("/games/");
   const activeUserId = activeProfile?.localUserId || config?.userId;
+  const libraryAmbientArtworkUrls = useShellUiStore((state) => state.libraryAmbientArtworkUrls);
+  const [ambientArtworkIndex, setAmbientArtworkIndex] = useState(0);
+
+  useEffect(() => setAmbientArtworkIndex(0), [libraryAmbientArtworkUrls]);
+  const libraryAmbientArtworkUrl = libraryAmbientArtworkUrls[ambientArtworkIndex];
 
   return (
     <div className="relative min-h-screen bg-background text-foreground">
+      {!hideTitleBar && location.pathname === "/" && libraryAmbientArtworkUrl ? (
+        <div aria-hidden="true" className="pointer-events-none fixed left-0 top-0 z-0 h-dvh w-screen overflow-hidden">
+          <img
+            src={libraryAmbientArtworkUrl}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={() => setAmbientArtworkIndex((index) => index + 1)}
+            className={`absolute inset-0 size-full scale-110 object-cover opacity-[0.3] ${
+              config?.lowPerformanceMode ? "" : "blur-[36px]"
+            }`}
+          />
+          <div className="absolute inset-0 bg-background/55" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_22%_0%,rgba(0,112,255,0.2),transparent_52%),radial-gradient(ellipse_at_78%_10%,rgba(194,116,72,0.14),transparent_48%)]" />
+          <div className="absolute inset-0 bg-linear-to-b from-background/10 via-transparent to-background/65" />
+          <div className="absolute inset-0 bg-linear-to-r from-background/20 via-transparent to-background/20" />
+        </div>
+      ) : null}
       {/* Barra lateral izquierda estilo Xbox */}
       {!hideTitleBar ? (
         <XboxSidebar
@@ -254,7 +277,7 @@ export function AppLayout({ navItems, games = [], onMenuGameClick, children, hid
 
       {/* Contenido principal */}
       <main
-        className={`min-h-screen overflow-x-clip transition-all duration-300 ${
+        className={`relative z-10 min-h-screen overflow-x-clip transition-all duration-300 ${
           hideTitleBar ? "pt-(--savecloud-bp-library-header-h) px-6 pb-6" : "ml-17 pt-16 px-8 pb-8"
         }`}>
         {children}

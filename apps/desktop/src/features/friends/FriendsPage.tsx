@@ -24,22 +24,29 @@ import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
 import { listCloudPresence } from "@services/tauri/invites.service";
 import { visibilityManager } from "@hooks/useAppVisibility";
+import { useProfileSession } from "@hooks/useProfileSession";
 
 type FriendsTabKey = "link" | "user" | "invites";
 
 export function FriendsPage() {
-  const { t } = useTranslation();
   const bigPictureConsole = useBigPictureConsole();
+  const { activeProfile } = useProfileSession();
+  const profileKey = activeProfile?.id ?? "no-profile";
 
-  if (bigPictureConsole) return <BigPictureFriendsPage />;
-
-  const [friendsTab, setFriendsTab] = useState<FriendsTabKey>(() => {
+  useEffect(() => {
     try {
-      return (sessionStorage.getItem("friendsPageTab") as FriendsTabKey) || "link";
-    } catch {
-      return "link";
-    }
-  });
+      sessionStorage.removeItem("friendsPageState");
+      sessionStorage.removeItem("friendsPageTab");
+    } catch {}
+  }, []);
+
+  return bigPictureConsole ? <BigPictureFriendsPage key={profileKey} /> : <FriendsPageContent key={profileKey} />;
+}
+
+function FriendsPageContent() {
+  const { t } = useTranslation();
+  const [friendsTab, setFriendsTab] = useState<FriendsTabKey>("link");
+  const { activeProfile } = useProfileSession();
 
   const popLayer = useNavigationStore((s) => s.popLayer);
   const {
@@ -99,7 +106,7 @@ export function FriendsPage() {
   useCloudPresenceRealtimeInvalidation();
 
   const { data: cloudPresence = [] } = useQuery({
-    queryKey: ["cloud-presence"],
+    queryKey: ["cloud-presence", activeProfile?.id ?? "no-profile"],
     queryFn: listCloudPresence,
     refetchInterval: 30_000,
   });
@@ -113,9 +120,6 @@ export function FriendsPage() {
       const normalized = userId.trim();
       if (!normalized) return;
       setFriendsTab("user");
-      try {
-        sessionStorage.setItem("friendsPageTab", "user");
-      } catch {}
       void loadFriendProfileById(normalized);
     };
 
@@ -178,9 +182,6 @@ export function FriendsPage() {
         onSelectionChange={(k) => {
           const nextTab = (String(k) as FriendsTabKey) || "link";
           setFriendsTab(nextTab);
-          try {
-            sessionStorage.setItem("friendsPageTab", nextTab);
-          } catch {}
           if (nextTab === "invites") {
             void refreshInvitesState();
           }

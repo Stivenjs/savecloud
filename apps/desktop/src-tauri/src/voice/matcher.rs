@@ -350,6 +350,7 @@ mod tests {
             magnet_link: None,
             launch_executable_path: None,
             playtime_seconds: 0,
+            last_played_at: None,
         }
     }
 

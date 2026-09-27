@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type { Config, ConfiguredGame } from "@app-types/config";
 import type { CopyFriendFilePlan } from "@services/tauri";
 import type { RemoteSaveInfo } from "@services/tauri";
@@ -27,6 +27,7 @@ import { extractShareTokenFromUrl, resolveShareToken } from "@/services/tauri/sh
 import { toastError, toastInfo, toastSyncResult } from "@utils/toast";
 import { useConfig } from "@hooks/useConfig";
 import { useLibrary } from "@hooks/useLibrary";
+import { useProfileSession } from "@hooks/useProfileSession";
 import { useQueryClient } from "@tanstack/react-query";
 import { getUnknownErrorMessage } from "@utils/errorMessage";
 import { formatGameDisplayName, findConfiguredGame } from "@utils/gameImage";
@@ -87,6 +88,7 @@ type FriendsPageState = {
 };
 
 type FriendsPageAction =
+  | { type: "RESET" }
   | { type: "SET_FRIEND_ID_INPUT"; payload: string }
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "SET_ERROR"; payload: string | null }
@@ -135,34 +137,10 @@ const initialState: FriendsPageState = {
   invitesStatsLoading: false,
 };
 
-const SESSION_KEY = "friendsPageState";
-
-const getInitialState = (): FriendsPageState => {
-  try {
-    const saved = sessionStorage.getItem(SESSION_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return {
-        ...initialState,
-        ...parsed,
-        loading: false,
-        shareLinkLoading: false,
-        shareLinkConfirmLoading: false,
-        inviteBusy: false,
-        invitesStatsLoading: false,
-        templateOpen: false,
-        addFriendGamesOpen: false,
-        shareLinkPreview: null,
-        copyConfirmPreview: null,
-        copyingGameId: null,
-      };
-    }
-  } catch {}
-  return initialState;
-};
-
 function friendsPageReducer(state: FriendsPageState, action: FriendsPageAction): FriendsPageState {
   switch (action.type) {
+    case "RESET":
+      return initialState;
     case "SET_FRIEND_ID_INPUT":
       return { ...state, friendIdInput: action.payload };
     case "SET_LOADING":
@@ -212,7 +190,7 @@ function friendsPageReducer(state: FriendsPageState, action: FriendsPageAction):
 
 export function useFriendsPage() {
   const queryClient = useQueryClient();
-  const [state, dispatch] = useReducer(friendsPageReducer, initialState, getInitialState);
+  const [state, dispatch] = useReducer(friendsPageReducer, initialState);
   const {
     friendIdInput,
     loading,
@@ -241,32 +219,18 @@ export function useFriendsPage() {
 
   const { config: ourConfig } = useConfig();
   const { games: ourGames } = useLibrary();
+  const { activeProfile } = useProfileSession();
+  const activeProfileId = activeProfile?.id ?? null;
+  const requestProfileIdRef = useRef(activeProfileId);
+  const previousProfileIdRef = useRef(activeProfileId);
+  requestProfileIdRef.current = activeProfileId;
   const activeCloudHostUserId = ourConfig?.activeCloudHostUserId?.trim() || null;
 
   useEffect(() => {
-    try {
-      const stateToSave = {
-        friendIdInput,
-        friendConfig,
-        friendSaves,
-        mySaves,
-        shareLinkInput,
-        inviteeUserIdInput,
-        inviteTokenInput,
-        lastCreatedInviteToken,
-      };
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(stateToSave));
-    } catch {}
-  }, [
-    friendIdInput,
-    friendConfig,
-    friendSaves,
-    mySaves,
-    shareLinkInput,
-    inviteeUserIdInput,
-    inviteTokenInput,
-    lastCreatedInviteToken,
-  ]);
+    if (previousProfileIdRef.current === activeProfileId) return;
+    previousProfileIdRef.current = activeProfileId;
+    dispatch({ type: "RESET" });
+  }, [activeProfileId]);
 
   const summaries: FriendGameSummary[] = useMemo(() => {
     if (!friendConfig) return [];
@@ -307,6 +271,7 @@ export function useFriendsPage() {
   }, [ourGames]);
 
   const loadFriendProfileById = useCallback(async (userId: string) => {
+    const requestedProfileId = requestProfileIdRef.current;
     const inputId = userId.trim();
     if (!inputId) {
       dispatch({ type: "SET_ERROR", payload: "Escribe el usuario de tu amigo." });
@@ -319,19 +284,24 @@ export function useFriendsPage() {
 
     try {
       const cfg = await getFriendConfig(inputId);
+      if (requestProfileIdRef.current !== requestedProfileId) return;
 
       const exactFriendId = cfg.userId;
 
       dispatch({ type: "SET_FRIEND_ID_INPUT", payload: exactFriendId ?? "" });
 
       const saves = await syncListRemoteSavesForUser(exactFriendId ?? "");
+      if (requestProfileIdRef.current !== requestedProfileId) return;
 
       dispatch({ type: "SET_FRIEND_DATA", config: cfg, saves });
     } catch (e) {
+      if (requestProfileIdRef.current !== requestedProfileId) return;
       dispatch({ type: "SET_FRIEND_DATA", config: null, saves: [] });
       dispatch({ type: "SET_ERROR", payload: getUnknownErrorMessage(e) });
     } finally {
-      dispatch({ type: "SET_LOADING", payload: false });
+      if (requestProfileIdRef.current === requestedProfileId) {
+        dispatch({ type: "SET_LOADING", payload: false });
+      }
     }
   }, []);
 
@@ -345,31 +315,40 @@ export function useFriendsPage() {
   };
 
   const loadPendingInvites = useCallback(async () => {
+    const requestedProfileId = requestProfileIdRef.current;
     try {
       const items = await listPendingCloudInvites();
+      if (requestProfileIdRef.current !== requestedProfileId) return;
       dispatch({ type: "SET_PENDING_INVITES", payload: items });
     } catch {
+      if (requestProfileIdRef.current !== requestedProfileId) return;
       dispatch({ type: "SET_PENDING_INVITES", payload: [] });
     }
   }, []);
 
   const loadMemberships = useCallback(async () => {
+    const requestedProfileId = requestProfileIdRef.current;
     try {
       const result = await listCloudMemberships();
+      if (requestProfileIdRef.current !== requestedProfileId) return;
       dispatch({ type: "SET_HOST_MEMBERSHIPS", payload: result.hostMemberships.filter((x) => x.active) });
       dispatch({ type: "SET_MEMBER_MEMBERSHIPS", payload: result.memberMemberships.filter((x) => x.active) });
     } catch {
+      if (requestProfileIdRef.current !== requestedProfileId) return;
       dispatch({ type: "SET_HOST_MEMBERSHIPS", payload: [] });
       dispatch({ type: "SET_MEMBER_MEMBERSHIPS", payload: [] });
     }
   }, []);
 
   const refreshInvitesState = useCallback(async () => {
+    const requestedProfileId = requestProfileIdRef.current;
     dispatch({ type: "SET_INVITES_STATS_LOADING", payload: true });
     try {
       await Promise.all([loadPendingInvites(), loadMemberships()]);
     } finally {
-      dispatch({ type: "SET_INVITES_STATS_LOADING", payload: false });
+      if (requestProfileIdRef.current === requestedProfileId) {
+        dispatch({ type: "SET_INVITES_STATS_LOADING", payload: false });
+      }
     }
   }, [loadPendingInvites, loadMemberships]);
 

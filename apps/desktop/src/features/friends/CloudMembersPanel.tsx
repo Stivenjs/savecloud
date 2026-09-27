@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Spinner, useDraggable } from "@heroui/react";
 import { motion } from "framer-motion";
@@ -113,6 +113,11 @@ export function CloudMembersPanel({
   const [isActionLoading, setIsActionLoading] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<{ type: CloudMembershipActionType; userId: string } | null>(null);
 
+  useEffect(() => {
+    setSearchQuery("");
+    setPendingAction(null);
+  }, [activeProfile?.id]);
+
   const { moveProps } = useDraggable({
     targetRef: containerRef,
     canOverflow: false,
@@ -133,7 +138,7 @@ export function CloudMembersPanel({
     isError: membershipsError,
     refetch: refetchMemberships,
   } = useQuery({
-    queryKey: ["cloud-memberships"],
+    queryKey: ["cloud-memberships", activeProfile?.id ?? "no-profile"],
     queryFn: listCloudMemberships,
     refetchInterval: isOpen ? 30_000 : false,
     enabled: isOpen,
@@ -144,7 +149,7 @@ export function CloudMembersPanel({
     isLoading: cloudPresenceLoading,
     refetch: refetchPresence,
   } = useQuery({
-    queryKey: ["cloud-presence"],
+    queryKey: ["cloud-presence", activeProfile?.id ?? "no-profile"],
     queryFn: listCloudPresence,
     refetchInterval: isOpen ? 30_000 : false,
     enabled: isOpen,
@@ -182,7 +187,7 @@ export function CloudMembersPanel({
   }, [hostMemberships, memberMemberships, localUserId]);
 
   const { data: memberAvatarByUser = new Map<string, string | null>() } = useQuery({
-    queryKey: ["cloud-members-avatars", cloudPeerIds],
+    queryKey: ["cloud-members-avatars", activeProfile?.id ?? "no-profile", cloudPeerIds],
     enabled: isOpen && cloudPeerIds.length > 0,
     queryFn: async () => {
       try {
@@ -264,6 +269,7 @@ export function CloudMembersPanel({
       <motion.div layout className="w-full">
         <div {...moveProps} className="w-full p-0">
           <CloudMembersHeader
+            key={activeProfile?.id ?? "no-profile"}
             isRefreshing={isRefreshing}
             onRefresh={handleRefresh}
             onClose={onClose}
@@ -310,6 +316,7 @@ export function CloudMembersPanel({
               ) : null}
 
               <CloudMembersSection
+                key={`${activeProfile?.id ?? "no-profile"}-host`}
                 title={t("friends.cloudMembersSection.inYourCloud")}
                 memberships={hostMemberships}
                 presenceMap={presenceByUser}
@@ -325,6 +332,7 @@ export function CloudMembersPanel({
               />
 
               <CloudMembersSection
+                key={`${activeProfile?.id ?? "no-profile"}-member`}
                 title={t("friends.cloudMembersSection.memberOf")}
                 memberships={memberMemberships}
                 presenceMap={presenceByUser}

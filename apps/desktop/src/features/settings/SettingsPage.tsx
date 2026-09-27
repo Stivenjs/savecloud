@@ -156,6 +156,8 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
     testingNotification,
     exporting,
     importing,
+    configEncryptionDialog,
+    configEncryptionError,
     checkingUpdate,
     configPath,
     config,
@@ -165,7 +167,6 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
     createWsBaseUrl,
     createApiKey,
     createUserId,
-    createSteamWebApiKey,
     creatingConfig,
     createConfigError,
     pullFriendConfigModalOpen,
@@ -177,6 +178,8 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
     resetSteamCatalogConfirmOpen,
     handleExportConfig,
     handleImportConfig,
+    handleCloseConfigEncryption,
+    handleSubmitConfigEncryption,
     handleCheckUpdates,
     handleBackupConfigToCloud,
     performRestoreConfigFromCloud,
@@ -204,7 +207,6 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
     setCreateWsBaseUrl,
     setCreateApiKey,
     setCreateUserId,
-    setCreateSteamWebApiKey,
     setCreateConfigModalOpen,
     setRestoreConfirmOpen,
     setResetSteamCatalogConfirmOpen,
@@ -294,6 +296,8 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
           <ConfigSection
             exporting={exporting}
             importing={importing}
+            configEncryptionDialog={configEncryptionDialog}
+            configEncryptionError={configEncryptionError}
             backingUpConfig={backingUpConfig}
             restoringConfig={restoringConfig}
             configPath={configPath}
@@ -310,6 +314,8 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
             onExport={handleExportConfig}
             onImportMerge={() => handleImportConfig("merge")}
             onImportReplace={() => handleImportConfig("replace")}
+            onCloseConfigEncryption={handleCloseConfigEncryption}
+            onSubmitConfigEncryption={handleSubmitConfigEncryption}
             onBackupToCloud={handleBackupConfigToCloud}
             onRestoreFromCloud={() => setRestoreConfirmOpen(true)}
             onSyncSteamCatalog={handleSyncSteamCatalog}
@@ -507,14 +513,12 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
             wsBaseUrl={createWsBaseUrl}
             apiKey={createApiKey}
             userId={createUserId}
-            steamWebApiKey={createSteamWebApiKey}
             error={createConfigError}
             creating={creatingConfig}
             onApiBaseUrlChange={setCreateApiBaseUrl}
             onWsBaseUrlChange={setCreateWsBaseUrl}
             onApiKeyChange={setCreateApiKey}
             onUserIdChange={setCreateUserId}
-            onSteamWebApiKeyChange={setCreateSteamWebApiKey}
             onClose={() => setCreateConfigModalOpen(false)}
             onSubmit={handleCreateConfigFile}
           />

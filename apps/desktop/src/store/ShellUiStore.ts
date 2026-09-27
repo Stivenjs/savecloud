@@ -1,6 +1,10 @@
 import { create } from "zustand";
 
 interface ShellUiStore {
+  /** Artwork destacado que usa AppLayout como fondo ambiental de Biblioteca. */
+  libraryAmbientArtworkUrls: readonly string[];
+  setLibraryAmbientArtworkUrls: (urls: readonly string[]) => void;
+
   /**
    * Biblioteca en modo consola: término de búsqueda y setter registrados desde GamesPage.
    * La rail superior global lee esto en la ruta `/`.
@@ -66,6 +70,9 @@ interface ShellUiStore {
 }
 
 export const useShellUiStore = create<ShellUiStore>((set, get) => ({
+  libraryAmbientArtworkUrls: [],
+  setLibraryAmbientArtworkUrls: (urls) => set({ libraryAmbientArtworkUrls: urls }),
+
   gamesBpSearchTerm: "",
   gamesBpSearchSetValue: null,
   setGamesBpSearchTerm: (term) => set({ gamesBpSearchTerm: term }),

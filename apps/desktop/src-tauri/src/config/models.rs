@@ -203,6 +203,9 @@ pub struct ConfiguredGame {
     pub launch_executable_path: Option<String>,
     #[serde(default)]
     pub playtime_seconds: u64,
+    /// Último inicio detectado por el monitor nativo, en RFC 3339.
+    #[serde(default)]
+    pub last_played_at: Option<String>,
 }
 
 /// Entrada descriptiva de una operación de sincronización completada.
@@ -255,6 +258,8 @@ pub struct Config {
     pub user_id: Option<String>,
     #[serde(default)]
     pub active_cloud_host_user_id: Option<String>,
+    #[serde(default)]
+    pub cloud_host_api_base_urls: BTreeMap<String, String>,
     #[serde(default)]
     pub cloud_host_ws_base_urls: BTreeMap<String, String>,
     pub custom_scan_paths: Vec<String>,
@@ -342,6 +347,8 @@ pub struct ConfigDto {
     pub user_id: Option<String>,
     #[serde(default)]
     pub active_cloud_host_user_id: Option<String>,
+    #[serde(default)]
+    pub cloud_host_api_base_urls: BTreeMap<String, String>,
     #[serde(default)]
     pub cloud_host_ws_base_urls: BTreeMap<String, String>,
     pub custom_scan_paths: Vec<String>,
@@ -455,6 +462,8 @@ pub struct GameDto {
     #[serde(default)]
     pub launch_executable_path: Option<String>,
     pub playtime_seconds: u64,
+    #[serde(default)]
+    pub last_played_at: Option<String>,
 }
 
 /// DTO del historial de operaciones para el frontend.

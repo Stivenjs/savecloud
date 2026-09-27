@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { Button } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
-import { RefreshCw } from "lucide-react";
+import { Play, RefreshCw } from "lucide-react";
 import type { ConfiguredGame } from "@app-types/config";
 import { useNavigate } from "react-router-dom";
 import { GamesFilters } from "@features/games/GamesFilters";
@@ -53,6 +53,25 @@ import { useShellUiStore } from "@store/ShellUiStore";
 import { useScrollRestoration } from "@hooks/useScrollRestoration";
 import { formatPlaytime } from "@utils/format";
 import { useGameSessionStore } from "@store/GameSessionStore";
+import { getGameLibraryHeroUrl, getSteamAppId, getSteamCdnCandidates } from "@utils/gameImage";
+
+function getLastPlayedTimestamp(game: ConfiguredGame): number {
+  const timestamp = game.lastPlayedAt ? Date.parse(game.lastPlayedAt) : 0;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function getAmbientArtworkUrls(game: ConfiguredGame | null): string[] {
+  if (!game) return [];
+  const customArtwork = game.imageUrl?.trim();
+  if (customArtwork) return [customArtwork];
+
+  const steamAppId = getSteamAppId(game);
+  if (!steamAppId) return [];
+
+  const libraryHero = getGameLibraryHeroUrl(game);
+  const header = getSteamCdnCandidates(steamAppId, "horizontal")[0];
+  return [...new Set([libraryHero, header].filter((url): url is string => Boolean(url)))];
+}
 
 export function GamesPage() {
   const { t } = useTranslation();
@@ -130,6 +149,7 @@ export function GamesPage() {
   } = useGamesPage();
 
   const runningSessionStartTimes = useGameSessionStore((state) => state.localSessionStartTimes);
+  const setLibraryAmbientArtworkUrls = useShellUiStore((state) => state.setLibraryAmbientArtworkUrls);
 
   const { statsByGameId } = useGameStats(games.length > 0 && bulkConfirm?.type === "sync");
 
@@ -140,11 +160,25 @@ export function GamesPage() {
 
   const spotlightGame = useMemo(() => {
     if (bigPictureConsole || debouncedSearchTerm.trim() || filteredGames.length < 2) return null;
-    const runningGame = filteredGames.find((game) => runningSessionStartTimes[game.id.trim().toLowerCase()]);
-    if (runningGame) return runningGame;
-    return [...filteredGames].sort((a, b) => (b.playtimeSeconds ?? 0) - (a.playtimeSeconds ?? 0))[0] ?? null;
+    const candidates = filteredGames.filter((game) => !runningSessionStartTimes[game.id.trim().toLowerCase()]);
+    return [...candidates].sort((a, b) => (b.playtimeSeconds ?? 0) - (a.playtimeSeconds ?? 0))[0] ?? null;
   }, [bigPictureConsole, debouncedSearchTerm, filteredGames, runningSessionStartTimes]);
   const libraryGames = spotlightGame ? filteredGames.filter((game) => game.id !== spotlightGame.id) : filteredGames;
+  const recentlyPlayedGames = useMemo(
+    () =>
+      filteredGames
+        .filter((game) => getLastPlayedTimestamp(game) > 0 && game.id !== spotlightGame?.id)
+        .sort((a, b) => getLastPlayedTimestamp(b) - getLastPlayedTimestamp(a))
+        .slice(0, 5),
+    [filteredGames, spotlightGame]
+  );
+  const ambientArtworkUrls = useMemo(() => getAmbientArtworkUrls(spotlightGame), [spotlightGame]);
+
+  useEffect(() => {
+    setLibraryAmbientArtworkUrls(bigPictureConsole ? [] : ambientArtworkUrls);
+  }, [ambientArtworkUrls, bigPictureConsole, setLibraryAmbientArtworkUrls]);
+
+  useEffect(() => () => setLibraryAmbientArtworkUrls([]), [setLibraryAmbientArtworkUrls]);
 
   useEffect(() => {
     if (!bigPictureConsole) return;
@@ -530,6 +564,30 @@ export function GamesPage() {
           layout={bigPictureConsole ? "position" : false}
           transition={{ layout: layoutShiftTransition }}
           className={`flex flex-col ${bigPictureConsole ? "gap-5" : "gap-6"} ${!bigPictureConsole ? "mt-6 sm:mt-8" : ""}`}>
+          {recentlyPlayedGames.length > 0 ? (
+            <section className="space-y-3" aria-label={t("library.continuePlayingTitle")}>
+              <div className="flex items-center gap-2">
+                <Play size={17} className="fill-primary text-primary" aria-hidden="true" />
+                <h2 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+                  {t("library.continuePlayingTitle")}
+                </h2>
+                <span className="text-xs tabular-nums text-default-500">
+                  {t("library.continuePlayingCount", { count: recentlyPlayedGames.length })}
+                </span>
+              </div>
+              <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto overscroll-x-contain pb-2">
+                {recentlyPlayedGames.map((game) => (
+                  <div key={game.id} className="w-[min(78vw,19rem)] shrink-0 snap-start sm:w-80">
+                    <GameCard
+                      game={game}
+                      orientation="horizontal"
+                      isGameRunning={Boolean(runningSessionStartTimes[game.id.trim().toLowerCase()])}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
           {spotlightGame ? (
             <section
               aria-label={t("library.featuredAria")}

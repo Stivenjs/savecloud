@@ -8,6 +8,7 @@ use crate::commands::sync::api::{api_request, get_download_urls, sync_list_remot
 use crate::commands::sync::context::resolve_api_context;
 use crate::config::gamification::GamificationStateDto;
 use crate::config::{self, Config, ConfigDto, ConfiguredGame, GameDto, OperationLogEntryDto};
+use crate::config::encrypted_export;
 use crate::steam;
 use crate::time;
 use crate::utils::launch_exe;
@@ -18,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{Emitter, Manager};
+use zeroize::Zeroizing;
 
 /// Resuelve interpolaciones del sistema y variables de entorno dentro de una ruta.
 ///
@@ -74,6 +76,7 @@ pub fn get_config() -> ConfigDto {
             .map(|_| config::MASKED_API_KEY.to_string()),
         user_id: settings.user_id.clone(),
         active_cloud_host_user_id: settings.active_cloud_host_user_id.clone(),
+        cloud_host_api_base_urls: settings.cloud_host_api_base_urls.clone(),
         cloud_host_ws_base_urls: settings.cloud_host_ws_base_urls.clone(),
         custom_scan_paths: settings.custom_scan_paths.clone(),
         keep_backups_per_game: settings.keep_backups_per_game,
@@ -138,6 +141,7 @@ pub fn get_library() -> Vec<GameDto> {
                 magnet_link,
                 launch_executable_path,
                 playtime_seconds,
+                last_played_at,
             } = game;
             let steam_app_id = steam_app_id.or_else(|| {
                 if image_url.is_none() {
@@ -157,6 +161,7 @@ pub fn get_library() -> Vec<GameDto> {
                 executable_names,
                 launch_executable_path,
                 playtime_seconds,
+                last_played_at,
             }
         })
         .collect()
@@ -239,6 +244,19 @@ pub fn create_config_file(
 
     config::save_settings(&settings)?;
     Ok(get_config_path())
+}
+
+/// Guarda la clave Steam Web API únicamente en el almacén seguro del perfil activo.
+#[tauri::command]
+pub fn set_steam_web_api_key(api_key: String) -> Result<(), String> {
+    let key = api_key.trim();
+    if key.is_empty() {
+        return Err("La clave Steam Web API no puede estar vacía".into());
+    }
+
+    let mut settings = config::load_settings();
+    settings.steam_web_api_key = Some(key.to_string());
+    config::save_settings(&settings)
 }
 
 #[tauri::command]
@@ -774,6 +792,7 @@ pub fn add_game(
             magnet_link: None,
             launch_executable_path: None,
             playtime_seconds: 0,
+            last_played_at: None,
         });
     }
     config::save_library(&library)
@@ -1073,12 +1092,14 @@ pub fn read_image_as_data_url(path: String) -> Result<String, String> {
     ))
 }
 
-/// Genera un dump local de la estructura monolítica hacia la ruta del argumento.
+/// Exporta la configuración como archivo binario cifrado `.scx`.
 #[tauri::command]
-pub fn export_config_to_file(path: String) -> Result<String, String> {
+pub fn export_config_to_file(path: String, password: String) -> Result<String, String> {
     let combined = config::get_combined_config();
-    let json = serde_json::to_string_pretty(&combined).map_err(|e| e.to_string())?;
-    fs::write(&path, json).map_err(|e| e.to_string())?;
+    let json = Zeroizing::new(serde_json::to_vec_pretty(&combined).map_err(|e| e.to_string())?);
+    let password = Zeroizing::new(password);
+    let encrypted = encrypted_export::encrypt_config_json(&json, &password)?;
+    fs::write(&path, encrypted).map_err(|e| e.to_string())?;
     Ok(path)
 }
 
@@ -1089,10 +1110,20 @@ pub fn export_config_to_file(path: String) -> Result<String, String> {
 /// * `path` - Ubicación de origen del archivo.
 /// * `mode` - Instrucción de sobreescritura (`replace` para drop & insert, `merge` para upsert pacífico).
 #[tauri::command]
-pub fn import_config_from_file(path: String, mode: String) -> Result<(), String> {
-    let contents = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let imported: Config =
-        serde_json::from_str(&contents).map_err(|e| format!("Estructura JSON corrupta: {}", e))?;
+pub fn import_config_from_file(
+    path: String,
+    mode: String,
+    password: Option<String>,
+) -> Result<(), String> {
+    let bytes = fs::read(&path).map_err(|e| e.to_string())?;
+    let password = password.map(Zeroizing::new);
+    let password_ref = password.as_ref().map(|value| value.as_str());
+    let decrypted = encrypted_export::decrypt_config_export(&bytes, password_ref)?;
+    let imported: Config = match decrypted {
+        Some(contents) => serde_json::from_slice(&contents),
+        None => serde_json::from_slice(&bytes),
+    }
+    .map_err(|e| format!("Estructura de configuración corrupta: {}", e))?;
 
     if mode == "replace" {
         return config::apply_combined_config(&imported);
@@ -1100,6 +1131,26 @@ pub fn import_config_from_file(path: String, mode: String) -> Result<(), String>
 
     if mode == "merge" {
         let mut current = config::get_combined_config();
+
+        current.api_base_url = current.api_base_url.or(imported.api_base_url);
+        current.ws_base_url = current.ws_base_url.or(imported.ws_base_url);
+        current.api_key = current.api_key.or(imported.api_key);
+        current.user_id = current.user_id.or(imported.user_id);
+        current.active_cloud_host_user_id = current
+            .active_cloud_host_user_id
+            .or(imported.active_cloud_host_user_id);
+        for (host_id, api_url) in imported.cloud_host_api_base_urls {
+            current
+                .cloud_host_api_base_urls
+                .entry(host_id)
+                .or_insert(api_url);
+        }
+        for (host_id, ws_url) in imported.cloud_host_ws_base_urls {
+            current
+                .cloud_host_ws_base_urls
+                .entry(host_id)
+                .or_insert(ws_url);
+        }
 
         for imp_game in imported.games {
             if let Some(existing) = current
@@ -1468,6 +1519,7 @@ pub fn add_games_from_friend(friend_games: Vec<GameDto>) -> Result<usize, String
             magnet_link: None,
             launch_executable_path: g.launch_executable_path.clone(),
             playtime_seconds: 0,
+            last_played_at: None,
         });
         existing_ids.insert(g.id.to_lowercase());
         added += 1;
