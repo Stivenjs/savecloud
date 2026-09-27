@@ -9,7 +9,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 /// Filtro por defecto para el sistema de logs.
-const DEFAULT_LOG_FILTER: &str = "warn,librqbit=off,rqbit=off,savecloud_desktop_lib=info";
+const DEFAULT_LOG_FILTER: &str =
+    "warn,librqbit=off,rqbit=off,tracing::span=off,tracing::span::active=off,savecloud_desktop_lib=info";
 
 /// Nombre de la carpeta y archivo de log dentro del directorio de datos de usuario.
 const APP_DIR_NAME: &str = "SaveCloud";
