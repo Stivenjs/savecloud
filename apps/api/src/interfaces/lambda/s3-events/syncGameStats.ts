@@ -69,6 +69,10 @@ export interface SQSEventPayload {
 
 export type SyncGameStatsIncomingEvent = SQSEventPayload & S3EventBridgePayload;
 
+export interface SyncGameStatsBatchResponse {
+  batchItemFailures: Array<{ itemIdentifier: string }>;
+}
+
 function extractEventInput(eventBody: unknown): ProcessS3EventInput | null {
   if (!eventBody || typeof eventBody !== "object") return null;
 
@@ -99,20 +103,34 @@ function extractEventInput(eventBody: unknown): ProcessS3EventInput | null {
   };
 }
 
-export const handler = async (event: SyncGameStatsIncomingEvent): Promise<void> => {
-  if (!event) return;
+export const handler = async (event: SyncGameStatsIncomingEvent): Promise<SyncGameStatsBatchResponse> => {
+  if (!event) return { batchItemFailures: [] };
 
   const inputs: ProcessS3EventInput[] = [];
+  const batchItemFailures: Array<{ itemIdentifier: string }> = [];
+  const validRecords: SQSRecordPayload[] = [];
 
   if (Array.isArray(event.Records) && event.Records.length > 0) {
     for (const record of event.Records) {
-      if (!record?.body) continue;
+      if (!record?.messageId || !record.body) {
+        if (record?.messageId) batchItemFailures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
       try {
         const parsedBody: unknown = typeof record.body === "string" ? JSON.parse(record.body) : record.body;
         const item = extractEventInput(parsedBody);
-        if (item) inputs.push(item);
-      } catch (err) {
-        console.warn("[syncGameStats] Failed to parse SQS record body:", err);
+        if (!item) {
+          batchItemFailures.push({ itemIdentifier: record.messageId });
+          continue;
+        }
+        inputs.push(item);
+        validRecords.push(record);
+      } catch (error) {
+        console.warn("[syncGameStats] No se pudo interpretar un mensaje SQS", {
+          messageId: record.messageId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        batchItemFailures.push({ itemIdentifier: record.messageId });
       }
     }
   } else {
@@ -121,6 +139,18 @@ export const handler = async (event: SyncGameStatsIncomingEvent): Promise<void> 
   }
 
   if (inputs.length > 0) {
-    await processS3EventUseCase.executeBatch(inputs);
+    try {
+      await processS3EventUseCase.executeBatch(inputs);
+    } catch (error) {
+      console.error("[syncGameStats] Falló el procesamiento del lote SQS", {
+        recordCount: validRecords.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      batchItemFailures.push(
+        ...validRecords.flatMap((record) => (record.messageId ? [{ itemIdentifier: record.messageId }] : []))
+      );
+    }
   }
+
+  return { batchItemFailures };
 };

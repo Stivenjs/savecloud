@@ -1,11 +1,16 @@
 import { GetObjectCommand, NoSuchKey, S3Client } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, QueryCommand, BatchWriteCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, QueryCommand, BatchWriteCommand } from "@aws-sdk/lib-dynamodb";
 import type { NotificationInboxFile, NotificationRecord } from "@domain/entities/NotificationRecord";
 import type { NotificationRepository } from "@domain/ports/NotificationRepository";
 
 const MAX_ITEMS = 500;
 const NOTIFICATION_TTL_DAYS = 30;
+const BATCH_WRITE_MAX_ATTEMPTS = 6;
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
 function calculateTtlEpoch(days = NOTIFICATION_TTL_DAYS): number {
   return Math.floor(Date.now() / 1000) + days * 86400;
@@ -40,18 +45,22 @@ export class DynamoDbNotificationStore implements NotificationRepository {
     if (!userId?.trim()) return { version: 1, items: [] };
 
     try {
-      const res = await this.docClient.send(
-        new QueryCommand({
-          TableName: this.tableName,
-          KeyConditionExpression: "userId = :userId",
-          ExpressionAttributeValues: {
-            ":userId": userId.trim(),
-          },
-          Limit: MAX_ITEMS,
-        })
-      );
-
-      const items = (res.Items ?? []) as NotificationRecord[];
+      const items: NotificationRecord[] = [];
+      let lastEvaluatedKey: Record<string, unknown> | undefined;
+      do {
+        const res = await this.docClient.send(
+          new QueryCommand({
+            TableName: this.tableName,
+            KeyConditionExpression: "userId = :userId",
+            ExpressionAttributeValues: {
+              ":userId": userId.trim(),
+            },
+            ExclusiveStartKey: lastEvaluatedKey,
+          })
+        );
+        items.push(...((res.Items ?? []) as NotificationRecord[]));
+        lastEvaluatedKey = res.LastEvaluatedKey;
+      } while (lastEvaluatedKey);
 
       if (items.length > 0) {
         items.sort((a, b) => (b.updatedAt > a.updatedAt ? 1 : b.updatedAt < a.updatedAt ? -1 : 0));
@@ -111,28 +120,27 @@ export class DynamoDbNotificationStore implements NotificationRepository {
         },
       }));
 
-      try {
-        await this.docClient.send(
+      let pendingRequests = putRequests;
+      for (let attempt = 0; pendingRequests.length > 0 && attempt < BATCH_WRITE_MAX_ATTEMPTS; attempt++) {
+        const result = await this.docClient.send(
           new BatchWriteCommand({
             RequestItems: {
-              [this.tableName]: putRequests,
+              [this.tableName]: pendingRequests,
             },
           })
         );
-      } catch {
-        // Fallback a PutCommand individual si falla el batch
-        for (const item of chunk) {
-          await this.docClient.send(
-            new PutCommand({
-              TableName: this.tableName,
-              Item: {
-                ...item,
-                userId: cleanUserId,
-                expiresAtEpoch: ttlEpoch,
-              },
-            })
-          );
+        pendingRequests = (result.UnprocessedItems?.[this.tableName] ?? []) as typeof putRequests;
+
+        if (pendingRequests.length > 0 && attempt + 1 < BATCH_WRITE_MAX_ATTEMPTS) {
+          const backoffMs = Math.min(1_000, 50 * 2 ** attempt);
+          await wait(backoffMs + Math.random() * 50);
         }
+      }
+
+      if (pendingRequests.length > 0) {
+        throw new Error(
+          `DynamoDB no procesó ${pendingRequests.length} notificaciones después de ${BATCH_WRITE_MAX_ATTEMPTS} intentos`
+        );
       }
     }
   }

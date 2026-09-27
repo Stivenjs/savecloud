@@ -249,6 +249,10 @@ Resources:
             Action: sqs:SendMessage
             Resource:
               Fn::GetAtt: [SyncGameStatsQueue, Arn]
+            Condition:
+              ArnEquals:
+                aws:SourceArn:
+                  Fn::GetAtt: [SyncGameStatsEventRule, Arn]
 
   SyncGameStatsEventRule:
     Type: AWS::Events::Rule

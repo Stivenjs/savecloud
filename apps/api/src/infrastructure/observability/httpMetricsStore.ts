@@ -32,6 +32,36 @@ export function resetHttpMetricsForTests(): void {
 export function recordHttpMetric(entry: Omit<HttpMetricsSample, "ts">): void {
   const sample: HttpMetricsSample = { ...entry, ts: Date.now() };
 
+  // CloudWatch extrae estas métricas estructuradas de los logs de Lambda.
+  // En local se conserva únicamente el búfer usado por el panel de desarrollo.
+  if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    // Las rutas no reconocidas usan una sola dimensión para evitar cardinalidad ilimitada.
+    const route = entry.routeUrl?.trim() || "/unmatched";
+    console.log(
+      JSON.stringify({
+        _aws: {
+          Timestamp: sample.ts,
+          CloudWatchMetrics: [
+            {
+              Namespace: "SaveCloud/API",
+              Dimensions: [["Route", "Method"]],
+              Metrics: [
+                { Name: "RequestCount", Unit: "Count" },
+                { Name: "ErrorCount", Unit: "Count" },
+                { Name: "LatencyMs", Unit: "Milliseconds" },
+              ],
+            },
+          ],
+        },
+        Route: route,
+        Method: entry.method.toUpperCase(),
+        RequestCount: 1,
+        ErrorCount: entry.statusCode >= 400 ? 1 : 0,
+        LatencyMs: entry.durationMs,
+      })
+    );
+  }
+
   if (ringCount < MAX_SAMPLES) {
     samples.push(sample);
     ringCount += 1;

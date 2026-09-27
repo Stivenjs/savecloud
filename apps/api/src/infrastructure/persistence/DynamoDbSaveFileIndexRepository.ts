@@ -55,6 +55,7 @@ export class DynamoDbSaveFileIndexRepository implements SaveFileIndexRepository 
         new QueryCommand({
           TableName: this.tableName,
           KeyConditionExpression: "userId = :u AND begins_with(#k, :prefix)",
+          ConsistentRead: true,
           ProjectionExpression: "userId, #k, gameId, #s, #lm",
           ExpressionAttributeNames: {
             "#k": "objectKey",

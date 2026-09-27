@@ -320,6 +320,16 @@ Resources:
       QueueName: ${sls:stage}-SyncGameStatsQueue
       VisibilityTimeout: 180
       MessageRetentionPeriod: 86400
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt: [SyncGameStatsDeadLetterQueue, Arn]
+        maxReceiveCount: 5
+
+  SyncGameStatsDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: ${sls:stage}-SyncGameStatsDeadLetterQueue
+      MessageRetentionPeriod: 1209600
 
   SyncGameStatsQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -336,6 +346,10 @@ Resources:
             Action: sqs:SendMessage
             Resource:
               Fn::GetAtt: [SyncGameStatsQueue, Arn]
+            Condition:
+              ArnEquals:
+                aws:SourceArn:
+                  Fn::GetAtt: [SyncGameStatsEventRule, Arn]
 
   SyncGameStatsEventRule:
     Type: AWS::Events::Rule

@@ -123,8 +123,8 @@ export class ProcessS3EventUseCase {
     if (!inputs || inputs.length === 0) return;
 
     const gameDeltas = new Map<string, AggregatedGameDelta>();
+    const gamesToReconcile = new Map<string, { userId: string; gameId: string }>();
 
-    // Serialize events for a repeated object key, but process independent objects concurrently.
     const eventsByObject = new Map<string, ProcessS3EventInput[]>();
     for (const input of inputs) {
       if (!input.s3Key) continue;
@@ -159,7 +159,11 @@ export class ProcessS3EventUseCase {
 
             if (detailType === "Object Deleted") {
               const existing = await this.saveFileIndexRepo.getByObjectKey(userId, s3Key);
-              if (!existing) continue;
+              if (!existing) {
+                // Un reintento puede llegar después de borrar el índice, pero antes de guardar las estadísticas.
+                gamesToReconcile.set(gameKey, { userId, gameId });
+                continue;
+              }
 
               const deletedSize = existing.size ?? 0;
               await this.saveFileIndexRepo.delete(userId, s3Key);
@@ -182,6 +186,10 @@ export class ProcessS3EventUseCase {
                 size: resolvedSize,
                 lastModified: eventTime,
               });
+            }
+
+            if (deltaFileCount === 0 && deltaSizeBytes === 0) {
+              gamesToReconcile.set(gameKey, { userId, gameId });
             }
 
             // Consolidar deltas en memoria por juego
@@ -218,5 +226,36 @@ export class ProcessS3EventUseCase {
     }
 
     await Promise.all(promises);
+
+    // Recupera estadísticas si el índice ya reflejaba un evento cuyo delta se perdió en un intento anterior.
+    const reconcileLimit = pLimit(GAME_STATS_CONCURRENCY);
+    await Promise.all(
+      Array.from(gamesToReconcile.values(), ({ userId, gameId }) =>
+        reconcileLimit(async () => {
+          const saves = await this.saveFileIndexRepo.listByUserAndGame(userId, gameId);
+          if (saves.length === 0) {
+            await this.gameStatRepo.delete(userId, gameId);
+            return;
+          }
+
+          let totalSizeBytes = 0;
+          let lastModified: Date | null = null;
+          for (const save of saves) {
+            totalSizeBytes += save.size ?? 0;
+            if (save.lastModified && (!lastModified || save.lastModified > lastModified)) {
+              lastModified = save.lastModified;
+            }
+          }
+
+          await this.gameStatRepo.save({
+            userId,
+            gameId,
+            fileCount: saves.length,
+            totalSizeBytes,
+            lastModified,
+          });
+        })
+      )
+    );
   }
 }
