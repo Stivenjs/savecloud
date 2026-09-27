@@ -130,6 +130,25 @@ const TRACKER_ESCALATION_MIN_PEERS: u32 = 3;
 /// bloquear el arranque de la aplicación indefinidamente.
 const WARMUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
+fn build_session_options(
+    ratelimits: LimitsConfig,
+    fastresume: bool,
+    disable_dht_persistence: bool,
+    disable_dht: bool,
+    listen_for_peers: bool,
+) -> SessionOptions {
+    SessionOptions {
+        listen_port_range: listen_for_peers.then_some(LISTEN_PORT_RANGE),
+        enable_upnp_port_forwarding: listen_for_peers,
+        fastresume,
+        disable_dht_persistence,
+        disable_dht,
+        concurrent_init_limit: Some(3),
+        ratelimits,
+        ..Default::default()
+    }
+}
+
 /// Estado global del subsistema de descargas torrent.
 ///
 /// Existe exactamente una instancia de `TorrentEngine` por proceso, almacenada
@@ -183,16 +202,9 @@ impl TorrentEngine {
     /// completa a tiempo, el caché queda vacío y las descargas solicitarán los
     /// trackers de forma síncrona sin impacto funcional.
     ///
-    /// # Recuperación ante estado DHT corrupto
-    ///
-    /// Si la aplicación se cierra abruptamente mientras hay torrents activos,
-    /// el archivo de estado persistente del DHT puede quedar en un estado
-    /// inválido. En ese caso librqbit devuelve un error `SessionInit` al
-    /// intentar cargarlo. Esta función detecta ese escenario, elimina el
-    /// directorio de sesión corrupto y reintenta la inicialización con un
-    /// directorio limpio, garantizando que la app siempre arranque.
-    /// El segundo intento se realiza sin `fastresume` para evitar cargar
-    /// cualquier otro estado persistente potencialmente dañado.
+    /// Si falla la sesión con DHT persistente, vuelve a intentarlo con DHT
+    /// en memoria. Si también falla, inicia el motor sin DHT ni puerto
+    /// entrante para que un problema de red P2P no bloquee el resto de la app.
     pub async fn new(output_folder: PathBuf) -> Result<Self, TorrentError> {
         let initial_limits = crate::config::with_settings(|settings| {
             build_limits_config(
@@ -201,56 +213,42 @@ impl TorrentEngine {
             )
         });
 
-        let options = SessionOptions {
-            listen_port_range: Some(LISTEN_PORT_RANGE),
-            enable_upnp_port_forwarding: true,
-            fastresume: true,
-            concurrent_init_limit: Some(3),
-            ratelimits: initial_limits,
-            ..Default::default()
-        };
-
-        let session = match Session::new_with_opts(output_folder.clone(), options).await {
-            Ok(s) => s,
-            Err(initial_err) => {
-                // El estado DHT persistente ha quedado corrupto tras un cierre
-                // abrupto. Se elimina el directorio de sesión y se reintenta
-                // con configuración limpia para garantizar que la app arranque.
-                sync_logger::log_error(
-                    "TorrentEngine::new",
-                    &format!(
-                        "Fallo en la inicialización de la sesión: {}. Intentando recuperación.",
-                        initial_err
-                    ),
-                    "El estado DHT persistente está corrupto. Limpiando y reintentando.",
+        let session = match Session::new_with_opts(
+            output_folder.clone(),
+            build_session_options(initial_limits, true, false, false, true),
+        )
+        .await
+        {
+            Ok(session) => session,
+            Err(persistent_dht_err) => {
+                log::warn!(
+                    "Torrent session initialization with persistent DHT failed; retrying with in-memory DHT: {persistent_dht_err:#}"
                 );
 
-                if output_folder.exists() {
-                    std::fs::remove_dir_all(&output_folder).map_err(|e| {
-                        TorrentError::SessionInit(format!(
-                            "No se pudo limpiar el directorio de sesión corrupto: {e}"
-                        ))
-                    })?;
+                match Session::new_with_opts(
+                    output_folder.clone(),
+                    build_session_options(initial_limits, false, true, false, true),
+                )
+                .await
+                {
+                    Ok(session) => session,
+                    Err(in_memory_dht_err) => {
+                        log::warn!(
+                            "Torrent session initialization with in-memory DHT failed; retrying without DHT or an incoming peer port: {in_memory_dht_err:#}"
+                        );
+
+                        Session::new_with_opts(
+                            output_folder,
+                            build_session_options(initial_limits, false, true, true, false),
+                        )
+                        .await
+                        .map_err(|fallback_err| {
+                            TorrentError::SessionInit(format!(
+                                "Fallaron los tres modos de inicio de librqbit. DHT persistente: {persistent_dht_err:#}; DHT en memoria: {in_memory_dht_err:#}; sin DHT ni puerto entrante: {fallback_err:#}"
+                            ))
+                        })?
+                    }
                 }
-
-                // El segundo intento arranca sin fastresume para evitar cargar
-                // cualquier otro estado persistente potencialmente dañado.
-                let recovery_options = SessionOptions {
-                    listen_port_range: Some(LISTEN_PORT_RANGE),
-                    enable_upnp_port_forwarding: true,
-                    fastresume: false,
-                    concurrent_init_limit: Some(3),
-                    ratelimits: initial_limits,
-                    ..Default::default()
-                };
-
-                Session::new_with_opts(output_folder, recovery_options)
-                    .await
-                    .map_err(|e| {
-                        TorrentError::SessionInit(format!(
-                            "Fallo irrecuperable tras limpiar estado DHT: {e}"
-                        ))
-                    })?
             }
         };
 
@@ -967,9 +965,8 @@ pub fn spawn_progress_monitor(
                     crate::sources::torrent_complete_notify(&app, &info_hash, total_bytes);
                 }
 
-                let seeding_mode = crate::config::with_settings(|settings| {
-                    settings.torrent_seeding_mode.clone()
-                });
+                let seeding_mode =
+                    crate::config::with_settings(|settings| settings.torrent_seeding_mode.clone());
 
                 let should_stop_seeding = if seeding_mode == "seed_ratio_1" {
                     stats.uploaded_bytes >= total_bytes
