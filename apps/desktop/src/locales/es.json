@@ -1085,8 +1085,8 @@
     "restoreConfigModal": {
       "title": "Restaurar configuración desde la nube",
       "desc1": "Se descargará la última copia de tu configuración desde la nube y se aplicará localmente.",
-      "desc2": "Antes de sobrescribir, se guardará un backup local del archivo actual en la carpeta de configuración:",
-      "warning": "Los cambios se aplicarán al instante y la app se recargará.",
+      "desc2": "Antes de aplicar la copia, se guardará una copia local cifrada (.scb) de la configuración actual en SaveCloud/config-backups. Esta copia no incluye credenciales; se protegen por separado en el almacén seguro del sistema.",
+      "warning": "La configuración descargada desde la nube no reemplazará tus credenciales locales. Los demás cambios se aplicarán al instante y la app se recargará.",
       "confirm": "Restaurar ahora"
     },
     "pullFriendConfigModal": {
