@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { syncCheckUnsyncedGames, syncUploadGame, type UnsyncedGame } from "@services/tauri";
 import { useConfig, CONFIG_QUERY_KEY } from "@hooks/useConfig";
@@ -35,6 +36,35 @@ export function useUnsyncedSaves() {
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
   });
+
+  useEffect(() => {
+    let disposed = false;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const unlisteners: Array<() => void> = [];
+
+    const subscribe = async (eventName: string) => {
+      const unlisten = await listen(eventName, () => {
+        if (refreshTimer) clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(() => {
+          void queryClient.invalidateQueries({ queryKey: UNSYNCED_QUERY_KEY, refetchType: "active" });
+        }, 300);
+      });
+
+      if (disposed) unlisten();
+      else unlisteners.push(unlisten);
+    };
+
+    void subscribe("sync-upload-done");
+    void subscribe("sync-download-done");
+    void subscribe("auto-sync-done");
+    void subscribe("auto-sync-error");
+
+    return () => {
+      disposed = true;
+      if (refreshTimer) clearTimeout(refreshTimer);
+      unlisteners.forEach((unlisten) => unlisten());
+    };
+  }, [queryClient]);
 
   const unsyncedGameIds = useMemo(() => unsyncedList.map((g: UnsyncedGame) => g.gameId), [unsyncedList]);
 

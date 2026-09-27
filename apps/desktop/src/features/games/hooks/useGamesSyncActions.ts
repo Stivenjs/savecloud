@@ -84,7 +84,7 @@ export function useGamesSyncActions({
     queryKey: ["unsynced-games"],
     queryFn: syncCheckUnsyncedGames,
     enabled: hasSyncConfig,
-    refetchInterval: 60_000,
+    staleTime: 30_000,
   });
   const unsyncedGameIds = unsyncedGames?.map((g: UnsyncedGame) => g.gameId) ?? [];
 
