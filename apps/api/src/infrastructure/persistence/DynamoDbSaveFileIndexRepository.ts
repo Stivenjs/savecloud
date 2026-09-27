@@ -1,7 +1,23 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, DeleteCommand, GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  DynamoDBDocumentClient,
+  BatchGetCommand,
+  BatchWriteCommand,
+  DeleteCommand,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+} from "@aws-sdk/lib-dynamodb";
 import type { GameSave } from "@domain/entities/GameSave";
-import type { SaveFileIndexRepository } from "@domain/ports/SaveFileIndexRepository";
+import type { SaveFileIndexMutation, SaveFileIndexRepository } from "@domain/ports/SaveFileIndexRepository";
+
+const BATCH_GET_SIZE = 100;
+const BATCH_WRITE_SIZE = 25;
+const BATCH_MAX_ATTEMPTS = 6;
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
 /**
  * Indice de archivos en DynamoDB para reemplazar listados masivos de S3.
@@ -13,7 +29,9 @@ export class DynamoDbSaveFileIndexRepository implements SaveFileIndexRepository 
     client: DynamoDBClient,
     private readonly tableName: string
   ) {
-    this.docClient = DynamoDBDocumentClient.from(client);
+    this.docClient = DynamoDBDocumentClient.from(client, {
+      marshallOptions: { removeUndefinedValues: true },
+    });
   }
 
   async listByUser(userId: string): Promise<GameSave[]> {
@@ -98,6 +116,99 @@ export class DynamoDbSaveFileIndexRepository implements SaveFileIndexRepository 
 
     if (!res.Item || typeof res.Item !== "object") return null;
     return this.mapItemToGameSave(userId, res.Item as Record<string, unknown>);
+  }
+
+  async batchGetByObjectKeys(userId: string, objectKeys: string[]): Promise<Map<string, GameSave>> {
+    const savesByKey = new Map<string, GameSave>();
+    const uniqueKeys = Array.from(new Set(objectKeys));
+
+    for (let offset = 0; offset < uniqueKeys.length; offset += BATCH_GET_SIZE) {
+      let pendingKeys = uniqueKeys.slice(offset, offset + BATCH_GET_SIZE);
+
+      for (let attempt = 0; pendingKeys.length > 0 && attempt < BATCH_MAX_ATTEMPTS; attempt++) {
+        const result = await this.docClient.send(
+          new BatchGetCommand({
+            RequestItems: {
+              [this.tableName]: {
+                Keys: pendingKeys.map((objectKey) => ({ userId, objectKey })),
+                ConsistentRead: true,
+                ProjectionExpression: "userId, #k, gameId, #s, #lm",
+                ExpressionAttributeNames: {
+                  "#k": "objectKey",
+                  "#s": "size",
+                  "#lm": "lastModified",
+                },
+              },
+            },
+          })
+        );
+
+        for (const item of result.Responses?.[this.tableName] ?? []) {
+          const save = this.mapItemToGameSave(userId, item as Record<string, unknown>);
+          if (save) savesByKey.set(save.key, save);
+        }
+
+        pendingKeys = (result.UnprocessedKeys?.[this.tableName]?.Keys ?? [])
+          .map((key) => key.objectKey)
+          .filter((key): key is string => typeof key === "string");
+
+        if (pendingKeys.length > 0 && attempt + 1 < BATCH_MAX_ATTEMPTS) {
+          await wait(Math.min(1_000, 50 * 2 ** attempt) + Math.random() * 50);
+        }
+      }
+
+      if (pendingKeys.length > 0) {
+        throw new Error(
+          `DynamoDB dejó ${pendingKeys.length} claves sin leer después de ${BATCH_MAX_ATTEMPTS} intentos`
+        );
+      }
+    }
+
+    return savesByKey;
+  }
+
+  async batchApplyMutations(mutations: SaveFileIndexMutation[]): Promise<void> {
+    for (let offset = 0; offset < mutations.length; offset += BATCH_WRITE_SIZE) {
+      const chunk = mutations.slice(offset, offset + BATCH_WRITE_SIZE);
+      let pendingRequests = chunk.map((mutation) =>
+        mutation.type === "put"
+          ? {
+              PutRequest: {
+                Item: {
+                  userId: mutation.userId,
+                  gameId: mutation.gameId,
+                  objectKey: mutation.objectKey,
+                  size: mutation.size,
+                  lastModified: mutation.lastModified?.toISOString() ?? null,
+                },
+              },
+            }
+          : {
+              DeleteRequest: {
+                Key: { userId: mutation.userId, objectKey: mutation.objectKey },
+              },
+            }
+      );
+
+      for (let attempt = 0; pendingRequests.length > 0 && attempt < BATCH_MAX_ATTEMPTS; attempt++) {
+        const result = await this.docClient.send(
+          new BatchWriteCommand({
+            RequestItems: { [this.tableName]: pendingRequests },
+          })
+        );
+        pendingRequests = (result.UnprocessedItems?.[this.tableName] ?? []) as typeof pendingRequests;
+
+        if (pendingRequests.length > 0 && attempt + 1 < BATCH_MAX_ATTEMPTS) {
+          await wait(Math.min(1_000, 50 * 2 ** attempt) + Math.random() * 50);
+        }
+      }
+
+      if (pendingRequests.length > 0) {
+        throw new Error(
+          `DynamoDB no procesó ${pendingRequests.length} cambios del índice después de ${BATCH_MAX_ATTEMPTS} intentos`
+        );
+      }
+    }
   }
 
   async upsert(input: {
