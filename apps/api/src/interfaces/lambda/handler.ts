@@ -70,7 +70,7 @@ const shareTokenStore = shareTokensTable
 const clipStore = clipsTable
   ? new DynamoDbClipStore(s3, bucketName, dynamoClient, clipsTable)
   : new ClipStore(s3, bucketName);
-const notificationStore = notificationsTable
+const notificationRepository = notificationsTable
   ? new DynamoDbNotificationStore(dynamoClient, notificationsTable, s3, bucketName)
   : new S3NotificationStore(s3, bucketName);
 const s3CloudInviteFallback = new S3CloudInviteRepository(s3, bucketName);
@@ -113,7 +113,7 @@ function initProxy(): Promise<Proxy> {
       steamSeedRepository,
       shareTokenStore,
       clipStore,
-      notificationStore,
+      notificationRepository,
       cloudInviteRepository,
       gameInventoryRepository,
       gameStatRepository,

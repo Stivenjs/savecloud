@@ -86,6 +86,11 @@ export async function backupConfigToCloud(): Promise<void> {
   await invoke("backup_config_to_cloud");
 }
 
+/** Sube config.json solo si el contenido cambió desde el último respaldo correcto. */
+export async function backupConfigToCloudIfChanged(): Promise<boolean> {
+  return invoke<boolean>("backup_config_to_cloud_if_changed");
+}
+
 const CONFIG_BACKUP_DEBOUNCE_MS = 2500;
 let configBackupTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -98,8 +103,8 @@ export function scheduleConfigBackupToCloud(): void {
   if (configBackupTimeoutId) clearTimeout(configBackupTimeoutId);
   configBackupTimeoutId = setTimeout(() => {
     configBackupTimeoutId = null;
-    backupConfigToCloud().catch(() => {
-      // Fallo silencioso para no molestar; el usuario puede usar "Subir a la nube" manual.
+    backupConfigToCloudIfChanged().catch(() => {
+      // El inicio, el foco y la reconexión reintentan si el respaldo sigue pendiente.
     });
   }, CONFIG_BACKUP_DEBOUNCE_MS);
 }

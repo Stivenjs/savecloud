@@ -5,6 +5,8 @@ export * from "./entities/NotificationRecord";
 export * from "./ports/CloudInviteRepository";
 export * from "./ports/ConnectionRepository";
 export * from "./ports/GameStatRepository";
+export * from "./ports/NotificationRepository";
 export * from "./ports/SaveFileIndexRepository";
 export * from "./ports/SaveRepository";
 export * from "./ports/WebSocketNotifier";
+export * from "./services/notification-merge";

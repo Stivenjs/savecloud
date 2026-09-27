@@ -1,14 +1,11 @@
 import { useEffect } from "react";
-import { useLanguageInitialization } from "@hooks/useLanguageInitialization";
-import { visibilityManager } from "@hooks/useAppVisibility";
 import { listen } from "@tauri-apps/api/event";
-import { NOTIFICATIONS_CHANGED_EVENT } from "@services/tauri/notifications.service";
-import { backupConfigToCloud, checkForUpdatesWithPrompt, listSteamCatalogPage } from "@services/tauri";
+import { useLanguageInitialization } from "@hooks/useLanguageInitialization";
+import { checkForUpdatesWithPrompt, listSteamCatalogPage } from "@services/tauri";
 import { toastSyncResult } from "@utils/toast";
 import { notifySyncComplete, notifySyncError } from "@utils/notification";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { useInputManager } from "@features/input/useInputManager";
-import { useNotificationStore } from "@store/NotificationStore";
 import { initSyncListeners } from "@store/SyncStore";
 import { initSourcesListeners } from "@store/SourcesDownloadsStore";
 import { initTorrentListeners } from "@store/TorrentStore";
@@ -16,9 +13,10 @@ import { useCloudWebSockets } from "@hooks/useCloudWebSockets";
 import { useCloudStreamRealtime } from "@hooks/useCloudStreamRealtime";
 import { useCloudStreamHostSignaling } from "@hooks/useCloudStreamHostSignaling";
 import { initGamesViewPreferences } from "@hooks/useGamesViewPreferences";
-import { useProfileSessionStore } from "@store/ProfileSessionStore";
 import { queryClient } from "@lib/queryClient";
 import { STEAM_CATALOG_PAGE_SIZE } from "@/constants/constants";
+import { useNotificationCloudSync } from "@hooks/useNotificationCloudSync";
+import { useConfigCloudBackupSync } from "@hooks/useConfigCloudBackupSync";
 
 /**
  * Hook encargado de inicializar comportamientos globales de la aplicación.
@@ -28,7 +26,7 @@ import { STEAM_CATALOG_PAGE_SIZE } from "@/constants/constants";
  *
  * Funciones principales:
  *
- * - Respaldar periódicamente la configuración del usuario en la nube.
+ * - Respaldar en la nube la configuración cuando su contenido cambia.
  * - Comprobar actualizaciones de la aplicación (solo en producción).
  * - Escuchar eventos de sincronización automática emitidos desde el backend de Tauri.
  *
@@ -50,125 +48,13 @@ export function useAppInitialization() {
   initSourcesListeners();
   initTorrentListeners();
   useCloudWebSockets();
+  useNotificationCloudSync();
+  useConfigCloudBackupSync();
   useCloudStreamRealtime();
   useCloudStreamHostSignaling();
 
   useEffect(() => {
     return initGamesViewPreferences();
-  }, []);
-
-  /**
-   * Contador de notificaciones + sync periódico con la API (multi-dispositivo).
-   */
-  useEffect(() => {
-    const refresh = async () => {
-      try {
-        const activeProfile = useProfileSessionStore.getState().activeProfile;
-        if (!activeProfile?.localUserId.trim() || !activeProfile.apiBaseUrl.trim()) {
-          console.info("[SaveCloud:useAppInitialization] sync notificaciones omitido (falta userId o apiBaseUrl)", {
-            hasUserId: !!activeProfile?.localUserId.trim(),
-            hasApi: !!activeProfile?.apiBaseUrl.trim(),
-          });
-          return;
-        }
-        await useNotificationStore.getState().syncWithCloud();
-      } catch (e) {
-        console.warn("[SaveCloud:useAppInitialization] refresh notificaciones error", e);
-      }
-    };
-
-    void useNotificationStore.getState().refreshUnreadCount();
-
-    const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        void useNotificationStore.getState().refreshUnreadCount();
-      }
-    };
-
-    document.addEventListener("visibilitychange", onVisible);
-
-    // Eliminar el timer completamente en background y recrearlo al volver.
-    // Esto evita que V8 despierte innecesariamente cuando la app está minimizada.
-    let intervalId: ReturnType<typeof setInterval> | null = setInterval(() => void refresh(), 120_000);
-
-    const unsubVisibility = visibilityManager.subscribe(
-      () => {
-        if (intervalId !== null) {
-          clearInterval(intervalId);
-          intervalId = null;
-        }
-      },
-      () => {
-        void refresh();
-        intervalId = setInterval(() => void refresh(), 120_000);
-      }
-    );
-
-    return () => {
-      document.removeEventListener("visibilitychange", onVisible);
-      unsubVisibility();
-      if (intervalId !== null) clearInterval(intervalId);
-    };
-  }, []);
-
-  /** Badge y lista del centro de notificaciones. Debounceado 500ms para evitar ráfagas de peticiones. */
-  useEffect(() => {
-    let active = true;
-    let unlistenFn: (() => void) | null = null;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const handleEvent = () => {
-      if (!active) return;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        void useNotificationStore.getState().syncWithCloud();
-      }, 500);
-    };
-
-    void listen(NOTIFICATIONS_CHANGED_EVENT, handleEvent).then((fn) => {
-      if (!active) {
-        fn();
-      } else {
-        unlistenFn = fn;
-      }
-    });
-
-    return () => {
-      active = false;
-      if (timer) clearTimeout(timer);
-      if (unlistenFn) unlistenFn();
-    };
-  }, []);
-  /**
-   * Respaldos periódicos de configuración del usuario.
-   *
-   * Esto evita pérdida de datos si el usuario cambia
-   * de dispositivo o reinstala la aplicación.
-   *
-   * Frecuencia: cada 5 minutos.
-   */
-  useEffect(() => {
-    const BACKUP_INTERVAL_MS = 5 * 60 * 1000;
-    const doBackup = () => backupConfigToCloud().catch(() => {});
-
-    let intervalId: ReturnType<typeof setInterval> | null = setInterval(doBackup, BACKUP_INTERVAL_MS);
-
-    const unsubVisibility = visibilityManager.subscribe(
-      () => {
-        if (intervalId !== null) {
-          clearInterval(intervalId);
-          intervalId = null;
-        }
-      },
-      () => {
-        intervalId = setInterval(doBackup, BACKUP_INTERVAL_MS);
-      }
-    );
-
-    return () => {
-      unsubVisibility();
-      if (intervalId !== null) clearInterval(intervalId);
-    };
   }, []);
 
   /**

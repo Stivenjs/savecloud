@@ -1218,7 +1218,7 @@ pub fn import_config_from_file(
 /// # Errors
 ///
 /// Devuelve `Err` en colisiones HTTP u obstáculos I/O remotos.
-async fn s3_transfer(
+pub(super) async fn s3_transfer(
     api_base: &str,
     user_id: &str,
     api_key: &str,
@@ -1293,19 +1293,7 @@ async fn s3_transfer(
 /// Extrae la imagen en memoria hacia un flujo que termina escrito en S3, simulando el nodo `__config__`.
 #[tauri::command]
 pub async fn backup_config_to_cloud() -> Result<(), String> {
-    let ctx = resolve_api_context()?;
-    let combined = config::get_combined_config();
-    let bytes = serde_json::to_vec_pretty(&combined).unwrap();
-    s3_transfer(
-        &ctx.base_url,
-        &ctx.user_id,
-        &ctx.api_key,
-        "config.json",
-        Some(bytes),
-        true,
-    )
-    .await
-    .map(|_| ())
+    crate::config::cloud_backup::backup_config_force().await
 }
 
 /// Extrae el archivo estático de S3 y lo reparte dinámicamente sobre la arquitectura de persistencia.

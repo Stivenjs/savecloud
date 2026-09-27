@@ -26,6 +26,7 @@ use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray::tray_state::TrayState;
 use crate::voice::VoiceState;
+use crate::config::cloud_backup::spawn_config_backup_watcher;
 use std::sync::Arc;
 use tauri::{App, Manager};
 use tokio::sync::Mutex;
@@ -302,6 +303,9 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
 
     spawn_pending_session_poller();
     spawn_lan_presence_advertiser();
+    if let Err(error) = spawn_config_backup_watcher() {
+        log::warn!("[config_backup] No se pudo iniciar el watcher de configuración: {error}");
+    }
 
     Ok(())
 }
