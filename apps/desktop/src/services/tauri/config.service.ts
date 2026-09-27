@@ -76,7 +76,7 @@ export async function exportConfigToFile(path: string, password: string): Promis
   return invoke("export_config_to_file", { path, password });
 }
 
-/** Importa una exportación `.scx` o un respaldo JSON antiguo. */
+/** Importa una exportación `.scx`, un respaldo local `.scb` o un JSON antiguo. */
 export async function importConfigFromFile(path: string, mode: "merge" | "replace", password?: string): Promise<void> {
   await invoke("import_config_from_file", { path, mode, password: password ?? null });
 }

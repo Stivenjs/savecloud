@@ -303,6 +303,9 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
 
     spawn_pending_session_poller();
     spawn_lan_presence_advertiser();
+    if let Err(error) = crate::config::local_backup::migrate_legacy_backups() {
+        log::warn!("[config_backup] No se pudieron cifrar los respaldos JSON antiguos: {error}");
+    }
     if let Err(error) = spawn_config_backup_watcher() {
         log::warn!("[config_backup] No se pudo iniciar el watcher de configuración: {error}");
     }

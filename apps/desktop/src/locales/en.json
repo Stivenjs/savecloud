@@ -1490,7 +1490,7 @@
       "localFilesEyebrow": "Portable copy",
       "localFilesTitle": "Move settings between devices",
       "localFilesDesc": "Export a password-encrypted copy or import an older backup.",
-      "exportHint": "<strong>Encrypted copy:</strong> saves your library, paths, and preferences in a password-protected .scx file.",
+      "exportHint": "<strong>Encrypted copy:</strong> the .scx file includes all settings and credentials, protected by the password you choose. Keep the password safe; you will need it to import the file on another device.",
       "mergeHint": "<strong>Merge library:</strong> adds games and paths from the file while keeping current data.",
       "replaceHint": "<strong>Replace configuration:</strong> overwrites current data; use this to restore a full copy.",
       "importUserHint": "<strong>Bring in a user's library:</strong> imports their public game list.",

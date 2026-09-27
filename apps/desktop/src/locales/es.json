@@ -1490,7 +1490,7 @@
       "localFilesEyebrow": "Copia portable",
       "localFilesTitle": "Mover configuración entre equipos",
       "localFilesDesc": "Exporta una copia cifrada con contraseña o importa un respaldo anterior.",
-      "exportHint": "<strong>Copia cifrada:</strong> guarda biblioteca, rutas y preferencias en un archivo .scx protegido por contraseña.",
+      "exportHint": "<strong>Copia cifrada:</strong> el archivo .scx incluye toda la configuración y las credenciales, protegidas con la contraseña que elijas. Guárdala en un lugar seguro; la necesitarás para importar el archivo en otro dispositivo.",
       "mergeHint": "<strong>Fusionar biblioteca:</strong> añade los juegos y rutas del archivo, conservando los datos actuales.",
       "replaceHint": "<strong>Reemplazar configuración:</strong> sustituye los datos actuales; úsalo para restaurar una copia completa.",
       "importUserHint": "<strong>Traer biblioteca de un usuario:</strong> importa su lista pública de juegos.",

@@ -13,7 +13,6 @@ use crate::steam;
 use crate::time;
 use crate::utils::launch_exe;
 use base64::Engine;
-use chrono::Utc;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -1118,12 +1117,21 @@ pub fn import_config_from_file(
     let bytes = fs::read(&path).map_err(|e| e.to_string())?;
     let password = password.map(Zeroizing::new);
     let password_ref = password.as_ref().map(|value| value.as_str());
-    let decrypted = encrypted_export::decrypt_config_export(&bytes, password_ref)?;
-    let imported: Config = match decrypted {
-        Some(contents) => serde_json::from_slice(&contents),
-        None => serde_json::from_slice(&bytes),
+    let mut imported: Config = if bytes.starts_with(super::local_backup::BACKUP_MAGIC) {
+        let contents = super::local_backup::decrypt(&bytes)?;
+        serde_json::from_slice(&contents)
+            .map_err(|e| format!("Estructura del respaldo local corrupta: {}", e))?
+    } else {
+        let decrypted = encrypted_export::decrypt_config_export(&bytes, password_ref)?;
+        match decrypted {
+            Some(contents) => serde_json::from_slice(&contents),
+            None => serde_json::from_slice(&bytes),
+        }
+        .map_err(|e| format!("Estructura de configuración corrupta: {}", e))?
+    };
+    if imported.proxy_url.is_none() {
+        imported.proxy_url = config::load_settings().proxy_url;
     }
-    .map_err(|e| format!("Estructura de configuración corrupta: {}", e))?;
 
     if mode == "replace" {
         return config::apply_combined_config(&imported);
@@ -1135,6 +1143,9 @@ pub fn import_config_from_file(
         current.api_base_url = current.api_base_url.or(imported.api_base_url);
         current.ws_base_url = current.ws_base_url.or(imported.ws_base_url);
         current.api_key = current.api_key.or(imported.api_key);
+        current.steam_web_api_key = current
+            .steam_web_api_key
+            .or(imported.steam_web_api_key);
         current.user_id = current.user_id.or(imported.user_id);
         current.active_cloud_host_user_id = current
             .active_cloud_host_user_id
@@ -1331,22 +1342,14 @@ pub async fn restore_config_from_cloud() -> Result<(), String> {
         false,
     )
     .await?;
-    let imported: Config = serde_json::from_slice(&bytes)
+    let mut imported: Config = serde_json::from_slice(&bytes)
         .map_err(|e| format!("Incapacidad de mutar buffer: {}", e))?;
 
-    if let Some(data_dir) = config::paths::data_dir() {
-        if let Some(parent) = data_dir.parent() {
-            let backup_dir = parent.join("config-backups");
-            let _ = fs::create_dir_all(&backup_dir);
-            let ts = Utc::now().format("%Y-%m-%d_%H-%M-%S");
-            let backup_path = backup_dir.join(format!("config-{}.json", ts));
-            let old_combined = config::get_combined_config();
-            let _ = fs::write(
-                &backup_path,
-                serde_json::to_string_pretty(&old_combined).unwrap_or_default(),
-            );
-        }
-    }
+    super::local_backup::migrate_legacy_backups()?;
+    super::local_backup::create_before_restore(&config::get_combined_config())?;
+    imported.api_key = None;
+    imported.steam_web_api_key = None;
+    imported.proxy_url = config::load_settings().proxy_url;
 
     config::apply_combined_config(&imported)
 }
