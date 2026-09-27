@@ -120,7 +120,6 @@ export function useLastSyncInfo(enabled: boolean) {
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
-
     refetchInterval: (query: Query<LastSyncQueryData, Error>) => (query.state.status === "error" ? 30_000 : false),
     retry: 2,
   });

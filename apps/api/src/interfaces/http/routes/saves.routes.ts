@@ -68,7 +68,7 @@ import { getUserId, getErrorMessage } from "@shared/utils";
 import { TtlCache } from "@shared/ttlCache";
 import { computeSavesEtag, computeSummaryEtag, send304IfNotModified, type SummaryEtagItem } from "@shared/etag";
 
-const savesSummaryCache = new TtlCache<string, SummaryEtagItem[]>({ ttlMs: 20_000, maxEntries: 200 });
+const savesSummaryCache = new TtlCache<string, SummaryEtagItem[]>({ ttlMs: 2_000, maxEntries: 200 });
 const backupsListCache = new TtlCache<string, ListBackupsOutput>({ ttlMs: 10_000, maxEntries: 300 });
 const CLOUD_HOST_HEADER = "x-cloud-host-user-id";
 
