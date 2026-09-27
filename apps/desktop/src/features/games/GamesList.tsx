@@ -101,7 +101,7 @@ export function GamesList({
     statsByGameId,
     isLoading: isLoadingStats,
     isError: statsError,
-  } = useGameStats(games.length > 0 && needsLibraryWideStats);
+  } = useGameStats(games.length > 0 && needsLibraryWideStats, hasSyncConfig);
   const { countByGameId: cloudBackupCountByGameId } = useCloudBackupCounts(gameIds, hasSyncConfig && games.length > 0);
   const gameRunningStatus = useGameRunningStatus(gameIds);
   const unsyncedSet = useMemo(() => new Set(unsyncedGameIds), [unsyncedGameIds]);

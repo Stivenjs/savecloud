@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { syncCheckUnsyncedGames, syncUploadGame, type UnsyncedGame } from "@services/tauri";
+import { syncUploadGame } from "@services/tauri";
 import { useConfig, CONFIG_QUERY_KEY } from "@hooks/useConfig";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { LAST_SYNC_QUERY_KEY } from "@hooks/useLastSyncInfo";
@@ -10,8 +10,7 @@ import { formatGameDisplayName } from "@utils/gameImage";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import i18n from "@lib/i18n";
-
-const UNSYNCED_QUERY_KEY = ["unsynced-games"] as const;
+import { UNSYNCED_GAMES_QUERY_KEY, unsyncedGamesQueryOptions } from "@hooks/queries/unsyncedGamesQuery";
 
 export function useUnsyncedSaves() {
   const queryClient = useQueryClient();
@@ -30,11 +29,8 @@ export function useUnsyncedSaves() {
     isLoading: isChecking,
     refetch: refetchUnsynced,
   } = useQuery({
-    queryKey: UNSYNCED_QUERY_KEY,
-    queryFn: syncCheckUnsyncedGames,
+    ...unsyncedGamesQueryOptions(),
     enabled: hasSyncConfig,
-    staleTime: 30 * 1000,
-    refetchOnWindowFocus: true,
   });
 
   useEffect(() => {
@@ -46,7 +42,7 @@ export function useUnsyncedSaves() {
       const unlisten = await listen(eventName, () => {
         if (refreshTimer) clearTimeout(refreshTimer);
         refreshTimer = setTimeout(() => {
-          void queryClient.invalidateQueries({ queryKey: UNSYNCED_QUERY_KEY, refetchType: "active" });
+          void queryClient.invalidateQueries({ queryKey: UNSYNCED_GAMES_QUERY_KEY, refetchType: "active" });
         }, 300);
       });
 
@@ -54,8 +50,6 @@ export function useUnsyncedSaves() {
       else unlisteners.push(unlisten);
     };
 
-    void subscribe("sync-upload-done");
-    void subscribe("sync-download-done");
     void subscribe("auto-sync-done");
     void subscribe("auto-sync-error");
 
@@ -66,7 +60,7 @@ export function useUnsyncedSaves() {
     };
   }, [queryClient]);
 
-  const unsyncedGameIds = useMemo(() => unsyncedList.map((g: UnsyncedGame) => g.gameId), [unsyncedList]);
+  const unsyncedGameIds = useMemo(() => unsyncedList.map((game) => game.gameId), [unsyncedList]);
 
   useEffect(() => {
     if (unsyncedGameIds.length > 0 && !hasNotifiedRef.current) {
@@ -106,7 +100,7 @@ export function useUnsyncedSaves() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: UNSYNCED_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: UNSYNCED_GAMES_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: LAST_SYNC_QUERY_KEY });
       queryClient.invalidateQueries({ queryKey: ["game-stats"] });
       queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });

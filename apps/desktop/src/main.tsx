@@ -6,10 +6,11 @@ import { ThemeProvider } from "next-themes";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { HeroUIProvider } from "@heroui/react";
 import { SavecloudToaster } from "@components/toast/SavecloudToaster";
-import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AppErrorBoundary } from "@components/error/AppErrorBoundary";
 import { queryClient } from "@lib/queryClient";
+import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
+import { getConfig } from "@services/tauri/config.service";
 import { useShellUiStore } from "@store/ShellUiStore";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { useDeveloperModeProtection } from "@hooks/useDeveloperModeProtection";
@@ -166,8 +167,15 @@ async function renderOverlayApp(): Promise<void> {
 }
 
 async function renderStreamViewerApp(): Promise<void> {
-  const { StreamViewerPage } = await import("@features/friends/StreamViewerPage");
-  await renderMainWrapped(<StreamViewerPage />);
+  const [{ StreamViewerPage }, { StreamViewerRuntime }] = await Promise.all([
+    import("@features/friends/StreamViewerPage"),
+    import("@/app/StreamViewerRuntime"),
+  ]);
+  await renderMainWrapped(
+    <StreamViewerRuntime>
+      <StreamViewerPage />
+    </StreamViewerRuntime>
+  );
 }
 
 async function renderFriendsWindowApp(): Promise<void> {
@@ -216,7 +224,11 @@ async function showMainWindow(): Promise<void> {
 
 async function maybeOpenStartupBigPicture(): Promise<void> {
   try {
-    const cfg = await invoke<{ startupWindowMode?: string }>("get_config");
+    const cfg = await queryClient.fetchQuery({
+      queryKey: CONFIG_QUERY_KEY,
+      queryFn: getConfig,
+      staleTime: 10 * 60 * 1000,
+    });
     if (cfg?.startupWindowMode !== "big_picture") return;
     const { openOrFocusBigPictureWindow } = await import("@/windows/bigPictureWindow");
     await openOrFocusBigPictureWindow();

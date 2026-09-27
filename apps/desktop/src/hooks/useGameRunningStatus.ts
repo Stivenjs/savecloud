@@ -4,15 +4,10 @@ import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { checkGamesRunning } from "@services/tauri";
 import { LIBRARY_QUERY_KEY } from "@hooks/useLibrary";
 import { GAME_STATS_QUERY_KEY } from "@hooks/useGameStat";
+import { gameRunningStatusQueryOptions, RUNNING_STATUS_KEY } from "@hooks/queries/gameRunningStatusQuery";
 import { useGameSessionStore } from "@store/GameSessionStore";
 
-/**
- * Key estático para el mapa global de juegos en ejecución.
- * Usar un key fijo (sin el array de IDs dentro) garantiza que el listener
- * de eventos siempre actualiza el mismo entry del cache que useQuery lee,
- * independientemente de qué instancia del hook registró el listener.
- */
-export const RUNNING_STATUS_KEY = ["game-running-status"] as const;
+export { RUNNING_STATUS_KEY };
 
 interface PlaytimePayload {
   gameId: string;
@@ -25,7 +20,7 @@ export function useGameRunningStatus(gameIds: readonly string[]): Record<string,
   const sortedIds = useMemo(() => [...gameIds].sort(), [gameIds.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useQuery({
-    queryKey: [...RUNNING_STATUS_KEY, sortedIds.join(",")],
+    ...gameRunningStatusQueryOptions(sortedIds),
     queryFn: async () => {
       const fresh = await checkGamesRunning(sortedIds);
       useGameSessionStore.getState().syncLocalRunningMap(fresh);
@@ -36,8 +31,6 @@ export function useGameRunningStatus(gameIds: readonly string[]): Record<string,
       return fresh;
     },
     enabled: sortedIds.length > 0,
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
   });
 
   const { data: globalMap } = useQuery<Record<string, boolean>>({

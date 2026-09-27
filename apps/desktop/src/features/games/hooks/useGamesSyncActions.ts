@@ -5,13 +5,11 @@ import {
   openSaveFolder,
   syncCheckDownloadConflicts,
   syncCheckDownloadConflictsBatch,
-  syncCheckUnsyncedGames,
   syncDownloadAllGames,
   syncDownloadGame,
   syncUploadAllGames,
   syncUploadGame,
   type SyncResult,
-  type UnsyncedGame,
 } from "@services/tauri";
 import type { ConfiguredGame } from "@savecloud/types";
 import { formatGameDisplayName, findConfiguredGame } from "@utils/gameImage";
@@ -29,6 +27,7 @@ import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
 import { LIBRARY_QUERY_KEY } from "@hooks/useLibrary";
 import { GAMIFICATION_QUERY_KEY } from "@hooks/useGamification";
 import i18n from "@lib/i18n";
+import { UNSYNCED_GAMES_QUERY_KEY, unsyncedGamesQueryOptions } from "@hooks/queries/unsyncedGamesQuery";
 
 export interface OperationResult {
   type: "sync" | "download";
@@ -45,8 +44,6 @@ export interface DownloadConflictItem {
 interface UseGamesSyncActionsProps {
   games: readonly ConfiguredGame[];
   hasSyncConfig: boolean;
-  refetchConfig?: () => Promise<unknown> | void;
-  refetchLastSync?: () => void;
   syncPreviewGame: ConfiguredGame | null;
   syncPreviewType: "upload" | "download" | null;
   setSyncPreview: (game: ConfiguredGame | null, type: "upload" | "download" | null) => void;
@@ -57,8 +54,6 @@ interface UseGamesSyncActionsProps {
 export function useGamesSyncActions({
   games,
   hasSyncConfig,
-  refetchConfig,
-  refetchLastSync,
   syncPreviewGame,
   syncPreviewType,
   setSyncPreview,
@@ -81,30 +76,26 @@ export function useGamesSyncActions({
   );
 
   const { data: unsyncedGames } = useQuery({
-    queryKey: ["unsynced-games"],
-    queryFn: syncCheckUnsyncedGames,
+    ...unsyncedGamesQueryOptions(),
     enabled: hasSyncConfig,
-    staleTime: 30_000,
   });
-  const unsyncedGameIds = unsyncedGames?.map((g: UnsyncedGame) => g.gameId) ?? [];
+  const unsyncedGameIds = unsyncedGames?.map((game) => game.gameId) ?? [];
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       await Promise.all([
-        refetchConfig?.(),
-        refetchLastSync?.(),
         queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY, type: "active" }),
         queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY, type: "active" }),
         queryClient.invalidateQueries({ queryKey: ["game-stats"], type: "active" }),
-        queryClient.invalidateQueries({ queryKey: ["unsynced-games"], type: "active" }),
+        queryClient.invalidateQueries({ queryKey: UNSYNCED_GAMES_QUERY_KEY, type: "active" }),
         queryClient.invalidateQueries({ queryKey: ["last-sync-info"], type: "active" }),
         queryClient.invalidateQueries({ queryKey: GAMIFICATION_QUERY_KEY, type: "active" }),
       ]);
     } finally {
       setRefreshing(false);
     }
-  }, [refetchConfig, refetchLastSync, queryClient]);
+  }, [queryClient]);
 
   const handleRefreshRef = useRef(handleRefresh);
   useEffect(() => {
@@ -115,10 +106,20 @@ export function useGamesSyncActions({
     let unlistenUpload: (() => void) | undefined;
     let unlistenDownload: (() => void) | undefined;
     let unlistenFullBackup: (() => void) | undefined;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
     const setupListeners = async () => {
       const onGlobalSyncEvent = () => {
-        handleRefreshRef.current();
+        if (refreshTimer) clearTimeout(refreshTimer);
+        const refreshAfterSync = () => {
+          const { syncOperation, activeCount } = useSyncStore.getState();
+          if (syncOperation || activeCount > 0) {
+            refreshTimer = setTimeout(refreshAfterSync, 300);
+            return;
+          }
+          handleRefreshRef.current();
+        };
+        refreshTimer = setTimeout(refreshAfterSync, 300);
       };
 
       unlistenUpload = await listen("sync-upload-done", onGlobalSyncEvent);
@@ -129,6 +130,7 @@ export function useGamesSyncActions({
     setupListeners();
 
     return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
       if (unlistenUpload) unlistenUpload();
       if (unlistenDownload) unlistenDownload();
       if (unlistenFullBackup) unlistenFullBackup();
@@ -158,8 +160,6 @@ export function useGamesSyncActions({
     try {
       await createAndUploadFullBackup(game.id);
       toastSuccess(i18n.t("library.toast.fullBackupUploadedTitle"), i18n.t("library.toast.fullBackupUploadedDesc"));
-      refetchLastSync?.();
-      queryClient.invalidateQueries({ queryKey: ["game-stats"] });
       queryClient.invalidateQueries({ queryKey: ["cloud-backups", game.id] });
       queryClient.invalidateQueries({ queryKey: ["cloud-backup-counts"] });
     } catch (e) {
@@ -168,9 +168,6 @@ export function useGamesSyncActions({
       notifyFullBackupError(formatGameDisplayName(game.id), msg).catch(() => {});
     } finally {
       setFullBackupUploadingGameId(null);
-      refetchConfig?.();
-      queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
-      queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
     }
   };
 
@@ -188,11 +185,6 @@ export function useGamesSyncActions({
       notifyDownloadError(formatGameDisplayName(game.id), msg).catch(() => {});
     } finally {
       setDownloading(null);
-      refetchLastSync?.();
-      queryClient.invalidateQueries({ queryKey: ["game-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
-      refetchConfig?.();
-      queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
     }
   };
 
@@ -213,10 +205,6 @@ export function useGamesSyncActions({
       };
       setOperationResult({ type: "download", gameId: game.id, result: errResult });
       toastDownloadResult(errResult, formatGameDisplayName(game.id));
-    } finally {
-      refetchLastSync?.();
-      queryClient.invalidateQueries({ queryKey: ["game-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
     }
   };
 
@@ -241,15 +229,9 @@ export function useGamesSyncActions({
       gameId: game.id,
       operationId: `sync-download-${game.id}`,
     });
-    try {
-      await executeDownload(game);
-      setDownloadConflictGame(null);
-      setDownloadConflicts([]);
-    } finally {
-      refetchLastSync?.();
-      queryClient.invalidateQueries({ queryKey: ["game-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
-    }
+    await executeDownload(game);
+    setDownloadConflictGame(null);
+    setDownloadConflicts([]);
   };
 
   const handleCloseDownloadConflict = () => {
@@ -278,11 +260,6 @@ export function useGamesSyncActions({
         setSyncPreview(null, null);
       } finally {
         setSyncing(null);
-        refetchLastSync?.();
-        queryClient.invalidateQueries({ queryKey: ["game-stats"] });
-        queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
-        refetchConfig?.();
-        queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
       }
     } else {
       setDownloading(game.id);
@@ -332,11 +309,6 @@ export function useGamesSyncActions({
       setSyncOperation(null);
       notifyBatchUploadDone(totalResult.okCount, totalResult.errCount).catch(() => {});
       setSyncing(null);
-      refetchLastSync?.();
-      queryClient.invalidateQueries({ queryKey: ["game-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
-      refetchConfig?.();
-      queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
     }
   };
 
@@ -365,11 +337,6 @@ export function useGamesSyncActions({
       setSyncOperation(null);
       notifyBatchDownloadDone(totalResult.okCount, totalResult.errCount).catch(() => {});
       setDownloading(null);
-      refetchLastSync?.();
-      queryClient.invalidateQueries({ queryKey: ["game-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
-      refetchConfig?.();
-      queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
     }
   };
 
@@ -400,21 +367,13 @@ export function useGamesSyncActions({
       setOperationResult({ type: "download", gameId: "", result: errResult });
       toastDownloadResult(errResult);
       setDownloading(null);
-    } finally {
-      refetchLastSync?.();
-      queryClient.invalidateQueries({ queryKey: ["game-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["unsynced-games"] });
     }
   };
 
   const handleConfirmDownloadAllConflict = async () => {
     setDownloading("all");
-    try {
-      await executeDownloadAll();
-      setDownloadAllConflictGames([]);
-    } finally {
-      refetchLastSync?.();
-    }
+    await executeDownloadAll();
+    setDownloadAllConflictGames([]);
   };
 
   const handleCloseDownloadAllConflict = () => {

@@ -151,7 +151,7 @@ export function GamesPage() {
   const runningSessionStartTimes = useGameSessionStore((state) => state.localSessionStartTimes);
   const setLibraryAmbientArtworkUrls = useShellUiStore((state) => state.setLibraryAmbientArtworkUrls);
 
-  const { statsByGameId } = useGameStats(games.length > 0 && bulkConfirm?.type === "sync");
+  const { statsByGameId } = useGameStats(games.length > 0 && bulkConfirm?.type === "sync", hasSyncConfig);
 
   const bigPictureConsole = useMemo(
     () => typeof document !== "undefined" && document.documentElement.classList.contains("savecloud-big-picture"),
@@ -163,14 +163,17 @@ export function GamesPage() {
     const candidates = filteredGames.filter((game) => !runningSessionStartTimes[game.id.trim().toLowerCase()]);
     return [...candidates].sort((a, b) => (b.playtimeSeconds ?? 0) - (a.playtimeSeconds ?? 0))[0] ?? null;
   }, [bigPictureConsole, debouncedSearchTerm, filteredGames, runningSessionStartTimes]);
-  const libraryGames = spotlightGame ? filteredGames.filter((game) => game.id !== spotlightGame.id) : filteredGames;
+  const spotlightGameId = spotlightGame?.id.trim().toLowerCase();
+  const libraryGames = spotlightGameId
+    ? filteredGames.filter((game) => game.id.trim().toLowerCase() !== spotlightGameId)
+    : filteredGames;
   const recentlyPlayedGames = useMemo(
     () =>
       filteredGames
-        .filter((game) => getLastPlayedTimestamp(game) > 0 && game.id !== spotlightGame?.id)
+        .filter((game) => getLastPlayedTimestamp(game) > 0 && game.id.trim().toLowerCase() !== spotlightGameId)
         .sort((a, b) => getLastPlayedTimestamp(b) - getLastPlayedTimestamp(a))
         .slice(0, 5),
-    [filteredGames, spotlightGame]
+    [filteredGames, spotlightGameId]
   );
   const ambientArtworkUrls = useMemo(() => getAmbientArtworkUrls(spotlightGame), [spotlightGame]);
 
@@ -581,6 +584,7 @@ export function GamesPage() {
                     <GameCard
                       game={game}
                       orientation="horizontal"
+                      disableHeroTransition
                       isGameRunning={Boolean(runningSessionStartTimes[game.id.trim().toLowerCase()])}
                     />
                   </div>

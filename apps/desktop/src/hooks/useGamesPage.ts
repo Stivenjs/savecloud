@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from "react";
-import { useConfig, CONFIG_QUERY_KEY } from "@hooks/useConfig";
+import { useConfig } from "@hooks/useConfig";
 import { LIBRARY_QUERY_KEY, useLibrary } from "@hooks/useLibrary";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
@@ -32,13 +32,11 @@ export function useGamesPage() {
     isLoading: lastSyncLoading,
     connectionStatus,
     connectionError,
-    refetch: refetchLastSync,
   } = useLastSyncInfo(hasSyncConfig);
 
   const invalidateConfig = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: CONFIG_QUERY_KEY });
+    void refetch?.();
     queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY });
-    refetch?.();
   }, [queryClient, refetch]);
 
   const filtering = useGamesFiltering(games, cloudGames.length);
@@ -60,8 +58,6 @@ export function useGamesPage() {
   const syncActions = useGamesSyncActions({
     games,
     hasSyncConfig,
-    refetchConfig: refetch,
-    refetchLastSync,
     syncPreviewGame: modals.syncPreviewGame,
     syncPreviewType: modals.syncPreviewType,
     setSyncPreview,
@@ -83,7 +79,6 @@ export function useGamesPage() {
     lastSyncLoading,
     connectionStatus,
     connectionError,
-    refetchLastSync,
     ...filtering,
     ...modals,
     ...syncActions,
