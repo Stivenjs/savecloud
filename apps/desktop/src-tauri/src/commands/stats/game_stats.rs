@@ -390,8 +390,6 @@ pub async fn get_game_stats() -> Result<Vec<GameStatsDto>, String> {
         .map(|g| (g.id.to_lowercase(), g.playtime_seconds))
         .collect();
 
-    let remote_saves = sync::api::sync_list_remote_saves_summary();
-
     let mut handles = Vec::with_capacity(library.games.len());
     for game in &library.games {
         let id = game.id.clone();
@@ -402,37 +400,7 @@ pub async fn get_game_stats() -> Result<Vec<GameStatsDto>, String> {
         }));
     }
 
-    let (joined, remote_saves) = tokio::join!(join_all(handles), remote_saves);
-    let cloud_by_game: HashMap<String, Option<String>> =
-        match remote_saves {
-            Ok(remote) => {
-                let mut map: HashMap<String, Option<chrono::DateTime<chrono::Utc>>> =
-                    HashMap::new();
-                for s in remote {
-                    let dt = match s.last_modified.as_deref() {
-                        Some(val) => chrono::DateTime::parse_from_rfc3339(val)
-                            .or_else(|_| chrono::DateTime::parse_from_rfc2822(val))
-                            .ok()
-                            .map(|d| d.with_timezone(&chrono::Utc)),
-                        None => None,
-                    };
-
-                    if let Some(new_dt) = dt {
-                        let key = s.game_id.to_lowercase();
-                        let entry = map.entry(key).or_insert(None);
-                        *entry = Some(match *entry {
-                            Some(prev) if new_dt > prev => new_dt,
-                            Some(prev) => prev,
-                            None => new_dt,
-                        });
-                    }
-                }
-                map.into_iter()
-                    .map(|(k, v)| (k, v.map(|d| d.to_rfc3339())))
-                    .collect()
-            }
-            Err(_) => HashMap::new(),
-        };
+    let joined = join_all(handles).await;
 
     let mut result = Vec::with_capacity(joined.len());
 
@@ -450,15 +418,13 @@ pub async fn get_game_stats() -> Result<Vec<GameStatsDto>, String> {
 
         let key_lower = game_id.to_lowercase();
 
-        let cloud_last_modified = cloud_by_game.get(&key_lower).cloned().flatten();
-
         let playtime_seconds = playtime_map.get(&key_lower).cloned().unwrap_or(0);
 
         result.push(GameStatsDto {
             game_id,
             local_size_bytes: local_size,
             local_last_modified,
-            cloud_last_modified,
+            cloud_last_modified: None,
             playtime_seconds,
         });
     }

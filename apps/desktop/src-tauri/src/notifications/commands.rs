@@ -185,31 +185,47 @@ async fn sync_notifications_pull_internal(app: &AppHandle, db: &AppDb, emit: boo
         .or_else(|| db::get_meta(db, "last_pull_cursor").ok().flatten())
         .filter(|s| !s.trim().is_empty());
 
-    let resp = sync_http::pull_since(cursor.as_deref(), 200)
-        .await?;
-    let items = resp.items;
-    let n = items.len();
-    if n == 0 {
-        return Ok(0);
-    }
-
-    let next = items.iter().map(|i| i.updated_at.clone()).max();
-
     let mut merged = 0usize;
-    for mut item in items {
-        item.user_id = user_id.clone();
-        item.pending_sync = false;
-        if item.server_updated_at.is_none() {
-            item.server_updated_at = Some(item.updated_at.clone());
-        }
-        db.with_conn(|conn| db::upsert_merged(conn, &mut item))
-            .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
-        merged += 1;
-    }
+    let mut current_cursor = cursor;
 
-    if let Some(c) = next {
-        db::set_meta(db, &cursor_key, &c)
+    loop {
+        let response = sync_http::pull_since(current_cursor.as_deref(), 200).await?;
+        let page_len = response.items.len();
+        if page_len == 0 {
+            break;
+        }
+
+        let next_cursor = response.next_cursor.or_else(|| {
+            response
+                .items
+                .iter()
+                .map(|item| item.server_updated_at.as_deref().unwrap_or(&item.updated_at))
+                .max()
+                .map(str::to_owned)
+        });
+
+        for mut item in response.items {
+            item.user_id = user_id.clone();
+            item.pending_sync = false;
+            if item.server_updated_at.is_none() {
+                item.server_updated_at = Some(item.updated_at.clone());
+            }
+            db.with_conn(|conn| db::upsert_merged(conn, &mut item))
+                .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
+            merged += 1;
+        }
+
+        let Some(next) = next_cursor else { break };
+        if current_cursor.as_deref() == Some(next.as_str()) {
+            break;
+        }
+        db::set_meta(db, &cursor_key, &next)
             .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
+        current_cursor = Some(next);
+
+        if page_len < 200 {
+            break;
+        }
     }
 
     if merged > 0 && emit {

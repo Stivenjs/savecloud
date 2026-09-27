@@ -90,6 +90,8 @@ export interface GameCardProps {
   priority?: boolean;
   /** Presentación amplia para destacar un juego en el inicio de Biblioteca. */
   featured?: boolean;
+  /** Desactiva la transición compartida cuando el juego aparece repetido en otra sección de la biblioteca. */
+  disableHeroTransition?: boolean;
   /** Callback para abrir el menú de acciones adaptado a consola (mando). */
   onOpenConsoleActions?: (game: ConfiguredGame) => void;
   /** Callback al hacer click derecho en la tarjeta para abrir el menú contextual de acciones. */
@@ -185,6 +187,7 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
     orientation = "vertical",
     priority = false,
     featured = false,
+    disableHeroTransition = false,
     ...cardRest
   } = props;
 
@@ -351,7 +354,10 @@ export const GameCard = memo(function GameCard(props: GameCardProps) {
 
         {/* Catalog cards share ids with library cards; only library cards should
             participate in the shared hero transition to a game detail route. */}
-        <MaybeViewTransition name={`game-hero-${game.id}`} share="hero-morph" disabled={isCatalog}>
+        <MaybeViewTransition
+          name={`game-hero-${game.id}`}
+          share="hero-morph"
+          disabled={isCatalog || disableHeroTransition}>
           <div className="relative isolate size-full overflow-hidden bg-zinc-950 rounded-xl">
             {isEffectivelyLoading ? (
               <Skeleton className="absolute inset-0 z-10 size-full rounded-xl" />

@@ -1,8 +1,8 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { getUserId, getErrorMessage } from "@shared/utils";
-import type { NotificationRecord } from "@domain/entities/NotificationRecord";
-import { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
-import { DynamoDbNotificationStore } from "@infrastructure/persistence/DynamoDbNotificationStore";
+import { getErrorMessage, getUserId } from "@shared/utils";
+import { AcknowledgeNotificationsUseCase } from "@application/use-cases/AcknowledgeNotificationsUseCase";
+import { ListNotificationsUseCase } from "@application/use-cases/ListNotificationsUseCase";
+import { SyncNotificationBatchUseCase } from "@application/use-cases/SyncNotificationBatchUseCase";
 import {
   NotificationAckSchema,
   type NotificationAckBody,
@@ -12,50 +12,30 @@ import {
   type NotificationListQuery,
 } from "@interfaces/schema/notifications";
 
+export interface NotificationRouteDependencies {
+  listNotificationsUseCase: ListNotificationsUseCase;
+  syncNotificationBatchUseCase: SyncNotificationBatchUseCase;
+  acknowledgeNotificationsUseCase: AcknowledgeNotificationsUseCase;
+}
+
 export async function registerNotificationRoutes(
   app: FastifyInstance,
-  store: S3NotificationStore | DynamoDbNotificationStore
+  deps: NotificationRouteDependencies
 ): Promise<void> {
   app.get<{ Querystring: NotificationListQuery }>(
     "/notifications",
     { schema: { querystring: NotificationListQuerySchema } },
     async (request, reply: FastifyReply) => {
       try {
-        const userId = getUserId(request);
-        const limit = request.query.limit ?? 50;
-        const cursor = request.query.cursor?.trim() ?? "";
-
-        const file = await store.load(userId);
-        let items = file.items.filter((n) => !n.dismissedAt);
-        if (items.length === 0) {
-          return reply.send({ items });
-        }
-
-        if (cursor) {
-          items = items.filter((n) => n.updatedAt > cursor);
-          if (items.length === 0) {
-            return reply.send({ items });
-          }
-        }
-
-        items.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
-        const page = items.slice(0, Math.min(limit, 500));
-
-        const needsStamp = page.some((n) => !n.serverUpdatedAt);
-        const stamped: NotificationRecord[] = needsStamp
-          ? (() => {
-              const now = new Date().toISOString();
-              return page.map((n) => ({
-                ...n,
-                serverUpdatedAt: n.serverUpdatedAt ?? now,
-              }));
-            })()
-          : page;
-
-        return reply.send({ items: stamped });
+        const result = await deps.listNotificationsUseCase.execute(
+          getUserId(request),
+          request.query.cursor?.trim() ?? "",
+          request.query.limit ?? 50
+        );
+        return reply.send(result);
       } catch (err) {
         const message = getErrorMessage(err);
-        request.log.error({ err, message }, "notifications list failed");
+        request.log.error({ err, message }, "Falló la consulta de notificaciones");
         return reply.status(500).send({ error: "Internal Server Error", message });
       }
     }
@@ -66,26 +46,11 @@ export async function registerNotificationRoutes(
     { schema: { body: NotificationBatchSchema } },
     async (request, reply: FastifyReply) => {
       try {
-        const userId = getUserId(request);
-        const incoming = request.body.items.filter((i) => i.userId === userId);
-        if (incoming.length === 0) {
-          return reply.status(204).send();
-        }
-
-        const file = await store.load(userId);
-        const now = new Date().toISOString();
-        const withServer: NotificationRecord[] = incoming.map((n) => ({
-          ...n,
-          serverUpdatedAt: now,
-          pendingSync: false,
-        }));
-
-        const merged = S3NotificationStore.mergeAll(file.items, withServer);
-        await store.save(userId, { version: 1, items: merged });
+        await deps.syncNotificationBatchUseCase.execute(getUserId(request), request.body.items);
         return reply.status(204).send();
       } catch (err) {
         const message = getErrorMessage(err);
-        request.log.error({ err, message }, "notifications batch failed");
+        request.log.error({ err, message }, "Falló la sincronización de notificaciones");
         return reply.status(500).send({ error: "Internal Server Error", message });
       }
     }
@@ -96,37 +61,12 @@ export async function registerNotificationRoutes(
     { schema: { body: NotificationAckSchema } },
     async (request, reply: FastifyReply) => {
       try {
-        const userId = getUserId(request);
-        const { ids, read, dismiss } = request.body;
-        if (ids.length === 0 || (!read && !dismiss)) {
-          return reply.status(204).send();
-        }
-        const now = new Date().toISOString();
-
-        const file = await store.load(userId);
-        const idSet = new Set(ids);
-        const next: NotificationRecord[] = file.items.map((n) => {
-          if (!idSet.has(n.id)) return n;
-          let readAt = n.readAt ?? null;
-          let dismissedAt = n.dismissedAt ?? null;
-          if (read) readAt = readAt ?? now;
-          if (dismiss) dismissedAt = now;
-          return {
-            ...n,
-            readAt,
-            dismissedAt,
-            updatedAt: now,
-            syncVersion: n.syncVersion + 1,
-            serverUpdatedAt: now,
-            pendingSync: false,
-          };
-        });
-
-        await store.save(userId, { version: 1, items: next });
+        const { ids, read = false, dismiss = false } = request.body;
+        await deps.acknowledgeNotificationsUseCase.execute(getUserId(request), ids, read, dismiss);
         return reply.status(204).send();
       } catch (err) {
         const message = getErrorMessage(err);
-        request.log.error({ err, message }, "notifications ack failed");
+        request.log.error({ err, message }, "Falló la actualización de notificaciones");
         return reply.status(500).send({ error: "Internal Server Error", message });
       }
     }

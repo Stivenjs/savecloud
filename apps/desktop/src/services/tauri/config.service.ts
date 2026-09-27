@@ -76,7 +76,7 @@ export async function exportConfigToFile(path: string, password: string): Promis
   return invoke("export_config_to_file", { path, password });
 }
 
-/** Importa una exportación `.scx` o un respaldo JSON antiguo. */
+/** Importa una exportación `.scx`, un respaldo local `.scb` o un JSON antiguo. */
 export async function importConfigFromFile(path: string, mode: "merge" | "replace", password?: string): Promise<void> {
   await invoke("import_config_from_file", { path, mode, password: password ?? null });
 }
@@ -84,6 +84,11 @@ export async function importConfigFromFile(path: string, mode: "merge" | "replac
 /** Sube config.json a la nube como "__config__/config.json" */
 export async function backupConfigToCloud(): Promise<void> {
   await invoke("backup_config_to_cloud");
+}
+
+/** Sube config.json solo si el contenido cambió desde el último respaldo correcto. */
+export async function backupConfigToCloudIfChanged(): Promise<boolean> {
+  return invoke<boolean>("backup_config_to_cloud_if_changed");
 }
 
 const CONFIG_BACKUP_DEBOUNCE_MS = 2500;
@@ -98,8 +103,8 @@ export function scheduleConfigBackupToCloud(): void {
   if (configBackupTimeoutId) clearTimeout(configBackupTimeoutId);
   configBackupTimeoutId = setTimeout(() => {
     configBackupTimeoutId = null;
-    backupConfigToCloud().catch(() => {
-      // Fallo silencioso para no molestar; el usuario puede usar "Subir a la nube" manual.
+    backupConfigToCloudIfChanged().catch(() => {
+      // El inicio, el foco y la reconexión reintentan si el respaldo sigue pendiente.
     });
   }, CONFIG_BACKUP_DEBOUNCE_MS);
 }

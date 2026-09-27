@@ -28,9 +28,13 @@ import { RespondCloudInviteUseCase } from "@application/use-cases/RespondCloudIn
 import { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
 import { SetCloudGameShareUseCase } from "@application/use-cases/SetCloudGameShareUseCase";
 import { ListCloudPresenceUseCase } from "@application/use-cases/ListCloudPresenceUseCase";
+import { AcknowledgeNotificationsUseCase } from "@application/use-cases/AcknowledgeNotificationsUseCase";
+import { BroadcastNotificationChangeUseCase } from "@application/use-cases/BroadcastNotificationChangeUseCase";
+import { ListNotificationsUseCase } from "@application/use-cases/ListNotificationsUseCase";
+import { SyncNotificationBatchUseCase } from "@application/use-cases/SyncNotificationBatchUseCase";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
-import type { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
+import type { NotificationRepository } from "@domain/ports/NotificationRepository";
 import type { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
 import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
 import { recordHttpMetric } from "@infrastructure/observability/httpMetricsStore";
@@ -55,7 +59,6 @@ import { DeleteFromTrashUseCase } from "@application/use-cases/DeleteFromTrashUs
 import { EmptyTrashUseCase } from "@application/use-cases/EmptyTrashUseCase";
 import type { ClipStore } from "@infrastructure/clips/ClipStore";
 import type { DynamoDbClipStore } from "@infrastructure/clips/DynamoDbClipStore";
-import type { DynamoDbNotificationStore } from "@infrastructure/persistence/DynamoDbNotificationStore";
 import type { DynamoDbShareTokenStore } from "@infrastructure/share/DynamoDbShareTokenStore";
 import { verifyUserAccessToken } from "@shared/accessToken";
 import { isPublicRoute } from "@interfaces/http/security/public-routes";
@@ -73,7 +76,7 @@ export interface AppDependencies {
   gameInventoryRepository?: GameInventoryRepository;
   shareTokenStore?: ShareTokenS3 | DynamoDbShareTokenStore;
   clipStore?: ClipStore | DynamoDbClipStore;
-  notificationStore?: S3NotificationStore | DynamoDbNotificationStore;
+  notificationRepository?: NotificationRepository;
   connectionRepository?: ConnectionRepository;
   webSocketNotifier?: WebSocketNotifier;
 }
@@ -163,8 +166,22 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     await registerClipRoutes(app, deps.clipStore);
   }
 
-  if (deps.notificationStore) {
-    await registerNotificationRoutes(app, deps.notificationStore);
+  if (deps.notificationRepository) {
+    const broadcastNotificationChange = new BroadcastNotificationChangeUseCase(
+      deps.connectionRepository,
+      deps.webSocketNotifier
+    );
+    await registerNotificationRoutes(app, {
+      listNotificationsUseCase: new ListNotificationsUseCase(deps.notificationRepository),
+      syncNotificationBatchUseCase: new SyncNotificationBatchUseCase(
+        deps.notificationRepository,
+        broadcastNotificationChange
+      ),
+      acknowledgeNotificationsUseCase: new AcknowledgeNotificationsUseCase(
+        deps.notificationRepository,
+        broadcastNotificationChange
+      ),
+    });
   }
 
   if (deps.cloudInviteRepository) {

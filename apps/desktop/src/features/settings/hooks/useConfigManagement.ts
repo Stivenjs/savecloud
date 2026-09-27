@@ -105,7 +105,7 @@ export function useConfigManagement() {
         title: "Importar configuración",
         directory: false,
         multiple: false,
-        filters: [{ name: "SaveCloud y JSON antiguo", extensions: ["scx", "json"] }],
+        filters: [{ name: "SaveCloud, respaldos locales y JSON antiguo", extensions: ["scx", "scb", "json"] }],
       });
       if (path && typeof path === "string") {
         importPath = path;

@@ -5,9 +5,12 @@
 //! de sincronización.
 
 pub mod config_cmds;
+pub mod backup_snapshot;
+pub mod cloud_backup;
 pub mod encrypted_export;
 pub mod gamification;
 pub mod io;
+pub mod local_backup;
 mod library_reader;
 pub mod models;
 pub mod paths;

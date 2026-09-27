@@ -9,9 +9,10 @@ import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
 import { formatGameDisplayName } from "@utils/gameImage";
 import type { ConfiguredGame } from "@app-types/config";
-import { checkGamesRunning, getFriendConfig, setCloudHostWsUrl } from "@services/tauri";
+import { getFriendConfig, setCloudHostWsUrl } from "@services/tauri";
 import { useGameSessionStore } from "@store/GameSessionStore";
 import i18n from "@lib/i18n";
+import { gameRunningStatusQueryOptions, RUNNING_STATUS_KEY } from "@hooks/queries/gameRunningStatusQuery";
 
 /**
  * Mensaje entrante desde el WebSocket de la nube (Rust → TS).
@@ -282,8 +283,15 @@ export function useCloudWebSockets() {
     if (!initialReplayDoneRef.current) {
       initialReplayDoneRef.current = true;
 
-      checkGamesRunning((gamesRef.current ?? []).map((game) => game.id))
+      const gameIds = (gamesRef.current ?? []).map((game) => game.id);
+      queryClient
+        .fetchQuery(gameRunningStatusQueryOptions(gameIds))
         .then((currentStatus) => {
+          useGameSessionStore.getState().syncLocalRunningMap(currentStatus);
+          queryClient.setQueryData(RUNNING_STATUS_KEY, (previous: Record<string, boolean> | undefined) => ({
+            ...(previous ?? {}),
+            ...currentStatus,
+          }));
           for (const [gameId, isRunning] of Object.entries(currentStatus)) {
             if (isRunning) {
               prevGameStatusRef.current[gameId] = true;

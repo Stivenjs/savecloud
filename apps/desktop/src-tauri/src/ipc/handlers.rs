@@ -119,6 +119,7 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::config::config_cmds::import_config_from_file,
         crate::config::config_cmds::import_friend_config,
         crate::config::config_cmds::backup_config_to_cloud,
+        crate::config::cloud_backup::backup_config_to_cloud_if_changed,
         crate::config::config_cmds::restore_config_from_cloud,
         crate::commands::sync::api::sync_list_remote_saves_for_user,
         crate::steam_catalog::seed::commands::sync_export_steam_manifest_to_cloud_seed,

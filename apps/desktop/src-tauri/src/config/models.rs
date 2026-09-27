@@ -255,6 +255,9 @@ pub struct Config {
     #[serde(default)]
     pub ws_base_url: Option<String>,
     pub api_key: Option<String>,
+    /// Credencial incluida únicamente en exportaciones `.scx` cifradas.
+    #[serde(default)]
+    pub steam_web_api_key: Option<String>,
     pub user_id: Option<String>,
     #[serde(default)]
     pub active_cloud_host_user_id: Option<String>,

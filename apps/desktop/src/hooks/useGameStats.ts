@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getGameStats } from "@services/tauri";
 import type { GameStats } from "@services/tauri";
 import { useProfileSession } from "@hooks/useProfileSession";
+import { useLastSyncInfo } from "@hooks/useLastSyncInfo";
 
 const GAME_STATS_QUERY_KEY = ["game-stats"] as const;
 const GAME_STATS_CACHE_VERSION = 1;
@@ -49,8 +50,9 @@ function readPersistedGameStats(storageKey: string): PersistedGameStats | undefi
   }
 }
 
-export function useGameStats(enabled: boolean) {
+export function useGameStats(enabled: boolean, cloudEnabled = enabled) {
   const { activeProfile } = useProfileSession();
+  const { cloudGames } = useLastSyncInfo(enabled && cloudEnabled);
   const profileId = activeProfile?.id ?? "default";
   const storageKey = `savecloud.game-stats.v${GAME_STATS_CACHE_VERSION}.${encodeURIComponent(profileId)}`;
   const persistedStats = useMemo(() => readPersistedGameStats(storageKey), [storageKey]);
@@ -65,8 +67,19 @@ export function useGameStats(enabled: boolean) {
   });
 
   const statsByGameId = useMemo(() => {
-    return new Map((query.data ?? []).map((s: GameStats) => [s.gameId, s]));
-  }, [query.data]);
+    const cloudModifiedByGameId = new Map(
+      cloudGames.map((game) => [game.gameId.toLowerCase(), game.lastModified ?? null])
+    );
+    return new Map(
+      (query.data ?? []).map((stats: GameStats) => [
+        stats.gameId,
+        {
+          ...stats,
+          cloudLastModified: cloudModifiedByGameId.get(stats.gameId.toLowerCase()) ?? null,
+        },
+      ])
+    );
+  }, [cloudGames, query.data]);
 
   useEffect(() => {
     if (!query.data || query.dataUpdatedAt === 0) return;

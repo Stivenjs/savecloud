@@ -47,6 +47,8 @@ pub enum CloudIncomingMessage {
     StreamSignal { data: StreamSignalData },
     /// Notificación de sesión de transferencia de guardados LAN pendiente.
     TransferSessionPending { data: TransferSessionPendingData },
+    /// El inbox cloud cambió y el cliente debe descargar desde su cursor local.
+    NotificationsChanged { data: NotificationsChangedData },
 }
 
 /// Datos asociados a un evento `FriendPlaying`.
@@ -113,6 +115,13 @@ pub struct TransferSessionPendingData {
     pub manifest_hash: String,
     /// Fecha/hora ISO-8601 de expiración de la sesión.
     pub expires_at: String,
+}
+
+/// Cursor de la última mutación remota del inbox.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationsChangedData {
+    pub cursor: String,
 }
 
 /// Payload para difusión de presencia enviada desde el cliente al servidor.
@@ -230,6 +239,7 @@ pub async fn start_ws_loop(
             Ok((ws_stream, _)) => {
                 backoff = Duration::from_secs(INITIAL_BACKOFF_SECS);
                 last_friend_game.clear();
+                let _ = app_handle.emit("cloud-ws-connected", ());
 
                 log_cloud(
                     &app_handle,
@@ -385,6 +395,7 @@ async fn handle_incoming_text(
                 CloudIncomingMessage::Error { .. } => "ERROR",
                 CloudIncomingMessage::StreamSignal { .. } => "STREAM_SIGNAL",
                 CloudIncomingMessage::TransferSessionPending { .. } => "TRANSFER_SESSION_PENDING",
+                CloudIncomingMessage::NotificationsChanged { .. } => "NOTIFICATIONS_CHANGED",
             };
 
             sync_logger::log_operation("cloud_ws_message_parsed", &format!("kind={}", msg_kind));

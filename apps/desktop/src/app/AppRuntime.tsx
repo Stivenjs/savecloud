@@ -8,7 +8,6 @@ import { NAV_ITEMS } from "@components/navigation/navItems";
 import { UnsyncedSavesModalWithProgress } from "@features/games";
 import { useAppInitialization } from "@hooks/useAppInitialization";
 import { useLibrary } from "@hooks/useLibrary";
-import { useProfileSessionHydration } from "@hooks/useProfileSession";
 import type { ConfiguredGame } from "@app-types/config";
 import {
   SAVECLOUD_OPEN_RESTORE_FROM_CLOUD_EVENT,
@@ -80,7 +79,6 @@ const StreamingDryRunMetricsModalLazy = lazy(() =>
 );
 
 export function AppRuntime({ hideTitleBar = false }: AppRuntimeProps) {
-  useProfileSessionHydration();
   useAppInitialization();
   const isStreamingMetricsOpen = useStreamingMetricsStore((s) => s.isModalOpen);
 

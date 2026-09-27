@@ -422,6 +422,7 @@ pub fn get_combined_config() -> Config {
         api_base_url: settings.api_base_url,
         ws_base_url: settings.ws_base_url,
         api_key: settings.api_key,
+        steam_web_api_key: settings.steam_web_api_key,
         user_id: settings.user_id,
         active_cloud_host_user_id: settings.active_cloud_host_user_id,
         cloud_host_api_base_urls: settings.cloud_host_api_base_urls,
@@ -478,6 +479,13 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
         .filter(|key| *key != crate::config::MASKED_API_KEY && !key.is_empty())
         .map(String::from)
         .or(current_settings.api_key);
+    current_settings.steam_web_api_key = cfg
+        .steam_web_api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+        .map(String::from)
+        .or(current_settings.steam_web_api_key);
 
     current_settings.user_id = cfg.user_id.clone().or(current_settings.user_id);
     current_settings.active_cloud_host_user_id = cfg

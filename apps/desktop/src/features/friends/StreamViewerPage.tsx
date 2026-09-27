@@ -3,8 +3,7 @@ import { Button } from "@heroui/react";
 import { listen } from "@tauri-apps/api/event";
 import { MonitorPlay } from "lucide-react";
 import { sendCloudStreamSignal } from "@services/tauri";
-import { useAppInitialization } from "@hooks/useAppInitialization";
-import { useProfileSession, useProfileSessionHydration } from "@hooks/useProfileSession";
+import { useProfileSession } from "@hooks/useProfileSession";
 import { useConfig } from "@hooks/useConfig";
 import { TitleBar } from "@components/layout/TitleBar";
 import { useTranslation } from "react-i18next";
@@ -52,8 +51,6 @@ const STATUS_KEYS: Record<StreamStatus, string> = {
 };
 
 export function StreamViewerPage() {
-  useProfileSessionHydration();
-  useAppInitialization();
   const { t } = useTranslation();
 
   const { activeProfile } = useProfileSession();

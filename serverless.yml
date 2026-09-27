@@ -138,7 +138,14 @@ custom:
   steamSeedFiltersDefault: "basic,developers,publishers,genres,categories,release_date,screenshots,movies"
 
 resources:
-  - ${file(infra/resources.${sls:stage, 'dev'}.yml)}
+  Resources: ${file(infra/resources.${sls:stage, 'dev'}.yml):Resources}
+  extensions:
+    HttpApiStage:
+      Properties:
+        # Limita el tráfico de cada stage de la HTTP API para contener picos.
+        DefaultRouteSettings:
+          ThrottlingBurstLimit: 1000
+          ThrottlingRateLimit: 500
 
 functions:
   apiAuthorizer:

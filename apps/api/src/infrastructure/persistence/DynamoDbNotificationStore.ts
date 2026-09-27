@@ -2,6 +2,7 @@ import { GetObjectCommand, NoSuchKey, S3Client } from "@aws-sdk/client-s3";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand, BatchWriteCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import type { NotificationInboxFile, NotificationRecord } from "@domain/entities/NotificationRecord";
+import type { NotificationRepository } from "@domain/ports/NotificationRepository";
 
 const MAX_ITEMS = 500;
 const NOTIFICATION_TTL_DAYS = 30;
@@ -10,7 +11,7 @@ function calculateTtlEpoch(days = NOTIFICATION_TTL_DAYS): number {
   return Math.floor(Date.now() / 1000) + days * 86400;
 }
 
-export class DynamoDbNotificationStore {
+export class DynamoDbNotificationStore implements NotificationRepository {
   private readonly dynamoClient: DynamoDBClient;
   private readonly docClient: DynamoDBDocumentClient;
   private readonly tableName: string;
@@ -154,27 +155,5 @@ export class DynamoDbNotificationStore {
       if (err instanceof NoSuchKey) return [];
       return [];
     }
-  }
-
-  /** Last-write-wins por `syncVersion`, desempate por `updatedAt` ISO. */
-  static mergeRecord(a: NotificationRecord, b: NotificationRecord): NotificationRecord {
-    if (b.syncVersion !== a.syncVersion) {
-      return b.syncVersion > a.syncVersion ? b : a;
-    }
-    return b.updatedAt > a.updatedAt ? b : a;
-  }
-
-  static mergeAll(existing: NotificationRecord[], incoming: NotificationRecord[]): NotificationRecord[] {
-    const map = new Map<string, NotificationRecord>();
-    for (const x of existing) {
-      map.set(x.id, x);
-    }
-    for (const y of incoming) {
-      const prev = map.get(y.id);
-      map.set(y.id, prev ? DynamoDbNotificationStore.mergeRecord(prev, y) : y);
-    }
-    const merged = [...map.values()];
-    merged.sort((p, q) => (q.updatedAt > p.updatedAt ? 1 : q.updatedAt < p.updatedAt ? -1 : 0));
-    return merged.slice(0, MAX_ITEMS);
   }
 }

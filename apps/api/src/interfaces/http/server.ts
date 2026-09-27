@@ -74,7 +74,7 @@ const shareTokenStore = shareTokensTable
 const clipStore = clipsTable
   ? new DynamoDbClipStore(s3, bucketName, dynamoClient, clipsTable, presignS3)
   : new ClipStore(s3, bucketName, presignS3);
-const notificationStore = notificationsTable
+const notificationRepository = notificationsTable
   ? new DynamoDbNotificationStore(dynamoClient, notificationsTable, s3, bucketName)
   : new S3NotificationStore(s3, bucketName);
 const s3CloudInviteFallback = new S3CloudInviteRepository(s3, bucketName);
@@ -129,7 +129,7 @@ async function main(): Promise<void> {
     steamSeedRepository,
     shareTokenStore,
     clipStore,
-    notificationStore,
+    notificationRepository,
     cloudInviteRepository,
     gameInventoryRepository,
     gameStatRepository,
