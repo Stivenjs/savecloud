@@ -1,6 +1,7 @@
 services:
   savecloud-api:
     image: savecloud-api:local
+    pull_policy: build
     build:
       context: .
       dockerfile: Dockerfile

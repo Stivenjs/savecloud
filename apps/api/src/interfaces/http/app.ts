@@ -1,4 +1,4 @@
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import Fastify, { LogController, type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import "@fastify/websocket";
@@ -68,7 +68,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     logger: {
       level: process.env.LOG_LEVEL ?? "warn",
     },
-    disableRequestLogging: process.env.HTTP_REQUEST_LOGS !== "true",
+    logController: new LogController({ disableRequestLogging: process.env.HTTP_REQUEST_LOGS !== "true" }),
     trustProxy: true,
   });
 

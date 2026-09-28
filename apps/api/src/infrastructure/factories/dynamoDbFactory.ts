@@ -14,7 +14,7 @@ const DEFAULT_AWS_REGION = "us-east-2";
 const DEFAULT_MAX_ATTEMPTS = 3;
 
 /** Tiempo máximo de espera (en ms) para la verificación de tablas al arrancar el servidor */
-const TABLE_INIT_TIMEOUT_MS = 15000;
+const TABLE_INIT_TIMEOUT_MS = 60000;
 
 /** Estructura con las configuraciones opcionales de tablas de DynamoDB */
 export interface DynamoDbTablesConfig {
@@ -226,14 +226,19 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
     }
   };
 
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
       () => reject(new Error(`DynamoDB table check timed out after ${TABLE_INIT_TIMEOUT_MS / 1000}s`)),
       TABLE_INIT_TIMEOUT_MS
-    )
-  );
+    );
+  });
 
-  await Promise.race([initTables(), timeoutPromise]);
+  try {
+    await Promise.race([initTables(), timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 /**
@@ -243,13 +248,13 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
  *
  * @param client - Instancia de `DynamoDBClient`.
  * @param tableInput - Definición del comando `CreateTableCommandInput` a ejecutar.
- * @param maxRetries - Número máximo de reintentos de conexión (por defecto 5).
+ * @param maxRetries - Número máximo de reintentos de conexión (por defecto 30).
  * @param delayMs - Tiempo de espera entre reintentos en ms (por defecto 1000 ms).
  */
 async function createTableIfNotExists(
   client: DynamoDBClient,
   tableInput: CreateTableCommandInput,
-  maxRetries = 5,
+  maxRetries = 30,
   delayMs = 1000
 ): Promise<void> {
   const tableName = tableInput.TableName;
@@ -270,6 +275,13 @@ async function createTableIfNotExists(
         console.log(`[DynamoDB Local] Esperando a que DynamoDB esté disponible (intento ${attempt}/${maxRetries})...`);
         await new Promise((resolve) => setTimeout(resolve, delayMs));
         continue;
+      }
+
+      if (isConnRefused) {
+        throw new Error(
+          `[DynamoDB Local] No estuvo disponible después de ${maxRetries} intentos; no se pudo verificar '${tableName}'.`,
+          { cause: err }
+        );
       }
 
       const isNotFound =
