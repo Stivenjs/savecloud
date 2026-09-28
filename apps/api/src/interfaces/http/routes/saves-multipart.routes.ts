@@ -21,7 +21,6 @@ import type { CompleteMultipartUploadUseCase } from "@application/use-cases/Comp
 import type { AbortMultipartUploadUseCase } from "@application/use-cases/AbortMultipartUploadUseCase";
 import type { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
 import { getStorageUserIdFromRequest } from "@interfaces/http/helpers/saves-route-helpers";
-import { getErrorMessage } from "@shared/utils";
 
 export async function registerSavesMultipartRoutes(
   app: FastifyInstance,
@@ -96,7 +95,7 @@ export async function registerSavesMultipartRoutes(
     "/saves/multipart/complete",
     { schema: { body: CompleteMultipartSchema } },
     async (request, reply) => {
-      try {
+      {
         const { key, uploadId, parts } = request.body;
         await deps.completeMultipartUploadUseCase.execute({
           key: key.trim(),
@@ -104,9 +103,6 @@ export async function registerSavesMultipartRoutes(
           parts: parts.map((part) => ({ partNumber: part.partNumber, etag: part.etag.trim() })),
         });
         return reply.status(204).send();
-      } catch (err) {
-        request.log.error({ err }, "multipart/complete failed");
-        return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
       }
     }
   );
@@ -115,13 +111,10 @@ export async function registerSavesMultipartRoutes(
     "/saves/multipart/abort",
     { schema: { body: AbortMultipartSchema } },
     async (request, reply) => {
-      try {
+      {
         const { key, uploadId } = request.body;
         await deps.abortMultipartUploadUseCase.execute({ key: key.trim(), uploadId: uploadId.trim() });
         return reply.status(204).send();
-      } catch (err) {
-        request.log.error({ err }, "multipart/abort failed");
-        return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
       }
     }
   );

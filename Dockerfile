@@ -20,6 +20,7 @@ COPY apps/api ./apps/api
 
 # Compilar y empaquetar la aplicación TypeScript a JavaScript para Bun
 RUN bun build apps/api/src/interfaces/http/server.ts --target bun --outdir ./dist
+RUN bun build apps/api/src/interfaces/worker/steam-seed-worker.ts --target bun --outfile ./dist/steam-seed-worker.js
 
 
 # STAGE 2: Production Runner

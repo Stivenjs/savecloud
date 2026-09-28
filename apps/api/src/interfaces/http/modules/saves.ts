@@ -21,6 +21,7 @@ import { ListSavesUseCase } from "@application/use-cases/ListSavesUseCase";
 import { RenameBackupUseCase } from "@application/use-cases/RenameBackupUseCase";
 import { RenameGameInCloudUseCase } from "@application/use-cases/RenameGameInCloudUseCase";
 import { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
+import { ResolveTargetStorageUserIdUseCase } from "@application/use-cases/ResolveTargetStorageUserIdUseCase";
 import { registerSavesRoutes } from "@interfaces/http/routes/saves.routes";
 import { registerSavesMultipartRoutes } from "@interfaces/http/routes/saves-multipart.routes";
 import { registerSteamSeedRoutes } from "@interfaces/http/routes/saves-steam-seed.routes";
@@ -53,6 +54,10 @@ export async function registerSavesModule(
     renameBackupUseCase: new RenameBackupUseCase(deps.saveRepository),
     resolveCloudStorageScopeUseCase,
     cloudInviteRepository: deps.cloudInviteRepository,
+    resolveTargetStorageUserIdUseCase:
+      deps.cloudInviteRepository && resolveCloudStorageScopeUseCase
+        ? new ResolveTargetStorageUserIdUseCase(deps.cloudInviteRepository, resolveCloudStorageScopeUseCase)
+        : undefined,
   };
 
   await registerSavesRoutes(app, useCases);

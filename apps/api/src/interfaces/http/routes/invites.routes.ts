@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { getUserId, getErrorMessage, resolvePublicBaseUrl } from "@shared/utils";
+import { resolvePublicBaseUrl } from "@shared/utils";
+import { getUserId } from "@interfaces/http/helpers/request-context";
+import { ApplicationError } from "@application/errors/ApplicationError";
 import type { CreateCloudInviteUseCase } from "@application/use-cases/CreateCloudInviteUseCase";
 import type { ListPendingCloudInvitesUseCase } from "@application/use-cases/ListPendingCloudInvitesUseCase";
 import type { RespondCloudInviteUseCase } from "@application/use-cases/RespondCloudInviteUseCase";
@@ -20,12 +22,6 @@ import {
   type MembershipActionBody,
 } from "@interfaces/schema/invites";
 
-function inviteErrorStatus(message: string): number {
-  if (message.includes("not found")) return 404;
-  if (message.includes("does not belong")) return 403;
-  return 400;
-}
-
 export async function registerInviteRoutes(
   app: FastifyInstance,
   deps: {
@@ -41,7 +37,7 @@ export async function registerInviteRoutes(
     "/invites",
     { schema: { body: CreateInviteSchema } },
     async (request, reply: FastifyReply) => {
-      try {
+      {
         const hostUserId = getUserId(request);
         const invite = await deps.createCloudInviteUseCase.execute({
           hostUserId,
@@ -55,19 +51,15 @@ export async function registerInviteRoutes(
           ...invite,
           inviteUrl: invite.token ? `${baseUrl}/invites/accept/${invite.token}` : null,
         });
-      } catch (err) {
-        return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
       }
     }
   );
 
   app.get("/invites/pending", async (request, reply: FastifyReply) => {
-    try {
+    {
       const userId = getUserId(request);
       const items = await deps.listPendingCloudInvitesUseCase.execute(userId);
       return reply.send({ items });
-    } catch (err) {
-      return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
     }
   });
 
@@ -75,7 +67,7 @@ export async function registerInviteRoutes(
     "/invites/:id/respond",
     { schema: { body: RespondInviteSchema } },
     async (request, reply: FastifyReply) => {
-      try {
+      {
         const userId = getUserId(request);
         await deps.respondCloudInviteUseCase.execute({
           userId,
@@ -83,10 +75,6 @@ export async function registerInviteRoutes(
           action: request.body.action,
         });
         return reply.status(204).send();
-      } catch (err) {
-        const message = getErrorMessage(err);
-        const status = inviteErrorStatus(message);
-        return reply.status(status).send({ error: "Bad Request", message });
       }
     }
   );
@@ -103,7 +91,7 @@ export async function registerInviteRoutes(
       },
     },
     async (request, reply: FastifyReply) => {
-      try {
+      {
         const userId = getUserId(request);
         const invite = await deps.respondCloudInviteUseCase.execute({
           userId,
@@ -117,16 +105,12 @@ export async function registerInviteRoutes(
           hostUserId: invite.hostUserId,
           wsUrl: invite.wsUrl,
         });
-      } catch (err) {
-        const message = getErrorMessage(err);
-        const status = inviteErrorStatus(message);
-        return reply.status(status).send({ error: "Bad Request", message });
       }
     }
   );
 
   app.get("/invites/memberships", async (request, reply: FastifyReply) => {
-    try {
+    {
       const userId = getUserId(request);
       const [hostMemberships, ownMemberMemberships] = await Promise.all([
         deps.cloudInviteRepository.listMembershipsForHost(userId),
@@ -157,19 +141,15 @@ export async function registerInviteRoutes(
       const mergedMemberMemberships = Array.from(memberMembershipsMap.values());
 
       return reply.send({ hostMemberships, memberMemberships: mergedMemberMemberships });
-    } catch (err) {
-      return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
     }
   });
 
   if (deps.listCloudPresenceUseCase) {
     app.get("/invites/presence", async (request, reply: FastifyReply) => {
-      try {
+      {
         const userId = getUserId(request);
         const result = await deps.listCloudPresenceUseCase!.execute(userId);
         return reply.send(result);
-      } catch (err) {
-        return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
       }
     });
   }
@@ -178,7 +158,7 @@ export async function registerInviteRoutes(
     "/invites/games/share",
     { schema: { body: SetGameShareSchema } },
     async (request, reply: FastifyReply) => {
-      try {
+      {
         const hostUserId = getUserId(request);
         const memberUserId = request.body.memberUserId.trim();
         const gameId = request.body.gameId.trim();
@@ -189,8 +169,6 @@ export async function registerInviteRoutes(
           shared: true,
         });
         return reply.status(204).send();
-      } catch (err) {
-        return reply.status(400).send({ error: "Bad Request", message: getErrorMessage(err) });
       }
     }
   );
@@ -199,7 +177,7 @@ export async function registerInviteRoutes(
     "/invites/games/unshare",
     { schema: { body: SetGameShareSchema } },
     async (request, reply: FastifyReply) => {
-      try {
+      {
         const hostUserId = getUserId(request);
         const memberUserId = request.body.memberUserId.trim();
         const gameId = request.body.gameId.trim();
@@ -210,8 +188,6 @@ export async function registerInviteRoutes(
           shared: false,
         });
         return reply.status(204).send();
-      } catch (err) {
-        return reply.status(400).send({ error: "Bad Request", message: getErrorMessage(err) });
       }
     }
   );
@@ -220,17 +196,15 @@ export async function registerInviteRoutes(
     "/invites/memberships/leave",
     { schema: { body: MembershipActionSchema } },
     async (request, reply: FastifyReply) => {
-      try {
+      {
         const userId = getUserId(request);
         const hostUserId = request.body.hostUserId.trim();
         const memberUserId = request.body.memberUserId.trim();
         if (userId !== memberUserId) {
-          return reply.status(403).send({ error: "Forbidden", message: "Only member can leave its own membership" });
+          throw new ApplicationError("FORBIDDEN", "Solo el miembro puede abandonar su propia membresía.");
         }
         await deps.cloudInviteRepository.deactivateMembership(hostUserId, memberUserId);
         return reply.status(204).send();
-      } catch (err) {
-        return reply.status(400).send({ error: "Bad Request", message: getErrorMessage(err) });
       }
     }
   );
@@ -239,17 +213,15 @@ export async function registerInviteRoutes(
     "/invites/memberships/remove",
     { schema: { body: MembershipActionSchema } },
     async (request, reply: FastifyReply) => {
-      try {
+      {
         const userId = getUserId(request);
         const hostUserId = request.body.hostUserId.trim();
         const memberUserId = request.body.memberUserId.trim();
         if (userId !== hostUserId) {
-          return reply.status(403).send({ error: "Forbidden", message: "Only host can remove members" });
+          throw new ApplicationError("FORBIDDEN", "Solo el anfitrión puede quitar miembros.");
         }
         await deps.cloudInviteRepository.deactivateMembership(hostUserId, memberUserId);
         return reply.status(204).send();
-      } catch (err) {
-        return reply.status(400).send({ error: "Bad Request", message: getErrorMessage(err) });
       }
     }
   );

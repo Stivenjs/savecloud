@@ -12,7 +12,10 @@ import {
 import type { SteamSeedRepository } from "@domain/ports/SteamSeedRepository";
 import type { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
 import { getStorageUserIdFromRequest, ownerIdFromStorageUserId } from "@interfaces/http/helpers/saves-route-helpers";
-import { getErrorMessage, getUserId } from "@shared/utils";
+import { ApplicationError } from "@application/errors/ApplicationError";
+import { assertSteamSeedRepository } from "@interfaces/http/helpers/steam-seed";
+
+import { getUserId } from "@interfaces/http/helpers/request-context";
 
 export async function registerSteamSeedRoutes(
   app: FastifyInstance,
@@ -25,9 +28,7 @@ export async function registerSteamSeedRoutes(
     "/saves/steam-seed/manifest/upload-url",
     { schema: { body: SteamSeedManifestUploadUrlSchema } },
     async (request, reply) => {
-      if (!deps.steamSeedRepository) {
-        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-      }
+      assertSteamSeedRepository(deps.steamSeedRepository);
       const ownerId = ownerIdFromStorageUserId(
         await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase)
       );
@@ -37,9 +38,7 @@ export async function registerSteamSeedRoutes(
   );
 
   app.post("/saves/steam-seed/priority/upload-url", async (request, reply) => {
-    if (!deps.steamSeedRepository) {
-      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-    }
+    assertSteamSeedRepository(deps.steamSeedRepository);
     const ownerId = ownerIdFromStorageUserId(
       await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase)
     );
@@ -48,9 +47,7 @@ export async function registerSteamSeedRoutes(
   });
 
   app.post("/saves/steam-seed/priority/download-url", async (request, reply) => {
-    if (!deps.steamSeedRepository) {
-      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-    }
+    assertSteamSeedRepository(deps.steamSeedRepository);
     const ownerId = ownerIdFromStorageUserId(
       await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase)
     );
@@ -59,49 +56,34 @@ export async function registerSteamSeedRoutes(
   });
 
   app.post("/saves/steam-seed/tick", async (request, reply) => {
-    if (!deps.steamSeedRepository) {
-      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-    }
-    try {
-      const { handler: seedHandler } = await import("@interfaces/lambda/steam-seed/handler");
-      const requesterUserId = getUserId(request);
-      const ownerId = ownerIdFromStorageUserId(
-        await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase)
-      );
-      if (requesterUserId !== ownerId) {
-        return reply
-          .status(403)
-          .send({ error: "Forbidden", message: "Only the cloud owner can manage the Steam worker" });
-      }
-      const result = await seedHandler({ ownerId });
-      return reply.send(result);
-    } catch (err: unknown) {
-      request.log.error({ err }, "steam-seed tick failed");
-      return reply.status(500).send({ error: "Internal Server Error", message: String(err) });
-    }
-  });
-
-  app.post("/saves/steam-seed/reset", async (request, reply) => {
-    if (!deps.steamSeedRepository) {
-      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-    }
+    assertSteamSeedRepository(deps.steamSeedRepository);
+    const { handler: seedHandler } = await import("@interfaces/lambda/steam-seed/handler");
     const requesterUserId = getUserId(request);
     const ownerId = ownerIdFromStorageUserId(
       await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase)
     );
     if (requesterUserId !== ownerId) {
-      return reply
-        .status(403)
-        .send({ error: "Forbidden", message: "Only the cloud owner can manage the Steam worker" });
+      throw new ApplicationError("FORBIDDEN", "Solo el propietario de la nube puede administrar Steam Seed.");
+    }
+    const result = await seedHandler({ ownerId });
+    return reply.send(result);
+  });
+
+  app.post("/saves/steam-seed/reset", async (request, reply) => {
+    assertSteamSeedRepository(deps.steamSeedRepository);
+    const requesterUserId = getUserId(request);
+    const ownerId = ownerIdFromStorageUserId(
+      await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase)
+    );
+    if (requesterUserId !== ownerId) {
+      throw new ApplicationError("FORBIDDEN", "Solo el propietario de la nube puede administrar Steam Seed.");
     }
     await deps.steamSeedRepository.resetState(ownerId);
     return reply.status(204).send();
   });
 
   app.get("/saves/steam-seed/status", async (request, reply) => {
-    if (!deps.steamSeedRepository) {
-      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-    }
+    assertSteamSeedRepository(deps.steamSeedRepository);
     const ownerId = ownerIdFromStorageUserId(
       await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase)
     );
@@ -110,17 +92,13 @@ export async function registerSteamSeedRoutes(
   });
 
   app.get("/saves/steam-seed/control", async (request, reply) => {
-    if (!deps.steamSeedRepository) {
-      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-    }
+    assertSteamSeedRepository(deps.steamSeedRepository);
     const requesterUserId = getUserId(request);
     const ownerId = ownerIdFromStorageUserId(
       await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase)
     );
     if (requesterUserId !== ownerId) {
-      return reply
-        .status(403)
-        .send({ error: "Forbidden", message: "Only the cloud owner can manage the Steam worker" });
+      throw new ApplicationError("FORBIDDEN", "Solo el propietario de la nube puede administrar Steam Seed.");
     }
     const [worker, progress, reviews] = await Promise.all([
       deps.steamSeedRepository.getWorkerControl(ownerId),
@@ -134,17 +112,13 @@ export async function registerSteamSeedRoutes(
     "/saves/steam-seed/control",
     { schema: { body: SteamSeedWorkerControlSchema } },
     async (request, reply) => {
-      if (!deps.steamSeedRepository) {
-        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-      }
+      assertSteamSeedRepository(deps.steamSeedRepository);
       const requesterUserId = getUserId(request);
       const ownerId = ownerIdFromStorageUserId(
         await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase)
       );
       if (requesterUserId !== ownerId) {
-        return reply
-          .status(403)
-          .send({ error: "Forbidden", message: "Only the cloud owner can manage the Steam worker" });
+        throw new ApplicationError("FORBIDDEN", "Solo el propietario de la nube puede administrar Steam Seed.");
       }
       const control = await deps.steamSeedRepository.setWorkerPaused(ownerId, request.body.paused);
       const [progress, reviews] = await Promise.all([
@@ -159,9 +133,7 @@ export async function registerSteamSeedRoutes(
     "/saves/steam-seed/batches",
     { schema: { querystring: SteamSeedBatchesQuerySchema } },
     async (request, reply) => {
-      if (!deps.steamSeedRepository) {
-        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-      }
+      assertSteamSeedRepository(deps.steamSeedRepository);
       const ownerId = ownerIdFromStorageUserId(
         await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase)
       );
@@ -175,9 +147,7 @@ export async function registerSteamSeedRoutes(
     "/saves/steam-seed/reviews/batches",
     { schema: { querystring: SteamSeedBatchesQuerySchema } },
     async (request, reply) => {
-      if (!deps.steamSeedRepository) {
-        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-      }
+      assertSteamSeedRepository(deps.steamSeedRepository);
       const ownerId = ownerIdFromStorageUserId(
         await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase)
       );
@@ -191,13 +161,11 @@ export async function registerSteamSeedRoutes(
     "/saves/steam-seed/batch/download-url",
     { schema: { body: SteamSeedBatchDownloadUrlSchema } },
     async (request, reply) => {
-      if (!deps.steamSeedRepository) {
-        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-      }
+      assertSteamSeedRepository(deps.steamSeedRepository);
 
       const { key, keys } = request.body;
       if (!key && (!keys || keys.length === 0)) {
-        return reply.status(400).send({ error: "Bad Request", message: "either 'key' or 'keys' is required" });
+        throw new ApplicationError("INVALID_ARGUMENT", "Debes indicar una clave o una lista de claves.");
       }
 
       try {
@@ -214,12 +182,10 @@ export async function registerSteamSeedRoutes(
         const downloadUrl = await deps.steamSeedRepository.getBatchDownloadUrl(ownerId, key!.trim());
         return reply.send({ downloadUrl });
       } catch (err) {
-        const message = getErrorMessage(err);
-        if (message.startsWith("Invalid key:")) {
-          return reply.status(400).send({ error: "Bad Request", message });
+        if (err instanceof Error && err.message.startsWith("Invalid key:")) {
+          throw new ApplicationError("INVALID_ARGUMENT", "La clave no pertenece a los datos de Steam Seed.");
         }
-        request.log.error({ err }, "steam-seed batch download-url failed");
-        return reply.status(500).send({ error: "Internal Server Error", message });
+        throw err;
       }
     }
   );
@@ -228,13 +194,11 @@ export async function registerSteamSeedRoutes(
     "/saves/steam-seed/reviews/batch/download-url",
     { schema: { body: SteamSeedBatchDownloadUrlSchema } },
     async (request, reply) => {
-      if (!deps.steamSeedRepository) {
-        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-      }
+      assertSteamSeedRepository(deps.steamSeedRepository);
 
       const { key, keys } = request.body;
       if (!key && (!keys || keys.length === 0)) {
-        return reply.status(400).send({ error: "Bad Request", message: "either 'key' or 'keys' is required" });
+        throw new ApplicationError("INVALID_ARGUMENT", "Debes indicar una clave o una lista de claves.");
       }
 
       try {
@@ -250,12 +214,10 @@ export async function registerSteamSeedRoutes(
         const downloadUrl = await deps.steamSeedRepository.getBatchDownloadUrl(ownerId, key!.trim());
         return reply.send({ downloadUrl });
       } catch (err) {
-        const message = getErrorMessage(err);
-        if (message.startsWith("Invalid key:")) {
-          return reply.status(400).send({ error: "Bad Request", message });
+        if (err instanceof Error && err.message.startsWith("Invalid key:")) {
+          throw new ApplicationError("INVALID_ARGUMENT", "La clave no pertenece a las reseñas de Steam Seed.");
         }
-        request.log.error({ err }, "steam-seed reviews batch download-url failed");
-        return reply.status(500).send({ error: "Internal Server Error", message });
+        throw err;
       }
     }
   );

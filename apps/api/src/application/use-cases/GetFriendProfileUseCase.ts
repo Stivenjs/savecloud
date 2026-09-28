@@ -1,6 +1,7 @@
 import type { SaveRepository } from "@domain/ports/SaveRepository";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import type { ResolveCloudStorageScopeUseCase } from "./ResolveCloudStorageScopeUseCase";
+import { ApplicationError } from "@application/errors/ApplicationError";
 
 /**
  * DTO que representa el perfil compartido de un amigo.
@@ -53,7 +54,7 @@ export class GetFriendProfileUseCase {
     const realTargetUserId = this.findClosestUser(targetUserId, allUsers);
 
     if (!realTargetUserId) {
-      throw new Error("User does not have any config saved in the cloud.");
+      throw new ApplicationError("NOT_FOUND", "El usuario no tiene una configuración guardada en la nube.");
     }
 
     const storageUserId = await this.resolveStorageUserId(realTargetUserId);
@@ -61,7 +62,7 @@ export class GetFriendProfileUseCase {
     const saves = await this.saveRepository.listByUserAndGame(storageUserId, "__config__");
 
     if (!saves || saves.length === 0) {
-      throw new Error("User does not have any config saved in the cloud.");
+      throw new ApplicationError("NOT_FOUND", "El usuario no tiene una configuración guardada en la nube.");
     }
 
     const latestConfig = saves
@@ -69,7 +70,7 @@ export class GetFriendProfileUseCase {
       .sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime())[0];
 
     if (!latestConfig) {
-      throw new Error("User does not have any config saved in the cloud.");
+      throw new ApplicationError("NOT_FOUND", "El usuario no tiene una configuración guardada en la nube.");
     }
 
     const jsonString = await this.saveRepository.getFileContent(latestConfig.key);

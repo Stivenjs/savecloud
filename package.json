@@ -10,6 +10,7 @@
   "scripts": {
     "build": "bun --cwd apps/api build",
     "dev": "bun --cwd apps/api dev",
+    "dev:seed-worker": "bun --cwd apps/api dev:steam-seed-worker",
     "cli": "bun --cwd apps/cli start",
     "build:cli": "bun run scripts/build-cli.ts",
     "api-key": "bun run scripts/generate-api-key.ts",

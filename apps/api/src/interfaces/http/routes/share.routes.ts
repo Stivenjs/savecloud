@@ -1,24 +1,9 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import type { CreateShareLinkUseCase } from "@application/use-cases/CreateShareLinkUseCase";
 import type { GetSharedGameUseCase } from "@application/use-cases/GetSharedGameUseCase";
-
-const USER_ID_HEADER = "x-user-id";
-
-function getUserId(request: FastifyRequest): string {
-  const userId = request.headers[USER_ID_HEADER];
-  if (typeof userId !== "string" || !userId.trim()) {
-    throw new Error("Missing or invalid x-user-id header");
-  }
-  return userId.trim();
-}
-
-function getBaseUrl(request: FastifyRequest): string {
-  const env = process.env.SHARE_BASE_URL?.trim();
-  if (env) return env.replace(/\/$/, "");
-  const proto = (request.headers["x-forwarded-proto"] as string) || "https";
-  const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "";
-  return `${proto}://${host}`;
-}
+import { getUserId } from "@interfaces/http/helpers/request-context";
+import { ApplicationError } from "@application/errors/ApplicationError";
+import { getPublicBaseUrl } from "@interfaces/http/helpers/public-base-url";
 
 export async function registerShareRoutes(
   app: FastifyInstance,
@@ -31,7 +16,7 @@ export async function registerShareRoutes(
     const { gameId, expiresInDays } = request.body ?? {};
 
     if (!gameId?.trim()) {
-      return reply.status(400).send({ error: "Bad Request", message: "gameId is required" });
+      throw new ApplicationError("INVALID_ARGUMENT", "El identificador del juego es obligatorio.");
     }
 
     const { token, expiresAt } = await deps.createShareLinkUseCase.execute({
@@ -39,7 +24,7 @@ export async function registerShareRoutes(
       gameId: gameId.trim(),
       expiresInDays,
     });
-    const shareUrl = `${getBaseUrl(request)}/share/${token}`;
+    const shareUrl = `${getPublicBaseUrl(request)}/share/${token}`;
 
     return reply.status(201).send({ token, shareUrl, expiresAt });
   });
@@ -70,22 +55,13 @@ export async function registerShareRoutes(
         }
 
         case "expired":
-          return reply.status(410).send({
-            error: "Gone",
-            message: "Este enlace ha expirado",
-          });
+          throw new ApplicationError("GONE", "Este enlace ha expirado.");
 
         case "not_found":
-          return reply.status(404).send({
-            error: "Not Found",
-            message: "Enlace inválido",
-          });
+          throw new ApplicationError("NOT_FOUND", "El enlace no es válido.");
 
         case "error":
-          return reply.status(502).send({
-            error: "Bad Gateway",
-            message: "No se pudo verificar el enlace, intenta de nuevo",
-          });
+          throw new ApplicationError("UPSTREAM_FAILURE", "No se pudo verificar el enlace. Inténtalo de nuevo.");
       }
     }
   );

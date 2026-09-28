@@ -126,7 +126,11 @@ build:
 custom:
   downloadBaseUrl:
     dev: ""
-    live: ${cf:sync-games-live.CloudFrontDistributionUrl, ''}
+    live:
+      Fn::Join:
+        - ""
+        - - "https://"
+          - Fn::GetAtt: [CloudFrontDistribution, DomainName]
   # Seed Steam: dev sin schedule por defecto; live con regla (ajustar rate si hace falta).
   steamSeedScheduleEnabled:
     dev: false

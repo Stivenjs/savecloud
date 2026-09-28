@@ -3,6 +3,7 @@ import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository"
 import type { GameInventoryRepository } from "@domain/ports/GameInventoryRepository";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
+import { ApplicationError } from "@application/errors/ApplicationError";
 
 export interface CreateTransferSessionInput {
   requesterUserId: string;
@@ -40,19 +41,19 @@ export class CreateTransferSessionUseCase {
     const manifestHash = input.manifestHash.trim();
 
     if (!requesterId || !targetUserId || !targetDeviceId || !gameKey || !manifestHash) {
-      throw new Error("Invalid transfer session input");
+      throw new ApplicationError("INVALID_ARGUMENT", "Faltan datos requeridos para iniciar la transferencia.");
     }
 
     await this.assertSameCloud(requesterId, targetUserId);
 
     const record = await this.inventoryRepository.getDeviceRecord(targetUserId, targetDeviceId);
     if (!record?.sharingEnabled) {
-      throw new Error("Target device inventory not found or sharing disabled");
+      throw new ApplicationError("NOT_FOUND", "El dispositivo no está disponible para compartir juegos.");
     }
 
     const game = record.games.find((g) => g.gameKey === gameKey && g.status === "verified");
     if (!game || game.manifestHash !== manifestHash) {
-      throw new Error("Game manifest mismatch on target device");
+      throw new ApplicationError("CONFLICT", "El manifiesto del juego cambió en el dispositivo destino.");
     }
 
     const sessionId = crypto.randomUUID();
@@ -108,7 +109,7 @@ export class CreateTransferSessionUseCase {
 
   private async assertSameCloud(requesterId: string, targetUserId: string): Promise<void> {
     if (requesterId === targetUserId) {
-      throw new Error("Cannot transfer from yourself");
+      throw new ApplicationError("INVALID_ARGUMENT", "No puedes transferir un juego a tu propio usuario.");
     }
 
     const requesterHosts = await this.cloudInviteRepository.listMembershipsForMember(requesterId);
@@ -119,7 +120,7 @@ export class CreateTransferSessionUseCase {
     const peerIds = new Set([hostUserId, ...members.filter((m) => m.active).map((m) => m.memberUserId)]);
 
     if (!peerIds.has(targetUserId)) {
-      throw new Error("Target user is not in your cloud");
+      throw new ApplicationError("FORBIDDEN", "El usuario destino no pertenece a tu nube.");
     }
   }
 }

@@ -1,4 +1,5 @@
 import type { SaveRepository } from "@domain/ports/SaveRepository";
+import { ApplicationError } from "@application/errors/ApplicationError";
 
 export interface GetDownloadUrlInput {
   userId: string;
@@ -24,7 +25,7 @@ export class GetDownloadUrlUseCase {
   async execute(input: GetDownloadUrlInput): Promise<GetDownloadUrlOutput> {
     const expectedPrefix = `${input.userId}/${input.gameId}/`;
     if (!input.key.startsWith(expectedPrefix) || input.key.includes("..")) {
-      throw new Error("Invalid key: must belong to user and game");
+      throw new ApplicationError("INVALID_ARGUMENT", "La clave debe pertenecer al usuario y juego solicitados.");
     }
     const downloadUrl = await this.saveRepository.getDownloadUrl(input.userId, input.gameId, input.key, input.range);
     return { downloadUrl, key: input.key };

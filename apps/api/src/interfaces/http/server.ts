@@ -122,27 +122,6 @@ async function main(): Promise<void> {
       console.log(`[SaveCloud API] Server listening on ${address}`);
     });
   }
-
-  if (process.env.ENABLE_SEED_WORKER === "true" || process.env.NODE_ENV !== "production") {
-    const SEED_INTERVAL_MS = Number(process.env.SEED_INTERVAL_MS) || 5 * 60 * 1000;
-    console.log(`[SaveCloud API] Background Steam Seed Worker active (interval: ${SEED_INTERVAL_MS / 1000}s)`);
-
-    setTimeout(() => {
-      import("@interfaces/lambda/steam-seed/handler")
-        .then(({ handler }) => handler({}))
-        .catch((workerErr) => {
-          console.error("[SaveCloud API] Initial Steam Seed Worker tick error:", workerErr);
-        });
-    }, 10000);
-
-    setInterval(() => {
-      import("@interfaces/lambda/steam-seed/handler")
-        .then(({ handler }) => handler({}))
-        .catch((workerErr) => {
-          console.error("[SaveCloud API] Periodic Steam Seed Worker tick error:", workerErr);
-        });
-    }, SEED_INTERVAL_MS);
-  }
 }
 
 main().catch((err: unknown) => {

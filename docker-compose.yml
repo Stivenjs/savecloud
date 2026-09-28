@@ -21,10 +21,18 @@ services:
       - GAME_STATS_TABLE=savecloud-game-stats
       - SAVE_FILES_INDEX_TABLE=savecloud-save-files-index
       - CONNECTIONS_TABLE=savecloud-connections
-      - ENABLE_SEED_WORKER=${ENABLE_SEED_WORKER:-true}
     depends_on:
       - minio
       - dynamodb-local
+
+  steam-seed-worker:
+    extends:
+      service: savecloud-api
+    container_name: savecloud-steam-seed-worker
+    command: ["bun", "dist/steam-seed-worker.js"]
+    ports: []
+    environment:
+      - SEED_INTERVAL_MS=${SEED_INTERVAL_MS:-300000}
 
   minio:
     image: minio/minio:latest

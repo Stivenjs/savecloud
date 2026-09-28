@@ -1,6 +1,6 @@
 import type { FastifyRequest } from "fastify";
 import type { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
-import { getUserId } from "@shared/utils";
+import { getUserId } from "@interfaces/http/helpers/request-context";
 
 const CLOUD_HOST_HEADER = "x-cloud-host-user-id";
 

@@ -27,6 +27,8 @@ import { registerTrashModule } from "@interfaces/http/modules/trash";
 import { registerSavesModule } from "@interfaces/http/modules/saves";
 import { registerShareModule } from "@interfaces/http/modules/share";
 import { registerClipsModule } from "@interfaces/http/modules/clips";
+import { registerHttpErrorHandler } from "@interfaces/http/error-handler";
+import { ApplicationError } from "@application/errors/ApplicationError";
 
 export interface AppDependencies {
   saveRepository: SaveRepository;
@@ -76,6 +78,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     encodings: ["br", "gzip", "deflate"],
   });
   await app.register(import("@fastify/websocket"));
+  registerHttpErrorHandler(app);
 
   await app.register(rateLimit, {
     global: false,
@@ -205,6 +208,6 @@ function registerApiKeyAuthHook(app: FastifyInstance, expectedApiKey?: string): 
       }
     }
 
-    return reply.status(401).send({ error: "Unauthorized" });
+    throw new ApplicationError("UNAUTHENTICATED", "No autorizado.");
   });
 }

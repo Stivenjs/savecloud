@@ -1,5 +1,6 @@
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import type { CloudInvite } from "@domain/entities/CloudInvite";
+import { ApplicationError } from "@application/errors/ApplicationError";
 
 export interface RespondCloudInviteInput {
   userId: string;
@@ -18,11 +19,11 @@ export class RespondCloudInviteUseCase {
       : input.token
         ? await this.repository.getInviteByToken(input.token)
         : null;
-    if (!invite) throw new Error("Invite not found");
-    if (invite.status !== "pending") throw new Error("Invite is no longer pending");
-    if (invite.expiresAt <= new Date().toISOString()) throw new Error("Invite expired");
+    if (!invite) throw new ApplicationError("NOT_FOUND", "No se encontró la invitación.");
+    if (invite.status !== "pending") throw new ApplicationError("CONFLICT", "La invitación ya no está pendiente.");
+    if (invite.expiresAt <= new Date().toISOString()) throw new ApplicationError("GONE", "La invitación expiró.");
     if (invite.hostUserId.trim() === userId) {
-      throw new Error("You cannot accept your own invite");
+      throw new ApplicationError("FORBIDDEN", "No puedes aceptar tu propia invitación.");
     }
 
     const now = new Date().toISOString();
@@ -34,7 +35,7 @@ export class RespondCloudInviteUseCase {
         invite.inviteeUserId = userId;
       }
       if (invite.inviteeUserId !== userId) {
-        throw new Error("Invite does not belong to this user");
+        throw new ApplicationError("FORBIDDEN", "La invitación no pertenece a este usuario.");
       }
       await this.repository.updateInvite(invite);
       await this.repository.upsertMembership({
@@ -50,7 +51,7 @@ export class RespondCloudInviteUseCase {
     }
 
     if (invite.inviteeUserId && invite.inviteeUserId !== input.userId.trim()) {
-      throw new Error("Invite does not belong to this user");
+      throw new ApplicationError("FORBIDDEN", "La invitación no pertenece a este usuario.");
     }
     invite.status = "rejected";
     invite.rejectedAt = now;
