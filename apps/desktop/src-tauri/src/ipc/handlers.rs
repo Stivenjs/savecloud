@@ -127,6 +127,8 @@ pub fn register_all_commands(builder: Builder<Wry>) -> Builder<Wry> {
         crate::steam_catalog::seed::commands::sync_import_cloud_seed_batches_to_sqlite,
         crate::steam_catalog::seed::commands::sync_import_cloud_seed_run_until_done,
         crate::steam_catalog::seed::commands::sync_get_steam_seed_freshness,
+        crate::steam_catalog::seed::commands::sync_get_steam_seed_worker_control,
+        crate::steam_catalog::seed::commands::sync_set_steam_seed_worker_paused,
         crate::config::config_cmds::get_friend_config,
         crate::config::config_cmds::get_friends_configs,
         crate::config::config_cmds::add_games_from_friend,

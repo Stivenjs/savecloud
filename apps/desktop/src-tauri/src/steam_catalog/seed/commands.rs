@@ -320,7 +320,6 @@ pub async fn sync_import_cloud_seed_run_until_done(
     let _ = app.emit("steam-catalog-updated", ());
 
     Ok(SteamSeedImportRunResultDto {
-
         rounds: round,
         batches_processed: total_batches,
         rows_updated: total_rows,
@@ -429,4 +428,64 @@ pub async fn sync_get_steam_seed_freshness(
         local_max_batch_key: local_max,
         error: None,
     })
+}
+
+#[tauri::command]
+pub async fn sync_get_steam_seed_worker_control(
+) -> Result<Option<SteamSeedWorkerControlDto>, String> {
+    let ctx = resolve_api_context()?;
+    let response = crate::commands::sync::api::api_request(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        "GET",
+        "/steam-seed/control",
+        None,
+    )
+    .await
+    .map_err(|error| format!("steam-seed/control: {error}"))?;
+
+    if response.status() == reqwest::StatusCode::FORBIDDEN {
+        return Ok(None);
+    }
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("steam-seed/control: {status} {body}"));
+    }
+
+    response
+        .json::<SteamSeedWorkerControlDto>()
+        .await
+        .map(Some)
+        .map_err(|error| format!("steam-seed/control: {error}"))
+}
+
+#[tauri::command]
+pub async fn sync_set_steam_seed_worker_paused(
+    paused: bool,
+) -> Result<SteamSeedWorkerControlDto, String> {
+    let ctx = resolve_api_context()?;
+    let body = serde_json::json!({ "paused": paused }).to_string();
+    let response = crate::commands::sync::api::api_request(
+        &ctx.base_url,
+        &ctx.user_id,
+        &ctx.api_key,
+        "PUT",
+        "/steam-seed/control",
+        Some(body.as_bytes()),
+    )
+    .await
+    .map_err(|error| format!("steam-seed/control: {error}"))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("steam-seed/control: {status} {body}"));
+    }
+
+    response
+        .json::<SteamSeedWorkerControlDto>()
+        .await
+        .map_err(|error| format!("steam-seed/control: {error}"))
 }

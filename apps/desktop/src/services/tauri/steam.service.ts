@@ -77,6 +77,23 @@ export interface SteamSeedFreshness {
   error: string | null;
 }
 
+export interface SteamSeedWorkerControl {
+  paused: boolean;
+  updatedAt: string | null;
+  lastBatchKey: string | null;
+  batchSeq: number;
+  catalogComplete: boolean;
+  reviews: {
+    lastBatchKey: string | null;
+    batchSeq: number;
+    offset: number;
+    processed: number;
+    ok: number;
+    notFound: number;
+    httpErrors: number;
+  };
+}
+
 export interface CatalogListItem {
   steamAppId: string;
   name: string;
@@ -204,6 +221,16 @@ export async function importCloudSeedRunUntilDone(options?: {
 /** Consulta GET /saves/steam-seed/status y el estado local (sin listar todo S3). */
 export async function getSteamSeedFreshness(): Promise<SteamSeedFreshness> {
   return invoke<SteamSeedFreshness>("sync_get_steam_seed_freshness");
+}
+
+/** Consulta el control del worker remoto; devuelve null si el usuario no es dueño de la nube. */
+export async function getSteamSeedWorkerControl(): Promise<SteamSeedWorkerControl | null> {
+  return invoke<SteamSeedWorkerControl | null>("sync_get_steam_seed_worker_control");
+}
+
+/** Pausa o reanuda el worker de Steam de la nube propia. */
+export async function setSteamSeedWorkerPaused(paused: boolean): Promise<SteamSeedWorkerControl> {
+  return invoke<SteamSeedWorkerControl>("sync_set_steam_seed_worker_paused", { paused });
 }
 
 /**

@@ -1,5 +1,6 @@
 import { Button, Card, CardBody, Divider, Progress, Skeleton, Tab, Tabs } from "@heroui/react";
 import { SteamSeedFreshnessBanner } from "@features/steam-catalog/components/SteamSeedFreshnessBanner";
+import { SteamSeedWorkerControls } from "@features/settings/SteamSeedWorkerControls";
 import { FileJson, Cloud, HardDrive, FolderOpen, Link2, Library, Zap } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import type { SteamCatalogSyncProgressPayload, SteamSeedImportProgressPayload } from "@services/tauri";
@@ -314,6 +315,7 @@ export function ConfigSection({
                     description={t("settings.configSection.seedDesc")}
                   />
                   <SteamSeedFreshnessBanner />
+                  <SteamSeedWorkerControls />
                   <div className="flex flex-wrap gap-2">
                     <Button
                       size="sm"

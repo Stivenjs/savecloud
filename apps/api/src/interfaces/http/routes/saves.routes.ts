@@ -32,6 +32,8 @@ import {
   type SteamSeedBatchDownloadUrlBody,
   SteamSeedBatchesQuerySchema,
   type SteamSeedBatchesQuery,
+  SteamSeedWorkerControlSchema,
+  type SteamSeedWorkerControlBody,
   ListSavesResponseSchema,
   GameSummaryResponseSchema,
   ErrorResponseSchema,
@@ -652,7 +654,13 @@ export async function registerSavesRoutes(
     }
     try {
       const { handler: seedHandler } = await import("@interfaces/lambda/steam-seed/handler");
+      const requesterUserId = getUserId(request);
       const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
+      if (requesterUserId !== ownerId) {
+        return reply
+          .status(403)
+          .send({ error: "Forbidden", message: "Only the cloud owner can manage the Steam worker" });
+      }
       const result = await seedHandler({ ownerId });
       return reply.send(result);
     } catch (err: unknown) {
@@ -665,7 +673,13 @@ export async function registerSavesRoutes(
     if (!deps.steamSeedRepository) {
       return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
     }
+    const requesterUserId = getUserId(request);
     const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
+    if (requesterUserId !== ownerId) {
+      return reply
+        .status(403)
+        .send({ error: "Forbidden", message: "Only the cloud owner can manage the Steam worker" });
+    }
     await deps.steamSeedRepository.resetState(ownerId);
     return reply.status(204).send();
   });
@@ -678,6 +692,48 @@ export async function registerSavesRoutes(
     const out = await deps.steamSeedRepository.getSteamSeedStatus(ownerId);
     return reply.send(out);
   });
+
+  app.get("/saves/steam-seed/control", async (request, reply) => {
+    if (!deps.steamSeedRepository) {
+      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
+    }
+    const requesterUserId = getUserId(request);
+    const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
+    if (requesterUserId !== ownerId) {
+      return reply
+        .status(403)
+        .send({ error: "Forbidden", message: "Only the cloud owner can manage the Steam worker" });
+    }
+    const [worker, progress, reviews] = await Promise.all([
+      deps.steamSeedRepository.getWorkerControl(ownerId),
+      deps.steamSeedRepository.getSteamSeedStatus(ownerId),
+      deps.steamSeedRepository.getSteamReviewsSeedStatus(ownerId),
+    ]);
+    return reply.send({ ...worker, ...progress, reviews });
+  });
+
+  app.put<{ Body: SteamSeedWorkerControlBody }>(
+    "/saves/steam-seed/control",
+    { schema: { body: SteamSeedWorkerControlSchema } },
+    async (request, reply) => {
+      if (!deps.steamSeedRepository) {
+        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
+      }
+      const requesterUserId = getUserId(request);
+      const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
+      if (requesterUserId !== ownerId) {
+        return reply
+          .status(403)
+          .send({ error: "Forbidden", message: "Only the cloud owner can manage the Steam worker" });
+      }
+      const control = await deps.steamSeedRepository.setWorkerPaused(ownerId, request.body.paused);
+      const [progress, reviews] = await Promise.all([
+        deps.steamSeedRepository.getSteamSeedStatus(ownerId),
+        deps.steamSeedRepository.getSteamReviewsSeedStatus(ownerId),
+      ]);
+      return reply.send({ ...control, ...progress, reviews });
+    }
+  );
 
   app.get<{ Querystring: SteamSeedBatchesQuery }>(
     "/saves/steam-seed/batches",
