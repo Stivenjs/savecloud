@@ -1,5 +1,11 @@
+import pLimit from "p-limit";
+import type { GameSave } from "@domain/entities/GameSave";
 import type { SaveFileIndexRepository } from "@domain/ports/SaveFileIndexRepository";
 import type { GameStatRepository } from "@domain/ports/GameStatRepository";
+import type { SaveFileIndexMutation } from "@domain/ports/SaveFileIndexRepository";
+
+const INDEX_EVENT_CONCURRENCY = 10;
+const GAME_STATS_CONCURRENCY = 10;
 
 export interface ProcessS3EventInput {
   detailType: "Object Created" | "Object Deleted";
@@ -118,82 +124,260 @@ export class ProcessS3EventUseCase {
   async executeBatch(inputs: ProcessS3EventInput[]): Promise<void> {
     if (!inputs || inputs.length === 0) return;
 
+    if (this.saveFileIndexRepo.batchGetByObjectKeys && this.saveFileIndexRepo.batchApplyMutations) {
+      await this.executeBatchWithDynamoBatches(inputs);
+      return;
+    }
+
     const gameDeltas = new Map<string, AggregatedGameDelta>();
+    const gamesToReconcile = new Map<string, { userId: string; gameId: string }>();
+
+    const eventsByObject = new Map<string, ProcessS3EventInput[]>();
+    for (const input of inputs) {
+      if (!input.s3Key) continue;
+      const parts = input.s3Key.split("/");
+      if (parts.length < 2 || isIgnoredS3Key(input.s3Key, parts)) continue;
+      const events = eventsByObject.get(input.s3Key) ?? [];
+      events.push(input);
+      eventsByObject.set(input.s3Key, events);
+    }
+
+    const indexLimit = pLimit(INDEX_EVENT_CONCURRENCY);
+    await Promise.all(
+      Array.from(eventsByObject.values(), (events) =>
+        indexLimit(async () => {
+          for (const input of events) {
+            const { detailType, s3Key, size, eventTime } = input;
+            if (!s3Key) continue;
+
+            const parts = s3Key.split("/");
+            if (parts.length < 2) continue;
+
+            if (isIgnoredS3Key(s3Key, parts)) continue;
+
+            const userId = parts[0];
+            const gameId = parts[1];
+            if (!userId || !gameId) continue;
+
+            const gameKey = `${userId}:::${gameId}`;
+            let deltaFileCount = 0;
+            let deltaSizeBytes = 0;
+            let targetTime = eventTime;
+
+            if (detailType === "Object Deleted") {
+              const existing = await this.saveFileIndexRepo.getByObjectKey(userId, s3Key);
+              if (!existing) {
+                // Un reintento puede llegar después de borrar el índice, pero antes de guardar las estadísticas.
+                gamesToReconcile.set(gameKey, { userId, gameId });
+                continue;
+              }
+
+              const deletedSize = existing.size ?? 0;
+              await this.saveFileIndexRepo.delete(userId, s3Key);
+
+              deltaFileCount = -1;
+              deltaSizeBytes = -deletedSize;
+            } else if (detailType === "Object Created") {
+              const existing = await this.saveFileIndexRepo.getByObjectKey(userId, s3Key);
+
+              const previousSize = existing?.size ?? 0;
+              const resolvedSize = size ?? existing?.size;
+              const nextSize = resolvedSize ?? 0;
+              deltaFileCount = existing ? 0 : 1;
+              deltaSizeBytes = nextSize - previousSize;
+
+              await this.saveFileIndexRepo.upsert({
+                userId,
+                gameId,
+                objectKey: s3Key,
+                size: resolvedSize,
+                lastModified: eventTime,
+              });
+            }
+
+            if (deltaFileCount === 0 && deltaSizeBytes === 0) {
+              gamesToReconcile.set(gameKey, { userId, gameId });
+            }
+
+            // Consolidar deltas en memoria por juego
+            const current = gameDeltas.get(gameKey) ?? {
+              userId,
+              gameId,
+              deltaFileCount: 0,
+              deltaSizeBytes: 0,
+              lastModified: null,
+            };
+
+            current.deltaFileCount += deltaFileCount;
+            current.deltaSizeBytes += deltaSizeBytes;
+
+            if (targetTime) {
+              if (!current.lastModified || targetTime > current.lastModified) {
+                current.lastModified = targetTime;
+              }
+            }
+
+            gameDeltas.set(gameKey, current);
+          }
+        })
+      )
+    );
+
+    // Aplicar deltas consolidados a DynamoDB (1 llamada por juego único en el lote)
+    const statsLimit = pLimit(GAME_STATS_CONCURRENCY);
+    const promises: Promise<void>[] = [];
+    for (const delta of gameDeltas.values()) {
+      if (delta.deltaFileCount !== 0 || delta.deltaSizeBytes !== 0 || delta.lastModified) {
+        promises.push(statsLimit(() => this.gameStatRepo.applyDelta(delta)));
+      }
+    }
+
+    await Promise.all(promises);
+
+    // Recupera estadísticas si el índice ya reflejaba un evento cuyo delta se perdió en un intento anterior.
+    const reconcileLimit = pLimit(GAME_STATS_CONCURRENCY);
+    await Promise.all(
+      Array.from(gamesToReconcile.values(), ({ userId, gameId }) =>
+        reconcileLimit(async () => {
+          const saves = await this.saveFileIndexRepo.listByUserAndGame(userId, gameId);
+          if (saves.length === 0) {
+            await this.gameStatRepo.delete(userId, gameId);
+            return;
+          }
+
+          let totalSizeBytes = 0;
+          let lastModified: Date | null = null;
+          for (const save of saves) {
+            totalSizeBytes += save.size ?? 0;
+            if (save.lastModified && (!lastModified || save.lastModified > lastModified)) {
+              lastModified = save.lastModified;
+            }
+          }
+
+          await this.gameStatRepo.save({
+            userId,
+            gameId,
+            fileCount: saves.length,
+            totalSizeBytes,
+            lastModified,
+          });
+        })
+      )
+    );
+  }
+
+  private async executeBatchWithDynamoBatches(inputs: ProcessS3EventInput[]): Promise<void> {
+    const eventsByObject = new Map<string, ProcessS3EventInput[]>();
+    const affectedGames = new Map<string, { userId: string; gameId: string }>();
+    const objectKeysByUser = new Map<string, Set<string>>();
 
     for (const input of inputs) {
-      const { detailType, s3Key, size, eventTime } = input;
-      if (!s3Key) continue;
-
-      const parts = s3Key.split("/");
-      if (parts.length < 2) continue;
-
-      if (isIgnoredS3Key(s3Key, parts)) continue;
+      if (!input.s3Key) continue;
+      const parts = input.s3Key.split("/");
+      if (isIgnoredS3Key(input.s3Key, parts)) continue;
 
       const userId = parts[0];
       const gameId = parts[1];
       if (!userId || !gameId) continue;
 
-      const gameKey = `${userId}:::${gameId}`;
-      let deltaFileCount = 0;
-      let deltaSizeBytes = 0;
-      let targetTime = eventTime;
+      const objectEvents = eventsByObject.get(input.s3Key) ?? [];
+      objectEvents.push(input);
+      eventsByObject.set(input.s3Key, objectEvents);
+      affectedGames.set(`${userId}:::${gameId}`, { userId, gameId });
 
-      if (detailType === "Object Deleted") {
-        const existing = await this.saveFileIndexRepo.getByObjectKey(userId, s3Key);
-        if (!existing) continue;
+      const userKeys = objectKeysByUser.get(userId) ?? new Set<string>();
+      userKeys.add(input.s3Key);
+      objectKeysByUser.set(userId, userKeys);
+    }
 
-        const deletedSize = existing.size ?? 0;
-        await this.saveFileIndexRepo.delete(userId, s3Key);
+    const existingByKey = new Map<string, GameSave>();
+    const readLimit = pLimit(INDEX_EVENT_CONCURRENCY);
+    await Promise.all(
+      Array.from(objectKeysByUser.entries(), ([userId, objectKeys]) =>
+        readLimit(async () => {
+          const results = await this.saveFileIndexRepo.batchGetByObjectKeys!(userId, Array.from(objectKeys));
+          for (const [key, save] of results) existingByKey.set(key, save);
+        })
+      )
+    );
 
-        deltaFileCount = -1;
-        deltaSizeBytes = -deletedSize;
-      } else if (detailType === "Object Created") {
-        const existing = await this.saveFileIndexRepo.getByObjectKey(userId, s3Key);
+    const mutations: SaveFileIndexMutation[] = [];
+    for (const [objectKey, objectEvents] of eventsByObject) {
+      const [userId, gameId] = objectKey.split("/");
+      if (!userId || !gameId) continue;
 
-        const previousSize = existing?.size ?? 0;
-        const resolvedSize = size ?? existing?.size;
-        const nextSize = resolvedSize ?? 0;
-        deltaFileCount = existing ? 0 : 1;
-        deltaSizeBytes = nextSize - previousSize;
+      let current = existingByKey.get(objectKey) ?? null;
+      const orderedEvents = objectEvents
+        .map((event, index) => ({ event, index }))
+        .sort((a, b) => {
+          const aTime = a.event.eventTime?.getTime();
+          const bTime = b.event.eventTime?.getTime();
+          if (aTime === undefined || bTime === undefined || aTime === bTime) return a.index - b.index;
+          return aTime - bTime;
+        });
 
-        await this.saveFileIndexRepo.upsert({
+      for (const { event } of orderedEvents) {
+        if (current?.lastModified && event.eventTime && event.eventTime < current.lastModified) continue;
+
+        if (event.detailType === "Object Deleted") {
+          current = null;
+          continue;
+        }
+
+        current = {
+          gameId,
+          key: objectKey,
+          filename: objectKey.slice(`${userId}/${gameId}/`.length),
+          size: event.size ?? current?.size,
+          lastModified: event.eventTime ?? current?.lastModified ?? new Date(0),
+        };
+      }
+
+      if (current) {
+        mutations.push({
+          type: "put",
           userId,
           gameId,
-          objectKey: s3Key,
-          size: resolvedSize,
-          lastModified: eventTime,
+          objectKey,
+          size: current.size,
+          lastModified: current.lastModified,
         });
-      }
-
-      // Consolidar deltas en memoria por juego
-      const current = gameDeltas.get(gameKey) ?? {
-        userId,
-        gameId,
-        deltaFileCount: 0,
-        deltaSizeBytes: 0,
-        lastModified: null,
-      };
-
-      current.deltaFileCount += deltaFileCount;
-      current.deltaSizeBytes += deltaSizeBytes;
-
-      if (targetTime) {
-        if (!current.lastModified || targetTime > current.lastModified) {
-          current.lastModified = targetTime;
-        }
-      }
-
-      gameDeltas.set(gameKey, current);
-    }
-
-    // Aplicar deltas consolidados a DynamoDB (1 llamada por juego único en el lote)
-    const promises: Promise<void>[] = [];
-    for (const delta of gameDeltas.values()) {
-      if (delta.deltaFileCount !== 0 || delta.deltaSizeBytes !== 0 || delta.lastModified) {
-        promises.push(this.gameStatRepo.applyDelta(delta));
+      } else if (existingByKey.has(objectKey)) {
+        mutations.push({ type: "delete", userId, objectKey });
       }
     }
 
-    await Promise.all(promises);
+    await this.saveFileIndexRepo.batchApplyMutations!(mutations);
+
+    // Recalcular desde el índice hace que la repetición de un mensaje SQS no duplique estadísticas.
+    const statsLimit = pLimit(GAME_STATS_CONCURRENCY);
+    await Promise.all(
+      Array.from(affectedGames.values(), ({ userId, gameId }) =>
+        statsLimit(async () => {
+          const saves = await this.saveFileIndexRepo.listByUserAndGame(userId, gameId);
+          if (saves.length === 0) {
+            await this.gameStatRepo.delete(userId, gameId);
+            return;
+          }
+
+          let totalSizeBytes = 0;
+          let lastModified: Date | null = null;
+          for (const save of saves) {
+            totalSizeBytes += save.size ?? 0;
+            if (save.lastModified && (!lastModified || save.lastModified > lastModified)) {
+              lastModified = save.lastModified;
+            }
+          }
+
+          await this.gameStatRepo.save({
+            userId,
+            gameId,
+            fileCount: saves.length,
+            totalSizeBytes,
+            lastModified,
+          });
+        })
+      )
+    );
   }
 }

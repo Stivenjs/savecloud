@@ -4,6 +4,7 @@ import { DEFAULT_STEAM_FILTERS } from "@interfaces/lambda/steam-seed/layout";
 import { pickOwnerIdAuto } from "@interfaces/lambda/steam-seed/owners";
 import { runSteamSeedTick } from "@interfaces/lambda/steam-seed/run";
 import { runReviewsTick } from "@interfaces/lambda/steam-seed/run_reviews";
+import { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
 
 /**
  * Entry point del worker `steamSeedWorker`.
@@ -51,6 +52,13 @@ export async function handler(_event: unknown, _context?: Partial<Context>): Pro
     // Prefijo por owner si existe, o prefijo base para modo legacy.
     const seedPrefix = ownerId ? `${basePrefix}/${ownerId}` : basePrefix;
 
+    const seedRepository = new S3SteamSeedRepository(s3, bucket);
+    const workerControl = ownerId ? await seedRepository.getWorkerControl(ownerId) : { paused: false, updatedAt: null };
+    if (workerControl.paused) {
+      console.log(JSON.stringify({ msg: "steam-seed.paused", requestId, ownerId }));
+      return { ok: true, paused: true, ownerId: ownerId || null };
+    }
+
     console.log(
       JSON.stringify({
         msg: "steam-seed.start",
@@ -82,7 +90,19 @@ export async function handler(_event: unknown, _context?: Partial<Context>): Pro
     );
 
     let reviewsResult: Awaited<ReturnType<typeof runReviewsTick>> | null = null;
+    const controlAfterDetails = ownerId
+      ? await seedRepository.getWorkerControl(ownerId)
+      : { paused: false, updatedAt: null };
     try {
+      if (controlAfterDetails.paused) {
+        return {
+          ok: true,
+          paused: true,
+          ownerId: ownerId || null,
+          reason: "paused_after_details_tick",
+          totals: detailsResult.stateAfter.totals,
+        };
+      }
       reviewsResult = await runReviewsTick({ s3, bucket, seedPrefix });
 
       console.log(

@@ -1,5 +1,10 @@
 import { Type, type Static } from "@sinclair/typebox";
 
+export const SteamSeedWorkerControlSchema = Type.Object({
+  paused: Type.Boolean(),
+});
+export type SteamSeedWorkerControlBody = Static<typeof SteamSeedWorkerControlSchema>;
+
 export const ListBackupsQuerySchema = Type.Object({
   gameId: Type.String({ minLength: 1 }),
 });

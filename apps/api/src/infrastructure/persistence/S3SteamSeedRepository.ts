@@ -1,7 +1,7 @@
 import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import pLimit from "p-limit";
-import { batchKey } from "@interfaces/lambda/steam-seed/layout";
+import { batchKey, reviewsBatchKey } from "@interfaces/lambda/steam-seed/layout";
 import { PRESIGN_EXPIRES_IN_SECONDS } from "@infrastructure/persistence/S3SaveRepository";
 
 function isNoSuchKey(err: unknown): boolean {
@@ -49,6 +49,27 @@ export type BatchDownloadResult = {
   /** Mensaje de error cuando `url` es `null`. */
   error?: string;
 };
+
+export type SteamSeedWorkerControl = {
+  paused: boolean;
+  updatedAt: string | null;
+};
+
+function nonNegativeInteger(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function emptySteamReviewsSeedStatus() {
+  return {
+    lastBatchKey: null,
+    batchSeq: 0,
+    offset: 0,
+    processed: 0,
+    ok: 0,
+    notFound: 0,
+    httpErrors: 0,
+  };
+}
 
 function defaultState(): SeedState {
   return {
@@ -98,6 +119,78 @@ export class S3SteamSeedRepository {
     const clean = ownerId.trim();
     if (!clean) throw new Error("ownerId is required");
     return `steam-seed/${clean}/`;
+  }
+
+  /** Lee el control operativo del worker para una nube. */
+  async getWorkerControl(ownerId: string): Promise<SteamSeedWorkerControl> {
+    try {
+      const out = await this.s3.send(
+        new GetObjectCommand({ Bucket: this.bucketName, Key: `${this.basePrefix(ownerId)}control.json` })
+      );
+      const raw = await out.Body?.transformToString();
+      if (!raw) return { paused: false, updatedAt: null };
+      const parsed = JSON.parse(raw) as { paused?: unknown; updatedAt?: unknown };
+      return {
+        paused: parsed.paused === true,
+        updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : null,
+      };
+    } catch (error) {
+      if (isNoSuchKey(error)) return { paused: false, updatedAt: null };
+      throw error;
+    }
+  }
+
+  /** Guarda el estado deseado del worker para una nube. */
+  async setWorkerPaused(ownerId: string, paused: boolean): Promise<SteamSeedWorkerControl> {
+    const control = { paused, updatedAt: new Date().toISOString() };
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: `${this.basePrefix(ownerId)}control.json`,
+        Body: JSON.stringify(control),
+        ContentType: "application/json",
+      })
+    );
+    return control;
+  }
+
+  /** Lee el cursor y los conteos del procesamiento de reseñas. */
+  async getSteamReviewsSeedStatus(ownerId: string): Promise<{
+    lastBatchKey: string | null;
+    batchSeq: number;
+    offset: number;
+    processed: number;
+    ok: number;
+    notFound: number;
+    httpErrors: number;
+  }> {
+    try {
+      const out = await this.s3.send(
+        new GetObjectCommand({ Bucket: this.bucketName, Key: `${this.basePrefix(ownerId)}reviews_state.json` })
+      );
+      const raw = await out.Body?.transformToString();
+      if (!raw) return emptySteamReviewsSeedStatus();
+
+      const parsed = JSON.parse(raw) as {
+        batchSeq?: unknown;
+        offset?: unknown;
+        totals?: { processed?: unknown; ok?: unknown; notFound?: unknown; httpErrors?: unknown };
+      };
+      const batchSeq = nonNegativeInteger(parsed.batchSeq);
+      const totals = parsed.totals ?? {};
+      return {
+        lastBatchKey: batchSeq > 0 ? `${this.basePrefix(ownerId)}${reviewsBatchKey(batchSeq - 1)}` : null,
+        batchSeq,
+        offset: nonNegativeInteger(parsed.offset),
+        processed: nonNegativeInteger(totals.processed),
+        ok: nonNegativeInteger(totals.ok),
+        notFound: nonNegativeInteger(totals.notFound),
+        httpErrors: nonNegativeInteger(totals.httpErrors),
+      };
+    } catch (error) {
+      if (isNoSuchKey(error)) return emptySteamReviewsSeedStatus();
+      throw error;
+    }
   }
 
   /**

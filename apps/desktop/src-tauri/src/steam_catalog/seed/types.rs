@@ -129,6 +129,30 @@ pub struct SteamSeedRemoteStatusDto {
     pub catalog_complete: bool,
 }
 
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteamSeedWorkerReviewsDto {
+    pub last_batch_key: Option<String>,
+    pub batch_seq: u32,
+    pub offset: u64,
+    pub processed: u64,
+    pub ok: u64,
+    pub not_found: u64,
+    pub http_errors: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteamSeedWorkerControlDto {
+    pub paused: bool,
+    pub updated_at: Option<String>,
+    pub last_batch_key: Option<String>,
+    pub batch_seq: u32,
+    pub catalog_complete: bool,
+    #[serde(default)]
+    pub reviews: SteamSeedWorkerReviewsDto,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SteamSeedFreshnessDto {

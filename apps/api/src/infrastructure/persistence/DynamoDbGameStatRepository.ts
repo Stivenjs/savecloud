@@ -18,29 +18,43 @@ export class DynamoDbGameStatRepository implements GameStatRepository {
   }
 
   async listByUser(userId: string): Promise<GameStat[]> {
-    const result = await this.docClient.send(
-      new QueryCommand({
-        TableName: this.tableName,
-        KeyConditionExpression: "userId = :u",
-        ProjectionExpression: "userId, gameId, fileCount, totalSizeBytes, #lm",
-        ExpressionAttributeNames: {
-          "#lm": "lastModified",
-        },
-        ExpressionAttributeValues: {
-          ":u": userId,
-        },
-      })
-    );
+    const items: Record<string, unknown>[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+    do {
+      const result = await this.docClient.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          KeyConditionExpression: "userId = :u",
+          ProjectionExpression: "userId, gameId, fileCount, totalSizeBytes, #lm",
+          ExpressionAttributeNames: {
+            "#lm": "lastModified",
+          },
+          ExpressionAttributeValues: {
+            ":u": userId,
+          },
+          ExclusiveStartKey: lastEvaluatedKey,
+        })
+      );
+      items.push(...((result.Items ?? []) as Record<string, unknown>[]));
+      lastEvaluatedKey = result.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
 
-    if (!result.Items) return [];
+    return items.flatMap((item) => {
+      if (typeof item.gameId !== "string" || !item.gameId) return [];
 
-    return result.Items.map((item) => ({
-      userId: item.userId,
-      gameId: item.gameId,
-      fileCount: item.fileCount ?? 0,
-      totalSizeBytes: item.totalSizeBytes ?? 0,
-      lastModified: item.lastModified ? new Date(item.lastModified) : null,
-    }));
+      const lastModified =
+        typeof item.lastModified === "string" && item.lastModified ? new Date(item.lastModified) : null;
+
+      return [
+        {
+          userId,
+          gameId: item.gameId,
+          fileCount: typeof item.fileCount === "number" ? item.fileCount : 0,
+          totalSizeBytes: typeof item.totalSizeBytes === "number" ? item.totalSizeBytes : 0,
+          lastModified: lastModified && !Number.isNaN(lastModified.getTime()) ? lastModified : null,
+        },
+      ];
+    });
   }
 
   async save(stat: GameStat): Promise<void> {
@@ -87,7 +101,7 @@ export class DynamoDbGameStatRepository implements GameStatRepository {
     };
 
     if (lastModified !== undefined) {
-      updateExpression += " SET #lm = :lm";
+      updateExpression = "SET #lm = :lm ADD fileCount :df, totalSizeBytes :ds";
       expressionAttributeValues[":lm"] = lastModified ? lastModified.toISOString() : null;
     }
 
@@ -112,7 +126,18 @@ export class DynamoDbGameStatRepository implements GameStatRepository {
     const nextTotalSize = typeof result.Attributes?.totalSizeBytes === "number" ? result.Attributes.totalSizeBytes : 0;
 
     if (nextFileCount <= 0 || nextTotalSize < 0) {
-      await this.delete(userId, gameId);
+      try {
+        await this.docClient.send(
+          new DeleteCommand({
+            TableName: this.tableName,
+            Key: { userId, gameId },
+            ConditionExpression: "fileCount <= :zero AND totalSizeBytes <= :zero",
+            ExpressionAttributeValues: { ":zero": 0 },
+          })
+        );
+      } catch (error) {
+        if (!(error instanceof Error) || error.name !== "ConditionalCheckFailedException") throw error;
+      }
     }
   }
 }
