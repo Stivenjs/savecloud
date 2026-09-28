@@ -1,6 +1,6 @@
 import type { S3Client } from "@aws-sdk/client-s3";
 import { listObjects, putJson, getObjectText, isNoSuchKey } from "@interfaces/lambda/steam-seed/s3";
-import { STEAM_SEED_MANIFEST_PREFIX, STEAM_SEED_MANIFEST_SUFFIX } from "@interfaces/lambda/steam-seed/layout";
+import { STEAM_SEED_MANIFEST_PREFIX, STEAM_SEED_MANIFEST_SUFFIX } from "@shared/steam-seed-layout";
 
 type OwnersStateV1 = {
   version: 1;

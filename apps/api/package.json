@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun --watch src/interfaces/http/server.ts",
     "build": "tsc",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit && bun ./scripts/check-architecture.ts",
+    "check:architecture": "bun ./scripts/check-architecture.ts"
   },
   "dependencies": {
     "@aws-sdk/client-apigatewaymanagementapi": "^3.1115.0",

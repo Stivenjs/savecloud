@@ -1,22 +1,8 @@
 import { buildApp } from "@interfaces/http/app";
-import { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
-import { DynamoDbNotificationStore } from "@infrastructure/persistence/DynamoDbNotificationStore";
-import { S3CloudInviteRepository } from "@infrastructure/persistence/S3CloudInviteRepository";
-import { DynamoDbCloudInviteRepository } from "@infrastructure/persistence/DynamoDbCloudInviteRepository";
-import { S3GameInventoryRepository } from "@infrastructure/persistence/S3GameInventoryRepository";
-import { DynamoDbGameInventoryRepository } from "@infrastructure/persistence/DynamoDbGameInventoryRepository";
-import { S3SaveRepository } from "@infrastructure/persistence/S3SaveRepository";
-import { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
-import { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
-import { DynamoDbShareTokenStore } from "@infrastructure/share/DynamoDbShareTokenStore";
-import { DynamoDbGameStatRepository } from "@infrastructure/persistence/DynamoDbGameStatRepository";
-import { DynamoDbSaveFileIndexRepository } from "@infrastructure/persistence/DynamoDbSaveFileIndexRepository";
-import { DynamoDbConnectionRepository } from "@infrastructure/persistence/DynamoDbConnectionRepository";
 import { FastifyWebSocketNotifier } from "@infrastructure/websocket/FastifyWebSocketNotifier";
 import { createS3Client, createPresignS3Client, getBucketName } from "@infrastructure/factories/storageFactory";
 import { createDynamoDbClient, ensureDynamoDbTablesExist } from "@infrastructure/factories/dynamoDbFactory";
-import { ClipStore } from "@infrastructure/clips/ClipStore";
-import { DynamoDbClipStore } from "@infrastructure/clips/DynamoDbClipStore";
+import { createApiStores } from "@infrastructure/factories/apiStoresFactory";
 import { startBunServer } from "@infrastructure/websocket/BunWebSocketServer";
 
 /** Puerto por defecto para el servidor HTTP de Fastify */
@@ -66,38 +52,23 @@ const s3 = createS3Client();
 const presignS3 = createPresignS3Client();
 const dynamoClient = createDynamoDbClient();
 
-const saveRepository = new S3SaveRepository(s3, bucketName, presignS3);
-const steamSeedRepository = new S3SteamSeedRepository(s3, bucketName, presignS3);
-const shareTokenStore = shareTokensTable
-  ? new DynamoDbShareTokenStore(dynamoClient, shareTokensTable, s3, bucketName)
-  : new ShareTokenS3(s3, bucketName);
-const clipStore = clipsTable
-  ? new DynamoDbClipStore(s3, bucketName, dynamoClient, clipsTable, presignS3)
-  : new ClipStore(s3, bucketName, presignS3);
-const notificationRepository = notificationsTable
-  ? new DynamoDbNotificationStore(dynamoClient, notificationsTable, s3, bucketName)
-  : new S3NotificationStore(s3, bucketName);
-const s3CloudInviteFallback = new S3CloudInviteRepository(s3, bucketName);
-const cloudInviteRepository = cloudInvitesTable
-  ? new DynamoDbCloudInviteRepository(dynamoClient, cloudInvitesTable, s3CloudInviteFallback)
-  : s3CloudInviteFallback;
-const s3GameInventoryFallback = new S3GameInventoryRepository(s3, bucketName, cloudInviteRepository);
-const gameInventoryRepository = gameInventoryTable
-  ? new DynamoDbGameInventoryRepository(
-      dynamoClient,
-      gameInventoryTable,
-      cloudInviteRepository,
-      s3GameInventoryFallback
-    )
-  : s3GameInventoryFallback;
-
-const gameStatRepository = gameStatsTable ? new DynamoDbGameStatRepository(dynamoClient, gameStatsTable) : undefined;
-const saveFileIndexRepository = saveFilesIndexTable
-  ? new DynamoDbSaveFileIndexRepository(dynamoClient, saveFilesIndexTable)
-  : undefined;
-const connectionRepository = connectionsTable
-  ? new DynamoDbConnectionRepository(dynamoClient, connectionsTable)
-  : undefined;
+const stores = createApiStores({
+  s3,
+  dynamo: dynamoClient,
+  bucketName,
+  presignS3,
+  tables: {
+    gameStats: gameStatsTable,
+    saveFilesIndex: saveFilesIndexTable,
+    connections: connectionsTable,
+    clips: clipsTable,
+    notifications: notificationsTable,
+    shareTokens: shareTokensTable,
+    cloudInvites: cloudInvitesTable,
+    gameInventory: gameInventoryTable,
+  },
+});
+const { connectionRepository } = stores;
 
 const webSocketNotifier = new FastifyWebSocketNotifier(connectionRepository);
 
@@ -124,15 +95,7 @@ async function main(): Promise<void> {
   }
 
   const app = await buildApp({
-    saveRepository,
-    saveFileIndexRepository,
-    steamSeedRepository,
-    shareTokenStore,
-    clipStore,
-    notificationRepository,
-    cloudInviteRepository,
-    gameInventoryRepository,
-    gameStatRepository,
+    ...stores,
     connectionRepository,
     webSocketNotifier,
   });

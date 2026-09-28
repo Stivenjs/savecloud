@@ -1,8 +1,9 @@
 import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import pLimit from "p-limit";
-import { batchKey, reviewsBatchKey } from "@interfaces/lambda/steam-seed/layout";
-import { PRESIGN_EXPIRES_IN_SECONDS } from "@infrastructure/persistence/S3SaveRepository";
+import { batchKey, reviewsBatchKey } from "@shared/steam-seed-layout";
+import { PRESIGN_EXPIRES_IN_SECONDS } from "@infrastructure/storage/presign";
+import type { SteamSeedRepository as SteamSeedRepositoryPort } from "@domain/ports/SteamSeedRepository";
 
 function isNoSuchKey(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { name?: string }).name === "NoSuchKey";
@@ -98,7 +99,7 @@ function defaultState(): SeedState {
  */
 const PRESIGN_CONCURRENCY = 64;
 
-export class S3SteamSeedRepository {
+export class S3SteamSeedRepository implements SteamSeedRepositoryPort {
   private readonly presignS3: S3Client;
 
   constructor(

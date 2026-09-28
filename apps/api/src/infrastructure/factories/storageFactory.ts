@@ -1,5 +1,6 @@
 import { S3Client } from "@aws-sdk/client-s3";
 import { resolveAwsCredentials } from "./awsCredentials";
+export { resolvePublicUrl } from "@infrastructure/storage/publicUrl";
 
 /** Nombre del bucket de S3 por defecto en entorno de desarrollo */
 const DEFAULT_BUCKET_NAME = "savecloud-saves-dev";
@@ -54,20 +55,4 @@ export function createPresignS3Client(): S3Client {
     return createS3Client();
   }
   return createS3Client(publicEndpoint);
-}
-
-/**
- * Mapea una URL interna de S3 reemplazando el endpoint interno por el endpoint público accesible.
- *
- * @param url - URL original generada con el endpoint interno de S3.
- * @returns URL transformada con el dominio/puerto público configurado en `S3_PUBLIC_ENDPOINT`.
- */
-export function resolvePublicUrl(url: string): string {
-  const publicEndpoint = process.env.S3_PUBLIC_ENDPOINT?.trim() || process.env.PUBLIC_S3_ENDPOINT?.trim();
-  const internalEndpoint = process.env.S3_ENDPOINT?.trim();
-
-  if (publicEndpoint && internalEndpoint && url.startsWith(internalEndpoint)) {
-    return url.replace(internalEndpoint, publicEndpoint);
-  }
-  return url;
 }

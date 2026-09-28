@@ -1,11 +1,7 @@
 import { ListObjectsV2Command, type S3Client } from "@aws-sdk/client-s3";
 import { createHash } from "crypto";
 import { tryGetObjectText } from "@interfaces/lambda/steam-seed/s3";
-import {
-  manifestPartKey,
-  STEAM_SEED_MANIFEST_PREFIX,
-  STEAM_SEED_MANIFEST_SUFFIX,
-} from "@interfaces/lambda/steam-seed/layout";
+import { manifestPartKey, STEAM_SEED_MANIFEST_PREFIX, STEAM_SEED_MANIFEST_SUFFIX } from "@shared/steam-seed-layout";
 
 /**
  * Separa un texto por líneas soportando LF o CRLF.

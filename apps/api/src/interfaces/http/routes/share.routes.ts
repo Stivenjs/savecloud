@@ -1,11 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import type { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
-import type { DynamoDbShareTokenStore } from "@infrastructure/share/DynamoDbShareTokenStore";
-import type { SaveRepository } from "@domain/ports/SaveRepository";
+import type { CreateShareLinkUseCase } from "@application/use-cases/CreateShareLinkUseCase";
+import type { GetSharedGameUseCase } from "@application/use-cases/GetSharedGameUseCase";
 
 const USER_ID_HEADER = "x-user-id";
-const MAX_TTL_SECONDS = 365 * 24 * 60 * 60;
-const DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 function getUserId(request: FastifyRequest): string {
   const userId = request.headers[USER_ID_HEADER];
@@ -23,17 +20,9 @@ function getBaseUrl(request: FastifyRequest): string {
   return `${proto}://${host}`;
 }
 
-function resolveTtlSeconds(expiresInDays: unknown): number {
-  if (typeof expiresInDays === "number" && expiresInDays > 0) {
-    return Math.min(Math.floor(expiresInDays * 24 * 60 * 60), MAX_TTL_SECONDS);
-  }
-  return DEFAULT_TTL_SECONDS;
-}
-
 export async function registerShareRoutes(
   app: FastifyInstance,
-  shareTokenStore: ShareTokenS3 | DynamoDbShareTokenStore,
-  saveRepository?: SaveRepository
+  deps: { createShareLinkUseCase: CreateShareLinkUseCase; getSharedGameUseCase: GetSharedGameUseCase }
 ): Promise<void> {
   app.post<{
     Body: { gameId?: string; expiresInDays?: number };
@@ -45,8 +34,11 @@ export async function registerShareRoutes(
       return reply.status(400).send({ error: "Bad Request", message: "gameId is required" });
     }
 
-    const ttlSeconds = resolveTtlSeconds(expiresInDays);
-    const { token, expiresAt } = await shareTokenStore.createToken(userId, gameId.trim(), ttlSeconds);
+    const { token, expiresAt } = await deps.createShareLinkUseCase.execute({
+      userId,
+      gameId: gameId.trim(),
+      expiresInDays,
+    });
     const shareUrl = `${getBaseUrl(request)}/share/${token}`;
 
     return reply.status(201).send({ token, shareUrl, expiresAt });
@@ -61,33 +53,19 @@ export async function registerShareRoutes(
     },
     async (request, reply: FastifyReply) => {
       const { token } = request.params;
-      const result = await shareTokenStore.getToken(token);
+      const result = await deps.getSharedGameUseCase.execute(token);
 
       switch (result.status) {
         case "ok": {
-          let files: { filename: string; size?: number; key: string }[] = [];
-          let isPackaged = false;
-
-          if (saveRepository) {
-            try {
-              const saves = await saveRepository.listByUserAndGame(result.payload.userId, result.payload.gameId);
-              files = saves.map((s) => ({
-                filename: s.filename,
-                size: s.size,
-                key: s.key,
-              }));
-              isPackaged = files.some((f) => f.filename.startsWith("backups/") || f.filename.endsWith(".tar"));
-            } catch (err) {
-              request.log.warn({ err }, "Could not resolve save files for share token");
-            }
+          if (result.filesError) {
+            request.log.warn({ err: result.filesError }, "No se pudieron consultar los archivos del enlace compartido");
           }
-
           return reply.send({
             userId: result.payload.userId,
             gameId: result.payload.gameId,
             expiresAt: result.payload.expiresAt,
-            files,
-            isPackaged,
+            files: result.files,
+            isPackaged: result.isPackaged,
           });
         }
 

@@ -1,12 +1,12 @@
 import type { NotificationRecord } from "@domain/entities/NotificationRecord";
 import type { NotificationRepository } from "@domain/ports/NotificationRepository";
+import type { NotificationChangeNotifier } from "@domain/ports/NotificationChangeNotifier";
 import { mergeNotificationRecords } from "@domain/services/notification-merge";
-import { BroadcastNotificationChangeUseCase } from "@application/use-cases/BroadcastNotificationChangeUseCase";
 
 export class SyncNotificationBatchUseCase {
   constructor(
     private readonly notificationRepository: NotificationRepository,
-    private readonly broadcastNotificationChange: BroadcastNotificationChangeUseCase
+    private readonly notificationChangeNotifier: NotificationChangeNotifier
   ) {}
 
   async execute(userId: string, incoming: NotificationRecord[]): Promise<void> {
@@ -34,6 +34,6 @@ export class SyncNotificationBatchUseCase {
       version: 1,
       items: mergeNotificationRecords(file.items, recordsWithServerTime),
     });
-    await this.broadcastNotificationChange.execute(userId, now);
+    await this.notificationChangeNotifier.notifyChanged(userId, now);
   }
 }

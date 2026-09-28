@@ -5,100 +5,41 @@ import "@fastify/websocket";
 import type { SaveRepository } from "@domain/ports/SaveRepository";
 import type { SaveFileIndexRepository } from "@domain/ports/SaveFileIndexRepository";
 import type { GameStatRepository } from "@domain/ports/GameStatRepository";
-import type { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
-import { GetUploadUrlUseCase } from "@application/use-cases/GetUploadUrlUseCase";
-import { GetUploadUrlsUseCase } from "@application/use-cases/GetUploadUrlsUseCase";
-import { GetDownloadUrlUseCase } from "@application/use-cases/GetDownloadUrlUseCase";
-import { GetDownloadUrlsUseCase } from "@application/use-cases/GetDownloadUrlsUseCase";
-import { DeleteGameFromCloudUseCase } from "@application/use-cases/DeleteGameFromCloudUseCase";
-import { RenameGameInCloudUseCase } from "@application/use-cases/RenameGameInCloudUseCase";
-import { ListBackupsUseCase } from "@application/use-cases/ListBackupsUseCase";
-import { DeleteBackupUseCase } from "@application/use-cases/DeleteBackupUseCase";
-import { RenameBackupUseCase } from "@application/use-cases/RenameBackupUseCase";
-import { ListSavesUseCase } from "@application/use-cases/ListSavesUseCase";
-import { GetGameSummaryUseCase } from "@application/use-cases/GetGameSummaryUseCase";
-import { CreateMultipartUploadUseCase } from "@application/use-cases/CreateMultipartUploadUseCase";
-import { CreateMultipartUploadWithPartUrlsUseCase } from "@application/use-cases/CreateMultipartUploadWithPartUrlsUseCase";
-import { GetUploadPartUrlsUseCase } from "@application/use-cases/GetUploadPartUrlsUseCase";
-import { CompleteMultipartUploadUseCase } from "@application/use-cases/CompleteMultipartUploadUseCase";
-import { AbortMultipartUploadUseCase } from "@application/use-cases/AbortMultipartUploadUseCase";
-import { CreateCloudInviteUseCase } from "@application/use-cases/CreateCloudInviteUseCase";
-import { ListPendingCloudInvitesUseCase } from "@application/use-cases/ListPendingCloudInvitesUseCase";
-import { RespondCloudInviteUseCase } from "@application/use-cases/RespondCloudInviteUseCase";
-import { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
-import { SetCloudGameShareUseCase } from "@application/use-cases/SetCloudGameShareUseCase";
-import { ListCloudPresenceUseCase } from "@application/use-cases/ListCloudPresenceUseCase";
-import { AcknowledgeNotificationsUseCase } from "@application/use-cases/AcknowledgeNotificationsUseCase";
-import { BroadcastNotificationChangeUseCase } from "@application/use-cases/BroadcastNotificationChangeUseCase";
-import { ListNotificationsUseCase } from "@application/use-cases/ListNotificationsUseCase";
-import { SyncNotificationBatchUseCase } from "@application/use-cases/SyncNotificationBatchUseCase";
+import type { ShareTokenRepository } from "@domain/ports/ShareTokenRepository";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import type { NotificationRepository } from "@domain/ports/NotificationRepository";
-import type { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
+import type { SteamSeedRepository } from "@domain/ports/SteamSeedRepository";
 import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
-import { recordHttpMetric } from "@infrastructure/observability/httpMetricsStore";
-import { registerSavesRoutes } from "@interfaces/http/routes/saves.routes";
-import { registerShareRoutes } from "@interfaces/http/routes/share.routes";
-import { registerNotificationRoutes } from "@interfaces/http/routes/notifications.routes";
-import { registerInviteRoutes } from "@interfaces/http/routes/invites.routes";
-import { registerInventoryRoutes } from "@interfaces/http/routes/inventory.routes";
-import { PublishDeviceInventoryUseCase } from "@application/use-cases/PublishDeviceInventoryUseCase";
-import { ListGameProvidersUseCase } from "@application/use-cases/ListGameProvidersUseCase";
-import { CreateTransferSessionUseCase } from "@application/use-cases/CreateTransferSessionUseCase";
-import { RecordInventoryHeartbeatUseCase } from "@application/use-cases/RecordInventoryHeartbeatUseCase";
-import { ListPendingTransferSessionsUseCase } from "@application/use-cases/ListPendingTransferSessionsUseCase";
+import { recordHttpMetric, summarizeHttpMetrics } from "@infrastructure/observability/httpMetricsStore";
 import type { GameInventoryRepository } from "@domain/ports/GameInventoryRepository";
-import { registerProfileRoutes } from "@interfaces/http/routes/users.routes";
 import { registerObservabilityRoutes } from "@interfaces/http/routes/observability.routes";
-import { registerClipRoutes } from "@interfaces/http/routes/clips.routes";
-import { registerTrashRoutes } from "@interfaces/http/routes/trash.routes";
-import { ListTrashUseCase } from "@application/use-cases/ListTrashUseCase";
-import { RestoreFromTrashUseCase } from "@application/use-cases/RestoreFromTrashUseCase";
-import { DeleteFromTrashUseCase } from "@application/use-cases/DeleteFromTrashUseCase";
-import { EmptyTrashUseCase } from "@application/use-cases/EmptyTrashUseCase";
-import type { ClipStore } from "@infrastructure/clips/ClipStore";
-import type { DynamoDbClipStore } from "@infrastructure/clips/DynamoDbClipStore";
-import type { DynamoDbShareTokenStore } from "@infrastructure/share/DynamoDbShareTokenStore";
+import type { ClipRepository } from "@domain/ports/ClipRepository";
 import { verifyUserAccessToken } from "@shared/accessToken";
 import { isPublicRoute } from "@interfaces/http/security/public-routes";
-import { GetFriendProfileUseCase } from "@application/use-cases/GetFriendProfileUseCase";
 import { ProcessS3EventUseCase } from "@application/use-cases/ProcessS3EventUseCase";
 import { registerWebhookRoutes } from "@interfaces/http/routes/webhooks.routes";
 import { registerWebSocketRoutes } from "@interfaces/http/routes/websocket.routes";
+import { registerNotificationsModule } from "@interfaces/http/modules/notifications";
+import { registerInvitesModule } from "@interfaces/http/modules/invites";
+import { registerInventoryModule } from "@interfaces/http/modules/inventory";
+import { registerTrashModule } from "@interfaces/http/modules/trash";
+import { registerSavesModule } from "@interfaces/http/modules/saves";
+import { registerShareModule } from "@interfaces/http/modules/share";
+import { registerClipsModule } from "@interfaces/http/modules/clips";
 
 export interface AppDependencies {
   saveRepository: SaveRepository;
   saveFileIndexRepository?: SaveFileIndexRepository;
   gameStatRepository?: GameStatRepository;
-  steamSeedRepository?: S3SteamSeedRepository;
+  steamSeedRepository?: SteamSeedRepository;
   cloudInviteRepository?: CloudInviteRepository;
   gameInventoryRepository?: GameInventoryRepository;
-  shareTokenStore?: ShareTokenS3 | DynamoDbShareTokenStore;
-  clipStore?: ClipStore | DynamoDbClipStore;
+  shareTokenRepository?: ShareTokenRepository;
+  clipRepository?: ClipRepository;
   notificationRepository?: NotificationRepository;
   connectionRepository?: ConnectionRepository;
   webSocketNotifier?: WebSocketNotifier;
-}
-
-interface SavesRouteUseCases {
-  getUploadUrlUseCase: GetUploadUrlUseCase;
-  getUploadUrlsUseCase: GetUploadUrlsUseCase;
-  getDownloadUrlUseCase: GetDownloadUrlUseCase;
-  getDownloadUrlsUseCase: GetDownloadUrlsUseCase;
-  deleteGameFromCloudUseCase: DeleteGameFromCloudUseCase;
-  renameGameInCloudUseCase: RenameGameInCloudUseCase;
-  listSavesUseCase: ListSavesUseCase;
-  getGameSummaryUseCase?: GetGameSummaryUseCase;
-  listBackupsUseCase: ListBackupsUseCase;
-  deleteBackupUseCase: DeleteBackupUseCase;
-  renameBackupUseCase: RenameBackupUseCase;
-  createMultipartUploadUseCase: CreateMultipartUploadUseCase;
-  createMultipartUploadWithPartUrlsUseCase: CreateMultipartUploadWithPartUrlsUseCase;
-  getUploadPartUrlsUseCase: GetUploadPartUrlsUseCase;
-  completeMultipartUploadUseCase: CompleteMultipartUploadUseCase;
-  abortMultipartUploadUseCase: AbortMultipartUploadUseCase;
-  resolveCloudStorageScopeUseCase?: ResolveCloudStorageScopeUseCase;
 }
 
 /**
@@ -149,79 +90,23 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
 
   registerHttpMetricsHooks(app);
   registerApiKeyAuthHook(app, process.env.API_KEY);
-  const savesUseCases = buildSavesRouteUseCases(deps);
+  const resolveCloudStorageScopeUseCase = await registerSavesModule(app, deps);
 
-  await registerSavesRoutes(app, {
-    ...savesUseCases,
-    steamSeedRepository: deps.steamSeedRepository,
-    resolveCloudStorageScopeUseCase: savesUseCases.resolveCloudStorageScopeUseCase,
-    cloudInviteRepository: deps.cloudInviteRepository,
+  await registerShareModule(app, {
+    shareTokenRepository: deps.shareTokenRepository,
+    saveRepository: deps.saveRepository,
   });
 
-  if (deps.shareTokenStore) {
-    await registerShareRoutes(app, deps.shareTokenStore, deps.saveRepository);
-  }
+  await registerClipsModule(app, deps.clipRepository);
 
-  if (deps.clipStore) {
-    await registerClipRoutes(app, deps.clipStore);
-  }
-
-  if (deps.notificationRepository) {
-    const broadcastNotificationChange = new BroadcastNotificationChangeUseCase(
-      deps.connectionRepository,
-      deps.webSocketNotifier
-    );
-    await registerNotificationRoutes(app, {
-      listNotificationsUseCase: new ListNotificationsUseCase(deps.notificationRepository),
-      syncNotificationBatchUseCase: new SyncNotificationBatchUseCase(
-        deps.notificationRepository,
-        broadcastNotificationChange
-      ),
-      acknowledgeNotificationsUseCase: new AcknowledgeNotificationsUseCase(
-        deps.notificationRepository,
-        broadcastNotificationChange
-      ),
-    });
-  }
-
-  if (deps.cloudInviteRepository) {
-    await registerInviteRoutes(app, {
-      createCloudInviteUseCase: new CreateCloudInviteUseCase(deps.cloudInviteRepository),
-      listPendingCloudInvitesUseCase: new ListPendingCloudInvitesUseCase(deps.cloudInviteRepository),
-      respondCloudInviteUseCase: new RespondCloudInviteUseCase(deps.cloudInviteRepository),
-      setCloudGameShareUseCase: new SetCloudGameShareUseCase(deps.cloudInviteRepository),
-      listCloudPresenceUseCase: deps.connectionRepository
-        ? new ListCloudPresenceUseCase(deps.cloudInviteRepository, deps.connectionRepository)
-        : undefined,
-      cloudInviteRepository: deps.cloudInviteRepository,
-    });
-  }
-
-  if (deps.cloudInviteRepository && savesUseCases.resolveCloudStorageScopeUseCase) {
-    await registerProfileRoutes(app, {
-      getFriendProfileUseCase: new GetFriendProfileUseCase(
-        deps.saveRepository,
-        deps.cloudInviteRepository,
-        savesUseCases.resolveCloudStorageScopeUseCase
-      ),
-    });
-  }
-
-  if (deps.gameInventoryRepository && deps.cloudInviteRepository) {
-    await registerInventoryRoutes(app, {
-      publishDeviceInventoryUseCase: new PublishDeviceInventoryUseCase(deps.gameInventoryRepository),
-      listGameProvidersUseCase: new ListGameProvidersUseCase(deps.gameInventoryRepository, deps.cloudInviteRepository),
-      createTransferSessionUseCase: new CreateTransferSessionUseCase(
-        deps.gameInventoryRepository,
-        deps.cloudInviteRepository,
-        deps.connectionRepository,
-        deps.webSocketNotifier
-      ),
-      recordInventoryHeartbeatUseCase: new RecordInventoryHeartbeatUseCase(deps.gameInventoryRepository),
-      listPendingTransferSessionsUseCase: new ListPendingTransferSessionsUseCase(deps.gameInventoryRepository),
-      gameInventoryRepository: deps.gameInventoryRepository,
-    });
-  }
+  await registerNotificationsModule(app, deps);
+  await registerInvitesModule(app, {
+    saveRepository: deps.saveRepository,
+    cloudInviteRepository: deps.cloudInviteRepository,
+    connectionRepository: deps.connectionRepository,
+    resolveCloudStorageScopeUseCase,
+  });
+  await registerInventoryModule(app, deps);
 
   const processS3EventUseCase =
     deps.saveFileIndexRepository && deps.gameStatRepository
@@ -230,12 +115,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
 
   await registerWebhookRoutes(app, { processS3EventUseCase });
   await registerWebSocketRoutes(app, { connectionRepository: deps.connectionRepository });
-  await registerTrashRoutes(app, {
-    listTrashUseCase: new ListTrashUseCase(deps.saveRepository),
-    restoreFromTrashUseCase: new RestoreFromTrashUseCase(deps.saveRepository),
-    deleteFromTrashUseCase: new DeleteFromTrashUseCase(deps.saveRepository),
-    emptyTrashUseCase: new EmptyTrashUseCase(deps.saveRepository),
-  });
+  await registerTrashModule(app, deps.saveRepository);
 
   app.get(
     "/health",
@@ -252,7 +132,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     }
   );
 
-  await registerObservabilityRoutes(app);
+  await registerObservabilityRoutes(app, summarizeHttpMetrics);
 
   return app;
 }
@@ -327,28 +207,4 @@ function registerApiKeyAuthHook(app: FastifyInstance, expectedApiKey?: string): 
 
     return reply.status(401).send({ error: "Unauthorized" });
   });
-}
-
-function buildSavesRouteUseCases(deps: AppDependencies): SavesRouteUseCases {
-  return {
-    getUploadUrlUseCase: new GetUploadUrlUseCase(deps.saveRepository),
-    getUploadUrlsUseCase: new GetUploadUrlsUseCase(deps.saveRepository),
-    getDownloadUrlUseCase: new GetDownloadUrlUseCase(deps.saveRepository),
-    getDownloadUrlsUseCase: new GetDownloadUrlsUseCase(deps.saveRepository),
-    deleteGameFromCloudUseCase: new DeleteGameFromCloudUseCase(deps.saveRepository),
-    renameGameInCloudUseCase: new RenameGameInCloudUseCase(deps.saveRepository),
-    listSavesUseCase: new ListSavesUseCase(deps.saveRepository, deps.saveFileIndexRepository),
-    getGameSummaryUseCase: deps.gameStatRepository ? new GetGameSummaryUseCase(deps.gameStatRepository) : undefined,
-    listBackupsUseCase: new ListBackupsUseCase(deps.saveRepository, deps.saveFileIndexRepository),
-    deleteBackupUseCase: new DeleteBackupUseCase(deps.saveRepository),
-    renameBackupUseCase: new RenameBackupUseCase(deps.saveRepository),
-    createMultipartUploadUseCase: new CreateMultipartUploadUseCase(deps.saveRepository),
-    createMultipartUploadWithPartUrlsUseCase: new CreateMultipartUploadWithPartUrlsUseCase(deps.saveRepository),
-    getUploadPartUrlsUseCase: new GetUploadPartUrlsUseCase(deps.saveRepository),
-    completeMultipartUploadUseCase: new CompleteMultipartUploadUseCase(deps.saveRepository),
-    abortMultipartUploadUseCase: new AbortMultipartUploadUseCase(deps.saveRepository),
-    resolveCloudStorageScopeUseCase: deps.cloudInviteRepository
-      ? new ResolveCloudStorageScopeUseCase(deps.cloudInviteRepository)
-      : undefined,
-  };
 }

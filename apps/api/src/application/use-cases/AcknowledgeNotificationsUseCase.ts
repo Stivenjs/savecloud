@@ -1,11 +1,11 @@
 import type { NotificationRecord } from "@domain/entities/NotificationRecord";
 import type { NotificationRepository } from "@domain/ports/NotificationRepository";
-import { BroadcastNotificationChangeUseCase } from "@application/use-cases/BroadcastNotificationChangeUseCase";
+import type { NotificationChangeNotifier } from "@domain/ports/NotificationChangeNotifier";
 
 export class AcknowledgeNotificationsUseCase {
   constructor(
     private readonly notificationRepository: NotificationRepository,
-    private readonly broadcastNotificationChange: BroadcastNotificationChangeUseCase
+    private readonly notificationChangeNotifier: NotificationChangeNotifier
   ) {}
 
   async execute(userId: string, ids: string[], read: boolean, dismiss: boolean): Promise<void> {
@@ -35,6 +35,6 @@ export class AcknowledgeNotificationsUseCase {
 
     if (!changed) return;
     await this.notificationRepository.save(userId, { version: 1, items });
-    await this.broadcastNotificationChange.execute(userId, now);
+    await this.notificationChangeNotifier.notifyChanged(userId, now);
   }
 }

@@ -5,22 +5,8 @@ import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { Agent } from "https";
 import type { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from "aws-lambda";
 import { buildApp } from "@interfaces/http/app";
-import { S3NotificationStore } from "@infrastructure/persistence/S3NotificationStore";
-import { DynamoDbNotificationStore } from "@infrastructure/persistence/DynamoDbNotificationStore";
-import { S3CloudInviteRepository } from "@infrastructure/persistence/S3CloudInviteRepository";
-import { DynamoDbCloudInviteRepository } from "@infrastructure/persistence/DynamoDbCloudInviteRepository";
-import { S3GameInventoryRepository } from "@infrastructure/persistence/S3GameInventoryRepository";
-import { DynamoDbGameInventoryRepository } from "@infrastructure/persistence/DynamoDbGameInventoryRepository";
-import { S3SaveRepository } from "@infrastructure/persistence/S3SaveRepository";
-import { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
-import { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
-import { DynamoDbShareTokenStore } from "@infrastructure/share/DynamoDbShareTokenStore";
-import { DynamoDbGameStatRepository } from "@infrastructure/persistence/DynamoDbGameStatRepository";
-import { DynamoDbSaveFileIndexRepository } from "@infrastructure/persistence/DynamoDbSaveFileIndexRepository";
-import { DynamoDbConnectionRepository } from "@infrastructure/persistence/DynamoDbConnectionRepository";
 import { ApiGatewayNotifier } from "@infrastructure/websocket/ApiGatewayNotifier";
-import { ClipStore } from "@infrastructure/clips/ClipStore";
-import { DynamoDbClipStore } from "@infrastructure/clips/DynamoDbClipStore";
+import { createApiStores } from "@infrastructure/factories/apiStoresFactory";
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -62,37 +48,22 @@ const dynamoClient = new DynamoDBClient({
   }),
 });
 
-const saveRepository = new S3SaveRepository(s3, bucketName);
-const steamSeedRepository = new S3SteamSeedRepository(s3, bucketName);
-const shareTokenStore = shareTokensTable
-  ? new DynamoDbShareTokenStore(dynamoClient, shareTokensTable, s3, bucketName)
-  : new ShareTokenS3(s3, bucketName);
-const clipStore = clipsTable
-  ? new DynamoDbClipStore(s3, bucketName, dynamoClient, clipsTable)
-  : new ClipStore(s3, bucketName);
-const notificationRepository = notificationsTable
-  ? new DynamoDbNotificationStore(dynamoClient, notificationsTable, s3, bucketName)
-  : new S3NotificationStore(s3, bucketName);
-const s3CloudInviteFallback = new S3CloudInviteRepository(s3, bucketName);
-const cloudInviteRepository = cloudInvitesTable
-  ? new DynamoDbCloudInviteRepository(dynamoClient, cloudInvitesTable, s3CloudInviteFallback)
-  : s3CloudInviteFallback;
-const s3GameInventoryFallback = new S3GameInventoryRepository(s3, bucketName, cloudInviteRepository);
-const gameInventoryRepository = gameInventoryTable
-  ? new DynamoDbGameInventoryRepository(
-      dynamoClient,
-      gameInventoryTable,
-      cloudInviteRepository,
-      s3GameInventoryFallback
-    )
-  : s3GameInventoryFallback;
-const gameStatRepository = new DynamoDbGameStatRepository(dynamoClient, gameStatsTable);
-const saveFileIndexRepository = saveFilesIndexTable
-  ? new DynamoDbSaveFileIndexRepository(dynamoClient, saveFilesIndexTable)
-  : undefined;
-const connectionRepository = connectionsTable
-  ? new DynamoDbConnectionRepository(dynamoClient, connectionsTable)
-  : undefined;
+const stores = createApiStores({
+  s3,
+  dynamo: dynamoClient,
+  bucketName,
+  tables: {
+    gameStats: gameStatsTable,
+    saveFilesIndex: saveFilesIndexTable,
+    connections: connectionsTable,
+    clips: clipsTable,
+    notifications: notificationsTable,
+    shareTokens: shareTokensTable,
+    cloudInvites: cloudInvitesTable,
+    gameInventory: gameInventoryTable,
+  },
+});
+const { connectionRepository } = stores;
 
 const wsEndpoint = optionalEnv("WS_ENDPOINT");
 const webSocketNotifier =
@@ -108,15 +79,7 @@ function initProxy(): Promise<Proxy> {
     console.info("[bootstrap] Cold start — initializing app");
 
     const app = await buildApp({
-      saveRepository,
-      saveFileIndexRepository,
-      steamSeedRepository,
-      shareTokenStore,
-      clipStore,
-      notificationRepository,
-      cloudInviteRepository,
-      gameInventoryRepository,
-      gameStatRepository,
+      ...stores,
       connectionRepository,
       webSocketNotifier,
     });

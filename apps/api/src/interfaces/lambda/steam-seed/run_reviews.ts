@@ -1,6 +1,6 @@
 import { PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import type { ReviewsBatchLineV1, SteamReviewsStateV1 } from "@interfaces/lambda/steam-seed/types";
-import { reviewsBatchKey } from "@interfaces/lambda/steam-seed/layout";
+import { reviewsBatchKey } from "@shared/steam-seed-layout";
 import { processWithConcurrencyLimit } from "@interfaces/lambda/steam-seed/concurrency";
 import { loadProcessedAppIds } from "@interfaces/lambda/steam-seed/state";
 import { fetchSteamReviews } from "@interfaces/lambda/steam-seed/steam_reviews";

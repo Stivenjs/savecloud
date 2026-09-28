@@ -10,7 +10,11 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { WebSocket, RawData } from "ws";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
-import type { FastifyWebSocketNotifier } from "@infrastructure/websocket/FastifyWebSocketNotifier";
+
+interface LocalSocketRegistry {
+  registerSocket(connectionId: string, socket: WebSocket): void;
+  unregisterSocket(connectionId: string): void;
+}
 
 /**
  * Tiempo de vida (TTL) predeterminado para las conexiones en DynamoDB (24 horas).
@@ -40,7 +44,7 @@ export interface WebSocketRouteDependencies {
   /** Puerto de persistencia de conexiones en la base de datos */
   connectionRepository?: ConnectionRepository;
   /** Notificador WebSocket local para standalone/Docker */
-  webSocketNotifier?: FastifyWebSocketNotifier;
+  webSocketNotifier?: LocalSocketRegistry;
 }
 
 /**

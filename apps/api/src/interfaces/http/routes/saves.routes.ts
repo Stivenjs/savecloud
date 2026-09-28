@@ -65,7 +65,7 @@ import type { CompleteMultipartUploadUseCase } from "@application/use-cases/Comp
 import type { AbortMultipartUploadUseCase } from "@application/use-cases/AbortMultipartUploadUseCase";
 import type { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
-import type { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
+import type { SteamSeedRepository } from "@domain/ports/SteamSeedRepository";
 import { getUserId, getErrorMessage } from "@shared/utils";
 import { TtlCache } from "@shared/ttlCache";
 import { computeSavesEtag, computeSummaryEtag, send304IfNotModified, type SummaryEtagItem } from "@shared/etag";
@@ -130,7 +130,7 @@ export async function registerSavesRoutes(
     getUploadPartUrlsUseCase: GetUploadPartUrlsUseCase;
     completeMultipartUploadUseCase: CompleteMultipartUploadUseCase;
     abortMultipartUploadUseCase: AbortMultipartUploadUseCase;
-    steamSeedRepository?: S3SteamSeedRepository;
+    steamSeedRepository?: SteamSeedRepository;
     resolveCloudStorageScopeUseCase?: ResolveCloudStorageScopeUseCase;
     cloudInviteRepository?: CloudInviteRepository;
   }

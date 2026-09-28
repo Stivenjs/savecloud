@@ -1,4 +1,4 @@
-import type { ClipMetadata } from "@infrastructure/clips/ClipStore";
+import type { ClipMetadata } from "@domain/entities/Clip";
 
 function escapeHtml(str: string): string {
   return str
