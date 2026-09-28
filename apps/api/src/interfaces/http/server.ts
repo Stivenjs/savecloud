@@ -4,6 +4,7 @@ import { createS3Client, createPresignS3Client, getBucketName } from "@infrastru
 import { createDynamoDbClient, ensureDynamoDbTablesExist } from "@infrastructure/factories/dynamoDbFactory";
 import { createApiStores } from "@infrastructure/factories/apiStoresFactory";
 import { startBunServer } from "@infrastructure/websocket/BunWebSocketServer";
+import { validateRuntimeConfiguration } from "@interfaces/configuration/runtimeConfiguration";
 
 /** Puerto por defecto para el servidor HTTP de Fastify */
 const DEFAULT_SERVER_PORT = 3000;
@@ -20,6 +21,10 @@ const DEFAULT_NOTIFICATIONS_TABLE = "savecloud-notifications";
 const DEFAULT_SHARE_TOKENS_TABLE = "savecloud-share-tokens";
 const DEFAULT_CLOUD_INVITES_TABLE = "savecloud-cloud-invites";
 const DEFAULT_GAME_INVENTORY_TABLE = "savecloud-game-inventory";
+
+if (process.env.NODE_ENV === "production" && !process.env.DYNAMODB_ENDPOINT?.trim()) {
+  validateRuntimeConfiguration("self-hosted");
+}
 
 /**
  * Obtiene el valor de una variable de entorno de forma opcional, recortando espacios en blanco.
@@ -88,10 +93,16 @@ async function main(): Promise<void> {
       gameStatsTable,
       saveFilesIndexTable,
       connectionsTable,
+      clipsTable,
+      notificationsTable,
+      shareTokensTable,
+      cloudInvitesTable,
+      gameInventoryTable,
     });
     console.log("[SaveCloud API] DynamoDB tables verified.");
   } catch (err: unknown) {
     console.error("[SaveCloud API] Error verifying DynamoDB tables:", err);
+    throw err;
   }
 
   const app = await buildApp({

@@ -7,6 +7,9 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from "aws-l
 import { buildApp } from "@interfaces/http/app";
 import { ApiGatewayNotifier } from "@infrastructure/websocket/ApiGatewayNotifier";
 import { createApiStores } from "@infrastructure/factories/apiStoresFactory";
+import { validateRuntimeConfiguration } from "@interfaces/configuration/runtimeConfiguration";
+
+validateRuntimeConfiguration("lambda");
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();

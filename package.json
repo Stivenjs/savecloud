@@ -17,7 +17,7 @@
     "api-key:live": "bun run scripts/generate-api-key.ts -- --live",
     "clean:s3-migrated": "bun run scripts/cleanup-s3-migrated-data.ts",
     "deploy:dev": "serverless deploy --stage dev",
-    "deploy:live": "serverless deploy --stage live",
+    "deploy:live": "serverless deploy --stage live && serverless info --stage live --verbose",
     "invoke:local": "serverless invoke local -f api",
     "logs:api:dev": "serverless logs -f api --stage dev --tail",
     "logs:seed:dev": "serverless logs -f steamSeedWorker --stage dev --tail",

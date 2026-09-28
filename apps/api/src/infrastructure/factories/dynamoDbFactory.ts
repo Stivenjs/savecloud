@@ -24,6 +24,8 @@ export interface DynamoDbTablesConfig {
   clipsTable?: string;
   notificationsTable?: string;
   shareTokensTable?: string;
+  cloudInvitesTable?: string;
+  gameInventoryTable?: string;
 }
 
 /**
@@ -62,8 +64,16 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
   if (!dynamoEndpoint) return;
 
   const initTables = async (): Promise<void> => {
-    const { gameStatsTable, saveFilesIndexTable, connectionsTable, clipsTable, notificationsTable, shareTokensTable } =
-      tables;
+    const {
+      gameStatsTable,
+      saveFilesIndexTable,
+      connectionsTable,
+      clipsTable,
+      notificationsTable,
+      shareTokensTable,
+      cloudInvitesTable,
+      gameInventoryTable,
+    } = tables;
 
     if (gameStatsTable) {
       await createTableIfNotExists(client, {
@@ -160,6 +170,60 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
         BillingMode: "PAY_PER_REQUEST",
       });
     }
+
+    if (cloudInvitesTable) {
+      await createTableIfNotExists(client, {
+        TableName: cloudInvitesTable,
+        AttributeDefinitions: [
+          { AttributeName: "pk", AttributeType: "S" },
+          { AttributeName: "sk", AttributeType: "S" },
+          { AttributeName: "gsi1pk", AttributeType: "S" },
+          { AttributeName: "gsi1sk", AttributeType: "S" },
+        ],
+        KeySchema: [
+          { AttributeName: "pk", KeyType: "HASH" },
+          { AttributeName: "sk", KeyType: "RANGE" },
+        ],
+        GlobalSecondaryIndexes: [
+          {
+            IndexName: "GSI1",
+            KeySchema: [
+              { AttributeName: "gsi1pk", KeyType: "HASH" },
+              { AttributeName: "gsi1sk", KeyType: "RANGE" },
+            ],
+            Projection: { ProjectionType: "ALL" },
+          },
+        ],
+        BillingMode: "PAY_PER_REQUEST",
+      });
+    }
+
+    if (gameInventoryTable) {
+      await createTableIfNotExists(client, {
+        TableName: gameInventoryTable,
+        AttributeDefinitions: [
+          { AttributeName: "pk", AttributeType: "S" },
+          { AttributeName: "sk", AttributeType: "S" },
+          { AttributeName: "gsi1pk", AttributeType: "S" },
+          { AttributeName: "gsi1sk", AttributeType: "S" },
+        ],
+        KeySchema: [
+          { AttributeName: "pk", KeyType: "HASH" },
+          { AttributeName: "sk", KeyType: "RANGE" },
+        ],
+        GlobalSecondaryIndexes: [
+          {
+            IndexName: "GSI1",
+            KeySchema: [
+              { AttributeName: "gsi1pk", KeyType: "HASH" },
+              { AttributeName: "gsi1sk", KeyType: "RANGE" },
+            ],
+            Projection: { ProjectionType: "ALL" },
+          },
+        ],
+        BillingMode: "PAY_PER_REQUEST",
+      });
+    }
   };
 
   const timeoutPromise = new Promise<never>((_, reject) =>
@@ -222,10 +286,8 @@ async function createTableIfNotExists(
           return;
         } catch (createErr: unknown) {
           const createErrObj = createErr as { name?: string } | undefined;
-          if (createErrObj?.name !== "ResourceInUseException") {
-            console.warn(`[DynamoDB Local] Advertencia al crear tabla '${tableName}':`, createErr);
-          }
-          return;
+          if (createErrObj?.name === "ResourceInUseException") return;
+          throw new Error(`[DynamoDB Local] No se pudo crear la tabla '${tableName}'.`, { cause: createErr });
         }
       } else {
         console.error(`[DynamoDB Local] Error al verificar tabla '${tableName}':`, err);

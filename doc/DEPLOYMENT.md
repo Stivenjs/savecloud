@@ -129,9 +129,9 @@ Asegura que el **bucket S3 solo sea accesible desde CloudFront** y no directamen
 
 ### URL de descarga base
 
-El backend detecta automáticamente el entorno.
+El backend toma la URL pública directamente del recurso CloudFront creado en el mismo stack. No es necesario copiar el dominio a una variable manual.
 
-En `live`, utilizará automáticamente el **dominio de CloudFront** para generar las URLs de descarga.
+En `live`, utiliza automáticamente el **dominio de CloudFront** para generar las URLs de descarga de backups, clips y portadas. El bucket S3 permanece privado; los objetos públicos se sirven a través de CloudFront.
 
 ### Desplegar
 
@@ -143,13 +143,13 @@ bun run deploy:live
 
 ### Endpoint del API
 
-Al finalizar cualquier despliegue, **Serverless Framework imprimirá en consola un endpoint de API Gateway**.
+Al finalizar `bun run deploy:live`, el script consulta también la información del stack con `serverless info --verbose`. La salida incluye los endpoints de API Gateway y los outputs de CloudFormation, entre ellos `CloudFrontDistributionUrl`.
 
-Copia esta URL, ya que será tu:
+La URL de API Gateway será tu:
 
 `API URL`
 
-para la aplicación cliente.
+para la aplicación cliente. La URL `CloudFrontDistributionUrl` sirve para verificar el dominio CDN usado por la API; no reemplaza la URL del API.
 
 ---
 
