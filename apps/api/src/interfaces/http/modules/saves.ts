@@ -22,6 +22,8 @@ import { RenameBackupUseCase } from "@application/use-cases/RenameBackupUseCase"
 import { RenameGameInCloudUseCase } from "@application/use-cases/RenameGameInCloudUseCase";
 import { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
 import { registerSavesRoutes } from "@interfaces/http/routes/saves.routes";
+import { registerSavesMultipartRoutes } from "@interfaces/http/routes/saves-multipart.routes";
+import { registerSteamSeedRoutes } from "@interfaces/http/routes/saves-steam-seed.routes";
 
 export async function registerSavesModule(
   app: FastifyInstance,
@@ -37,7 +39,7 @@ export async function registerSavesModule(
     ? new ResolveCloudStorageScopeUseCase(deps.cloudInviteRepository)
     : undefined;
 
-  await registerSavesRoutes(app, {
+  const useCases = {
     getUploadUrlUseCase: new GetUploadUrlUseCase(deps.saveRepository),
     getUploadUrlsUseCase: new GetUploadUrlsUseCase(deps.saveRepository),
     getDownloadUrlUseCase: new GetDownloadUrlUseCase(deps.saveRepository),
@@ -49,14 +51,22 @@ export async function registerSavesModule(
     listBackupsUseCase: new ListBackupsUseCase(deps.saveRepository, deps.saveFileIndexRepository),
     deleteBackupUseCase: new DeleteBackupUseCase(deps.saveRepository),
     renameBackupUseCase: new RenameBackupUseCase(deps.saveRepository),
+    resolveCloudStorageScopeUseCase,
+    cloudInviteRepository: deps.cloudInviteRepository,
+  };
+
+  await registerSavesRoutes(app, useCases);
+  await registerSavesMultipartRoutes(app, {
     createMultipartUploadUseCase: new CreateMultipartUploadUseCase(deps.saveRepository),
     createMultipartUploadWithPartUrlsUseCase: new CreateMultipartUploadWithPartUrlsUseCase(deps.saveRepository),
     getUploadPartUrlsUseCase: new GetUploadPartUrlsUseCase(deps.saveRepository),
     completeMultipartUploadUseCase: new CompleteMultipartUploadUseCase(deps.saveRepository),
     abortMultipartUploadUseCase: new AbortMultipartUploadUseCase(deps.saveRepository),
+    resolveCloudStorageScopeUseCase,
+  });
+  await registerSteamSeedRoutes(app, {
     steamSeedRepository: deps.steamSeedRepository,
     resolveCloudStorageScopeUseCase,
-    cloudInviteRepository: deps.cloudInviteRepository,
   });
 
   return resolveCloudStorageScopeUseCase;
