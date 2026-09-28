@@ -1,6 +1,6 @@
 import { createS3Client } from "@infrastructure/factories/storageFactory";
 import type { Context } from "aws-lambda";
-import { DEFAULT_STEAM_FILTERS } from "@interfaces/lambda/steam-seed/layout";
+import { DEFAULT_STEAM_FILTERS } from "@shared/steam-seed-layout";
 import { pickOwnerIdAuto } from "@interfaces/lambda/steam-seed/owners";
 import { runSteamSeedTick } from "@interfaces/lambda/steam-seed/run";
 import { runReviewsTick } from "@interfaces/lambda/steam-seed/run_reviews";

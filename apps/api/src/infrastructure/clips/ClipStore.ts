@@ -8,34 +8,13 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomBytes } from "node:crypto";
-import { resolvePublicUrl } from "@infrastructure/factories/storageFactory";
+import { resolvePublicUrl } from "@infrastructure/storage/publicUrl";
+import type { ClipDto, ClipMetadata, GetClipResult } from "@domain/entities/Clip";
+import type { ClipRepository } from "@domain/ports/ClipRepository";
 
 const CLIP_META_PREFIX = "clips-meta/";
 const CLIP_VIDEO_PREFIX = "clips/";
 const PRESIGN_EXPIRES_IN_SECONDS = 900;
-
-export interface ClipMetadata {
-  clipId: string;
-  userId: string;
-  gameId: string;
-  filename: string;
-  videoKey: string;
-  contentType: string;
-  createdAt: string;
-  posterUrl?: string;
-  steamAppId?: string;
-  gameTitle?: string;
-}
-
-export interface ClipDto extends ClipMetadata {
-  cdnUrl: string;
-  watchUrl: string;
-}
-
-export type GetClipResult =
-  | { status: "ok"; clip: ClipMetadata; cdnUrl: string }
-  | { status: "not_found" }
-  | { status: "error"; cause?: unknown };
 
 function getFileExtension(filename: string): string {
   const parts = filename.split(".");
@@ -62,7 +41,7 @@ function resolveContentType(ext: string, override?: string): string {
   }
 }
 
-export class ClipStore {
+export class ClipStore implements ClipRepository {
   private readonly s3: S3Client;
   private readonly presignS3: S3Client;
   private readonly bucketName: string;

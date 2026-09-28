@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import { getUserId, getErrorMessage } from "@shared/utils";
+import { getUserId } from "@interfaces/http/helpers/request-context";
+import { ApplicationError } from "@application/errors/ApplicationError";
 import type { PublishDeviceInventoryUseCase } from "@application/use-cases/PublishDeviceInventoryUseCase";
 import type { ListGameProvidersUseCase } from "@application/use-cases/ListGameProvidersUseCase";
 import type { CreateTransferSessionUseCase } from "@application/use-cases/CreateTransferSessionUseCase";
@@ -30,7 +31,7 @@ export async function registerInventoryRoutes(
     "/inventory/devices/:deviceId",
     { schema: { body: PublishDeviceInventorySchema } },
     async (request, reply: FastifyReply) => {
-      try {
+      {
         const userId = getUserId(request);
         const deviceId = request.params.deviceId.trim();
         const body = request.body;
@@ -45,8 +46,6 @@ export async function registerInventoryRoutes(
           games: body.games,
         });
         return reply.send({ ok: true });
-      } catch (err) {
-        return reply.status(400).send({ error: "Bad Request", message: getErrorMessage(err) });
       }
     }
   );
@@ -55,53 +54,45 @@ export async function registerInventoryRoutes(
     "/inventory/devices/:deviceId/heartbeat",
     { schema: { body: InventoryHeartbeatSchema } },
     async (request, reply: FastifyReply) => {
-      try {
+      {
         const userId = getUserId(request);
         await deps.recordInventoryHeartbeatUseCase.execute(userId, request.params.deviceId, request.body.appVersion);
         return reply.send({ ok: true });
-      } catch (err) {
-        return reply.status(400).send({ error: "Bad Request", message: getErrorMessage(err) });
       }
     }
   );
 
   app.delete<{ Params: { deviceId: string } }>("/inventory/devices/:deviceId", async (request, reply: FastifyReply) => {
-    try {
+    {
       const userId = getUserId(request);
       await deps.gameInventoryRepository.deleteDeviceInventory(userId, request.params.deviceId.trim());
       return reply.send({ ok: true });
-    } catch (err) {
-      return reply.status(400).send({ error: "Bad Request", message: getErrorMessage(err) });
     }
   });
 
   app.get<{ Querystring: { gameKey?: string } }>("/inventory/providers", async (request, reply: FastifyReply) => {
-    try {
+    {
       const userId = getUserId(request);
       const gameKey = (request.query.gameKey ?? "").trim();
       if (!gameKey) {
-        return reply.status(400).send({ error: "Bad Request", message: "gameKey is required" });
+        throw new ApplicationError("INVALID_ARGUMENT", "La clave del juego es obligatoria.");
       }
       const result = await deps.listGameProvidersUseCase.execute({ requesterUserId: userId, gameKey });
       return reply.send(result);
-    } catch (err) {
-      return reply.status(400).send({ error: "Bad Request", message: getErrorMessage(err) });
     }
   });
 
   app.get<{ Querystring: { deviceId?: string } }>(
     "/inventory/transfer-sessions/pending",
     async (request, reply: FastifyReply) => {
-      try {
+      {
         getUserId(request);
         const deviceId = (request.query.deviceId ?? "").trim();
         if (!deviceId) {
-          return reply.status(400).send({ error: "Bad Request", message: "deviceId is required" });
+          throw new ApplicationError("INVALID_ARGUMENT", "El identificador del dispositivo es obligatorio.");
         }
         const items = await deps.listPendingTransferSessionsUseCase.execute(deviceId);
         return reply.send({ items });
-      } catch (err) {
-        return reply.status(400).send({ error: "Bad Request", message: getErrorMessage(err) });
       }
     }
   );
@@ -110,7 +101,7 @@ export async function registerInventoryRoutes(
     "/inventory/transfer-sessions",
     { schema: { body: CreateTransferSessionSchema } },
     async (request, reply: FastifyReply) => {
-      try {
+      {
         const userId = getUserId(request);
         const body = request.body;
         const session = await deps.createTransferSessionUseCase.execute({
@@ -121,8 +112,6 @@ export async function registerInventoryRoutes(
           manifestHash: body.manifestHash,
         });
         return reply.send(session);
-      } catch (err) {
-        return reply.status(400).send({ error: "Bad Request", message: getErrorMessage(err) });
       }
     }
   );

@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import {
   ListBackupsQuerySchema,
   type ListBackupsQuery,
@@ -18,22 +18,6 @@ import {
   type DownloadUrlBody,
   DownloadUrlsBatchSchema,
   type DownloadUrlsBatchBody,
-  InitMultipartPartUrlsSchema,
-  type InitMultipartPartUrlsBody,
-  GetPartUrlsSchema,
-  type GetPartUrlsBody,
-  CompleteMultipartSchema,
-  type CompleteMultipartBody,
-  AbortMultipartSchema,
-  type AbortMultipartBody,
-  SteamSeedManifestUploadUrlSchema,
-  type SteamSeedManifestUploadUrlBody,
-  SteamSeedBatchDownloadUrlSchema,
-  type SteamSeedBatchDownloadUrlBody,
-  SteamSeedBatchesQuerySchema,
-  type SteamSeedBatchesQuery,
-  SteamSeedWorkerControlSchema,
-  type SteamSeedWorkerControlBody,
   ListSavesResponseSchema,
   GameSummaryResponseSchema,
   ErrorResponseSchema,
@@ -42,9 +26,6 @@ import {
   DownloadUrlResponseSchema,
   DownloadUrlsBatchResponseSchema,
   ListBackupsResponseSchema,
-  InitMultipartResponseSchema,
-  InitMultipartWithPartUrlsResponseSchema,
-  GetPartUrlsResponseSchema,
 } from "@interfaces/schema/saves";
 import type { GetUploadUrlUseCase } from "@application/use-cases/GetUploadUrlUseCase";
 import type { GetUploadUrlsUseCase } from "@application/use-cases/GetUploadUrlsUseCase";
@@ -53,63 +34,26 @@ import type { GetDownloadUrlsUseCase } from "@application/use-cases/GetDownloadU
 import type { DeleteGameFromCloudUseCase } from "@application/use-cases/DeleteGameFromCloudUseCase";
 import type { RenameGameInCloudUseCase } from "@application/use-cases/RenameGameInCloudUseCase";
 import type { GetGameSummaryUseCase } from "@application/use-cases/GetGameSummaryUseCase";
-import type { ListBackupsOutput, ListBackupsUseCase } from "@application/use-cases/ListBackupsUseCase";
+import type { ListBackupsUseCase } from "@application/use-cases/ListBackupsUseCase";
 import type { DeleteBackupUseCase } from "@application/use-cases/DeleteBackupUseCase";
 import type { RenameBackupUseCase } from "@application/use-cases/RenameBackupUseCase";
 import type { ListSavesUseCase } from "@application/use-cases/ListSavesUseCase";
 import { invalidateListSavesByGameCache } from "@application/use-cases/ListSavesUseCase";
-import type { CreateMultipartUploadUseCase } from "@application/use-cases/CreateMultipartUploadUseCase";
-import type { CreateMultipartUploadWithPartUrlsUseCase } from "@application/use-cases/CreateMultipartUploadWithPartUrlsUseCase";
-import type { GetUploadPartUrlsUseCase } from "@application/use-cases/GetUploadPartUrlsUseCase";
-import type { CompleteMultipartUploadUseCase } from "@application/use-cases/CompleteMultipartUploadUseCase";
-import type { AbortMultipartUploadUseCase } from "@application/use-cases/AbortMultipartUploadUseCase";
 import type { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
+import type { ResolveTargetStorageUserIdUseCase } from "@application/use-cases/ResolveTargetStorageUserIdUseCase";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
-import type { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
-import { getUserId, getErrorMessage } from "@shared/utils";
-import { TtlCache } from "@shared/ttlCache";
+import { getUserId } from "@interfaces/http/helpers/request-context";
+import { ApplicationError } from "@application/errors/ApplicationError";
 import { computeSavesEtag, computeSummaryEtag, send304IfNotModified, type SummaryEtagItem } from "@shared/etag";
-
-const savesSummaryCache = new TtlCache<string, SummaryEtagItem[]>({ ttlMs: 2_000, maxEntries: 200 });
-const backupsListCache = new TtlCache<string, ListBackupsOutput>({ ttlMs: 10_000, maxEntries: 300 });
-const CLOUD_HOST_HEADER = "x-cloud-host-user-id";
-
-function ownerIdFromStorageUserId(storageUserId: string): string {
-  const marker = "::member::";
-  const idx = storageUserId.indexOf(marker);
-  return idx > 0 ? storageUserId.slice(0, idx) : storageUserId;
-}
-
-function invalidateSavesCaches(userId: string, gameId?: string): void {
-  savesSummaryCache.delete(userId);
-  invalidateListSavesByGameCache(userId, gameId);
-}
-
-function backupsCacheKey(storageUserId: string, gameId: string): string {
-  return `${storageUserId}::${gameId.trim()}`;
-}
-
-function invalidateBackupsCache(storageUserId: string, gameId: string): void {
-  backupsListCache.delete(backupsCacheKey(storageUserId, gameId));
-}
-
-/**
- * Resuelve el prefijo de almacenamiento S3 para el usuario objetivo (anfitrión propio o miembro en nube compartida).
- * Usado por GET /saves?targetUserId= para listar guardados de otro usuario con x-user-id = solicitante autenticado.
- */
-async function resolveTargetStorageUserId(
-  targetUserId: string,
-  resolveScope: ResolveCloudStorageScopeUseCase,
-  repo: CloudInviteRepository
-): Promise<string> {
-  const memberships = await repo.listMembershipsForMember(targetUserId);
-  const active = memberships.find((m) => m.active);
-  if (active) {
-    const scope = await resolveScope.execute(targetUserId, active.hostUserId);
-    return scope.storageUserId;
-  }
-  return targetUserId;
-}
+import { getStorageUserIdFromRequest } from "@interfaces/http/helpers/saves-route-helpers";
+import {
+  cacheBackups,
+  cacheSavesSummary,
+  getCachedBackups,
+  getCachedSavesSummary,
+  invalidateBackupsCache,
+  invalidateSavesCaches,
+} from "@interfaces/http/helpers/saves-cache";
 
 export async function registerSavesRoutes(
   app: FastifyInstance,
@@ -125,25 +69,11 @@ export async function registerSavesRoutes(
     listBackupsUseCase: ListBackupsUseCase;
     deleteBackupUseCase: DeleteBackupUseCase;
     renameBackupUseCase: RenameBackupUseCase;
-    createMultipartUploadUseCase: CreateMultipartUploadUseCase;
-    createMultipartUploadWithPartUrlsUseCase: CreateMultipartUploadWithPartUrlsUseCase;
-    getUploadPartUrlsUseCase: GetUploadPartUrlsUseCase;
-    completeMultipartUploadUseCase: CompleteMultipartUploadUseCase;
-    abortMultipartUploadUseCase: AbortMultipartUploadUseCase;
-    steamSeedRepository?: S3SteamSeedRepository;
     resolveCloudStorageScopeUseCase?: ResolveCloudStorageScopeUseCase;
     cloudInviteRepository?: CloudInviteRepository;
+    resolveTargetStorageUserIdUseCase?: ResolveTargetStorageUserIdUseCase;
   }
 ): Promise<void> {
-  async function getStorageUserIdFromRequest(request: FastifyRequest): Promise<string> {
-    const requesterUserId = getUserId(request);
-    const hostHeader = request.headers[CLOUD_HOST_HEADER];
-    const requestedHostUserId = typeof hostHeader === "string" && hostHeader.trim() ? hostHeader.trim() : undefined;
-    if (!deps.resolveCloudStorageScopeUseCase) return requesterUserId;
-    const scope = await deps.resolveCloudStorageScopeUseCase.execute(requesterUserId, requestedHostUserId);
-    return scope.storageUserId;
-  }
-
   app.get(
     "/saves",
     {
@@ -163,19 +93,12 @@ export async function registerSavesRoutes(
 
       let userId: string;
       if (!targetUserIdRaw || targetUserIdRaw === requesterUserId) {
-        userId = await getStorageUserIdFromRequest(request);
+        userId = await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase);
       } else {
-        if (!deps.cloudInviteRepository || !deps.resolveCloudStorageScopeUseCase) {
-          return reply.status(403).send({
-            error: "Forbidden",
-            message: "targetUserId requires cloud invite support",
-          });
+        if (!deps.cloudInviteRepository || !deps.resolveTargetStorageUserIdUseCase) {
+          throw new ApplicationError("FORBIDDEN", "No está habilitado el acceso a la nube del usuario solicitado.");
         }
-        userId = await resolveTargetStorageUserId(
-          targetUserIdRaw,
-          deps.resolveCloudStorageScopeUseCase,
-          deps.cloudInviteRepository
-        );
+        userId = await deps.resolveTargetStorageUserIdUseCase.execute(targetUserIdRaw);
       }
 
       const saves = await deps.listSavesUseCase.execute({ userId, gameId });
@@ -187,8 +110,8 @@ export async function registerSavesRoutes(
   );
 
   app.get("/saves/summary", { schema: { response: { 200: GameSummaryResponseSchema } } }, async (request, reply) => {
-    const userId = await getStorageUserIdFromRequest(request);
-    const cached = savesSummaryCache.get(userId);
+    const userId = await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase);
+    const cached = getCachedSavesSummary(userId);
     if (cached) {
       const etag = computeSummaryEtag(cached);
       if (send304IfNotModified(request, reply, etag)) return;
@@ -233,7 +156,7 @@ export async function registerSavesRoutes(
       }));
     }
 
-    savesSummaryCache.set(userId, summary);
+    cacheSavesSummary(userId, summary);
     const etag = computeSummaryEtag(summary);
     if (send304IfNotModified(request, reply, etag)) return;
     return reply.send(summary);
@@ -250,14 +173,13 @@ export async function registerSavesRoutes(
       },
     },
     async (request, reply) => {
-      const storageUserId = await getStorageUserIdFromRequest(request);
+      const storageUserId = await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase);
       const gameId = request.query.gameId.trim();
-      const cacheKey = backupsCacheKey(storageUserId, gameId);
-      const cached = backupsListCache.get(cacheKey);
+      const cached = getCachedBackups(storageUserId, gameId);
       if (cached) return reply.send(cached);
 
       const result = await deps.listBackupsUseCase.execute({ userId: storageUserId, gameId });
-      backupsListCache.set(cacheKey, result);
+      cacheBackups(storageUserId, gameId, result);
       return reply.send(result);
     }
   );
@@ -266,21 +188,15 @@ export async function registerSavesRoutes(
     "/saves/backup",
     { schema: { body: BackupKeySchema } },
     async (request, reply) => {
-      try {
+      {
         const userId = getUserId(request);
-        const storageUserId = await getStorageUserIdFromRequest(request);
+        const storageUserId = await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase);
         const { gameId, key } = request.body;
 
         await deps.deleteBackupUseCase.execute({ userId: storageUserId, gameId: gameId.trim(), key: key.trim() });
         invalidateSavesCaches(userId, gameId);
         invalidateBackupsCache(storageUserId, gameId);
         return reply.status(204).send();
-      } catch (err) {
-        const message = getErrorMessage(err);
-        if (message.startsWith("Invalid key:")) return reply.status(400).send({ error: "Bad Request", message });
-
-        request.log.error({ err, message }, "delete backup failed");
-        return reply.status(500).send({ error: "Internal Server Error", message });
       }
     }
   );
@@ -289,9 +205,9 @@ export async function registerSavesRoutes(
     "/saves/backup",
     { schema: { body: RenameBackupSchema } },
     async (request, reply) => {
-      try {
+      {
         const userId = getUserId(request);
-        const storageUserId = await getStorageUserIdFromRequest(request);
+        const storageUserId = await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase);
         const { gameId, key, newFilename } = request.body;
 
         await deps.renameBackupUseCase.execute({
@@ -303,13 +219,6 @@ export async function registerSavesRoutes(
         invalidateSavesCaches(userId, gameId);
         invalidateBackupsCache(storageUserId, gameId);
         return reply.status(204).send();
-      } catch (err) {
-        const message = getErrorMessage(err);
-        if (message.startsWith("Invalid key:") || message.includes("newFilename must")) {
-          return reply.status(400).send({ error: "Bad Request", message });
-        }
-        request.log.error({ err, message }, "rename backup failed");
-        return reply.status(500).send({ error: "Internal Server Error", message });
       }
     }
   );
@@ -318,18 +227,15 @@ export async function registerSavesRoutes(
     "/saves/delete-game",
     { schema: { body: GameIdOnlySchema } },
     async (request, reply) => {
-      try {
+      {
         const userId = getUserId(request);
-        const storageUserId = await getStorageUserIdFromRequest(request);
+        const storageUserId = await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase);
         const gameId = request.body.gameId.trim();
         const permanent = request.body.permanent === true;
         await deps.deleteGameFromCloudUseCase.execute({ userId: storageUserId, gameId, permanent });
         invalidateSavesCaches(userId, gameId);
         invalidateBackupsCache(storageUserId, gameId);
         return reply.status(204).send();
-      } catch (err) {
-        request.log.error({ err }, "delete-game failed");
-        return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
       }
     }
   );
@@ -338,14 +244,14 @@ export async function registerSavesRoutes(
     "/saves/rename-game",
     { schema: { body: RenameGameSchema } },
     async (request, reply) => {
-      try {
+      {
         const userId = getUserId(request);
-        const storageUserId = await getStorageUserIdFromRequest(request);
+        const storageUserId = await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase);
         const oldGameId = request.body.oldGameId.trim();
         const newGameId = request.body.newGameId.trim();
 
         if (oldGameId === newGameId) {
-          return reply.status(400).send({ error: "Bad Request", message: "oldGameId and newGameId must be different" });
+          throw new ApplicationError("INVALID_ARGUMENT", "El juego de origen y destino deben ser diferentes.");
         }
 
         await deps.renameGameInCloudUseCase.execute({ userId: storageUserId, oldGameId, newGameId });
@@ -354,9 +260,6 @@ export async function registerSavesRoutes(
         invalidateBackupsCache(storageUserId, oldGameId);
         invalidateBackupsCache(storageUserId, newGameId);
         return reply.status(204).send();
-      } catch (err) {
-        request.log.error({ err }, "rename-game failed");
-        return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
       }
     }
   );
@@ -373,8 +276,8 @@ export async function registerSavesRoutes(
       },
     },
     async (request, reply) => {
-      try {
-        const userId = await getStorageUserIdFromRequest(request);
+      {
+        const userId = await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase);
         const { gameId, filename } = request.body;
 
         const result = await deps.getUploadUrlUseCase.execute({
@@ -383,9 +286,6 @@ export async function registerSavesRoutes(
           filename: filename.trim(),
         });
         return reply.send(result);
-      } catch (err) {
-        request.log.error({ err }, "upload-url failed");
-        return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
       }
     }
   );
@@ -402,15 +302,12 @@ export async function registerSavesRoutes(
       },
     },
     async (request, reply) => {
-      try {
-        const userId = await getStorageUserIdFromRequest(request);
+      {
+        const userId = await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase);
         const items = request.body.items.map((x) => ({ gameId: x.gameId.trim(), filename: x.filename.trim() }));
 
         const result = await deps.getUploadUrlsUseCase.execute({ userId, items });
         return reply.send(result);
-      } catch (err) {
-        request.log.error({ err }, "upload-urls failed");
-        return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
       }
     }
   );
@@ -429,12 +326,12 @@ export async function registerSavesRoutes(
       },
     },
     async (request, reply) => {
-      try {
+      {
         const requesterUserId = getUserId(request);
-        const userId = await getStorageUserIdFromRequest(request);
+        const userId = await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase);
         const rawKey = request.body.key ?? request.body.backupKey;
         if (!rawKey || !rawKey.trim()) {
-          return reply.status(400).send({ error: "Bad Request", message: "key is required" });
+          throw new ApplicationError("INVALID_ARGUMENT", "La clave es obligatoria.");
         }
         const { gameId, range } = request.body;
         const trimmedGameId = gameId.trim();
@@ -451,7 +348,7 @@ export async function registerSavesRoutes(
             trimmedGameId
           );
           if (!canReadShared) {
-            return reply.status(403).send({ error: "Forbidden", message: "Game is not shared for this member" });
+            throw new ApplicationError("FORBIDDEN", "El juego no está compartido con este miembro.");
           }
         }
 
@@ -462,12 +359,6 @@ export async function registerSavesRoutes(
           range,
         });
         return reply.send(result);
-      } catch (err) {
-        const message = getErrorMessage(err);
-        if (message.startsWith("Invalid key:")) return reply.status(400).send({ error: "Bad Request", message });
-
-        request.log.error({ err }, "download-url failed");
-        return reply.status(500).send({ error: "Internal Server Error", message });
       }
     }
   );
@@ -484,350 +375,12 @@ export async function registerSavesRoutes(
       },
     },
     async (request, reply) => {
-      try {
-        const userId = await getStorageUserIdFromRequest(request);
+      {
+        const userId = await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase);
         const items = request.body.items.map((x) => ({ gameId: x.gameId.trim(), key: x.key.trim() }));
 
         const result = await deps.getDownloadUrlsUseCase.execute({ userId, items });
         return reply.send(result);
-      } catch (err) {
-        request.log.error({ err }, "download-urls failed");
-        return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
-      }
-    }
-  );
-
-  app.post<{ Body: UploadUrlBody }>(
-    "/saves/multipart/init",
-    {
-      schema: {
-        body: UploadUrlSchema,
-        response: {
-          200: InitMultipartResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      const userId = await getStorageUserIdFromRequest(request);
-      const { gameId, filename } = request.body;
-
-      const result = await deps.createMultipartUploadUseCase.execute({
-        userId,
-        gameId: gameId.trim(),
-        filename: filename.trim(),
-      });
-      return reply.send(result);
-    }
-  );
-
-  app.post<{ Body: InitMultipartPartUrlsBody }>(
-    "/saves/multipart/init-with-part-urls",
-    {
-      schema: {
-        body: InitMultipartPartUrlsSchema,
-        response: {
-          200: InitMultipartWithPartUrlsResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      const userId = await getStorageUserIdFromRequest(request);
-      const { gameId, filename, partCount } = request.body;
-
-      const result = await deps.createMultipartUploadWithPartUrlsUseCase.execute({
-        userId,
-        gameId: gameId.trim(),
-        filename: filename.trim(),
-        partCount,
-      });
-      return reply.send({
-        ...result,
-        partUrls: result.partUrls.map((p) => ({
-          partNumber: p.partNumber,
-          url: p.url,
-          uploadUrl: p.uploadUrl ?? p.url,
-        })),
-      });
-    }
-  );
-
-  app.post<{ Body: GetPartUrlsBody }>(
-    "/saves/multipart/part-urls",
-    {
-      schema: {
-        body: GetPartUrlsSchema,
-        response: {
-          200: GetPartUrlsResponseSchema,
-        },
-      },
-    },
-    async (request, reply) => {
-      const { key, uploadId, partNumbers } = request.body;
-
-      const result = await deps.getUploadPartUrlsUseCase.execute({
-        key: key.trim(),
-        uploadId: uploadId.trim(),
-        partNumbers,
-      });
-      return reply.send({
-        partUrls: result.partUrls.map((p) => ({
-          partNumber: p.partNumber,
-          url: p.url,
-          uploadUrl: p.uploadUrl ?? p.url,
-        })),
-      });
-    }
-  );
-
-  app.post<{ Body: CompleteMultipartBody }>(
-    "/saves/multipart/complete",
-    { schema: { body: CompleteMultipartSchema } },
-    async (request, reply) => {
-      try {
-        const { key, uploadId, parts } = request.body;
-
-        await deps.completeMultipartUploadUseCase.execute({
-          key: key.trim(),
-          uploadId: uploadId.trim(),
-          parts: parts.map((p) => ({ partNumber: p.partNumber, etag: p.etag.trim() })),
-        });
-        return reply.status(204).send();
-      } catch (err) {
-        request.log.error({ err }, "multipart/complete failed");
-        return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
-      }
-    }
-  );
-
-  app.post<{ Body: AbortMultipartBody }>(
-    "/saves/multipart/abort",
-    { schema: { body: AbortMultipartSchema } },
-    async (request, reply) => {
-      try {
-        const { key, uploadId } = request.body;
-        await deps.abortMultipartUploadUseCase.execute({
-          key: key.trim(),
-          uploadId: uploadId.trim(),
-        });
-        return reply.status(204).send();
-      } catch (err) {
-        request.log.error({ err }, "multipart/abort failed");
-        return reply.status(500).send({ error: "Internal Server Error", message: getErrorMessage(err) });
-      }
-    }
-  );
-
-  app.post<{ Body: SteamSeedManifestUploadUrlBody }>(
-    "/saves/steam-seed/manifest/upload-url",
-    { schema: { body: SteamSeedManifestUploadUrlSchema } },
-    async (request, reply) => {
-      if (!deps.steamSeedRepository) {
-        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-      }
-      const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
-      const result = await deps.steamSeedRepository.getManifestUploadUrl(ownerId, request.body.partIndex);
-      return reply.send(result);
-    }
-  );
-
-  app.post("/saves/steam-seed/priority/upload-url", async (request, reply) => {
-    if (!deps.steamSeedRepository) {
-      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-    }
-    const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
-    const result = await deps.steamSeedRepository.getPriorityUploadUrl(ownerId);
-    return reply.send(result);
-  });
-
-  app.post("/saves/steam-seed/priority/download-url", async (request, reply) => {
-    if (!deps.steamSeedRepository) {
-      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-    }
-    const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
-    const downloadUrl = await deps.steamSeedRepository.getPriorityDownloadUrl(ownerId);
-    return reply.send({ downloadUrl });
-  });
-
-  app.post("/saves/steam-seed/tick", async (request, reply) => {
-    if (!deps.steamSeedRepository) {
-      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-    }
-    try {
-      const { handler: seedHandler } = await import("@interfaces/lambda/steam-seed/handler");
-      const requesterUserId = getUserId(request);
-      const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
-      if (requesterUserId !== ownerId) {
-        return reply
-          .status(403)
-          .send({ error: "Forbidden", message: "Only the cloud owner can manage the Steam worker" });
-      }
-      const result = await seedHandler({ ownerId });
-      return reply.send(result);
-    } catch (err: unknown) {
-      request.log.error({ err }, "steam-seed tick failed");
-      return reply.status(500).send({ error: "Internal Server Error", message: String(err) });
-    }
-  });
-
-  app.post("/saves/steam-seed/reset", async (request, reply) => {
-    if (!deps.steamSeedRepository) {
-      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-    }
-    const requesterUserId = getUserId(request);
-    const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
-    if (requesterUserId !== ownerId) {
-      return reply
-        .status(403)
-        .send({ error: "Forbidden", message: "Only the cloud owner can manage the Steam worker" });
-    }
-    await deps.steamSeedRepository.resetState(ownerId);
-    return reply.status(204).send();
-  });
-
-  app.get("/saves/steam-seed/status", async (request, reply) => {
-    if (!deps.steamSeedRepository) {
-      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-    }
-    const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
-    const out = await deps.steamSeedRepository.getSteamSeedStatus(ownerId);
-    return reply.send(out);
-  });
-
-  app.get("/saves/steam-seed/control", async (request, reply) => {
-    if (!deps.steamSeedRepository) {
-      return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-    }
-    const requesterUserId = getUserId(request);
-    const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
-    if (requesterUserId !== ownerId) {
-      return reply
-        .status(403)
-        .send({ error: "Forbidden", message: "Only the cloud owner can manage the Steam worker" });
-    }
-    const [worker, progress, reviews] = await Promise.all([
-      deps.steamSeedRepository.getWorkerControl(ownerId),
-      deps.steamSeedRepository.getSteamSeedStatus(ownerId),
-      deps.steamSeedRepository.getSteamReviewsSeedStatus(ownerId),
-    ]);
-    return reply.send({ ...worker, ...progress, reviews });
-  });
-
-  app.put<{ Body: SteamSeedWorkerControlBody }>(
-    "/saves/steam-seed/control",
-    { schema: { body: SteamSeedWorkerControlSchema } },
-    async (request, reply) => {
-      if (!deps.steamSeedRepository) {
-        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-      }
-      const requesterUserId = getUserId(request);
-      const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
-      if (requesterUserId !== ownerId) {
-        return reply
-          .status(403)
-          .send({ error: "Forbidden", message: "Only the cloud owner can manage the Steam worker" });
-      }
-      const control = await deps.steamSeedRepository.setWorkerPaused(ownerId, request.body.paused);
-      const [progress, reviews] = await Promise.all([
-        deps.steamSeedRepository.getSteamSeedStatus(ownerId),
-        deps.steamSeedRepository.getSteamReviewsSeedStatus(ownerId),
-      ]);
-      return reply.send({ ...control, ...progress, reviews });
-    }
-  );
-
-  app.get<{ Querystring: SteamSeedBatchesQuery }>(
-    "/saves/steam-seed/batches",
-    { schema: { querystring: SteamSeedBatchesQuerySchema } },
-    async (request, reply) => {
-      if (!deps.steamSeedRepository) {
-        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-      }
-      const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
-      const maxKeys = request.query.maxKeys ?? 200;
-      const out = await deps.steamSeedRepository.listBatchKeys(ownerId, maxKeys, request.query.cursor);
-      return reply.send(out);
-    }
-  );
-
-  app.get<{ Querystring: SteamSeedBatchesQuery }>(
-    "/saves/steam-seed/reviews/batches",
-    { schema: { querystring: SteamSeedBatchesQuerySchema } },
-    async (request, reply) => {
-      if (!deps.steamSeedRepository) {
-        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-      }
-      const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
-      const maxKeys = request.query.maxKeys ?? 200;
-      const out = await deps.steamSeedRepository.listReviewBatchKeys(ownerId, maxKeys, request.query.cursor);
-      return reply.send(out);
-    }
-  );
-
-  app.post<{ Body: SteamSeedBatchDownloadUrlBody }>(
-    "/saves/steam-seed/batch/download-url",
-    { schema: { body: SteamSeedBatchDownloadUrlSchema } },
-    async (request, reply) => {
-      if (!deps.steamSeedRepository) {
-        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-      }
-
-      const { key, keys } = request.body;
-      if (!key && (!keys || keys.length === 0)) {
-        return reply.status(400).send({ error: "Bad Request", message: "either 'key' or 'keys' is required" });
-      }
-
-      try {
-        const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
-
-        // Bulk mode: keys array
-        if (keys) {
-          const results = await deps.steamSeedRepository.getBatchDownloadUrl(ownerId, keys);
-          return reply.send({ results });
-        }
-
-        const downloadUrl = await deps.steamSeedRepository.getBatchDownloadUrl(ownerId, key!.trim());
-        return reply.send({ downloadUrl });
-      } catch (err) {
-        const message = getErrorMessage(err);
-        if (message.startsWith("Invalid key:")) {
-          return reply.status(400).send({ error: "Bad Request", message });
-        }
-        request.log.error({ err }, "steam-seed batch download-url failed");
-        return reply.status(500).send({ error: "Internal Server Error", message });
-      }
-    }
-  );
-
-  app.post<{ Body: SteamSeedBatchDownloadUrlBody }>(
-    "/saves/steam-seed/reviews/batch/download-url",
-    { schema: { body: SteamSeedBatchDownloadUrlSchema } },
-    async (request, reply) => {
-      if (!deps.steamSeedRepository) {
-        return reply.status(501).send({ error: "Not Implemented", message: "steam seed repository unavailable" });
-      }
-
-      const { key, keys } = request.body;
-      if (!key && (!keys || keys.length === 0)) {
-        return reply.status(400).send({ error: "Bad Request", message: "either 'key' or 'keys' is required" });
-      }
-
-      try {
-        const ownerId = ownerIdFromStorageUserId(await getStorageUserIdFromRequest(request));
-
-        if (keys) {
-          const results = await deps.steamSeedRepository.getBatchDownloadUrl(ownerId, keys);
-          return reply.send({ results });
-        }
-
-        const downloadUrl = await deps.steamSeedRepository.getBatchDownloadUrl(ownerId, key!.trim());
-        return reply.send({ downloadUrl });
-      } catch (err) {
-        const message = getErrorMessage(err);
-        if (message.startsWith("Invalid key:")) {
-          return reply.status(400).send({ error: "Bad Request", message });
-        }
-        request.log.error({ err }, "steam-seed reviews batch download-url failed");
-        return reply.status(500).send({ error: "Internal Server Error", message });
       }
     }
   );

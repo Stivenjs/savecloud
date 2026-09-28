@@ -1,5 +1,7 @@
 services:
   savecloud-api:
+    image: savecloud-api:local
+    pull_policy: build
     build:
       context: .
       dockerfile: Dockerfile
@@ -12,8 +14,8 @@ services:
       - SYNC_GAMES_API_KEY=${SYNC_GAMES_API_KEY:-sg_secret_key_12345}
       - BUCKET_NAME=savecloud-saves
       - AWS_REGION=us-east-1
-      - AWS_ACCESS_KEY_ID=minioadmin
-      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - AWS_ACCESS_KEY_ID=${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
+      - AWS_SECRET_ACCESS_KEY=${OBJECT_STORAGE_SECRET_KEY:-minioadmin}
       - S3_ENDPOINT=http://minio:9000
       - S3_PUBLIC_ENDPOINT=${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       - S3_FORCE_PATH_STYLE=true
@@ -21,44 +23,68 @@ services:
       - GAME_STATS_TABLE=savecloud-game-stats
       - SAVE_FILES_INDEX_TABLE=savecloud-save-files-index
       - CONNECTIONS_TABLE=savecloud-connections
-      - ENABLE_SEED_WORKER=${ENABLE_SEED_WORKER:-true}
     depends_on:
-      - minio
-      - dynamodb-local
+      minio:
+        condition: service_started
+      dynamodb-local:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - 'fetch("http://127.0.0.1:3000/health").then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))'
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  steam-seed-worker:
+    extends:
+      service: savecloud-api
+    container_name: savecloud-steam-seed-worker
+    command: ["bun", "dist/steam-seed-worker.js"]
+    ports: !reset []
+    depends_on:
+      create-bucket:
+        condition: service_completed_successfully
+    environment:
+      - SEED_INTERVAL_MS=${SEED_INTERVAL_MS:-300000}
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/aistor/minio:latest
     container_name: savecloud-minio
     restart: unless-stopped
     ports:
       - "9000:9000" # Puerto de API S3
       - "9001:9001" # Panel de administración Web (http://localhost:9001)
     environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
+      - MINIO_ROOT_USER=${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${OBJECT_STORAGE_SECRET_KEY:-minioadmin}
       - MINIO_NOTIFY_WEBHOOK_ENABLE_primary=on
       - MINIO_NOTIFY_WEBHOOK_ENDPOINT_primary=http://savecloud-api:3000/webhooks/minio
-    command: server /data --console-address ":9001"
+    command: server /mnt/data --console-address ":9001" --license /minio.license
     volumes:
-      - minio_data:/data
+      - minio_data:/mnt/data
+      - ${MINIO_LICENSE_PATH:?Define MINIO_LICENSE_PATH en .env con la ruta al archivo de licencia AIStor}:/minio.license:ro
 
   create-bucket:
-    image: minio/mc
-    container_name: savecloud-create-bucket
+    image: savecloud-api:local
+    container_name: savecloud-storage-bootstrap
+    command: ["bun", "dist/storage-bootstrap.js"]
+    restart: on-failure
+    environment:
+      - BUCKET_NAME=savecloud-saves
+      - AWS_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
+      - AWS_SECRET_ACCESS_KEY=${OBJECT_STORAGE_SECRET_KEY:-minioadmin}
+      - S3_ENDPOINT=http://minio:9000
+      - S3_FORCE_PATH_STYLE=true
     depends_on:
-      - minio
-    entrypoint: >
-      /bin/sh -c "
-      until (/usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin) do echo 'Esperando a MinIO...'; sleep 1; done;
-      /usr/bin/mc mb myminio/savecloud-saves --ignore-existing;
-      /usr/bin/mc event add myminio/savecloud-saves arn:minio:sqs::primary:webhook --event put,delete --ignore-existing;
-      /usr/bin/mc ilm rule add myminio/savecloud-saves --expire-days 7 --prefix \"share-tokens/\" || true;
-      /usr/bin/mc ilm rule add myminio/savecloud-saves --expire-days 30 --prefix \"cloud-invites/\" || true;
-      /usr/bin/mc ilm rule add myminio/savecloud-saves --expire-days 30 --prefix \"notifications/\" || true;
-      /usr/bin/mc ilm rule add myminio/savecloud-saves --expire-days 90 --prefix \"game-inventory/\" || true;
-      echo 'Bucket S3 savecloud-saves, notificaciones MinIO y reglas de Lifecycle (ILM) verificados!';
-      exit 0;
-      "
+      minio:
+        condition: service_started
+      savecloud-api:
+        condition: service_healthy
 
   dynamodb-local:
     image: amazon/dynamodb-local:latest

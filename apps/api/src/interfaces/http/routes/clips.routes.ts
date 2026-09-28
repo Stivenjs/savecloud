@@ -1,39 +1,14 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { ClipStore } from "@infrastructure/clips/ClipStore";
-import type { DynamoDbClipStore } from "@infrastructure/clips/DynamoDbClipStore";
-import { renderNotFoundHtml, renderWatchHtml } from "@interfaces/http/views/clipWatchHtml";
-
-const USER_ID_HEADER = "x-user-id";
-
-/**
- * Extrae y valida el identificador de usuario a partir del encabezado HTTP.
- */
-function getUserId(request: FastifyRequest): string {
-  const userId = request.headers[USER_ID_HEADER];
-  if (typeof userId !== "string" || !userId.trim()) {
-    throw new Error("Missing or invalid x-user-id header");
-  }
-  return userId.trim();
-}
-
-/**
- * Obtiene la URL base pública para construir enlaces compartibles.
- */
-function getBaseUrl(request: FastifyRequest): string {
-  const env = process.env.SHARE_BASE_URL?.trim();
-  if (env) return env.replace(/\/$/, "");
-  const proto = (request.headers["x-forwarded-proto"] as string) || "https";
-  const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "";
-  return `${proto}://${host}`;
-}
+import type { ClipRepository } from "@domain/ports/ClipRepository";
+import { getUserId } from "@interfaces/http/helpers/request-context";
+import { ApplicationError } from "@application/errors/ApplicationError";
+import { getPublicBaseUrl } from "@interfaces/http/helpers/public-base-url";
+import { createClipWatchHandler } from "@interfaces/http/handlers/clipWatchHandler";
 
 /**
  * Registra las rutas HTTP asociadas a los clips de vídeo.
  */
-export async function registerClipRoutes(
-  app: FastifyInstance,
-  clipStore: ClipStore | DynamoDbClipStore
-): Promise<void> {
+export async function registerClipRoutes(app: FastifyInstance, clipStore: ClipRepository): Promise<void> {
   /**
    * POST /clips/upload-url (Autenticado)
    * Solicita una URL presignada para subir el archivo binario del clip directamente a S3.
@@ -58,13 +33,13 @@ export async function registerClipRoutes(
       }) ?? {};
 
     if (!gameId?.trim()) {
-      return reply.status(400).send({ error: "Bad Request", message: "gameId is required" });
+      throw new ApplicationError("INVALID_ARGUMENT", "El identificador del juego es obligatorio.");
     }
     if (!filename?.trim()) {
-      return reply.status(400).send({ error: "Bad Request", message: "filename is required" });
+      throw new ApplicationError("INVALID_ARGUMENT", "El nombre del archivo es obligatorio.");
     }
 
-    try {
+    {
       const { clipId, uploadUrl, cdnUrl } = await clipStore.createClipUploadUrl(
         userId,
         gameId.trim(),
@@ -78,7 +53,7 @@ export async function registerClipRoutes(
         }
       );
 
-      const baseUrl = getBaseUrl(request);
+      const baseUrl = getPublicBaseUrl(request);
       const watchUrl = `${baseUrl}/v/${clipId}`;
 
       return reply.status(201).send({
@@ -87,9 +62,6 @@ export async function registerClipRoutes(
         cdnUrl,
         watchUrl,
       });
-    } catch (err) {
-      request.log.error(err, "Failed to create clip upload URL");
-      return reply.status(500).send({ error: "Internal Server Error", message: "No se pudo generar la URL de subida" });
     }
   });
 
@@ -104,14 +76,11 @@ export async function registerClipRoutes(
   }>("/clips", async (request: FastifyRequest, reply: FastifyReply) => {
     const userId = getUserId(request);
     const { gameId } = (request.query as { gameId?: string }) ?? {};
-    const baseUrl = getBaseUrl(request);
+    const baseUrl = getPublicBaseUrl(request);
 
-    try {
+    {
       const clips = await clipStore.listClips(userId, gameId, baseUrl);
       return reply.send({ clips });
-    } catch (err) {
-      request.log.error(err, "Failed to list clips");
-      return reply.status(500).send({ error: "Internal Server Error", message: "Error al listar clips" });
     }
   });
 
@@ -128,60 +97,19 @@ export async function registerClipRoutes(
     const { clipId } = request.params as { clipId: string };
 
     if (!clipId?.trim()) {
-      return reply.status(400).send({ error: "Bad Request", message: "clipId is required" });
+      throw new ApplicationError("INVALID_ARGUMENT", "El identificador del clip es obligatorio.");
     }
 
-    try {
+    {
       const deleted = await clipStore.deleteUserClip(userId, clipId.trim());
       if (!deleted) {
-        return reply.status(404).send({ error: "Not Found", message: "Clip no encontrado o no autorizado" });
+        throw new ApplicationError("NOT_FOUND", "No se encontró el clip solicitado.");
       }
       return reply.status(200).send({ ok: true, message: "Clip eliminado correctamente" });
-    } catch (err) {
-      request.log.error(err, "Failed to delete clip");
-      return reply.status(500).send({ error: "Internal Server Error", message: "Error al eliminar clip" });
     }
   });
 
-  /**
-   * Manejador común para visualizar el reproductor web del clip.
-   */
-  const handleWatch = async (request: FastifyRequest<{ Params: { clipId: string } }>, reply: FastifyReply) => {
-    const { clipId } = request.params;
-    const defaultCoverUrl = clipStore.buildCdnUrl("clips/assets/savecloud-clip-cover.png");
-    const result = await clipStore.getClip(clipId);
-
-    if (result.status === "not_found") {
-      return reply
-        .status(404)
-        .header("Cache-Control", "public, max-age=60, s-maxage=300")
-        .type("text/html; charset=utf-8")
-        .send(renderNotFoundHtml(defaultCoverUrl));
-    }
-
-    if (result.status === "error") {
-      return reply
-        .status(502)
-        .header("Cache-Control", "no-cache, no-store, must-revalidate")
-        .type("text/html; charset=utf-8")
-        .send("<h1>Error al cargar el clip</h1>");
-    }
-
-    const baseUrl = getBaseUrl(request);
-    const watchUrl = `${baseUrl}/v/${clipId}`;
-    const html = renderWatchHtml({
-      clip: result.clip,
-      cdnUrl: result.cdnUrl,
-      watchUrl,
-      defaultCoverUrl,
-    });
-
-    return reply
-      .status(200)
-      .header("Cache-Control", "public, max-age=300, s-maxage=86400, stale-while-revalidate=604800")
-      .type("text/html; charset=utf-8")
-      .send(html);
-  };
+  const watchHandler = createClipWatchHandler(clipStore);
 
   /**
    * GET /v/:clipId (PÚBLICO)
@@ -194,7 +122,7 @@ export async function registerClipRoutes(
         rateLimit: { max: 60, timeWindow: "1 minute" },
       },
     },
-    handleWatch
+    watchHandler
   );
 
   /**
@@ -208,7 +136,7 @@ export async function registerClipRoutes(
         rateLimit: { max: 60, timeWindow: "1 minute" },
       },
     },
-    handleWatch
+    watchHandler
   );
 
   /**
@@ -227,13 +155,13 @@ export async function registerClipRoutes(
       const result = await clipStore.getClip(clipId);
 
       if (result.status === "not_found") {
-        return reply.status(404).send({ error: "Not Found", message: "Clip no encontrado" });
+        throw new ApplicationError("NOT_FOUND", "Clip no encontrado.");
       }
       if (result.status === "error") {
-        return reply.status(502).send({ error: "Bad Gateway", message: "Error al consultar el clip" });
+        throw new ApplicationError("UPSTREAM_FAILURE", "No se pudo consultar el clip.");
       }
 
-      const baseUrl = getBaseUrl(request);
+      const baseUrl = getPublicBaseUrl(request);
       return reply.header("Cache-Control", "public, max-age=120, s-maxage=3600, stale-while-revalidate=86400").send({
         clip: result.clip,
         cdnUrl: result.cdnUrl,

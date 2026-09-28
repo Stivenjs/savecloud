@@ -2,13 +2,14 @@ import { DeleteObjectCommand, GetObjectCommand, NoSuchKey, S3Client } from "@aws
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, GetCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import { randomBytes } from "node:crypto";
-import type { GetTokenResult, ShareTokenPayload } from "./ShareTokenS3";
+import type { GetTokenResult, ShareTokenPayload } from "@domain/entities/ShareToken";
+import type { ShareTokenRepository } from "@domain/ports/ShareTokenRepository";
 
 const S3_PREFIX = "share-tokens/";
 const DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 días
 const TOKEN_BYTES = 24;
 
-export class DynamoDbShareTokenStore {
+export class DynamoDbShareTokenStore implements ShareTokenRepository {
   private readonly dynamoClient: DynamoDBClient;
   private readonly docClient: DynamoDBDocumentClient;
   private readonly tableName: string;

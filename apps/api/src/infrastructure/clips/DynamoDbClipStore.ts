@@ -10,8 +10,9 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, QueryCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { randomBytes } from "node:crypto";
-import { resolvePublicUrl } from "@infrastructure/factories/storageFactory";
-import type { ClipDto, ClipMetadata, GetClipResult } from "./ClipStore";
+import { resolvePublicUrl } from "@infrastructure/storage/publicUrl";
+import type { ClipRepository } from "@domain/ports/ClipRepository";
+import type { ClipDto, ClipMetadata, GetClipResult } from "@domain/entities/Clip";
 
 const CLIP_META_PREFIX = "clips-meta/";
 const CLIP_VIDEO_PREFIX = "clips/";
@@ -42,7 +43,7 @@ function resolveContentType(ext: string, override?: string): string {
   }
 }
 
-export class DynamoDbClipStore {
+export class DynamoDbClipStore implements ClipRepository {
   private readonly s3: S3Client;
   private readonly presignS3: S3Client;
   private readonly bucketName: string;

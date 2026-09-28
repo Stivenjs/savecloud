@@ -1,5 +1,6 @@
 import type { CloudInvite } from "@domain/entities/CloudInvite";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
+import { ApplicationError } from "@application/errors/ApplicationError";
 
 export interface CreateCloudInviteInput {
   hostUserId: string;
@@ -16,7 +17,7 @@ export class CreateCloudInviteUseCase {
     const host = input.hostUserId.trim();
     const invitee = input.inviteeUserId?.trim();
     if (invitee && invitee === host) {
-      throw new Error("You cannot invite yourself");
+      throw new ApplicationError("INVALID_ARGUMENT", "No puedes enviarte una invitación a ti mismo.");
     }
 
     // Política de invitaciones pendientes antes de ser aceptadas: hasta 365 días de vigencia (por defecto 30 días).

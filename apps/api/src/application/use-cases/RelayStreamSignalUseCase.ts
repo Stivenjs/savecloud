@@ -1,6 +1,7 @@
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
+import { ApplicationError } from "@application/errors/ApplicationError";
 
 export interface RelayStreamSignalInput {
   senderUserId: string;
@@ -27,7 +28,7 @@ export class RelayStreamSignalUseCase {
     const targetId = input.targetUserId?.trim();
 
     if (!senderId || !event || !streamId) {
-      throw new Error("Invalid input: senderUserId, event and streamId are required");
+      throw new ApplicationError("INVALID_ARGUMENT", "El usuario emisor, el evento y la sesión son obligatorios.");
     }
 
     let activeCloudHostId = senderId;
@@ -44,7 +45,7 @@ export class RelayStreamSignalUseCase {
     const peers = [...new Set([activeCloudHostId, ...activeMemberIds])];
 
     if (!peers.includes(senderId)) {
-      throw new Error("Sender does not belong to the active cloud");
+      throw new ApplicationError("FORBIDDEN", "El usuario emisor no pertenece a la nube activa.");
     }
 
     const recipients = targetId
@@ -52,7 +53,7 @@ export class RelayStreamSignalUseCase {
       : peers.filter((peerUserId) => peerUserId !== senderId);
 
     if (targetId && recipients.length === 0) {
-      throw new Error("Target is invalid for this cloud");
+      throw new ApplicationError("FORBIDDEN", "El usuario destino no pertenece a la nube activa.");
     }
 
     const message = {

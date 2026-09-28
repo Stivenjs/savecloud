@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch src/interfaces/http/server.ts",
+    "dev:steam-seed-worker": "bun --watch src/interfaces/worker/steam-seed-worker.ts",
+    "worker:steam-seed": "bun src/interfaces/worker/steam-seed-worker.ts",
     "build": "tsc",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit && bun ./scripts/check-architecture.ts",
+    "check:architecture": "bun ./scripts/check-architecture.ts"
   },
   "dependencies": {
     "@aws-sdk/client-apigatewaymanagementapi": "^3.1115.0",

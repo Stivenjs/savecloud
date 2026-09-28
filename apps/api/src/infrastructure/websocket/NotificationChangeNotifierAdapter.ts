@@ -1,18 +1,18 @@
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
+import type { NotificationChangeNotifier } from "@domain/ports/NotificationChangeNotifier";
 import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
 
 export const NOTIFICATIONS_CHANGED_MESSAGE = "NOTIFICATIONS_CHANGED";
 
-/** Avisa que el inbox cambió; los registros se recuperan mediante la API HTTP. */
-export class BroadcastNotificationChangeUseCase {
+/** Adapta los cambios de persistencia al aviso WebSocket del usuario. */
+export class NotificationChangeNotifierAdapter implements NotificationChangeNotifier {
   constructor(
     private readonly connectionRepository?: ConnectionRepository,
     private readonly webSocketNotifier?: WebSocketNotifier
   ) {}
 
-  async execute(userId: string, cursor: string): Promise<void> {
-    const connectionRepository = this.connectionRepository;
-    const webSocketNotifier = this.webSocketNotifier;
+  async notifyChanged(userId: string, cursor: string): Promise<void> {
+    const { connectionRepository, webSocketNotifier } = this;
     if (!connectionRepository || !webSocketNotifier) return;
 
     try {

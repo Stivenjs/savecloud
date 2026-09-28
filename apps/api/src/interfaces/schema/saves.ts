@@ -148,6 +148,7 @@ export type GameSummaryResponse = Static<typeof GameSummaryResponseSchema>;
 export const ErrorResponseSchema = Type.Object({
   error: Type.String(),
   message: Type.String(),
+  code: Type.Optional(Type.String()),
 });
 export type ErrorResponse = Static<typeof ErrorResponseSchema>;
 

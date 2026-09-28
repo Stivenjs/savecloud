@@ -12,6 +12,7 @@ import {
   UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { PRESIGN_EXPIRES_IN_SECONDS } from "@infrastructure/storage/presign";
 import pLimit from "p-limit";
 import type { GameSave } from "@domain/entities/GameSave";
 import type {
@@ -26,7 +27,6 @@ import type {
   UploadUrlResult,
 } from "@domain/ports/SaveRepository";
 
-export const PRESIGN_EXPIRES_IN_SECONDS = 3600;
 const DOWNLOAD_BASE_URL = process.env.DOWNLOAD_BASE_URL;
 
 /**

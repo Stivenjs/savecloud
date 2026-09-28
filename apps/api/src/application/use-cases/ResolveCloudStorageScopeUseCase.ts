@@ -1,4 +1,5 @@
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
+import { ApplicationError } from "@application/errors/ApplicationError";
 
 export interface ResolvedCloudScope {
   requestUserId: string;
@@ -25,7 +26,7 @@ export class ResolveCloudStorageScopeUseCase {
 
     const membership = await this.repository.getMembership(host, userId);
     if (!membership || !membership.active) {
-      throw new Error("User has no active membership in requested host cloud");
+      throw new ApplicationError("FORBIDDEN", "No tienes membresía activa en la nube solicitada.");
     }
 
     return {

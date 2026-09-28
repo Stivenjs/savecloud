@@ -1,4 +1,5 @@
 node_modules
+**/node_modules
 .git
 .github
 .husky
@@ -10,3 +11,9 @@ dist
 *.log
 .env*
 !.env.docker.example
+!apps/desktop/
+apps/desktop/*
+!apps/desktop/package.json
+!apps/web/
+apps/web/*
+!apps/web/package.json

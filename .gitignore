@@ -6,9 +6,11 @@ dist/
 .env
 .env.*
 !.env.example
+minio.license
 *.log
 .DS_Store
 *.db
 *.db-journal
 *.db-wal
 __pycache__
+.license

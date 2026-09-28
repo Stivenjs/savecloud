@@ -14,7 +14,7 @@ const DEFAULT_AWS_REGION = "us-east-2";
 const DEFAULT_MAX_ATTEMPTS = 3;
 
 /** Tiempo máximo de espera (en ms) para la verificación de tablas al arrancar el servidor */
-const TABLE_INIT_TIMEOUT_MS = 15000;
+const TABLE_INIT_TIMEOUT_MS = 60000;
 
 /** Estructura con las configuraciones opcionales de tablas de DynamoDB */
 export interface DynamoDbTablesConfig {
@@ -24,6 +24,8 @@ export interface DynamoDbTablesConfig {
   clipsTable?: string;
   notificationsTable?: string;
   shareTokensTable?: string;
+  cloudInvitesTable?: string;
+  gameInventoryTable?: string;
 }
 
 /**
@@ -62,8 +64,16 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
   if (!dynamoEndpoint) return;
 
   const initTables = async (): Promise<void> => {
-    const { gameStatsTable, saveFilesIndexTable, connectionsTable, clipsTable, notificationsTable, shareTokensTable } =
-      tables;
+    const {
+      gameStatsTable,
+      saveFilesIndexTable,
+      connectionsTable,
+      clipsTable,
+      notificationsTable,
+      shareTokensTable,
+      cloudInvitesTable,
+      gameInventoryTable,
+    } = tables;
 
     if (gameStatsTable) {
       await createTableIfNotExists(client, {
@@ -160,16 +170,75 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
         BillingMode: "PAY_PER_REQUEST",
       });
     }
+
+    if (cloudInvitesTable) {
+      await createTableIfNotExists(client, {
+        TableName: cloudInvitesTable,
+        AttributeDefinitions: [
+          { AttributeName: "pk", AttributeType: "S" },
+          { AttributeName: "sk", AttributeType: "S" },
+          { AttributeName: "gsi1pk", AttributeType: "S" },
+          { AttributeName: "gsi1sk", AttributeType: "S" },
+        ],
+        KeySchema: [
+          { AttributeName: "pk", KeyType: "HASH" },
+          { AttributeName: "sk", KeyType: "RANGE" },
+        ],
+        GlobalSecondaryIndexes: [
+          {
+            IndexName: "GSI1",
+            KeySchema: [
+              { AttributeName: "gsi1pk", KeyType: "HASH" },
+              { AttributeName: "gsi1sk", KeyType: "RANGE" },
+            ],
+            Projection: { ProjectionType: "ALL" },
+          },
+        ],
+        BillingMode: "PAY_PER_REQUEST",
+      });
+    }
+
+    if (gameInventoryTable) {
+      await createTableIfNotExists(client, {
+        TableName: gameInventoryTable,
+        AttributeDefinitions: [
+          { AttributeName: "pk", AttributeType: "S" },
+          { AttributeName: "sk", AttributeType: "S" },
+          { AttributeName: "gsi1pk", AttributeType: "S" },
+          { AttributeName: "gsi1sk", AttributeType: "S" },
+        ],
+        KeySchema: [
+          { AttributeName: "pk", KeyType: "HASH" },
+          { AttributeName: "sk", KeyType: "RANGE" },
+        ],
+        GlobalSecondaryIndexes: [
+          {
+            IndexName: "GSI1",
+            KeySchema: [
+              { AttributeName: "gsi1pk", KeyType: "HASH" },
+              { AttributeName: "gsi1sk", KeyType: "RANGE" },
+            ],
+            Projection: { ProjectionType: "ALL" },
+          },
+        ],
+        BillingMode: "PAY_PER_REQUEST",
+      });
+    }
   };
 
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
       () => reject(new Error(`DynamoDB table check timed out after ${TABLE_INIT_TIMEOUT_MS / 1000}s`)),
       TABLE_INIT_TIMEOUT_MS
-    )
-  );
+    );
+  });
 
-  await Promise.race([initTables(), timeoutPromise]);
+  try {
+    await Promise.race([initTables(), timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 /**
@@ -179,13 +248,13 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
  *
  * @param client - Instancia de `DynamoDBClient`.
  * @param tableInput - Definición del comando `CreateTableCommandInput` a ejecutar.
- * @param maxRetries - Número máximo de reintentos de conexión (por defecto 5).
+ * @param maxRetries - Número máximo de reintentos de conexión (por defecto 30).
  * @param delayMs - Tiempo de espera entre reintentos en ms (por defecto 1000 ms).
  */
 async function createTableIfNotExists(
   client: DynamoDBClient,
   tableInput: CreateTableCommandInput,
-  maxRetries = 5,
+  maxRetries = 30,
   delayMs = 1000
 ): Promise<void> {
   const tableName = tableInput.TableName;
@@ -208,6 +277,13 @@ async function createTableIfNotExists(
         continue;
       }
 
+      if (isConnRefused) {
+        throw new Error(
+          `[DynamoDB Local] No estuvo disponible después de ${maxRetries} intentos; no se pudo verificar '${tableName}'.`,
+          { cause: err }
+        );
+      }
+
       const isNotFound =
         err instanceof ResourceNotFoundException ||
         errorObj?.name === "ResourceNotFoundException" ||
@@ -222,10 +298,8 @@ async function createTableIfNotExists(
           return;
         } catch (createErr: unknown) {
           const createErrObj = createErr as { name?: string } | undefined;
-          if (createErrObj?.name !== "ResourceInUseException") {
-            console.warn(`[DynamoDB Local] Advertencia al crear tabla '${tableName}':`, createErr);
-          }
-          return;
+          if (createErrObj?.name === "ResourceInUseException") return;
+          throw new Error(`[DynamoDB Local] No se pudo crear la tabla '${tableName}'.`, { cause: createErr });
         }
       } else {
         console.error(`[DynamoDB Local] Error al verificar tabla '${tableName}':`, err);

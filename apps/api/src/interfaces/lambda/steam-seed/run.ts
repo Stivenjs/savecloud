@@ -6,7 +6,7 @@ import {
   DEFAULT_STEAM_FILTERS,
   STEAM_SEED_PRIORITY_KEY,
   STEAM_SEED_STATE_KEY,
-} from "@interfaces/lambda/steam-seed/layout";
+} from "@shared/steam-seed-layout";
 import { processWithConcurrencyLimit } from "@interfaces/lambda/steam-seed/concurrency";
 import { collectAppIds, isStreamDone } from "@interfaces/lambda/steam-seed/cursor";
 import { getManifestSignatureAndIndices, splitLines } from "@interfaces/lambda/steam-seed/manifest";

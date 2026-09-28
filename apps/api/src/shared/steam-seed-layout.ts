@@ -1,6 +1,6 @@
 /**
- * Objetos bajo `STEAM_SEED_PREFIX` (p.ej. `steam-seed/` en el bucket de guardados).
- * Ver docs/steam-seed.md.
+ * Claves de objetos del catálogo Steam en S3.
+ * Este contrato lo comparten el worker Lambda y el adaptador de persistencia.
  */
 export const STEAM_SEED_STATE_KEY = "state.json";
 export const STEAM_SEED_PRIORITY_KEY = "priority_appids.jsonl";

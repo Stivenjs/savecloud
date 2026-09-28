@@ -1,7 +1,7 @@
 import type { S3Client } from "@aws-sdk/client-s3";
 import type { SteamReviewsStateV1 } from "@interfaces/lambda/steam-seed/types";
 import { getObjectText, isNoSuchKey, putJson } from "@interfaces/lambda/steam-seed/s3";
-import { STEAM_REVIEWS_STATE_KEY } from "@interfaces/lambda/steam-seed/layout";
+import { STEAM_REVIEWS_STATE_KEY } from "@shared/steam-seed-layout";
 
 /**
  * Devuelve el estado inicial (vacío) del cursor de reseñas.

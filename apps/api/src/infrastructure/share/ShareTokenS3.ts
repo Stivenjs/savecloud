@@ -1,25 +1,11 @@
 import { DeleteObjectCommand, GetObjectCommand, NoSuchKey, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { randomBytes } from "node:crypto";
+import type { GetTokenResult, ShareTokenPayload } from "@domain/entities/ShareToken";
+import type { ShareTokenRepository } from "@domain/ports/ShareTokenRepository";
 
 const PREFIX = "share-tokens/";
 const DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 const TOKEN_BYTES = 24;
-
-export interface ShareTokenPayload {
-  userId: string;
-  gameId: string;
-  expiresAt: string; // ISO 8601
-}
-
-/**
- * Resultado de `getToken`, discriminado para que el caller pueda reaccionar
- * de forma distinta ante "no existe / expirado" vs "fallo de infraestructura".
- */
-export type GetTokenResult =
-  | { status: "ok"; payload: ShareTokenPayload }
-  | { status: "not_found" }
-  | { status: "expired" }
-  | { status: "error"; cause: unknown };
 
 /** Verifica que el payload de S3 tenga la forma esperada antes de usarlo. */
 function isValidPayload(value: unknown): value is ShareTokenPayload {
@@ -35,7 +21,7 @@ function isValidPayload(value: unknown): value is ShareTokenPayload {
   );
 }
 
-export class ShareTokenS3 {
+export class ShareTokenS3 implements ShareTokenRepository {
   constructor(
     private readonly s3: S3Client,
     private readonly bucketName: string

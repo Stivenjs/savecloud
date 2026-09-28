@@ -1,6 +1,7 @@
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import type { GameInventoryRepository } from "@domain/ports/GameInventoryRepository";
 import type { GameProviderDevice } from "@domain/entities/GameInventory";
+import { ApplicationError } from "@application/errors/ApplicationError";
 
 export interface ListGameProvidersInput {
   requesterUserId: string;
@@ -22,7 +23,7 @@ export class ListGameProvidersUseCase {
     const requesterId = input.requesterUserId.trim();
     const gameKey = input.gameKey.trim();
     if (!requesterId || !gameKey) {
-      throw new Error("requesterUserId and gameKey are required");
+      throw new ApplicationError("INVALID_ARGUMENT", "El usuario solicitante y la clave del juego son obligatorios.");
     }
 
     const hostUserId = await this.resolveActiveHostUserId(requesterId);
