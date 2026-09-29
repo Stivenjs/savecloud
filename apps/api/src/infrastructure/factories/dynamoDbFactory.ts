@@ -44,7 +44,12 @@ export function createDynamoDbClient(): DynamoDBClient {
     region: awsRegion,
     endpoint: dynamoEndpoint,
     maxAttempts: DEFAULT_MAX_ATTEMPTS,
-    credentials: resolveAwsCredentials(dynamoEndpoint ? "local" : undefined),
+    credentials: dynamoEndpoint
+      ? {
+          accessKeyId: process.env.DYNAMODB_ACCESS_KEY_ID?.trim() || "local",
+          secretAccessKey: process.env.DYNAMODB_SECRET_ACCESS_KEY?.trim() || "local",
+        }
+      : resolveAwsCredentials(),
   });
 }
 

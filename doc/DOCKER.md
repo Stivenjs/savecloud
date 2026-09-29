@@ -30,37 +30,78 @@ La API configura CORS con reflejo del origen solicitado (`@fastify/cors`, `origi
 
 La imagen `quay.io/minio/aistor/minio` requiere una licencia activa. Obtén el archivo `minio.license` en [MinIO AIStor Pricing](https://www.min.io/pricing) y guárdalo fuera del repositorio. La licencia no se incluye ni distribuye con SaveCloud. Consulta también el [procedimiento de instalación oficial](https://docs.min.io/aistor/installation/container/install/?tab=download-image-docker#deploy-minio-container) y el [acuerdo AIStor Free](https://www.min.io/legal/aistor-free-agreement).
 
-## Despliegue en VPS
+### Iniciar sesión en la consola de MinIO
 
-1. Clona el repositorio en el VPS y crea los registros DNS `A` para el dominio raíz y `s3` apuntando a la IP pública del VPS. Si configuras IPv6, crea los registros `AAAA` correspondientes. Ambos nombres deben resolver al VPS para que Caddy pueda emitir sus certificados.
-2. Copia `.env.docker.example` a `.env` en la raíz del proyecto.
-3. Configura al menos estos valores en `.env`:
+La consola administrativa de MinIO está en `http://localhost:9001`. Inicia sesión con las credenciales de MinIO guardadas en `.env`:
 
-```env
-DOMAIN=savecloud.example.com
-S3_PUBLIC_ENDPOINT=https://s3.savecloud.example.com
-SYNC_GAMES_API_KEY=una-clave-larga-y-aleatoria
-OBJECT_STORAGE_ACCESS_KEY=un-usuario-minio
-OBJECT_STORAGE_SECRET_KEY=una-clave-minio-larga-y-aleatoria
-MINIO_LICENSE_PATH=/ruta/absoluta/minio.license
-```
+- **Usuario / Access Key:** valor de `OBJECT_STORAGE_ACCESS_KEY`.
+- **Contraseña / Secret Key:** valor de `OBJECT_STORAGE_SECRET_KEY`.
 
-`S3_PUBLIC_ENDPOINT` debe ser exactamente `https://s3.<DOMAIN>`. La API lo usa para firmar las URLs que descarga/sube la aplicación de escritorio. Su endpoint interno continúa siendo `http://minio:9000`. No uses `localhost` en `S3_PUBLIC_ENDPOINT` para un VPS: esa URL sería inaccesible para los clientes remotos.
-
-4. Asegúrate de que el firewall permite TCP 80 y 443. UDP 443 es opcional para HTTP/3.
-5. Desde la raíz del repositorio, inicia los servicios:
+El asistente Docker genera estas credenciales si `.env` contiene valores de ejemplo. Usa los valores actuales de `.env`; no copies credenciales de ejemplo ni compartas la contraseña. En una instalación VPS, el puerto `9001` solo escucha en loopback del servidor. Para abrir la consola desde tu computadora, crea un túnel SSH y luego visita `http://localhost:9001`:
 
 ```bash
-docker compose up -d
+ssh -L 9001:127.0.0.1:9001 usuario@IP_O_DOMINIO_DEL_VPS
 ```
 
-La primera ejecución construye la imagen de la API. El inicializador crea el bucket después de que la API esté saludable y el worker de Steam espera a que termine esa inicialización.
+## Despliegue en VPS
+
+### Apuntar el dominio al VPS
+
+Haz esta configuración en el panel donde administras el DNS del dominio (puede ser el panel del registrador o un proveedor DNS como Cloudflare). Busca una sección llamada **DNS**, **Zona DNS** o **Administrar registros**.
+
+En los ejemplos siguientes, reemplaza `savecloud.example.com` por el dominio que compraste. Por ejemplo, si tu dominio es `miservidor.net`, usa `miservidor.net` para SaveCloud y `s3.miservidor.net` para el almacenamiento.
+
+1. Obtén la **IP pública** del VPS en el panel de tu proveedor de alojamiento. Debe ser la IP pública del servidor, no `localhost`, una IP privada como `192.168.x.x` ni la IP de tu computadora.
+2. Crea estos dos registros DNS tipo `A` y usa la misma IP pública del VPS:
+
+   | Tipo | Nombre/Host | Valor/Apunta a                                 | Uso                                         |
+   | ---- | ----------- | ---------------------------------------------- | ------------------------------------------- |
+   | `A`  | `@`         | IP pública del VPS, por ejemplo `203.0.113.25` | API de SaveCloud en `savecloud.example.com` |
+   | `A`  | `s3`        | La misma IP pública del VPS                    | S3 presignado en `s3.savecloud.example.com` |
+
+   Algunos paneles usan el dominio completo en vez de `@`: en ese caso, escribe `savecloud.example.com` en el primer registro y `s3.savecloud.example.com` en el segundo. No escribas `https://`, puertos ni rutas en los campos DNS.
+
+3. Si el VPS tiene una dirección IPv6 pública y está configurada para recibir tráfico, añade también registros `AAAA` para `@` y `s3` con esa dirección. Si no tienes IPv6 configurado, no añadas registros `AAAA`: un AAAA incorrecto puede hacer que algunos clientes intenten conectarse a una IP equivocada.
+4. Para el primer arranque, si tu proveedor DNS ofrece proxy/CDN, configura estos dos registros como **DNS only / Solo DNS**. Caddy debe poder recibir directamente las solicitudes HTTP y HTTPS para obtener los certificados; después podrás habilitar un proxy si este permite WebSockets y las cargas S3 que necesitas.
+5. Guarda los registros y espera a que se actualice el DNS. Comprueba desde tu computadora que ambos nombres muestran la IP pública del VPS:
+
+   ```powershell
+   nslookup savecloud.example.com
+   nslookup s3.savecloud.example.com
+   ```
+
+   En Linux/macOS también puedes usar `dig +short savecloud.example.com` y `dig +short s3.savecloud.example.com`. Si las respuestas todavía no muestran la IP del VPS, espera y vuelve a consultar antes de iniciar Caddy.
+
+6. En el firewall del proveedor y del VPS, permite tráfico entrante TCP por los puertos `80` y `443`. UDP `443` es opcional y solo habilita HTTP/3. Si algún servicio ya está ocupando TCP `80` o `443`, Caddy no podrá atender el dominio ni emitir sus certificados.
+
+### Iniciar SaveCloud con el asistente
+
+1. Clona el repositorio en el VPS. Ten a mano la IP pública, el dominio y el archivo de licencia MinIO AIStor.
+2. Desde la raíz del repositorio, ejecuta el asistente según tu sistema:
+
+Windows PowerShell:
+
+```powershell
+.\scripts\docker-setup.ps1
+```
+
+Linux/macOS:
+
+```bash
+bash scripts/docker-setup.sh
+```
+
+3. Elige **2 (VPS)** e introduce tu dominio y la IP pública del VPS. El asistente muestra los registros `A` que debes tener configurados. Responde `S` si ya apuntaste ambos registros y abriste los puertos; si todavía no, puedes continuar, pero Caddy no obtendrá los certificados hasta que lo hagas.
+4. Cuando lo pida, introduce la ruta al archivo `minio.license`. Si no existe `.env`, el asistente la crea desde `.env.docker.example`. Actualiza `DOMAIN` y `S3_PUBLIC_ENDPOINT` y conserva las credenciales personalizadas existentes; si detecta valores de ejemplo o credenciales predeterminadas, genera valores aleatorios seguros.
+5. El asistente inicia la pila, espera que la API, el bucket y el worker estén listos, y muestra la API HTTPS, WebSocket seguro y endpoint S3. También muestra la API key que debes guardar en **Configuración → Conexión de servidor** en la app.
+
+`S3_PUBLIC_ENDPOINT` queda configurado como `https://s3.<DOMAIN>`. La API lo usa para firmar las URLs de cargas y descargas. Su endpoint interno sigue siendo `http://minio:9000`.
 
 ### Usar los scripts automatizados
 
 Los scripts construyen e inician la pila con `docker compose up -d --build`, esperan hasta dos minutos a que la API esté saludable, a que termine la inicialización del bucket y a que arranque el worker. Al finalizar imprimen las URLs apropiadas para el modo local o VPS, además de los endpoints internos de Docker. Leen `DOMAIN`, `S3_PUBLIC_ENDPOINT` y `API_PORT` del entorno o del archivo `.env`.
 
-Ejecuta el comando desde la raíz del repositorio, donde están `docker-compose.yml` y `.env`:
+Si ya configuraste `.env` y no necesitas el asistente, ejecuta desde la raíz del repositorio `docker compose up -d` o usa el script correspondiente. Los scripts construyen e inician la pila; ejecuta desde la raíz, donde están `docker-compose.yml` y `.env`:
 
 Windows PowerShell:
 
@@ -93,14 +134,19 @@ En la aplicación de escritorio, ve a **Configuración → Conexión de servidor
 
 ## Desarrollo local
 
-La API conserva `http://localhost:3000` y la S3 API local `http://localhost:9000`; esos puertos se enlazan solo a la interfaz loopback del host. Crea `.env` desde `.env.docker.example` y para desarrollo cambia estas variables:
+La API conserva `http://localhost:3000` y la S3 API local `http://localhost:9000`; esos puertos se enlazan solo a la interfaz loopback del host. Desde la raíz del repositorio, ejecuta el asistente y elige **1 (desarrollo local)**:
 
-```env
-DOMAIN=localhost
-S3_PUBLIC_ENDPOINT=http://localhost:9000
+```powershell
+.\scripts\docker-setup.ps1
 ```
 
-La API key también es obligatoria localmente. Usa el mismo valor en `SYNC_GAMES_API_KEY` dentro de `.env` y en **Configuración → Conexión de servidor → Clave de acceso** en la aplicación de escritorio; Compose pasa ese valor a la API como `API_KEY`. Si las claves no coinciden, las solicitudes protegidas responderán `401`.
+En Linux/macOS:
+
+```bash
+bash scripts/docker-setup.sh
+```
+
+El asistente configura `DOMAIN=localhost`, `S3_PUBLIC_ENDPOINT=http://localhost:9000`, prepara `.env` si hace falta e inicia los servicios. La API key también es obligatoria localmente: el asistente la muestra al terminar para que la guardes en **Configuración → Conexión de servidor → Clave de acceso**. Si después ejecutas el script de arranque directamente, usa `bash scripts/docker-up.sh` o `.\scripts\docker-up.ps1`.
 
 La consola MinIO sigue disponible en `http://localhost:9001`; DynamoDB Local, si se necesita desde herramientas del host, en `http://localhost:8000`. Para iniciar localmente:
 
@@ -119,7 +165,7 @@ docker compose ps
 docker compose logs --tail=100 savecloud-api create-bucket steam-seed-worker
 ```
 
-`savecloud-api` debe aparecer `Healthy`, `steam-seed-worker` debe permanecer activo y `savecloud-storage-bootstrap` puede aparecer como `Exited (0)`, porque es una tarea de inicialización. Desde la red de Compose, Caddy usa `savecloud-api:3000` y `minio:9000`; la API usa `minio:9000` y `dynamodb-local:8000`.
+`savecloud-api` debe aparecer `Healthy`, `steam-seed-worker` debe permanecer activo y `savecloud-storage-bootstrap` puede aparecer como `Exited (0)`, porque es una tarea de inicialización. Desde la red de Compose, Caddy usa `savecloud-api:3000` y `minio:9000`; la API usa `minio:9000` y `dynamodb-local:8000`. DynamoDB Local usa credenciales simuladas independientes (`local`/`local`); las credenciales aleatorias de `.env` son para MinIO.
 
 ## Persistencia y comandos útiles
 
