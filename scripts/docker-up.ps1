@@ -43,18 +43,53 @@ while ((Get-Date) -lt $deadline) {
 if (-not $ready) {
   Write-Host "SaveCloud no quedó listo. Estado actual de los servicios:" -ForegroundColor Red
   & docker compose ps
-  & docker compose logs --tail=80 savecloud-api minio create-bucket steam-seed-worker
+  & docker compose logs --tail=80 caddy savecloud-api minio create-bucket steam-seed-worker
   exit 1
 }
 
+$domain = $env:DOMAIN
+$s3PublicEndpoint = $env:S3_PUBLIC_ENDPOINT
+$apiPort = $env:API_PORT
+if (Test-Path -LiteralPath ".env") {
+  foreach ($line in Get-Content -LiteralPath ".env") {
+    if ($line -match '^\s*(DOMAIN|S3_PUBLIC_ENDPOINT|API_PORT)\s*=\s*(.*?)\s*$') {
+      $key = $Matches[1]
+      $value = $Matches[2].Trim('"', "'")
+      switch ($key) {
+        "DOMAIN" { if (-not $domain) { $domain = $value } }
+        "S3_PUBLIC_ENDPOINT" { if (-not $s3PublicEndpoint) { $s3PublicEndpoint = $value } }
+        "API_PORT" { if (-not $apiPort) { $apiPort = $value } }
+      }
+    }
+  }
+}
+if (-not $domain) { $domain = "localhost" }
+if (-not $s3PublicEndpoint) { $s3PublicEndpoint = "http://localhost:9000" }
+if (-not $apiPort) { $apiPort = "3000" }
+
 Write-Host ""
-Write-Host "SaveCloud está listo. URLs locales:"
-Write-Host "  API HTTP:             http://localhost:3000"
-Write-Host "  Salud de la API:      http://localhost:3000/health"
-Write-Host "  WebSocket local:      ws://localhost:3000/ws"
-Write-Host "  API S3 (AIStor):      http://localhost:9000"
-Write-Host "  Consola AIStor:       http://localhost:9001"
-Write-Host "  DynamoDB Local:       http://localhost:8000"
+if ($domain -eq "localhost") {
+  Write-Host "SaveCloud está listo. Endpoints locales:"
+  Write-Host "  API HTTP:             http://localhost:$apiPort"
+  Write-Host "  Salud de la API:      http://localhost:$apiPort/health"
+  Write-Host "  WebSocket:            ws://localhost:$apiPort/ws"
+  Write-Host "  S3 público/presigned: $s3PublicEndpoint"
+  Write-Host "  Consola AIStor:       http://localhost:9001"
+  Write-Host "  DynamoDB Local:       http://localhost:8000"
+} else {
+  Write-Host "SaveCloud está listo. URLs públicas:"
+  Write-Host "  API HTTPS:            https://$domain"
+  Write-Host "  Salud de la API:      https://$domain/health"
+  Write-Host "  WebSocket seguro:     wss://$domain/ws"
+  Write-Host "  S3 público/presigned: $s3PublicEndpoint"
+  Write-Host ""
+  Write-Host "Endpoints disponibles solo desde el VPS:"
+  Write-Host "  API local:            http://127.0.0.1:$apiPort"
+  Write-Host "  Consola AIStor:       http://127.0.0.1:9001"
+  Write-Host "  DynamoDB Local:       http://127.0.0.1:8000"
+}
 Write-Host ""
-Write-Host "Para acceder desde otro equipo, sustituye localhost por la IP de este servidor."
-Write-Host "El WebSocket local usa ws://; usa wss:// cuando publiques la API detrás de TLS."
+Write-Host "Endpoints internos Docker:"
+Write-Host "  API:                  savecloud-api:3000"
+Write-Host "  S3:                   minio:9000"
+Write-Host "  DynamoDB:             dynamodb-local:8000"
