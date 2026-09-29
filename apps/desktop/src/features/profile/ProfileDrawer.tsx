@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useProfileSessionStore } from "@store/ProfileSessionStore";
+import { resetAppStateForProfileSwitch } from "@utils/resetAppState";
 import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { ProfileHeroBackground } from "@features/profile/PublicProfileHero";
 import { buildNiceAvatarConfig, generateNiceAvatarSeed, serializeNiceAvatarConfig } from "@features/profile/niceAvatar";
@@ -200,9 +201,9 @@ export function ProfileDrawer({
   const handleLogout = useCallback(() => {
     onClose();
     invoke("stop_cloud_ws").catch(() => {});
-    queryClient.clear();
+    void resetAppStateForProfileSwitch();
     useProfileSessionStore.getState().clearSession();
-  }, [onClose, queryClient]);
+  }, [onClose]);
 
   const pickFile = useCallback(
     async (kind: "background" | "avatar" | "frame") => {

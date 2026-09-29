@@ -1,7 +1,7 @@
 import { Spinner } from "@heroui/react";
 import "@styles/App.css";
 import { ProfileStartupSelector } from "@features/profile/ProfileStartupSelector";
-import { useProfileSessionHydration } from "@hooks/useProfileSession";
+import { useProfileSessionHydration, useProfileSession } from "@hooks/useProfileSession";
 import { AppRuntime } from "@/app/AppRuntime";
 import { useStartupProfileGate } from "@/app/hooks/useStartupProfileGate";
 import { useVoiceCommands, VoiceCommandIndicator } from "@features/voice-commands";
@@ -18,6 +18,7 @@ function AppAmbientBackground({ children }: { children: React.ReactNode }) {
 function App() {
   useProfileSessionHydration();
   useVoiceCommands();
+  const { activeProfile } = useProfileSession();
   const gate = useStartupProfileGate();
 
   const appReady = !gate.loading && !gate.visible;
@@ -50,7 +51,7 @@ function App() {
 
   return (
     <AppAmbientBackground>
-      <AppRuntime />
+      <AppRuntime key={activeProfile?.id ?? "no-profile"} />
       <VoiceCommandIndicator />
     </AppAmbientBackground>
   );
