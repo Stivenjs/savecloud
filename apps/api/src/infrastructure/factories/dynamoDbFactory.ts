@@ -51,7 +51,7 @@ export function createDynamoDbClient(): DynamoDBClient {
 /**
  * Verifica la existencia de las tablas de DynamoDB necesarias y las crea automáticamente en entornos locales o Docker.
  *
- * Incluye un tiempo máximo de espera de 15 segundos (`TABLE_INIT_TIMEOUT_MS`) para asegurar que la inicialización
+ * Incluye un tiempo máximo de espera de 60 segundos (`TABLE_INIT_TIMEOUT_MS`) para asegurar que la inicialización
  * del servidor espere a que DynamoDB Local levante.
  *
  * @param client - Instancia de `DynamoDBClient` para realizar las operaciones.
@@ -242,7 +242,7 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
 }
 
 /**
- * Comprueba si una tabla existe en DynamoDB y la crea si falta.
+ * Comprueba que una tabla esté activa en DynamoDB y la crea si falta.
  *
  * Incluye reintentos automáticos si la conexión es rechazada (ECONNREFUSED) mientras DynamoDB Local termina de arrancar.
  *
@@ -262,8 +262,12 @@ async function createTableIfNotExists(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      await client.send(new DescribeTableCommand({ TableName: tableName }));
-      return;
+      const result = await client.send(new DescribeTableCommand({ TableName: tableName }));
+      if (result.Table?.TableStatus === "ACTIVE") return;
+
+      console.log(
+        `[DynamoDB Local] Esperando a que la tabla '${tableName}' esté ACTIVE (estado actual: ${result.Table?.TableStatus ?? "desconocido"}, intento ${attempt}/${maxRetries})...`
+      );
     } catch (err: unknown) {
       const errorObj = err as { name?: string; __type?: string; message?: string; code?: string } | undefined;
       const isConnRefused =
@@ -294,17 +298,26 @@ async function createTableIfNotExists(
       if (isNotFound) {
         try {
           await client.send(new CreateTableCommand(tableInput));
-          console.log(`[DynamoDB Local] Tabla '${tableName}' creada exitosamente.`);
-          return;
+          console.log(`[DynamoDB Local] Tabla '${tableName}' creada; esperando estado ACTIVE.`);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue;
         } catch (createErr: unknown) {
           const createErrObj = createErr as { name?: string } | undefined;
-          if (createErrObj?.name === "ResourceInUseException") return;
+          if (createErrObj?.name === "ResourceInUseException") {
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            continue;
+          }
           throw new Error(`[DynamoDB Local] No se pudo crear la tabla '${tableName}'.`, { cause: createErr });
         }
       } else {
-        console.error(`[DynamoDB Local] Error al verificar tabla '${tableName}':`, err);
-        return;
+        throw new Error(`[DynamoDB Local] Error al verificar tabla '${tableName}'.`, { cause: err });
       }
     }
+
+    if (attempt < maxRetries) await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
+
+  throw new Error(
+    `[DynamoDB Local] La tabla '${tableName}' no llegó a estado ACTIVE después de ${maxRetries} intentos.`
+  );
 }
