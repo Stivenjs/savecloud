@@ -32,9 +32,39 @@ La imagen `quay.io/minio/aistor/minio` requiere una licencia activa. Obtén el a
 
 ## Despliegue en VPS
 
-1. Clona el repositorio en el VPS y crea los registros DNS `A` para el dominio raíz y `s3` apuntando a la IP pública del VPS. Si configuras IPv6, crea los registros `AAAA` correspondientes. Ambos nombres deben resolver al VPS para que Caddy pueda emitir sus certificados.
-2. Copia `.env.docker.example` a `.env` en la raíz del proyecto.
-3. Configura al menos estos valores en `.env`:
+### Apuntar el dominio al VPS
+
+Haz esta configuración en el panel donde administras el DNS del dominio (puede ser el panel del registrador o un proveedor DNS como Cloudflare). Busca una sección llamada **DNS**, **Zona DNS** o **Administrar registros**.
+
+En los ejemplos siguientes, reemplaza `savecloud.example.com` por el dominio que compraste. Por ejemplo, si tu dominio es `miservidor.net`, usa `miservidor.net` para SaveCloud y `s3.miservidor.net` para el almacenamiento.
+
+1. Obtén la **IP pública** del VPS en el panel de tu proveedor de alojamiento. Debe ser la IP pública del servidor, no `localhost`, una IP privada como `192.168.x.x` ni la IP de tu computadora.
+2. Crea estos dos registros DNS tipo `A` y usa la misma IP pública del VPS:
+
+   | Tipo | Nombre/Host | Valor/Apunta a                                 | Uso                                         |
+   | ---- | ----------- | ---------------------------------------------- | ------------------------------------------- |
+   | `A`  | `@`         | IP pública del VPS, por ejemplo `203.0.113.25` | API de SaveCloud en `savecloud.example.com` |
+   | `A`  | `s3`        | La misma IP pública del VPS                    | S3 presignado en `s3.savecloud.example.com` |
+
+   Algunos paneles usan el dominio completo en vez de `@`: en ese caso, escribe `savecloud.example.com` en el primer registro y `s3.savecloud.example.com` en el segundo. No escribas `https://`, puertos ni rutas en los campos DNS.
+
+3. Si el VPS tiene una dirección IPv6 pública y está configurada para recibir tráfico, añade también registros `AAAA` para `@` y `s3` con esa dirección. Si no tienes IPv6 configurado, no añadas registros `AAAA`: un AAAA incorrecto puede hacer que algunos clientes intenten conectarse a una IP equivocada.
+4. Para el primer arranque, si tu proveedor DNS ofrece proxy/CDN, configura estos dos registros como **DNS only / Solo DNS**. Caddy debe poder recibir directamente las solicitudes HTTP y HTTPS para obtener los certificados; después podrás habilitar un proxy si este permite WebSockets y las cargas S3 que necesitas.
+5. Guarda los registros y espera a que se actualice el DNS. Comprueba desde tu computadora que ambos nombres muestran la IP pública del VPS:
+
+   ```powershell
+   nslookup savecloud.example.com
+   nslookup s3.savecloud.example.com
+   ```
+
+   En Linux/macOS también puedes usar `dig +short savecloud.example.com` y `dig +short s3.savecloud.example.com`. Si las respuestas todavía no muestran la IP del VPS, espera y vuelve a consultar antes de iniciar Caddy.
+
+6. En el firewall del proveedor y del VPS, permite tráfico entrante TCP por los puertos `80` y `443`. UDP `443` es opcional y solo habilita HTTP/3. Si algún servicio ya está ocupando TCP `80` o `443`, Caddy no podrá atender el dominio ni emitir sus certificados.
+
+### Iniciar SaveCloud
+
+1. Clona el repositorio en el VPS y copia `.env.docker.example` a `.env` en la raíz del proyecto.
+2. Configura al menos estos valores en `.env`:
 
 ```env
 DOMAIN=savecloud.example.com
@@ -47,8 +77,7 @@ MINIO_LICENSE_PATH=/ruta/absoluta/minio.license
 
 `S3_PUBLIC_ENDPOINT` debe ser exactamente `https://s3.<DOMAIN>`. La API lo usa para firmar las URLs que descarga/sube la aplicación de escritorio. Su endpoint interno continúa siendo `http://minio:9000`. No uses `localhost` en `S3_PUBLIC_ENDPOINT` para un VPS: esa URL sería inaccesible para los clientes remotos.
 
-4. Asegúrate de que el firewall permite TCP 80 y 443. UDP 443 es opcional para HTTP/3.
-5. Desde la raíz del repositorio, inicia los servicios:
+3. Desde la raíz del repositorio, inicia los servicios:
 
 ```bash
 docker compose up -d
