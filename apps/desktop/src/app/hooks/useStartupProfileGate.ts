@@ -3,6 +3,7 @@ import { CONFIG_QUERY_KEY } from "@hooks/useConfig";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { queryClient } from "@lib/queryClient";
 import { useProfileSessionStore } from "@store/ProfileSessionStore";
+import { resetAppStateForProfileSwitch } from "@utils/resetAppState";
 import {
   createProfileCmd,
   getAlwaysShowSelectorCmd,
@@ -100,7 +101,7 @@ export function useStartupProfileGate(): StartupProfileGateState {
         }
 
         const updated = await setActiveProfileCmd(profileId);
-        queryClient.clear();
+        await resetAppStateForProfileSwitch();
         useProfileSessionStore.getState().setActiveProfile(profileDtoToSession(updated), selected.source);
 
         await queryClient.refetchQueries({ queryKey: CONFIG_QUERY_KEY, type: "all" });

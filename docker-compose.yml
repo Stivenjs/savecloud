@@ -38,9 +38,14 @@ services:
       - S3_PUBLIC_ENDPOINT=${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       - S3_FORCE_PATH_STYLE=true
       - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
-      - GAME_STATS_TABLE=savecloud-game-stats
-      - SAVE_FILES_INDEX_TABLE=savecloud-save-files-index
+      - CLIPS_TABLE=savecloud-clips
+      - CLOUD_INVITES_TABLE=savecloud-cloud-invites
       - CONNECTIONS_TABLE=savecloud-connections
+      - GAME_INVENTORY_TABLE=savecloud-game-inventory
+      - GAME_STATS_TABLE=savecloud-game-stats
+      - NOTIFICATIONS_TABLE=savecloud-notifications
+      - SAVE_FILES_INDEX_TABLE=savecloud-save-files-index
+      - SHARE_TOKENS_TABLE=savecloud-share-tokens
     depends_on:
       minio:
         condition: service_started
