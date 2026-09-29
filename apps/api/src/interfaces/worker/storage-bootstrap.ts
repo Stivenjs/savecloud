@@ -4,6 +4,7 @@ import {
   PutBucketCorsCommand,
   PutBucketLifecycleConfigurationCommand,
   PutBucketNotificationConfigurationCommand,
+  PutBucketPolicyCommand,
 } from "@aws-sdk/client-s3";
 import { createS3Client, getBucketName } from "@infrastructure/factories/storageFactory";
 
@@ -14,6 +15,24 @@ async function main(): Promise<void> {
   const s3 = createS3Client();
   const bucketName = getBucketName();
   await ensureBucketExists(s3, bucketName);
+
+  await s3.send(
+    new PutBucketPolicyCommand({
+      Bucket: bucketName,
+      Policy: JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Sid: "PublicReadSharedClipObjects",
+            Effect: "Allow",
+            Principal: "*",
+            Action: ["s3:GetObject"],
+            Resource: `arn:aws:s3:::${bucketName}/clips/*`,
+          },
+        ],
+      }),
+    })
+  );
 
   await s3.send(
     new PutBucketCorsCommand({
@@ -61,7 +80,9 @@ async function main(): Promise<void> {
     })
   );
 
-  console.info(`[storage-bootstrap] Bucket '${bucketName}' listo con CORS, lifecycle y webhook de eventos.`);
+  console.info(
+    `[storage-bootstrap] Bucket '${bucketName}' listo con CORS, lifecycle, webhook y lectura pública de objetos compartidos de clips.`
+  );
 }
 
 async function ensureBucketExists(s3: ReturnType<typeof createS3Client>, bucketName: string): Promise<void> {

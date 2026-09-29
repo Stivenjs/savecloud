@@ -165,7 +165,7 @@ docker compose ps
 docker compose logs --tail=100 savecloud-api create-bucket steam-seed-worker
 ```
 
-`savecloud-api` debe aparecer `Healthy`, `steam-seed-worker` debe permanecer activo y `savecloud-storage-bootstrap` puede aparecer como `Exited (0)`, porque es una tarea de inicialización. Desde la red de Compose, Caddy usa `savecloud-api:3000` y `minio:9000`; la API usa `minio:9000` y `dynamodb-local:8000`. DynamoDB Local usa credenciales simuladas independientes (`local`/`local`); las credenciales aleatorias de `.env` son para MinIO.
+`savecloud-api` debe aparecer `Healthy`, `steam-seed-worker` debe permanecer activo y `savecloud-storage-bootstrap` puede aparecer como `Exited (0)`, porque es una tarea de inicialización. Desde la red de Compose, Caddy usa `savecloud-api:3000` y `minio:9000`; la API usa `minio:9000` y `dynamodb-local:8000`. DynamoDB Local usa credenciales simuladas independientes (`local`/`local`); las credenciales aleatorias de `.env` son para MinIO. El bootstrap permite lectura pública de objetos bajo `clips/` para que los clips compartidos puedan abrirse sin autenticación. No concede lectura pública a `clips-meta/` ni al resto del bucket.
 
 ## Persistencia y comandos útiles
 
