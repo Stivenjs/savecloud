@@ -1,4 +1,19 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: savecloud-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
   savecloud-api:
     image: savecloud-api:local
     pull_policy: build
@@ -7,11 +22,12 @@ services:
       dockerfile: Dockerfile
     container_name: savecloud-api
     restart: unless-stopped
+    # Loopback access preserves the local development URL without exposing the API publicly.
     ports:
-      - "3000:3000"
+      - "127.0.0.1:${API_PORT:-3000}:3000"
     environment:
       - PORT=3000
-      - SYNC_GAMES_API_KEY=${SYNC_GAMES_API_KEY:-sg_secret_key_12345}
+      - API_KEY=${SYNC_GAMES_API_KEY:-sg_secret_key_12345}
       - BUCKET_NAME=savecloud-saves
       - AWS_REGION=us-east-1
       - AWS_ACCESS_KEY_ID=${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
@@ -56,8 +72,8 @@ services:
     container_name: savecloud-minio
     restart: unless-stopped
     ports:
-      - "9000:9000" # Puerto de API S3
-      - "9001:9001" # Panel de administración Web (http://localhost:9001)
+      - "127.0.0.1:9000:9000" # Endpoint S3 local; en VPS el acceso externo pasa por Caddy.
+      - "127.0.0.1:9001:9001" # Panel de administración solo local.
     environment:
       - MINIO_ROOT_USER=${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
       - MINIO_ROOT_PASSWORD=${OBJECT_STORAGE_SECRET_KEY:-minioadmin}
@@ -93,10 +109,12 @@ services:
     user: root
     command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - dynamodb_data:/home/dynamodblocal/data
 
 volumes:
+  caddy_data:
+  caddy_config:
   minio_data:
   dynamodb_data:

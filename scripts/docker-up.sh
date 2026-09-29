@@ -31,20 +31,58 @@ done
 if [ "$ready" != true ]; then
   echo "SaveCloud no quedó listo. Estado actual de los servicios:" >&2
   docker compose ps >&2
-  docker compose logs --tail=80 savecloud-api minio create-bucket steam-seed-worker >&2
+  docker compose logs --tail=80 caddy savecloud-api minio create-bucket steam-seed-worker >&2
   exit 1
 fi
 
-cat <<'EOF'
+domain=${DOMAIN:-}
+s3_public_endpoint=${S3_PUBLIC_ENDPOINT:-}
+api_port=${API_PORT:-}
+if [ -f .env ]; then
+  while IFS='=' read -r key value; do
+    value=$(printf '%s' "$value" | tr -d '\r')
+    case "$key" in
+      DOMAIN) [ -n "$domain" ] || domain=$value ;;
+      S3_PUBLIC_ENDPOINT) [ -n "$s3_public_endpoint" ] || s3_public_endpoint=$value ;;
+      API_PORT) [ -n "$api_port" ] || api_port=$value ;;
+    esac
+  done < .env
+fi
+domain=${domain:-localhost}
+s3_public_endpoint=${s3_public_endpoint:-http://localhost:9000}
+api_port=${api_port:-3000}
 
-SaveCloud está listo. URLs locales:
-  API HTTP:             http://localhost:3000
-  Salud de la API:      http://localhost:3000/health
-  WebSocket local:      ws://localhost:3000/ws
-  API S3 (AIStor):      http://localhost:9000
+if [ "$domain" = "localhost" ]; then
+  cat <<EOF
+SaveCloud está listo. Endpoints locales:
+  API HTTP:             http://localhost:${api_port}
+  Salud de la API:      http://localhost:${api_port}/health
+  WebSocket:            ws://localhost:${api_port}/ws
+  S3 público/presigned: ${s3_public_endpoint}
   Consola AIStor:       http://localhost:9001
   DynamoDB Local:       http://localhost:8000
 
-Para acceder desde otro equipo, sustituye localhost por la IP de este servidor.
-El WebSocket local usa ws://; usa wss:// cuando publiques la API detrás de TLS.
+Endpoints internos Docker:
+  API:                  savecloud-api:3000
+  S3:                   minio:9000
+  DynamoDB:             dynamodb-local:8000
 EOF
+else
+  cat <<EOF
+SaveCloud está listo. URLs públicas:
+  API HTTPS:            https://${domain}
+  Salud de la API:      https://${domain}/health
+  WebSocket seguro:     wss://${domain}/ws
+  S3 público/presigned: ${s3_public_endpoint}
+
+Endpoints disponibles solo desde el VPS:
+  API local:            http://127.0.0.1:${api_port}
+  Consola AIStor:       http://127.0.0.1:9001
+  DynamoDB Local:       http://127.0.0.1:8000
+
+Endpoints internos Docker:
+  API:                  savecloud-api:3000
+  S3:                   minio:9000
+  DynamoDB:             dynamodb-local:8000
+EOF
+fi

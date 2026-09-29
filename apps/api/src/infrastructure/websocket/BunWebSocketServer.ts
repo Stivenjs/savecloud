@@ -8,6 +8,7 @@
 import type { FastifyInstance, InjectOptions } from "fastify";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 import type { FastifyWebSocketNotifier } from "@infrastructure/websocket/FastifyWebSocketNotifier";
+import { verifyUserAccessToken } from "@shared/accessToken";
 
 /**
  * Datos asociados al contexto de cada conexión WebSocket en Bun.
@@ -55,6 +56,19 @@ export interface StartBunServerOptions {
 
 /** Tiempo de vida predeterminado para registros de conexión en DynamoDB (24 horas) */
 const CONNECTION_TTL_SECONDS = 24 * 60 * 60;
+
+function isAuthorizedWebSocketRequest(url: URL): boolean {
+  const expectedApiKey = process.env.API_KEY?.trim();
+  if (!expectedApiKey) return true;
+
+  const userId = url.searchParams.get("userId")?.trim();
+  const credential = url.searchParams.get("apiKey")?.trim() || url.searchParams.get("token")?.trim();
+  if (!credential) return false;
+  if (credential === expectedApiKey) return true;
+
+  const accessToken = verifyUserAccessToken(credential);
+  return accessToken !== null && Boolean(userId) && userId === accessToken.userId;
+}
 
 /**
  * Delega una petición HTTP estándar a la instancia de Fastify vía `app.inject` de forma asíncrona.
@@ -118,6 +132,10 @@ export async function startBunServer(options: StartBunServerOptions): Promise<vo
     hostname: host,
     fetch(req, server) {
       const url = new URL(req.url);
+
+      if (req.headers.get("upgrade")?.toLowerCase() === "websocket" && !isAuthorizedWebSocketRequest(url)) {
+        return new Response("No autorizado.", { status: 401 });
+      }
 
       const userId = url.searchParams.get("userId")?.trim() || undefined;
       const deviceId = url.searchParams.get("deviceId")?.trim() || undefined;

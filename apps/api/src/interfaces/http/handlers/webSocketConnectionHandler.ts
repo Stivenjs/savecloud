@@ -30,7 +30,7 @@ export function createWebSocketConnectionHandler(deps: WebSocketConnectionDepend
     const deviceId = query.deviceId?.trim();
 
     console.log(
-      `[SaveCloud WS] Handshake exitoso! connectionId=${connectionId}, userId=${userId || "anónimo"}, url=${request.url}`
+      `[SaveCloud WS] Handshake exitoso! connectionId=${connectionId}, userId=${userId || "anónimo"}, path=${request.url.split("?")[0]}`
     );
 
     deps.webSocketNotifier?.registerSocket(connectionId, socket);

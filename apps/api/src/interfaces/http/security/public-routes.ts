@@ -48,7 +48,7 @@ export function isPublicHttpRoute(method: string, path: string): boolean {
     return true;
   }
 
-  // Endpoint de salud y WebSocket (monitoreo y conexión pública)
+  // Endpoint de salud y handshake WebSocket (las credenciales WS se validan en su adaptador)
   if (path === HEALTH_PATH || path === "/" || path === "/ws") {
     return true;
   }
