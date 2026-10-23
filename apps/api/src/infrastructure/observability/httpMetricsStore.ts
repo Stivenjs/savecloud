@@ -21,21 +21,125 @@ const MAX_SAMPLES = 2500;
 const samples: HttpMetricsSample[] = [];
 let ringStart = 0;
 let ringCount = 0;
+const COUNTER_BUCKET_MS = 10_000;
+const COUNTER_BUCKET_COUNT = (24 * 60 * 60 * 1000) / COUNTER_BUCKET_MS;
 
-/** Expuesto solo para pruebas. */
+interface CountEntry {
+  requests: number;
+  errors: number;
+}
+
+interface RouteCountEntry extends CountEntry {
+  statuses: Map<number, number>;
+}
+
+interface RequestCountBucket {
+  startMs: number;
+  firstRequestAtMs: number;
+  lastRequestAtMs: number;
+  total: CountEntry;
+  byScope: Record<MetricsScope, CountEntry>;
+  byMethod: Map<string, CountEntry>;
+  byRoute: Map<string, RouteCountEntry>;
+  byStatus: Map<number, number>;
+}
+
+interface WindowCounters {
+  requests: number;
+  errors: number;
+  oldestRequestAtMs: number | null;
+  newestRequestAtMs: number | null;
+  byScope: Record<MetricsScope, CountEntry>;
+  byMethod: Map<string, CountEntry>;
+  byRoute: Map<string, RouteCountEntry>;
+  byStatus: Map<number, number>;
+}
+
+const counterBuckets: Array<RequestCountBucket | undefined> = new Array(COUNTER_BUCKET_COUNT);
+
+/** Expone un reinicio del almacén para las pruebas. */
 export function resetHttpMetricsForTests(): void {
   samples.length = 0;
   ringStart = 0;
   ringCount = 0;
+  counterBuckets.fill(undefined);
+}
+
+function createCountEntry(): CountEntry {
+  return { requests: 0, errors: 0 };
+}
+
+function incrementCount(entry: CountEntry, isError: boolean): void {
+  entry.requests += 1;
+  if (isError) entry.errors += 1;
+}
+
+function getRequestCountBucket(ts: number): RequestCountBucket {
+  const startMs = Math.floor(ts / COUNTER_BUCKET_MS) * COUNTER_BUCKET_MS;
+  const index = Math.floor(startMs / COUNTER_BUCKET_MS) % COUNTER_BUCKET_COUNT;
+  const existing = counterBuckets[index];
+  if (existing?.startMs === startMs) return existing;
+
+  const bucket: RequestCountBucket = {
+    startMs,
+    firstRequestAtMs: ts,
+    lastRequestAtMs: ts,
+    total: createCountEntry(),
+    byScope: {
+      saves: createCountEntry(),
+      notifications: createCountEntry(),
+      other: createCountEntry(),
+    },
+    byMethod: new Map(),
+    byRoute: new Map(),
+    byStatus: new Map(),
+  };
+  counterBuckets[index] = bucket;
+  return bucket;
+}
+
+function incrementMapEntry<T extends CountEntry>(
+  entries: Map<string, T>,
+  key: string,
+  isError: boolean,
+  create: () => T
+): T {
+  let entry = entries.get(key);
+  if (!entry) {
+    entry = create();
+    entries.set(key, entry);
+  }
+  incrementCount(entry, isError);
+  return entry;
+}
+
+function recordRequestCount(sample: HttpMetricsSample): void {
+  const bucket = getRequestCountBucket(sample.ts);
+  const isError = sample.statusCode >= 400;
+  const method = (sample.method || "GET").toUpperCase();
+  const route = effectiveRoute(sample);
+
+  bucket.firstRequestAtMs = Math.min(bucket.firstRequestAtMs, sample.ts);
+  bucket.lastRequestAtMs = Math.max(bucket.lastRequestAtMs, sample.ts);
+  incrementCount(bucket.total, isError);
+  incrementCount(bucket.byScope[classifyPath(sample.path)], isError);
+  incrementMapEntry(bucket.byMethod, method, isError, createCountEntry);
+
+  const routeEntry = incrementMapEntry(bucket.byRoute, route, isError, () => ({
+    ...createCountEntry(),
+    statuses: new Map<number, number>(),
+  }));
+  routeEntry.statuses.set(sample.statusCode, (routeEntry.statuses.get(sample.statusCode) ?? 0) + 1);
+  bucket.byStatus.set(sample.statusCode, (bucket.byStatus.get(sample.statusCode) ?? 0) + 1);
 }
 
 export function recordHttpMetric(entry: Omit<HttpMetricsSample, "ts">): void {
   const sample: HttpMetricsSample = { ...entry, ts: Date.now() };
 
-  // CloudWatch extrae estas métricas estructuradas de los logs de Lambda.
-  // En local se conserva únicamente el búfer usado por el panel de desarrollo.
+  // CloudWatch extrae estas métricas estructuradas de los registros de Lambda.
+  // En local se conserva el búfer usado por el panel de desarrollo.
   if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
-    // Las rutas no reconocidas usan una sola dimensión para evitar cardinalidad ilimitada.
+    // Las rutas desconocidas comparten una dimensión para limitar la cardinalidad.
     const route = entry.routeUrl?.trim() || "/unmatched";
     console.log(
       JSON.stringify({
@@ -62,6 +166,8 @@ export function recordHttpMetric(entry: Omit<HttpMetricsSample, "ts">): void {
     );
   }
 
+  recordRequestCount(sample);
+
   if (ringCount < MAX_SAMPLES) {
     samples.push(sample);
     ringCount += 1;
@@ -83,6 +189,80 @@ function snapshotSamples(): HttpMetricsSample[] {
     cursor = (cursor + 1) % MAX_SAMPLES;
   }
   return out;
+}
+
+function createWindowCounters(): WindowCounters {
+  return {
+    requests: 0,
+    errors: 0,
+    oldestRequestAtMs: null,
+    newestRequestAtMs: null,
+    byScope: {
+      saves: createCountEntry(),
+      notifications: createCountEntry(),
+      other: createCountEntry(),
+    },
+    byMethod: new Map(),
+    byRoute: new Map(),
+    byStatus: new Map(),
+  };
+}
+
+function addCountEntry(target: CountEntry, source: CountEntry): void {
+  target.requests += source.requests;
+  target.errors += source.errors;
+}
+
+function summarizeCounters(buckets: RequestCountBucket[]): WindowCounters {
+  const summary = createWindowCounters();
+
+  for (const bucket of buckets) {
+    summary.requests += bucket.total.requests;
+    summary.errors += bucket.total.errors;
+    summary.oldestRequestAtMs =
+      summary.oldestRequestAtMs == null
+        ? bucket.firstRequestAtMs
+        : Math.min(summary.oldestRequestAtMs, bucket.firstRequestAtMs);
+    summary.newestRequestAtMs =
+      summary.newestRequestAtMs == null
+        ? bucket.lastRequestAtMs
+        : Math.max(summary.newestRequestAtMs, bucket.lastRequestAtMs);
+
+    for (const scope of ["saves", "notifications", "other"] as const) {
+      addCountEntry(summary.byScope[scope], bucket.byScope[scope]);
+    }
+
+    for (const [method, source] of bucket.byMethod) {
+      const target = summary.byMethod.get(method) ?? createCountEntry();
+      addCountEntry(target, source);
+      summary.byMethod.set(method, target);
+    }
+
+    for (const [route, source] of bucket.byRoute) {
+      let target = summary.byRoute.get(route);
+      if (!target) {
+        target = { ...createCountEntry(), statuses: new Map<number, number>() };
+        summary.byRoute.set(route, target);
+      }
+      addCountEntry(target, source);
+      for (const [status, count] of source.statuses) {
+        target.statuses.set(status, (target.statuses.get(status) ?? 0) + count);
+      }
+    }
+
+    for (const [status, count] of bucket.byStatus) {
+      summary.byStatus.set(status, (summary.byStatus.get(status) ?? 0) + count);
+    }
+  }
+
+  return summary;
+}
+
+function getCounterBuckets(cutoff: number, now: number): RequestCountBucket[] {
+  return counterBuckets.filter(
+    (bucket): bucket is RequestCountBucket =>
+      bucket != null && bucket.startMs <= now && bucket.startMs + COUNTER_BUCKET_MS > cutoff
+  );
 }
 
 export function windowParamToMs(window: string): number {
@@ -189,14 +369,20 @@ export interface MetricsBucketDto {
 }
 
 export interface CoverageDto {
-  /** Muestras realmente consideradas en la ventana. */
+  /** Mediciones de latencia consideradas en la ventana. */
   samplesInWindow: number;
+  /** Solicitudes contabilizadas en la ventana, sin límite de muestras de latencia. */
+  requestsInWindow: number;
+  /** Mediciones de latencia retenidas y consideradas para percentiles. */
+  latencySamplesInWindow: number;
   oldestSampleAtMs: number | null;
   newestSampleAtMs: number | null;
-  /** Capacidad total del buffer (límite duro en memoria). */
+  /** Capacidad del búfer acotado usado para percentiles de latencia. */
   retentionLimit: number;
-  /** Muestras retenidas globalmente, todas ventanas. */
+  /** Mediciones de latencia retenidas globalmente, todas las ventanas. */
   retainedSamples: number;
+  /** Duración de cada intervalo de agregación exacta. */
+  counterBucketMs: number;
 }
 
 export interface ObservabilityAlertItemDto {
@@ -245,22 +431,25 @@ function emptyScope(): ScopeSummaryDto {
   return { requests: 0, errors: 0, p50Ms: null, p95Ms: null, p99Ms: null };
 }
 
-function reduceScope(rows: HttpMetricsSample[]): ScopeSummaryDto {
-  const n = rows.length;
-  if (n === 0) return emptyScope();
-  const errors = rows.filter((r) => r.statusCode >= 400).length;
+function reduceScope(rows: HttpMetricsSample[], counts: CountEntry): ScopeSummaryDto {
+  if (counts.requests === 0) return emptyScope();
   const okDurations = rows.filter((r) => r.statusCode < 400).map((r) => r.durationMs);
   okDurations.sort((a, b) => a - b);
   return {
-    requests: n,
-    errors,
+    requests: counts.requests,
+    errors: counts.errors,
     p50Ms: percentile(okDurations, 0.5),
     p95Ms: percentile(okDurations, 0.95),
     p99Ms: percentile(okDurations, 0.99),
   };
 }
 
-function buildBuckets(rows: HttpMetricsSample[], windowMs: number, now: number): MetricsBucketDto[] {
+function buildBuckets(
+  rows: HttpMetricsSample[],
+  countBuckets: RequestCountBucket[],
+  windowMs: number,
+  now: number
+): MetricsBucketDto[] {
   const BUCKET_COUNT = 30;
   const bucketMs = Math.max(1, Math.floor(windowMs / BUCKET_COUNT));
   const start = now - windowMs;
@@ -275,13 +464,20 @@ function buildBuckets(rows: HttpMetricsSample[], windowMs: number, now: number):
     const idx = Math.min(BUCKET_COUNT - 1, Math.max(0, Math.floor((r.ts - start) / bucketMs)));
     const slot = buckets[idx];
     if (!slot) continue;
-    slot.requests += 1;
-    if (r.statusCode >= 400) {
-      slot.errors += 1;
-    } else {
+    if (r.statusCode < 400) {
       const arr = okPerBucket[idx];
       if (arr) arr.push(r.durationMs);
     }
+  }
+  for (const countBucket of countBuckets) {
+    const idx = Math.min(
+      BUCKET_COUNT - 1,
+      Math.max(0, Math.floor((countBucket.startMs - start) / bucketMs))
+    );
+    const slot = buckets[idx];
+    if (!slot) continue;
+    slot.requests += countBucket.total.requests;
+    slot.errors += countBucket.total.errors;
   }
   for (let i = 0; i < BUCKET_COUNT; i++) {
     const arr = okPerBucket[i];
@@ -294,7 +490,10 @@ function buildBuckets(rows: HttpMetricsSample[], windowMs: number, now: number):
   return buckets;
 }
 
-function buildTopSlowPaths(rows: HttpMetricsSample[]): PathLatencyEntryDto[] {
+function buildTopSlowPaths(
+  rows: HttpMetricsSample[],
+  routeCounts: Map<string, RouteCountEntry>
+): PathLatencyEntryDto[] {
   const grouped = new Map<string, number[]>();
   for (const r of rows) {
     if (r.statusCode >= 400) continue;
@@ -307,12 +506,13 @@ function buildTopSlowPaths(rows: HttpMetricsSample[]): PathLatencyEntryDto[] {
     arr.push(r.durationMs);
   }
   const out: PathLatencyEntryDto[] = [];
-  for (const [route, arr] of grouped.entries()) {
-    if (arr.length < 3) continue;
+  for (const [route, counts] of routeCounts.entries()) {
+    if (counts.requests < 3) continue;
+    const arr = grouped.get(route) ?? [];
     arr.sort((a, b) => a - b);
     out.push({
       route,
-      requests: arr.length,
+      requests: counts.requests,
       p95Ms: percentile(arr, 0.95),
       p99Ms: percentile(arr, 0.99),
     });
@@ -321,27 +521,13 @@ function buildTopSlowPaths(rows: HttpMetricsSample[]): PathLatencyEntryDto[] {
   return out.slice(0, 5);
 }
 
-function buildTopErrorPaths(rows: HttpMetricsSample[]): PathErrorEntryDto[] {
-  const grouped = new Map<string, { total: number; errors: number; statusFreq: Map<number, number> }>();
-  for (const r of rows) {
-    const key = effectiveRoute(r);
-    let agg = grouped.get(key);
-    if (!agg) {
-      agg = { total: 0, errors: 0, statusFreq: new Map() };
-      grouped.set(key, agg);
-    }
-    agg.total += 1;
-    if (r.statusCode >= 400) {
-      agg.errors += 1;
-      agg.statusFreq.set(r.statusCode, (agg.statusFreq.get(r.statusCode) ?? 0) + 1);
-    }
-  }
+function buildTopErrorPaths(routeCounts: Map<string, RouteCountEntry>): PathErrorEntryDto[] {
   const out: PathErrorEntryDto[] = [];
-  for (const [route, agg] of grouped.entries()) {
+  for (const [route, agg] of routeCounts.entries()) {
     if (agg.errors === 0) continue;
     let topStatus: number | null = null;
     let topCount = -1;
-    for (const [code, c] of agg.statusFreq.entries()) {
+    for (const [code, c] of agg.statuses.entries()) {
       if (c > topCount) {
         topStatus = code;
         topCount = c;
@@ -350,7 +536,7 @@ function buildTopErrorPaths(rows: HttpMetricsSample[]): PathErrorEntryDto[] {
     out.push({
       route,
       errors: agg.errors,
-      errorRate: agg.total > 0 ? agg.errors / agg.total : 0,
+      errorRate: agg.requests > 0 ? agg.errors / agg.requests : 0,
       topStatus,
     });
   }
@@ -358,7 +544,7 @@ function buildTopErrorPaths(rows: HttpMetricsSample[]): PathErrorEntryDto[] {
   return out.slice(0, 5);
 }
 
-function buildStatusBreakdown(rows: HttpMetricsSample[]): ObservabilitySummaryDto["statusBreakdown"] {
+function buildStatusBreakdown(byStatus: Map<number, number>): ObservabilitySummaryDto["statusBreakdown"] {
   const classes: Record<"1xx" | "2xx" | "3xx" | "4xx" | "5xx", number> = {
     "1xx": 0,
     "2xx": 0,
@@ -366,46 +552,40 @@ function buildStatusBreakdown(rows: HttpMetricsSample[]): ObservabilitySummaryDt
     "4xx": 0,
     "5xx": 0,
   };
-  const granular = new Map<number, number>();
-  for (const r of rows) {
-    const code = r.statusCode;
-    if (code >= 100 && code < 200) classes["1xx"] += 1;
-    else if (code >= 200 && code < 300) classes["2xx"] += 1;
-    else if (code >= 300 && code < 400) classes["3xx"] += 1;
-    else if (code >= 400 && code < 500) classes["4xx"] += 1;
-    else if (code >= 500 && code < 600) classes["5xx"] += 1;
-    granular.set(code, (granular.get(code) ?? 0) + 1);
+  for (const [code, count] of byStatus) {
+    if (code >= 100 && code < 200) classes["1xx"] += count;
+    else if (code >= 200 && code < 300) classes["2xx"] += count;
+    else if (code >= 300 && code < 400) classes["3xx"] += count;
+    else if (code >= 400 && code < 500) classes["4xx"] += count;
+    else if (code >= 500 && code < 600) classes["5xx"] += count;
   }
-  const granularArr = [...granular.entries()]
+  const granularArr = [...byStatus.entries()]
     .map(([statusCode, count]) => ({ statusCode, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
   return { classes, granular: granularArr };
 }
 
-function buildByMethod(rows: HttpMetricsSample[]): ObservabilitySummaryDto["byMethod"] {
-  const grouped = new Map<string, { ok: number[]; total: number; errors: number }>();
+function buildByMethod(
+  rows: HttpMetricsSample[],
+  methodCounts: Map<string, CountEntry>
+): ObservabilitySummaryDto["byMethod"] {
+  const grouped = new Map<string, number[]>();
   for (const r of rows) {
     const m = (r.method || "GET").toUpperCase();
-    let agg = grouped.get(m);
-    if (!agg) {
-      agg = { ok: [], total: 0, errors: 0 };
-      grouped.set(m, agg);
-    }
-    agg.total += 1;
-    if (r.statusCode >= 400) {
-      agg.errors += 1;
-    } else {
-      agg.ok.push(r.durationMs);
-    }
+    if (r.statusCode >= 400) continue;
+    const durations = grouped.get(m) ?? [];
+    durations.push(r.durationMs);
+    grouped.set(m, durations);
   }
   const out: ObservabilitySummaryDto["byMethod"] = {};
-  for (const [method, agg] of grouped.entries()) {
-    agg.ok.sort((a, b) => a - b);
+  for (const [method, counts] of methodCounts.entries()) {
+    const durations = grouped.get(method) ?? [];
+    durations.sort((a, b) => a - b);
     out[method] = {
-      requests: agg.total,
-      errors: agg.errors,
-      p95Ms: percentile(agg.ok, 0.95),
+      requests: counts.requests,
+      errors: counts.errors,
+      p95Ms: percentile(durations, 0.95),
     };
   }
   return out;
@@ -416,8 +596,9 @@ export function summarizeHttpMetrics(windowParam: string): ObservabilitySummaryD
   const windowMs = windowParamToMs(window);
   const now = Date.now();
   const cutoff = now - windowMs;
-  const snapshot = snapshotSamples();
-  const rows = snapshot.filter((s) => s.ts >= cutoff);
+  const rows = snapshotSamples().filter((sample) => sample.ts >= cutoff);
+  const countBuckets = getCounterBuckets(cutoff, now);
+  const counters = summarizeCounters(countBuckets);
 
   const byPathScope = {
     saves: rows.filter((r) => classifyPath(r.path) === "saves"),
@@ -425,21 +606,20 @@ export function summarizeHttpMetrics(windowParam: string): ObservabilitySummaryD
     other: rows.filter((r) => classifyPath(r.path) === "other"),
   };
 
-  const savesSummary = reduceScope(byPathScope.saves);
-  const notificationsSummary = reduceScope(byPathScope.notifications);
-  const otherSummary = reduceScope(byPathScope.other);
+  const savesSummary = reduceScope(byPathScope.saves, counters.byScope.saves);
+  const notificationsSummary = reduceScope(byPathScope.notifications, counters.byScope.notifications);
+  const otherSummary = reduceScope(byPathScope.other, counters.byScope.other);
 
-  const totalsRows = rows;
-  const totalsN = totalsRows.length;
-  const totalsErrors = totalsRows.filter((r) => r.statusCode >= 400).length;
-  const okAll = totalsRows.filter((r) => r.statusCode < 400).map((r) => r.durationMs);
+  const totalsN = counters.requests;
+  const totalsErrors = counters.errors;
+  const okAll = rows.filter((row) => row.statusCode < 400).map((row) => row.durationMs);
   okAll.sort((a, b) => a - b);
 
   const reasonMap = new Map<string, number>();
-  for (const r of totalsRows) {
-    if (r.statusCode < 400) continue;
-    const code = reasonCodeFromStatus(r.statusCode);
-    reasonMap.set(code, (reasonMap.get(code) ?? 0) + 1);
+  for (const [statusCode, count] of counters.byStatus) {
+    if (statusCode < 400) continue;
+    const reasonCode = reasonCodeFromStatus(statusCode);
+    reasonMap.set(reasonCode, (reasonMap.get(reasonCode) ?? 0) + count);
   }
   const topReasonCodes = [...reasonMap.entries()]
     .map(([reasonCode, count]) => ({ reasonCode, count }))
@@ -482,9 +662,9 @@ export function summarizeHttpMetrics(windowParam: string): ObservabilitySummaryD
     });
   }
 
-  const oldestTs = rows.length > 0 ? Math.min(...rows.map((r) => r.ts)) : null;
-  const newestTs = rows.length > 0 ? Math.max(...rows.map((r) => r.ts)) : null;
-  const buckets = buildBuckets(rows, windowMs, now);
+  const oldestTs = counters.oldestRequestAtMs;
+  const newestTs = counters.newestRequestAtMs;
+  const buckets = buildBuckets(rows, countBuckets, windowMs, now);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -508,18 +688,21 @@ export function summarizeHttpMetrics(windowParam: string): ObservabilitySummaryD
         errors: 0,
       },
     },
-    byMethod: buildByMethod(rows),
-    statusBreakdown: buildStatusBreakdown(rows),
-    topSlowPaths: buildTopSlowPaths(rows),
-    topErrorPaths: buildTopErrorPaths(rows),
+    byMethod: buildByMethod(rows, counters.byMethod),
+    statusBreakdown: buildStatusBreakdown(counters.byStatus),
+    topSlowPaths: buildTopSlowPaths(rows, counters.byRoute),
+    topErrorPaths: buildTopErrorPaths(counters.byRoute),
     topReasonCodes,
     buckets,
     coverage: {
       samplesInWindow: rows.length,
+      requestsInWindow: totalsN,
+      latencySamplesInWindow: rows.length,
       oldestSampleAtMs: oldestTs,
       newestSampleAtMs: newestTs,
       retentionLimit: MAX_SAMPLES,
       retainedSamples: ringCount,
+      counterBucketMs: COUNTER_BUCKET_MS,
     },
     items,
     unreadCount: items.length,

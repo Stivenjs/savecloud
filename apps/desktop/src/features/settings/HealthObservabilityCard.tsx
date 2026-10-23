@@ -306,6 +306,7 @@ export function HealthObservabilityCard() {
   };
 
   const remoteTotals = data?.remote?.totals;
+  const remoteCoverage = data?.remote?.coverage;
   const buckets = data?.remote?.buckets ?? [];
   const slowPaths = data?.remote?.topSlowPaths ?? [];
   const errorPaths = data?.remote?.topErrorPaths ?? [];
@@ -480,32 +481,39 @@ export function HealthObservabilityCard() {
                   <span>{t("settings.health.serverTraffic", { window: data.remote?.window ?? remoteWindow })}</span>
                 </div>
                 {remoteTotals ? (
-                  <ul className="grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-[12px] tabular-nums text-default-700 dark:text-default-200">
-                    <li className="flex justify-between">
-                      <span className="text-default-500">requests</span>
-                      <span>{remoteTotals.requests ?? 0}</span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-default-500">errors</span>
-                      <span>{remoteTotals.errors ?? 0}</span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-default-500">P50</span>
-                      <span>{formatNumber(remoteTotals.p50Ms, " ms")}</span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-default-500">P95</span>
-                      <span>{formatNumber(remoteTotals.p95Ms, " ms")}</span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-default-500">P99</span>
-                      <span>{formatNumber(remoteTotals.p99Ms ?? null, " ms")}</span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-default-500">RPS</span>
-                      <span>{formatRps(remoteTotals.rpsAvg)}</span>
-                    </li>
-                  </ul>
+                  <>
+                    <ul className="grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-[12px] tabular-nums text-default-700 dark:text-default-200">
+                      <li className="flex justify-between">
+                        <span className="text-default-500">requests</span>
+                        <span>{remoteTotals.requests ?? 0}</span>
+                      </li>
+                      <li className="flex justify-between">
+                        <span className="text-default-500">errors</span>
+                        <span>{remoteTotals.errors ?? 0}</span>
+                      </li>
+                      <li className="flex justify-between">
+                        <span className="text-default-500">P50</span>
+                        <span>{formatNumber(remoteTotals.p50Ms, " ms")}</span>
+                      </li>
+                      <li className="flex justify-between">
+                        <span className="text-default-500">P95</span>
+                        <span>{formatNumber(remoteTotals.p95Ms, " ms")}</span>
+                      </li>
+                      <li className="flex justify-between">
+                        <span className="text-default-500">P99</span>
+                        <span>{formatNumber(remoteTotals.p99Ms ?? null, " ms")}</span>
+                      </li>
+                      <li className="flex justify-between">
+                        <span className="text-default-500">RPS</span>
+                        <span>{formatRps(remoteTotals.rpsAvg)}</span>
+                      </li>
+                    </ul>
+                    {remoteCoverage?.latencySamplesInWindow != null && (
+                      <p className="mt-2 text-[10px] text-default-500">
+                        Conteos agregados por intervalos de {((remoteCoverage.counterBucketMs ?? 0) / 1000).toFixed(0)} s · percentiles sobre {remoteCoverage.latencySamplesInWindow.toLocaleString()} mediciones recientes
+                      </p>
+                    )}
+                  </>
                 ) : (
                   <p
                     className="text-[12px] text-default-500"
