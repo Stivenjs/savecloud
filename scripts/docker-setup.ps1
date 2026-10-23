@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 $envPath = Join-Path (Get-Location) ".env"
 $examplePath = Join-Path (Get-Location) ".env.docker.example"
 

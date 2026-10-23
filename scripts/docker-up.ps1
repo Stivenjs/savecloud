@@ -1,6 +1,11 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
-& docker compose up -d --build
+& docker compose build savecloud-api steam-seed-worker create-bucket
+if ($LASTEXITCODE -ne 0) {
+  exit $LASTEXITCODE
+}
+
+& docker compose up -d --no-build
 if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }
