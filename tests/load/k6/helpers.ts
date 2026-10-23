@@ -1,6 +1,6 @@
 import http from "k6/http";
 import type { RefinedResponse } from "k6/http";
-import { apiKey, baseUrl, userId, assertStatus } from "@/config";
+import { apiKey, baseUrl, userIdForVu, assertStatus } from "@/config";
 
 /**
  * Identidad de una ejecución compartida entre setup, VUs y teardown.
@@ -10,6 +10,8 @@ export interface LoadTestRun {
   runId: string;
   /** Máximo de VUs configurado para el perfil activo. */
   maxVUs: number;
+  /** Identidades de prueba asignadas a la población virtual. */
+  userIds: string[];
 }
 
 /**
@@ -17,7 +19,7 @@ export interface LoadTestRun {
  *
  * @returns Encabezados API key y usuario de prueba.
  */
-export function apiHeaders(): Record<string, string> {
+export function apiHeaders(userId = userIdForVu(__VU)): Record<string, string> {
   return {
     "x-api-key": apiKey,
     "x-user-id": userId,
@@ -46,8 +48,8 @@ export function parseJson<T>(response: RefinedResponse<"text">, label: string): 
  * @param gameId - Identificador temporal reservado por el test.
  * @param label - Etiqueta k6 para agrupar la métrica de limpieza.
  */
-export function permanentlyDeleteGame(gameId: string, label = "cleanup"): void {
-  const response = httpPost(`${baseUrl}/saves/delete-game`, { gameId, permanent: true }, label);
+export function permanentlyDeleteGame(gameId: string, label = "cleanup", userId?: string): void {
+  const response = httpPost(`${baseUrl}/saves/delete-game`, { gameId, permanent: true }, label, userId);
   assertStatus(response, 204, label);
 }
 
@@ -59,6 +61,11 @@ export function permanentlyDeleteGame(gameId: string, label = "cleanup"): void {
  * @param endpoint - Etiqueta de endpoint para los resultados de k6.
  * @returns Respuesta HTTP de k6.
  */
-export function httpPost(url: string, body: unknown, endpoint: string): RefinedResponse<"text"> {
-  return http.post<"text">(url, JSON.stringify(body), { headers: apiHeaders(), tags: { endpoint } });
+export function httpPost(
+  url: string,
+  body: unknown,
+  endpoint: string,
+  userId?: string
+): RefinedResponse<"text"> {
+  return http.post<"text">(url, JSON.stringify(body), { headers: apiHeaders(userId), tags: { endpoint } });
 }

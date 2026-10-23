@@ -20,7 +20,7 @@ const INDEX_POLL_INTERVAL_SECONDS = 0.2;
 /**
  * Ejecuta una carga aislada y espera la indexación asíncrona antes de borrar el objeto.
  *
- * @param run - Unique identifiers created in the k6 setup lifecycle.
+ * @param run - Identificadores únicos creados durante la preparación de k6.
  */
 export function writeCycleScenario(run: LoadTestRun): void {
   const gameId = `k6-${run.runId}-${__VU}`;
