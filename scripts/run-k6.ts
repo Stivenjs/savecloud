@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const profile = Bun.argv[2];
-if (!profile || !["smoke", "load", "stress"].includes(profile)) {
-  console.error("Uso: bun run scripts/run-k6.ts <smoke|load|stress>");
+if (!profile || !["smoke", "load", "stress", "capacity"].includes(profile)) {
+  console.error("Uso: bun run scripts/run-k6.ts <smoke|load|stress|capacity>");
   process.exit(2);
 }
 

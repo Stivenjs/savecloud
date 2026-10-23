@@ -43,6 +43,7 @@
     "load:smoke": "bun run scripts/run-k6.ts smoke",
     "load:steady": "bun run scripts/run-k6.ts load",
     "load:stress": "bun run scripts/run-k6.ts stress",
+    "load:capacity": "bun run scripts/run-k6.ts capacity",
     "load:setup": "bun run scripts/setup-k6-users.ts",
     "check:load": "bun ./node_modules/typescript/bin/tsc --noEmit -p tests/load/k6/tsconfig.json",
     "format": "oxfmt .",

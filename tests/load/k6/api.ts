@@ -1,6 +1,6 @@
 import { sleep } from "k6";
 import { permanentlyDeleteGame, type LoadTestRun } from "@/helpers";
-import { apiKey, maxVUs, options, userIdForVu, userIds } from "@/config";
+import { apiKey, maxVUs, options, profile, userIdForVu, userIds } from "@/config";
 import { healthSetupCheck } from "@/scenarios/health";
 import { readScenario } from "@/scenarios/read";
 import { presignScenario } from "@/scenarios/presign";
@@ -32,11 +32,11 @@ export function setup(): LoadTestRun {
 }
 
 /**
- * Ejecuta navegación, solicitudes de URL presignada y ciclos de guardado temporal.
+ * Ejecuta la mezcla de flujos que representa una sesión normal de SaveCloud.
  *
- * @param run - Identificadores compartidos creados por setup.
+ * @param run - Identificadores compartidos creados durante la preparación de k6.
  */
-export default function (run: LoadTestRun): void {
+function runMixedUserWorkload(run: LoadTestRun): void {
   const workload = Math.random();
   if (workload < 0.7) {
     readScenario();
@@ -45,7 +45,16 @@ export default function (run: LoadTestRun): void {
   } else {
     writeCycleScenario(run);
   }
-  sleep(2 + Math.random() * 4);
+}
+
+/**
+ * Ejecuta navegación, solicitudes de URL presignada y ciclos de guardado temporal.
+ *
+ * @param run - Identificadores compartidos creados por setup.
+ */
+export default function (run: LoadTestRun): void {
+  runMixedUserWorkload(run);
+  if (profile !== "capacity") sleep(2 + Math.random() * 4);
 }
 
 /**
