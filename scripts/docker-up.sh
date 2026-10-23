@@ -15,8 +15,9 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
   bootstrap_state=$(inspect_value '{{.State.Status}}' savecloud-storage-bootstrap)
   bootstrap_exit_code=$(inspect_value '{{.State.ExitCode}}' savecloud-storage-bootstrap)
   worker_state=$(inspect_value '{{.State.Status}}' savecloud-steam-seed-worker)
+  s3_worker_state=$(inspect_value '{{.State.Status}}' savecloud-s3-events-worker)
 
-  if [ "$api_health" = "healthy" ] && [ "$bootstrap_state" = "exited" ] && [ "$bootstrap_exit_code" = "0" ] && [ "$worker_state" = "running" ]; then
+  if [ "$api_health" = "healthy" ] && [ "$bootstrap_state" = "exited" ] && [ "$bootstrap_exit_code" = "0" ] && [ "$worker_state" = "running" ] && [ "$s3_worker_state" = "running" ]; then
     ready=true
     break
   fi
@@ -31,7 +32,7 @@ done
 if [ "$ready" != true ]; then
   echo "SaveCloud no quedó listo. Estado actual de los servicios:" >&2
   docker compose ps >&2
-  docker compose logs --tail=80 caddy savecloud-api minio create-bucket steam-seed-worker >&2
+  docker compose logs --tail=80 caddy savecloud-api minio create-bucket steam-seed-worker s3-events-worker >&2
   exit 1
 fi
 

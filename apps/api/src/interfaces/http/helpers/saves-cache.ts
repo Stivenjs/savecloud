@@ -1,4 +1,5 @@
 import type { ListBackupsOutput } from "@application/use-cases/ListBackupsUseCase";
+import type { ProcessS3EventInput } from "@application/use-cases/ProcessS3EventUseCase";
 import { invalidateListSavesByGameCache } from "@application/use-cases/ListSavesUseCase";
 import { TtlCache } from "@shared/ttlCache";
 import type { SummaryEtagItem } from "@shared/etag";
@@ -47,4 +48,12 @@ export function invalidateSavesCaches(userId: string, gameId?: string): void {
 
 export function invalidateBackupsCache(storageUserId: string, gameId: string): void {
   backupsListCache.delete(`${storageUserId}::${gameId.trim()}`);
+}
+
+/** Invalida las listas afectadas tras completar el procesamiento de los eventos. */
+export function invalidateEventCaches(events: ProcessS3EventInput[]): void {
+  for (const event of events) {
+    const [userId, gameId] = event.s3Key.split("/");
+    if (userId && gameId) invalidateSavesCaches(userId, gameId);
+  }
 }

@@ -43,6 +43,7 @@ export interface AppDependencies {
   notificationRepository?: NotificationRepository;
   connectionRepository?: ConnectionRepository;
   webSocketNotifier?: WebSocketNotifier;
+  processS3Events?: (events: import("@application/use-cases/ProcessS3EventUseCase").ProcessS3EventInput[]) => Promise<void>;
 }
 
 /**
@@ -119,7 +120,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       ? new ProcessS3EventUseCase(deps.saveFileIndexRepository, deps.gameStatRepository)
       : undefined;
 
-  await registerWebhookRoutes(app, { processS3EventUseCase });
+  await registerWebhookRoutes(app, { processS3EventUseCase, processS3Events: deps.processS3Events });
   await registerWebSocketRoutes(app, { connectionRepository: deps.connectionRepository });
   await registerTrashModule(app, deps.saveRepository);
 

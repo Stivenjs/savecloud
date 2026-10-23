@@ -32,8 +32,9 @@ while ((Get-Date) -lt $deadline) {
   $bootstrapState = Get-ContainerInspectValue -Format '{{.State.Status}}' -Container "savecloud-storage-bootstrap"
   $bootstrapExitCode = Get-ContainerInspectValue -Format '{{.State.ExitCode}}' -Container "savecloud-storage-bootstrap"
   $workerState = Get-ContainerInspectValue -Format '{{.State.Status}}' -Container "savecloud-steam-seed-worker"
+  $s3WorkerState = Get-ContainerInspectValue -Format '{{.State.Status}}' -Container "savecloud-s3-events-worker"
 
-  if ($apiHealth -eq "healthy" -and $bootstrapState -eq "exited" -and $bootstrapExitCode -eq "0" -and $workerState -eq "running") {
+  if ($apiHealth -eq "healthy" -and $bootstrapState -eq "exited" -and $bootstrapExitCode -eq "0" -and $workerState -eq "running" -and $s3WorkerState -eq "running") {
     $ready = $true
     break
   }
@@ -48,7 +49,7 @@ while ((Get-Date) -lt $deadline) {
 if (-not $ready) {
   Write-Host "SaveCloud no quedó listo. Estado actual de los servicios:" -ForegroundColor Red
   & docker compose ps
-  & docker compose logs --tail=80 caddy savecloud-api minio create-bucket steam-seed-worker
+  & docker compose logs --tail=80 caddy savecloud-api minio create-bucket steam-seed-worker s3-events-worker
   exit 1
 }
 

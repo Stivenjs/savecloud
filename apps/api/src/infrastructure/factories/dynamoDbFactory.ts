@@ -6,6 +6,7 @@ import {
   type CreateTableCommandInput,
 } from "@aws-sdk/client-dynamodb";
 import { resolveAwsCredentials } from "./awsCredentials";
+import { registerDynamoOperationMetrics } from "@infrastructure/observability/dynamoMetrics";
 
 /** Región por defecto para la infraestructura de AWS */
 const DEFAULT_AWS_REGION = "us-east-2";
@@ -40,7 +41,7 @@ export function createDynamoDbClient(): DynamoDBClient {
   const awsRegion = process.env.AWS_REGION?.trim() || DEFAULT_AWS_REGION;
   const dynamoEndpoint = process.env.DYNAMODB_ENDPOINT?.trim() || undefined;
 
-  return new DynamoDBClient({
+  const client = new DynamoDBClient({
     region: awsRegion,
     endpoint: dynamoEndpoint,
     maxAttempts: DEFAULT_MAX_ATTEMPTS,
@@ -51,6 +52,8 @@ export function createDynamoDbClient(): DynamoDBClient {
         }
       : resolveAwsCredentials(),
   });
+  registerDynamoOperationMetrics(client);
+  return client;
 }
 
 /**
