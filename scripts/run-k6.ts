@@ -1,5 +1,5 @@
 import { buildSync } from "esbuild";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -19,6 +19,18 @@ if (!k6Path) {
 
 const temporaryDirectory = mkdtempSync(join(tmpdir(), "savecloud-k6-"));
 const bundlePath = join(temporaryDirectory, "api.js");
+const localEnvironment = new Map<string, string>();
+const localEnvironmentPath = join(process.cwd(), ".env.k6");
+
+if (existsSync(localEnvironmentPath)) {
+  for (const line of readFileSync(localEnvironmentPath, "utf8").split(/\r?\n/)) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine || trimmedLine.startsWith("#")) continue;
+    const separator = trimmedLine.indexOf("=");
+    if (separator < 1) continue;
+    localEnvironment.set(trimmedLine.slice(0, separator).trim(), trimmedLine.slice(separator + 1).trim());
+  }
+}
 
 try {
   buildSync({
@@ -32,8 +44,8 @@ try {
   });
 
   const args = ["run", "-e", `TEST_PROFILE=${profile}`];
-  for (const name of ["BASE_URL", "SYNC_GAMES_API_KEY"]) {
-    const value = process.env[name];
+  for (const name of ["BASE_URL", "SYNC_GAMES_API_KEY", "USER_ID", "USER_IDS", "USER_ID_PREFIX"]) {
+    const value = process.env[name] || localEnvironment.get(name);
     if (value) args.push("-e", `${name}=${value}`);
   }
   args.push(bundlePath);

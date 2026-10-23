@@ -11,12 +11,15 @@ Esta guía cubre el uso local y el despliegue de SaveCloud en un VPS. En el VPS,
 | MinIO S3                  | `minio:9000`              | Solo a través de `https://s3.<DOMAIN>` en Caddy; `127.0.0.1:9000` local |
 | Consola MinIO             | `minio:9001`              | Solo `127.0.0.1:9001`                                                   |
 | DynamoDB Local            | `dynamodb-local:8000`     | Solo `127.0.0.1:8000`                                                   |
+| Cola de eventos S3        | `elasticmq:9324`          | Sin puertos publicados                                                   |
 
 Compose crea una red privada y los servicios se encuentran por nombre DNS de servicio. La API usa `minio:9000` y `dynamodb-local:8000`; no usa `localhost` para hablar con otros contenedores. Caddy no tiene una dependencia de arranque respecto de la API: reintenta las conexiones al upstream cuando la API termina de iniciar.
 
 Caddy termina TLS para `DOMAIN` y `s3.DOMAIN`, renueva los certificados y conserva su estado en los volúmenes `caddy_data` y `caddy_config`. El proxy inverso maneja automáticamente el upgrade de WebSocket. El cliente se conecta a `wss://<DOMAIN>/ws` cuando configura la URL `https://<DOMAIN>`.
 
 La API configura CORS con reflejo del origen solicitado (`@fastify/cors`, `origin: true`) y no usa cookies de sesión. En todos los modos, la autenticación HTTP usa `API_KEY`, que Compose alimenta desde `SYNC_GAMES_API_KEY`; WebSocket valida la clave/token que envía el cliente en la query. TLS se termina en Caddy; Fastify tiene `trustProxy` habilitado para reconocer el protocolo y la IP reenviados.
+
+En Docker, la API guarda las notificaciones de MinIO en una cola SQS compatible y responde al recibir la confirmación de almacenamiento de la cola. `s3-events-worker` reúne eventos concurrentes durante una ventana breve, procesa hasta diez por lote, actualiza DynamoDB e invalida las cachés de la API antes de confirmar los mensajes. La indexación sucede en segundo plano; una carga puede tardar unos instantes en aparecer en una lista. ElasticMQ persiste la cola y los mensajes en el volumen `elasticmq_data`; usa long polling para dormir cuando la cola está vacía. En AWS se conserva el flujo S3 → SQS → Lambda.
 
 ## Requisitos del VPS
 
@@ -122,6 +125,7 @@ Comprueba el estado y los registros:
 ```bash
 docker compose ps
 docker compose logs --tail=100 caddy savecloud-api create-bucket steam-seed-worker
+docker compose logs --tail=100 s3-events-worker elasticmq
 ```
 
 Para confirmar la emisión del certificado busca en `docker compose logs caddy` mensajes que indiquen que el certificado de `savecloud.example.com` y `s3.savecloud.example.com` fue emitido/almacenado. También puedes consultar el endpoint HTTPS:
@@ -155,6 +159,8 @@ docker compose up -d
 ```
 
 También puedes usar los scripts automatizados de la sección anterior. En Windows ejecuta `.\scripts\docker-up.ps1`; en Linux/macOS ejecuta `bash scripts/docker-up.sh`. La salida confirma cuándo la API, el bucket y el worker están listos y muestra las URLs locales.
+
+Para observar el volumen y la latencia agregada de las operaciones DynamoDB durante una prueba, configura `DYNAMODB_OPERATION_METRICS=true` en `.env` y recrea la API y el worker. Cada minuto se registra un resumen por operación, con cantidad, errores, promedio y máximo; los valores quedan desactivados por defecto.
 
 En el cliente de escritorio local configura `http://localhost:3000`; el WebSocket correspondiente usa `ws://localhost:3000/ws`. Los puertos de MinIO, su consola y DynamoDB no escuchan en interfaces públicas.
 

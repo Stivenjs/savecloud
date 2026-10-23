@@ -102,10 +102,13 @@ export interface RemoteStatusBreakdown {
 
 export interface RemoteCoverage {
   readonly samplesInWindow: number;
+  readonly requestsInWindow?: number;
+  readonly latencySamplesInWindow?: number;
   readonly oldestSampleAtMs: number | null;
   readonly newestSampleAtMs: number | null;
   readonly retentionLimit: number;
   readonly retainedSamples: number;
+  readonly counterBucketMs?: number;
 }
 
 export interface RemoteObservabilitySummary {

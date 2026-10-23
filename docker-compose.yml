@@ -27,6 +27,8 @@ services:
       - "127.0.0.1:${API_PORT:-3000}:3000"
     environment:
       - PORT=3000
+      - LOG_LEVEL=${LOG_LEVEL:-warn}
+      - HTTP_REQUEST_LOGS=${HTTP_REQUEST_LOGS:-false}
       - API_KEY=${SYNC_GAMES_API_KEY:-sg_secret_key_12345}
       - BUCKET_NAME=savecloud-saves
       - AWS_REGION=us-east-1
@@ -38,6 +40,9 @@ services:
       - S3_PUBLIC_ENDPOINT=${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       - S3_FORCE_PATH_STYLE=true
       - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+      - SQS_ENDPOINT=http://elasticmq:9324
+      - S3_EVENT_QUEUE_NAME=savecloud-s3-events
+      - S3_EVENT_QUEUE_URL=http://elasticmq:9324/000000000000/savecloud-s3-events
       - CLIPS_TABLE=savecloud-clips
       - CLOUD_INVITES_TABLE=savecloud-cloud-invites
       - CONNECTIONS_TABLE=savecloud-connections
@@ -50,6 +55,8 @@ services:
       minio:
         condition: service_started
       dynamodb-local:
+        condition: service_started
+      elasticmq:
         condition: service_started
     healthcheck:
       test:
@@ -73,6 +80,24 @@ services:
         condition: service_completed_successfully
     environment:
       - SEED_INTERVAL_MS=${SEED_INTERVAL_MS:-300000}
+
+  s3-events-worker:
+    extends:
+      service: savecloud-api
+    container_name: savecloud-s3-events-worker
+    command: ["bun", "dist/s3-events-worker.js"]
+    ports: !reset []
+    healthcheck:
+      disable: true
+    depends_on:
+      elasticmq:
+        condition: service_started
+      savecloud-api:
+        condition: service_healthy
+      dynamodb-local:
+        condition: service_started
+      create-bucket:
+        condition: service_completed_successfully
 
   minio:
     image: quay.io/minio/aistor/minio:latest
@@ -120,8 +145,17 @@ services:
     volumes:
       - dynamodb_data:/home/dynamodblocal/data
 
+  elasticmq:
+    image: softwaremill/elasticmq-native:1.7.1
+    container_name: savecloud-elasticmq
+    restart: unless-stopped
+    volumes:
+      - ./infra/elasticmq/elasticmq.conf:/opt/elasticmq.conf:ro
+      - elasticmq_data:/data
+
 volumes:
   caddy_data:
   caddy_config:
   minio_data:
   dynamodb_data:
+  elasticmq_data:

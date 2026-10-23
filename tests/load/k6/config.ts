@@ -23,11 +23,11 @@ const profiles = {
     thresholds: { http_req_failed: ["rate<0.01"], http_req_duration: ["p(95)<750"] },
   },
   stress: {
-    maxVUs: 50,
+    maxVUs: 100,
     stages: [
-      { duration: "1m", target: 10 },
-      { duration: "2m", target: 25 },
+      { duration: "1m", target: 20 },
       { duration: "2m", target: 50 },
+      { duration: "2m", target: 100 },
       { duration: "1m", target: 0 },
     ],
     thresholds: { http_req_failed: ["rate<0.05"], http_req_duration: ["p(95)<1500"] },
@@ -60,14 +60,31 @@ export const options: Options = {
 
 export const baseUrl = (__ENV.BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 export const apiKey = __ENV.SYNC_GAMES_API_KEY || "";
-export const userId = __ENV.USER_ID || "";
+const configuredUserIds = (__ENV.USER_IDS || "")
+  .split(",")
+  .map((userId) => userId.trim())
+  .filter(Boolean)
+  .filter((userId, index, ids) => ids.indexOf(userId) === index);
+const singleUserId = (__ENV.USER_ID || "").trim();
+const userIdPrefix = (__ENV.USER_ID_PREFIX || "savecloud-k6-user").trim() || "savecloud-k6-user";
+export const userIds =
+  configuredUserIds.length > 0
+    ? configuredUserIds
+    : singleUserId
+      ? [singleUserId]
+      : Array.from({ length: maxVUs }, (_, index) => `${userIdPrefix}-${String(index + 1).padStart(3, "0")}`);
+
+/** Asigna una identidad estable a cada VU y permite varios dispositivos por cuenta. */
+export function userIdForVu(vu: number): string {
+  return userIds[(vu - 1) % userIds.length] || "";
+}
 
 /**
- * Records status and latency assertions for an API response.
+ * Comprueba el estado y la latencia de una respuesta HTTP.
  *
- * @param response - HTTP response returned by a k6 request.
- * @param expected - Expected HTTP status code.
- * @param label - Human-readable operation name shown in the k6 report.
+ * @param response - Respuesta HTTP devuelta por k6.
+ * @param expected - Código de estado esperado.
+ * @param label - Nombre de la operación en el informe.
  */
 export function assertStatus(
   response: { status: number; timings: { duration: number } },

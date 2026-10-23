@@ -38,19 +38,17 @@ import type { ListBackupsUseCase } from "@application/use-cases/ListBackupsUseCa
 import type { DeleteBackupUseCase } from "@application/use-cases/DeleteBackupUseCase";
 import type { RenameBackupUseCase } from "@application/use-cases/RenameBackupUseCase";
 import type { ListSavesUseCase } from "@application/use-cases/ListSavesUseCase";
-import { invalidateListSavesByGameCache } from "@application/use-cases/ListSavesUseCase";
 import type { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
 import type { ResolveTargetStorageUserIdUseCase } from "@application/use-cases/ResolveTargetStorageUserIdUseCase";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import { getUserId } from "@interfaces/http/helpers/request-context";
 import { ApplicationError } from "@application/errors/ApplicationError";
-import { computeSavesEtag, computeSummaryEtag, send304IfNotModified, type SummaryEtagItem } from "@shared/etag";
+import { computeSavesEtag, computeSummaryEtag, send304IfNotModified } from "@shared/etag";
 import { getStorageUserIdFromRequest } from "@interfaces/http/helpers/saves-route-helpers";
 import {
   cacheBackups,
-  cacheSavesSummary,
   getCachedBackups,
-  getCachedSavesSummary,
+  getOrLoadSavesSummary,
   invalidateBackupsCache,
   invalidateSavesCaches,
 } from "@interfaces/http/helpers/saves-cache";
@@ -111,52 +109,43 @@ export async function registerSavesRoutes(
 
   app.get("/saves/summary", { schema: { response: { 200: GameSummaryResponseSchema } } }, async (request, reply) => {
     const userId = await getStorageUserIdFromRequest(request, deps.resolveCloudStorageScopeUseCase);
-    const cached = getCachedSavesSummary(userId);
-    if (cached) {
-      const etag = computeSummaryEtag(cached);
-      if (send304IfNotModified(request, reply, etag)) return;
-      return reply.send(cached);
-    }
+    const summary = await getOrLoadSavesSummary(userId, async () => {
+      if (deps.getGameSummaryUseCase) {
+        const rawSummary = await deps.getGameSummaryUseCase.execute(userId);
+        return rawSummary.map((s) => ({
+          gameId: s.gameId,
+          fileCount: s.fileCount,
+          totalSizeBytes: s.totalSizeBytes,
+          lastModified: s.lastModified ? s.lastModified.toISOString() : null,
+        }));
+      }
 
-    let summary: SummaryEtagItem[];
-
-    if (deps.getGameSummaryUseCase) {
-      const rawSummary = await deps.getGameSummaryUseCase.execute(userId);
-      summary = rawSummary.map((s) => ({
-        gameId: s.gameId,
-        fileCount: s.fileCount,
-        totalSizeBytes: s.totalSizeBytes,
-        lastModified: s.lastModified ? s.lastModified.toISOString() : null,
-      }));
-    } else {
       const saves = await deps.listSavesUseCase.execute({ userId });
       type Agg = { fileCount: number; totalSize: number; lastModified: Date | null };
       const byGame = new Map<string, Agg>();
 
-      for (const s of saves) {
-        const key = s.gameId;
-        const existing = byGame.get(key) ?? { fileCount: 0, totalSize: 0, lastModified: null };
+      for (const save of saves) {
+        const existing = byGame.get(save.gameId) ?? { fileCount: 0, totalSize: 0, lastModified: null };
         const nextLast =
-          existing.lastModified == null || (s.lastModified && s.lastModified > existing.lastModified)
-            ? (s.lastModified ?? existing.lastModified)
+          existing.lastModified == null || (save.lastModified && save.lastModified > existing.lastModified)
+            ? (save.lastModified ?? existing.lastModified)
             : existing.lastModified;
 
-        byGame.set(key, {
+        byGame.set(save.gameId, {
           fileCount: existing.fileCount + 1,
-          totalSize: existing.totalSize + (s.size ?? 0),
+          totalSize: existing.totalSize + (save.size ?? 0),
           lastModified: nextLast,
         });
       }
 
-      summary = Array.from(byGame.entries()).map(([gameId, agg]) => ({
+      return Array.from(byGame.entries()).map(([gameId, aggregate]) => ({
         gameId,
-        fileCount: agg.fileCount,
-        totalSizeBytes: agg.totalSize,
-        lastModified: agg.lastModified ? agg.lastModified.toISOString() : null,
+        fileCount: aggregate.fileCount,
+        totalSizeBytes: aggregate.totalSize,
+        lastModified: aggregate.lastModified ? aggregate.lastModified.toISOString() : null,
       }));
-    }
+    });
 
-    cacheSavesSummary(userId, summary);
     const etag = computeSummaryEtag(summary);
     if (send304IfNotModified(request, reply, etag)) return;
     return reply.send(summary);

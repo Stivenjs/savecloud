@@ -44,20 +44,43 @@ export class ListSavesUseCase {
       return saves;
     }
 
-    if (this.saveFileIndexRepository) {
-      const saves = await this.saveFileIndexRepository.listByUser(input.userId);
-      if (saves.length > 0) return saves;
-    }
+    const saveFileIndexRepository = this.saveFileIndexRepository;
+    if (!saveFileIndexRepository) return this.saveRepository.listByUser(input.userId);
 
-    return this.saveRepository.listByUser(input.userId);
+    return getOrLoadUserSaves(input.userId, async () => {
+      const saves = await saveFileIndexRepository.listByUser(input.userId);
+      return saves.length > 0 ? saves : this.saveRepository.listByUser(input.userId);
+    });
   }
 }
 
-// Cache por instancia: evita repetir listados del mismo juego en refrescos frecuentes de UI.
+// Cachés por instancia: reducen consultas repetidas sin mantener datos mucho tiempo.
 const listByUserAndGameCache = new TtlCache<string, GameSave[]>({ ttlMs: 10_000, maxEntries: 300 });
+const listByUserCache = new TtlCache<string, GameSave[]>({ ttlMs: 500, maxEntries: 300 });
+const listByUserInFlight = new Map<string, { promise: Promise<GameSave[]>; invalidated: boolean }>();
+
+async function getOrLoadUserSaves(userId: string, loader: () => Promise<GameSave[]>): Promise<GameSave[]> {
+  const cached = listByUserCache.get(userId);
+  if (cached) return cached;
+
+  const pending = listByUserInFlight.get(userId);
+  if (pending) return pending.promise;
+
+  const request = { promise: Promise.resolve([] as GameSave[]), invalidated: false };
+  request.promise = Promise.resolve().then(loader);
+  listByUserInFlight.set(userId, request);
+
+  try {
+    const saves = await request.promise;
+    if (!request.invalidated) listByUserCache.set(userId, saves);
+    return saves;
+  } finally {
+    if (listByUserInFlight.get(userId) === request) listByUserInFlight.delete(userId);
+  }
+}
 
 /**
- * Invalida la caché de listados filtrados por juego.
+ * Invalida las cachés de listados del usuario.
  *
  * - Si se pasa `gameId`, invalida solo esa clave.
  * - Si no se pasa, invalida todas las claves del usuario.
@@ -65,6 +88,10 @@ const listByUserAndGameCache = new TtlCache<string, GameSave[]>({ ttlMs: 10_000,
 export function invalidateListSavesByGameCache(userId: string, gameId?: string): void {
   const trimmedUserId = userId.trim();
   if (!trimmedUserId) return;
+
+  listByUserCache.delete(trimmedUserId);
+  const pendingUserList = listByUserInFlight.get(trimmedUserId);
+  if (pendingUserList) pendingUserList.invalidated = true;
 
   const trimmedGameId = gameId?.trim();
   if (trimmedGameId) {

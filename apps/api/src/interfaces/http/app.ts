@@ -29,6 +29,7 @@ import { registerShareModule } from "@interfaces/http/modules/share";
 import { registerClipsModule } from "@interfaces/http/modules/clips";
 import { registerHttpErrorHandler } from "@interfaces/http/error-handler";
 import { ApplicationError } from "@application/errors/ApplicationError";
+import { resolveHttpLoggingConfig } from "@interfaces/http/helpers/http-logging";
 
 export interface AppDependencies {
   saveRepository: SaveRepository;
@@ -42,6 +43,7 @@ export interface AppDependencies {
   notificationRepository?: NotificationRepository;
   connectionRepository?: ConnectionRepository;
   webSocketNotifier?: WebSocketNotifier;
+  processS3Events?: (events: import("@application/use-cases/ProcessS3EventUseCase").ProcessS3EventInput[]) => Promise<void>;
 }
 
 /**
@@ -64,11 +66,13 @@ declare module "fastify" {
 }
 
 export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> {
+  const loggingConfig = resolveHttpLoggingConfig();
+
   const app = Fastify({
     logger: {
-      level: process.env.LOG_LEVEL ?? "warn",
+      level: loggingConfig.level,
     },
-    logController: new LogController({ disableRequestLogging: process.env.HTTP_REQUEST_LOGS !== "true" }),
+    logController: new LogController({ disableRequestLogging: true }),
     trustProxy: true,
   });
 
@@ -91,7 +95,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     },
   });
 
-  registerHttpMetricsHooks(app);
+  registerHttpMetricsHooks(app, loggingConfig.requestLoggingEnabled);
   registerApiKeyAuthHook(app, process.env.API_KEY);
   const resolveCloudStorageScopeUseCase = await registerSavesModule(app, deps);
 
@@ -116,7 +120,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       ? new ProcessS3EventUseCase(deps.saveFileIndexRepository, deps.gameStatRepository)
       : undefined;
 
-  await registerWebhookRoutes(app, { processS3EventUseCase });
+  await registerWebhookRoutes(app, { processS3EventUseCase, processS3Events: deps.processS3Events });
   await registerWebSocketRoutes(app, { connectionRepository: deps.connectionRepository });
   await registerTrashModule(app, deps.saveRepository);
 
@@ -140,7 +144,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   return app;
 }
 
-function registerHttpMetricsHooks(app: FastifyInstance): void {
+function registerHttpMetricsHooks(app: FastifyInstance, requestLoggingEnabled: boolean): void {
   app.addHook("onRequest", async (request: FastifyRequest) => {
     request._scMetricsStartNs = process.hrtime.bigint();
   });
@@ -151,12 +155,24 @@ function registerHttpMetricsHooks(app: FastifyInstance): void {
 
     const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
     const path = (request.url ?? "").split("?")[0] ?? "";
-    if (path === "/health" || path === "/favicon.ico" || path.startsWith("/observability/")) return;
-
     const routeTemplate =
       typeof request.routeOptions?.url === "string" && request.routeOptions.url.length > 0
         ? request.routeOptions.url
         : null;
+
+    if (requestLoggingEnabled && path !== "/health" && path !== "/favicon.ico" && !path.startsWith("/observability/")) {
+      request.log.info(
+        {
+          method: request.method,
+          route: routeTemplate ?? "<ruta-no-encontrada>",
+          statusCode: reply.statusCode,
+          durationMs: Number(durationMs.toFixed(2)),
+        },
+        "Solicitud HTTP completada"
+      );
+    }
+
+    if (path === "/health" || path === "/favicon.ico" || path.startsWith("/observability/")) return;
 
     recordHttpMetric({
       method: request.method,

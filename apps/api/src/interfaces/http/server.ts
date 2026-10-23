@@ -5,6 +5,7 @@ import { createDynamoDbClient, ensureDynamoDbTablesExist } from "@infrastructure
 import { createApiStores } from "@infrastructure/factories/apiStoresFactory";
 import { startBunServer } from "@infrastructure/websocket/BunWebSocketServer";
 import { validateRuntimeConfiguration } from "@interfaces/configuration/runtimeConfiguration";
+import { createS3EventQueueClient, enqueueS3Events, ensureS3EventQueue } from "@infrastructure/queue/s3EventQueue";
 
 /** Puerto por defecto para el servidor HTTP de Fastify */
 const DEFAULT_SERVER_PORT = 3000;
@@ -21,6 +22,7 @@ const DEFAULT_NOTIFICATIONS_TABLE = "savecloud-notifications";
 const DEFAULT_SHARE_TOKENS_TABLE = "savecloud-share-tokens";
 const DEFAULT_CLOUD_INVITES_TABLE = "savecloud-cloud-invites";
 const DEFAULT_GAME_INVENTORY_TABLE = "savecloud-game-inventory";
+const SQS_MAX_BATCH_SIZE = 10;
 
 if (process.env.NODE_ENV === "production" && !process.env.DYNAMODB_ENDPOINT?.trim()) {
   validateRuntimeConfiguration("self-hosted");
@@ -76,6 +78,9 @@ const stores = createApiStores({
 const { connectionRepository } = stores;
 
 const webSocketNotifier = new FastifyWebSocketNotifier(connectionRepository);
+const s3EventQueueName = optionalEnv("S3_EVENT_QUEUE_NAME");
+const s3EventQueueClient = s3EventQueueName ? createS3EventQueueClient() : undefined;
+const s3EventQueueUrl = optionalEnv("S3_EVENT_QUEUE_URL");
 
 /**
  * Función de arranque principal de la API HTTP de SaveCloud.
@@ -89,6 +94,10 @@ async function main(): Promise<void> {
   console.log("[SaveCloud API] Starting server initialization...");
 
   try {
+    if (s3EventQueueClient && s3EventQueueName) {
+      if (!s3EventQueueUrl) throw new Error("S3_EVENT_QUEUE_URL es obligatorio cuando se configura S3_EVENT_QUEUE_NAME.");
+      await ensureS3EventQueue(s3EventQueueClient, s3EventQueueName);
+    }
     await ensureDynamoDbTablesExist(dynamoClient, {
       gameStatsTable,
       saveFilesIndexTable,
@@ -109,6 +118,17 @@ async function main(): Promise<void> {
     ...stores,
     connectionRepository,
     webSocketNotifier,
+    processS3Events: s3EventQueueClient && s3EventQueueName
+      ? async (events) => {
+          for (let offset = 0; offset < events.length; offset += SQS_MAX_BATCH_SIZE) {
+            await enqueueS3Events(
+              s3EventQueueClient,
+              s3EventQueueUrl!,
+              events.slice(offset, offset + SQS_MAX_BATCH_SIZE)
+            );
+          }
+        }
+      : undefined,
   });
 
   const port = Number(process.env.PORT) || DEFAULT_SERVER_PORT;

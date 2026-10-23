@@ -1,5 +1,5 @@
 import http from "k6/http";
-import { check, group } from "k6";
+import { check, group, sleep } from "k6";
 import type { LoadTestRun } from "@/helpers";
 import { apiHeaders, httpPost, parseJson, permanentlyDeleteGame } from "@/helpers";
 import { baseUrl, assertStatus } from "@/config";
@@ -14,11 +14,13 @@ interface SaveRecord {
   filename: string;
 }
 
+const INDEX_VISIBILITY_TIMEOUT_SECONDS = 5;
+const INDEX_POLL_INTERVAL_SECONDS = 0.2;
+
 /**
- * Performs a complete, isolated save upload cycle: request a presigned URL,
- * PUT a tiny object to S3, read it through the API, and permanently delete it.
+ * Ejecuta una carga aislada y espera la indexación asíncrona antes de borrar el objeto.
  *
- * @param run - Unique identifiers created in the k6 setup lifecycle.
+ * @param run - Identificadores únicos creados durante la preparación de k6.
  */
 export function writeCycleScenario(run: LoadTestRun): void {
   const gameId = `k6-${run.runId}-${__VU}`;
@@ -40,16 +42,22 @@ export function writeCycleScenario(run: LoadTestRun): void {
       });
       assertStatus(uploadResponse, 200, "S3 save upload");
 
-      const listResponse = http.get(`${baseUrl}/saves?gameId=${encodeURIComponent(gameId)}`, {
-        headers: apiHeaders(),
-        tags: { endpoint: "saves-list-after-upload" },
-      });
-      assertStatus(listResponse, 200, "save list after upload");
-      check(listResponse, {
-        "uploaded save is visible in the library": (response) =>
-          parseJson<SaveRecord[]>(response, "save list after upload").some(
-            (save) => save.gameId === gameId && save.filename === filename
-          ),
+      let saveIsVisible = false;
+      const deadline = Date.now() + INDEX_VISIBILITY_TIMEOUT_SECONDS * 1000;
+      while (!saveIsVisible && Date.now() < deadline) {
+        const listResponse = http.get(`${baseUrl}/saves?gameId=${encodeURIComponent(gameId)}`, {
+          headers: apiHeaders(),
+          tags: { endpoint: "saves-list-after-upload" },
+        });
+        assertStatus(listResponse, 200, "save list after upload");
+        saveIsVisible = parseJson<SaveRecord[]>(listResponse, "save list after upload").some(
+          (save) => save.gameId === gameId && save.filename === filename
+        );
+        if (!saveIsVisible) sleep(INDEX_POLL_INTERVAL_SECONDS);
+      }
+
+      check(saveIsVisible, {
+        "uploaded save is visible in the library": (visible) => visible,
       });
     } finally {
       permanentlyDeleteGame(gameId, "temporary-save-cleanup");
