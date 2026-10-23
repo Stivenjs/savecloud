@@ -93,11 +93,15 @@ done
 if [ "$choice" = 1 ]; then
   domain=localhost
   s3_endpoint=http://localhost:9000
+  log_level=info
+  http_request_logs=true
   echo "Modo local: la API y S3 estarán disponibles solo en esta computadora."
 else
   domain=$(read_domain)
   public_ipv4=$(read_public_ipv4)
   s3_endpoint="https://s3.$domain"
+  log_level=warn
+  http_request_logs=false
   echo
   echo "Antes del HTTPS automático, configura estos DNS en el panel de tu dominio:"
   echo "  Registro A   Host @    Apunta a: $public_ipv4"
@@ -117,6 +121,8 @@ api_port=${api_port:-3000}
 set_env DOMAIN "$domain"
 set_env S3_PUBLIC_ENDPOINT "$s3_endpoint"
 set_env API_PORT "$api_port"
+set_env LOG_LEVEL "$log_level"
+set_env HTTP_REQUEST_LOGS "$http_request_logs"
 
 api_key=$(read_env SYNC_GAMES_API_KEY)
 case "$api_key" in
@@ -151,6 +157,8 @@ set_env MINIO_LICENSE_PATH "$resolved_license_path"
 export DOMAIN="$domain"
 export S3_PUBLIC_ENDPOINT="$s3_endpoint"
 export API_PORT="$api_port"
+export LOG_LEVEL="$log_level"
+export HTTP_REQUEST_LOGS="$http_request_logs"
 export SYNC_GAMES_API_KEY="$api_key"
 export OBJECT_STORAGE_ACCESS_KEY="$object_user"
 export OBJECT_STORAGE_SECRET_KEY="$object_secret"

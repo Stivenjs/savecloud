@@ -27,6 +27,8 @@ services:
       - "127.0.0.1:${API_PORT:-3000}:3000"
     environment:
       - PORT=3000
+      - LOG_LEVEL=${LOG_LEVEL:-warn}
+      - HTTP_REQUEST_LOGS=${HTTP_REQUEST_LOGS:-false}
       - API_KEY=${SYNC_GAMES_API_KEY:-sg_secret_key_12345}
       - BUCKET_NAME=savecloud-saves
       - AWS_REGION=us-east-1

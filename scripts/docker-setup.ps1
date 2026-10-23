@@ -85,6 +85,8 @@ do {
 if ($choice -eq "1") {
   $domain = "localhost"
   $s3Endpoint = "http://localhost:9000"
+  $logLevel = "info"
+  $httpRequestLogs = "true"
   $apiPort = Get-EnvValue "API_PORT"
   if (-not $apiPort) { $apiPort = "3000" }
   Write-Host ""
@@ -93,6 +95,8 @@ if ($choice -eq "1") {
   $domain = Read-DomainName
   $publicIpv4 = Read-PublicIpv4
   $s3Endpoint = "https://s3.$domain"
+  $logLevel = "warn"
+  $httpRequestLogs = "false"
   $apiPort = Get-EnvValue "API_PORT"
   if (-not $apiPort) { $apiPort = "3000" }
 
@@ -111,6 +115,8 @@ if ($choice -eq "1") {
 Set-EnvValue "DOMAIN" $domain
 Set-EnvValue "S3_PUBLIC_ENDPOINT" $s3Endpoint
 Set-EnvValue "API_PORT" $apiPort
+Set-EnvValue "LOG_LEVEL" $logLevel
+Set-EnvValue "HTTP_REQUEST_LOGS" $httpRequestLogs
 
 $apiKey = Get-EnvValue "SYNC_GAMES_API_KEY"
 if (-not $apiKey -or $apiKey -match '^replace-with-' -or $apiKey -eq "sg_secret_key_12345") {
@@ -144,6 +150,8 @@ Set-EnvValue "MINIO_LICENSE_PATH" $licensePath
 $env:DOMAIN = $domain
 $env:S3_PUBLIC_ENDPOINT = $s3Endpoint
 $env:API_PORT = $apiPort
+$env:LOG_LEVEL = $logLevel
+$env:HTTP_REQUEST_LOGS = $httpRequestLogs
 $env:SYNC_GAMES_API_KEY = $apiKey
 $env:OBJECT_STORAGE_ACCESS_KEY = $objectUser
 $env:OBJECT_STORAGE_SECRET_KEY = $objectSecret
