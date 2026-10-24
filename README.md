@@ -38,7 +38,7 @@ SaveCloud puede desplegarse en **AWS Cloud** o autohospedarse en tu propio servi
 
 ## Stack del backend
 
-- **Runtime:** Bun (local) / Node.js 20 (Lambda)
+- **Runtime:** Bun (local y Docker) / Node.js 24.x (AWS Lambda)
 - **Lenguaje:** TypeScript
 - **API:** Fastify
 - **Deploy:** Serverless Framework → AWS Lambda + API Gateway
