@@ -60,9 +60,11 @@ interface LatencyBarProps {
   p95: number | null;
   p99?: number | null;
   ceiling?: number;
+  sampleCount?: number | null;
+  requestCount?: number | null;
 }
 
-function LatencyBar({ p50, p95, p99, ceiling = 2500 }: LatencyBarProps) {
+function LatencyBar({ p50, p95, p99, ceiling = 2500, sampleCount, requestCount }: LatencyBarProps) {
   const { t } = useTranslation();
   const safeP50 = p50 ?? 0;
   const safeP95 = p95 ?? 0;
@@ -75,10 +77,8 @@ function LatencyBar({ p50, p95, p99, ceiling = 2500 }: LatencyBarProps) {
   return (
     <div className="space-y-2 px-4 py-3">
       <div className="flex items-center justify-between text-[10px] font-medium uppercase tracking-[0.14em] text-default-400">
-        <span>Latencia API · /saves</span>
-        <span className="font-mono text-default-500">
-          {t("settings.health.snapshotPrefix")} P95 &lt; {ceiling}ms
-        </span>
+        <span>{t("settings.health.serverApiLatency")}</span>
+        <span className="font-mono text-default-500">{t("settings.health.serverLatencyTarget", { ceiling })}</span>
       </div>
       <div className="relative h-2 overflow-hidden rounded-full bg-default-200/60">
         <div
@@ -108,6 +108,11 @@ function LatencyBar({ p50, p95, p99, ceiling = 2500 }: LatencyBarProps) {
           P99 <span className="text-foreground">{formatNumber(p99 ?? null, " ms")}</span>
         </span>
       </div>
+      {sampleCount != null && requestCount != null ? (
+        <p className="text-[10px] text-default-500">
+          {t("settings.health.serverLatencyCoverage", { samples: sampleCount, requests: requestCount })}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -392,9 +397,15 @@ export function HealthObservabilityCard() {
               </div>
               <div className="flex flex-col items-end font-mono text-[11px] text-default-500">
                 <span>
-                  {t("settings.health.snapshotPrefix")}{" "}
+                  {t("settings.health.clientSnapshotLabel")}{" "}
                   <span className="text-foreground">{formatRelative(data.local.generatedAtMs)}</span>
                 </span>
+                {remoteCoverage ? (
+                  <span>
+                    {t("settings.health.serverLastRequestLabel")}{" "}
+                    <span className="text-foreground">{formatRelative(remoteCoverage.newestSampleAtMs)}</span>
+                  </span>
+                ) : null}
                 {data.local.cloud.apiBaseHostPreview ? (
                   <span className="opacity-70">host {data.local.cloud.apiBaseHostPreview}</span>
                 ) : null}
@@ -421,9 +432,11 @@ export function HealthObservabilityCard() {
               <div className="bg-content1">
                 <MetricCell
                   label={t("settings.health.serverWebSocket")}
-                  value={data.remote?.websocket?.activeConnections != null
-                    ? String(data.remote.websocket.activeConnections)
-                    : "—"}
+                  value={
+                    data.remote?.websocket?.activeConnections != null
+                      ? String(data.remote.websocket.activeConnections)
+                      : "—"
+                  }
                   hint={
                     data.remote?.websocket?.scope === "api_process"
                       ? t("settings.health.serverWebSocketScope")
@@ -433,30 +446,44 @@ export function HealthObservabilityCard() {
               </div>
               <div className="bg-content1">
                 <MetricCell
-                  label="API P50"
-                  value={formatNumber(data.local.syncApi.p50Ms, "ms")}
-                  hint={t("settings.health.samples", { count: data.local.syncApi.sampleCount })}
+                  label={t("settings.health.serverApiP50")}
+                  value={formatNumber(remoteTotals?.p50Ms, "ms")}
+                  hint={
+                    remoteCoverage?.latencySamplesInWindow != null
+                      ? t("settings.health.serverLatencySampleCount", {
+                          count: remoteCoverage.latencySamplesInWindow,
+                        })
+                      : t("settings.health.serverMetricsUnavailable")
+                  }
                 />
               </div>
               <div className="bg-content1">
                 <MetricCell
-                  label="API P95"
-                  value={formatNumber(data.local.syncApi.p95Ms, "ms")}
-                  hint={t("settings.health.windowLabel", { window: "15m" })}
+                  label={t("settings.health.serverApiP95")}
+                  value={formatNumber(remoteTotals?.p95Ms, "ms")}
+                  hint={
+                    remoteTotals
+                      ? t("settings.health.windowLabel", { window: data.remote?.window ?? remoteWindow })
+                      : t("settings.health.serverMetricsUnavailable")
+                  }
                   intent={kpis.p95Intent}
                 />
               </div>
               <div className="bg-content1">
                 <MetricCell
-                  label="Error rate"
+                  label={t("settings.health.serverErrorRate")}
                   value={formatPercent(kpis.errorRate)}
-                  hint={t("settings.health.errorsCount", { count: data.local.syncApi.errorCount })}
+                  hint={
+                    remoteTotals
+                      ? t("settings.health.errorsCount", { count: remoteTotals.errors ?? 0 })
+                      : t("settings.health.serverMetricsUnavailable")
+                  }
                   intent={kpis.errorRateIntent}
                 />
               </div>
               <div className="bg-content1">
                 <MetricCell
-                  label="En cola"
+                  label={t("settings.health.wsQueue")}
                   value={String(data.local.ws.pendingQueueLen)}
                   hint={t("settings.health.unreadCount", { count: data.local.notifications.unreadCount })}
                   intent={kpis.pendingIntent}
@@ -467,7 +494,31 @@ export function HealthObservabilityCard() {
             <div className="border-t border-default-200" />
 
             <section>
-              <LatencyBar p50={data.local.syncApi.p50Ms} p95={data.local.syncApi.p95Ms} />
+              <LatencyBar
+                p50={remoteTotals?.p50Ms ?? null}
+                p95={remoteTotals?.p95Ms ?? null}
+                p99={remoteTotals?.p99Ms ?? null}
+                sampleCount={remoteCoverage?.latencySamplesInWindow ?? null}
+                requestCount={remoteTotals?.requests ?? null}
+              />
+            </section>
+
+            <section className="border-t border-default-200 px-4 py-2.5">
+              <div className="text-[10px] font-medium uppercase tracking-[0.14em] text-default-400">
+                {t("settings.health.clientDiagnostics")}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-default-500">
+                <span>P50 {formatNumber(data.local.syncApi.p50Ms, " ms")}</span>
+                <span>P95 {formatNumber(data.local.syncApi.p95Ms, " ms")}</span>
+                <span>{t("settings.health.clientHttpResponses", { count: data.local.syncApi.sampleCount })}</span>
+                <span>
+                  {t("settings.health.clientLatencySamples", {
+                    count: Math.max(0, data.local.syncApi.sampleCount - data.local.syncApi.errorCount),
+                  })}
+                </span>
+                <span>{t("settings.health.errorsCount", { count: data.local.syncApi.errorCount })}</span>
+              </div>
+              <p className="mt-1 text-[10px] text-default-500">{t("settings.health.clientDiagnosticsDetails")}</p>
             </section>
 
             {buckets.length > 0 ? (
@@ -521,11 +572,16 @@ export function HealthObservabilityCard() {
                         <span>{formatRps(remoteTotals.rpsAvg)}</span>
                       </li>
                     </ul>
-                    {remoteCoverage?.latencySamplesInWindow != null && (
+                    {remoteCoverage?.latencySamplesInWindow != null && remoteCoverage.counterBucketMs != null && (
                       <p className="mt-2 text-[10px] text-default-500">
-                        Conteos agregados por intervalos de {((remoteCoverage.counterBucketMs ?? 0) / 1000).toFixed(0)} s · percentiles sobre {remoteCoverage.latencySamplesInWindow.toLocaleString()} mediciones recientes
+                        {t("settings.health.serverTrafficCoverage", {
+                          seconds: (remoteCoverage.counterBucketMs / 1000).toFixed(0),
+                          samples: remoteCoverage.latencySamplesInWindow.toLocaleString(),
+                          requests: remoteCoverage.requestsInWindow?.toLocaleString() ?? remoteTotals.requests,
+                        })}
                       </p>
                     )}
+                    <p className="mt-1 text-[10px] text-default-500">{t("settings.health.serverMetricsScope")}</p>
                   </>
                 ) : (
                   <p
@@ -581,7 +637,9 @@ export function HealthObservabilityCard() {
               <div className="px-5 py-3">
                 <div className="mb-2 flex items-center justify-between text-[11px] font-medium uppercase tracking-[0.14em] text-default-400">
                   <span>{t("settings.health.recentErrors")}</span>
-                  <span className="font-mono lowercase text-default-500">{remoteWindow}</span>
+                  <span className="font-mono lowercase text-default-500">
+                    {t("settings.health.clientErrorsWindow")}
+                  </span>
                 </div>
                 {data.local.recentErrors.length === 0 ? (
                   <p className="text-[12px] text-default-500">{t("settings.health.noErrorsInWindow")}</p>

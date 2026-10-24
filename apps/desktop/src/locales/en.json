@@ -954,7 +954,8 @@
       "refreshAria": "Refresh telemetry",
       "loadError": "Could not load telemetry",
       "retry": "Retry",
-      "snapshotPrefix": "snapshot",
+      "clientSnapshotLabel": "Client",
+      "serverLastRequestLabel": "API · last request:",
       "clientWebSocket": "Client WS",
       "connectionsOk": "Successful connections: {{count}}",
       "serverWebSocket": "Server WS",
@@ -964,8 +965,24 @@
       "unconfigured": "unconfigured",
       "samples": "{{count}} samples",
       "windowLabel": "window {{window}}",
+      "clientErrorsWindow": "client · 15m",
+      "serverApiLatency": "API latency · server",
+      "serverLatencyTarget": "P95 target < {{ceiling}} ms",
+      "serverApiP50": "Server API P50",
+      "serverApiP95": "Server API P95",
+      "serverErrorRate": "Server API error rate",
+      "serverLatencySampleCount": "{{count}} measured responses",
+      "serverLatencyCoverage": "Percentiles use {{samples}} responses without errors; requests in window: {{requests}}.",
+      "serverTrafficCoverage": "Counts grouped every {{seconds}} s; percentiles use {{samples}} responses without errors out of {{requests}} requests.",
+      "serverMetricsScope": "Data from this process, not globally aggregated in AWS. /health and /observability are excluded.",
+      "serverMetricsUnavailable": "Server metrics unavailable",
+      "clientDiagnostics": "Supplementary diagnostics · client · sync HTTP",
+      "clientDiagnosticsDetails": "Last 15 min; buffer holds up to 400 responses. Excludes S3 transfers and WebSocket; connection failures may not be counted.",
+      "clientHttpResponses": "{{count}} HTTP responses",
+      "clientLatencySamples": "{{count}} successful responses used for percentiles",
+      "wsQueue": "WS queue",
       "errorsCount": "{{count}} errors",
-      "unreadCount": "unread {{count}}",
+      "unreadCount": "unread notifications: {{count}}",
       "apiTraffic": "API Traffic · {{window}}",
       "serverTraffic": "Server · {{window}}",
       "noRemoteData": "No remote data. Verify that API exposes <code class=\"font-mono\">{{path}}</code>.",
@@ -995,6 +1012,10 @@
         "critical": {
           "label": "CRITICAL",
           "detail": "intervention suggested"
+        },
+        "unknown": {
+          "label": "NO DATA",
+          "detail": "not enough server metrics to evaluate"
         }
       },
       "relative": {

@@ -33,6 +33,13 @@ export function getSeverityVisual(severity: ObservabilitySeverity): SeverityVisu
         dotClass: "bg-rose-500 shadow-[0_0_0_4px_rgba(244,63,94,0.20)]",
         pillClass: "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300",
       };
+    case "unknown":
+      return {
+        label: i18n.t("settings.health.severity.unknown.label", "SIN DATOS"),
+        detail: i18n.t("settings.health.severity.unknown.detail", "no hay métricas de servidor suficientes"),
+        dotClass: "bg-default-400 shadow-[0_0_0_4px_rgba(148,163,184,0.16)]",
+        pillClass: "border-default-300 bg-default-100 text-default-600 dark:text-default-300",
+      };
   }
 }
 
@@ -41,8 +48,8 @@ export function formatNumber(n: number | null | undefined, suffix = ""): string 
   return `${Math.round(n)}${suffix}`;
 }
 
-export function formatPercent(rate: number, fractionDigits = 1): string {
-  if (!Number.isFinite(rate)) return "—";
+export function formatPercent(rate: number | null | undefined, fractionDigits = 1): string {
+  if (rate == null || !Number.isFinite(rate)) return "—";
   return `${(rate * 100).toFixed(fractionDigits)}%`;
 }
 
@@ -76,23 +83,26 @@ export function timeOfDay(tsMs: number): string {
 
 export interface KpiSnapshot {
   wsState: "online" | "offline" | "unconfigured";
-  errorRate: number;
+  errorRate: number | null;
   errorRateIntent: "neutral" | "warn" | "danger";
   p95Intent: "neutral" | "warn" | "danger";
   pendingIntent: "neutral" | "warn" | "danger";
 }
 
 export function deriveKpis(data: MergedObservability): KpiSnapshot {
-  const sample = data.local.syncApi.sampleCount;
-  const rate = sample > 0 ? data.local.syncApi.errorCount / sample : 0;
+  const serverTotals = data.remote?.totals;
+  const serverRequests = serverTotals?.requests ?? 0;
+  const serverErrors = serverTotals?.errors ?? 0;
+  const rate = serverTotals?.errorRate ?? (serverRequests > 0 ? serverErrors / serverRequests : null);
   return {
     wsState: !data.local.cloud.configured ? "unconfigured" : data.local.ws.connected ? "online" : "offline",
     errorRate: rate,
-    errorRateIntent: rate > 0.25 && sample >= 5 ? "danger" : rate > 0.1 && sample >= 5 ? "warn" : "neutral",
+    errorRateIntent:
+      rate != null && serverRequests >= 5 ? (rate > 0.25 ? "danger" : rate > 0.1 ? "warn" : "neutral") : "neutral",
     p95Intent:
-      data.local.syncApi.p95Ms != null && data.local.syncApi.p95Ms > 2500
+      serverTotals?.p95Ms != null && serverTotals.p95Ms > 2500
         ? "danger"
-        : data.local.syncApi.p95Ms != null && data.local.syncApi.p95Ms > 1500
+        : serverTotals?.p95Ms != null && serverTotals.p95Ms > 1500
           ? "warn"
           : "neutral",
     pendingIntent: data.local.ws.pendingQueueLen > 20 ? "warn" : "neutral",

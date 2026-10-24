@@ -474,10 +474,7 @@ function buildBuckets(
     }
   }
   for (const countBucket of countBuckets) {
-    const idx = Math.min(
-      BUCKET_COUNT - 1,
-      Math.max(0, Math.floor((countBucket.startMs - start) / bucketMs))
-    );
+    const idx = Math.min(BUCKET_COUNT - 1, Math.max(0, Math.floor((countBucket.startMs - start) / bucketMs)));
     const slot = buckets[idx];
     if (!slot) continue;
     slot.requests += countBucket.total.requests;
@@ -669,6 +666,7 @@ export function summarizeHttpMetrics(windowParam: string): ObservabilitySummaryD
   const oldestTs = counters.oldestRequestAtMs;
   const newestTs = counters.newestRequestAtMs;
   const buckets = buildBuckets(rows, countBuckets, windowMs, now);
+  const successfulLatencySamples = rows.filter((row) => row.statusCode < 400).length;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -701,7 +699,7 @@ export function summarizeHttpMetrics(windowParam: string): ObservabilitySummaryD
     coverage: {
       samplesInWindow: rows.length,
       requestsInWindow: totalsN,
-      latencySamplesInWindow: rows.length,
+      latencySamplesInWindow: successfulLatencySamples,
       oldestSampleAtMs: oldestTs,
       newestSampleAtMs: newestTs,
       retentionLimit: MAX_SAMPLES,
