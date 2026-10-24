@@ -1,6 +1,6 @@
 # STAGE 1: Builder (Compilación y Bundling)
 
-FROM oven/bun:1.2-alpine AS builder
+FROM oven/bun:1.4.4-alpine AS builder
 WORKDIR /app
 
 # Copiar manifiestos y configuración de TypeScript para workspaces
@@ -32,7 +32,7 @@ COPY apps/desktop/src-tauri/icons/Square310x310Logo.png ./dist/assets/savecloud-
 
 # STAGE 2: Production Runner
 
-FROM oven/bun:1.2-alpine AS runner
+FROM oven/bun:1.4.4-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
