@@ -58,7 +58,7 @@ export interface DesktopHealthSnapshot {
   readonly suggestedActions: readonly SuggestedAction[];
 }
 
-export type ObservabilitySeverity = "ok" | "warning" | "critical";
+export type ObservabilitySeverity = "ok" | "warning" | "critical" | "unknown";
 
 export interface ScopeSummaryDto {
   readonly requests: number;

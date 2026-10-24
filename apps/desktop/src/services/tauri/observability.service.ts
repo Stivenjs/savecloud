@@ -62,12 +62,16 @@ function overallSeverity(
     if (offMs > 30_000) return "warning";
   }
 
-  const rate = local.syncApi.sampleCount > 0 ? local.syncApi.errorCount / local.syncApi.sampleCount : 0;
-  if (local.syncApi.sampleCount >= 8 && rate > 0.25) return "critical";
-  if (local.syncApi.sampleCount >= 5 && rate > 0.15) return "warning";
+  const clientRate = local.syncApi.sampleCount > 0 ? local.syncApi.errorCount / local.syncApi.sampleCount : 0;
+  if (local.syncApi.sampleCount >= 8 && clientRate > 0.25) return "critical";
+  if (local.syncApi.sampleCount >= 5 && clientRate > 0.15) return "warning";
 
-  const rRate = remote?.totals?.requests ? (remote.totals.errors ?? 0) / (remote.totals.requests || 1) : 0;
-  if ((remote?.totals?.requests ?? 0) >= 20 && rRate > 0.2) return "warning";
+  const server = remote?.totals;
+  if (!server || server.requests == null || server.requests < 5) return "unknown";
+
+  const serverRate = server.errorRate ?? (server.requests > 0 ? (server.errors ?? 0) / server.requests : 0);
+  if (serverRate > 0.25 || (server.p95Ms != null && server.p95Ms > 2500)) return "critical";
+  if (serverRate > 0.1 || (server.p95Ms != null && server.p95Ms > 1500)) return "warning";
 
   return "ok";
 }
@@ -75,7 +79,7 @@ function overallSeverity(
 export async function fetchMergedObservability(window: string): Promise<MergedObservability> {
   const [local, remoteRaw] = await Promise.all([
     getLocalObservabilitySnapshot(),
-    getRemoteObservabilitySummaryRaw(window),
+    getRemoteObservabilitySummaryRaw(window).catch(() => null),
   ]);
   const remote = remoteRaw && isRecord(remoteRaw as object) ? (remoteRaw as RemoteObservabilitySummary) : null;
   return {

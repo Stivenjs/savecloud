@@ -954,7 +954,8 @@
       "refreshAria": "Refrescar telemetría",
       "loadError": "No se pudo cargar la telemetría",
       "retry": "Reintentar",
-      "snapshotPrefix": "snapshot",
+      "clientSnapshotLabel": "Cliente",
+      "serverLastRequestLabel": "API · última petición:",
       "clientWebSocket": "WS cliente",
       "connectionsOk": "Conexiones exitosas: {{count}}",
       "serverWebSocket": "WS servidor",
@@ -964,8 +965,24 @@
       "unconfigured": "sin configurar",
       "samples": "{{count}} muestras",
       "windowLabel": "ventana {{window}}",
+      "clientErrorsWindow": "cliente · 15m",
+      "serverApiLatency": "Latencia API · servidor",
+      "serverLatencyTarget": "objetivo P95 < {{ceiling}} ms",
+      "serverApiP50": "API servidor P50",
+      "serverApiP95": "API servidor P95",
+      "serverErrorRate": "Tasa de error API servidor",
+      "serverLatencySampleCount": "{{count}} respuestas medidas",
+      "serverLatencyCoverage": "Percentiles sobre {{samples}} respuestas sin error; solicitudes en la ventana: {{requests}}.",
+      "serverTrafficCoverage": "Conteos agrupados cada {{seconds}} s; percentiles sobre {{samples}} respuestas sin error de {{requests}} solicitudes.",
+      "serverMetricsScope": "Datos de este proceso, no globales en AWS. Se excluyen /health y /observability.",
+      "serverMetricsUnavailable": "Métricas del servidor no disponibles",
+      "clientDiagnostics": "Diagnóstico complementario · cliente · HTTP de sincronización",
+      "clientDiagnosticsDetails": "Últimos 15 min; búfer de hasta 400 respuestas. No incluye transferencias S3 ni WebSocket; fallos de conexión pueden quedar fuera del conteo.",
+      "clientHttpResponses": "{{count}} respuestas HTTP",
+      "clientLatencySamples": "{{count}} respuestas sin error para percentiles",
+      "wsQueue": "Cola WS",
       "errorsCount": "{{count}} errores",
-      "unreadCount": "unread {{count}}",
+      "unreadCount": "notificaciones sin leer: {{count}}",
       "apiTraffic": "Tráfico API · {{window}}",
       "serverTraffic": "Servidor · {{window}}",
       "noRemoteData": "Sin datos remotos. Revisa que la API exponga <code class=\"font-mono\">{{path}}</code>.",
@@ -995,6 +1012,10 @@
         "critical": {
           "label": "CRÍTICO",
           "detail": "intervención sugerida"
+        },
+        "unknown": {
+          "label": "SIN DATOS",
+          "detail": "métricas de servidor insuficientes para evaluar"
         }
       },
       "relative": {
