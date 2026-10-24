@@ -50,7 +50,27 @@ const profiles = {
       { duration: "1m", target: 25 },
       { duration: "30s", target: 0 },
     ],
-    thresholds: { http_req_failed: ["rate<0.05"], http_req_duration: ["p(95)<1500"] },
+    thresholds: {
+      http_req_failed: ["rate<0.05"],
+      http_req_duration: ["p(95)<1500"],
+      ws_handshake_success: ["rate>0.99"],
+      ws_pong_success: ["rate>0.99"],
+      ws_pong_latency_ms: ["p(95)<500"],
+    },
+  },
+  ws: {
+    maxVUs: 10,
+    executor: "ramping-vus",
+    stages: [
+      { duration: "1m", target: 10 },
+      { duration: "3m", target: 10 },
+      { duration: "1m", target: 0 },
+    ],
+    thresholds: {
+      ws_handshake_success: ["rate>0.99"],
+      ws_pong_success: ["rate>0.99"],
+      ws_pong_latency_ms: ["p(95)<500"],
+    },
   },
 } satisfies Record<string, LoadProfile>;
 
@@ -82,15 +102,34 @@ const workloadScenario =
         stages: selected.stages,
       };
 
+const scenarios: NonNullable<Options["scenarios"]> =
+  profile === "capacity"
+    ? {
+        api_capacity: { ...workloadScenario, exec: "default" },
+        websocket_presence: {
+          executor: "constant-vus",
+          vus: 25,
+          duration: "4m",
+          gracefulStop: "30s",
+          exec: "websocketLoad",
+        },
+      }
+    : profile === "ws"
+      ? { websocket_connections: { ...workloadScenario, exec: "websocketLoad" } }
+      : { mixed_api_workload: workloadScenario };
+
 export const options: Options = {
-  scenarios: {
-    [profile === "capacity" ? "api_capacity" : "mixed_api_workload"]: workloadScenario,
-  },
+  scenarios,
   thresholds: selected.thresholds,
   userAgent: "SaveCloud-k6/1.0",
 };
 
 export const baseUrl = (__ENV.BASE_URL || "http://localhost:3000").replace(/\/$/, "");
+export const wsBaseUrl = (__ENV.WS_BASE_URL || baseUrl)
+  .replace(/^https:/, "wss:")
+  .replace(/^http:/, "ws:")
+  .replace(/\/$/, "");
+export const wsEndpoint = __ENV.WS_BASE_URL?.trim() || `${wsBaseUrl}/ws`;
 export const apiKey = __ENV.SYNC_GAMES_API_KEY || "";
 const configuredUserIds = (__ENV.USER_IDS || "")
   .split(",")

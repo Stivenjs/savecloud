@@ -118,6 +118,7 @@ async function main(): Promise<void> {
     ...stores,
     connectionRepository,
     webSocketNotifier,
+    getActiveWebSocketConnectionCount: () => webSocketNotifier.getActiveConnectionCount(),
     processS3Events: s3EventQueueClient && s3EventQueueName
       ? async (events) => {
           for (let offset = 0; offset < events.length; offset += SQS_MAX_BATCH_SIZE) {

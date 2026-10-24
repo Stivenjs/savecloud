@@ -403,10 +403,10 @@ export function HealthObservabilityCard() {
 
             <div className="border-t border-default-200" />
 
-            <section className="grid grid-cols-2 gap-px bg-default-200/60 sm:grid-cols-5">
+            <section className="grid grid-cols-2 gap-px bg-default-200/60 sm:grid-cols-6">
               <div className="bg-content1">
                 <MetricCell
-                  label="WebSocket"
+                  label={t("settings.health.clientWebSocket")}
                   value={kpis.wsState === "online" ? "Online" : kpis.wsState === "offline" ? "Offline" : "—"}
                   hint={
                     kpis.wsState === "online"
@@ -416,6 +416,19 @@ export function HealthObservabilityCard() {
                         : t("settings.health.unconfigured")
                   }
                   intent={kpis.wsState === "offline" ? "warn" : "neutral"}
+                />
+              </div>
+              <div className="bg-content1">
+                <MetricCell
+                  label={t("settings.health.serverWebSocket")}
+                  value={data.remote?.websocket?.activeConnections != null
+                    ? String(data.remote.websocket.activeConnections)
+                    : "—"}
+                  hint={
+                    data.remote?.websocket?.scope === "api_process"
+                      ? t("settings.health.serverWebSocketScope")
+                      : t("settings.health.serverWebSocketUnavailable")
+                  }
                 />
               </div>
               <div className="bg-content1">

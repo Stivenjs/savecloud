@@ -44,6 +44,7 @@ export interface AppDependencies {
   notificationRepository?: NotificationRepository;
   connectionRepository?: ConnectionRepository;
   webSocketNotifier?: WebSocketNotifier;
+  getActiveWebSocketConnectionCount?: () => number;
   processS3Events?: (events: import("@application/use-cases/ProcessS3EventUseCase").ProcessS3EventInput[]) => Promise<void>;
 }
 
@@ -140,7 +141,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     }
   );
 
-  await registerObservabilityRoutes(app, summarizeHttpMetrics);
+  await registerObservabilityRoutes(app, summarizeHttpMetrics, deps.getActiveWebSocketConnectionCount);
 
   return app;
 }

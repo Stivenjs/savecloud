@@ -5,6 +5,7 @@ import { healthSetupCheck } from "@/scenarios/health";
 import { readScenario } from "@/scenarios/read";
 import { presignScenario } from "@/scenarios/presign";
 import { writeCycleScenario } from "@/scenarios/write-cycle";
+import { CAPACITY_WEBSOCKET_DURATION_MS, webSocketScenario } from "@/scenarios/websocket";
 
 export { options };
 
@@ -27,7 +28,7 @@ export function setup(): LoadTestRun {
   }
   console.log(`Población k6: ${maxVUs} dispositivos virtuales y ${activeUserCount} identidades activas.`);
   console.log(`Identidades activas: ${userIds[0]} … ${userIds[activeUserCount - 1]}`);
-  console.log(`Espacio temporal k6: k6-${runId}-<VU>`);
+  if (profile !== "ws") console.log(`Espacio temporal k6: k6-${runId}-<VU>`);
   return { runId, maxVUs, userIds };
 }
 
@@ -57,12 +58,19 @@ export default function (run: LoadTestRun): void {
   if (profile !== "capacity") sleep(2 + Math.random() * 4);
 }
 
+/** Ejecuta conexiones persistentes en escenarios WS aislados del flujo HTTP. */
+export function websocketLoad(): void {
+  webSocketScenario(profile === "capacity" ? CAPACITY_WEBSOCKET_DURATION_MS : undefined);
+}
+
 /**
  * Limpia los prefijos temporales al terminar; cada ciclo también limpia en finally.
  *
  * @param run - Identificadores compartidos creados por setup.
  */
 export function teardown(run: LoadTestRun): void {
+  if (profile === "ws") return;
+
   for (let vu = 1; vu <= run.maxVUs; vu += 1) {
     const userId = userIdForVu(vu);
     permanentlyDeleteGame(`k6-${run.runId}-${vu}`, "run-teardown-cleanup", userId);

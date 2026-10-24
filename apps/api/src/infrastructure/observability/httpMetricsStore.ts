@@ -403,6 +403,10 @@ export interface ObservabilityAlertItemDto {
 export interface ObservabilitySummaryDto {
   generatedAt: string;
   window: string;
+  websocket?: {
+    activeConnections: number | null;
+    scope: "api_process" | "unavailable";
+  };
   totals: {
     requests: number;
     errors: number;
