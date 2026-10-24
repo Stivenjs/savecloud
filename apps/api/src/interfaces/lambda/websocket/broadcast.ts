@@ -88,6 +88,20 @@ export const handler = async (event: APIGatewayProxyWebsocketEventV2): Promise<L
 
   const isStopSignal = parsedGameId.length === 0;
 
+  const broadcastUseCase = new BroadcastActivityUseCase(inviteRepo, connectionRepo, ws);
+  let broadcastSucceeded = true;
+  try {
+    await broadcastUseCase.execute({
+      broadcasterUserId: verifiedUserId,
+      presenceStatus: isStopSignal ? "online" : "playing",
+      gameId: isStopSignal ? undefined : parsedGameId,
+      gameName: isStopSignal ? undefined : normalizedGameName || parsedGameId,
+    });
+  } catch (error) {
+    broadcastSucceeded = false;
+    console.error("[ws:broadcast] Error broadcasting", { connectionId, error });
+  }
+
   try {
     await connectionRepo.setConnectionActivity(connectionId, {
       lastActivityAt: Date.now(),
@@ -96,19 +110,10 @@ export const handler = async (event: APIGatewayProxyWebsocketEventV2): Promise<L
     });
   } catch (error) {
     console.error("[ws:broadcast] Error actualizando actividad en DynamoDB", { connectionId, error });
-  }
-
-  const broadcastUseCase = new BroadcastActivityUseCase(inviteRepo, connectionRepo, ws);
-  try {
-    await broadcastUseCase.execute({
-      broadcasterUserId: verifiedUserId,
-      presenceStatus: isStopSignal ? "online" : "playing",
-      gameId: isStopSignal ? undefined : parsedGameId,
-      gameName: isStopSignal ? undefined : normalizedGameName || parsedGameId,
-    });
-    return { statusCode: 200, body: "Broadcast sent" };
-  } catch (error) {
-    console.error("[ws:broadcast] Error broadcasting", { connectionId, error });
     return { statusCode: 500, body: "Internal error" };
   }
+
+  return broadcastSucceeded
+    ? { statusCode: 200, body: "Broadcast sent" }
+    : { statusCode: 500, body: "Internal error" };
 };

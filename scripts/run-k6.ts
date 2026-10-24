@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const profile = Bun.argv[2];
-if (!profile || !["smoke", "load", "stress"].includes(profile)) {
-  console.error("Uso: bun run scripts/run-k6.ts <smoke|load|stress>");
+if (!profile || !["smoke", "load", "stress", "capacity", "ws"].includes(profile)) {
+  console.error("Uso: bun run scripts/run-k6.ts <smoke|load|stress|capacity|ws>");
   process.exit(2);
 }
 
@@ -44,7 +44,7 @@ try {
   });
 
   const args = ["run", "-e", `TEST_PROFILE=${profile}`];
-  for (const name of ["BASE_URL", "SYNC_GAMES_API_KEY", "USER_ID", "USER_IDS", "USER_ID_PREFIX"]) {
+  for (const name of ["BASE_URL", "WS_BASE_URL", "SYNC_GAMES_API_KEY", "USER_ID", "USER_IDS", "USER_ID_PREFIX"]) {
     const value = process.env[name] || localEnvironment.get(name);
     if (value) args.push("-e", `${name}=${value}`);
   }

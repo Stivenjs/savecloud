@@ -171,12 +171,14 @@ export async function startBunServer(options: StartBunServerOptions): Promise<vo
           const parsed = JSON.parse(message.toString()) as BunWsIncomingPayload;
           if (parsed.action === "ping") {
             ws.send(JSON.stringify({ type: "PONG" }));
-          } else if (parsed.action === "broadcast" && connectionRepository && parsed.gameName && parsed.gameId) {
+          } else if (parsed.action === "broadcast" && connectionRepository) {
+            const gameId = parsed.gameId?.trim() ?? "";
+            const gameName = parsed.gameName?.trim() ?? "";
             connectionRepository
               .setConnectionActivity(ws.data.connectionId, {
                 lastActivityAt: Date.now(),
-                activityGameId: parsed.gameId,
-                activityGameName: parsed.gameName,
+                activityGameId: gameId || null,
+                activityGameName: gameId ? gameName || gameId : null,
               })
               .catch((err: unknown) => {
                 console.error("[SaveCloud WS Bun] Error actualizando actividad:", err);

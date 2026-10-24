@@ -114,6 +114,10 @@ export interface RemoteCoverage {
 export interface RemoteObservabilitySummary {
   readonly generatedAt?: string;
   readonly window?: string;
+  readonly websocket?: {
+    readonly activeConnections?: number | null;
+    readonly scope?: "api_process" | "unavailable";
+  };
   readonly totals?: {
     readonly requests?: number;
     readonly errors?: number;

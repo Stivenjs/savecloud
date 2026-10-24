@@ -12,6 +12,7 @@ import type { NotificationRepository } from "@domain/ports/NotificationRepositor
 import type { SteamSeedRepository } from "@domain/ports/SteamSeedRepository";
 import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
 import { recordHttpMetric, summarizeHttpMetrics } from "@infrastructure/observability/httpMetricsStore";
+import { shouldIgnoreHttpObservation } from "@infrastructure/observability/httpRoutePolicy";
 import type { GameInventoryRepository } from "@domain/ports/GameInventoryRepository";
 import { registerObservabilityRoutes } from "@interfaces/http/routes/observability.routes";
 import type { ClipRepository } from "@domain/ports/ClipRepository";
@@ -43,6 +44,7 @@ export interface AppDependencies {
   notificationRepository?: NotificationRepository;
   connectionRepository?: ConnectionRepository;
   webSocketNotifier?: WebSocketNotifier;
+  getActiveWebSocketConnectionCount?: () => number;
   processS3Events?: (events: import("@application/use-cases/ProcessS3EventUseCase").ProcessS3EventInput[]) => Promise<void>;
 }
 
@@ -139,7 +141,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     }
   );
 
-  await registerObservabilityRoutes(app, summarizeHttpMetrics);
+  await registerObservabilityRoutes(app, summarizeHttpMetrics, deps.getActiveWebSocketConnectionCount);
 
   return app;
 }
@@ -155,12 +157,13 @@ function registerHttpMetricsHooks(app: FastifyInstance, requestLoggingEnabled: b
 
     const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
     const path = (request.url ?? "").split("?")[0] ?? "";
+    const ignoreObservation = shouldIgnoreHttpObservation(path);
     const routeTemplate =
       typeof request.routeOptions?.url === "string" && request.routeOptions.url.length > 0
         ? request.routeOptions.url
         : null;
 
-    if (requestLoggingEnabled && path !== "/health" && path !== "/favicon.ico" && !path.startsWith("/observability/")) {
+    if (requestLoggingEnabled && !ignoreObservation) {
       request.log.info(
         {
           method: request.method,
@@ -172,7 +175,7 @@ function registerHttpMetricsHooks(app: FastifyInstance, requestLoggingEnabled: b
       );
     }
 
-    if (path === "/health" || path === "/favicon.ico" || path.startsWith("/observability/")) return;
+    if (ignoreObservation) return;
 
     recordHttpMetric({
       method: request.method,

@@ -1,10 +1,11 @@
 import { sleep } from "k6";
 import { permanentlyDeleteGame, type LoadTestRun } from "@/helpers";
-import { apiKey, maxVUs, options, userIdForVu, userIds } from "@/config";
+import { apiKey, maxVUs, options, profile, userIdForVu, userIds } from "@/config";
 import { healthSetupCheck } from "@/scenarios/health";
 import { readScenario } from "@/scenarios/read";
 import { presignScenario } from "@/scenarios/presign";
 import { writeCycleScenario } from "@/scenarios/write-cycle";
+import { CAPACITY_WEBSOCKET_DURATION_MS, webSocketScenario } from "@/scenarios/websocket";
 
 export { options };
 
@@ -27,16 +28,16 @@ export function setup(): LoadTestRun {
   }
   console.log(`Población k6: ${maxVUs} dispositivos virtuales y ${activeUserCount} identidades activas.`);
   console.log(`Identidades activas: ${userIds[0]} … ${userIds[activeUserCount - 1]}`);
-  console.log(`Espacio temporal k6: k6-${runId}-<VU>`);
+  if (profile !== "ws") console.log(`Espacio temporal k6: k6-${runId}-<VU>`);
   return { runId, maxVUs, userIds };
 }
 
 /**
- * Ejecuta navegación, solicitudes de URL presignada y ciclos de guardado temporal.
+ * Ejecuta la mezcla de flujos que representa una sesión normal de SaveCloud.
  *
- * @param run - Identificadores compartidos creados por setup.
+ * @param run - Identificadores compartidos creados durante la preparación de k6.
  */
-export default function (run: LoadTestRun): void {
+function runMixedUserWorkload(run: LoadTestRun): void {
   const workload = Math.random();
   if (workload < 0.7) {
     readScenario();
@@ -45,7 +46,21 @@ export default function (run: LoadTestRun): void {
   } else {
     writeCycleScenario(run);
   }
-  sleep(2 + Math.random() * 4);
+}
+
+/**
+ * Ejecuta navegación, solicitudes de URL presignada y ciclos de guardado temporal.
+ *
+ * @param run - Identificadores compartidos creados por setup.
+ */
+export default function (run: LoadTestRun): void {
+  runMixedUserWorkload(run);
+  if (profile !== "capacity") sleep(2 + Math.random() * 4);
+}
+
+/** Ejecuta conexiones persistentes en escenarios WS aislados del flujo HTTP. */
+export function websocketLoad(): void {
+  webSocketScenario(profile === "capacity" ? CAPACITY_WEBSOCKET_DURATION_MS : undefined);
 }
 
 /**
@@ -54,6 +69,8 @@ export default function (run: LoadTestRun): void {
  * @param run - Identificadores compartidos creados por setup.
  */
 export function teardown(run: LoadTestRun): void {
+  if (profile === "ws") return;
+
   for (let vu = 1; vu <= run.maxVUs; vu += 1) {
     const userId = userIdForVu(vu);
     permanentlyDeleteGame(`k6-${run.runId}-${vu}`, "run-teardown-cleanup", userId);

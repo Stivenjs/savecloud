@@ -48,6 +48,15 @@ export class FastifyWebSocketNotifier implements WebSocketNotifier {
     this.activeSockets.delete(connectionId);
   }
 
+  /** Número de sockets abiertos registrados en este proceso de API. */
+  getActiveConnectionCount(): number {
+    let activeConnections = 0;
+    for (const socket of this.activeSockets.values()) {
+      if (socket.readyState === 1 /* OPEN */) activeConnections += 1;
+    }
+    return activeConnections;
+  }
+
   /**
    * Envía un payload JSON al socket especificado por connectionId.
    *

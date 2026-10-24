@@ -47,12 +47,14 @@ export function createWebSocketConnectionHandler(deps: WebSocketConnectionDepend
         const parsed = JSON.parse(data.toString("utf-8")) as WsIncomingPayload;
         if (parsed.action === "ping") {
           socket.send(JSON.stringify({ type: "PONG" }));
-        } else if (parsed.action === "broadcast" && deps.connectionRepository && parsed.gameName && parsed.gameId) {
+        } else if (parsed.action === "broadcast" && deps.connectionRepository) {
+          const gameId = parsed.gameId?.trim() ?? "";
+          const gameName = parsed.gameName?.trim() ?? "";
           deps.connectionRepository
             .setConnectionActivity(connectionId, {
               lastActivityAt: Date.now(),
-              activityGameId: parsed.gameId,
-              activityGameName: parsed.gameName,
+              activityGameId: gameId || null,
+              activityGameName: gameId ? gameName || gameId : null,
             })
             .catch((err: unknown) => console.error("[SaveCloud WS] Error actualizando actividad de juego:", err));
         }
