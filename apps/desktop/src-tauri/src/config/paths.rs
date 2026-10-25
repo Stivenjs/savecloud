@@ -136,11 +136,6 @@ pub fn legacy_sources_path() -> Option<PathBuf> {
     data_dir().map(|d| d.join(SOURCES_FILE_NAME))
 }
 
-/// Ruta legado de fuentes remotas registradas.
-pub fn legacy_remote_sources_path() -> Option<PathBuf> {
-    data_dir().map(|d| d.join(REMOTE_SOURCES_FILE_NAME))
-}
-
 /// Ruta legado de jobs activos.
 pub fn legacy_active_jobs_path() -> Option<PathBuf> {
     data_dir().map(|d| d.join(ACTIVE_JOBS_FILE_NAME))
