@@ -486,10 +486,10 @@ fn read_sources_file(path: &Path) -> Result<Vec<SourceCatalog>, String> {
 
 /// Carga la configuración de fuentes remotas registradas.
 pub fn load_remote_sources() -> Result<Vec<RemoteSourceConfig>, String> {
-    let path = resolve_read_path(
-        paths::remote_sources_path(),
-        paths::legacy_remote_sources_path(),
-    )?;
+    let path = crate::config::profile_storage::scoped_or_legacy_path(
+        paths::REMOTE_SOURCES_FILE_NAME,
+    )
+    .ok_or_else(|| "No se pudo resolver remote_sources_path".to_string())?;
     if !path.exists() {
         return Ok(Vec::new());
     }
