@@ -79,7 +79,7 @@ services:
       create-bucket:
         condition: service_completed_successfully
     environment:
-      - SEED_INTERVAL_MS=${SEED_INTERVAL_MS:-300000}
+      - SEED_INTERVAL_MS=${SEED_INTERVAL_MS:-120000}
 
   s3-events-worker:
     extends:

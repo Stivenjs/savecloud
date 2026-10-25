@@ -36,6 +36,8 @@ type FetchReviewsWithRetryResult = {
   reviewsSuccess: boolean | null;
   summary?: import("@interfaces/lambda/steam-seed/types").SteamReviewSummary;
   error?: string;
+  contentType?: string;
+  bodyPreview?: string;
   rateLimited: boolean;
 };
 
@@ -60,6 +62,8 @@ async function fetchWithRetry(params: {
         reviewsSuccess: res.reviewsSuccess ?? null,
         summary: res.summary,
         error: res.error,
+        contentType: res.contentType,
+        bodyPreview: res.bodyPreview,
         rateLimited: false,
       };
     }
@@ -81,6 +85,14 @@ export type RunReviewsTickResult = {
   wroteBatchKey?: string;
   done: boolean;
   reason?: "backoff_active" | "no_processed_ids" | "pass_complete" | "batch_written";
+  errors?: Array<{
+    httpStatus: number;
+    error: string;
+    count: number;
+    sampleAppIds: number[];
+    contentType?: string;
+    bodyPreview?: string;
+  }>;
 };
 
 /**
@@ -159,11 +171,28 @@ export async function runReviewsTick(params: {
   let notFound = 0;
   let httpErrors = 0;
   let sawRateLimit = false;
+  const errorSummary = new Map<
+    string,
+    {
+      httpStatus: number;
+      error: string;
+      count: number;
+      sampleAppIds: number[];
+      contentType?: string;
+      bodyPreview?: string;
+    }
+  >();
 
   for (const r of fetchResults) {
     if (r.rateLimited) {
       sawRateLimit = true;
       httpErrors += 1;
+      const error = "rate_limited";
+      const errorKey = `${r.httpStatus}:${error}`;
+      const summary = errorSummary.get(errorKey) ?? { httpStatus: r.httpStatus, error, count: 0, sampleAppIds: [] };
+      summary.count += 1;
+      if (summary.sampleAppIds.length < 5) summary.sampleAppIds.push(r.appId);
+      errorSummary.set(errorKey, summary);
       const line: ReviewsBatchLineV1 = {
         appId: r.appId,
         fetchedAt: r.fetchedAt,
@@ -196,6 +225,19 @@ export async function runReviewsTick(params: {
       lines.push(JSON.stringify(line));
     } else {
       httpErrors += 1;
+      const error = (r.error ?? "http_error").replace(/\s+/g, " ").slice(0, 160);
+      const errorKey = `${r.httpStatus}:${error}:${r.contentType ?? ""}:${r.bodyPreview ?? ""}`;
+      const summary = errorSummary.get(errorKey) ?? {
+        httpStatus: r.httpStatus,
+        error,
+        count: 0,
+        sampleAppIds: [],
+        contentType: r.contentType,
+        bodyPreview: r.bodyPreview,
+      };
+      summary.count += 1;
+      if (summary.sampleAppIds.length < 5) summary.sampleAppIds.push(r.appId);
+      errorSummary.set(errorKey, summary);
       const line: ReviewsBatchLineV1 = {
         appId: r.appId,
         fetchedAt: r.fetchedAt,
@@ -238,5 +280,6 @@ export async function runReviewsTick(params: {
     wroteBatchKey: wroteKey,
     done: false,
     reason: "batch_written",
+    errors: Array.from(errorSummary.values()),
   };
 }
