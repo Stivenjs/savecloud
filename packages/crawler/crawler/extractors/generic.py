@@ -14,6 +14,7 @@ from crawler.config import (
 from crawler.core.firewall import FirewallDetector, TurnstileSolver
 from crawler.core.network import is_ad_domain, is_ignored_download_url
 from crawler.extractors.base import BaseExtractor, ExtractionContext
+from crawler.utils.dom import DomHelper
 
 
 class GenericExtractor(BaseExtractor):
@@ -121,7 +122,8 @@ class GenericExtractor(BaseExtractor):
         # Scan for direct download links in href
         try:
             for sel in GENERIC_DIRECT_LINK_SELECTORS:
-                locator = page.locator(sel)
+                resolved_selector = DomHelper.resolve_action_selector(page, sel) or sel
+                locator = page.locator(resolved_selector)
                 count = locator.count()
                 for i in range(count):
                     el = locator.nth(i)
@@ -167,7 +169,8 @@ class GenericExtractor(BaseExtractor):
         try:
             for selector in GENERIC_BUTTON_SELECTORS:
                 try:
-                    elements = page.locator(selector)
+                    resolved_selector = DomHelper.resolve_action_selector(page, selector) or selector
+                    elements = page.locator(resolved_selector)
                     count = elements.count()
                     for i in range(count):
                         el = elements.nth(i)

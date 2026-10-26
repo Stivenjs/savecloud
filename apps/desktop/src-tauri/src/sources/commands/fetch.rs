@@ -56,13 +56,13 @@ fn resolve_scrapling_script(app: &AppHandle) -> Result<PathBuf, String> {
 fn resolve_scrapling_binary(app: &AppHandle) -> Result<PathBuf, String> {
     let candidate_names = if cfg!(target_os = "windows") {
         vec![
-            "resources/savecloud_crawler/savecloud_crawler.exe",
-            "resources/savecloud_crawler.exe",
+            "resources/SaveCloud Runtime/SaveCloud Runtime.exe",
+            "resources/SaveCloud Runtime.exe",
         ]
     } else {
         vec![
-            "resources/savecloud_crawler/savecloud_crawler",
-            "resources/savecloud_crawler",
+            "resources/SaveCloud Runtime/SaveCloud Runtime",
+            "resources/SaveCloud Runtime",
         ]
     };
 

@@ -36,7 +36,13 @@ async fn resolve_native(
         HOST_MARKERS,
         &["download", "descargar", "télécharger", "telecharger"],
     ) {
-        return Ok(direct);
+        if is_url_on_marked_host(&direct, HOST_MARKERS) {
+            return Ok(direct);
+        }
+
+        log::info!(
+            "akirabox: ignoring external download candidate from page markup: {direct}"
+        );
     }
 
     Err(HosterError::ResolutionFailed(

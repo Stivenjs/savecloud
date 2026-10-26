@@ -1,5 +1,5 @@
 import { $, Glob } from "bun";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 interface BuildConfig {
   readonly binaryName: string;
@@ -11,10 +11,18 @@ interface BuildConfig {
 }
 
 const CONFIG: BuildConfig = {
-  binaryName: "savecloud_crawler",
+  binaryName: "SaveCloud Runtime",
   requiredPythonImports: "import PyInstaller, scrapling.fetchers",
   pipDependencies: ["pyinstaller", "scrapling[fetchers]"],
-  collectPackages: ["crawler", "scrapling", "browserforge", "apify_fingerprint_datapoints", "curl_cffi", "patchright"],
+  collectPackages: [
+    "crawler",
+    "scrapling",
+    "browserforge",
+    "apify_fingerprint_datapoints",
+    "curl_cffi",
+    "patchright",
+    "tld",
+  ],
   hiddenImports: ["_cffi_backend"],
   windowsSystemDlls: [
     "vcruntime140.dll",
@@ -132,7 +140,7 @@ async function ensurePythonDependencies(pythonBin: string): Promise<void> {
 /**
  * Discovers and prepares Windows VC++ runtime DLLs for bundling if running on Windows.
  */
-async function getWindowsDllArguments(): Promise<string[]> {
+async function getWindowsDllArguments(pythonBin: string): Promise<string[]> {
   if (process.platform !== "win32") {
     return [];
   }
@@ -150,6 +158,14 @@ async function getWindowsDllArguments(): Promise<string[]> {
     }
   }
 
+  // Python 3.15's stable-ABI compatibility extension is installed separately from
+  // python315.dll and is required by binary wheels such as curl_cffi.
+  const stableAbiCompatDll = join(dirname(pythonBin), "abi3t-compat", "python3t.dll");
+  if (await Bun.file(stableAbiCompatDll).exists()) {
+    log.info("Bundling Python stable-ABI compatibility DLL: python3t.dll");
+    dllArgs.push("--add-binary", `${stableAbiCompatDll};.`);
+  }
+
   return dllArgs;
 }
 
@@ -157,7 +173,7 @@ async function getWindowsDllArguments(): Promise<string[]> {
  * Compiles the Python script into a standalone executable using PyInstaller.
  */
 async function compileBinary(paths: ProjectPaths, pythonBin: string): Promise<void> {
-  const dllArgs = await getWindowsDllArguments();
+  const dllArgs = await getWindowsDllArguments(pythonBin);
 
   const iconArgs: string[] = [];
   if (await Bun.file(paths.iconPath).exists()) {
@@ -287,7 +303,7 @@ async function main(): Promise<void> {
   const startTime = performance.now();
   const paths = resolvePaths();
 
-  console.log("\x1b[1m=== SaveCloud Crawler Build Pipeline ===\x1b[0m");
+  console.log("\x1b[1m=== SaveCloud Runtime Build Pipeline ===\x1b[0m");
 
   log.step(1, 5, "Validating Python entrypoint script");
   if (!(await Bun.file(paths.pythonScript).exists())) {

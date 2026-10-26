@@ -12,19 +12,48 @@ class SessionManager:
     """Manages cross-invocation session cookies (e.g. cf_clearance) and user-agents by host."""
 
     @classmethod
-    def get_session_file_path(cls) -> str:
+    def _get_savecloud_dir(cls) -> str:
         home = os.path.expanduser("~")
         if sys.platform == "win32":
             base_dir = os.environ.get("APPDATA") or os.path.join(home, "AppData", "Roaming")
-            target_dir = os.path.join(base_dir, "SaveCloud")
+            return os.path.join(base_dir, "SaveCloud")
         elif sys.platform == "darwin":
-            target_dir = os.path.join(home, "Library", "Application Support", "SaveCloud")
-        else:
-            base_dir = os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config")
-            target_dir = os.path.join(base_dir, "savecloud")
+            return os.path.join(home, "Library", "Application Support", "SaveCloud")
+        base_dir = os.environ.get("XDG_CONFIG_HOME") or os.path.join(home, ".config")
+        return os.path.join(base_dir, "savecloud")
 
-        os.makedirs(target_dir, exist_ok=True)
-        return os.path.join(target_dir, "crawler_sessions.json")
+    @classmethod
+    def _get_database_dir(cls) -> str:
+        savecloud_dir = cls._get_savecloud_dir()
+        database_dir = os.path.join(savecloud_dir, "data", "db")
+        os.makedirs(database_dir, exist_ok=True)
+        return database_dir
+
+    @classmethod
+    def _get_cache_dir(cls) -> str:
+        savecloud_dir = cls._get_savecloud_dir()
+        cache_dir = os.path.join(savecloud_dir, "data", "cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        return cache_dir
+
+    @classmethod
+    def get_session_file_path(cls) -> str:
+        """Returns the persistent crawler session file path, migrating the legacy file."""
+        cache_dir = cls._get_cache_dir()
+        session_path = os.path.join(cache_dir, "crawler_sessions.json")
+        legacy_path = os.path.join(cls._get_savecloud_dir(), "crawler_sessions.json")
+        if not os.path.exists(session_path) and os.path.isfile(legacy_path):
+            try:
+                os.replace(legacy_path, session_path)
+            except OSError as exc:
+                sys.stderr.write(f"[SessionManager] Could not migrate legacy session file: {exc}\n")
+
+        return session_path
+
+    @classmethod
+    def get_adaptive_storage_file_path(cls) -> str:
+        """Returns the persistent Scrapling adaptive-selector database path."""
+        return os.path.join(cls._get_database_dir(), "crawler_adaptive.db")
 
     @classmethod
     def _normalize_host(cls, host_or_url: str) -> str:

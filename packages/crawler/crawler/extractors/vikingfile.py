@@ -15,6 +15,9 @@ class VikingFileExtractor(BaseExtractor):
     name: str = "vikingfile"
     priority: int = 85
     requires_browser: bool = True
+    # The built-in solver retries against VikingFile's iframe while it is being
+    # replaced. Let the extractor's frame-aware solver handle the challenge instead.
+    use_scrapling_cloudflare_solver: bool = False
 
     DOMAINS: tuple[str, ...] = (
         "vikingfile.com",
