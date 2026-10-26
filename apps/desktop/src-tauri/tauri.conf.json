@@ -104,7 +104,8 @@
     "resources": [
       "resources/oye_cloud.rpw",
       "resources/savecloud_crawler*",
-      "resources/verified_sources.json"
+      "resources/verified_sources.json",
+      "resources/installer-sources.ps1"
     ]
   },
   "identifier": "com.savecloud.desktop",

@@ -1,34 +1,39 @@
 ; SaveCloud NSIS Installer Hooks
-; Agrega la opción de instalar fuentes de descargas verificadas en el instalador
+; Agrega fuentes verificadas solo cuando el catálogo trae fuentes nuevas.
 
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
 
-; Cadenas multi-idioma con fallbacks seguros (Español e Inglés)
-LangString MSG_INSTALL_SOURCES 0 "¿Deseas instalar las fuentes de descargas verificadas por SaveCloud?$\r$\n$\r$\nIncluye: FitGirl, SteamRip, DODI, GOG, OnlineFix, Xatab, Kazumi, SteamGG, RexaGames, 0xEMPRESS y AtopGames."
-LangString MSG_INSTALL_SOURCES ${LANG_SPANISH} "¿Deseas instalar las fuentes de descargas verificadas por SaveCloud?$\r$\n$\r$\nIncluye: FitGirl, SteamRip, DODI, GOG, OnlineFix, Xatab, Kazumi, SteamGG, RexaGames, 0xEMPRESS y AtopGames."
-LangString MSG_INSTALL_SOURCES ${LANG_SPANISHINTERNATIONAL} "¿Deseas instalar las fuentes de descargas verificadas por SaveCloud?$\r$\n$\r$\nIncluye: FitGirl, SteamRip, DODI, GOG, OnlineFix, Xatab, Kazumi, SteamGG, RexaGames, 0xEMPRESS y AtopGames."
-LangString MSG_INSTALL_SOURCES ${LANG_ENGLISH} "Do you want to install verified download sources for SaveCloud?$\r$\n$\r$\nIncludes: FitGirl, SteamRip, DODI, GOG, OnlineFix, Xatab, Kazumi, SteamGG, RexaGames, 0xEMPRESS, and AtopGames."
-
-LangString TITLE_INSTALL_SOURCES 0 "Fuentes Verificadas de SaveCloud"
-LangString TITLE_INSTALL_SOURCES ${LANG_SPANISH} "Fuentes Verificadas de SaveCloud"
-LangString TITLE_INSTALL_SOURCES ${LANG_SPANISHINTERNATIONAL} "Fuentes Verificadas de SaveCloud"
-LangString TITLE_INSTALL_SOURCES ${LANG_ENGLISH} "SaveCloud Verified Sources"
-
 !macro NSIS_HOOK_POSTINSTALL
-  ${IfNot} ${Silent}
-    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON1 "$(MSG_INSTALL_SOURCES)" /SD IDYES IDNO skip_verified_sources
-  ${EndIf}
-
   CreateDirectory "$APPDATA\SaveCloud\data\cache"
 
-  ${If} ${FileExists} "$INSTDIR\resources\verified_sources.json"
-    ${IfNot} ${FileExists} "$APPDATA\SaveCloud\data\cache\remote_sources.json"
-      CopyFiles /SILENT "$INSTDIR\resources\verified_sources.json" "$APPDATA\SaveCloud\data\cache\remote_sources.json"
-    ${Else}
-      CopyFiles /SILENT "$INSTDIR\resources\verified_sources.json" "$APPDATA\SaveCloud\data\cache\verified_sources.json"
+  ${IfNot} ${Silent}
+    nsExec::Exec '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\installer-sources.ps1" -Action Check -DataRoot "$APPDATA\SaveCloud\data" -PresetPath "$INSTDIR\resources\verified_sources.json" -PendingPath "$PLUGINSDIR\verified-sources-pending.json"'
+    Pop $0
+    ${If} $0 == 10
+      ${If} $LANGUAGE == ${LANG_SPANISHINTERNATIONAL}
+        MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON1 "Hay nuevas fuentes verificadas disponibles para SaveCloud.$\r$\n$\r$\n¿Quieres añadirlas a tu catálogo?" /SD IDNO IDYES apply_verified_sources IDNO dismiss_verified_sources
+      ${Else}
+        MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON1 "New verified sources are available for SaveCloud.$\r$\n$\r$\nWould you like to add them to your catalog?" /SD IDNO IDYES apply_verified_sources IDNO dismiss_verified_sources
+      ${EndIf}
+
+      apply_verified_sources:
+      nsExec::Exec '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\installer-sources.ps1" -Action Apply -DataRoot "$APPDATA\SaveCloud\data" -PresetPath "$INSTDIR\resources\verified_sources.json" -PendingPath "$PLUGINSDIR\verified-sources-pending.json"'
+      Pop $0
+      ${If} $0 != 0
+        ${If} $LANGUAGE == ${LANG_SPANISHINTERNATIONAL}
+          MessageBox MB_OK|MB_ICONEXCLAMATION "No se pudieron añadir las nuevas fuentes. Puedes instalarlas luego desde Configuración."
+        ${Else}
+          MessageBox MB_OK|MB_ICONEXCLAMATION "The new sources could not be added. You can install them later from Settings."
+        ${EndIf}
+      ${EndIf}
+      Goto verified_sources_done
+
+      dismiss_verified_sources:
+      nsExec::Exec '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$INSTDIR\resources\installer-sources.ps1" -Action Dismiss -DataRoot "$APPDATA\SaveCloud\data" -PresetPath "$INSTDIR\resources\verified_sources.json" -PendingPath "$PLUGINSDIR\verified-sources-pending.json"'
+      Pop $0
     ${EndIf}
   ${EndIf}
 
-skip_verified_sources:
+verified_sources_done:
 !macroend
