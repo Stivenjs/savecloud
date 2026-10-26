@@ -16,6 +16,7 @@ class GofileExtractor(BaseExtractor):
     name: str = "gofile"
     priority: int = 90
     requires_browser: bool = True
+    use_scrapling_cloudflare_solver: bool = False
 
     DOMAINS: tuple[str, ...] = ("gofile.io", "gofile")
     STORE_DOWNLOAD_PATH: str = "/download/web/"

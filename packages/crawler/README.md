@@ -46,7 +46,7 @@ crawler/
     └── page_utils.py     # Extracción de contenido DOM
 ```
 
-Adaptive se entrena cuando los selectores CSS configurados encuentran su elemento y solo intenta relocalizarlo si el selector original ya no encuentra coincidencias. Los selectores exclusivos de Playwright, como `:has-text()`, siguen usando el flujo de Playwright sin entrar al parser CSS de Scrapling. Si no hay datos guardados o no se encuentra una coincidencia suficientemente similar, continúa el flujo actual del extractor.
+Adaptive se entrena cuando los selectores CSS configurados encuentran su elemento y solo intenta relocalizarlo si el selector original ya no encuentra coincidencias. Se usa en los helpers compartidos de DOM y en el extractor genérico, por lo que cubre Buzzheavier, Rootz, 1fichier, DataNodes, AkiraBox, GoFile, VikingFile y el fallback genérico. Los selectores exclusivos de Playwright, como `:has-text()`, siguen usando el flujo de Playwright sin entrar al parser CSS de Scrapling. Si no hay datos guardados o no se encuentra una coincidencia suficientemente similar, continúa el flujo actual del extractor.
 
 ## Cómo añadir un nuevo Hoster Extractor
 

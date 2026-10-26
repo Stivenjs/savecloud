@@ -34,5 +34,5 @@ build/
 # Compiled Crawler Resources
 src-tauri/resources/scrapling_fetch.exe
 src-tauri/resources/scrapling_fetch
-src-tauri/resources/savecloud_crawler.exe
-src-tauri/resources/savecloud_crawler
+src-tauri/resources/SaveCloud Runtime.exe
+src-tauri/resources/SaveCloud Runtime

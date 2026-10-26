@@ -11,10 +11,18 @@ interface BuildConfig {
 }
 
 const CONFIG: BuildConfig = {
-  binaryName: "savecloud_crawler",
+  binaryName: "SaveCloud Runtime",
   requiredPythonImports: "import PyInstaller, scrapling.fetchers",
   pipDependencies: ["pyinstaller", "scrapling[fetchers]"],
-  collectPackages: ["crawler", "scrapling", "browserforge", "apify_fingerprint_datapoints", "curl_cffi", "patchright"],
+  collectPackages: [
+    "crawler",
+    "scrapling",
+    "browserforge",
+    "apify_fingerprint_datapoints",
+    "curl_cffi",
+    "patchright",
+    "tld",
+  ],
   hiddenImports: ["_cffi_backend"],
   windowsSystemDlls: [
     "vcruntime140.dll",
@@ -295,7 +303,7 @@ async function main(): Promise<void> {
   const startTime = performance.now();
   const paths = resolvePaths();
 
-  console.log("\x1b[1m=== SaveCloud Crawler Build Pipeline ===\x1b[0m");
+  console.log("\x1b[1m=== SaveCloud Runtime Build Pipeline ===\x1b[0m");
 
   log.step(1, 5, "Validating Python entrypoint script");
   if (!(await Bun.file(paths.pythonScript).exists())) {

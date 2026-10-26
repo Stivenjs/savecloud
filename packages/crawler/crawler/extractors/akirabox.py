@@ -15,6 +15,7 @@ class AkiraBoxExtractor(BaseExtractor):
     name: str = "akirabox"
     priority: int = 85
     requires_browser: bool = True  # Required for Cloudflare Turnstile and session clearance
+    use_scrapling_cloudflare_solver: bool = False
 
     DOMAINS: tuple[str, ...] = (
         "akirabox.to",

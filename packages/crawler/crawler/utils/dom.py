@@ -262,7 +262,8 @@ class DomHelper:
         """Finds the first visible element matching any of the selectors and returns its http href."""
         for sel in selectors:
             try:
-                elements = page.locator(sel)
+                resolved_selector = AdaptiveDom.resolve_selector(page, sel) or sel
+                elements = page.locator(resolved_selector)
                 if elements.count() > 0 and elements.first.is_visible():
                     href = elements.first.get_attribute("href")
                     if href and href.startswith("http"):
@@ -276,7 +277,8 @@ class DomHelper:
         """Finds the first visible element matching any of the selectors and clicks it."""
         for sel in selectors:
             try:
-                elements = page.locator(sel)
+                resolved_selector = AdaptiveDom.resolve_selector(page, sel) or sel
+                elements = page.locator(resolved_selector)
                 if elements.count() > 0:
                     first_el = elements.first
                     if first_el.is_visible():
@@ -315,7 +317,8 @@ class DomHelper:
         """Checks if any element matching the given selectors exists and is visible."""
         for sel in selectors:
             try:
-                locator = page.locator(sel)
+                resolved_selector = AdaptiveDom.resolve_selector(page, sel) or sel
+                locator = page.locator(resolved_selector)
                 if locator.count() > 0 and locator.first.is_visible():
                     return True
             except Exception:

@@ -21,9 +21,11 @@ class AdaptiveDom:
 
             # Scrapling supports CSS3, while some Playwright-only selectors (such as
             # :has-text()) are intentionally left to the existing Playwright path.
+            identifier = f"savecloud-action:{selector}"
+            had_saved_selector = bool(parser.retrieve(identifier))
             matches = parser.css(
                 selector,
-                identifier=f"savecloud-action:{selector}",
+                identifier=identifier,
                 adaptive=True,
                 auto_save=True,
             )
@@ -33,6 +35,11 @@ class AdaptiveDom:
             # Preserve the original selector whenever it still works in the live DOM.
             try:
                 if page.locator(selector).count() > 0:
+                    if not had_saved_selector:
+                        sys.stderr.write(
+                            f"[Scrapling Adaptive] Learned selector on {page_url}: "
+                            f"{selector}\n"
+                        )
                     return selector
             except Exception:
                 pass

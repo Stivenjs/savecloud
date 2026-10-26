@@ -89,7 +89,8 @@ class StealthBrowserStrategy(FetchStrategy):
         kwargs = {
             "headless": True,
             "network_idle": False,
-            "solve_cloudflare": context.solve_cloudflare,
+            "solve_cloudflare": context.solve_cloudflare
+            and getattr(extractor, "use_scrapling_cloudflare_solver", True),
             "timeout": browser_timeout,
             "page_setup": page_setup,
             "page_action": page_action,
