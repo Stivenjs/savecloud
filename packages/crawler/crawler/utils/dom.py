@@ -3,6 +3,8 @@
 import sys
 from typing import Any, Iterable
 
+from crawler.utils.adaptive import AdaptiveDom
+
 
 class DomHelper:
     """Provides high-level, declarative browser DOM interaction utilities."""
@@ -12,6 +14,11 @@ class DomHelper:
         if isinstance(patterns, str):
             return [patterns.lower()]
         return [p.lower() for p in patterns if p]
+
+    @staticmethod
+    def resolve_action_selector(page: Any, selector: str) -> str | None:
+        """Returns the original or adaptively relocated selector for an action element."""
+        return AdaptiveDom.resolve_selector(page, selector)
 
     @classmethod
     def has_text(cls, page: Any, patterns: str | Iterable[str]) -> bool:
@@ -31,10 +38,14 @@ class DomHelper:
     @staticmethod
     def exists(page: Any, selector: str) -> bool:
         """Checks if an element matching selector exists in the DOM."""
+        if AdaptiveDom.resolve_selector(page, selector) is not None:
+            return True
         try:
-            return page.evaluate(
-                """(sel) => !!document.querySelector(sel)""",
-                selector,
+            return bool(
+                page.evaluate(
+                    """(sel) => !!document.querySelector(sel)""",
+                    selector,
+                )
             )
         except Exception:
             return False
@@ -86,6 +97,7 @@ class DomHelper:
     @staticmethod
     def click(page: Any, selector: str, force_enable: bool = False) -> bool:
         """Finds element matching selector, optionally enables it, and clicks it."""
+        resolved_selector = AdaptiveDom.resolve_selector(page, selector) or selector
         try:
             clicked = page.evaluate(
                 """({ sel, forceEnable }) => {
@@ -98,12 +110,12 @@ class DomHelper:
                     }
                     return false;
                 }""",
-                {"sel": selector, "forceEnable": force_enable},
+                {"sel": resolved_selector, "forceEnable": force_enable},
             )
             if clicked:
                 return True
 
-            locator = page.locator(selector).first
+            locator = page.locator(resolved_selector).first
             if locator.is_visible():
                 locator.click(force=True)
                 return True

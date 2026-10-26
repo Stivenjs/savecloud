@@ -156,7 +156,12 @@ class OneFichierExtractor(BaseExtractor):
             # 4. Check if final download link is already present on page
             for sel in self.FINAL_DOWNLOAD_SELECTORS:
                 if DomHelper.exists(page, sel):
-                    href = page.evaluate(f"() => {{ const el = document.querySelector('{sel}'); return el ? el.href : null; }}")
+                    resolved_selector = DomHelper.resolve_action_selector(page, sel) or sel
+                    href = page.locator(resolved_selector).first.get_attribute("href")
+                    if href:
+                        href = page.evaluate(
+                            "href => new URL(href, window.location.href).href", href
+                        )
                     if href and href.startswith("http") and "1fichier.com" in href and "?" not in href:
                         sys.stderr.write(f"[1fichier] Found final download link: {href}\n")
                         context.captured_download_url = href
