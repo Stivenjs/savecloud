@@ -1,6 +1,6 @@
 import { handler as runSteamSeedTick } from "@interfaces/lambda/steam-seed/handler";
 
-const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
+const DEFAULT_INTERVAL_MS = 2 * 60 * 1000;
 const INITIAL_DELAY_MS = 10 * 1000;
 
 function readIntervalMs(): number {

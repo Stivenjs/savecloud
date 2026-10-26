@@ -116,6 +116,7 @@ export async function handler(_event: unknown, _context?: Partial<Context>): Pro
           backoffUntil: reviewsResult.stateAfter.backoffUntil,
           offset: reviewsResult.stateAfter.offset,
           totals: reviewsResult.stateAfter.totals,
+          errors: reviewsResult.errors ?? [],
         })
       );
     } catch (reviewsErr) {
