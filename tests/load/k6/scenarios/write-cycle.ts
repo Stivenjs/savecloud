@@ -28,11 +28,7 @@ export function writeCycleScenario(run: LoadTestRun): void {
 
   group("temporary save upload and cleanup", () => {
     try {
-      const uploadUrlResponse = httpPost(
-        `${baseUrl}/saves/upload-url`,
-        { gameId, filename },
-        "upload-url"
-      );
+      const uploadUrlResponse = httpPost(`${baseUrl}/saves/upload-url`, { gameId, filename }, "upload-url");
       assertStatus(uploadUrlResponse, 200, "upload URL");
 
       const { uploadUrl } = parseJson<UploadUrlResponse>(uploadUrlResponse, "upload URL");

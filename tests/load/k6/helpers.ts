@@ -61,11 +61,6 @@ export function permanentlyDeleteGame(gameId: string, label = "cleanup", userId?
  * @param endpoint - Etiqueta de endpoint para los resultados de k6.
  * @returns Respuesta HTTP de k6.
  */
-export function httpPost(
-  url: string,
-  body: unknown,
-  endpoint: string,
-  userId?: string
-): RefinedResponse<"text"> {
+export function httpPost(url: string, body: unknown, endpoint: string, userId?: string): RefinedResponse<"text"> {
   return http.post<"text">(url, JSON.stringify(body), { headers: apiHeaders(userId), tags: { endpoint } });
 }

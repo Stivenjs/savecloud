@@ -8,7 +8,7 @@ Agent hooks automate code quality checks, security validation, and context injec
 **Event**: `PostToolUse`
 **Command**: `bun run format:changed`
 **Timeout**: 60s
-**Purpose**: Automatically format only the files modified in the current git worktree using Prettier after the agent edits them.
+**Purpose**: Automatically format only the files modified in the current git worktree with `bun fmt` after the agent edits them.
 
 
 ### session-context.json

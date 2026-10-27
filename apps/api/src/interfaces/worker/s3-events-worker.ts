@@ -24,8 +24,12 @@ const useCase = new ProcessS3EventUseCase(
 );
 
 let stopping = false;
-process.on("SIGTERM", () => { stopping = true; });
-process.on("SIGINT", () => { stopping = true; });
+process.on("SIGTERM", () => {
+  stopping = true;
+});
+process.on("SIGINT", () => {
+  stopping = true;
+});
 
 /** Consume eventos durables y confirma el lote solo después de completar DynamoDB. */
 async function run(): Promise<void> {

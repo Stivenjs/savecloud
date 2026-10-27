@@ -113,7 +113,5 @@ export const handler = async (event: APIGatewayProxyWebsocketEventV2): Promise<L
     return { statusCode: 500, body: "Internal error" };
   }
 
-  return broadcastSucceeded
-    ? { statusCode: 200, body: "Broadcast sent" }
-    : { statusCode: 500, body: "Internal error" };
+  return broadcastSucceeded ? { statusCode: 200, body: "Broadcast sent" } : { statusCode: 500, body: "Internal error" };
 };

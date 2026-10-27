@@ -10,7 +10,7 @@
 
 - **Package Manager / Monorepo:** [Bun](https://bun.sh/) (`bun.lock`, workspaces: `apps/*`, `packages/*`).
 - **Code Control & Languages:** TypeScript (strict), Rust 2021 (Tauri v2), Python 3.10+ (crawler).
-- **Code Formatter:** `oxfmt` (`.oxfmtrc.json`).
+- **Code Formatter:** Bun formatter (`bun fmt`, configured by `.oxfmtrc.json`).
 
 ---
 
@@ -127,7 +127,7 @@ bun run desktop:build   # Package desktop installer / executable
 # Testing & Formatting
 bun run test            # API security and sharing tests
 bun run test:api        # Full API test suite
-bun run format          # Format entire repository with oxfmt
+bun run format          # Format entire repository with Bun
 ```
 
 ---

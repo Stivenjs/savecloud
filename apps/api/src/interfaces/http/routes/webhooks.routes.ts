@@ -41,7 +41,6 @@ function isProcessS3EventInput(value: unknown): value is ReturnType<typeof parse
   if (!value || typeof value !== "object") return false;
   const event = value as Record<string, unknown>;
   return (
-    (event.detailType === "Object Created" || event.detailType === "Object Deleted") &&
-    typeof event.s3Key === "string"
+    (event.detailType === "Object Created" || event.detailType === "Object Deleted") && typeof event.s3Key === "string"
   );
 }

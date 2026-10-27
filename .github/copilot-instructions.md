@@ -199,7 +199,7 @@ bun add -d vitest supertest
 
 ## Code Style
 
-- **Formatter**: Prettier (configured in package.json)
+- **Formatter**: Bun formatter (`bun fmt`, configured by `.oxfmtrc.json`)
 - **Linter**: ESLint (TypeScript)
 - **Pre-commit**: Husky + lint-staged (auto-format on commit)
 
