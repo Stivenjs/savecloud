@@ -7,17 +7,27 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use futures_util::StreamExt;
-use tokio::io::AsyncWriteExt;
+use reqwest::Response;
+use serde::{Deserialize, Serialize};
+use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
+use super::io::write_json_atomically;
+use super::retry::{retry_delay, wait_for_retry};
 use super::segments::{HTTP_PROGRESS_EMIT_BYTES, HTTP_PROGRESS_EMIT_INTERVAL};
 use super::validation::{
     invalid_download_body_message, looks_like_html_or_json, stream_read_error_message,
     validate_resume_response,
 };
 use crate::network::{apply_profile, ensure_download_success, DownloadProfile};
+
+#[derive(Serialize, Deserialize)]
+struct SingleStreamMeta {
+    total: u64,
+    validator: Option<String>,
+}
 
 /// Ejecuta la descarga en un único flujo continuo HTTP con soporte cooperativo de pausa.
 pub async fn run_single_stream_download<F>(
@@ -26,6 +36,7 @@ pub async fn run_single_stream_download<F>(
     profile: &DownloadProfile,
     initial_response: Option<reqwest::Response>,
     part_path: &Path,
+    checkpoint_path: &Path,
     total: u64,
     validator: Option<String>,
     accept_ranges: bool,
@@ -45,56 +56,82 @@ where
         0
     };
 
-    let (response, mut file, mut loaded) =
-        if existing_len > 0 && accept_ranges && (total == 0 || existing_len < total) {
-            drop(initial_response);
-            let range = format!("bytes={existing_len}-");
-            let req = client
-                .get(effective_uri)
-                .header("Range", range)
-                .header("Accept-Encoding", "identity");
-            let req = if let Some(value) = validator.as_deref() {
-                req.header(reqwest::header::IF_RANGE, value)
-            } else {
-                req
-            };
-            let req = apply_profile(req, profile);
-            let res = req
-                .send()
-                .await
-                .map_err(|e| format!("Error reanudando descarga: {e}"))?;
+    let saved_validator = tokio::fs::read(checkpoint_path)
+        .await
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<SingleStreamMeta>(&bytes).ok())
+        .filter(|meta| meta.total == total)
+        .and_then(|meta| meta.validator);
+    let can_resume = existing_len > 0
+        && accept_ranges
+        && validator
+            .as_ref()
+            .is_some_and(|current| saved_validator.as_ref() == Some(current))
+        && (total == 0 || existing_len < total);
 
-            if res.status() == reqwest::StatusCode::PARTIAL_CONTENT {
-                validate_resume_response(&res, existing_len, total)?;
-                let file = tokio::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(part_path)
-                    .await
-                    .map_err(|e| format!("No se pudo abrir archivo para reanudar: {e}"))?;
-                (res, file, existing_len)
-            } else {
-                let res = ensure_download_success(res).map_err(|error| error.user_message())?;
-                let file = tokio::fs::File::create(part_path)
-                    .await
-                    .map_err(|e| format!("No se pudo crear archivo destino: {e}"))?;
-                (res, file, 0)
+    let (response, mut file, mut loaded) = if can_resume {
+        drop(initial_response);
+        let res = request_resume(
+            client,
+            effective_uri,
+            profile,
+            existing_len,
+            total,
+            validator.as_deref(),
+            &cancel_flag,
+            &pause_flag,
+        )
+        .await;
+        let res = match res {
+            Ok(response) => response,
+            Err(error) if error == "stopped_by_user" => {
+                remove_partial_download(part_path, checkpoint_path).await;
+                return Err(error);
             }
+            Err(error) => return Err(error),
+        };
+
+        if res.status() == reqwest::StatusCode::PARTIAL_CONTENT {
+            validate_resume_response(&res, existing_len, total)?;
+            let file = tokio::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(part_path)
+                .await
+                .map_err(|e| format!("No se pudo abrir archivo para reanudar: {e}"))?;
+            (res, file, existing_len)
         } else {
-            let res = match initial_response {
-                Some(r) => r,
-                None => {
-                    let req = apply_profile(client.get(effective_uri), profile);
-                    req.send()
-                        .await
-                        .map_err(|e| format!("Error iniciando stream: {e}"))?
-                }
-            };
+            let res = validate_full_restart(res, total, validator.as_deref())?;
             let file = tokio::fs::File::create(part_path)
                 .await
                 .map_err(|e| format!("No se pudo crear archivo destino: {e}"))?;
             (res, file, 0)
+        }
+    } else {
+        let res = match initial_response {
+            Some(r) => r,
+            None => {
+                let req = apply_profile(client.get(effective_uri), profile);
+                req.send()
+                    .await
+                    .map_err(|e| format!("Error iniciando stream: {e}"))?
+            }
         };
+        let file = tokio::fs::File::create(part_path)
+            .await
+            .map_err(|e| format!("No se pudo crear archivo destino: {e}"))?;
+        (res, file, 0)
+    };
+
+    if !can_resume {
+        let checkpoint = SingleStreamMeta {
+            total,
+            validator: validator.clone(),
+        };
+        write_json_atomically(checkpoint_path, &checkpoint)
+            .await
+            .map_err(|error| format!("No se pudo guardar el checkpoint HTTP: {error}"))?;
+    }
 
     emit_progress(loaded, total, false)?;
 
@@ -110,6 +147,7 @@ where
         if cancel_flag.load(Ordering::Relaxed) {
             drop(file);
             let _ = tokio::fs::remove_file(part_path).await;
+            let _ = tokio::fs::remove_file(checkpoint_path).await;
             return Err("stopped_by_user".to_string());
         }
 
@@ -126,6 +164,7 @@ where
             if cancel_flag.load(Ordering::Relaxed) {
                 drop(file);
                 let _ = tokio::fs::remove_file(part_path).await;
+                let _ = tokio::fs::remove_file(checkpoint_path).await;
                 return Err("stopped_by_user".to_string());
             }
 
@@ -186,6 +225,7 @@ where
         if cancel_flag.load(Ordering::Relaxed) {
             drop(file);
             let _ = tokio::fs::remove_file(part_path).await;
+            let _ = tokio::fs::remove_file(checkpoint_path).await;
             return Err("stopped_by_user".to_string());
         }
 
@@ -200,33 +240,49 @@ where
             let _ = file.flush().await;
             if accept_ranges && (total == 0 || loaded < total) && retries < MAX_RETRIES {
                 retries += 1;
-                let backoff = Duration::from_millis(500 * (1 << retries.min(4)));
+                let backoff = retry_delay(retries, None);
                 log::warn!(
                     "Corte en stream único ({e}), reanudando desde byte {loaded} ({retries}/{MAX_RETRIES}) en {backoff:?}..."
                 );
-                tokio::time::sleep(backoff).await;
+                wait_for_retry(backoff, &cancel_flag, &pause_flag).await?;
 
-                let range = format!("bytes={loaded}-");
-                let req = client
-                    .get(effective_uri)
-                    .header("Range", range)
-                    .header("Accept-Encoding", "identity");
-                let req = if let Some(value) = validator.as_deref() {
-                    req.header(reqwest::header::IF_RANGE, value)
-                } else {
-                    req
+                let res = request_resume(
+                    client,
+                    effective_uri,
+                    profile,
+                    loaded,
+                    total,
+                    validator.as_deref(),
+                    &cancel_flag,
+                    &pause_flag,
+                )
+                .await;
+                let res = match res {
+                    Ok(response) => response,
+                    Err(error) if error == "stopped_by_user" => {
+                        drop(file);
+                        remove_partial_download(part_path, checkpoint_path).await;
+                        return Err(error);
+                    }
+                    Err(error) => return Err(error),
                 };
-                let req = apply_profile(req, profile);
-                match req.send().await {
-                    Ok(res) if validate_resume_response(&res, loaded, total).is_ok() => {
-                        stream = res.bytes_stream();
-                        continue;
-                    }
-                    Ok(res) => {
-                        return Err(format!("No se pudo reanudar la descarga: {}", res.status()));
-                    }
-                    Err(error) => return Err(format!("Error reanudando descarga: {error}")),
+                if res.status() == reqwest::StatusCode::OK {
+                    let res = validate_full_restart(res, total, validator.as_deref())?;
+                    file.set_len(0)
+                        .await
+                        .map_err(|error| format!("No se pudo reiniciar el archivo: {error}"))?;
+                    file.seek(std::io::SeekFrom::Start(0))
+                        .await
+                        .map_err(|error| format!("No se pudo reiniciar el archivo: {error}"))?;
+                    loaded = 0;
+                    last_emit_loaded = 0;
+                    last_emit_at = Instant::now();
+                    stream = res.bytes_stream();
+                    header_checked = false;
+                    continue;
                 }
+                stream = res.bytes_stream();
+                continue;
             }
             return Err(stream_read_error_message(
                 e,
@@ -242,29 +298,45 @@ where
             log::info!(
                 "Stream único cerrado por el servidor en byte {loaded}/{total}, reconectando ({retries}/{MAX_RETRIES})..."
             );
-            tokio::time::sleep(Duration::from_millis(300)).await;
+            wait_for_retry(retry_delay(retries, None), &cancel_flag, &pause_flag).await?;
 
-            let range = format!("bytes={loaded}-");
-            let req = client
-                .get(effective_uri)
-                .header("Range", range)
-                .header("Accept-Encoding", "identity");
-            let req = if let Some(value) = validator.as_deref() {
-                req.header(reqwest::header::IF_RANGE, value)
-            } else {
-                req
+            let res = request_resume(
+                client,
+                effective_uri,
+                profile,
+                loaded,
+                total,
+                validator.as_deref(),
+                &cancel_flag,
+                &pause_flag,
+            )
+            .await;
+            let res = match res {
+                Ok(response) => response,
+                Err(error) if error == "stopped_by_user" => {
+                    drop(file);
+                    remove_partial_download(part_path, checkpoint_path).await;
+                    return Err(error);
+                }
+                Err(error) => return Err(error),
             };
-            let req = apply_profile(req, profile);
-            match req.send().await {
-                Ok(res) if validate_resume_response(&res, loaded, total).is_ok() => {
-                    stream = res.bytes_stream();
-                    continue;
-                }
-                Ok(res) => {
-                    return Err(format!("No se pudo reanudar la descarga: {}", res.status()));
-                }
-                Err(error) => return Err(format!("Error reanudando descarga: {error}")),
+            if res.status() == reqwest::StatusCode::OK {
+                let res = validate_full_restart(res, total, validator.as_deref())?;
+                file.set_len(0)
+                    .await
+                    .map_err(|error| format!("No se pudo reiniciar el archivo: {error}"))?;
+                file.seek(std::io::SeekFrom::Start(0))
+                    .await
+                    .map_err(|error| format!("No se pudo reiniciar el archivo: {error}"))?;
+                loaded = 0;
+                last_emit_loaded = 0;
+                last_emit_at = Instant::now();
+                stream = res.bytes_stream();
+                header_checked = false;
+                continue;
             }
+            stream = res.bytes_stream();
+            continue;
         }
 
         break;
@@ -286,4 +358,91 @@ where
     drop(file);
 
     Ok(loaded)
+}
+
+async fn request_resume(
+    client: &reqwest::Client,
+    uri: &str,
+    profile: &DownloadProfile,
+    start: u64,
+    total: u64,
+    validator: Option<&str>,
+    cancel_flag: &Arc<AtomicBool>,
+    pause_flag: &Arc<AtomicBool>,
+) -> Result<Response, String> {
+    const MAX_REQUEST_RETRIES: usize = 6;
+
+    for attempt in 1..=MAX_REQUEST_RETRIES {
+        let mut request = client
+            .get(uri)
+            .header("Range", format!("bytes={start}-"))
+            .header("Accept-Encoding", "identity");
+        if let Some(value) = validator {
+            request = request.header(reqwest::header::IF_RANGE, value);
+        }
+        let request = apply_profile(request, profile);
+
+        match request.send().await {
+            Ok(response)
+                if response.status() == reqwest::StatusCode::PARTIAL_CONTENT
+                    || response.status() == reqwest::StatusCode::OK =>
+            {
+                if response.status() == reqwest::StatusCode::PARTIAL_CONTENT {
+                    validate_resume_response(&response, start, total)?;
+                }
+                return Ok(response);
+            }
+            Ok(response) => {
+                let status = response.status();
+                let retryable = status == reqwest::StatusCode::REQUEST_TIMEOUT
+                    || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+                    || status.is_server_error();
+                if !retryable || attempt == MAX_REQUEST_RETRIES {
+                    return Err(format!("No se pudo reanudar la descarga: HTTP {status}"));
+                }
+                let delay = retry_delay(attempt, Some(response.headers()));
+                drop(response);
+                wait_for_retry(delay, cancel_flag, pause_flag).await?;
+            }
+            Err(error) => {
+                if attempt == MAX_REQUEST_RETRIES {
+                    return Err(format!("Error reanudando descarga: {error}"));
+                }
+                let delay = retry_delay(attempt, None);
+                wait_for_retry(delay, cancel_flag, pause_flag).await?;
+            }
+        }
+    }
+
+    Err("Se agotaron los intentos para reanudar la descarga".to_string())
+}
+
+async fn remove_partial_download(part_path: &Path, checkpoint_path: &Path) {
+    let _ = tokio::fs::remove_file(part_path).await;
+    let _ = tokio::fs::remove_file(checkpoint_path).await;
+}
+
+fn validate_full_restart(
+    response: Response,
+    total: u64,
+    validator: Option<&str>,
+) -> Result<Response, String> {
+    let response = ensure_download_success(response).map_err(|error| error.user_message())?;
+    if let Some(expected_validator) = validator {
+        let actual_validator = super::download_validator(response.headers());
+        if actual_validator.as_deref() != Some(expected_validator) {
+            return Err(
+                "El archivo remoto cambió durante la descarga; se debe iniciar de nuevo"
+                    .to_string(),
+            );
+        }
+    }
+    if total > 0
+        && response
+            .content_length()
+            .is_some_and(|length| length != total)
+    {
+        return Err("El tamaño remoto cambió al reanudar la descarga".to_string());
+    }
+    Ok(response)
 }

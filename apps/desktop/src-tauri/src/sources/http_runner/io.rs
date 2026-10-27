@@ -6,6 +6,26 @@
 use std::path::Path;
 use std::time::Duration;
 
+/// Escribe JSON en un archivo lateral y lo publica con un renombrado al finalizar.
+pub async fn write_json_atomically<T: serde::Serialize + ?Sized>(
+    path: &Path,
+    value: &T,
+) -> Result<(), std::io::Error> {
+    let bytes = serde_json::to_vec(value).map_err(std::io::Error::other)?;
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("checkpoint");
+    let temporary_path = path.with_file_name(format!("{file_name}.tmp-{}", uuid::Uuid::new_v4()));
+
+    tokio::fs::write(&temporary_path, bytes).await?;
+    if let Err(error) = tokio::fs::rename(&temporary_path, path).await {
+        let _ = tokio::fs::remove_file(&temporary_path).await;
+        return Err(error);
+    }
+    Ok(())
+}
+
 /// Escribe un buffer en un offset arbitrario de un archivo existente.
 ///
 /// En Windows utiliza `FileExt::seek_write`, que mapea a la función Win32 `WriteFile`
@@ -14,10 +34,11 @@ use std::time::Duration;
 /// de sincronización manual con mutexes.
 ///
 /// En sistemas Unix utiliza `FileExt::write_all_at` (`pwrite`).
-pub fn write_at(file: &std::fs::File, mut buf: &[u8], mut offset: u64) -> std::io::Result<()> {
+pub fn write_at(file: &std::fs::File, buf: &[u8], offset: u64) -> std::io::Result<()> {
     #[cfg(windows)]
     {
         use std::os::windows::fs::FileExt;
+        let (mut buf, mut offset) = (buf, offset);
         while !buf.is_empty() {
             let written = file.seek_write(buf, offset)?;
             if written == 0 {

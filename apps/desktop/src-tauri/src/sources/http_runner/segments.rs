@@ -1,6 +1,6 @@
 //! Motor de descarga acelerada multi-segmento en paralelo.
 //!
-//! Divide el archivo en 4 conexiones concurrentes con rangos HTTP (`Range: bytes=X-Y`),
+//! Divide el archivo en 2 o 4 conexiones concurrentes con rangos HTTP (`Range: bytes=X-Y`),
 //! sincronizando la escritura atómica directa a disco sin locks y persistiendo metadatos
 //! en `.part.meta` para soportar pausa y reanudación exacta sin pérdidas.
 
@@ -12,12 +12,19 @@ use std::time::{Duration, Instant};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 
-use super::io::{allocate_file_fast, write_at};
+use super::io::{allocate_file_fast, write_at, write_json_atomically};
+use super::retry::{retry_delay, wait_for_retry};
 use super::validation::{response_is_html_or_json, validate_partial_response};
 use crate::network::{apply_profile, DownloadProfile};
 
 /// Número de conexiones concurrentes en descargas multi-segmento.
 pub const NUM_PARALLEL_SEGMENTS: usize = 4;
+
+/// Respuestas `200 OK` a rangos solicitan un reinicio en modo secuencial.
+pub const RANGE_UNSUPPORTED_ERROR: &str = "range_unsupported:";
+
+/// Un `429` repetido reduce la descarga a un único stream.
+pub const PARALLELISM_REDUCE_ERROR: &str = "parallelism_reduce:";
 
 /// Bytes descargados entre emisiones de progreso (evita saturar IPC/UI).
 pub const HTTP_PROGRESS_EMIT_BYTES: u64 = 512 * 1024;
@@ -49,12 +56,16 @@ pub struct DownloadMeta {
 
 /// Genera la partición inicial equilibrada en 4 rangos de bytes para un archivo de tamaño `total`.
 pub fn create_default_segments(total: u64) -> Vec<DownloadSegment> {
-    let seg_size = total / (NUM_PARALLEL_SEGMENTS as u64);
-    let mut segments = Vec::with_capacity(NUM_PARALLEL_SEGMENTS);
+    create_segments(total, NUM_PARALLEL_SEGMENTS)
+}
 
-    for i in 0..NUM_PARALLEL_SEGMENTS {
+fn create_segments(total: u64, count: usize) -> Vec<DownloadSegment> {
+    let seg_size = total / count as u64;
+    let mut segments = Vec::with_capacity(count);
+
+    for i in 0..count {
         let start = i as u64 * seg_size;
-        let end = if i == NUM_PARALLEL_SEGMENTS - 1 {
+        let end = if i == count - 1 {
             total.saturating_sub(1)
         } else {
             ((i as u64 + 1) * seg_size).saturating_sub(1)
@@ -70,7 +81,17 @@ pub fn create_default_segments(total: u64) -> Vec<DownloadSegment> {
     segments
 }
 
-/// Ejecuta la descarga en 4 conexiones paralelas concurrentes.
+fn segment_count_for_size(total: u64) -> usize {
+    const FOUR_SEGMENT_THRESHOLD: u64 = 128 * 1024 * 1024;
+    if total < FOUR_SEGMENT_THRESHOLD {
+        2
+    } else {
+        NUM_PARALLEL_SEGMENTS
+    }
+}
+
+/// Descarga rangos en paralelo, usando 2 conexiones para archivos menores de 128 MiB
+/// y hasta 4 para archivos mayores.
 pub async fn run_multi_segment_download<F>(
     client: &reqwest::Client,
     effective_uri: &str,
@@ -86,6 +107,7 @@ pub async fn run_multi_segment_download<F>(
 where
     F: FnMut(u64, u64, bool) -> Result<(), String>,
 {
+    let segment_count = segment_count_for_size(total);
     let saved_segments = if meta_path.exists() {
         match tokio::fs::read(meta_path).await {
             Ok(bytes) => serde_json::from_slice::<DownloadMeta>(&bytes)
@@ -93,7 +115,7 @@ where
                 .filter(|meta| {
                     meta.total == total
                         && meta.validator == validator
-                        && segments_are_valid(&meta.segments, total)
+                        && segments_are_valid(&meta.segments, total, segment_count)
                         && std::fs::metadata(part_path).is_ok_and(|file| file.len() == total)
                 })
                 .map(|meta| meta.segments),
@@ -102,7 +124,13 @@ where
     } else {
         None
     };
-    let segments = saved_segments.unwrap_or_else(|| create_default_segments(total));
+    let segments = saved_segments.unwrap_or_else(|| {
+        if segment_count == NUM_PARALLEL_SEGMENTS {
+            create_default_segments(total)
+        } else {
+            create_segments(total, segment_count)
+        }
+    });
 
     let std_file = std::fs::OpenOptions::new()
         .create(true)
@@ -124,7 +152,7 @@ where
 
     let mut tasks = tokio::task::JoinSet::new();
 
-    for seg_idx in 0..NUM_PARALLEL_SEGMENTS {
+    for seg_idx in 0..segment_count {
         let seg = {
             let guard = segments_state.lock().await;
             guard[seg_idx].clone()
@@ -171,35 +199,42 @@ where
                     Ok(r) => r,
                     Err(e) => {
                         retries += 1;
-                        if retries > MAX_RETRIES || cancel_flag.load(Ordering::Relaxed) || pause_flag.load(Ordering::Relaxed) {
+                        if retries > MAX_RETRIES {
                             return Err(format!("Error conectando segmento {seg_idx} tras {retries} intentos: {e}"));
                         }
-                        let backoff = Duration::from_millis(500 * (1 << retries.min(4)));
+                        let backoff = retry_delay(retries, None);
                         log::warn!(
                             "Segmento {seg_idx} fallo de conexión ({e}), reintentando {retries}/{MAX_RETRIES} en {backoff:?}..."
                         );
-                        tokio::time::sleep(backoff).await;
+                        wait_for_retry(backoff, &cancel_flag, &pause_flag).await?;
                         continue;
                     }
                 };
 
                 let status = res.status();
+                if status == reqwest::StatusCode::OK {
+                    return Err(format!(
+                        "{RANGE_UNSUPPORTED_ERROR} el servidor ignoró Range en el segmento {seg_idx}"
+                    ));
+                }
                 if status != reqwest::StatusCode::PARTIAL_CONTENT {
                     retries += 1;
-                    if status.is_success()
-                        || retries > MAX_RETRIES
-                        || cancel_flag.load(Ordering::Relaxed)
-                        || pause_flag.load(Ordering::Relaxed)
-                    {
+                    if status == reqwest::StatusCode::TOO_MANY_REQUESTS && retries >= 2 {
+                        return Err(format!(
+                            "{PARALLELISM_REDUCE_ERROR} el hoster limita las conexiones paralelas"
+                        ));
+                    }
+                    if !is_retryable_status(status) || retries > MAX_RETRIES {
                         return Err(format!(
                             "El servidor no respetó el rango del segmento {seg_idx} (código {status})"
                         ));
                     }
-                    let backoff = Duration::from_millis(500 * (1 << retries.min(4)));
+                    let backoff = retry_delay(retries, Some(res.headers()));
                     log::warn!(
                         "Segmento {seg_idx} código HTTP {status}, reintentando {retries}/{MAX_RETRIES} en {backoff:?}..."
                     );
-                    tokio::time::sleep(backoff).await;
+                    drop(res);
+                    wait_for_retry(backoff, &cancel_flag, &pause_flag).await?;
                     continue;
                 }
 
@@ -264,11 +299,11 @@ where
                             "Error en stream del segmento {seg_idx} ({curr}/{end} bytes tras {MAX_RETRIES} reintentos): {err}"
                         ));
                     }
-                    let backoff = Duration::from_millis(500 * (1 << retries.min(4)));
+                    let backoff = retry_delay(retries, None);
                     log::warn!(
                         "Corte de stream en segmento {seg_idx} ({curr}/{end} bytes, error: {err}), reanudando automáticamente ({retries}/{MAX_RETRIES}) en {backoff:?}..."
                     );
-                    tokio::time::sleep(backoff).await;
+                    wait_for_retry(backoff, &cancel_flag, &pause_flag).await?;
                     continue;
                 }
 
@@ -282,7 +317,12 @@ where
                     log::info!(
                         "Stream del segmento {seg_idx} completó conexión en {curr}/{end} bytes, continuando segmento..."
                     );
-                    tokio::time::sleep(Duration::from_millis(200)).await;
+                    wait_for_retry(
+                        retry_delay(retries, None),
+                        &cancel_flag,
+                        &pause_flag,
+                    )
+                    .await?;
                     continue;
                 }
             }
@@ -361,11 +401,13 @@ where
                     Ok(Err(e)) => {
                         tasks.abort_all();
                         drain_tasks(&mut tasks).await;
+                        drop(file_arc);
                         return Err(e);
                     }
                     Err(e) if !e.is_cancelled() => {
                         tasks.abort_all();
                         drain_tasks(&mut tasks).await;
+                        drop(file_arc);
                         return Err(format!("Fallo en tarea de segmento: {e}"));
                     }
                     _ => {}
@@ -398,12 +440,12 @@ where
     Ok(final_loaded)
 }
 
-fn segments_are_valid(segments: &[DownloadSegment], total: u64) -> bool {
-    if total == 0 || segments.len() != NUM_PARALLEL_SEGMENTS {
+fn segments_are_valid(segments: &[DownloadSegment], total: u64, count: usize) -> bool {
+    if total == 0 || segments.len() != count {
         return false;
     }
 
-    let expected = create_default_segments(total);
+    let expected = create_segments(total, count);
     segments
         .iter()
         .zip(expected)
@@ -418,15 +460,15 @@ fn segments_are_valid(segments: &[DownloadSegment], total: u64) -> bool {
 }
 
 async fn persist_meta(path: &Path, meta: &DownloadMeta) -> Result<(), String> {
-    let bytes = serde_json::to_vec(meta)
-        .map_err(|error| format!("No se pudo serializar el progreso: {error}"))?;
-    let temporary_path = path.with_extension("part.meta.tmp");
-    tokio::fs::write(&temporary_path, bytes)
+    write_json_atomically(path, meta)
         .await
-        .map_err(|error| format!("No se pudo guardar el progreso de descarga: {error}"))?;
-    tokio::fs::rename(&temporary_path, path)
-        .await
-        .map_err(|error| format!("No se pudo confirmar el progreso de descarga: {error}"))
+        .map_err(|error| format!("No se pudo guardar el progreso de descarga: {error}"))
+}
+
+fn is_retryable_status(status: reqwest::StatusCode) -> bool {
+    status == reqwest::StatusCode::REQUEST_TIMEOUT
+        || status == reqwest::StatusCode::TOO_MANY_REQUESTS
+        || status.is_server_error()
 }
 
 async fn drain_tasks(tasks: &mut tokio::task::JoinSet<Result<(), String>>) {
