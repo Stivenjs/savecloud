@@ -13,7 +13,7 @@
     }
   },
   "scripts": {
-    "check": "tsc --noEmit"
+    "check": "bun check"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

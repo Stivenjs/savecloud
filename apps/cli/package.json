@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "bun index.ts",
-    "check": "tsc --noEmit"
+    "check": "bun check"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.6.0",

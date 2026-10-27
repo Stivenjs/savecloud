@@ -46,7 +46,7 @@
     "load:capacity": "bun run scripts/run-k6.ts capacity",
     "load:ws": "bun run scripts/run-k6.ts ws",
     "load:setup": "bun run scripts/setup-k6-users.ts",
-    "check:load": "bun ./node_modules/typescript/bin/tsc --noEmit -p tests/load/k6/tsconfig.json",
+    "check:load": "bun check -p tests/load/k6/tsconfig.json",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "format:changed": "bun run scripts/format-changed.ts",
