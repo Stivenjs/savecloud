@@ -48,8 +48,6 @@ function generateOne(): string {
   return `${ENV_PREFIX}_${secretPart}`;
 }
 
-// ---
-
 const keys = Array.from({ length: COUNT }, () => generateOne());
 
 console.log("");

@@ -1,45 +1,44 @@
 {
-  "editor.formatOnSave": true,
-  "editor.defaultFormatter": "oxc.oxc-vscode",
+  "editor.formatOnSave": false,
+  "emeraldwalk.runonsave": {
+    "commands": [
+      {
+        "match": "\\.(js|jsx|ts|tsx|mjs|cjs|mts|cts|json|jsonc|css|scss|less|html|vue|svelte|ya?ml|toml|md|mdx|graphql|gql|hbs|handlebars)$",
+        "cmd": "bun fmt --no-script \"${file}\""
+      }
+    ]
+  },
   "rust-analyzer.linkedProjects": ["apps/desktop/src-tauri/Cargo.toml"],
   "rust-analyzer.server.path": "rust-analyzer",
   "[typescript]": {
-    "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.codeActionsOnSave": {
       "source.organizeImports": "never"
     }
   },
   "[typescriptreact]": {
-    "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.codeActionsOnSave": {
       "source.organizeImports": "never"
     }
   },
   "[javascript]": {
-    "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.codeActionsOnSave": {
       "source.organizeImports": "never"
     }
   },
   "[javascriptreact]": {
-    "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.codeActionsOnSave": {
       "source.organizeImports": "never"
     }
   },
   "[json]": {
-    "editor.defaultFormatter": "oxc.oxc-vscode",
     "editor.codeActionsOnSave": {
       "source.organizeImports": "never"
     }
   },
   "js/ts.experimental.useTsgo": true,
-  "typescript.enablePromptUseWorkspaceTsdk": false,
+  "js/ts.tsdk.promptToUseWorkspaceVersion": false,
   "[dockerfile]": {
     "editor.defaultFormatter": "ms-azuretools.vscode-containers"
-  },
-  "[jsonc]": {
-    "editor.defaultFormatter": "oxc.oxc-vscode"
   },
   "[rust]": {
     "editor.defaultFormatter": "rust-lang.rust-analyzer"
