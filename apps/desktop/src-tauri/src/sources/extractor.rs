@@ -7,6 +7,8 @@ use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 use tauri::{AppHandle, Manager};
 
+use crate::utils::transfer_metrics::{TransferSample, TransferSpeedTracker};
+
 const COPY_BUF_SIZE: usize = 512 * 1024;
 
 struct SystemTools {
@@ -50,16 +52,55 @@ pub fn is_archive(filename: &str) -> bool {
 
 #[inline]
 fn push_progress(app: &AppHandle, state: &SourcesState, job_id: &str, loaded: u64, total: u64) {
+    push_progress_sample(
+        app,
+        state,
+        job_id,
+        loaded,
+        total,
+        TransferSample {
+            download_speed_bytes: 0,
+            eta_seconds: None,
+        },
+    );
+}
+
+fn push_progress_sample(
+    app: &AppHandle,
+    state: &SourcesState,
+    job_id: &str,
+    loaded: u64,
+    total: u64,
+    sample: TransferSample,
+) {
     if let Ok(mut job) = find_job(state, job_id) {
         job.status = SourceJobStatus::Extracting;
         job.loaded = loaded;
         job.total = total;
-        job.download_speed_bytes = 0;
-        job.eta_seconds = None;
+        job.download_speed_bytes = sample.download_speed_bytes;
+        job.eta_seconds = sample.eta_seconds;
         job.updated_at = now_iso();
         let _ = state.upsert_job(job.clone());
         emit_progress(app, &job);
     }
+}
+
+fn push_zip_progress(
+    app: &AppHandle,
+    state: &SourcesState,
+    job_id: &str,
+    loaded: u64,
+    total: u64,
+    tracker: &mut TransferSpeedTracker,
+    is_final: bool,
+) {
+    let now = std::time::Instant::now();
+    let sample = if is_final {
+        tracker.record_final(loaded, total, now)
+    } else {
+        tracker.record(loaded, total, now)
+    };
+    push_progress_sample(app, state, job_id, loaded, total, sample);
 }
 
 pub fn extract_zip(
@@ -73,6 +114,9 @@ pub fn extract_zip(
     let mut archive =
         zip::ZipArchive::new(file).map_err(|e| format!("Formato ZIP inválido: {e}"))?;
 
+    let state = app.state::<SourcesState>();
+    push_progress(app, &state, job_id, 0, 0);
+
     let total_files = archive.len();
     if total_files == 0 {
         return Ok(());
@@ -81,20 +125,28 @@ pub fn extract_zip(
     let mut total_uncompressed: u64 = 0;
     for i in 0..total_files {
         if let Ok(f) = archive.by_index_raw(i) {
-            total_uncompressed += f.size();
+            total_uncompressed = total_uncompressed.saturating_add(f.size());
         }
     }
     let total_uncompressed = total_uncompressed.max(1);
-    let archive_size = archive_path.metadata().map(|m| m.len()).unwrap_or(1);
 
     std::fs::create_dir_all(destination_dir)
         .map_err(|e| format!("No se pudo crear directorio destino: {e}"))?;
 
-    let state = app.state::<SourcesState>();
+    let mut speed_tracker = TransferSpeedTracker::new();
     let mut extracted_bytes: u64 = 0;
     let mut last_update = std::time::Instant::now();
     let throttle = std::time::Duration::from_millis(250);
     let mut copy_buf = vec![0u8; COPY_BUF_SIZE];
+    push_zip_progress(
+        app,
+        &state,
+        job_id,
+        0,
+        total_uncompressed,
+        &mut speed_tracker,
+        false,
+    );
 
     for i in 0..total_files {
         let mut entry = archive
@@ -105,8 +157,6 @@ pub fn extract_zip(
             Some(p) => destination_dir.join(p),
             None => continue,
         };
-
-        let entry_size = entry.size();
 
         if entry.is_dir() {
             std::fs::create_dir_all(&outpath)
@@ -133,21 +183,51 @@ pub fn extract_zip(
                 writer
                     .write_all(&copy_buf[..n])
                     .map_err(|e| format!("Error escribiendo {}: {e}", outpath.display()))?;
+
+                extracted_bytes = extracted_bytes.saturating_add(n as u64);
+                let now = std::time::Instant::now();
+                if now.duration_since(last_update) >= throttle {
+                    push_zip_progress(
+                        app,
+                        &state,
+                        job_id,
+                        extracted_bytes.min(total_uncompressed),
+                        total_uncompressed,
+                        &mut speed_tracker,
+                        false,
+                    );
+                    last_update = now;
+                }
             }
             writer
                 .flush()
                 .map_err(|e| format!("Error en flush {}: {e}", outpath.display()))?;
         }
 
-        extracted_bytes += entry_size;
-
         let now = std::time::Instant::now();
         if i == total_files - 1 || now.duration_since(last_update) >= throttle {
-            let loaded = (extracted_bytes * archive_size) / total_uncompressed;
-            push_progress(app, &state, job_id, loaded, archive_size);
+            push_zip_progress(
+                app,
+                &state,
+                job_id,
+                extracted_bytes.min(total_uncompressed),
+                total_uncompressed,
+                &mut speed_tracker,
+                false,
+            );
             last_update = now;
         }
     }
+
+    push_zip_progress(
+        app,
+        &state,
+        job_id,
+        total_uncompressed,
+        total_uncompressed,
+        &mut speed_tracker,
+        true,
+    );
 
     Ok(())
 }
@@ -401,8 +481,23 @@ pub async fn process_post_download_extraction(
 
     let dest_path = PathBuf::from(&destination_dir);
 
-    if let Err(err) = extract_archive(&app, &job_id, &path, &dest_path) {
-        log::error!("Error de extracción en job {job_id}: {err}");
+    let extraction_app = app.clone();
+    let extraction_job_id = job_id.clone();
+    let extraction_path = path.clone();
+    let extraction_destination = dest_path.clone();
+    match tokio::task::spawn_blocking(move || {
+        extract_archive(
+            &extraction_app,
+            &extraction_job_id,
+            &extraction_path,
+            &extraction_destination,
+        )
+    })
+    .await
+    {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => log::error!("Error de extracción en job {job_id}: {error}"),
+        Err(error) => log::error!("Falló el worker de extracción del job {job_id}: {error}"),
     }
 
     let _ = std::fs::remove_file(&path);
