@@ -23,13 +23,20 @@
   CreateDirectory "$APPDATA\SaveCloud\data\cache"
 
   ${IfNot} ${Silent}
-    nsExec::Exec '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\installer-sources.ps1" -Action Check -DataRoot "$APPDATA\SaveCloud\data" -PresetPath "$PLUGINSDIR\verified_sources.json" -PendingPath "$PLUGINSDIR\verified-sources-pending.json"'
+    nsExec::Exec '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\installer-sources.ps1" -Action Check -DataRoot "$APPDATA\SaveCloud\data" -PresetPath "$PLUGINSDIR\verified_sources.json" -PendingPath "$PLUGINSDIR\verified-sources-pending.json" -DisplayPath "$PLUGINSDIR\verified-sources-names.txt"'
     Pop $0
     ${If} $0 == 10
+      StrCpy $1 ""
+      FileOpen $0 "$PLUGINSDIR\verified-sources-names.txt" r
+      IfErrors verified_sources_names_unavailable
+      FileRead $0 $1
+      FileClose $0
+      verified_sources_names_unavailable:
+
       ${If} $LANGUAGE == ${LANG_SPANISHINTERNATIONAL}
-        MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON1 "Hay nuevas fuentes verificadas disponibles para SaveCloud.$\r$\n$\r$\n¿Quieres añadirlas a tu catálogo?" /SD IDNO IDYES apply_verified_sources IDNO dismiss_verified_sources
+        MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON1 "Hay nuevas fuentes verificadas disponibles para SaveCloud:$\r$\n$\r$\n$1$\r$\n$\r$\n¿Quieres añadirlas a tu catálogo?" /SD IDNO IDYES apply_verified_sources IDNO dismiss_verified_sources
       ${Else}
-        MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON1 "New verified sources are available for SaveCloud.$\r$\n$\r$\nWould you like to add them to your catalog?" /SD IDNO IDYES apply_verified_sources IDNO dismiss_verified_sources
+        MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON1 "New verified sources are available for SaveCloud:$\r$\n$\r$\n$1$\r$\n$\r$\nWould you like to add them to your catalog?" /SD IDNO IDYES apply_verified_sources IDNO dismiss_verified_sources
       ${EndIf}
 
       apply_verified_sources:
