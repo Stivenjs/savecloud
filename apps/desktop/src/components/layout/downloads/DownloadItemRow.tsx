@@ -125,7 +125,12 @@ export function DownloadItemRow({
             {formatBytes(row.loaded ?? 0)}
             {(row.total ?? 0) > 0 ? ` / ${formatBytes(row.total ?? 0)}` : ""}
           </span>
-          {row.status === "extracting" ? null : (
+          {row.status === "extracting" ? (
+            <span className="inline-flex items-center gap-1">
+              <Clock size={consoleMode ? 14 : 12} className="text-default-400" />
+              <span className="tabular-nums">{formatEta(row.etaSeconds ?? null)}</span>
+            </span>
+          ) : (
             <>
               <span className="inline-flex items-center gap-1">
                 <Zap size={consoleMode ? 14 : 12} className="text-primary/70" />

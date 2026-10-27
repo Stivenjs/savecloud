@@ -95,7 +95,8 @@ async function main(): Promise<void> {
 
   try {
     if (s3EventQueueClient && s3EventQueueName) {
-      if (!s3EventQueueUrl) throw new Error("S3_EVENT_QUEUE_URL es obligatorio cuando se configura S3_EVENT_QUEUE_NAME.");
+      if (!s3EventQueueUrl)
+        throw new Error("S3_EVENT_QUEUE_URL es obligatorio cuando se configura S3_EVENT_QUEUE_NAME.");
       await ensureS3EventQueue(s3EventQueueClient, s3EventQueueName);
     }
     await ensureDynamoDbTablesExist(dynamoClient, {
@@ -119,17 +120,18 @@ async function main(): Promise<void> {
     connectionRepository,
     webSocketNotifier,
     getActiveWebSocketConnectionCount: () => webSocketNotifier.getActiveConnectionCount(),
-    processS3Events: s3EventQueueClient && s3EventQueueName
-      ? async (events) => {
-          for (let offset = 0; offset < events.length; offset += SQS_MAX_BATCH_SIZE) {
-            await enqueueS3Events(
-              s3EventQueueClient,
-              s3EventQueueUrl!,
-              events.slice(offset, offset + SQS_MAX_BATCH_SIZE)
-            );
+    processS3Events:
+      s3EventQueueClient && s3EventQueueName
+        ? async (events) => {
+            for (let offset = 0; offset < events.length; offset += SQS_MAX_BATCH_SIZE) {
+              await enqueueS3Events(
+                s3EventQueueClient,
+                s3EventQueueUrl!,
+                events.slice(offset, offset + SQS_MAX_BATCH_SIZE)
+              );
+            }
           }
-        }
-      : undefined,
+        : undefined,
   });
 
   const port = Number(process.env.PORT) || DEFAULT_SERVER_PORT;

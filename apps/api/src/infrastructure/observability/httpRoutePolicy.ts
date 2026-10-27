@@ -6,9 +6,6 @@ export function shouldIgnoreHttpObservation(path: string): boolean {
   const pathname = path.split("?")[0] ?? "";
 
   return (
-    pathname === "/" ||
-    pathname === "/health" ||
-    pathname === "/favicon.ico" ||
-    pathname.startsWith("/observability/")
+    pathname === "/" || pathname === "/health" || pathname === "/favicon.ico" || pathname.startsWith("/observability/")
   );
 }

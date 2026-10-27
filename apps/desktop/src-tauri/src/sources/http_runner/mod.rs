@@ -1,16 +1,18 @@
 //! Ejecutor HTTP acelerado para jobs de fuentes (multi-segmento y pause/resume).
 //!
 //! Coordina la resolución de URLs mediante clientes y perfiles específicos por hoster,
-//! particiona automáticamente archivos de juegos en 4 conexiones paralelas si el servidor
-//! soporta rangos (`Range: bytes`), gestiona metadatos `.part.meta` para pausar y reanudar
-//! de forma determinista, y asegura escrituras atómicas a disco tolerantes a antivirus.
+//! particiona archivos grandes en hasta 4 rangos, reduce la concurrencia ante límites del
+//! hoster y mantiene checkpoints compatibles con pausa y reanudación.
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Instant;
 
+use base64::Engine;
+use sha2::{Digest, Sha256};
 use tauri::AppHandle;
+use tokio::io::AsyncReadExt;
 
 use super::hosters::{self, HosterError};
 use crate::network::{ensure_download_success, get_hoster_download_client, get_with_profile};
@@ -18,6 +20,7 @@ use crate::utils::transfer_metrics::TransferSpeedTracker;
 
 pub mod io;
 pub mod naming;
+pub mod retry;
 pub mod segments;
 pub mod single_stream;
 pub mod validation;
@@ -26,7 +29,7 @@ pub use naming::build_output_name;
 
 use io::safe_rename_with_retry;
 use naming::content_disposition_filename;
-use segments::run_multi_segment_download;
+use segments::{run_multi_segment_download, PARALLELISM_REDUCE_ERROR, RANGE_UNSUPPORTED_ERROR};
 use single_stream::run_single_stream_download;
 use validation::{invalid_download_body_message, response_is_html_or_json};
 
@@ -122,8 +125,11 @@ pub async fn run_http_download(
     let output = destination.join(&output_file_name);
     let part_path = destination.join(format!("{output_file_name}.part"));
     let meta_path = destination.join(format!("{output_file_name}.part.meta"));
+    let single_meta_path = destination.join(format!("{output_file_name}.part.stream.meta"));
 
     let total = initial_response.content_length().unwrap_or(0);
+    let validator = download_validator(initial_response.headers());
+    let mut expected_sha256 = sha256_digest(initial_response.headers())?;
     let accept_ranges = initial_response
         .headers()
         .get("accept-ranges")
@@ -133,34 +139,74 @@ pub async fn run_http_download(
         == "bytes"
         || initial_response.status() == reqwest::StatusCode::PARTIAL_CONTENT;
 
-    // Si el archivo final ya existe con el tamaño idéntico al reportado por el servidor, completar de inmediato
-    if output.exists() && total > 0 {
-        if let Ok(meta) = tokio::fs::metadata(&output).await {
-            if meta.len() == total {
-                emit_progress(total, total, true)?;
-                return Ok(HttpRunResult {
-                    loaded: total,
-                    total,
-                    output_file_name,
-                });
-            }
-        }
-    }
-
     let final_loaded = if accept_ranges && total >= MIN_MULTI_SEGMENT_BYTES {
         drop(initial_response);
-        run_multi_segment_download(
+        match run_multi_segment_download(
             &client,
             effective_uri,
             &profile,
             &part_path,
             &meta_path,
             total,
+            validator.clone(),
             cancel_flag.clone(),
             pause_flag.clone(),
             &mut emit_progress,
         )
-        .await?
+        .await
+        {
+            Ok(loaded) => loaded,
+            Err(error)
+                if error.starts_with(RANGE_UNSUPPORTED_ERROR)
+                    || error.starts_with(PARALLELISM_REDUCE_ERROR) =>
+            {
+                let _ = tokio::fs::remove_file(&part_path).await;
+                let _ = tokio::fs::remove_file(&meta_path).await;
+                let response = get_with_profile(&client, effective_uri, &profile)
+                    .await
+                    .map_err(|error| format!("Error al reiniciar descarga HTTP: {error}"))?;
+                let response =
+                    ensure_download_success(response).map_err(|error| error.user_message())?;
+                if response.status() != reqwest::StatusCode::OK {
+                    return Err(format!(
+                        "El hoster no entregó un stream completo para el fallback (HTTP {})",
+                        response.status()
+                    ));
+                }
+                if response
+                    .content_length()
+                    .is_some_and(|length| length != total)
+                {
+                    return Err("El tamaño remoto cambió al reiniciar la descarga".to_string());
+                }
+                let fallback_validator = download_validator(response.headers());
+                if validator.is_some() && fallback_validator != validator {
+                    return Err("El archivo remoto cambió durante el fallback HTTP".to_string());
+                }
+                if let Some(digest) = sha256_digest(response.headers())? {
+                    expected_sha256 = Some(digest);
+                }
+                if response_is_html_or_json(response.headers()) {
+                    return Err(invalid_download_body_message(uri, None));
+                }
+                run_single_stream_download(
+                    &client,
+                    effective_uri,
+                    &profile,
+                    Some(response),
+                    &part_path,
+                    &single_meta_path,
+                    total,
+                    validator.clone(),
+                    true,
+                    cancel_flag.clone(),
+                    pause_flag.clone(),
+                    &mut emit_progress,
+                )
+                .await?
+            }
+            Err(error) => return Err(error),
+        }
     } else {
         run_single_stream_download(
             &client,
@@ -168,7 +214,9 @@ pub async fn run_http_download(
             &profile,
             Some(initial_response),
             &part_path,
+            &single_meta_path,
             total,
+            validator,
             accept_ranges,
             cancel_flag.clone(),
             pause_flag.clone(),
@@ -180,6 +228,7 @@ pub async fn run_http_download(
     if final_loaded < MIN_VALID_DOWNLOAD_BYTES {
         let _ = tokio::fs::remove_file(&part_path).await;
         let _ = tokio::fs::remove_file(&meta_path).await;
+        let _ = tokio::fs::remove_file(&single_meta_path).await;
         let lower_uri = uri.to_ascii_lowercase();
         if lower_uri.contains("vikingfile") || lower_uri.contains("vik1ngfile") {
             return Err(invalid_download_body_message(uri, None));
@@ -189,15 +238,88 @@ pub async fn run_http_download(
         ));
     }
 
+    if let Some(expected) = expected_sha256 {
+        let actual = sha256_file(&part_path).await?;
+        if actual != expected {
+            let _ = tokio::fs::remove_file(&part_path).await;
+            let _ = tokio::fs::remove_file(&meta_path).await;
+            let _ = tokio::fs::remove_file(&single_meta_path).await;
+            return Err("El checksum SHA-256 del archivo descargado no coincide".to_string());
+        }
+    }
+
     safe_rename_with_retry(&part_path, &output)
         .await
         .map_err(|e| format!("No se pudo renombrar archivo final: {e}"))?;
 
     let _ = tokio::fs::remove_file(&meta_path).await;
+    let _ = tokio::fs::remove_file(&single_meta_path).await;
 
     Ok(HttpRunResult {
         loaded: final_loaded,
         total: if total > 0 { total } else { final_loaded },
         output_file_name,
     })
+}
+
+fn download_validator(headers: &reqwest::header::HeaderMap) -> Option<String> {
+    headers
+        .get(reqwest::header::ETAG)
+        .and_then(|value| value.to_str().ok())
+        .filter(|etag| !etag.trim_start().starts_with("W/"))
+        .or_else(|| {
+            headers
+                .get(reqwest::header::LAST_MODIFIED)
+                .and_then(|value| value.to_str().ok())
+        })
+        .map(str::to_owned)
+}
+
+fn sha256_digest(headers: &reqwest::header::HeaderMap) -> Result<Option<[u8; 32]>, String> {
+    for header_name in ["content-digest", "digest"] {
+        let Some(header_value) = headers.get(header_name) else {
+            continue;
+        };
+        let value = header_value
+            .to_str()
+            .map_err(|error| format!("Cabecera de checksum inválida: {error}"))?;
+        for entry in value.split(',') {
+            let Some((algorithm, encoded)) = entry.trim().split_once('=') else {
+                continue;
+            };
+            if !algorithm.trim().eq_ignore_ascii_case("sha-256") {
+                continue;
+            }
+            let encoded = encoded.trim().trim_matches('"').trim_matches(':');
+            let digest = base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .map_err(|error| format!("Checksum SHA-256 inválido: {error}"))?;
+            let digest: [u8; 32] = digest
+                .try_into()
+                .map_err(|_| "El checksum SHA-256 tiene una longitud inválida".to_string())?;
+            return Ok(Some(digest));
+        }
+    }
+    Ok(None)
+}
+
+async fn sha256_file(path: &std::path::Path) -> Result<[u8; 32], String> {
+    let mut file = tokio::fs::File::open(path)
+        .await
+        .map_err(|error| format!("No se pudo abrir el archivo para verificarlo: {error}"))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0_u8; 1024 * 1024];
+
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .await
+            .map_err(|error| format!("No se pudo leer el archivo para verificarlo: {error}"))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+
+    Ok(hasher.finalize().into())
 }

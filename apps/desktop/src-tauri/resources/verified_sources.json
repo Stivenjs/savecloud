@@ -1,6 +1,7 @@
 [
   {
     "id": "remote-59e6a31484ce",
+    "name": "FitGirl",
     "url": "https://hydralinks.cloud/sources/fitgirl.json",
     "enabled": true,
     "sync": {
@@ -14,6 +15,7 @@
   },
   {
     "id": "remote-118d12535cb4",
+    "name": "SteamRip",
     "url": "https://hydralinks.cloud/sources/steamrip.json",
     "enabled": true,
     "sync": {
@@ -27,6 +29,7 @@
   },
   {
     "id": "remote-2e45374d21bf",
+    "name": "Online-Fix",
     "url": "https://hydralinks.cloud/sources/onlinefix.json",
     "enabled": true,
     "sync": {
@@ -40,6 +43,7 @@
   },
   {
     "id": "remote-1783e708d297",
+    "name": "ByXatab",
     "url": "https://hydralinks.cloud/sources/xatab.json",
     "enabled": true,
     "sync": {
@@ -53,6 +57,7 @@
   },
   {
     "id": "remote-6e247eb2aaad",
+    "name": "DODI",
     "url": "https://hydralinks.cloud/sources/dodi.json",
     "enabled": true,
     "sync": {
@@ -66,6 +71,7 @@
   },
   {
     "id": "remote-1a3c886a3ff3",
+    "name": "Free GOG",
     "url": "https://hydralinks.cloud/sources/gog.json",
     "enabled": true,
     "sync": {
@@ -79,6 +85,7 @@
   },
   {
     "id": "remote-6cd751fb21be",
+    "name": "Atop Games",
     "url": "https://hydralinks.cloud/sources/atop-games.json",
     "enabled": true,
     "sync": {
@@ -92,6 +99,7 @@
   },
   {
     "id": "remote-d979e2a45109",
+    "name": "SteamGG",
     "url": "https://wkeynhk.online/steamgg.json",
     "enabled": true,
     "sync": {
@@ -105,6 +113,7 @@
   },
   {
     "id": "remote-5d1baec7edea",
+    "name": "Fuente Kazumi",
     "url": "https://davidkazumisource.com/fontekazumi.json",
     "enabled": true,
     "sync": {
@@ -118,6 +127,7 @@
   },
   {
     "id": "remote-ecee099b9bb0",
+    "name": "RexaGames",
     "url": "https://hydralinks.cloud/sources/rexagames.json",
     "enabled": true,
     "sync": {
@@ -131,7 +141,120 @@
   },
   {
     "id": "remote-2fb22b88b8ad",
+    "name": "Empress",
     "url": "https://hydralinks.cloud/sources/empress.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-764d16278335",
+    "name": "KaosKrew",
+    "url": "https://hydralinks.cloud/sources/kaoskrew.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-050ac13a2b87",
+    "name": "Rutracker & Rutor",
+    "url": "https://raw.githubusercontent.com/KekitU/rutracker-hydra-links/main/all_categories.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-1078e98f155f",
+    "name": "GameBounty",
+    "url": "https://hydralinks.cloud/sources/gamebounty.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-d5755c57ba6b",
+    "name": "TinyRepacks",
+    "url": "https://hydralinks.cloud/sources/tinyrepacks.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-5194b6aff008",
+    "name": "Erotorrent.ru",
+    "url": "https://raw.githubusercontent.com/s0d4lite52spb/sodalite-hydralinks/refs/heads/main/erotorrent.ru_list.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-6ba3d7ce51f8",
+    "name": "Rutor",
+    "url": "https://wkeynhk.online/rutor.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-a71c4ad9d472",
+    "name": "Shisuy's Source",
+    "url": "https://raw.githubusercontent.com/Shisuiicaro/source/refs/heads/main/shisuyssource.json",
+    "enabled": true,
+    "sync": {
+      "etag": null,
+      "lastModified": null,
+      "contentHash": null,
+      "lastCheckedAt": null,
+      "lastSyncedAt": null,
+      "syncError": null
+    }
+  },
+  {
+    "id": "remote-179da0189fff",
+    "name": "AnkerGames",
+    "url": "https://wkeynhk.online/ankergames.json",
     "enabled": true,
     "sync": {
       "etag": null,

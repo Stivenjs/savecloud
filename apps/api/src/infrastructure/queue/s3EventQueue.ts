@@ -92,9 +92,7 @@ export async function deleteS3Events(
   messages: Array<{ MessageId?: string; ReceiptHandle?: string }>
 ): Promise<void> {
   const entries = messages.flatMap((message, index) =>
-    message.MessageId && message.ReceiptHandle
-      ? [{ Id: String(index), ReceiptHandle: message.ReceiptHandle }]
-      : []
+    message.MessageId && message.ReceiptHandle ? [{ Id: String(index), ReceiptHandle: message.ReceiptHandle }] : []
   );
   if (entries.length === 0) return;
 

@@ -8,7 +8,7 @@
     "dev:steam-seed-worker": "bun --watch src/interfaces/worker/steam-seed-worker.ts",
     "worker:steam-seed": "bun src/interfaces/worker/steam-seed-worker.ts",
     "build": "tsc",
-    "check": "tsc --noEmit && bun ./scripts/check-architecture.ts",
+    "check": "bun check && bun ./scripts/check-architecture.ts",
     "check:architecture": "bun ./scripts/check-architecture.ts"
   },
   "dependencies": {

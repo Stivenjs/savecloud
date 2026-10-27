@@ -11,7 +11,7 @@ Esta guía cubre el uso local y el despliegue de SaveCloud en un VPS. En el VPS,
 | MinIO S3                  | `minio:9000`              | Solo a través de `https://s3.<DOMAIN>` en Caddy; `127.0.0.1:9000` local |
 | Consola MinIO             | `minio:9001`              | Solo `127.0.0.1:9001`                                                   |
 | DynamoDB Local            | `dynamodb-local:8000`     | Solo `127.0.0.1:8000`                                                   |
-| Cola de eventos S3        | `elasticmq:9324`          | Sin puertos publicados                                                   |
+| Cola de eventos S3        | `elasticmq:9324`          | Sin puertos publicados                                                  |
 
 Compose crea una red privada y los servicios se encuentran por nombre DNS de servicio. La API usa `minio:9000` y `dynamodb-local:8000`; no usa `localhost` para hablar con otros contenedores. Caddy no tiene una dependencia de arranque respecto de la API: reintenta las conexiones al upstream cuando la API termina de iniciar.
 

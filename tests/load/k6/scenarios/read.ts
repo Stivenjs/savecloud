@@ -39,8 +39,7 @@ export function readScenario(): void {
 
     const savesBody = parseJson<SaveRecord[]>(saves, "saves list");
     const summaries = parseJson<GameSummary[]>(summary, "saves summary");
-    const selectedSave =
-      savesBody.length > 0 ? savesBody[Math.floor(Math.random() * savesBody.length)] : undefined;
+    const selectedSave = savesBody.length > 0 ? savesBody[Math.floor(Math.random() * savesBody.length)] : undefined;
     const selectedGame =
       selectedSave?.gameId ??
       (summaries.length > 0 ? summaries[Math.floor(Math.random() * summaries.length)].gameId : undefined);

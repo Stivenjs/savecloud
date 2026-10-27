@@ -45,7 +45,9 @@ export interface AppDependencies {
   connectionRepository?: ConnectionRepository;
   webSocketNotifier?: WebSocketNotifier;
   getActiveWebSocketConnectionCount?: () => number;
-  processS3Events?: (events: import("@application/use-cases/ProcessS3EventUseCase").ProcessS3EventInput[]) => Promise<void>;
+  processS3Events?: (
+    events: import("@application/use-cases/ProcessS3EventUseCase").ProcessS3EventInput[]
+  ) => Promise<void>;
 }
 
 /**

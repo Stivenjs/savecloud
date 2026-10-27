@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun run --bun vite",
-    "build": "tsc && bun run --bun vite build",
-    "check": "tsc --noEmit",
+    "build": "bun check && bun run --bun vite build",
+    "check": "bun check",
     "preview": "bun run --bun vite preview"
   },
   "dependencies": {

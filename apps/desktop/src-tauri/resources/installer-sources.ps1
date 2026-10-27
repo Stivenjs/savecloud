@@ -7,7 +7,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$PresetPath,
     [Parameter(Mandatory = $true)]
-    [string]$PendingPath
+    [string]$PendingPath,
+    [string]$DisplayPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -116,6 +117,31 @@ function Get-SourceIdSet {
     return $ids
 }
 
+function Get-SourceDisplayName {
+    param([object]$Source)
+
+    $name = ([string]$Source.name).Trim()
+    if (-not [string]::IsNullOrWhiteSpace($name)) {
+        return ($name -replace '[\r\n,]+', ' ').Trim()
+    }
+
+    $url = Normalize-SourceUrl -Url ([string]$Source.url)
+    try {
+        $leaf = [System.IO.Path]::GetFileName(([System.Uri]$url).AbsolutePath)
+        $stem = [System.IO.Path]::GetFileNameWithoutExtension($leaf)
+        if (-not [string]::IsNullOrWhiteSpace($stem)) {
+            $words = ($stem -replace '[-_]+', ' ').ToLowerInvariant()
+            return [System.Globalization.CultureInfo]::InvariantCulture.TextInfo.ToTitleCase($words)
+        }
+    }
+    catch {
+        # Use the URL host when the path cannot be parsed into a useful filename.
+    }
+
+    try { return ([System.Uri]$url).Host }
+    catch { return $url }
+}
+
 try {
     $root = [System.IO.Path]::GetFullPath($DataRoot)
     $remotePath = Resolve-RemoteSourcesPath -Root $root
@@ -155,9 +181,16 @@ try {
             if (Test-Path -LiteralPath $PendingPath -PathType Leaf) {
                 Remove-Item -LiteralPath $PendingPath -Force
             }
+            if (-not [string]::IsNullOrWhiteSpace($DisplayPath) -and (Test-Path -LiteralPath $DisplayPath -PathType Leaf)) {
+                Remove-Item -LiteralPath $DisplayPath -Force
+            }
             exit 0
         }
         Write-JsonAtomic -Path $PendingPath -Value @($pending.ToArray())
+        if (-not [string]::IsNullOrWhiteSpace($DisplayPath)) {
+            $displayNames = @($pending | ForEach-Object { Get-SourceDisplayName -Source $_ }) -join ', '
+            [System.IO.File]::WriteAllText($DisplayPath, $displayNames, [System.Text.UTF8Encoding]::new($false))
+        }
         exit 10
     }
 
@@ -194,6 +227,9 @@ try {
             )
             if (-not $installed) {
                 $source | Add-Member -NotePropertyName enabled -NotePropertyValue $true -Force
+                if ($source.PSObject.Properties.Name -contains 'name') {
+                    $source.PSObject.Properties.Remove('name')
+                }
                 [void]$merged.Add($source)
                 Add-KnownSource -Ids $knownIds -Urls $knownUrls -Source $source
             }

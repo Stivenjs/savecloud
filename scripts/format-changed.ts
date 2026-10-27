@@ -4,7 +4,44 @@ import { spawnSync } from "child_process";
 import { extname } from "path";
 
 const cwd = process.cwd();
-const oxfmtExtensions = new Set([".js", ".jsx", ".ts", ".tsx", ".json", ".css", ".md"]);
+const bunFormatExtensions = new Set([
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".mjs",
+  ".cjs",
+  ".mts",
+  ".cts",
+  ".json",
+  ".jsonc",
+  ".css",
+  ".scss",
+  ".less",
+  ".html",
+  ".vue",
+  ".svelte",
+  ".yaml",
+  ".yml",
+  ".toml",
+  ".md",
+  ".mdx",
+  ".graphql",
+  ".gql",
+  ".hbs",
+  ".handlebars",
+]);
+const ignoredPathSegments = new Set([
+  ".agents",
+  ".vscode",
+  ".github",
+  ".husky",
+  "build",
+  "coverage",
+  "node_modules",
+  "src-tauri",
+]);
+const ignoredFileNames = new Set(["package-lock.json", "yarn.lock", "pnpm-lock.yaml"]);
 
 function runGit(args: string[]) {
   const result = spawnSync("git", args, {
@@ -29,23 +66,31 @@ const changedTrackedFiles = runGit(["diff", "--name-only", "--diff-filter=ACMR",
 
 const untrackedFiles = runGit(["ls-files", "--others", "--exclude-standard"]).split(/\r?\n/).filter(Boolean);
 
-const changedFiles = Array.from(new Set([...changedTrackedFiles, ...untrackedFiles])).filter((filePath) =>
-  oxfmtExtensions.has(extname(filePath).toLowerCase())
-);
+const changedFiles = Array.from(new Set([...changedTrackedFiles, ...untrackedFiles])).filter((filePath) => {
+  const normalizedPath = filePath.replaceAll("\\", "/");
+  const isIgnored = normalizedPath.split("/").some((segment) => ignoredPathSegments.has(segment));
+  const fileName = normalizedPath.split("/").at(-1);
+  return (
+    !isIgnored &&
+    fileName !== undefined &&
+    !ignoredFileNames.has(fileName) &&
+    bunFormatExtensions.has(extname(filePath).toLowerCase())
+  );
+});
 
 if (!changedFiles.length) {
   process.exit(0);
 }
 
-const oxfmt = spawnSync("oxfmt", [...changedFiles], {
+const formatter = spawnSync("bun", ["fmt", ...changedFiles], {
   cwd,
   stdio: "inherit",
 });
 
-if (oxfmt.error) {
-  throw oxfmt.error;
+if (formatter.error) {
+  throw formatter.error;
 }
 
-if (oxfmt.status !== 0) {
-  process.exit(oxfmt.status ?? 1);
+if (formatter.status !== 0) {
+  process.exit(formatter.status ?? 1);
 }
