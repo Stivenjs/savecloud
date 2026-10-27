@@ -124,6 +124,7 @@ pub async fn run_http_download(
     let meta_path = destination.join(format!("{output_file_name}.part.meta"));
 
     let total = initial_response.content_length().unwrap_or(0);
+    let validator = download_validator(initial_response.headers());
     let accept_ranges = initial_response
         .headers()
         .get("accept-ranges")
@@ -132,20 +133,6 @@ pub async fn run_http_download(
         .unwrap_or_default()
         == "bytes"
         || initial_response.status() == reqwest::StatusCode::PARTIAL_CONTENT;
-
-    // Si el archivo final ya existe con el tamaño idéntico al reportado por el servidor, completar de inmediato
-    if output.exists() && total > 0 {
-        if let Ok(meta) = tokio::fs::metadata(&output).await {
-            if meta.len() == total {
-                emit_progress(total, total, true)?;
-                return Ok(HttpRunResult {
-                    loaded: total,
-                    total,
-                    output_file_name,
-                });
-            }
-        }
-    }
 
     let final_loaded = if accept_ranges && total >= MIN_MULTI_SEGMENT_BYTES {
         drop(initial_response);
@@ -156,6 +143,7 @@ pub async fn run_http_download(
             &part_path,
             &meta_path,
             total,
+            validator,
             cancel_flag.clone(),
             pause_flag.clone(),
             &mut emit_progress,
@@ -169,6 +157,7 @@ pub async fn run_http_download(
             Some(initial_response),
             &part_path,
             total,
+            validator,
             accept_ranges,
             cancel_flag.clone(),
             pause_flag.clone(),
@@ -200,4 +189,17 @@ pub async fn run_http_download(
         total: if total > 0 { total } else { final_loaded },
         output_file_name,
     })
+}
+
+fn download_validator(headers: &reqwest::header::HeaderMap) -> Option<String> {
+    headers
+        .get(reqwest::header::ETAG)
+        .and_then(|value| value.to_str().ok())
+        .filter(|etag| !etag.trim_start().starts_with("W/"))
+        .or_else(|| {
+            headers
+                .get(reqwest::header::LAST_MODIFIED)
+                .and_then(|value| value.to_str().ok())
+        })
+        .map(str::to_owned)
 }

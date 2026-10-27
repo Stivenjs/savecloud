@@ -1,10 +1,112 @@
 //! Detección preventiva de respuestas web erróneas (HTML, JSON de error, Cloudflare CAPTCHAs)
 //! y formateo de mensajes de error de red.
 
-use std::time::Duration;
 use reqwest::header::HeaderMap;
+use std::time::Duration;
 
 use crate::sources::hosters;
+
+/// Valida que una respuesta a `Range` contenga exactamente el tramo solicitado.
+///
+/// No basta con que la respuesta sea exitosa: `200 OK` significa que el servidor
+/// ignoró el rango y no se puede anexar ni escribir como si fuera un `206`.
+///
+/// # Errors
+///
+/// Devuelve un error si el servidor no responde con `206 Partial Content`, omite
+/// `Content-Range` o informa límites diferentes a los solicitados.
+pub fn validate_partial_response(
+    response: &reqwest::Response,
+    expected_start: u64,
+    expected_end: u64,
+    expected_total: u64,
+) -> Result<(), String> {
+    if response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
+        return Err(format!(
+            "El servidor no respetó el rango HTTP solicitado (código {})",
+            response.status()
+        ));
+    }
+
+    let content_range = response
+        .headers()
+        .get(reqwest::header::CONTENT_RANGE)
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| "Respuesta 206 sin cabecera Content-Range válida".to_string())?;
+    let (actual_start, actual_end, actual_total) = parse_content_range(content_range)?;
+
+    if (actual_start, actual_end, actual_total) != (expected_start, expected_end, expected_total) {
+        return Err(format!(
+            "El servidor devolvió un rango distinto al solicitado ({actual_start}-{actual_end}/{actual_total})"
+        ));
+    }
+
+    Ok(())
+}
+
+/// Valida una respuesta de continuación cuando el tamaño remoto puede ser desconocido.
+///
+/// # Errors
+///
+/// Devuelve un error si la respuesta no es un rango parcial válido o si su inicio
+/// o tamaño total no coincide con la continuación solicitada.
+pub fn validate_resume_response(
+    response: &reqwest::Response,
+    expected_start: u64,
+    expected_total: u64,
+) -> Result<(), String> {
+    if response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
+        return Err(format!(
+            "El servidor no respetó la reanudación HTTP solicitada (código {})",
+            response.status()
+        ));
+    }
+
+    let content_range = response
+        .headers()
+        .get(reqwest::header::CONTENT_RANGE)
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| "Respuesta 206 sin cabecera Content-Range válida".to_string())?;
+    let (actual_start, actual_end, actual_total) = parse_content_range(content_range)?;
+    if actual_start != expected_start
+        || actual_end != actual_total - 1
+        || (expected_total > 0 && actual_total != expected_total)
+    {
+        return Err(format!(
+            "El servidor devolvió un rango de reanudación incoherente ({actual_start}-{actual_end}/{actual_total})"
+        ));
+    }
+
+    Ok(())
+}
+
+fn parse_content_range(value: &str) -> Result<(u64, u64, u64), String> {
+    let range = value
+        .strip_prefix("bytes ")
+        .ok_or_else(|| "Cabecera Content-Range con unidad inválida".to_string())?;
+    let (range, total) = range
+        .split_once('/')
+        .ok_or_else(|| "Cabecera Content-Range incompleta".to_string())?;
+    let (start, end) = range
+        .split_once('-')
+        .ok_or_else(|| "Cabecera Content-Range incompleta".to_string())?;
+
+    let start = start
+        .parse::<u64>()
+        .map_err(|_| "Inicio inválido en Content-Range".to_string())?;
+    let end = end
+        .parse::<u64>()
+        .map_err(|_| "Fin inválido en Content-Range".to_string())?;
+    let total = total
+        .parse::<u64>()
+        .map_err(|_| "Tamaño total inválido en Content-Range".to_string())?;
+
+    if end < start || total == 0 || end >= total {
+        return Err("Content-Range contiene límites incoherentes".to_string());
+    }
+
+    Ok((start, end, total))
+}
 
 /// Comprueba si la cabecera `Content-Type` indica contenido web (HTML o JSON) en lugar de binario.
 pub fn response_is_html_or_json(headers: &HeaderMap) -> bool {
@@ -78,17 +180,33 @@ mod tests {
 
     #[test]
     fn looks_like_html_or_json_detects_html_and_json() {
-        assert!(looks_like_html_or_json(b"<!DOCTYPE html><html><body>Error</body></html>"));
-        assert!(looks_like_html_or_json(b"  <html><head><title>Just a moment</title></head></html>"));
-        assert!(looks_like_html_or_json(b"{\"status\": \"error\", \"message\": \"invalid\"}"));
-        assert!(!looks_like_html_or_json(b"Rar!\x1a\x07\x00BinaryDataArchiveContentHere"));
-        assert!(!looks_like_html_or_json(b"PK\x03\x04ZipFileHeaderBinaryContent"));
+        assert!(looks_like_html_or_json(
+            b"<!DOCTYPE html><html><body>Error</body></html>"
+        ));
+        assert!(looks_like_html_or_json(
+            b"  <html><head><title>Just a moment</title></head></html>"
+        ));
+        assert!(looks_like_html_or_json(
+            b"{\"status\": \"error\", \"message\": \"invalid\"}"
+        ));
+        assert!(!looks_like_html_or_json(
+            b"Rar!\x1a\x07\x00BinaryDataArchiveContentHere"
+        ));
+        assert!(!looks_like_html_or_json(
+            b"PK\x03\x04ZipFileHeaderBinaryContent"
+        ));
     }
 
     #[test]
     fn looks_like_cloudflare_challenge_detects_keywords() {
-        assert!(looks_like_cloudflare_challenge("Just a moment... Please verify"));
-        assert!(looks_like_cloudflare_challenge("Attention Required! | Cloudflare"));
-        assert!(!looks_like_cloudflare_challenge("Normal game installer content"));
+        assert!(looks_like_cloudflare_challenge(
+            "Just a moment... Please verify"
+        ));
+        assert!(looks_like_cloudflare_challenge(
+            "Attention Required! | Cloudflare"
+        ));
+        assert!(!looks_like_cloudflare_challenge(
+            "Normal game installer content"
+        ));
     }
 }

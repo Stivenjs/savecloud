@@ -12,8 +12,9 @@ use std::time::{Duration, Instant};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 
-use crate::network::{apply_profile, DownloadProfile};
 use super::io::{allocate_file_fast, write_at};
+use super::validation::{response_is_html_or_json, validate_partial_response};
+use crate::network::{apply_profile, DownloadProfile};
 
 /// Número de conexiones concurrentes en descargas multi-segmento.
 pub const NUM_PARALLEL_SEGMENTS: usize = 4;
@@ -41,6 +42,9 @@ pub struct DownloadSegment {
 pub struct DownloadMeta {
     pub total: u64,
     pub segments: Vec<DownloadSegment>,
+    /// Entity validator captured from the initial response, if the hoster provides one.
+    #[serde(default)]
+    pub validator: Option<String>,
 }
 
 /// Genera la partición inicial equilibrada en 4 rangos de bytes para un archivo de tamaño `total`.
@@ -74,6 +78,7 @@ pub async fn run_multi_segment_download<F>(
     part_path: &Path,
     meta_path: &Path,
     total: u64,
+    validator: Option<String>,
     cancel_flag: Arc<AtomicBool>,
     pause_flag: Arc<AtomicBool>,
     mut emit_progress: F,
@@ -81,19 +86,23 @@ pub async fn run_multi_segment_download<F>(
 where
     F: FnMut(u64, u64, bool) -> Result<(), String>,
 {
-    let segments = if meta_path.exists() {
+    let saved_segments = if meta_path.exists() {
         match tokio::fs::read(meta_path).await {
-            Ok(bytes) => match serde_json::from_slice::<DownloadMeta>(&bytes) {
-                Ok(meta) if meta.total == total && meta.segments.len() == NUM_PARALLEL_SEGMENTS => {
-                    meta.segments
-                }
-                _ => create_default_segments(total),
-            },
-            Err(_) => create_default_segments(total),
+            Ok(bytes) => serde_json::from_slice::<DownloadMeta>(&bytes)
+                .ok()
+                .filter(|meta| {
+                    meta.total == total
+                        && meta.validator == validator
+                        && segments_are_valid(&meta.segments, total)
+                        && std::fs::metadata(part_path).is_ok_and(|file| file.len() == total)
+                })
+                .map(|meta| meta.segments),
+            Err(_) => None,
         }
     } else {
-        create_default_segments(total)
+        None
     };
+    let segments = saved_segments.unwrap_or_else(|| create_default_segments(total));
 
     let std_file = std::fs::OpenOptions::new()
         .create(true)
@@ -133,6 +142,7 @@ where
         let segments_state = Arc::clone(&segments_state);
         let cancel_flag = Arc::clone(&cancel_flag);
         let pause_flag = Arc::clone(&pause_flag);
+        let validator = validator.clone();
 
         tasks.spawn(async move {
             let mut curr = seg.current;
@@ -150,6 +160,11 @@ where
                     .get(&uri)
                     .header("Range", range)
                     .header("Accept-Encoding", "identity");
+                let req = if let Some(value) = validator.as_deref() {
+                    req.header(reqwest::header::IF_RANGE, value)
+                } else {
+                    req
+                };
                 let req = apply_profile(req, &profile);
 
                 let res = match req.send().await {
@@ -169,15 +184,15 @@ where
                 };
 
                 let status = res.status();
-                if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE && curr >= end {
-                    break;
-                }
-
-                if !status.is_success() && status != reqwest::StatusCode::PARTIAL_CONTENT {
+                if status != reqwest::StatusCode::PARTIAL_CONTENT {
                     retries += 1;
-                    if retries > MAX_RETRIES || cancel_flag.load(Ordering::Relaxed) || pause_flag.load(Ordering::Relaxed) {
+                    if status.is_success()
+                        || retries > MAX_RETRIES
+                        || cancel_flag.load(Ordering::Relaxed)
+                        || pause_flag.load(Ordering::Relaxed)
+                    {
                         return Err(format!(
-                            "El servidor rechazó rango HTTP en segmento {seg_idx} tras {retries} intentos (código {status})"
+                            "El servidor no respetó el rango del segmento {seg_idx} (código {status})"
                         ));
                     }
                     let backoff = Duration::from_millis(500 * (1 << retries.min(4)));
@@ -186,6 +201,14 @@ where
                     );
                     tokio::time::sleep(backoff).await;
                     continue;
+                }
+
+                validate_partial_response(&res, curr, end, total)
+                    .map_err(|error| format!("Respuesta inválida para segmento {seg_idx}: {error}"))?;
+                if response_is_html_or_json(res.headers()) {
+                    return Err(format!(
+                        "El servidor devolvió contenido web en lugar del segmento {seg_idx}"
+                    ));
                 }
 
                 let mut stream = res.bytes_stream();
@@ -198,6 +221,12 @@ where
 
                     match chunk_res {
                         Ok(chunk) => {
+                            let remaining = end.saturating_sub(curr).saturating_add(1);
+                            if chunk.len() as u64 > remaining {
+                                return Err(format!(
+                                    "El servidor envió datos fuera del rango del segmento {seg_idx}"
+                                ));
+                            }
                             if let Err(e) = write_at(&file_arc, &chunk, curr) {
                                 return Err(format!("Error de disco en segmento {seg_idx}: {e}"));
                             }
@@ -269,6 +298,8 @@ where
     loop {
         if cancel_flag.load(Ordering::Relaxed) {
             tasks.abort_all();
+            drain_tasks(&mut tasks).await;
+            drop(file_arc);
             let _ = tokio::fs::remove_file(part_path).await;
             let _ = tokio::fs::remove_file(meta_path).await;
             return Err("stopped_by_user".to_string());
@@ -276,14 +307,18 @@ where
 
         if pause_flag.load(Ordering::Relaxed) {
             tasks.abort_all();
+            drain_tasks(&mut tasks).await;
+            file_arc
+                .sync_data()
+                .map_err(|error| format!("No se pudo sincronizar la descarga pausada: {error}"))?;
             let guard = segments_state.lock().await;
             let meta = DownloadMeta {
                 total,
                 segments: guard.clone(),
+                validator: validator.clone(),
             };
-            if let Ok(bytes) = serde_json::to_vec(&meta) {
-                let _ = tokio::fs::write(meta_path, bytes).await;
-            }
+            drop(guard);
+            persist_meta(meta_path, &meta).await?;
             return Err("paused_by_user".to_string());
         }
 
@@ -304,10 +339,13 @@ where
                 let meta = DownloadMeta {
                     total,
                     segments: guard.clone(),
+                    validator: validator.clone(),
                 };
-                if let Ok(bytes) = serde_json::to_vec(&meta) {
-                    let _ = tokio::fs::write(meta_path, bytes).await;
-                }
+                drop(guard);
+                file_arc
+                    .sync_data()
+                    .map_err(|error| format!("No se pudo sincronizar el progreso: {error}"))?;
+                persist_meta(meta_path, &meta).await?;
             }
             last_save = Instant::now();
         }
@@ -322,10 +360,12 @@ where
                     Ok(Ok(())) => {}
                     Ok(Err(e)) => {
                         tasks.abort_all();
+                        drain_tasks(&mut tasks).await;
                         return Err(e);
                     }
                     Err(e) if !e.is_cancelled() => {
                         tasks.abort_all();
+                        drain_tasks(&mut tasks).await;
                         return Err(format!("Fallo en tarea de segmento: {e}"));
                     }
                     _ => {}
@@ -335,11 +375,62 @@ where
         }
     }
 
+    let completed_segments = segments_state.lock().await;
+    if completed_segments
+        .iter()
+        .any(|segment| segment.current <= segment.end)
+    {
+        return Err(
+            "La descarga segmentada terminó antes de completar todos los rangos".to_string(),
+        );
+    }
+    drop(completed_segments);
+
     let final_loaded = loaded_atomic.load(Ordering::Relaxed);
+    if final_loaded != total {
+        return Err(format!(
+            "Descarga segmentada incompleta: {final_loaded} de {total} bytes"
+        ));
+    }
     emit_progress(final_loaded, total, true)?;
     let _ = tokio::fs::remove_file(meta_path).await;
     drop(file_arc);
     Ok(final_loaded)
+}
+
+fn segments_are_valid(segments: &[DownloadSegment], total: u64) -> bool {
+    if total == 0 || segments.len() != NUM_PARALLEL_SEGMENTS {
+        return false;
+    }
+
+    let expected = create_default_segments(total);
+    segments
+        .iter()
+        .zip(expected)
+        .enumerate()
+        .all(|(index, (saved, expected))| {
+            saved.index == index
+                && saved.start == expected.start
+                && saved.end == expected.end
+                && saved.current >= saved.start
+                && saved.current <= saved.end.saturating_add(1)
+        })
+}
+
+async fn persist_meta(path: &Path, meta: &DownloadMeta) -> Result<(), String> {
+    let bytes = serde_json::to_vec(meta)
+        .map_err(|error| format!("No se pudo serializar el progreso: {error}"))?;
+    let temporary_path = path.with_extension("part.meta.tmp");
+    tokio::fs::write(&temporary_path, bytes)
+        .await
+        .map_err(|error| format!("No se pudo guardar el progreso de descarga: {error}"))?;
+    tokio::fs::rename(&temporary_path, path)
+        .await
+        .map_err(|error| format!("No se pudo confirmar el progreso de descarga: {error}"))
+}
+
+async fn drain_tasks(tasks: &mut tokio::task::JoinSet<Result<(), String>>) {
+    while tasks.join_next().await.is_some() {}
 }
 
 #[cfg(test)]

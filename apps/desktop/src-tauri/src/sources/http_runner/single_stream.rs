@@ -12,9 +12,12 @@ use std::time::{Duration, Instant};
 use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;
 
-use crate::network::{apply_profile, DownloadProfile};
 use super::segments::{HTTP_PROGRESS_EMIT_BYTES, HTTP_PROGRESS_EMIT_INTERVAL};
-use super::validation::{invalid_download_body_message, looks_like_html_or_json, stream_read_error_message};
+use super::validation::{
+    invalid_download_body_message, looks_like_html_or_json, stream_read_error_message,
+    validate_resume_response,
+};
+use crate::network::{apply_profile, ensure_download_success, DownloadProfile};
 
 /// Ejecuta la descarga en un único flujo continuo HTTP con soporte cooperativo de pausa.
 pub async fn run_single_stream_download<F>(
@@ -24,6 +27,7 @@ pub async fn run_single_stream_download<F>(
     initial_response: Option<reqwest::Response>,
     part_path: &Path,
     total: u64,
+    validator: Option<String>,
     accept_ranges: bool,
     cancel_flag: Arc<AtomicBool>,
     pause_flag: Arc<AtomicBool>,
@@ -45,7 +49,15 @@ where
         if existing_len > 0 && accept_ranges && (total == 0 || existing_len < total) {
             drop(initial_response);
             let range = format!("bytes={existing_len}-");
-            let req = client.get(effective_uri).header("Range", range);
+            let req = client
+                .get(effective_uri)
+                .header("Range", range)
+                .header("Accept-Encoding", "identity");
+            let req = if let Some(value) = validator.as_deref() {
+                req.header(reqwest::header::IF_RANGE, value)
+            } else {
+                req
+            };
             let req = apply_profile(req, profile);
             let res = req
                 .send()
@@ -53,6 +65,7 @@ where
                 .map_err(|e| format!("Error reanudando descarga: {e}"))?;
 
             if res.status() == reqwest::StatusCode::PARTIAL_CONTENT {
+                validate_resume_response(&res, existing_len, total)?;
                 let file = tokio::fs::OpenOptions::new()
                     .create(true)
                     .append(true)
@@ -61,6 +74,7 @@ where
                     .map_err(|e| format!("No se pudo abrir archivo para reanudar: {e}"))?;
                 (res, file, existing_len)
             } else {
+                let res = ensure_download_success(res).map_err(|error| error.user_message())?;
                 let file = tokio::fs::File::create(part_path)
                     .await
                     .map_err(|e| format!("No se pudo crear archivo destino: {e}"))?;
@@ -94,12 +108,15 @@ where
 
     loop {
         if cancel_flag.load(Ordering::Relaxed) {
+            drop(file);
             let _ = tokio::fs::remove_file(part_path).await;
             return Err("stopped_by_user".to_string());
         }
 
         if pause_flag.load(Ordering::Relaxed) {
-            let _ = file.flush().await;
+            file.sync_data()
+                .await
+                .map_err(|error| format!("No se pudo sincronizar la descarga pausada: {error}"))?;
             return Err("paused_by_user".to_string());
         }
 
@@ -107,17 +124,26 @@ where
 
         while let Some(next) = stream.next().await {
             if cancel_flag.load(Ordering::Relaxed) {
+                drop(file);
                 let _ = tokio::fs::remove_file(part_path).await;
                 return Err("stopped_by_user".to_string());
             }
 
             if pause_flag.load(Ordering::Relaxed) {
-                let _ = file.flush().await;
+                file.sync_data().await.map_err(|error| {
+                    format!("No se pudo sincronizar la descarga pausada: {error}")
+                })?;
                 return Err("paused_by_user".to_string());
             }
 
             match next {
                 Ok(chunk) => {
+                    if total > 0 && loaded.saturating_add(chunk.len() as u64) > total {
+                        return Err(format!(
+                            "El servidor envió más datos que el tamaño anunciado ({total} bytes)"
+                        ));
+                    }
+
                     // Validar en memoria RAM que los primeros bytes no sean una página web de error
                     if !header_checked && loaded == 0 {
                         header_checked = true;
@@ -137,7 +163,8 @@ where
                     }
                     loaded = loaded.saturating_add(chunk.len() as u64);
 
-                    let bytes_step = loaded.saturating_sub(last_emit_loaded) >= HTTP_PROGRESS_EMIT_BYTES;
+                    let bytes_step =
+                        loaded.saturating_sub(last_emit_loaded) >= HTTP_PROGRESS_EMIT_BYTES;
                     let time_step = last_emit_at.elapsed() >= HTTP_PROGRESS_EMIT_INTERVAL;
                     let reached_end = total > 0 && loaded >= total;
 
@@ -157,12 +184,15 @@ where
         }
 
         if cancel_flag.load(Ordering::Relaxed) {
+            drop(file);
             let _ = tokio::fs::remove_file(part_path).await;
             return Err("stopped_by_user".to_string());
         }
 
         if pause_flag.load(Ordering::Relaxed) {
-            let _ = file.flush().await;
+            file.sync_data()
+                .await
+                .map_err(|error| format!("No se pudo sincronizar la descarga pausada: {error}"))?;
             return Err("paused_by_user".to_string());
         }
 
@@ -181,16 +211,29 @@ where
                     .get(effective_uri)
                     .header("Range", range)
                     .header("Accept-Encoding", "identity");
+                let req = if let Some(value) = validator.as_deref() {
+                    req.header(reqwest::header::IF_RANGE, value)
+                } else {
+                    req
+                };
                 let req = apply_profile(req, profile);
                 match req.send().await {
-                    Ok(res) if res.status().is_success() || res.status() == reqwest::StatusCode::PARTIAL_CONTENT => {
+                    Ok(res) if validate_resume_response(&res, loaded, total).is_ok() => {
                         stream = res.bytes_stream();
                         continue;
                     }
-                    _ => continue,
+                    Ok(res) => {
+                        return Err(format!("No se pudo reanudar la descarga: {}", res.status()));
+                    }
+                    Err(error) => return Err(format!("Error reanudando descarga: {error}")),
                 }
             }
-            return Err(stream_read_error_message(e, loaded, total, stream_started.elapsed()));
+            return Err(stream_read_error_message(
+                e,
+                loaded,
+                total,
+                stream_started.elapsed(),
+            ));
         }
 
         if accept_ranges && total > 0 && loaded < total && retries < MAX_RETRIES {
@@ -206,17 +249,31 @@ where
                 .get(effective_uri)
                 .header("Range", range)
                 .header("Accept-Encoding", "identity");
+            let req = if let Some(value) = validator.as_deref() {
+                req.header(reqwest::header::IF_RANGE, value)
+            } else {
+                req
+            };
             let req = apply_profile(req, profile);
             match req.send().await {
-                Ok(res) if res.status().is_success() || res.status() == reqwest::StatusCode::PARTIAL_CONTENT => {
+                Ok(res) if validate_resume_response(&res, loaded, total).is_ok() => {
                     stream = res.bytes_stream();
                     continue;
                 }
-                _ => continue,
+                Ok(res) => {
+                    return Err(format!("No se pudo reanudar la descarga: {}", res.status()));
+                }
+                Err(error) => return Err(format!("Error reanudando descarga: {error}")),
             }
         }
 
         break;
+    }
+
+    if total > 0 && loaded != total {
+        return Err(format!(
+            "Descarga HTTP incompleta: {loaded} de {total} bytes"
+        ));
     }
 
     if loaded != last_emit_loaded {

@@ -114,29 +114,54 @@ pub fn allocate_file_fast(file: &std::fs::File, total: u64) -> std::io::Result<(
 /// el archivo inmediatamente después de cerrarse (`ERROR_SHARING_VIOLATION`).
 ///
 /// Esta función:
-/// 1. Elimina previamente el archivo de destino si ya existía.
+/// 1. Conserva el archivo de destino existente en una copia temporal recuperable.
 /// 2. Aplica un bucle de hasta 10 reintentos con retraso incremental (150ms * intento)
 ///    para permitir que el kernel o el antivirus liberen el archivo antes de fallar.
+/// 3. Restaura la copia anterior si no se puede instalar el archivo nuevo.
 pub async fn safe_rename_with_retry(from: &Path, to: &Path) -> Result<(), std::io::Error> {
-    let _ = tokio::fs::remove_file(to).await;
+    let backup_path = to.with_file_name(format!(
+        "{}.savecloud-{}-backup",
+        to.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("download"),
+        uuid::Uuid::new_v4()
+    ));
+    let has_previous_file = match tokio::fs::metadata(to).await {
+        Ok(_) => {
+            tokio::fs::rename(to, &backup_path).await?;
+            true
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => return Err(error),
+    };
+
     let mut last_err = None;
 
     for attempt in 0..10 {
         match tokio::fs::rename(from, to).await {
-            Ok(()) => return Ok(()),
+            Ok(()) => {
+                if has_previous_file {
+                    let _ = tokio::fs::remove_file(&backup_path).await;
+                }
+                return Ok(());
+            }
             Err(e) => {
                 last_err = Some(e);
-                let _ = tokio::fs::remove_file(to).await;
                 tokio::time::sleep(Duration::from_millis(150 * (attempt + 1))).await;
             }
         }
     }
 
-    Err(last_err.unwrap_or_else(|| {
-        std::io::Error::other(
-            "Fallo desconocido al renombrar archivo",
-        )
-    }))
+    if has_previous_file {
+        if let Err(restore_error) = tokio::fs::rename(&backup_path, to).await {
+            return Err(std::io::Error::other(format!(
+                "No se pudo instalar el nuevo archivo ni restaurar el anterior desde {}: {restore_error}",
+                backup_path.display()
+            )));
+        }
+    }
+
+    Err(last_err.unwrap_or_else(|| std::io::Error::other("Fallo desconocido al renombrar archivo")))
 }
 
 #[cfg(test)]
@@ -183,7 +208,10 @@ mod tests {
         let elapsed = start.elapsed();
 
         // En lugar de tardar 30-60 segundos rellenando ceros, debe tardar menos de 500ms
-        assert!(elapsed < Duration::from_millis(500), "Asignación tardó demasiado: {elapsed:?}");
+        assert!(
+            elapsed < Duration::from_millis(500),
+            "Asignación tardó demasiado: {elapsed:?}"
+        );
 
         let _ = std::fs::remove_file(&file_path);
         let _ = std::fs::remove_dir_all(&temp_dir);
