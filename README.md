@@ -20,7 +20,7 @@ Servidor de guardado en la nube para juegos (S3 + Lambda) y app de escritorio pa
 ## Vista de la aplicación
 
 <p align="center">
-  <img src="/doc/images/preview.png" width="800" /></p>
+  <img src="/doc/images/preview.png?v=1a91eb7f" width="800" /></p>
 
 ---
 
