@@ -33,6 +33,8 @@ function shouldPreferMappedMessage(code: string): boolean {
     "GATEWAY_TIMEOUT",
     "HTTP_504",
     "HTTP_408",
+    "RATE_LIMITED",
+    "HTTP_429",
   ].includes(code);
 }
 

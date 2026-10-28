@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import i18n from "../apps/desktop/src/lib/i18n";
 import { getUnknownErrorMessage } from "../apps/desktop/src/utils/errorMessage";
 
 describe("getUnknownErrorMessage", () => {
@@ -65,6 +66,23 @@ describe("getUnknownErrorMessage", () => {
     expect(getUnknownErrorMessage({ code: "GATEWAY_TIMEOUT", status: 504 })).toBe(
       "Un servicio necesario tardó demasiado en responder. Inténtalo de nuevo."
     );
+  });
+
+  test("localizes rate-limit details to the active app language", async () => {
+    const previousLanguage = i18n.language;
+
+    try {
+      await i18n.changeLanguage("en");
+      expect(
+        getUnknownErrorMessage({
+          code: "RATE_LIMITED",
+          status: 429,
+          detail: "Se alcanzó el límite de solicitudes.",
+        })
+      ).toBe("Too many requests. Wait a moment before trying again.");
+    } finally {
+      await i18n.changeLanguage(previousLanguage);
+    }
   });
 
   test("hides server details from legacy 500 envelopes", () => {
