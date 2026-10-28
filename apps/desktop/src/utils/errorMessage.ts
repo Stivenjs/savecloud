@@ -11,34 +11,71 @@ function messageFromStructuredError(value: unknown): string | null {
   const selectedMessage = detail || message || title;
 
   const mapped = messageForCode(code);
-  if (mapped) return mapped;
+  if (mapped && shouldPreferMappedMessage(code)) return mapped;
   const status = (value as { status?: unknown; statusCode?: unknown }).status;
   const legacyStatus = (value as { status?: unknown; statusCode?: unknown }).statusCode;
   if ((typeof status === "number" && status >= 500) || (typeof legacyStatus === "number" && legacyStatus >= 500)) {
     return i18n.t("errors.serverFailure");
   }
   if (selectedMessage) return localizeGenericServerError(selectedMessage);
-  return null;
+  return mapped;
+}
+
+function shouldPreferMappedMessage(code: string): boolean {
+  return [
+    "INTERNAL_ERROR",
+    "UNKNOWN_ERROR",
+    "UPSTREAM_FAILURE",
+    "NETWORK_ERROR",
+    "REQUEST_TIMEOUT",
+    "SERVICE_UNAVAILABLE",
+    "HTTP_503",
+    "GATEWAY_TIMEOUT",
+    "HTTP_504",
+    "HTTP_408",
+  ].includes(code);
 }
 
 function messageForCode(code: string): string | null {
   switch (code) {
     case "INTERNAL_ERROR":
     case "UNKNOWN_ERROR":
-    case "UPSTREAM_FAILURE":
       return i18n.t("errors.serverFailure");
+    case "UPSTREAM_FAILURE":
+    case "HTTP_502":
+      return i18n.t("errors.upstreamFailure");
     case "NETWORK_ERROR":
-    case "REQUEST_TIMEOUT":
       return i18n.t("errors.networkFailure");
+    case "REQUEST_TIMEOUT":
+    case "HTTP_408":
+      return i18n.t("errors.requestTimeout");
     case "UNAUTHENTICATED":
     case "HTTP_401":
       return i18n.t("errors.unauthenticated");
     case "FORBIDDEN":
     case "HTTP_403":
       return i18n.t("errors.forbidden");
+    case "VALIDATION_ERROR":
+    case "HTTP_400":
+      return i18n.t("errors.validationFailure");
+    case "RATE_LIMITED":
+    case "HTTP_429":
+      return i18n.t("errors.rateLimited");
+    case "PAYLOAD_TOO_LARGE":
+    case "HTTP_413":
+      return i18n.t("errors.payloadTooLarge");
+    case "UNSUPPORTED_MEDIA_TYPE":
+    case "HTTP_415":
+      return i18n.t("errors.unsupportedMediaType");
+    case "UNPROCESSABLE_ENTITY":
+    case "HTTP_422":
+      return i18n.t("errors.unprocessableEntity");
     case "SERVICE_UNAVAILABLE":
     case "HTTP_503":
       return i18n.t("errors.serviceUnavailable");
+    case "GATEWAY_TIMEOUT":
+    case "HTTP_504":
+      return i18n.t("errors.gatewayTimeout");
     default:
       return null;
   }
@@ -60,8 +97,9 @@ function parsePayloadMessage(source: string): string | null {
       status?: unknown;
       statusCode?: unknown;
     };
-    const code = typeof body.code === "string" ? messageForCode(body.code) : null;
-    if (code) return code;
+    const errorCode = typeof body.code === "string" ? body.code : "";
+    const mapped = messageForCode(errorCode);
+    if (mapped && shouldPreferMappedMessage(errorCode)) return mapped;
     if (
       (typeof body.status === "number" && body.status >= 500) ||
       (typeof body.statusCode === "number" && body.statusCode >= 500)
@@ -73,6 +111,7 @@ function parsePayloadMessage(source: string): string | null {
     if (typeof body.error === "string" && body.error.trim()) {
       return /^internal server error$/i.test(body.error.trim()) ? i18n.t("errors.serverFailure") : body.error.trim();
     }
+    if (mapped) return mapped;
   } catch {
     // Algunos comandos de Rust imprimen el cuerpo como `Error { ... }`.
   }

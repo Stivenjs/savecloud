@@ -1,13 +1,29 @@
 import { describe, expect, test } from "bun:test";
-import Fastify from "fastify";
-import rateLimit from "@fastify/rate-limit";
+import { createRequire } from "node:module";
 import { ApplicationError } from "@application/errors/ApplicationError";
 import { registerHttpErrorHandler } from "@interfaces/http/error-handler";
+
+interface TestApp {
+  get(path: string, optionsOrHandler: unknown, handler?: () => unknown): void;
+  register(plugin: unknown, options: unknown): Promise<void>;
+  ready(): Promise<void>;
+  inject(options: { method: string; url: string }): Promise<{
+    statusCode: number;
+    headers: Record<string, string | undefined>;
+    body: string;
+    json(): Record<string, unknown>;
+  }>;
+  close(): Promise<void>;
+}
+
+const requireApiDependency = createRequire(new URL("../apps/api/package.json", import.meta.url));
+const Fastify = requireApiDependency("fastify") as (options: { logger: boolean }) => TestApp;
+const rateLimit = requireApiDependency("@fastify/rate-limit");
 
 describe("HTTP error contract", () => {
   async function makeApp() {
     const app = Fastify({ logger: false });
-    registerHttpErrorHandler(app);
+    registerHttpErrorHandler(app as unknown as Parameters<typeof registerHttpErrorHandler>[0]);
     app.get("/business-error", async () => {
       throw new ApplicationError("CONFLICT", "Ese identificador ya está ocupado.");
     });
@@ -19,6 +35,11 @@ describe("HTTP error contract", () => {
     }));
     await app.register(rateLimit, { global: false });
     app.get("/rate-limited", { config: { rateLimit: { max: 1, timeWindow: 60_000 } } }, async () => ({ ok: true }));
+    for (const statusCode of [408, 413, 415, 422, 501, 502, 503, 504]) {
+      app.get(`/http-${statusCode}`, async () => {
+        throw Object.assign(new Error("private upstream details"), { statusCode });
+      });
+    }
     await app.ready();
     return app;
   }
@@ -86,7 +107,31 @@ describe("HTTP error contract", () => {
       const response = await app.inject({ method: "GET", url: "/rate-limited" });
       expect(response.statusCode).toBe(429);
       expect(response.headers["content-type"]).toContain("application/problem+json");
-      expect(response.json()).toMatchObject({ status: 429, code: "HTTP_429" });
+      expect(response.json()).toMatchObject({ status: 429, code: "RATE_LIMITED" });
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("assigns stable codes and safe messages to common Fastify HTTP errors", async () => {
+    const cases = [
+      [408, "REQUEST_TIMEOUT"],
+      [413, "PAYLOAD_TOO_LARGE"],
+      [415, "UNSUPPORTED_MEDIA_TYPE"],
+      [422, "UNPROCESSABLE_ENTITY"],
+      [501, "NOT_IMPLEMENTED"],
+      [502, "UPSTREAM_FAILURE"],
+      [503, "SERVICE_UNAVAILABLE"],
+      [504, "GATEWAY_TIMEOUT"],
+    ] as const;
+    const app = await makeApp();
+    try {
+      for (const [status, code] of cases) {
+        const response = await app.inject({ method: "GET", url: `/http-${status}` });
+        expect(response.statusCode).toBe(status);
+        expect(response.json()).toMatchObject({ status, code });
+        expect(response.body).not.toContain("private upstream details");
+      }
     } finally {
       await app.close();
     }

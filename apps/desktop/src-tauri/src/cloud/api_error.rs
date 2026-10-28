@@ -6,10 +6,10 @@ use crate::errors::AppError;
 #[serde(rename_all = "camelCase")]
 struct ApiProblem {
     code: Option<String>,
-    #[serde(alias = "message")]
     detail: Option<String>,
-    #[serde(alias = "error")]
+    message: Option<String>,
     title: Option<String>,
+    error: Option<String>,
     request_id: Option<String>,
 }
 
@@ -40,7 +40,9 @@ pub async fn from_response(response: reqwest::Response) -> AppError {
         problem
             .detail
             .filter(|detail| !detail.trim().is_empty())
+            .or(problem.message.filter(|message| !message.trim().is_empty()))
             .or(problem.title)
+            .or(problem.error)
             .unwrap_or_else(|| format!("La solicitud no se pudo completar ({effective_status})."))
     };
 
@@ -81,5 +83,53 @@ pub async fn ensure_success(response: reqwest::Response) -> Result<reqwest::Resp
         Ok(response)
     } else {
         Err(from_response(response).await)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ApiProblem;
+
+    #[test]
+    fn parses_rfc_problem_with_legacy_compatibility_fields_together() {
+        let body = r#"{
+            "type":"about:blank",
+            "title":"Forbidden",
+            "status":403,
+            "detail":"No puedes aceptar tu propia invitación.",
+            "instance":"urn:savecloud:request:req-1",
+            "code":"FORBIDDEN",
+            "requestId":"req-1",
+            "error":"Forbidden",
+            "message":"No puedes aceptar tu propia invitación.",
+            "statusCode":403
+        }"#;
+
+        let problem = serde_json::from_str::<ApiProblem>(body)
+            .expect("RFC fields and legacy aliases should coexist");
+
+        assert_eq!(problem.code.as_deref(), Some("FORBIDDEN"));
+        assert_eq!(
+            problem.detail.as_deref(),
+            Some("No puedes aceptar tu propia invitación.")
+        );
+        assert_eq!(
+            problem.message.as_deref(),
+            Some("No puedes aceptar tu propia invitación.")
+        );
+        assert_eq!(problem.request_id.as_deref(), Some("req-1"));
+    }
+
+    #[test]
+    fn still_parses_legacy_error_envelopes() {
+        let body = r#"{"code":"INVALID_ARGUMENT","error":"Bad Request","message":"No puedes enviarte una invitación a ti mismo."}"#;
+        let problem = serde_json::from_str::<ApiProblem>(body).expect("legacy fields should parse");
+
+        assert_eq!(problem.code.as_deref(), Some("INVALID_ARGUMENT"));
+        assert_eq!(
+            problem.message.as_deref(),
+            Some("No puedes enviarte una invitación a ti mismo.")
+        );
+        assert_eq!(problem.error.as_deref(), Some("Bad Request"));
     }
 }
