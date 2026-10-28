@@ -7,9 +7,7 @@
 import type { FastifyRequest } from "fastify";
 
 export const HEALTH_PATH = "/health";
-export const SHARE_TOKEN_PATH = "/share/:token";
 export const ACCEPT_INVITE_TOKEN_PATH = "/invites/accept-token";
-export const SHARE_PUBLIC_URL_PREFIX = "/share/";
 
 /**
  * Determina si una solicitud de Fastify está dirigida a una ruta pública.
@@ -53,16 +51,8 @@ export function isPublicHttpRoute(method: string, path: string): boolean {
     return true;
   }
 
-  // GET /share/:token es público (resolver link compartido sin autenticación)
-  if (
-    upperMethod === "GET" &&
-    path.startsWith(SHARE_PUBLIC_URL_PREFIX) &&
-    path.length > SHARE_PUBLIC_URL_PREFIX.length
-  ) {
-    return true;
-  }
-
-  // Aceptar invitación por token es público (bootstrap de credenciales de usuario)
+  // Bootstrap sin sesión previa: el token de invitación autoriza la operación y el servidor
+  // vincula la aceptación al ID local, rechazando IDs distintos en invitaciones dirigidas.
   if (upperMethod === "POST" && path === ACCEPT_INVITE_TOKEN_PATH) {
     return true;
   }

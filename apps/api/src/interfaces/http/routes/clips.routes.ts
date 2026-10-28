@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ClipRepository } from "@domain/ports/ClipRepository";
 import { getUserId } from "@interfaces/http/helpers/request-context";
 import { ApplicationError } from "@application/errors/ApplicationError";
+import { publicClipRateLimit } from "@interfaces/http/rate-limits/clip";
 import { getPublicBaseUrl } from "@interfaces/http/helpers/public-base-url";
 import { createClipWatchHandler } from "@interfaces/http/handlers/clipWatchHandler";
 
@@ -118,9 +119,7 @@ export async function registerClipRoutes(app: FastifyInstance, clipStore: ClipRe
   app.get<{ Params: { clipId: string } }>(
     "/v/:clipId",
     {
-      config: {
-        rateLimit: { max: 60, timeWindow: "1 minute" },
-      },
+      config: { rateLimit: publicClipRateLimit },
     },
     watchHandler
   );
@@ -132,9 +131,7 @@ export async function registerClipRoutes(app: FastifyInstance, clipStore: ClipRe
   app.get<{ Params: { clipId: string } }>(
     "/clip/:clipId",
     {
-      config: {
-        rateLimit: { max: 60, timeWindow: "1 minute" },
-      },
+      config: { rateLimit: publicClipRateLimit },
     },
     watchHandler
   );
@@ -146,9 +143,7 @@ export async function registerClipRoutes(app: FastifyInstance, clipStore: ClipRe
   app.get<{ Params: { clipId: string } }>(
     "/api/clips/:clipId",
     {
-      config: {
-        rateLimit: { max: 60, timeWindow: "1 minute" },
-      },
+      config: { rateLimit: publicClipRateLimit },
     },
     async (request, reply: FastifyReply) => {
       const { clipId } = request.params;

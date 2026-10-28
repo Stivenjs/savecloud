@@ -3,6 +3,7 @@ import type { CreateShareLinkUseCase } from "@application/use-cases/CreateShareL
 import type { GetSharedGameUseCase } from "@application/use-cases/GetSharedGameUseCase";
 import { getUserId } from "@interfaces/http/helpers/request-context";
 import { ApplicationError } from "@application/errors/ApplicationError";
+import { publicShareRateLimit } from "@interfaces/http/rate-limits/share";
 import { getPublicBaseUrl } from "@interfaces/http/helpers/public-base-url";
 
 export async function registerShareRoutes(
@@ -32,9 +33,7 @@ export async function registerShareRoutes(
   app.get<{ Params: { token: string } }>(
     "/share/:token",
     {
-      config: {
-        rateLimit: { max: 30, timeWindow: "1 minute" },
-      },
+      config: { rateLimit: publicShareRateLimit },
     },
     async (request, reply: FastifyReply) => {
       const { token } = request.params;

@@ -9,6 +9,7 @@ import type { SetCloudGameShareUseCase } from "@application/use-cases/SetCloudGa
 import type { ListCloudPresenceUseCase } from "@application/use-cases/ListCloudPresenceUseCase";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import { issueUserAccessToken } from "@shared/accessToken";
+import { inviteAcceptanceRateLimit, inviteCreationRateLimit } from "@interfaces/http/rate-limits/invite";
 import {
   AcceptByTokenSchema,
   type AcceptByTokenBody,
@@ -35,7 +36,10 @@ export async function registerInviteRoutes(
 ): Promise<void> {
   app.post<{ Body: CreateInviteBody }>(
     "/invites",
-    { schema: { body: CreateInviteSchema } },
+    {
+      schema: { body: CreateInviteSchema },
+      config: { rateLimit: inviteCreationRateLimit },
+    },
     async (request, reply: FastifyReply) => {
       {
         const hostUserId = getUserId(request);
@@ -83,12 +87,7 @@ export async function registerInviteRoutes(
     "/invites/accept-token",
     {
       schema: { body: AcceptByTokenSchema },
-      config: {
-        rateLimit: {
-          max: 10,
-          timeWindow: "1 minute",
-        },
-      },
+      config: { rateLimit: inviteAcceptanceRateLimit },
     },
     async (request, reply: FastifyReply) => {
       {

@@ -10,10 +10,9 @@
  * @module tests/catalog-facets.test
  */
 
-import { beforeAll, describe, expect, it } from "bun:test";
-import { Database } from "bun:sqlite";
-import fs from "node:fs";
-import path from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import type { Database } from "bun:sqlite";
+import { createSqliteDatabaseFixture } from "./helpers/sqlite-database-fixture";
 
 interface FacetRow {
   readonly label: string;
@@ -26,38 +25,15 @@ interface FilteredAppRow {
   readonly catalog_rank_score: number;
 }
 
-function resolveDatabasePath(): string {
-  if (process.env.SAVECLOUD_DB_PATH) {
-    return process.env.SAVECLOUD_DB_PATH;
-  }
-
-  const isWindows = process.platform === "win32";
-  const isMac = process.platform === "darwin";
-
-  if (isWindows) {
-    const appData = process.env.APPDATA || path.join(process.env.USERPROFILE || "", "AppData", "Roaming");
-    return path.join(appData, "SaveCloud", "data", "db", "catalog.sqlite");
-  }
-
-  if (isMac) {
-    const home = process.env.HOME || "";
-    return path.join(home, "Library", "Application Support", "SaveCloud", "data", "db", "catalog.sqlite");
-  }
-
-  const home = process.env.HOME || "";
-  const configHome = process.env.XDG_CONFIG_HOME || path.join(home, ".config");
-  return path.join(configHome, "SaveCloud", "data", "db", "catalog.sqlite");
-}
-
 describe("Facetas y Filtros Compuestos de Catalogo", () => {
   let db: Database;
 
   beforeAll(() => {
-    const dbPath = resolveDatabasePath();
-    if (!fs.existsSync(dbPath)) {
-      throw new Error(`Base de datos no encontrada en: ${dbPath}`);
-    }
-    db = new Database(dbPath, { readonly: true });
+    db = createSqliteDatabaseFixture();
+  });
+
+  afterAll(() => {
+    db.close();
   });
 
   describe("Distribucion de Facetas", () => {

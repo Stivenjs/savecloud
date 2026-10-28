@@ -112,7 +112,7 @@ pub async fn create_remote_share_link(
 
 /// Resuelve un token de compartición para obtener los metadatos del recurso.
 ///
-/// Esta operación es pública (no requiere x-api-key) según la política de la API.
+/// La API requiere autenticación para resolver el enlace.
 ///
 /// # Arguments
 /// * `token` - El código único del enlace compartido.
@@ -120,11 +120,15 @@ pub async fn create_remote_share_link(
 pub async fn resolve_remote_share_token(token: String) -> AppResult<ResolvedShare> {
     let api_ctx = crate::commands::sync::context::resolve_api_context()?;
     let base_url = api_ctx.base_url;
+    let api_key = api_ctx.api_key;
+    let user_id = api_ctx.user_id;
 
     let endpoint = format!("{}/share/{}", base_url.trim_end_matches('/'), token);
 
     let response = API_CLIENT
         .get(&endpoint)
+        .header("x-api-key", api_key)
+        .header("x-user-id", user_id)
         .send()
         .await
         .map_err(|_| AppError::network())?;

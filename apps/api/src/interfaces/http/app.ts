@@ -29,6 +29,7 @@ import { registerSavesModule } from "@interfaces/http/modules/saves";
 import { registerShareModule } from "@interfaces/http/modules/share";
 import { registerClipsModule } from "@interfaces/http/modules/clips";
 import { registerHttpErrorHandler } from "@interfaces/http/error-handler";
+import { healthRateLimit } from "@interfaces/http/rate-limits/health";
 import { ApplicationError } from "@application/errors/ApplicationError";
 import { resolveHttpLoggingConfig } from "@interfaces/http/helpers/http-logging";
 
@@ -131,12 +132,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   app.get(
     "/health",
     {
-      config: {
-        rateLimit: {
-          max: 60,
-          timeWindow: "1 minute",
-        },
-      },
+      config: { rateLimit: healthRateLimit },
     },
     async (_, reply: FastifyReply) => {
       return reply.send({ status: "ok" });

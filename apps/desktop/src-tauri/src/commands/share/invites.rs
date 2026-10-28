@@ -3,6 +3,7 @@ use crate::config;
 use crate::errors::{AppError, AppResult};
 use crate::network::API_CLIENT;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tauri::command;
 
 const INVITE_TOKEN_LENGTH: usize = 48;
@@ -22,24 +23,54 @@ fn validate_invite_token(token: &str) -> AppResult<()> {
     }
 }
 
+fn invite_bootstrap_client() -> AppResult<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .connect_timeout(Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| AppError::network())
+}
+
 fn parse_invite_url(invite_url: &str) -> AppResult<(String, String)> {
     let trimmed = invite_url.trim();
     let marker = "/invites/accept/";
-    let idx = trimmed.find(marker).ok_or_else(|| {
+    let mut parsed_url = url::Url::parse(trimmed).map_err(|_| {
         AppError::new(
             "INVALID_ARGUMENT",
             "El enlace no tiene un formato de invitación válido.",
         )
     })?;
-    let base_url = normalize_base_url(&trimmed[..idx]);
-    let suffix = &trimmed[idx + marker.len()..];
-    let token = suffix
-        .split(['?', '#'])
-        .next()
-        .unwrap_or_default()
-        .trim_end_matches('/');
-    validate_invite_token(token)?;
-    Ok((base_url, token.to_string()))
+
+    if !matches!(parsed_url.scheme(), "http" | "https")
+        || parsed_url.host_str().is_none()
+        || !parsed_url.username().is_empty()
+        || parsed_url.password().is_some()
+    {
+        return Err(AppError::new(
+            "INVALID_ARGUMENT",
+            "El enlace debe usar HTTP o HTTPS y no puede incluir credenciales.",
+        ));
+    }
+
+    let path = parsed_url.path();
+    let idx = path.rfind(marker).ok_or_else(|| {
+        AppError::new(
+            "INVALID_ARGUMENT",
+            "El enlace no tiene un formato de invitación válido.",
+        )
+    })?;
+    let base_path = path[..idx].to_string();
+    let token = path[idx + marker.len()..].trim_end_matches('/').to_string();
+    validate_invite_token(&token)?;
+
+    // El endpoint de bootstrap no usa API key. Limpia cualquier dato no necesario
+    // del enlace y conserva solo el origen y el prefijo de ruta del servidor invitante.
+    parsed_url.set_path(&base_path);
+    parsed_url.set_query(None);
+    parsed_url.set_fragment(None);
+    let base_url = normalize_base_url(parsed_url.as_str());
+    Ok((base_url, token))
 }
 
 fn is_local_net(s: &str) -> bool {
@@ -449,8 +480,11 @@ pub async fn accept_cloud_invite_by_url(invite_url: String) -> AppResult<()> {
     let endpoint = format!("{}/invites/accept-token", base_url);
     let payload = serde_json::json!({ "token": token });
 
-    // Bootstrap: esta llamada NO requiere x-api-key (ruta pública en backend).
-    let response = API_CLIENT
+    // El primer contacto no tiene credenciales para el host invitante. Solo se envía
+    // el ID local requerido para validar invitaciones dirigidas; nunca una API key.
+    // Se desactivan redirecciones para evitar reenviar encabezados a otro dominio.
+    let bootstrap_client = invite_bootstrap_client()?;
+    let response = bootstrap_client
         .post(&endpoint)
         .header("x-user-id", user_id.clone())
         .json(&payload)
