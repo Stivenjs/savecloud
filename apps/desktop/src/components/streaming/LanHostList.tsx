@@ -20,6 +20,7 @@ interface DiscoveredStreamHost {
   ip: string;
   port: number;
   savecloud_port: number;
+  tls_fingerprint: string;
   hostname: string;
 }
 
@@ -75,6 +76,7 @@ export const LanHostList = ({ isOpen, onClose, config }: LanHostListProps) => {
       ip: "127.0.0.1",
       port: 47989,
       savecloud_port: 0,
+      tls_fingerprint: "",
       hostname: mirrorHostLabel,
     });
 

@@ -21,9 +21,7 @@ static LAST_PUBLISHED: LazyLock<Mutex<Option<(String, u16)>>> = LazyLock::new(||
 
 /// Accede de forma segura al guard de Mutex del demonio mDNS con resiliencia a locks envenenados.
 fn daemon() -> MutexGuard<'static, Option<ServiceDaemon>> {
-    MDNS_DAEMON
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
+    MDNS_DAEMON.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// Detecta la dirección IPv4 local primaria utilizada para la salida de red LAN.
@@ -53,6 +51,8 @@ pub struct DiscoveredStreamHost {
     pub port: u16,
     /// Puerto HTTP/WebSocket auxiliar de SaveCloud (ej. 47990).
     pub savecloud_port: u16,
+    /// Huella SHA-256 del certificado TLS del servidor LAN SaveCloud.
+    pub tls_fingerprint: String,
     /// Nombre de red del equipo (*hostname*).
     pub hostname: String,
 }
@@ -77,9 +77,7 @@ pub fn publish_stream_service(
         return Ok(());
     }
 
-    let last_published_guard = LAST_PUBLISHED
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let last_published_guard = LAST_PUBLISHED.lock().unwrap_or_else(|e| e.into_inner());
 
     if last_published_guard
         .as_ref()
@@ -110,6 +108,9 @@ pub fn publish_stream_service(
     properties.insert("userId".to_string(), user_id.to_string());
     properties.insert("savecloudPort".to_string(), savecloud_port.to_string());
     properties.insert("ipAddress".to_string(), host_ip.clone());
+    if let Some(fingerprint) = crate::peer_lan::server::lan_tls_fingerprint() {
+        properties.insert("tlsFingerprint".to_string(), fingerprint);
+    }
 
     let info = ServiceInfo::new(
         STREAM_SERVICE_TYPE,
@@ -125,9 +126,7 @@ pub fn publish_stream_service(
         .register(info)
         .map_err(|err| format!("mDNS register: {err}"))?;
 
-    let mut last = LAST_PUBLISHED
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let mut last = LAST_PUBLISHED.lock().unwrap_or_else(|e| e.into_inner());
     *last = Some((device_id.to_string(), sunshine_port));
 
     log::info!(
@@ -138,9 +137,7 @@ pub fn publish_stream_service(
 
 /// Retira y anula el anuncio de servicio mDNS de streaming de este PC en la LAN.
 pub fn withdraw_stream_service() {
-    let mut last = LAST_PUBLISHED
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let mut last = LAST_PUBLISHED.lock().unwrap_or_else(|e| e.into_inner());
     *last = None;
 
     let mut guard = daemon();
@@ -210,6 +207,10 @@ pub async fn discover_stream_hosts(timeout_secs: u64) -> Result<Vec<DiscoveredSt
                         .get("savecloudPort")
                         .and_then(|v| v.val_str().parse::<u16>().ok())
                         .unwrap_or(0);
+                    let tls_fingerprint = properties
+                        .get("tlsFingerprint")
+                        .map(|value| value.val_str().to_string())
+                        .unwrap_or_default();
 
                     let mut ip = info
                         .get_addresses()
@@ -245,6 +246,7 @@ pub async fn discover_stream_hosts(timeout_secs: u64) -> Result<Vec<DiscoveredSt
                                 ip,
                                 port: info.get_port(),
                                 savecloud_port,
+                                tls_fingerprint,
                                 hostname: info.get_hostname().to_string(),
                             },
                         );
@@ -271,6 +273,3 @@ pub async fn discover_stream_hosts(timeout_secs: u64) -> Result<Vec<DiscoveredSt
     .await
     .map_err(|err| format!("Error en tarea de descubrimiento mDNS: {err}"))?
 }
-
-
-

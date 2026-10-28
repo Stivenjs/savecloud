@@ -33,6 +33,7 @@ export const PublishDeviceInventorySchema = Type.Object({
   contentHash: Type.String({ minLength: 8 }),
   updatedAt: Type.String({ minLength: 10 }),
   sharingEnabled: Type.Boolean(),
+  tlsFingerprint: Type.Optional(Type.String({ pattern: "^[a-fA-F0-9]{64}$" })),
   games: Type.Array(GameInventoryEntrySchema),
 });
 

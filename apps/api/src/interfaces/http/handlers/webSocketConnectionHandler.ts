@@ -25,9 +25,9 @@ const CONNECTION_TTL_SECONDS = 24 * 60 * 60;
 export function createWebSocketConnectionHandler(deps: WebSocketConnectionDependencies) {
   return (socket: WebSocket, request: FastifyRequest) => {
     const connectionId = `ws_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const query = (request.query as Record<string, string> | undefined) ?? {};
-    const userId = query.userId?.trim();
-    const deviceId = query.deviceId?.trim();
+    const userId = request.scAuthenticatedUserId;
+    const deviceHeader = request.headers["x-device-id"];
+    const deviceId = typeof deviceHeader === "string" ? deviceHeader.trim() : undefined;
 
     console.log(
       `[SaveCloud WS] Handshake exitoso! connectionId=${connectionId}, userId=${userId || "anónimo"}, path=${request.url.split("?")[0]}`

@@ -43,12 +43,22 @@ pub async fn publish_manifest_to_cloud(manifest: &DeviceInventoryManifest) -> Re
 
 async fn put_cloud_manifest(manifest: &DeviceInventoryManifest) -> Result<(), String> {
     let ctx = resolve_api_context()?;
+    let tls_fingerprint = if manifest.sharing_enabled {
+        crate::peer_lan::ensure_lan_presence().await;
+        Some(
+            crate::peer_lan::server::lan_tls_fingerprint().ok_or_else(|| {
+                "No se pudo iniciar TLS para compartir el inventario LAN".to_string()
+            })?,
+        )
+    } else {
+        None
+    };
     let url = format!(
         "{}/inventory/devices/{}",
         ctx.base_url,
         urlencoding::encode(&manifest.device_id)
     );
-    let body = manifest.to_publish_body();
+    let body = manifest.to_publish_body(tls_fingerprint);
 
     let client = API_CLIENT.clone();
     let res = client
@@ -134,6 +144,7 @@ pub struct GameProviderDeviceDto {
     pub manifest_hash: String,
     pub verified_at: String,
     pub last_seen_at: Option<String>,
+    pub tls_fingerprint: Option<String>,
     #[serde(default)]
     pub files: Option<Vec<InventoryFileDto>>,
 }

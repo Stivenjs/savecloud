@@ -16,6 +16,7 @@ pub struct LanDeviceProbe {
     pub lan_host: String,
     pub port: u16,
     pub reachable: bool,
+    pub tls_fingerprint: String,
 }
 
 pub async fn probe_lan_devices(target_ids: Vec<String>) -> Result<Vec<LanDeviceProbe>, String> {
@@ -68,6 +69,7 @@ pub async fn probe_lan_devices(target_ids: Vec<String>) -> Result<Vec<LanDeviceP
                 lan_host: String::new(),
                 port: 0,
                 reachable: false,
+                tls_fingerprint: String::new(),
             })
         })
         .collect();
@@ -97,6 +99,7 @@ fn probe_from_service(
         lan_host: host,
         port,
         reachable: true,
+        tls_fingerprint: txt_get(info, "tlsFingerprint"),
     })
 }
 

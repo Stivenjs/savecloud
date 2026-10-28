@@ -2,6 +2,9 @@
 
 use std::time::Duration;
 
+use tauri::{AppHandle, Manager};
+
+use crate::cloud::CloudWsState;
 use crate::commands::sync::context::resolve_api_context;
 use crate::config::load_settings;
 use crate::network::API_CLIENT;
@@ -112,11 +115,35 @@ pub async fn register_and_serve_session(
     }
 }
 
-pub fn spawn_pending_session_poller() {
-    tauri::async_runtime::spawn(async {
+pub fn spawn_pending_session_poller(app: AppHandle) {
+    let mut connection_status = app.state::<CloudWsState>().subscribe_connection_status();
+
+    tauri::async_runtime::spawn(async move {
+        let mut was_connected = false;
         loop {
+            let connected = *connection_status.borrow_and_update();
+            if connected {
+                if !was_connected {
+                    // Catch up after startup/reconnect in case a WS event was missed.
+                    let _ = poll_and_serve_pending_sessions().await;
+                }
+                was_connected = true;
+                if connection_status.changed().await.is_err() {
+                    break;
+                }
+                continue;
+            }
+
+            was_connected = false;
             let _ = poll_and_serve_pending_sessions().await;
-            tokio::time::sleep(Duration::from_secs(60)).await;
+            tokio::select! {
+                _ = tokio::time::sleep(Duration::from_secs(60)) => {}
+                changed = connection_status.changed() => {
+                    if changed.is_err() {
+                        break;
+                    }
+                }
+            }
         }
     });
 }

@@ -41,26 +41,31 @@ pub async fn streaming_start_host(
     // 2. Publicar en mDNS que somos un Host, pasando también el puerto de nuestra API LAN
     super::discovery::publish_stream_service(&device_id, &user_id, 47989, savecloud_port)?;
 
-    // 3. Generar un PIN aleatorio de 4 dígitos para el Host
-    let simulated_pin = {
+    // Sunshine recibe un PIN de cuatro dígitos en stdin. SaveCloud usa un código
+    // de seis dígitos independiente para autorizar el registro del certificado LAN.
+    let sunshine_pin = {
         use rand::Rng;
         let mut rng = rand::thread_rng();
         format!("{:04}", rng.gen_range(0..10000))
     };
+    let pairing_code = {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        format!("{:06}", rng.gen_range(0..1_000_000))
+    };
 
-    // 4. Escribir el PIN en el stdin de Sunshine para que lo valide automáticamente
-    // cuando el cliente haga la petición de emparejamiento con este mismo PIN.
-    if let Err(e) = state.host.provide_pin(&simulated_pin).await {
+    if let Err(e) = state.host.provide_pin(&sunshine_pin).await {
         log::warn!("No se pudo proveer PIN al stdin de Sunshine: {}", e);
     }
+    crate::peer_lan::server::set_streaming_pairing_code(pairing_code.clone())?;
 
     *state.session.lock().unwrap() = HostState::Hosting {
-        pin: simulated_pin.clone(),
+        pin: pairing_code.clone(),
         clients: vec![],
     };
     let _ = app.emit("streaming-state-changed", ());
 
-    Ok(simulated_pin)
+    Ok(pairing_code)
 }
 
 /// Conecta este cliente a un Host descubierto en la LAN usando su IP y configuraciones avanzadas de transmisión.
@@ -72,6 +77,8 @@ pub async fn streaming_start_host(
 pub async fn streaming_connect_lan(
     ip_address: String,
     mut savecloud_port: u16,
+    pairing_code: String,
+    mut tls_fingerprint: String,
     width: Option<i32>,
     height: Option<i32>,
     fps: Option<i32>,
@@ -94,6 +101,10 @@ pub async fn streaming_connect_lan(
             .await
             .map_err(|e| e.to_string())?;
         tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+    }
+    if tls_fingerprint.trim().is_empty() && is_loopback {
+        tls_fingerprint = crate::peer_lan::server::lan_tls_fingerprint()
+            .ok_or_else(|| "No se pudo obtener la huella TLS del servidor local".to_string())?;
     }
 
     let video_format = match codec.as_deref() {
@@ -131,7 +142,13 @@ pub async fn streaming_connect_lan(
 
     let connect_res = state
         .client
-        .connect_lan(&ip_address, savecloud_port, &stream_options)
+        .connect_lan(
+            &ip_address,
+            savecloud_port,
+            &pairing_code,
+            &tls_fingerprint,
+            &stream_options,
+        )
         .await
         .map_err(|e| {
             super::set_mirror_mode(false);
@@ -169,6 +186,7 @@ pub async fn streaming_stop(
     super::set_mirror_mode(false);
 
     state.host.stop().await.map_err(|e| e.to_string())?;
+    crate::peer_lan::server::clear_streaming_pairing_code();
     super::bindings::reset_bindings_state();
     super::input_relay::reset_input_relay_state();
     withdraw_stream_service();
@@ -199,7 +217,10 @@ pub async fn streaming_cancel_active_session(
     let _ = client.get("https://localhost:47984/cancel").send().await;
 
     if let Ok(mut session) = state.session.lock() {
-        if let HostState::Hosting { ref mut clients, .. } = *session {
+        if let HostState::Hosting {
+            ref mut clients, ..
+        } = *session
+        {
             clients.clear();
         }
     }
@@ -227,7 +248,10 @@ pub fn set_audio_output_device(device_name: Option<String>) -> Result<(), String
     let mut settings = crate::config::load_settings();
     settings.audio_output_device = device_name.clone();
     crate::config::save_settings(&settings).map_err(|e| e.to_string())?;
-    log::info!("[Audio] Dispositivo de salida configurado a: {:?}", device_name);
+    log::info!(
+        "[Audio] Dispositivo de salida configurado a: {:?}",
+        device_name
+    );
     Ok(())
 }
 
@@ -254,11 +278,12 @@ pub async fn streaming_toggle_fullscreen(app: AppHandle) -> Result<bool, String>
     if let Some(window) = app.get_webview_window("streaming-window") {
         let is_fullscreen = window.is_fullscreen().map_err(|e| e.to_string())?;
         let next_state = !is_fullscreen;
-        window.set_fullscreen(next_state).map_err(|e| e.to_string())?;
+        window
+            .set_fullscreen(next_state)
+            .map_err(|e| e.to_string())?;
         log::info!("Comando: Pantalla completa alternada a: {}", next_state);
         Ok(next_state)
     } else {
         Err("Ventana de streaming no encontrada".into())
     }
 }
-

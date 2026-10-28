@@ -29,7 +29,8 @@ services:
       - PORT=3000
       - LOG_LEVEL=${LOG_LEVEL:-warn}
       - HTTP_REQUEST_LOGS=${HTTP_REQUEST_LOGS:-false}
-      - API_KEY=${SYNC_GAMES_API_KEY:-sg_secret_key_12345}
+      - API_KEY=${SYNC_GAMES_API_KEY:?SYNC_GAMES_API_KEY must be set to a unique random secret}
+      - TRUSTED_PROXY_CIDRS=${TRUSTED_PROXY_CIDRS:-172.16.0.0/12}
       - BUCKET_NAME=savecloud-saves
       - AWS_REGION=us-east-1
       - AWS_ACCESS_KEY_ID=${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}

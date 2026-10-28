@@ -41,6 +41,7 @@ interface DeviceDbRecord {
   sharingEnabled: boolean;
   lastSeenAt?: string;
   appVersion?: string;
+  tlsFingerprint?: string;
   games: GameInventoryEntry[];
 }
 
@@ -63,6 +64,7 @@ interface GameProviderDbRecord {
   manifestHash: string;
   verifiedAt: string;
   lastSeenAt?: string;
+  tlsFingerprint?: string;
   files?: GameProviderDevice["files"];
 }
 
@@ -150,6 +152,7 @@ export class DynamoDbGameInventoryRepository implements GameInventoryRepository 
         sharingEnabled: item.sharingEnabled,
         lastSeenAt: item.lastSeenAt,
         appVersion: item.appVersion,
+        tlsFingerprint: item.tlsFingerprint,
         games: item.games || [],
       };
     }
@@ -182,6 +185,7 @@ export class DynamoDbGameInventoryRepository implements GameInventoryRepository 
       updatedAt: input.updatedAt,
       sharingEnabled: input.sharingEnabled,
       lastSeenAt: now,
+      tlsFingerprint: input.tlsFingerprint,
       games: verified,
     };
 
@@ -238,6 +242,7 @@ export class DynamoDbGameInventoryRepository implements GameInventoryRepository 
       manifestHash: game.manifestHash,
       verifiedAt: game.verifiedAt,
       lastSeenAt: record.lastSeenAt,
+      tlsFingerprint: record.tlsFingerprint,
       files: game.files,
     };
 
@@ -349,6 +354,7 @@ export class DynamoDbGameInventoryRepository implements GameInventoryRepository 
             manifestHash: item.manifestHash,
             verifiedAt: item.verifiedAt,
             lastSeenAt: item.lastSeenAt,
+            tlsFingerprint: item.tlsFingerprint,
             files: item.files,
           });
         }
@@ -398,7 +404,7 @@ export class DynamoDbGameInventoryRepository implements GameInventoryRepository 
   /**
    * Lista las sesiones de transferencia pendientes para un dispositivo destino.
    */
-  async listPendingTransferSessions(targetDeviceId: string): Promise<TransferSessionRecord[]> {
+  async listPendingTransferSessions(targetUserId: string, targetDeviceId: string): Promise<TransferSessionRecord[]> {
     const res = await this.docClient.send(
       new QueryCommand({
         TableName: this.tableName,
@@ -417,7 +423,7 @@ export class DynamoDbGameInventoryRepository implements GameInventoryRepository 
       for (const raw of res.Items) {
         const item = raw as TransferSessionDbRecord;
         const exp = Date.parse(item.expiresAt);
-        if (Number.isFinite(exp) && exp >= now) {
+        if (item.targetUserId === targetUserId && Number.isFinite(exp) && exp >= now) {
           sessions.push({
             sessionId: item.sessionId,
             token: item.token,
@@ -434,7 +440,7 @@ export class DynamoDbGameInventoryRepository implements GameInventoryRepository 
     }
 
     if (this.s3Fallback) {
-      return this.s3Fallback.listPendingTransferSessions(targetDeviceId);
+      return this.s3Fallback.listPendingTransferSessions(targetUserId, targetDeviceId);
     }
 
     return [];
@@ -443,19 +449,35 @@ export class DynamoDbGameInventoryRepository implements GameInventoryRepository 
   /**
    * Consume (elimina) una sesión de transferencia una vez completada.
    */
-  async consumeTransferSession(sessionId: string): Promise<void> {
-    await this.docClient.send(
-      new DeleteCommand({
-        TableName: this.tableName,
-        Key: {
-          pk: `SESSION#${sessionId.trim()}`,
-          sk: "METADATA",
-        },
-      })
+  async consumeTransferSession(
+    sessionId: string,
+    requesterUserId: string
+  ): Promise<"consumed" | "not_found" | "forbidden"> {
+    const key = { pk: `SESSION#${sessionId.trim()}`, sk: "METADATA" };
+    const existing = await this.docClient.send(
+      new GetCommand({ TableName: this.tableName, Key: key, ConsistentRead: true })
     );
-
-    if (this.s3Fallback) {
-      await this.s3Fallback.consumeTransferSession(sessionId).catch(() => {});
+    if (!existing.Item) {
+      return this.s3Fallback ? this.s3Fallback.consumeTransferSession(sessionId, requesterUserId) : "not_found";
     }
+    const item = existing.Item as TransferSessionDbRecord;
+    if (item.requesterUserId !== requesterUserId) return "forbidden";
+
+    try {
+      await this.docClient.send(
+        new DeleteCommand({
+          TableName: this.tableName,
+          Key: key,
+          ConditionExpression: "requesterUserId = :requesterUserId",
+          ExpressionAttributeValues: { ":requesterUserId": requesterUserId },
+        })
+      );
+    } catch (error) {
+      if ((error as { name?: string }).name === "ConditionalCheckFailedException") return "not_found";
+      throw error;
+    }
+
+    if (this.s3Fallback) await this.s3Fallback.consumeTransferSession(sessionId, requesterUserId);
+    return "consumed";
   }
 }

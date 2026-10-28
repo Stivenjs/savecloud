@@ -12,33 +12,10 @@ use crate::plugins::log_buffer::AppLogs;
 use serde_json::Value;
 use tauri::{command, AppHandle, State};
 
-/// Adjunta parámetros de consulta URL (query string) a una URL base de WebSocket de forma segura.
-///
-/// Garantiza la preservación del esquema, host, puerto y ruta válida (mínimo `/`).
-fn append_ws_query(ws_base: &str, query: &str) -> String {
-    let trimmed = ws_base.trim();
-    if let Ok(parsed) = url::Url::parse(trimmed) {
-        let scheme = parsed.scheme();
-        let host = parsed.host_str().unwrap_or("");
-        let port_part = match parsed.port() {
-            Some(p) => format!(":{}", p),
-            None => String::new(),
-        };
-        let path = parsed.path();
-        let effective_path = if path.is_empty() { "/" } else { path };
-        format!(
-            "{}://{}{}{}?{}",
-            scheme, host, port_part, effective_path, query
-        )
-    } else {
-        format!("{}/?{}", trimmed.trim_end_matches('/'), query)
-    }
-}
-
 /// Inicia la conexión WebSocket remota con la nube de SaveCloud.
 ///
 /// Resuelve la autenticación y parámetros según el modo de operación (Host propio o Invitado/Guest),
-/// construye la URL autenticada y delega la ejecución al [`CloudWsState`].
+/// construye los headers autenticados y delega la ejecución al [`CloudWsState`].
 ///
 /// # Argumentos
 /// * `app_handle` - Handle de la aplicación Tauri.
@@ -72,7 +49,7 @@ pub async fn start_cloud_ws(
 
     let device_id = crate::peer_inventory::resolve_device_id()?;
 
-    let final_url = if let Some(ref host) = active_host {
+    let (final_url, credential) = if let Some(ref host) = active_host {
         let ws_base_raw = settings
             .cloud_host_ws_base_urls
             .get(host)
@@ -91,13 +68,7 @@ pub async fn start_cloud_ws(
         let token = config::get_secure_api_key_for_cloud_host(host)
             .ok_or("No tienes credenciales (token) para este host.")?;
 
-        let query = format!(
-            "userId={}&token={}&deviceId={}",
-            urlencoding::encode(&user_id),
-            urlencoding::encode(&token),
-            urlencoding::encode(&device_id)
-        );
-        append_ws_query(&ws_base, &query)
+        (ws_base, token)
     } else {
         let ws_base_raw = settings
             .ws_base_url
@@ -121,21 +92,16 @@ pub async fn start_cloud_ws(
             .filter(|s| !s.is_empty())
             .ok_or("API Key no configurada en ajustes.")?;
 
-        let query = format!(
-            "userId={}&apiKey={}&deviceId={}",
-            urlencoding::encode(&user_id),
-            urlencoding::encode(api_key),
-            urlencoding::encode(&device_id)
-        );
-        append_ws_query(&ws_base, &query)
+        (ws_base, api_key.to_string())
     };
 
-    let ws_endpoint_preview = final_url
-        .split('?')
-        .next()
-        .unwrap_or("unknown");
+    let ws_endpoint_preview = final_url.split('?').next().unwrap_or("unknown");
 
-    let mode = if active_host.is_some() { "guest" } else { "host" };
+    let mode = if active_host.is_some() {
+        "guest"
+    } else {
+        "host"
+    };
 
     sync_logger::log_operation(
         "cloud_ws_start",
@@ -146,7 +112,16 @@ pub async fn start_cloud_ws(
     );
 
     cloud_state
-        .start(app_handle, final_url, logs.inner().clone())
+        .start(
+            app_handle,
+            final_url,
+            logs.inner().clone(),
+            super::ws_client::CloudWsAuth {
+                credential,
+                user_id,
+                device_id,
+            },
+        )
         .await;
 
     Ok(())

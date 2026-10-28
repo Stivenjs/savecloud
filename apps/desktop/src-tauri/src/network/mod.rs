@@ -154,20 +154,97 @@ pub static DATA_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         .expect("fallo critico al inicializar DATA_CLIENT")
 });
 
-/// Cliente HTTP para transferencias peer LAN (archivos grandes, timeouts largos).
-pub static PEER_LAN_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+/// Crea un cliente LAN que solo acepta el certificado anunciado por el peer mDNS.
+pub fn build_peer_lan_client(expected_fingerprint: &str) -> Result<reqwest::Client, String> {
+    use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+    use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+    use rustls::{DigitallySignedStruct, SignatureScheme};
+    use sha2::{Digest, Sha256};
+    use std::sync::Arc;
+
+    #[derive(Debug)]
+    struct PinnedCertificateVerifier {
+        expected: Vec<u8>,
+        algorithms: rustls::crypto::WebPkiSupportedAlgorithms,
+    }
+
+    impl ServerCertVerifier for PinnedCertificateVerifier {
+        fn verify_server_cert(
+            &self,
+            end_entity: &CertificateDer<'_>,
+            _intermediates: &[CertificateDer<'_>],
+            _server_name: &ServerName<'_>,
+            _ocsp_response: &[u8],
+            _now: UnixTime,
+        ) -> Result<ServerCertVerified, rustls::Error> {
+            let actual = Sha256::digest(end_entity.as_ref());
+            let matches = actual
+                .iter()
+                .zip(&self.expected)
+                .fold(0_u8, |diff, (left, right)| diff | (left ^ right))
+                == 0;
+            if matches && actual.len() == self.expected.len() {
+                Ok(ServerCertVerified::assertion())
+            } else {
+                Err(rustls::Error::InvalidCertificate(
+                    rustls::CertificateError::UnknownIssuer,
+                ))
+            }
+        }
+
+        fn verify_tls12_signature(
+            &self,
+            message: &[u8],
+            cert: &CertificateDer<'_>,
+            dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            rustls::crypto::verify_tls12_signature(message, cert, dss, &self.algorithms)
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            message: &[u8],
+            cert: &CertificateDer<'_>,
+            dss: &DigitallySignedStruct,
+        ) -> Result<HandshakeSignatureValid, rustls::Error> {
+            rustls::crypto::verify_tls13_signature(message, cert, dss, &self.algorithms)
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+            self.algorithms.supported_schemes()
+        }
+    }
+
+    let expected = hex::decode(expected_fingerprint.trim())
+        .map_err(|_| "La huella TLS anunciada por el dispositivo es inválida".to_string())?;
+    if expected.len() != 32 {
+        return Err("La huella TLS anunciada por el dispositivo debe ser SHA-256".to_string());
+    }
+
+    let provider = rustls::crypto::ring::default_provider();
+    let algorithms = provider.signature_verification_algorithms;
+    let tls = rustls::ClientConfig::builder_with_provider(provider.into())
+        .with_safe_default_protocol_versions()
+        .map_err(|error| format!("Configuración TLS LAN inválida: {error}"))?
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(PinnedCertificateVerifier {
+            expected,
+            algorithms,
+        }))
+        .with_no_client_auth();
+
     reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .timeout(DATA_REQUEST_TIMEOUT)
         .connect_timeout(DATA_CONNECT_TIMEOUT)
         .tcp_keepalive(DATA_TCP_KEEPALIVE)
         .tcp_nodelay(true)
-        .danger_accept_invalid_certs(true)
         .pool_max_idle_per_host(4)
         .pool_idle_timeout(Duration::from_secs(60))
+        .use_preconfigured_tls(tls)
         .build()
-        .expect("fallo critico al inicializar PEER_LAN_CLIENT")
-});
+        .map_err(|error| format!("No se pudo crear el cliente TLS peer LAN: {error}"))
+}
 
 struct CachedSteamClient {
     client: reqwest::Client,

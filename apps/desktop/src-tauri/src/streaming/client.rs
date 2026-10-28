@@ -142,8 +142,9 @@ impl MoonlightClient {
         }
 
         let subject_alt_names = vec!["savecloud-client".to_string()];
-        let cert = rcgen::generate_simple_self_signed(subject_alt_names)
-            .map_err(|err| StreamingError::Crypto(format!("Fallo al generar certificado X.509: {err}")))?;
+        let cert = rcgen::generate_simple_self_signed(subject_alt_names).map_err(|err| {
+            StreamingError::Crypto(format!("Fallo al generar certificado X.509: {err}"))
+        })?;
 
         let mut cert_pem = cert
             .serialize_pem()
@@ -156,7 +157,9 @@ impl MoonlightClient {
         if let Some(parent) = self.cert_path.parent() {
             if !parent.exists() {
                 std::fs::create_dir_all(parent).map_err(|err| {
-                    StreamingError::Config(format!("Fallo al crear directorio de certificados: {err}"))
+                    StreamingError::Config(format!(
+                        "Fallo al crear directorio de certificados: {err}"
+                    ))
                 })?;
             }
         }
@@ -190,7 +193,8 @@ impl MoonlightClient {
                     StreamingError::Config(format!("Fallo al crear directorio para cliente: {err}"))
                 })?;
             }
-            std::fs::write(&id_path, &new_id).map_err(|err| StreamingError::Config(err.to_string()))?;
+            std::fs::write(&id_path, &new_id)
+                .map_err(|err| StreamingError::Config(err.to_string()))?;
             return Ok(new_id);
         }
         Ok("0123456789ABCDEF".to_string())
@@ -213,6 +217,8 @@ impl MoonlightClient {
         &self,
         host_ip: &str,
         savecloud_port: u16,
+        pairing_code: &str,
+        tls_fingerprint: &str,
         options: &StreamOptions,
     ) -> StreamingResult<ConnectResult> {
         if self.is_connected.load(Ordering::SeqCst) {
@@ -253,22 +259,21 @@ impl MoonlightClient {
         let url = format!("https://{host_ip}:{savecloud_port}/streaming/pair");
         let payload = serde_json::json!({
             "client_cert": cert_pem,
-            "unique_id": unique_id
+            "unique_id": unique_id,
+            "pairing_code": pairing_code,
         });
 
-        let client = reqwest::Client::builder()
-            .danger_accept_invalid_certs(true)
-            .timeout(std::time::Duration::from_secs(10))
-            .build()
-            .map_err(|err| {
-                StreamingError::Network(format!(
-                    "Error creando cliente HTTP para emparejamiento: {err}"
-                ))
-            })?;
+        let client = crate::network::build_peer_lan_client(tls_fingerprint)
+            .map_err(StreamingError::Network)?;
 
-        let res = client.post(&url).json(&payload).send().await.map_err(|err| {
-            StreamingError::Network(format!("Error conectando a SaveCloud Host: {err}"))
-        })?;
+        let res = client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|err| {
+                StreamingError::Network(format!("Error conectando a SaveCloud Host: {err}"))
+            })?;
 
         if !res.status().is_success() {
             return Err(StreamingError::Network(format!(
@@ -426,7 +431,6 @@ impl MoonlightClient {
             "https://{target_ip}:47984/resume?uniqueid={unique_id}&uuid={uuid}&appversion=7.1.431.0&rikey={rikey_hex}&rikeyid={rikey_id}"
         );
 
-        
         let mut retries = 25;
         let mut last_error = String::new();
         let mut session_url = String::new();
@@ -485,8 +489,9 @@ impl MoonlightClient {
 
         let ip_cstr = CString::new(host_ip)
             .map_err(|err| StreamingError::Config(format!("IP inválida para CString: {err}")))?;
-        let session_url_cstr = CString::new(session_url)
-            .map_err(|err| StreamingError::Config(format!("Session URL inválida para CString: {err}")))?;
+        let session_url_cstr = CString::new(session_url).map_err(|err| {
+            StreamingError::Config(format!("Session URL inválida para CString: {err}"))
+        })?;
 
         let options_clone = options.clone();
 
@@ -494,7 +499,8 @@ impl MoonlightClient {
             let app_version = CString::new("7.1.431.0").unwrap_or_default();
             let gfe_version = CString::new("3.23.0.74").unwrap_or_default();
 
-            let mut server_info: SERVER_INFORMATION = unsafe { MaybeUninit::zeroed().assume_init() };
+            let mut server_info: SERVER_INFORMATION =
+                unsafe { MaybeUninit::zeroed().assume_init() };
             initialize_server_information(&mut server_info);
             server_info.address = ip_cstr.as_ptr();
             server_info.serverInfoAppVersion = app_version.as_ptr();
@@ -529,7 +535,8 @@ impl MoonlightClient {
             }
             stream_config.remoteInputAesIv = iv_c;
 
-            let mut cl_callbacks: CONNECTION_LISTENER_CALLBACKS = unsafe { MaybeUninit::zeroed().assume_init() };
+            let mut cl_callbacks: CONNECTION_LISTENER_CALLBACKS =
+                unsafe { MaybeUninit::zeroed().assume_init() };
             initialize_connection_callbacks(&mut cl_callbacks);
             cl_callbacks.stageStarting = cl_stage_starting as *mut std::ffi::c_void;
             cl_callbacks.stageComplete = cl_stage_complete as *mut std::ffi::c_void;
@@ -547,7 +554,8 @@ impl MoonlightClient {
                 capabilities: 0x01, // CAPABILITY_DIRECT_SUBMIT
             };
 
-            let mut ar_callbacks: AUDIO_RENDERER_CALLBACKS = unsafe { MaybeUninit::zeroed().assume_init() };
+            let mut ar_callbacks: AUDIO_RENDERER_CALLBACKS =
+                unsafe { MaybeUninit::zeroed().assume_init() };
             initialize_audio_callbacks(&mut ar_callbacks);
             ar_callbacks.init = Some(super::audio::ar_init);
             ar_callbacks.start = Some(super::audio::ar_start);
@@ -583,7 +591,11 @@ impl MoonlightClient {
         self.is_connecting.store(false, Ordering::SeqCst);
         let was_connected = self.is_connected.swap(false, Ordering::SeqCst);
 
-        let host_ip = self.last_host_ip.lock().ok().and_then(|mut guard| guard.take());
+        let host_ip = self
+            .last_host_ip
+            .lock()
+            .ok()
+            .and_then(|mut guard| guard.take());
         let unique_id = self.get_or_create_unique_id().ok();
 
         if let (Some(mut target_ip), Some(id)) = (host_ip, unique_id) {
@@ -631,4 +643,3 @@ impl Drop for MoonlightClient {
         self.disconnect();
     }
 }
-

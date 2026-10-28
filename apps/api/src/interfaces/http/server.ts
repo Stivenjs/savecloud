@@ -24,8 +24,15 @@ const DEFAULT_CLOUD_INVITES_TABLE = "savecloud-cloud-invites";
 const DEFAULT_GAME_INVENTORY_TABLE = "savecloud-game-inventory";
 const SQS_MAX_BATCH_SIZE = 10;
 
-if (process.env.NODE_ENV === "production" && !process.env.DYNAMODB_ENDPOINT?.trim()) {
-  validateRuntimeConfiguration("self-hosted");
+if (process.env.NODE_ENV === "production") {
+  if (!process.env.API_KEY?.trim()) {
+    throw new Error("[bootstrap] API_KEY es obligatoria en producción; la API no puede iniciar sin autenticación.");
+  }
+
+  // Las instalaciones con DynamoDB local (por ejemplo, Docker) también deben
+  // proteger sus rutas. La validación completa solo aplica al despliegue sin
+  // endpoint local, donde se esperan las variables de producción de AWS.
+  if (!process.env.DYNAMODB_ENDPOINT?.trim()) validateRuntimeConfiguration("self-hosted");
 }
 
 /**

@@ -48,6 +48,9 @@ pub fn publish_lan_service(device_id: &str, user_id: &str, port: u16) -> Result<
     let mut properties = std::collections::HashMap::new();
     properties.insert("deviceId".to_string(), device_id.to_string());
     properties.insert("userId".to_string(), user_id.to_string());
+    if let Some(fingerprint) = crate::peer_lan::server::lan_tls_fingerprint() {
+        properties.insert("tlsFingerprint".to_string(), fingerprint);
+    }
 
     let host_ip = primary_lan_ipv4()
         .map(|v4| v4.to_string())
