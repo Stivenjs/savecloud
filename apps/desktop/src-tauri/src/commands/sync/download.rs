@@ -360,19 +360,18 @@ fn check_conflicts_for_game(
 #[tauri::command]
 pub async fn sync_check_download_conflicts(
     game_id: String,
+    destination_path: Option<String>,
 ) -> Result<DownloadConflictsResultDto, String> {
     let game = crate::config::load_game(&game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
-
-    if game.paths.is_empty() {
-        return Err("El juego no tiene rutas de guardado".into());
-    }
+    let download_roots =
+        path_utils::resolve_cloud_download_roots(&game.paths, destination_path.as_deref())?;
 
     // Optimización: si ya conocemos el juego, listamos solo su prefijo remoto.
     let saves: Vec<RemoteSaveInfoDto> =
         api::sync_list_remote_saves_for_game(game_id.clone()).await?;
 
-    let conflicts = check_conflicts_for_game(&game.paths, &saves);
+    let conflicts = check_conflicts_for_game(&download_roots, &saves);
     Ok(DownloadConflictsResultDto { conflicts })
 }
 
@@ -742,6 +741,7 @@ async fn download_one_file(
 #[tauri::command]
 pub async fn sync_download_game(
     game_id: String,
+    destination_path: Option<String>,
     app: AppHandle,
     tray_state: State<'_, TrayState>,
 ) -> Result<SyncResultDto, String> {
@@ -749,7 +749,8 @@ pub async fn sync_download_game(
     tray_state.0.update_tooltip();
 
     let operation_id = format!("sync-download-{game_id}");
-    let result = sync_download_game_impl(game_id.clone(), app.clone(), None).await;
+    let result =
+        sync_download_game_impl(game_id.clone(), app.clone(), None, destination_path).await;
 
     tray_state.0.syncing_dec();
     tray_state.0.clone().refresh_unsynced_async();
@@ -791,6 +792,7 @@ pub(crate) async fn sync_download_game_impl(
     game_id: String,
     app: AppHandle,
     prefetched_saves: Option<Vec<RemoteSaveInfoDto>>,
+    destination_path: Option<String>,
 ) -> Result<SyncResultDto, String> {
     let api_ctx = super::context::resolve_api_context()?;
     let cfg = crate::config::load_settings();
@@ -818,10 +820,9 @@ pub(crate) async fn sync_download_game_impl(
     let api_base = api_ctx.base_url.as_str();
     let api_key = api_ctx.api_key.as_str();
 
-    if game.paths.is_empty() {
-        return Err("El juego no tiene rutas de guardado configuradas.".into());
-    }
-    let game_paths_arc = Arc::new(game.paths.clone());
+    let download_roots =
+        path_utils::resolve_cloud_download_roots(&game.paths, destination_path.as_deref())?;
+    let game_paths_arc = Arc::new(download_roots);
 
     // Usa la lista provista por el llamador o la descarga si es una llamada individual.
     let saves: Vec<_> = match prefetched_saves {
@@ -1060,6 +1061,7 @@ pub async fn sync_download_all_games(
                 let r = super::full_backup::download_and_restore_full_backup_impl(
                     game_id.clone(),
                     backup_key,
+                    None,
                     app,
                     tray,
                     false,
@@ -1151,7 +1153,7 @@ pub async fn sync_download_all_games(
                 .collect();
 
             async move {
-                let r = sync_download_game_impl(game_id.clone(), app, Some(game_saves)).await;
+                let r = sync_download_game_impl(game_id.clone(), app, Some(game_saves), None).await;
                 (game_id, r)
             }
         })

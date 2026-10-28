@@ -35,6 +35,7 @@ use crate::config;
 use crate::config::models::FULL_BACKUP_PACKAGED_ZSTD_DEFAULT;
 use crate::network::DATA_CLIENT;
 use crate::tray::tray_state::TrayState;
+use crate::utils::path_utils;
 use crate::utils::transfer_metrics::{TransferProgressThrottle, PACKAGED_PROGRESS_POLICY};
 use tauri::{AppHandle, Manager, State};
 
@@ -421,6 +422,7 @@ fn unpack_tar_or_zstd<R: std::io::Read>(reader: R, game_paths: &[String]) -> Res
 pub async fn download_and_restore_full_backup_impl(
     game_id: String,
     backup_key: String,
+    destination_path: Option<String>,
     app: AppHandle,
     tray_state: std::sync::Arc<crate::tray::tray_state::TrayStateInner>,
     emit_done: bool,
@@ -429,16 +431,13 @@ pub async fn download_and_restore_full_backup_impl(
     let game = config::load_game(&game_id)?
         .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
-    if game.paths.is_empty() {
-        return Err("El juego no tiene rutas de guardado configuradas".to_string());
-    }
+    let game_paths =
+        path_utils::resolve_cloud_download_roots(&game.paths, destination_path.as_deref())?;
 
     if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
         let pm = pm.lock().await;
         pm.execute_pre_download(&game_id);
     }
-
-    let game_paths = game.paths.clone();
 
     // Resolución de URL pre-firmada
     let body = serde_json::json!({ "gameId": game_id, "key": backup_key });
@@ -863,11 +862,19 @@ pub async fn list_full_backups_batch(
 pub async fn download_and_restore_full_backup(
     game_id: String,
     backup_key: String,
+    destination_path: Option<String>,
     app: AppHandle,
     tray_state: State<'_, TrayState>,
 ) -> Result<(), String> {
-    download_and_restore_full_backup_impl(game_id, backup_key, app, tray_state.0.clone(), true)
-        .await
+    download_and_restore_full_backup_impl(
+        game_id,
+        backup_key,
+        destination_path,
+        app,
+        tray_state.0.clone(),
+        true,
+    )
+    .await
 }
 
 #[tauri::command]

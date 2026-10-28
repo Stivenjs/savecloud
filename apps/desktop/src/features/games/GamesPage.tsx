@@ -110,6 +110,7 @@ export function GamesPage() {
     setGameToRemove,
     downloadConflictGame,
     downloadConflicts,
+    downloadDestinationPath,
     handleConfirmDownloadConflict,
     handleCloseDownloadConflict,
     downloadAllConflictGames,
@@ -490,6 +491,7 @@ export function GamesPage() {
               onClose={handleCloseSyncPreview}
               type={syncPreviewType ?? "upload"}
               gameId={syncPreviewGame?.id ?? ""}
+              destinationPath={downloadDestinationPath}
               onConfirm={handleConfirmSyncPreview}
               onFullBackupInstead={
                 syncPreviewType === "upload" && syncPreviewGame
@@ -529,8 +531,8 @@ export function GamesPage() {
               hasCloudIntegration={hasSyncConfig}
               onDownloadFromCloud={
                 gameToRestoreBackup && hasSyncConfig
-                  ? () => {
-                      void handleDownloadOne(gameToRestoreBackup);
+                  ? (destinationPath) => {
+                      void handleDownloadOne(gameToRestoreBackup, destinationPath);
                     }
                   : undefined
               }
