@@ -12,6 +12,7 @@ import {
   Spinner,
   Tab,
   Tabs,
+  Tooltip,
 } from "@heroui/react";
 import {
   Cloud,
@@ -21,6 +22,7 @@ import {
   Gamepad2,
   HardDrive,
   History,
+  Info,
   Pencil,
   Plus,
   Sparkles,
@@ -362,6 +364,18 @@ export function RestoreBackupModal({
             </h3>
             <p className="mt-1.5 text-xs leading-relaxed text-default-500">
               {t("library.restoreBackup.cloudFilesDesc")}
+              <Tooltip
+                content={t("library.restoreBackup.cloudFilesDetails")}
+                placement="top"
+                delay={300}
+                classNames={{ content: "max-w-64 whitespace-normal text-wrap" }}>
+                <button
+                  type="button"
+                  className="ml-1 inline-flex align-middle text-default-400 hover:text-default-600"
+                  aria-label={t("library.restoreBackup.cloudFilesDetails")}>
+                  <Info size={13} />
+                </button>
+              </Tooltip>
             </p>
           </div>
         </div>
@@ -553,6 +567,18 @@ export function RestoreBackupModal({
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-xs leading-relaxed text-default-600 dark:text-default-400">
                           {t("library.restoreBackup.snapshotsDesc")}
+                          <Tooltip
+                            content={t("library.restoreBackup.snapshotsDetails")}
+                            placement="top"
+                            delay={300}
+                            classNames={{ content: "max-w-64 whitespace-normal text-wrap" }}>
+                            <button
+                              type="button"
+                              className="ml-1 inline-flex align-middle text-default-400 hover:text-default-600"
+                              aria-label={t("library.restoreBackup.snapshotsDetails")}>
+                              <Info size={13} />
+                            </button>
+                          </Tooltip>
                         </p>
                         <Button
                           color="primary"
