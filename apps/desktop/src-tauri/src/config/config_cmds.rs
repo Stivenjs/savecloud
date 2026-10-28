@@ -286,6 +286,12 @@ pub fn set_cloud_host_ws_url(host_user_id: String, ws_url: String) -> Result<(),
 /// Modifica la política local de retención máxima de respaldos por juego.
 #[tauri::command]
 pub fn set_keep_backups_per_game(keep_last_n: u32) -> Result<(), String> {
+    if keep_last_n > crate::commands::sync::backup::MAX_KEEP_BACKUPS_PER_GAME {
+        return Err(format!(
+            "La retención máxima es de {} copias por juego.",
+            crate::commands::sync::backup::MAX_KEEP_BACKUPS_PER_GAME
+        ));
+    }
     let mut settings = config::load_settings();
     settings.keep_backups_per_game = Some(keep_last_n);
     config::save_settings(&settings)

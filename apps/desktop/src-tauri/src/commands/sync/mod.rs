@@ -18,6 +18,7 @@ pub mod full_backup;
 pub(crate) mod models;
 pub mod multipart_upload;
 pub mod preview;
+pub(crate) mod retry;
 pub mod streaming;
 pub mod upload;
 

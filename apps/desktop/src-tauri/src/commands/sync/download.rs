@@ -15,6 +15,7 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
 use futures_util::stream::{self, StreamExt};
+use reqwest::header::HeaderMap;
 use tokio::io::{AsyncWriteExt, BufWriter};
 
 use super::api;
@@ -61,6 +62,9 @@ const RESTORE_PACKAGED_CONCURRENCY: usize = 2;
 /// Tamaño del buffer de escritura a disco, en bytes.
 const WRITE_BUF_SIZE: usize = 512 * 1024;
 
+/// Intentos totales para descargar cada archivo remoto, incluido el primero.
+const DOWNLOAD_MAX_ATTEMPTS: u32 = 3;
+
 /// Tamaño máximo de un lote al solicitar URLs de descarga a la API.
 const DOWNLOAD_URLS_BATCH_SIZE: usize = 500;
 
@@ -93,6 +97,172 @@ fn file_write_error_message(filename: &str, e: &std::io::Error) -> String {
     } else {
         format!("{}: {}", filename, e)
     }
+}
+
+enum DownloadAttemptFailure {
+    Retryable {
+        message: String,
+        headers: Option<HeaderMap>,
+    },
+    Permanent(String),
+}
+
+fn download_temp_path(dest_path: &std::path::Path) -> PathBuf {
+    let mut filename = dest_path
+        .file_name()
+        .unwrap_or_else(|| std::ffi::OsStr::new("save"))
+        .to_os_string();
+    filename.push(format!(".savecloud-{}.part", uuid::Uuid::new_v4()));
+    dest_path.with_file_name(filename)
+}
+
+async fn download_file_attempt(
+    temp_path: &std::path::Path,
+    save: &RemoteSaveInfoDto,
+    download_url: &str,
+    game_id: &str,
+    app: &AppHandle,
+) -> Result<(), DownloadAttemptFailure> {
+    let response = match DATA_CLIENT.get(download_url).send().await {
+        Ok(response) => response,
+        Err(error) if error.is_timeout() || error.is_connect() => {
+            return Err(DownloadAttemptFailure::Retryable {
+                message: format!("{}: {}", save.filename, error),
+                headers: None,
+            });
+        }
+        Err(error) => {
+            return Err(DownloadAttemptFailure::Permanent(format!(
+                "{}: {}",
+                save.filename, error
+            )));
+        }
+    };
+
+    if !response.status().is_success() {
+        let status = response.status();
+        if super::retry::is_retryable_status(status) {
+            return Err(DownloadAttemptFailure::Retryable {
+                message: format!("{}: HTTP {}", save.filename, status),
+                headers: Some(response.headers().clone()),
+            });
+        }
+        return Err(DownloadAttemptFailure::Permanent(format!(
+            "{}: HTTP {}",
+            save.filename, status
+        )));
+    }
+
+    let total = response.content_length().or(save.size).unwrap_or(0);
+    let is_packaged_backup =
+        save.filename.starts_with("backups/") || save.filename.ends_with(".tar");
+    let emit_bytes_threshold = if is_packaged_backup {
+        DOWNLOAD_PROGRESS_EMIT_BYTES_PACKAGED
+    } else {
+        DOWNLOAD_PROGRESS_EMIT_BYTES
+    };
+
+    let file = create_file_with_retry(temp_path).await.map_err(|error| {
+        DownloadAttemptFailure::Permanent(file_write_error_message(&save.filename, &error))
+    })?;
+    let mut writer = BufWriter::with_capacity(WRITE_BUF_SIZE, file);
+    let mut stream = response.bytes_stream();
+    let mut loaded = 0_u64;
+    let mut last_emit = 0_u64;
+    let mut last_emit_at = Instant::now();
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = match chunk_result {
+            Ok(chunk) => chunk,
+            Err(error) => {
+                drop(writer);
+                return Err(DownloadAttemptFailure::Retryable {
+                    message: format!("{}: {}", save.filename, error),
+                    headers: None,
+                });
+            }
+        };
+        loaded += chunk.len() as u64;
+
+        let bytes_step = loaded.saturating_sub(last_emit) >= emit_bytes_threshold;
+        let time_step = last_emit_at.elapsed() >= DOWNLOAD_PROGRESS_EMIT_INTERVAL;
+        if bytes_step && time_step {
+            last_emit = loaded;
+            last_emit_at = Instant::now();
+            emit_sync_download_progress(
+                app,
+                SyncProgressPayload {
+                    operation_id: Some(format!("sync-download-{game_id}")),
+                    status: Some("running".to_string()),
+                    game_id: game_id.to_string(),
+                    filename: save.filename.clone(),
+                    loaded,
+                    total,
+                    downloaded_bytes: Some(loaded),
+                    total_bytes: Some(total),
+                    can_pause: None,
+                    can_cancel: None,
+                    can_resume: None,
+                    strategy: Some(SyncOperationStrategy::DownloadFile),
+                    state: None,
+                    reason_code: None,
+                },
+            );
+        }
+
+        if let Err(error) = writer.write_all(&chunk).await {
+            drop(writer);
+            return Err(DownloadAttemptFailure::Permanent(file_write_error_message(
+                &save.filename,
+                &error,
+            )));
+        }
+    }
+
+    if total > 0 && loaded != total {
+        drop(writer);
+        let message = format!(
+            "{}: tamaño descargado inesperado ({loaded} de {total} bytes)",
+            save.filename
+        );
+        return if loaded < total {
+            Err(DownloadAttemptFailure::Retryable {
+                message,
+                headers: None,
+            })
+        } else {
+            Err(DownloadAttemptFailure::Permanent(message))
+        };
+    }
+
+    writer.flush().await.map_err(|error| {
+        DownloadAttemptFailure::Permanent(file_write_error_message(&save.filename, &error))
+    })?;
+    drop(writer);
+
+    if total > 0 && loaded > 0 {
+        emit_sync_download_progress(
+            app,
+            SyncProgressPayload {
+                operation_id: Some(format!("sync-download-{game_id}")),
+                status: Some("running".to_string()),
+                game_id: game_id.to_string(),
+                filename: save.filename.clone(),
+                loaded: total,
+                total,
+                downloaded_bytes: Some(total),
+                total_bytes: Some(total),
+                can_pause: None,
+                can_cancel: None,
+                can_resume: None,
+                strategy: Some(SyncOperationStrategy::DownloadFile),
+                state: None,
+                reason_code: None,
+            },
+        );
+    }
+
+    Ok(())
 }
 
 /// Intenta crear (o truncar) un archivo, reintentando con backoff exponencial
@@ -479,160 +649,95 @@ async fn download_one_file(
         let _ = fs::create_dir_all(parent);
     }
 
-    // Copia de seguridad previa a la sobreescritura (estructura de carpetas igual que en la nube).
+    let temp_path = download_temp_path(&dest_path);
+    let mut downloaded = false;
+    for attempt in 0..DOWNLOAD_MAX_ATTEMPTS {
+        match download_file_attempt(&temp_path, save, download_url, game_id, app).await {
+            Ok(()) => {
+                downloaded = true;
+                break;
+            }
+            Err(DownloadAttemptFailure::Permanent(error)) => {
+                let _ = fs::remove_file(&temp_path);
+                return Err(error);
+            }
+            Err(DownloadAttemptFailure::Retryable { message, headers }) => {
+                let _ = fs::remove_file(&temp_path);
+                if attempt + 1 == DOWNLOAD_MAX_ATTEMPTS {
+                    return Err(message);
+                }
+                super::retry::wait_before_retry(attempt, headers.as_ref()).await;
+            }
+        }
+    }
+
+    if !downloaded {
+        return Err(format!(
+            "{}: no se pudo completar la descarga",
+            save.filename
+        ));
+    }
+
+    // Preserva la versión local antes de instalar el archivo descargado.
     if let Some(backup_base) = backup_dir {
         let backup_path = backup_path_for_cloud_file(backup_base, &save.filename);
-        if let Some(bp) = backup_path.parent() {
-            let _ = fs::create_dir_all(bp);
+        if let Some(parent) = backup_path.parent() {
+            if let Err(error) = fs::create_dir_all(parent) {
+                let _ = fs::remove_file(&temp_path);
+                return Err(format!(
+                    "No se pudo crear el directorio de backup para '{}': {}",
+                    save.filename, error
+                ));
+            }
         }
         match fs::copy(&dest_path, &backup_path) {
             Ok(_) => {}
-            Err(e) if e.kind() == ErrorKind::NotFound => {}
-            Err(e) => {
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => {
                 sync_logger::log_error(
                     "sync_download_game",
                     "download_one_file",
-                    &format!("No se pudo hacer backup de '{}': {}", save.filename, e),
+                    &format!("No se pudo hacer backup de '{}': {}", save.filename, error),
                 );
+                let _ = fs::remove_file(&temp_path);
+                return Err(format!(
+                    "No se pudo preservar el guardado local '{}': {}",
+                    save.filename, error
+                ));
             }
         }
     }
 
-    let res = DATA_CLIENT
-        .get(download_url)
-        .send()
-        .await
-        .map_err(|e| format!("{}: {}", save.filename, e))?;
+    if let Err(error) =
+        crate::sources::http_runner::io::safe_rename_with_retry(&temp_path, &dest_path).await
+    {
+        let _ = fs::remove_file(&temp_path);
+        return Err(file_write_error_message(&save.filename, &error));
+    }
 
-    let total = res.content_length().or(save.size).unwrap_or(0);
-    let mut loaded: u64 = 0;
-    let mut last_emit: u64 = 0;
-    let mut last_emit_at = Instant::now();
-    let is_packaged_backup =
-        save.filename.starts_with("backups/") || save.filename.ends_with(".tar");
-    let emit_bytes_threshold = if is_packaged_backup {
-        DOWNLOAD_PROGRESS_EMIT_BYTES_PACKAGED
-    } else {
-        DOWNLOAD_PROGRESS_EMIT_BYTES
-    };
+    if let Ok(dt) = DateTime::parse_from_rfc3339(&save.last_modified)
+        .or_else(|_| DateTime::parse_from_rfc2822(&save.last_modified))
+    {
+        let unix_secs = dt.timestamp();
+        let unix_nanos = dt.timestamp_subsec_nanos();
+        let ft = filetime::FileTime::from_unix_time(unix_secs, unix_nanos);
+        let path_clone = dest_path.clone();
 
-    let file = create_file_with_retry(&dest_path)
-        .await
-        .map_err(|e| file_write_error_message(&save.filename, &e))?;
+        // filetime::set_file_mtime es una llamada de sistema síncrona;
+        // se delega a un thread de bloqueo para no interferir con Tokio.
+        let set_result =
+            tokio::task::spawn_blocking(move || filetime::set_file_mtime(&path_clone, ft)).await;
 
-    let mut writer = BufWriter::with_capacity(WRITE_BUF_SIZE, file);
-    let mut stream = res.bytes_stream();
-    let mut write_err: Option<String> = None;
-
-    while let Some(chunk_result) = stream.next().await {
-        match chunk_result {
-            Ok(chunk) => {
-                loaded += chunk.len() as u64;
-
-                let bytes_step = loaded.saturating_sub(last_emit) >= emit_bytes_threshold;
-                let time_step = last_emit_at.elapsed() >= DOWNLOAD_PROGRESS_EMIT_INTERVAL;
-                let done = total > 0 && loaded >= total;
-                let should_emit = (bytes_step && time_step) || done;
-
-                if should_emit {
-                    last_emit = loaded;
-                    last_emit_at = Instant::now();
-                    emit_sync_download_progress(
-                        app,
-                        SyncProgressPayload {
-                            operation_id: Some(format!("sync-download-{game_id}")),
-                            status: Some("running".to_string()),
-                            game_id: game_id.to_string(),
-                            filename: save.filename.clone(),
-                            loaded,
-                            total,
-                            downloaded_bytes: Some(loaded),
-                            total_bytes: Some(total),
-                            can_pause: None,
-                            can_cancel: None,
-                            can_resume: None,
-                            strategy: Some(SyncOperationStrategy::DownloadFile),
-                            state: None,
-                            reason_code: None,
-                        },
-                    );
-                }
-
-                if let Err(e) = writer.write_all(&chunk).await {
-                    write_err = Some(file_write_error_message(&save.filename, &e));
-                    break;
-                }
-            }
-            Err(e) => {
-                write_err = Some(format!("{}: {}", save.filename, e));
-                break;
-            }
+        if let Err(e) = set_result {
+            sync_logger::log_error(
+                "sync_download_game",
+                "download_one_file",
+                &format!("No se pudo ajustar mtime de '{}': {}", save.filename, e),
+            );
         }
     }
 
-    // Emite el 100 % si la transferencia terminó correctamente pero el último
-    // chunk no lo alcanzó exactamente por el umbral de emisión.
-    if write_err.is_none() && total > 0 && loaded < total {
-        emit_sync_download_progress(
-            app,
-            SyncProgressPayload {
-                operation_id: Some(format!("sync-download-{game_id}")),
-                status: Some("running".to_string()),
-                game_id: game_id.to_string(),
-                filename: save.filename.clone(),
-                loaded: total,
-                total,
-                downloaded_bytes: Some(total),
-                total_bytes: Some(total),
-                can_pause: None,
-                can_cancel: None,
-                can_resume: None,
-                strategy: Some(SyncOperationStrategy::DownloadFile),
-                state: None,
-                reason_code: None,
-            },
-        );
-    }
-
-    if write_err.is_none() {
-        if let Err(e) = writer.flush().await {
-            write_err = Some(file_write_error_message(&save.filename, &e));
-        }
-    }
-
-    // Libera el writer (y el file handle subyacente) antes de modificar
-    // la fecha de modificación, para evitar conflictos en algunos sistemas.
-    drop(writer);
-
-    if write_err.is_none() {
-        if let Ok(dt) = DateTime::parse_from_rfc3339(&save.last_modified)
-            .or_else(|_| DateTime::parse_from_rfc2822(&save.last_modified))
-        {
-            let unix_secs = dt.timestamp();
-            let unix_nanos = dt.timestamp_subsec_nanos();
-            let ft = filetime::FileTime::from_unix_time(unix_secs, unix_nanos);
-            let path_clone = dest_path.clone();
-
-            // filetime::set_file_mtime es una llamada de sistema síncrona;
-            // se delega a un thread de bloqueo para no interferir con Tokio.
-            let set_result =
-                tokio::task::spawn_blocking(move || filetime::set_file_mtime(&path_clone, ft))
-                    .await;
-
-            if let Err(e) = set_result {
-                sync_logger::log_error(
-                    "sync_download_game",
-                    "download_one_file",
-                    &format!("No se pudo ajustar mtime de '{}': {}", save.filename, e),
-                );
-            }
-        }
-    }
-
-    match write_err {
-        Some(e) => Err(e),
-        None => Ok(()),
-    }
+    Ok(())
 }
 
 /// Descarga todos los archivos de guardado de un juego desde la nube.
@@ -772,10 +877,17 @@ pub(crate) async fn sync_download_game_impl(
         ));
     }
 
-    let backup_dir = crate::config::config_dir().map(|root| {
-        let ts = chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S");
-        root.join("backups").join(&game_id).join(ts.to_string())
-    });
+    let keep_backups = cfg
+        .keep_backups_per_game
+        .unwrap_or(backup::DEFAULT_KEEP_BACKUPS_PER_GAME)
+        .min(backup::MAX_KEEP_BACKUPS_PER_GAME);
+    let backup_dir = (keep_backups > 0)
+        .then(crate::config::config_dir)
+        .flatten()
+        .map(|root| {
+            let ts = chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S");
+            root.join("backups").join(&game_id).join(ts.to_string())
+        });
 
     let results: Vec<Result<(), String>> = stream::iter(
         saves
@@ -823,10 +935,7 @@ pub(crate) async fn sync_download_game_impl(
     );
 
     if backup_dir.is_some() && result.err_count == 0 {
-        let keep = cfg
-            .keep_backups_per_game
-            .unwrap_or(backup::DEFAULT_KEEP_BACKUPS_PER_GAME);
-        let _ = backup::cleanup_old_backups(keep);
+        let _ = backup::cleanup_old_backups(keep_backups);
     }
 
     if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
@@ -857,7 +966,7 @@ pub(crate) async fn sync_download_game_impl(
 ///    distribuye entre los juegos que la necesitan, evitando N peticiones.
 ///
 /// Al finalizar se actualiza el tray, se emite `sync-download-done` y se
-/// limpian backups antiguos según la política de retención configurada.
+/// limpian backups antiguos si la creación de copias locales está habilitada.
 ///
 /// # Errors
 ///
@@ -1091,10 +1200,13 @@ pub async fn sync_download_all_games(
     }
     emit_sync_download_done(&app);
 
-    let keep = cfg
+    let keep_backups = cfg
         .keep_backups_per_game
-        .unwrap_or(backup::DEFAULT_KEEP_BACKUPS_PER_GAME);
-    let _ = backup::cleanup_old_backups(keep);
+        .unwrap_or(backup::DEFAULT_KEEP_BACKUPS_PER_GAME)
+        .min(backup::MAX_KEEP_BACKUPS_PER_GAME);
+    if keep_backups > 0 {
+        let _ = backup::cleanup_old_backups(keep_backups);
+    }
 
     Ok(results)
 }

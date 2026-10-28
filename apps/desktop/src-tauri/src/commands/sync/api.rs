@@ -28,11 +28,13 @@ struct EtagCacheEntry<T> {
     data: T,
 }
 
-static SAVES_CACHE: LazyLock<std::sync::RwLock<HashMap<String, EtagCacheEntry<Vec<RemoteSaveInfoDto>>>>> =
-    LazyLock::new(|| std::sync::RwLock::new(HashMap::new()));
+static SAVES_CACHE: LazyLock<
+    std::sync::RwLock<HashMap<String, EtagCacheEntry<Vec<RemoteSaveInfoDto>>>>,
+> = LazyLock::new(|| std::sync::RwLock::new(HashMap::new()));
 
-static SUMMARY_CACHE: LazyLock<std::sync::RwLock<HashMap<String, EtagCacheEntry<Vec<CloudSavesSummaryDto>>>>> =
-    LazyLock::new(|| std::sync::RwLock::new(HashMap::new()));
+static SUMMARY_CACHE: LazyLock<
+    std::sync::RwLock<HashMap<String, EtagCacheEntry<Vec<CloudSavesSummaryDto>>>>,
+> = LazyLock::new(|| std::sync::RwLock::new(HashMap::new()));
 
 /// Invalida la caché ETag en memoria para un usuario y opcionalmente un juego concreto.
 /// Debe llamarse tras operaciones que modifiquen el estado en S3 (subida, borrado, renombrado).
@@ -120,50 +122,76 @@ pub(crate) async fn api_request_with_etag(
     if_none_match: Option<&str>,
 ) -> Result<reqwest::Response, String> {
     let url = format!("{}/saves{}", base_url.trim_end_matches('/'), path);
-
-    let mut req = API_CLIENT
-        .request(method.parse().unwrap(), &url)
-        .header("x-user-id", user_id)
-        .header("x-api-key", api_key);
-
-    if let Some(etag) = if_none_match {
-        req = req.header("If-None-Match", etag);
-    }
-
     let active_host = crate::config::load_settings()
         .active_cloud_host_user_id
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
-    if let Some(host) = active_host {
-        req = req.header("x-cloud-host-user-id", host);
+    let method = reqwest::Method::from_bytes(method.as_bytes())
+        .map_err(|error| format!("Método HTTP inválido '{method}': {error}"))?;
+    let retry_safe = super::retry::is_safe_to_retry(&method, path);
+    let max_attempts = if retry_safe { 3 } else { 1 };
+
+    for attempt in 0..max_attempts {
+        let mut req = API_CLIENT
+            .request(method.clone(), &url)
+            .header("x-user-id", user_id)
+            .header("x-api-key", api_key);
+
+        if let Some(etag) = if_none_match {
+            req = req.header("If-None-Match", etag);
+        }
+        if let Some(host) = active_host.as_deref() {
+            req = req.header("x-cloud-host-user-id", host);
+        }
+        if let Some(body) = body {
+            req = req
+                .header("Content-Type", "application/json")
+                .body(body.to_vec());
+        }
+
+        let start = Instant::now();
+        let response = match req.send().await {
+            Ok(response) => response,
+            Err(error) => {
+                let can_retry = retry_safe
+                    && attempt + 1 < max_attempts
+                    && (error.is_timeout() || error.is_connect());
+                if can_retry {
+                    super::retry::wait_before_retry(attempt, None).await;
+                    continue;
+                }
+
+                observability::record_error("sync_api_send", &error.to_string(), None);
+                return Err(error.to_string());
+            }
+        };
+
+        if retry_safe
+            && attempt + 1 < max_attempts
+            && super::retry::is_retryable_status(response.status())
+        {
+            super::retry::wait_before_retry(attempt, Some(response.headers())).await;
+            continue;
+        }
+
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+        let status = response.status();
+        let is_ok = status.is_success() || status == reqwest::StatusCode::NOT_MODIFIED;
+        observability::record_saves_api_timing(elapsed_ms, is_ok, path);
+        if !is_ok {
+            let status_code = status.as_u16();
+            observability::record_error(
+                "sync_api_http",
+                &format!("path={path} status={status_code}"),
+                Some(status_code),
+            );
+        }
+        return Ok(response);
     }
 
-    if let Some(b) = body {
-        req = req
-            .header("Content-Type", "application/json")
-            .body(b.to_vec());
-    }
-
-    let start = Instant::now();
-    let res = req.send().await.map_err(|e| {
-        observability::record_error("sync_api_send", &e.to_string(), None);
-        e.to_string()
-    })?;
-    let elapsed_ms = start.elapsed().as_millis() as u64;
-    let status = res.status();
-    let is_ok = status.is_success() || status == reqwest::StatusCode::NOT_MODIFIED;
-    observability::record_saves_api_timing(elapsed_ms, is_ok, path);
-    if !is_ok {
-        let st = status.as_u16();
-        observability::record_error(
-            "sync_api_http",
-            &format!("path={} status={}", path, st),
-            Some(st),
-        );
-    }
-    Ok(res)
+    Err("La solicitud a la API terminó sin respuesta.".to_string())
 }
 
 pub(crate) async fn api_request(
@@ -379,9 +407,17 @@ async fn list_remote_saves_for_user_and_game(
     let if_none_match = cached_entry.as_ref().map(|e| e.etag.as_str());
 
     let path = format!("?gameId={}", urlencoding::encode(trimmed_game_id));
-    let res = api_request_with_etag(api_base, user_id, api_key, "GET", &path, None, if_none_match)
-        .await
-        .map_err(|e| format!("GET /saves?gameId: {}", e))?;
+    let res = api_request_with_etag(
+        api_base,
+        user_id,
+        api_key,
+        "GET",
+        &path,
+        None,
+        if_none_match,
+    )
+    .await
+    .map_err(|e| format!("GET /saves?gameId: {}", e))?;
 
     if res.status() == reqwest::StatusCode::NOT_MODIFIED {
         if let Some(entry) = cached_entry {
@@ -557,13 +593,17 @@ pub async fn sync_list_remote_saves_for_user(
 }
 
 #[tauri::command]
-pub async fn sync_delete_game_from_cloud(game_id: String, permanent: Option<bool>) -> Result<(), String> {
+pub async fn sync_delete_game_from_cloud(
+    game_id: String,
+    permanent: Option<bool>,
+) -> Result<(), String> {
     let ctx = get_api_context()?;
     let is_perm = permanent.unwrap_or(false);
     let body = serde_json::json!({
         "gameId": game_id.trim(),
         "permanent": is_perm
-    }).to_string();
+    })
+    .to_string();
 
     let res = api_request(
         &ctx.base_url,

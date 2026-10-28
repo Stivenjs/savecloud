@@ -15,7 +15,8 @@
 //! Para mejorar la resiliencia del proceso:
 //!
 //! - Las URLs prefirmadas se generan en lote para reducir la carga sobre el backend.
-//! - Se aplican reintentos con backoff en todas las fases críticas del flujo.
+//! - Se reintentan con backoff las consultas seguras y la subida de partes.
+//! - init y complete no se repiten automáticamente para evitar duplicar mutaciones.
 //! - Se configuran timeouts de conexión y de request en el cliente HTTP.
 
 use std::collections::HashSet;
@@ -89,35 +90,8 @@ pub(crate) const MULTIPART_THRESHOLD: u64 = 5 * 1024 * 1024;
 /// Cuántas partes pedir por llamada a part-urls.
 const PARTS_PER_URL_BATCH: u32 = 32;
 
-/// Reintentos para operaciones que pueden fallar por red o 5xx (init, part-urls, complete, PUT parte).
-const MAX_RETRIES: u32 = 3;
-/// Segundos de espera entre reintentos (backoff: 1ª espera 1s, 2ª espera 2s).
-const RETRY_DELAY_SECS: u64 = 1;
-
 /// Cuántas partes se suben en paralelo (acelera mucho archivos grandes).
 const MULTIPART_PUT_CONCURRENCY: usize = 8;
-
-/// Ejecuta una operación async con reintentos y backoff. Devuelve el último error si todos fallan.
-async fn with_retry<F, Fut, T>(mut op: F) -> Result<T, String>
-where
-    F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = Result<T, String>>,
-{
-    let mut last_err = String::new();
-    for attempt in 0..MAX_RETRIES {
-        match op().await {
-            Ok(t) => return Ok(t),
-            Err(e) => {
-                last_err = e.clone();
-                if attempt + 1 < MAX_RETRIES {
-                    let delay = RETRY_DELAY_SECS * (attempt + 1) as u64;
-                    tokio::time::sleep(tokio::time::Duration::from_secs(delay)).await;
-                }
-            }
-        }
-    }
-    Err(last_err)
-}
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -349,10 +323,8 @@ fn spawn_url_prefetcher(
                 }
             }
 
-            let urls_result = with_retry(|| {
-                multipart_part_urls(&api_base, &user_id, &api_key, &key, &upload_id, chunk)
-            })
-            .await;
+            let urls_result =
+                multipart_part_urls(&api_base, &user_id, &api_key, &key, &upload_id, chunk).await;
 
             match urls_result {
                 Ok(urls) => {
@@ -403,8 +375,7 @@ pub(crate) async fn upload_one_file_multipart(
 
     let (upload_id, key) = if num_parts == 0 {
         let (uid, k) =
-            with_retry(|| multipart_init(api_base, user_id, api_key, game_id, relative_filename))
-                .await?;
+            multipart_init(api_base, user_id, api_key, game_id, relative_filename).await?;
         multipart_complete(api_base, user_id, api_key, &k, &uid, &[]).await?;
         emit_sync_upload_progress(
             &app,
@@ -427,8 +398,7 @@ pub(crate) async fn upload_one_file_multipart(
         );
         return Ok(());
     } else {
-        with_retry(|| multipart_init(api_base, user_id, api_key, game_id, relative_filename))
-            .await?
+        multipart_init(api_base, user_id, api_key, game_id, relative_filename).await?
     };
 
     // Canal con capacidad limitada para aplicar contrapresión (Backpressure)
@@ -557,16 +527,14 @@ pub(crate) async fn upload_one_file_multipart(
 
     completed_parts.sort_by_key(|p| p.0);
 
-    with_retry(|| {
-        multipart_complete(
-            api_base,
-            user_id,
-            api_key,
-            &key,
-            &upload_id,
-            &completed_parts,
-        )
-    })
+    multipart_complete(
+        api_base,
+        user_id,
+        api_key,
+        &key,
+        &upload_id,
+        &completed_parts,
+    )
     .await?;
 
     Ok(())
@@ -762,16 +730,14 @@ pub(crate) async fn resume_paused_upload(
     }
 
     all_parts.sort_by_key(|p| p.0);
-    with_retry(|| {
-        multipart_complete(
-            api_base,
-            user_id,
-            api_key,
-            &state.key,
-            &state.upload_id,
-            &all_parts,
-        )
-    })
+    multipart_complete(
+        api_base,
+        user_id,
+        api_key,
+        &state.key,
+        &state.upload_id,
+        &all_parts,
+    )
     .await?;
 
     remove_paused_state_file();
