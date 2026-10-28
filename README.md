@@ -1,4 +1,7 @@
-
+<h1>
+  <img src="/assets/icon.ico" width="60" style="vertical-align: middle; margin-right: 10px;" />
+  SaveCloud
+</h1>
 
 Servidor de guardado en la nube para juegos (S3 + Lambda) y app de escritorio para sincronizar guardados.
 
