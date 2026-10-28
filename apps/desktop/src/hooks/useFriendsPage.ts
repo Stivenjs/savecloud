@@ -29,6 +29,7 @@ import { useConfig } from "@hooks/useConfig";
 import { useLibrary } from "@hooks/useLibrary";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSyncStore } from "@store/SyncStore";
 import { getUnknownErrorMessage } from "@utils/errorMessage";
 import { formatGameDisplayName, findConfiguredGame } from "@utils/gameImage";
 import i18n from "@lib/i18n";
@@ -60,6 +61,34 @@ export type CopyFriendSavesPreview = {
   conflictCount: number;
   strategy: "overwrite" | "rename";
 };
+
+function beginFriendSavesProgress(gameId: string): string {
+  const operationId = `friend-import-${gameId}-${crypto.randomUUID()}`;
+  const syncStore = useSyncStore.getState();
+  syncStore.setSyncOperation({ type: "download", mode: "batch", gameId, operationId });
+  syncStore.setProgress({
+    type: "download",
+    operationId,
+    status: "running",
+    gameId,
+    filename: i18n.t("sync.friendImportPreparing"),
+    loaded: 0,
+    total: 0,
+  });
+  return operationId;
+}
+
+function endFriendSavesProgress(operationId: string): void {
+  const syncStore = useSyncStore.getState();
+  syncStore.removeTaskByOperationId(operationId);
+  if (syncStore.syncOperation?.operationId === operationId) {
+    syncStore.setSyncOperation(null);
+  }
+}
+
+function scheduleFriendSavesProgressFallback(operationId: string): void {
+  window.setTimeout(() => endFriendSavesProgress(operationId), 5000);
+}
 
 type FriendsPageState = {
   friendIdInput: string;
@@ -547,6 +576,8 @@ export function useFriendsPage() {
     if (!shareLinkPreview) return;
     const { userId, gameId, friendGame, files } = shareLinkPreview;
     dispatch({ type: "SET_SHARE_LINK_CONFIRM_LOADING", payload: true });
+    const progressOperationId = beginFriendSavesProgress(gameId);
+    let transferRequestCompleted = false;
     try {
       let result;
       if (files && files.length > 0) {
@@ -554,11 +585,13 @@ export function useFriendsPage() {
           key: f.key || `${userId}/${gameId}/${f.filename}`,
           filename: f.filename,
           targetFilename: f.filename,
+          size: f.size,
         }));
-        result = await copyFriendSavesWithPlan(userId, gameId, plan);
+        result = await copyFriendSavesWithPlan(userId, gameId, plan, progressOperationId);
       } else {
-        result = await copyFriendSaves(userId, gameId);
+        result = await copyFriendSaves(userId, gameId, progressOperationId);
       }
+      transferRequestCompleted = true;
 
       const alreadyHave = ourGameIds.has(gameId.toLowerCase());
       if (!alreadyHave) {
@@ -566,6 +599,7 @@ export function useFriendsPage() {
           ? {
               id: friendGame.id,
               paths: ["(editar ruta en Configuración)"],
+              playtimeSeconds: friendGame.playtimeSeconds ?? 0,
               steamAppId: friendGame.steamAppId ?? undefined,
               imageUrl: friendGame.imageUrl ?? undefined,
               editionLabel: friendGame.editionLabel ?? undefined,
@@ -586,6 +620,8 @@ export function useFriendsPage() {
         e instanceof Error ? e.message : i18n.t("friends.toast.cannotImport")
       );
     } finally {
+      if (transferRequestCompleted) scheduleFriendSavesProgressFallback(progressOperationId);
+      else endFriendSavesProgress(progressOperationId);
       dispatch({ type: "SET_SHARE_LINK_CONFIRM_LOADING", payload: false });
     }
   };
@@ -649,12 +685,18 @@ export function useFriendsPage() {
       }
     };
 
-    for (const s of newFiles) plan.push({ key: s.key, filename: s.filename, targetFilename: s.filename });
+    for (const s of newFiles) plan.push({ key: s.key, filename: s.filename, targetFilename: s.filename, size: s.size });
     if (strategy === "overwrite") {
-      for (const s of conflictFiles) plan.push({ key: s.key, filename: s.filename, targetFilename: s.filename });
+      for (const s of conflictFiles)
+        plan.push({ key: s.key, filename: s.filename, targetFilename: s.filename, size: s.size });
     } else {
       for (const s of conflictFiles)
-        plan.push({ key: s.key, filename: s.filename, targetFilename: makeUniqueName(s.filename) });
+        plan.push({
+          key: s.key,
+          filename: s.filename,
+          targetFilename: makeUniqueName(s.filename),
+          size: s.size,
+        });
     }
 
     if (plan.length === 0) {
@@ -686,8 +728,11 @@ export function useFriendsPage() {
     const { friendId, gameId, plan } = preview;
     dispatch({ type: "SET_COPY_CONFIRM_PREVIEW", payload: null });
     dispatch({ type: "SET_COPYING_GAME_ID", payload: gameId });
+    const progressOperationId = beginFriendSavesProgress(gameId);
+    let transferRequestCompleted = false;
     try {
-      const result = await copyFriendSavesWithPlan(friendId, gameId, plan);
+      const result = await copyFriendSavesWithPlan(friendId, gameId, plan, progressOperationId);
+      transferRequestCompleted = true;
       const hadBefore = myGameIdsWithSaves.has(gameId);
       const suffix =
         preview.conflictCount > 0 && preview.strategy === "rename"
@@ -703,6 +748,8 @@ export function useFriendsPage() {
         e instanceof Error ? e.message : i18n.t("friends.toast.cannotCopySaves")
       );
     } finally {
+      if (transferRequestCompleted) scheduleFriendSavesProgressFallback(progressOperationId);
+      else endFriendSavesProgress(progressOperationId);
       dispatch({ type: "SET_COPYING_GAME_ID", payload: null });
     }
   };

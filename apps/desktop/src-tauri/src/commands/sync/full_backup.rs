@@ -1,7 +1,8 @@
 //! Módulo de backup completo de juegos mediante archivo `.tar` en S3.
 //!
-//! Agrupa todos los archivos de un juego en un único archivo `.tar`
-//! para optimizar la transferencia hacia y desde almacenamiento remoto.
+//! Agrupa todos los archivos de un juego en un único archivo TAR para optimizar
+//! la transferencia hacia y desde almacenamiento remoto. El modo streaming almacena
+//! el TAR comprimido con Zstandard; el modo multipart tradicional almacena TAR puro.
 //!
 //! Flujo de operación:
 //!
@@ -16,7 +17,7 @@
 
 use futures_util::StreamExt;
 use std::fs;
-use std::io::{BufWriter, ErrorKind};
+use std::io::{BufWriter, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::SyncIoBridge;
@@ -372,6 +373,31 @@ fn unpack_archive_resilient<R: std::io::Read>(
     Ok(())
 }
 
+/// Detecta si el flujo contiene TAR puro o un TAR comprimido con Zstandard y lo extrae.
+///
+/// La detección por magic bytes mantiene compatibles los backups creados por ambos
+/// modos de subida, aunque ambos usen la extensión `.tar` en S3.
+fn unpack_tar_or_zstd<R: std::io::Read>(reader: R, game_paths: &[String]) -> Result<(), String> {
+    const ZSTD_FRAME_MAGIC: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
+
+    let mut reader = reader;
+    let mut prefix = [0_u8; ZSTD_FRAME_MAGIC.len()];
+    reader
+        .read_exact(&mut prefix)
+        .map_err(|e| format!("Backup truncado o inválido: {}", e))?;
+
+    let reader = std::io::Cursor::new(prefix).chain(reader);
+    if prefix == ZSTD_FRAME_MAGIC {
+        let decoder = zstd::stream::read::Decoder::new(reader)
+            .map_err(|e| format!("Fallo al inicializar descompresor Zstandard: {}", e))?;
+        let mut archive = tar::Archive::new(decoder);
+        unpack_archive_resilient(&mut archive, game_paths)
+    } else {
+        let mut archive = tar::Archive::new(reader);
+        unpack_archive_resilient(&mut archive, game_paths)
+    }
+}
+
 /// Implementa la descarga y extracción en streaming puro de un backup empaquetado.
 ///
 /// Esta arquitectura elimina la necesidad de archivos temporales. Crea una tubería
@@ -465,15 +491,8 @@ pub async fn download_and_restore_full_backup_impl(
 
     // Hilo dedicado a la descompresión y extracción. Se ejecuta en paralelo a la descarga.
     let extract_task = tokio::task::spawn_blocking(move || {
-        // SyncIoBridge convierte el canal asíncrono 'rx' en un lector implementando std::io::Read.
-        let sync_reader = SyncIoBridge::new(rx);
-
-        // Capa de descompresión: extrae los datos Zstd antes de pasarlos al TAR.
-        let zstd_decoder = zstd::stream::read::Decoder::new(sync_reader)
-            .map_err(|e| format!("fallo al inicializar descompresor Zstd: {}", e))?;
-
-        let mut archive = tar::Archive::new(zstd_decoder);
-        unpack_archive_resilient(&mut archive, &game_paths)
+        // SyncIoBridge convierte el canal asíncrono 'rx' en un lector bloqueante.
+        unpack_tar_or_zstd(SyncIoBridge::new(rx), &game_paths)
     });
 
     let mut loaded: u64 = 0;

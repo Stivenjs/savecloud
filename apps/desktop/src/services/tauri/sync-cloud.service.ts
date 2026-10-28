@@ -33,6 +33,7 @@ export interface CopyFriendFilePlan {
   key: string;
   filename: string;
   targetFilename: string;
+  size?: number;
 }
 
 /** Información de un guardado en la nube */
@@ -147,12 +148,12 @@ export function syncUploadResume(): Promise<SyncResult> {
 }
 
 /** Copia los guardados de un amigo para un juego concreto a tu cuenta */
-export async function copyFriendSaves(friendUserId: string, gameId: string): Promise<SyncResult> {
+export async function copyFriendSaves(friendUserId: string, gameId: string, operationId: string): Promise<SyncResult> {
   const r = await invoke<{
     okCount: number;
     errCount: number;
     errors: string[];
-  }>("copy_friend_saves", { friendUserId, gameId });
+  }>("copy_friend_saves", { friendUserId, gameId, operationId });
   return {
     okCount: r.okCount,
     errCount: r.errCount,
@@ -164,13 +165,14 @@ export async function copyFriendSaves(friendUserId: string, gameId: string): Pro
 export async function copyFriendSavesWithPlan(
   friendUserId: string,
   gameId: string,
-  plan: CopyFriendFilePlan[]
+  plan: CopyFriendFilePlan[],
+  operationId: string
 ): Promise<SyncResult> {
   const r = await invoke<{
     okCount: number;
     errCount: number;
     errors: string[];
-  }>("copy_friend_saves_with_plan", { friendUserId, gameId, plan });
+  }>("copy_friend_saves_with_plan", { friendUserId, gameId, plan, operationId });
   return {
     okCount: r.okCount,
     errCount: r.errCount,

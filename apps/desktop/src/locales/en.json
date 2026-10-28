@@ -2234,6 +2234,7 @@
     "cancelUpload": "Cancel upload",
     "preparingData": "Preparing data",
     "preparingDataDesc": "Preparing data… this may take a few minutes for large games.",
+    "friendImportPreparing": "Preparing friend save import…",
     "sent": "Sent",
     "onDisk": "On disk",
     "speed": "Speed",

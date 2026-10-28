@@ -5,6 +5,7 @@ import { DesktopDownloadsWidget } from "./downloads/DesktopDownloadsWidget";
 
 export interface DownloadsPanelProps {
   consoleMode?: boolean;
+  forceVisible?: boolean;
 }
 
 /**
@@ -12,14 +13,14 @@ export interface DownloadsPanelProps {
  * Preserva el diseño visual exacto original y adapta su posicionamiento
  * dinámicamente cuando está en modo consola (elevado sobre la barra de control hints).
  */
-export function DownloadsPanel({ consoleMode }: DownloadsPanelProps) {
+export function DownloadsPanel({ consoleMode, forceVisible = false }: DownloadsPanelProps) {
   const isConsoleFromContext = useBigPictureConsole();
   const isConsole = consoleMode ?? isConsoleFromContext;
   const data = useDownloadsData();
 
   if (isConsole) {
-    return <ConsoleDownloadsWidget data={data} />;
+    return <ConsoleDownloadsWidget data={data} forceVisible={forceVisible} />;
   }
 
-  return <DesktopDownloadsWidget data={data} />;
+  return <DesktopDownloadsWidget data={data} forceVisible={forceVisible} />;
 }

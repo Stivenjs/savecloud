@@ -464,6 +464,7 @@ pub struct GameDto {
     pub executable_names: Option<Vec<String>>,
     #[serde(default)]
     pub launch_executable_path: Option<String>,
+    #[serde(default)]
     pub playtime_seconds: u64,
     #[serde(default)]
     pub last_played_at: Option<String>,

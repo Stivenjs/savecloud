@@ -60,6 +60,9 @@ export function SyncProgressBar() {
 
   const value =
     progress && progress.total > 0 ? Math.min(100, Math.round((progress.loaded / progress.total) * 100)) : 0;
+  const hasTransferMetrics = progress?.speedBytesPerSecond !== undefined;
+  const displayedSpeedBps = progress?.speedBytesPerSecond ?? speedBps;
+  const displayedEtaSeconds = hasTransferMetrics ? (progress.etaSeconds ?? null) : etaSeconds;
 
   const canPause = !!progress?.canPause;
   const canCancel = !!progress?.canCancel;
@@ -144,8 +147,8 @@ export function SyncProgressBar() {
             value={value}
             canPause={canPause}
             canCancel={canCancel}
-            speedBps={speedBps}
-            etaSeconds={etaSeconds}
+            speedBps={displayedSpeedBps}
+            etaSeconds={displayedEtaSeconds}
             onCancel={onCancelUpload}
             onPause={onPauseUpload}
           />

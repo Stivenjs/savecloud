@@ -130,6 +130,7 @@ export async function addGamesFromFriend(
   friendGames: readonly {
     id: string;
     paths: string[];
+    playtimeSeconds?: number;
     steamAppId?: string;
     imageUrl?: string;
     editionLabel?: string;

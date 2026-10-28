@@ -10,9 +10,10 @@ import type { DownloadRow } from "./types";
 
 export interface DesktopDownloadsWidgetProps {
   data: ReturnType<typeof useDownloadsData>;
+  forceVisible?: boolean;
 }
 
-export function DesktopDownloadsWidget({ data }: DesktopDownloadsWidgetProps) {
+export function DesktopDownloadsWidget({ data, forceVisible = false }: DesktopDownloadsWidgetProps) {
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -25,14 +26,18 @@ export function DesktopDownloadsWidget({ data }: DesktopDownloadsWidgetProps) {
     togglingHash,
     onToggleTorrentPause,
     onCancelTorrent,
+    onPauseSync,
+    onCancelSync,
+    onResumeSync,
     onCancelSource,
     onPauseSource,
     onResumeSource,
   } = data;
 
-  if (totalActive === 0 && !keepPanelVisibleForBatch) return null;
+  if (totalActive === 0 && !keepPanelVisibleForBatch && !forceVisible) return null;
 
-  const visibleRows = rows.length > 0 ? rows.length : keepPanelVisibleForBatch ? 1 : 0;
+  const visibleRows = rows.length > 0 ? rows.length : keepPanelVisibleForBatch || forceVisible ? 1 : 0;
+  const displayedActiveCount = totalActive === 0 && forceVisible ? 1 : totalActive;
   const estimatedRowHeightPx = 168;
   const listMaxHeightPx = collapsed ? 0 : Math.min(visibleRows * estimatedRowHeightPx, 420);
 
@@ -41,7 +46,7 @@ export function DesktopDownloadsWidget({ data }: DesktopDownloadsWidgetProps) {
       <div className="pointer-events-auto rounded-2xl border border-default-200/60 bg-content1/95 p-4 shadow-xl backdrop-blur-md transition-all duration-200 ease-out">
         {/* Header */}
         <DownloadsHeader
-          totalActive={totalActive}
+          totalActive={displayedActiveCount}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((v) => !v)}
         />
@@ -54,14 +59,18 @@ export function DesktopDownloadsWidget({ data }: DesktopDownloadsWidgetProps) {
           className="overflow-hidden transition-[max-height,opacity] duration-300 ease-out"
           style={{ maxHeight: `${listMaxHeightPx}px`, opacity: collapsed ? 0 : 1 }}>
           <ScrollShadow hideScrollBar className="max-h-105 space-y-2.5 pr-1" size={20} orientation="vertical">
-            {rows.length === 0 && keepPanelVisibleForBatch ? (
+            {rows.length === 0 && (keepPanelVisibleForBatch || forceVisible) ? (
               <div className="flex items-center gap-3 rounded-xl border border-default-200/40 bg-default-50/80 p-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
                   <Download size={18} className="animate-pulse text-primary" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">{t("downloads.preparingNext")}</p>
-                  <p className="mt-0.5 text-xs text-default-400">{t("downloads.batchUploadActive")}</p>
+                  <p className="text-sm font-medium">
+                    {keepPanelVisibleForBatch ? t("downloads.preparingNext") : t("downloads.preparingDownload")}
+                  </p>
+                  {keepPanelVisibleForBatch ? (
+                    <p className="mt-0.5 text-xs text-default-400">{t("downloads.batchUploadActive")}</p>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -74,6 +83,9 @@ export function DesktopDownloadsWidget({ data }: DesktopDownloadsWidgetProps) {
                 sourcesSyncProgress={sourcesSyncProgress}
                 onToggleTorrentPause={onToggleTorrentPause}
                 onCancelTorrent={onCancelTorrent}
+                onPauseSync={onPauseSync}
+                onCancelSync={onCancelSync}
+                onResumeSync={onResumeSync}
                 onCancelSource={onCancelSource}
                 onPauseSource={onPauseSource}
                 onResumeSource={onResumeSource}

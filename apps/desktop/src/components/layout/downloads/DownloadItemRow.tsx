@@ -14,6 +14,9 @@ export interface DownloadItemRowProps {
   sourcesSyncProgress?: SourceSyncProgressPayload | null;
   onToggleTorrentPause: (infoHash: string, isPaused: boolean) => void;
   onCancelTorrent: (infoHash: string) => void;
+  onPauseSync: () => void;
+  onCancelSync: () => void;
+  onResumeSync: () => void;
   onCancelSource: (jobId: string, infoHash?: string) => void;
   onPauseSource: (jobId: string) => void;
   onResumeSource: (jobId: string) => void;
@@ -26,6 +29,9 @@ export function DownloadItemRow({
   sourcesSyncProgress,
   onToggleTorrentPause,
   onCancelTorrent,
+  onPauseSync,
+  onCancelSync,
+  onResumeSync,
   onCancelSource,
   onPauseSource,
   onResumeSource,
@@ -163,18 +169,19 @@ export function DownloadItemRow({
       ) : null}
 
       {/* Acciones para sync */}
-      {row.source === "sync" && (row.canPause || row.canCancel) ? (
+      {row.source === "sync" && (row.canPause || row.canResume || row.canCancel) ? (
         <div className={`flex items-center ${consoleMode ? "mt-3 gap-2.5" : "mt-2.5 gap-2"}`}>
-          {row.canPause ? (
+          {row.canPause || row.canResume ? (
             <button
               type="button"
               className={`inline-flex cursor-pointer items-center bg-default-100 font-semibold text-default-600 transition-colors hover:bg-default-200 active:scale-95 ${
                 consoleMode
                   ? "h-9 px-3.5 text-xs sm:text-sm rounded-xl gap-2"
                   : "rounded-md px-2.5 py-1.5 text-xs gap-1.5"
-              }`}>
-              <Pause size={consoleMode ? 14 : 12} />
-              {t("downloads.pause")}
+              }`}
+              onClick={row.canResume ? onResumeSync : onPauseSync}>
+              {row.canResume ? <Play size={consoleMode ? 14 : 12} /> : <Pause size={consoleMode ? 14 : 12} />}
+              {row.canResume ? t("downloads.resume") : t("downloads.pause")}
             </button>
           ) : null}
           {row.canCancel ? (
@@ -184,7 +191,8 @@ export function DownloadItemRow({
                 consoleMode
                   ? "h-9 px-3.5 text-xs sm:text-sm rounded-xl gap-2"
                   : "rounded-md px-2.5 py-1.5 text-xs gap-1.5"
-              }`}>
+              }`}
+              onClick={onCancelSync}>
               <X size={consoleMode ? 14 : 12} />
               {t("downloads.cancel")}
             </button>

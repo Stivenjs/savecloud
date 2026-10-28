@@ -8,14 +8,22 @@
 //! reintentos en solicitudes críticas.
 
 use super::context::ApiContext;
-use super::models::SyncResultDto;
-use super::models::{CloudSavesSummaryDto, RemoteSaveDto, RemoteSaveInfoDto};
+use super::events::{emit_sync_download_progress, emit_sync_terminal};
+use super::models::{
+    CloudSavesSummaryDto, RemoteSaveDto, RemoteSaveInfoDto, SyncOperationStrategy,
+    SyncProgressPayload, SyncResultDto,
+};
 use crate::network::API_CLIENT;
 use crate::observability;
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::LazyLock;
-use std::time::Instant;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter};
+
+use crate::utils::transfer_metrics::{TransferSample, TransferSpeedTracker};
 
 const S3_ACCELERATE_HOST: &str = "s3-accelerate.amazonaws.com";
 
@@ -106,6 +114,8 @@ pub struct CopyFriendFilePlanDto {
     pub key: String,
     pub filename: String,
     pub target_filename: String,
+    #[serde(default)]
+    pub size: Option<u64>,
 }
 
 fn get_api_context() -> Result<ApiContext, String> {
@@ -787,10 +797,116 @@ pub async fn sync_rename_game_in_cloud(
     Ok(())
 }
 
+const FRIEND_COPY_PROGRESS_EMIT_BYTES: u64 = 256 * 1024;
+const FRIEND_COPY_PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(250);
+
+fn emit_friend_copy_progress(
+    app: &AppHandle,
+    operation_id: &str,
+    game_id: &str,
+    filename: &str,
+    loaded: u64,
+    total: u64,
+    metrics: &Mutex<TransferSpeedTracker>,
+    is_final: bool,
+) {
+    emit_sync_download_progress(
+        app,
+        SyncProgressPayload {
+            operation_id: Some(operation_id.to_string()),
+            status: Some("running".to_string()),
+            game_id: game_id.to_string(),
+            filename: filename.to_string(),
+            loaded,
+            total,
+            downloaded_bytes: Some(loaded),
+            total_bytes: Some(total),
+            can_pause: Some(false),
+            can_cancel: Some(false),
+            can_resume: Some(false),
+            strategy: Some(SyncOperationStrategy::DownloadFile),
+            state: None,
+            reason_code: None,
+        },
+    );
+
+    let sample = metrics.lock().ok().map(|mut tracker| {
+        let now = Instant::now();
+        if is_final {
+            tracker.record_final(loaded, total, now)
+        } else {
+            tracker.record(loaded, total, now)
+        }
+    });
+    if let Some(TransferSample {
+        download_speed_bytes,
+        eta_seconds,
+    }) = sample
+    {
+        let _ = app.emit(
+            "sync-transfer-metrics",
+            serde_json::json!({
+                "operationId": operation_id,
+                "speedBytesPerSecond": download_speed_bytes,
+                "etaSeconds": eta_seconds,
+            }),
+        );
+    }
+}
+
 async fn copy_friend_saves_with_plan_impl(
     _friend_user_id: &str,
     game_id: &str,
     plan: Vec<CopyFriendFilePlanDto>,
+    operation_id: String,
+    app: AppHandle,
+) -> Result<SyncResultDto, String> {
+    let total = plan
+        .iter()
+        .try_fold(0_u64, |total, item| {
+            item.size
+                .map(|size| total.saturating_add(size.saturating_mul(2)))
+        })
+        .unwrap_or(0);
+    let loaded = Arc::new(AtomicU64::new(0));
+    let metrics = Arc::new(Mutex::new(TransferSpeedTracker::new()));
+
+    let result = copy_friend_saves_with_plan_transfer(
+        game_id,
+        plan,
+        app.clone(),
+        operation_id.clone(),
+        loaded,
+        metrics,
+        total,
+    )
+    .await;
+
+    let status = match &result {
+        Ok(result) if result.err_count == 0 => "completed",
+        _ => "failed",
+    };
+    emit_sync_terminal(
+        &app,
+        operation_id,
+        status,
+        "download",
+        Some(game_id.to_string()),
+        None,
+        None,
+    );
+
+    result
+}
+
+async fn copy_friend_saves_with_plan_transfer(
+    game_id: &str,
+    plan: Vec<CopyFriendFilePlanDto>,
+    app: AppHandle,
+    operation_id: String,
+    loaded: Arc<AtomicU64>,
+    metrics: Arc<Mutex<TransferSpeedTracker>>,
+    total: u64,
 ) -> Result<SyncResultDto, String> {
     let ctx = get_api_context()?;
 
@@ -798,7 +914,7 @@ async fn copy_friend_saves_with_plan_impl(
         return Ok(SyncResultDto {
             ok_count: 0,
             err_count: 0,
-            errors: vec!["No hay archivos en el plan".into()],
+            errors: vec!["El amigo no tiene guardados".into()],
         });
     }
 
@@ -853,6 +969,11 @@ async fn copy_friend_saves_with_plan_impl(
         let download_url = download_map.get(&item.key).cloned();
         let upload_url = upload_map.get(&item.target_filename).cloned();
 
+        let app = app.clone();
+        let operation_id = operation_id.clone();
+        let game_id = game_id.to_string();
+        let loaded = Arc::clone(&loaded);
+        let metrics = Arc::clone(&metrics);
         set.spawn(async move {
             let mut item_err = None;
             let mut success = false;
@@ -866,11 +987,8 @@ async fn copy_friend_saves_with_plan_impl(
                 None => return (item, false, Some("Sin URL de subida".to_string())),
             };
 
-            let bytes = match API_CLIENT.get(&d_url).send().await {
-                Ok(resp) if resp.status().is_success() => match resp.bytes().await {
-                    Ok(b) => b,
-                    Err(e) => return (item, false, Some(format!("error leyendo descarga: {}", e))),
-                },
+            let response = match API_CLIENT.get(&d_url).send().await {
+                Ok(resp) if resp.status().is_success() => resp,
                 Ok(resp) => {
                     return (
                         item,
@@ -887,15 +1005,85 @@ async fn copy_friend_saves_with_plan_impl(
                 }
             };
 
-            let content_length = bytes.len();
-            match API_CLIENT
+            let content_length = response.content_length().or(item.size);
+            let download_stream = response.bytes_stream().map({
+                let app = app.clone();
+                let operation_id = operation_id.clone();
+                let game_id = game_id.clone();
+                let filename = item.filename.clone();
+                let loaded = Arc::clone(&loaded);
+                let metrics = Arc::clone(&metrics);
+                let mut last_emit = loaded.load(Ordering::Relaxed);
+                let mut last_emit_at = Instant::now();
+
+                move |chunk| {
+                    if let Ok(bytes) = &chunk {
+                        let current = loaded.fetch_add(bytes.len() as u64, Ordering::Relaxed)
+                            + bytes.len() as u64;
+                        if current.saturating_sub(last_emit) >= FRIEND_COPY_PROGRESS_EMIT_BYTES
+                            || last_emit_at.elapsed() >= FRIEND_COPY_PROGRESS_EMIT_INTERVAL
+                        {
+                            last_emit = current;
+                            last_emit_at = Instant::now();
+                            emit_friend_copy_progress(
+                                &app,
+                                &operation_id,
+                                &game_id,
+                                &filename,
+                                current,
+                                total,
+                                &metrics,
+                                false,
+                            );
+                        }
+                    }
+                    chunk
+                }
+            });
+            let upload_stream = download_stream.map({
+                let app = app.clone();
+                let operation_id = operation_id.clone();
+                let game_id = game_id.clone();
+                let filename = item.target_filename.clone();
+                let loaded = Arc::clone(&loaded);
+                let metrics = Arc::clone(&metrics);
+                let mut last_emit = loaded.load(Ordering::Relaxed);
+                let mut last_emit_at = Instant::now();
+
+                move |chunk| {
+                    if let Ok(bytes) = &chunk {
+                        let current = loaded.fetch_add(bytes.len() as u64, Ordering::Relaxed)
+                            + bytes.len() as u64;
+                        if current.saturating_sub(last_emit) >= FRIEND_COPY_PROGRESS_EMIT_BYTES
+                            || last_emit_at.elapsed() >= FRIEND_COPY_PROGRESS_EMIT_INTERVAL
+                        {
+                            last_emit = current;
+                            last_emit_at = Instant::now();
+                            emit_friend_copy_progress(
+                                &app,
+                                &operation_id,
+                                &game_id,
+                                &filename,
+                                current,
+                                total,
+                                &metrics,
+                                false,
+                            );
+                        }
+                    }
+                    chunk
+                }
+            });
+
+            let mut request = API_CLIENT
                 .put(&u_url)
-                .body(bytes)
-                .header("Content-Type", "application/octet-stream")
-                .header("Content-Length", content_length.to_string())
-                .send()
-                .await
-            {
+                .body(reqwest::Body::wrap_stream(upload_stream))
+                .header("Content-Type", "application/octet-stream");
+            if let Some(content_length) = content_length {
+                request = request.header("Content-Length", content_length.to_string());
+            }
+
+            match request.send().await {
                 Ok(put_res) if put_res.status().is_success() => success = true,
                 Ok(put_res) => item_err = Some(format!("error S3 PUT: {}", put_res.status())),
                 Err(e) => item_err = Some(format!("falla de red en subida: {}", e)),
@@ -912,6 +1100,16 @@ async fn copy_friend_saves_with_plan_impl(
     while let Some(res) = set.join_next().await {
         match res {
             Ok((item, success, err_opt)) => {
+                emit_friend_copy_progress(
+                    &app,
+                    &operation_id,
+                    game_id,
+                    &item.target_filename,
+                    loaded.load(Ordering::Relaxed),
+                    total,
+                    &metrics,
+                    true,
+                );
                 if success {
                     ok_count += 1;
                 } else {
@@ -948,6 +1146,8 @@ async fn copy_friend_saves_with_plan_impl(
 pub async fn copy_friend_saves(
     friend_user_id: String,
     game_id: String,
+    operation_id: String,
+    app: AppHandle,
 ) -> Result<SyncResultDto, String> {
     let friend_id = friend_user_id.trim();
     if friend_id.is_empty() {
@@ -975,18 +1175,11 @@ pub async fn copy_friend_saves(
             key: s.key,
             filename: s.filename.clone(),
             target_filename: s.filename,
+            size: s.size,
         })
         .collect();
 
-    if plan.is_empty() {
-        return Ok(SyncResultDto {
-            ok_count: 0,
-            err_count: 0,
-            errors: vec!["El amigo no tiene guardados".into()],
-        });
-    }
-
-    copy_friend_saves_with_plan_impl(friend_id, game_id_trimmed, plan).await
+    copy_friend_saves_with_plan_impl(friend_id, game_id_trimmed, plan, operation_id, app).await
 }
 
 #[tauri::command]
@@ -994,6 +1187,8 @@ pub async fn copy_friend_saves_with_plan(
     friend_user_id: String,
     game_id: String,
     plan: Vec<CopyFriendFilePlanDto>,
+    operation_id: String,
+    app: AppHandle,
 ) -> Result<SyncResultDto, String> {
     let friend_id = friend_user_id.trim();
     let game_id_trimmed = game_id.trim();
@@ -1002,7 +1197,7 @@ pub async fn copy_friend_saves_with_plan(
         return Err("friendUserId o gameId están vacíos".into());
     }
 
-    copy_friend_saves_with_plan_impl(friend_id, game_id_trimmed, plan).await
+    copy_friend_saves_with_plan_impl(friend_id, game_id_trimmed, plan, operation_id, app).await
 }
 
 #[tauri::command]

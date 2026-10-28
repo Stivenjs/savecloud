@@ -28,6 +28,8 @@ export interface SyncProgressState {
   filename: string;
   loaded: number;
   total: number;
+  speedBytesPerSecond?: number;
+  etaSeconds?: number | null;
 }
 
 export type SyncProgressMode = "single" | "batch";
@@ -68,6 +70,20 @@ interface SyncStore {
 /** Si llevamos 100% más de este tiempo sin recibir *-done, ocultamos por si el evento se perdió. */
 const STALE_100_PERCENT_MS = 4000;
 let staleTimer: ReturnType<typeof setTimeout> | null = null;
+const finishedFriendImportIds = new Set<string>();
+
+function isFinishedFriendImport(operationId?: string): boolean {
+  return Boolean(operationId && finishedFriendImportIds.has(operationId));
+}
+
+function markFriendImportFinished(operationId?: string): void {
+  if (!operationId?.startsWith("friend-import-")) return;
+  finishedFriendImportIds.add(operationId);
+  if (finishedFriendImportIds.size > 128) {
+    const oldestId = finishedFriendImportIds.values().next().value;
+    if (oldestId) finishedFriendImportIds.delete(oldestId);
+  }
+}
 
 function isTaskFinished(task: SyncProgressState): boolean {
   const reachedTotal = task.total > 0 && task.loaded >= task.total;
@@ -251,7 +267,25 @@ export function initSyncListeners() {
     loaded: number;
     total: number;
   }>("sync-download-progress", (ev) => {
+    if (isFinishedFriendImport(ev.payload.operationId)) return;
     setProgress({ type: "download", ...ev.payload });
+  });
+
+  listen<{
+    operationId: string;
+    speedBytesPerSecond: number;
+    etaSeconds: number | null;
+  }>("sync-transfer-metrics", (ev) => {
+    if (isFinishedFriendImport(ev.payload.operationId)) return;
+    useSyncStore.getState().setProgress((previous) =>
+      previous?.operationId === ev.payload.operationId
+        ? {
+            ...previous,
+            speedBytesPerSecond: ev.payload.speedBytesPerSecond,
+            etaSeconds: ev.payload.etaSeconds,
+          }
+        : previous
+    );
   });
 
   listen<{
@@ -261,6 +295,7 @@ export function initSyncListeners() {
     gameId?: string;
     reasonCode?: string;
   }>("sync-operation-terminal", (ev) => {
+    markFriendImportFinished(ev.payload.operationId);
     const state = useSyncStore.getState();
     state.removeTaskByOperationId(ev.payload.operationId);
     // En batch, backend emite terminal por juego. Si coincide por prefijo, limpiamos task equivalente.
