@@ -37,6 +37,10 @@ export class RespondCloudInviteUseCase {
       if (invite.inviteeUserId !== userId) {
         throw new ApplicationError("FORBIDDEN", "La invitación no pertenece a este usuario.");
       }
+      const existingMembership = await this.repository.getMembership(invite.hostUserId, userId);
+      if (existingMembership?.active) {
+        throw new ApplicationError("CONFLICT", "Este ID ya pertenece a un miembro activo de esta nube.");
+      }
       await this.repository.updateInvite(invite);
       await this.repository.upsertMembership({
         hostUserId: invite.hostUserId,
