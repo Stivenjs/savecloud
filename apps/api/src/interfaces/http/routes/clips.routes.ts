@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ClipRepository } from "@domain/ports/ClipRepository";
 import { getUserId } from "@interfaces/http/helpers/request-context";
 import { ApplicationError } from "@application/errors/ApplicationError";
-import { publicClipRateLimit } from "@interfaces/http/rate-limits/clip";
+import { clipUploadUrlRateLimit, publicClipRateLimit } from "@interfaces/http/rate-limits/clip";
 import { getPublicBaseUrl } from "@interfaces/http/helpers/public-base-url";
 import { createClipWatchHandler } from "@interfaces/http/handlers/clipWatchHandler";
 
@@ -20,51 +20,55 @@ export async function registerClipRoutes(app: FastifyInstance, clipStore: ClipRe
       filename?: string;
       contentType?: string;
     };
-  }>("/clips/upload-url", async (request: FastifyRequest, reply: FastifyReply) => {
-    const userId = getUserId(request);
-    const { gameId, filename, contentType, posterUrl, steamAppId, gameTitle, thumbnailBase64 } =
-      (request.body as {
-        gameId?: string;
-        filename?: string;
-        contentType?: string;
-        posterUrl?: string;
-        steamAppId?: string;
-        gameTitle?: string;
-        thumbnailBase64?: string;
-      }) ?? {};
+  }>(
+    "/clips/upload-url",
+    { config: { rateLimit: clipUploadUrlRateLimit } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const userId = getUserId(request);
+      const { gameId, filename, contentType, posterUrl, steamAppId, gameTitle, thumbnailBase64 } =
+        (request.body as {
+          gameId?: string;
+          filename?: string;
+          contentType?: string;
+          posterUrl?: string;
+          steamAppId?: string;
+          gameTitle?: string;
+          thumbnailBase64?: string;
+        }) ?? {};
 
-    if (!gameId?.trim()) {
-      throw new ApplicationError("INVALID_ARGUMENT", "El identificador del juego es obligatorio.");
+      if (!gameId?.trim()) {
+        throw new ApplicationError("INVALID_ARGUMENT", "El identificador del juego es obligatorio.");
+      }
+      if (!filename?.trim()) {
+        throw new ApplicationError("INVALID_ARGUMENT", "El nombre del archivo es obligatorio.");
+      }
+
+      {
+        const { clipId, uploadUrl, cdnUrl } = await clipStore.createClipUploadUrl(
+          userId,
+          gameId.trim(),
+          filename.trim(),
+          contentType,
+          {
+            posterUrl,
+            steamAppId,
+            gameTitle,
+            thumbnailBase64,
+          }
+        );
+
+        const baseUrl = getPublicBaseUrl(request);
+        const watchUrl = `${baseUrl}/v/${clipId}`;
+
+        return reply.status(201).send({
+          clipId,
+          uploadUrl,
+          cdnUrl,
+          watchUrl,
+        });
+      }
     }
-    if (!filename?.trim()) {
-      throw new ApplicationError("INVALID_ARGUMENT", "El nombre del archivo es obligatorio.");
-    }
-
-    {
-      const { clipId, uploadUrl, cdnUrl } = await clipStore.createClipUploadUrl(
-        userId,
-        gameId.trim(),
-        filename.trim(),
-        contentType,
-        {
-          posterUrl,
-          steamAppId,
-          gameTitle,
-          thumbnailBase64,
-        }
-      );
-
-      const baseUrl = getPublicBaseUrl(request);
-      const watchUrl = `${baseUrl}/v/${clipId}`;
-
-      return reply.status(201).send({
-        clipId,
-        uploadUrl,
-        cdnUrl,
-        watchUrl,
-      });
-    }
-  });
+  );
 
   /**
    * GET /clips (Autenticado)
