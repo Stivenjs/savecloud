@@ -349,65 +349,68 @@ export function RestoreBackupModal({
       <section
         aria-labelledby="recover-primary-heading"
         className="flex h-full flex-col rounded-2xl border border-divider bg-content1 p-5 sm:p-6">
-        <div className="flex items-center gap-3">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/12 text-primary">
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-default-100 text-primary dark:bg-content2">
             <CloudDownload size={22} strokeWidth={1.8} />
           </span>
-          <Chip size="sm" color="primary" variant="flat" className="h-5 text-[10px] font-semibold">
-            {t("library.restoreBackup.recommended")}
-          </Chip>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-default-500">
+              {t("library.restoreBackup.recommended")}
+            </p>
+            <h3 id="recover-primary-heading" className="mt-1 text-base font-semibold tracking-tight text-foreground">
+              {t("library.restoreBackup.cloudFilesTitle")}
+            </h3>
+            <p className="mt-1.5 text-xs leading-relaxed text-default-500">
+              {t("library.restoreBackup.cloudFilesDesc")}
+            </p>
+          </div>
         </div>
 
-        <div className="mt-5">
-          <h3 id="recover-primary-heading" className="text-lg font-bold leading-tight tracking-tight text-foreground">
-            {t("library.restoreBackup.cloudFilesTitle")}
-          </h3>
-          <p className="mt-2 text-sm leading-relaxed text-default-600 dark:text-default-400">
-            {t("library.restoreBackup.cloudFilesDesc")}
-          </p>
-        </div>
-
-        <div className="mt-6 space-y-3">
+        <div className="mt-6 space-y-2.5">
           <div className="flex items-center justify-between gap-3">
-            <p id="restore-destination-label" className="text-xs font-semibold text-foreground">
+            <p id="restore-destination-label" className="text-xs font-medium text-default-600">
               {t("library.restoreBackup.destinationTitle")}
             </p>
-            {destinationPath && (
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div
+              id="restore-destination-path"
+              aria-labelledby="restore-destination-label"
+              className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-lg border border-divider bg-default-100/50 px-3 dark:bg-content2"
+              title={destinationPath ?? undefined}>
+              <FolderOpen size={15} className="shrink-0 text-default-500" strokeWidth={1.75} />
+              <span className="truncate text-xs text-default-700 dark:text-default-300">
+                {destinationPath ??
+                  (game?.paths.length
+                    ? t("library.restoreBackup.destinationConfigured")
+                    : t("library.restoreBackup.destinationRequired"))}
+              </span>
+            </div>
+            <Button
+              size="sm"
+              variant="flat"
+              className="h-10 shrink-0 font-medium"
+              startContent={<FolderOpen size={15} />}
+              onPress={() => void handleSelectDestination()}
+              isLoading={selectingDestination}
+              isDisabled={cloudBusy || creatingFullBackup || !!restoring || selectingDestination}>
+              {destinationPath
+                ? t("library.restoreBackup.changeDestination")
+                : t("library.restoreBackup.chooseDestination")}
+            </Button>
+          </div>
+          {destinationPath && (
+            <div className="flex justify-end">
               <Button
                 size="sm"
                 variant="light"
-                className="h-7 min-w-0 px-2 text-xs"
+                className="h-7 min-w-0 px-1 text-xs text-default-500"
                 onPress={() => setDestinationPath(null)}
                 isDisabled={selectingDestination || cloudBusy}>
                 {t("library.restoreBackup.useGamePath")}
               </Button>
-            )}
-          </div>
-          <div
-            id="restore-destination-path"
-            aria-labelledby="restore-destination-label"
-            className="flex min-h-12 min-w-0 items-center gap-2 rounded-xl border border-divider bg-content1/80 px-3 py-2.5"
-            title={destinationPath ?? undefined}>
-            <FolderOpen size={16} className="shrink-0 text-primary" strokeWidth={1.75} />
-            <span className="truncate text-xs text-default-700 dark:text-default-300">
-              {destinationPath ??
-                (game?.paths.length
-                  ? t("library.restoreBackup.destinationConfigured")
-                  : t("library.restoreBackup.destinationRequired"))}
-            </span>
-          </div>
-          <Button
-            size="sm"
-            variant="flat"
-            className="w-full font-semibold"
-            startContent={<FolderOpen size={16} />}
-            onPress={() => void handleSelectDestination()}
-            isLoading={selectingDestination}
-            isDisabled={cloudBusy || creatingFullBackup || !!restoring || selectingDestination}>
-            {destinationPath
-              ? t("library.restoreBackup.changeDestination")
-              : t("library.restoreBackup.chooseDestination")}
-          </Button>
+            </div>
+          )}
           <p className="text-[11px] leading-relaxed text-default-500">{t("library.restoreBackup.destinationHint")}</p>
         </div>
 
@@ -597,21 +600,30 @@ export function RestoreBackupModal({
                             <motion.li
                               key={b.key}
                               variants={itemVariants}
-                              className="flex flex-wrap items-center justify-between gap-3 border-b border-divider px-2 py-3 transition-colors last:border-b-0 hover:bg-default-100/60">
-                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                              className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-divider px-2 py-3 transition-colors last:border-b-0 hover:bg-default-100/60">
+                              <div className="flex min-w-0 items-center gap-3">
                                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                                   <Cloud size={18} strokeWidth={1.75} />
                                 </span>
                                 <div className="min-w-0 flex-1">
                                   <p className="truncate text-sm font-semibold text-foreground">{b.filename}</p>
-                                  <p className="text-xs tabular-nums text-default-500">
-                                    {b.lastModified}
-                                    {b.size != null ? ` • ${formatBytes(b.size)}` : ""}
+                                  <p className="flex min-w-0 items-center gap-1 text-xs tabular-nums text-default-500">
+                                    <span className="min-w-0 truncate" title={b.lastModified}>
+                                      {b.lastModified}
+                                    </span>
+                                    {b.size != null && (
+                                      <>
+                                        <span aria-hidden="true" className="shrink-0">
+                                          ·
+                                        </span>
+                                        <span className="shrink-0 whitespace-nowrap">{formatBytes(b.size)}</span>
+                                      </>
+                                    )}
                                   </p>
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-1">
+                              <div className="flex shrink-0 items-center gap-1">
                                 <Button
                                   size="sm"
                                   color="primary"
