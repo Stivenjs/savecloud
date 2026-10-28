@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import type { AppSettingsConfig, Config, ConfiguredGame } from "@savecloud/types";
 
 // Re-exports de servicios modulares por dominio para mantener 100% de retrocompatibilidad

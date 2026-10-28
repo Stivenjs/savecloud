@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getAvailableDisks } from "@services/tauri";
 import type { DiskInfo } from "@services/tauri";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 export const DISKS_QUERY_KEY = ["system", "disks"] as const;
 
@@ -21,7 +22,7 @@ export function useDisks() {
   return {
     disks: (disks ?? []) as DiskInfo[],
     isLoading,
-    error: isError ? (error instanceof Error ? error.message : String(error)) : null,
+    error: isError ? getUnknownErrorMessage(error) : null,
     refreshDisks,
   };
 }

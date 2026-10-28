@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { listen } from "@tauri-apps/api/event";
 
 export type DownloadProtocol = "http" | "torrentMagnet" | "torrentFile" | "peerLan" | "unknown";

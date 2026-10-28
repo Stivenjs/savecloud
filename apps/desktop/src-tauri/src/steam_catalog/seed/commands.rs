@@ -1,6 +1,7 @@
 use super::api::*;
 use super::db::*;
 use super::types::*;
+use crate::cloud::api_error;
 use crate::commands::sync::context::resolve_api_context;
 use crate::network::API_CLIENT;
 use crate::sqlite::AppDb;
@@ -49,11 +50,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
         .map_err(|e| format!("manifest/upload-url: {}", e))?;
 
         if !res.status().is_success() {
-            return Err(format!(
-                "API steam-seed manifest upload-url: {} {}",
-                res.status(),
-                res.text().await.unwrap_or_default()
-            ));
+            return Err(api_error::response_message(res).await);
         }
 
         let upload: SteamSeedUploadUrlResponse = res.json().await.map_err(|e| e.to_string())?;
@@ -74,10 +71,9 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
 
         if !put.status().is_success() {
             return Err(format!(
-                "S3 PUT manifest part {}: {} {}",
+                "El almacenamiento rechazó la parte {} del manifiesto (HTTP {}).",
                 part_index,
                 put.status(),
-                put.text().await.unwrap_or_default()
             ));
         }
         parts_uploaded += 1;
@@ -114,11 +110,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
     .map_err(|e| format!("priority/upload-url: {}", e))?;
 
     if !priority_url_res.status().is_success() {
-        return Err(format!(
-            "API steam-seed priority upload-url: {} {}",
-            priority_url_res.status(),
-            priority_url_res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(priority_url_res).await);
     }
 
     let priority_upload: SteamSeedUploadUrlResponse =
@@ -146,9 +138,8 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
 
     if !put_priority.status().is_success() {
         return Err(format!(
-            "S3 PUT priority appids: {} {}",
-            put_priority.status(),
-            put_priority.text().await.unwrap_or_default()
+            "El almacenamiento rechazó la lista prioritaria (HTTP {}).",
+            put_priority.status()
         ));
     }
 
@@ -174,11 +165,7 @@ pub async fn sync_reset_cloud_seed_state() -> Result<(), String> {
     .map_err(|e| format!("steam-seed/reset: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        return Err(format!(
-            "API steam-seed/reset: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -393,13 +380,12 @@ pub async fn sync_get_steam_seed_freshness(
     };
 
     if !list_res.status().is_success() {
-        let status = list_res.status();
-        let body = list_res.text().await.unwrap_or_default();
+        let error = api_error::response_message(list_res).await;
         return Ok(SteamSeedFreshnessDto {
             status: "unknown".to_string(),
             cloud_last_batch_key: None,
             local_max_batch_key: local_max,
-            error: Some(format!("steam-seed/status: {} {}", status, body)),
+            error: Some(error),
         });
     }
 
@@ -449,9 +435,7 @@ pub async fn sync_get_steam_seed_worker_control(
         return Ok(None);
     }
     if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("steam-seed/control: {status} {body}"));
+        return Err(api_error::response_message(response).await);
     }
 
     response
@@ -479,9 +463,7 @@ pub async fn sync_set_steam_seed_worker_paused(
     .map_err(|error| format!("steam-seed/control: {error}"))?;
 
     if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("steam-seed/control: {status} {body}"));
+        return Err(api_error::response_message(response).await);
     }
 
     response

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import type { SyncResult } from "./sync-cloud.service";
 
 /** Información de un backup local */

@@ -10,6 +10,7 @@ import { SaveGraphFilters } from "@components/save-graph/SaveGraphFilters";
 import { SaveGraphLegend } from "@components/save-graph/SaveGraphLegend";
 import { SaveGraphDetailPanel } from "@components/save-graph/SaveGraphDetailPanel";
 import { formatGameDisplayName } from "@utils/gameImage";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
 import { useTranslation } from "react-i18next";
 
@@ -134,7 +135,7 @@ export function GameSaveGraphPage() {
                 {isError ? (
                   <div className="flex min-h-[52vh] items-center justify-center rounded-3xl border border-danger/20 bg-danger/10 p-6 text-danger">
                     {t("saveGraph.detail.loadError", {
-                      message: error instanceof Error ? error.message : t("errors.unexpected"),
+                      message: getUnknownErrorMessage(error, t("errors.unexpected")),
                     })}
                   </div>
                 ) : null}

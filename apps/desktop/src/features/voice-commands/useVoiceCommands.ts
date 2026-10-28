@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { toastError, toastInfo, toastSuccess } from "@utils/toast";
 import { formatGameDisplayName } from "@utils/gameImage";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import { parseVoiceCommand, rankAlternativesByConfidence } from "@/features/voice-commands/commandMapper";
 import { useSpeechRecognition } from "@/features/voice-commands/useSpeechRecognition";
 import {
@@ -290,7 +291,7 @@ export function useVoiceCommands() {
             saveLearnedCorrections(learnedCorrectionsRef.current);
             toastSuccess(t("voiceCommands.toast.launching"), formatGameDisplayName(resolvedMatch.game_id));
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
+            const message = getUnknownErrorMessage(error);
             toastError(t("voiceCommands.toast.executionFailed"), message);
           } finally {
             stop();

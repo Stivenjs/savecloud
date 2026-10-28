@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { getActiveTorrentDownloads } from "@services/tauri/config.service";
 import { formatGameDisplayName } from "@utils/gameImage";
 import i18n from "@lib/i18n";

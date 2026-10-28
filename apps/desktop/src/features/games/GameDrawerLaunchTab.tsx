@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import {
   Button,
   Card,
@@ -82,7 +83,7 @@ export function GameDrawerLaunchTab({ form, setField, setError, isOpen }: GameDr
         setField("launchExecutablePath", selected);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getUnknownErrorMessage(e));
     }
   }, [setError, setField, t]);
 

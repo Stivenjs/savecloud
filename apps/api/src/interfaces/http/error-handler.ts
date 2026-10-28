@@ -1,4 +1,5 @@
-import type { FastifyError, FastifyInstance } from "fastify";
+import type { FastifyError, FastifyInstance, FastifyReply } from "fastify";
+import type { ApiProblemDetails } from "@savecloud/types";
 import { ApplicationError, type ApplicationErrorCode } from "@application/errors/ApplicationError";
 
 interface HttpErrorDetails {
@@ -59,6 +60,27 @@ function fastifyErrorDetails(error: unknown): HttpErrorDetails | null {
 }
 
 export function registerHttpErrorHandler(app: FastifyInstance): void {
+  const sendProblem = (
+    reply: FastifyReply,
+    input: { status: number; title: string; detail: string; code: string; requestId: string }
+  ) => {
+    const { status, title, detail, code, requestId } = input;
+    const problem: ApiProblemDetails = {
+      type: "about:blank",
+      title,
+      status,
+      detail,
+      instance: `urn:savecloud:request:${encodeURIComponent(requestId)}`,
+      code,
+      requestId,
+      error: title,
+      message: detail,
+      statusCode: status,
+    };
+
+    return reply.status(status).header("x-request-id", requestId).type("application/problem+json").send(problem);
+  };
+
   app.setErrorHandler((error, request, reply) => {
     let details: HttpErrorDetails;
     let code: string;
@@ -88,6 +110,23 @@ export function registerHttpErrorHandler(app: FastifyInstance): void {
       request.log.info({ code, statusCode: details.status }, "Solicitud HTTP rechazada");
     }
 
-    return reply.status(details.status).send({ error: details.label, message: details.message, code });
+    return sendProblem(reply, {
+      status: details.status,
+      title: details.label,
+      detail: details.message,
+      code,
+      requestId: request.id,
+    });
+  });
+
+  app.setNotFoundHandler((request, reply) => {
+    request.log.info({ code: "NOT_FOUND", statusCode: 404 }, "Ruta HTTP no encontrada");
+    return sendProblem(reply, {
+      status: 404,
+      title: "Not Found",
+      detail: "La ruta solicitada no existe.",
+      code: "NOT_FOUND",
+      requestId: request.id,
+    });
   });
 }

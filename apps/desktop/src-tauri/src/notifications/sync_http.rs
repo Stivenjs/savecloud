@@ -3,6 +3,7 @@
 //! Usa [`crate::commands::sync::context::resolve_api_context`] para que miembros de nube compartida
 //! apunten a la API del anfitrión y al token guardado al aceptar la invitación (no solo `settings.api_key`).
 
+use crate::cloud::api_error;
 use crate::network::API_CLIENT;
 
 use super::models::{
@@ -41,10 +42,9 @@ pub async fn push_batch(items: Vec<NotificationRecordDto>) -> Result<(), String>
     .json(&body)
     .send()
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|_| api_error::network_message())?;
     if !res.status().is_success() {
-        let txt = res.text().await.unwrap_or_default();
-        return Err(format!("notifications batch: {}", txt));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -69,14 +69,13 @@ pub async fn pull_since(
     )
     .send()
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|_| api_error::network_message())?;
     if !res.status().is_success() {
-        let txt = res.text().await.unwrap_or_default();
-        return Err(format!("notifications pull: {}", txt));
+        return Err(api_error::response_message(res).await);
     }
     res.json::<NotificationListResponse>()
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|_| api_error::invalid_response_message())
 }
 
 pub async fn ack_remote(ids: Vec<String>, read: bool, dismiss: bool) -> Result<(), String> {
@@ -99,10 +98,9 @@ pub async fn ack_remote(ids: Vec<String>, read: bool, dismiss: bool) -> Result<(
     .json(&body)
     .send()
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|_| api_error::network_message())?;
     if !res.status().is_success() {
-        let txt = res.text().await.unwrap_or_default();
-        return Err(format!("notifications ack: {}", txt));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }

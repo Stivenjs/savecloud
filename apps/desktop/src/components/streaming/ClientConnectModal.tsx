@@ -5,13 +5,14 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Spinner, Chip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { Monitor, AlertCircle, RefreshCw } from "lucide-react";
 import { openOrFocusStreamingWindow } from "@/windows/streamingWindow";
 import { getSavedStreamingConfig, RESOLUTION_OPTIONS, StreamingConfig } from "@components/streaming/streamingTypes";
 import { getBestSupportedCodec } from "./VideoStreamDecoder";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 /**
  * Propiedades para el modal de conexión a anfitrión.
@@ -65,7 +66,7 @@ export const ClientConnectModal = ({ host, isOpen, onClose, config }: ClientConn
       await openOrFocusStreamingWindow(connectRes, isMirror);
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(getUnknownErrorMessage(err));
     } finally {
       setIsConnecting(false);
     }

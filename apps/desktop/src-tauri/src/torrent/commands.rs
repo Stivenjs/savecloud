@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::cloud::api_error;
 use crate::network::{API_CLIENT, DATA_CLIENT};
 use crate::torrent::engine;
 use crate::torrent::errors::TorrentError;
@@ -351,11 +352,9 @@ pub async fn delete_cloud_torrent(
     .map_err(TorrentError::CloudUrls)?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        return Err(TorrentError::CloudDownload(format!(
-            "API DELETE torrent: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        )));
+        return Err(TorrentError::CloudDownload(
+            api_error::response_message(res).await,
+        ));
     }
     Ok(())
 }

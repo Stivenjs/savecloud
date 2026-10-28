@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { listen, emit } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { AnimatePresence, motion } from "framer-motion";
 import { Gamepad2 } from "lucide-react";
 import { useTranslation } from "react-i18next";

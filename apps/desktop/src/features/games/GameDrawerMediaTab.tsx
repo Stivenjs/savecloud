@@ -7,6 +7,7 @@ import { readImageAsDataUrl, searchSteamGames } from "@services/tauri";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import type { ManifestSearchResult } from "@services/tauri";
 import type { GameFormState } from "@/hooks/useGameForm";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 interface MediaTabProps {
   form: GameFormState;
@@ -36,7 +37,7 @@ export function GameDrawerMediaTab({ form, setField, setError, isOpen }: MediaTa
         setField("selectedSteamAppId", null);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getUnknownErrorMessage(e));
     }
   };
 

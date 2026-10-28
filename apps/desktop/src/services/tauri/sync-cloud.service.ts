@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 
 /** Resultado de subida o descarga */
 export interface SyncResult {

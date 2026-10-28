@@ -1,5 +1,5 @@
 import { Button, Card, CardBody, Select, SelectItem, Tooltip } from "@heroui/react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openPath } from "@tauri-apps/plugin-opener";
@@ -10,6 +10,7 @@ import { focusMainWindow } from "@/windows/mainWindow";
 import { useObservabilityHealth } from "@hooks/useObservabilityHealth";
 import { sanitizeDiagnosticPayload } from "@services/tauri/observability.service";
 import { toastError, toastSuccess } from "@utils/toast";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import { useTranslation } from "react-i18next";
 import {
   deriveKpis,
@@ -377,7 +378,7 @@ export function HealthObservabilityCard() {
         ) : isError || !data || !kpis ? (
           <div className="flex flex-col items-start gap-3 px-5 py-6 text-sm text-danger">
             <span className="font-medium">{t("settings.health.loadError")}</span>
-            <span className="text-default-500">{error instanceof Error ? error.message : t("errors.unexpected")}</span>
+            <span className="text-default-500">{getUnknownErrorMessage(error, t("errors.unexpected"))}</span>
             <Button size="sm" variant="flat" onPress={() => void refetch()} startContent={<RotateCw size={14} />}>
               {t("settings.health.retry")}
             </Button>

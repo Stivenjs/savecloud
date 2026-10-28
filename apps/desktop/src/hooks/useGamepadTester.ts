@@ -1,9 +1,11 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
+import { isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { inferGamepadLayoutKind, type GamepadLayoutKind } from "@/lib/gamepadLabelMaps";
 import { toastError, toastInfo, toastSuccess } from "@/utils/toast";
 import i18n from "@lib/i18n";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 export interface GamepadSummaryDto {
   id: number;
@@ -113,7 +115,7 @@ export function useGamepadTester(): UseGamepadTesterResult {
       setGamepads(list ?? []);
       setLoadErr(null);
     } catch (e) {
-      setLoadErr(e instanceof Error ? e.message : String(e));
+      setLoadErr(getUnknownErrorMessage(e));
     } finally {
       if (opts?.showLoading) setListRefreshing(false);
     }
@@ -126,7 +128,7 @@ export function useGamepadTester(): UseGamepadTesterResult {
     try {
       await invoke("gamepad_tester_trigger_rumble", { gamepadIndex: selectedId });
     } catch (e) {
-      setRumbleErr(e instanceof Error ? e.message : String(e));
+      setRumbleErr(getUnknownErrorMessage(e));
     } finally {
       setRumbleBusy(false);
     }
@@ -156,7 +158,7 @@ export function useGamepadTester(): UseGamepadTesterResult {
     try {
       await invoke("set_preferred_gamepad_layout", { layout: next });
     } catch (e) {
-      setLoadErr(e instanceof Error ? e.message : String(e));
+      setLoadErr(getUnknownErrorMessage(e));
     }
   }, []);
 
@@ -192,7 +194,7 @@ export function useGamepadTester(): UseGamepadTesterResult {
         });
       } catch (e) {
         if (!cancelled) {
-          setLoadErr(e instanceof Error ? e.message : String(e));
+          setLoadErr(getUnknownErrorMessage(e));
         }
       }
     })();

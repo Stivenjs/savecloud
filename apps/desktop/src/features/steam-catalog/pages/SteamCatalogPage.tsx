@@ -19,6 +19,7 @@ import { useSteamCatalogTrendingHero } from "@features/steam-catalog/hooks/useSt
 import { useSteamCatalogGamepadPagination } from "@features/steam-catalog/hooks/useSteamCatalogGamepadPagination";
 import { useShellUiStore } from "@store/ShellUiStore";
 import { useScrollRestoration } from "@hooks/useScrollRestoration";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import { STEAM_CATALOG_PAGE_SIZE } from "@/constants/constants";
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
 
@@ -275,7 +276,7 @@ export function SteamCatalogPage() {
           isLoading={isHeroLoading}
           isFetching={isHeroFetching}
           isError={isHeroError}
-          errorMessage={heroError?.message}
+          errorMessage={heroError ? getUnknownErrorMessage(heroError) : undefined}
         />
       ) : null}
 

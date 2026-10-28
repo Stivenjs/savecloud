@@ -1,4 +1,5 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
+import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigationStore } from "@features/input/store";

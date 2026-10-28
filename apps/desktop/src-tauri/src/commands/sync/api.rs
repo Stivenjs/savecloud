@@ -13,6 +13,7 @@ use super::models::{
     CloudSavesSummaryDto, RemoteSaveDto, RemoteSaveInfoDto, SyncOperationStrategy,
     SyncProgressPayload, SyncResultDto,
 };
+use crate::cloud::api_error;
 use crate::network::API_CLIENT;
 use crate::observability;
 use futures_util::StreamExt;
@@ -176,7 +177,7 @@ pub(crate) async fn api_request_with_etag(
                 }
 
                 observability::record_error("sync_api_send", &error.to_string(), None);
-                return Err(error.to_string());
+                return Err(api_error::network_message());
             }
         };
 
@@ -203,7 +204,7 @@ pub(crate) async fn api_request_with_etag(
         return Ok(response);
     }
 
-    Err("La solicitud a la API terminó sin respuesta.".to_string())
+    Err(api_error::network_message())
 }
 
 pub(crate) async fn api_request(
@@ -249,11 +250,7 @@ pub(crate) async fn get_upload_urls(
     .map_err(|e| format!("upload-urls: {}", e))?;
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API upload-urls: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     let parsed: UploadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
@@ -295,11 +292,7 @@ pub(crate) async fn get_download_urls(
     .map_err(|e| format!("download-urls: {}", e))?;
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API download-urls: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     let parsed: DownloadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
@@ -351,11 +344,7 @@ async fn list_remote_saves_for_user(
     }
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     let etag_header = res
@@ -438,11 +427,7 @@ async fn list_remote_saves_for_user_and_game(
     }
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     let etag_header = res
@@ -527,11 +512,7 @@ async fn list_remote_saves_summary_for_user(
     }
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     let etag_header = res
@@ -629,11 +610,7 @@ pub async fn sync_delete_game_from_cloud(
     .map_err(|e| format!("delete-game: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        return Err(format!(
-            "API delete-game: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     invalidate_remote_saves_cache(&ctx.user_id, Some(game_id.trim()));
     Ok(())
@@ -678,7 +655,7 @@ pub async fn sync_list_trash() -> Result<Vec<TrashGameItem>, String> {
     .map_err(|e| format!("list-trash: {}", e))?;
 
     if !res.status().is_success() {
-        return Err(format!("API list-trash: {}", res.status()));
+        return Err(api_error::response_message(res).await);
     }
 
     let parsed: TrashListResponse = res
@@ -706,11 +683,7 @@ pub async fn sync_restore_from_trash(game_id: String) -> Result<(), String> {
     .map_err(|e| format!("restore-from-trash: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        return Err(format!(
-            "API restore-from-trash: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -732,11 +705,7 @@ pub async fn sync_delete_from_trash(game_id: String) -> Result<(), String> {
     .map_err(|e| format!("delete-from-trash: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        return Err(format!(
-            "API delete-from-trash: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -757,11 +726,7 @@ pub async fn sync_empty_trash() -> Result<(), String> {
     .map_err(|e| format!("empty-trash: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        return Err(format!(
-            "API empty-trash: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -790,11 +755,7 @@ pub async fn sync_rename_game_in_cloud(
     .map_err(|e| format!("rename-game: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        return Err(format!(
-            "API rename-game: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }

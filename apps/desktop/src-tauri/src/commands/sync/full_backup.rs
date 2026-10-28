@@ -31,6 +31,7 @@ use super::events::{
 use super::models::{SyncOperationStrategy, SyncProgressPayload};
 use super::multipart_upload;
 use super::streaming;
+use crate::cloud::api_error;
 use crate::config;
 use crate::config::models::FULL_BACKUP_PACKAGED_ZSTD_DEFAULT;
 use crate::network::DATA_CLIENT;
@@ -68,7 +69,10 @@ fn create_tar_archive(paths: &[String], dest_path: &Path) -> Result<u64, String>
             continue;
         }
 
-        let prefix = folder_prefixes.get(root_idx).map(|s| s.as_str()).unwrap_or("");
+        let prefix = folder_prefixes
+            .get(root_idx)
+            .map(|s| s.as_str())
+            .unwrap_or("");
 
         if root_path.is_file() {
             let file_name = root_path
@@ -199,11 +203,7 @@ pub async fn list_cloud_backups(
         .map_err(|e| format!("GET /backups: {}", e))?;
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API backups: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     #[derive(serde::Deserialize)]
@@ -327,7 +327,11 @@ fn unpack_archive_resilient<R: std::io::Read>(
         let entry_type = entry.header().entry_type();
         if entry_type.is_dir() {
             fs::create_dir_all(&target_path).map_err(|e| {
-                format!("Fallo creando directorio [{}]: {}", target_path.display(), e)
+                format!(
+                    "Fallo creando directorio [{}]: {}",
+                    target_path.display(),
+                    e
+                )
             })?;
         } else if entry_type.is_file() {
             if let Some(parent) = target_path.parent() {
@@ -428,8 +432,8 @@ pub async fn download_and_restore_full_backup_impl(
     emit_done: bool,
 ) -> Result<(), String> {
     let ctx = get_api_context()?;
-    let game = config::load_game(&game_id)?
-        .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
+    let game =
+        config::load_game(&game_id)?.ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     let game_paths =
         path_utils::resolve_cloud_download_roots(&game.paths, destination_path.as_deref())?;
@@ -453,11 +457,7 @@ pub async fn download_and_restore_full_backup_impl(
     .map_err(|e| format!("download-url: {}", e))?;
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API download-url: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
@@ -603,17 +603,18 @@ pub async fn create_and_upload_full_backup(
 ) -> Result<String, String> {
     let ctx = get_api_context()?;
     let cfg = config::load_settings();
-    let game = config::load_game(&game_id)?
-        .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
+    let game =
+        config::load_game(&game_id)?.ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     if game.paths.is_empty() {
         return Err("El juego no tiene rutas de guardado configuradas".to_string());
     }
 
     let paths_for_size = game.paths.clone();
-    let estimated_total = tokio::task::spawn_blocking(move || calculate_total_paths_size(&paths_for_size))
-        .await
-        .unwrap_or(0);
+    let estimated_total =
+        tokio::task::spawn_blocking(move || calculate_total_paths_size(&paths_for_size))
+            .await
+            .unwrap_or(0);
 
     let temp_dir = std::env::temp_dir();
     let filename = format!("{}.tar", chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S"));
@@ -894,11 +895,7 @@ pub async fn delete_cloud_backup(game_id: String, backup_key: String) -> Result<
     .map_err(|e| format!("delete backup: {}", e))?;
 
     if !res.status().is_success() && res.status() != reqwest::StatusCode::NO_CONTENT {
-        return Err(format!(
-            "API delete backup: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -937,11 +934,7 @@ pub async fn rename_cloud_backup(
     .map_err(|e| format!("rename backup: {}", e))?;
 
     if !res.status().is_success() && res.status() != reqwest::StatusCode::NO_CONTENT {
-        return Err(format!(
-            "API rename backup: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -956,17 +949,18 @@ pub async fn test_streaming_full_backup(
     tray_state: State<'_, TrayState>,
 ) -> Result<streaming::multipart::StreamingDryRunMetrics, String> {
     let cfg = config::load_settings();
-    let game = config::load_game(&game_id)?
-        .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
+    let game =
+        config::load_game(&game_id)?.ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     if game.paths.is_empty() {
         return Err("El juego no tiene rutas de guardado configuradas".to_string());
     }
 
     let paths_for_size = game.paths.clone();
-    let estimated_total = tokio::task::spawn_blocking(move || calculate_total_paths_size(&paths_for_size))
-        .await
-        .unwrap_or(0);
+    let estimated_total =
+        tokio::task::spawn_blocking(move || calculate_total_paths_size(&paths_for_size))
+            .await
+            .unwrap_or(0);
 
     let filename = format!("{}.tar", chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S"));
     let relative_filename = format!("{}{}", BACKUPS_PREFIX, filename);

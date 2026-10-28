@@ -3,7 +3,7 @@ import { VideoPlayer } from "@components/streaming/VideoPlayer";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { TitleBar } from "@components/layout/TitleBar";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { Maximize2, Minimize2, RefreshCw, X } from "lucide-react";
 import { Button, Chip, Tooltip } from "@heroui/react";
 

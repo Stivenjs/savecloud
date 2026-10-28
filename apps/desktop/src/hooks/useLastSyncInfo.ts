@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery, type Query } from "@tanstack/react-query";
 import { listOperationHistory, syncListRemoteSavesSummary, type OperationLogEntry } from "@services/tauri";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 export const LAST_SYNC_QUERY_KEY = ["last-sync-info"] as const;
 const CONFIG_GAME_ID = "__config__";
@@ -150,7 +151,7 @@ export function useLastSyncInfo(enabled: boolean) {
     isLoading: query.isLoading && enabled,
     isFetching: query.isFetching,
     connectionStatus,
-    connectionError: query.error instanceof Error ? query.error.message : null,
+    connectionError: query.error ? getUnknownErrorMessage(query.error) : null,
     refetch: query.refetch,
   };
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Button, Card, CardBody, Progress, Tooltip, Chip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -107,7 +108,7 @@ export function EmulatorIntegrationsCard() {
           status: "failed",
           loaded: 0,
           total: 100,
-          error: e instanceof Error ? e.message : String(e),
+          error: getUnknownErrorMessage(e),
         },
       }));
     }

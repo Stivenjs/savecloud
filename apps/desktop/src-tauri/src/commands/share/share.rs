@@ -5,6 +5,8 @@
 //! Utiliza el estado gestionado de Tauri para mantener un pool de conexiones
 //! HTTP persistente, reduciendo la latencia en las negociaciones TLS.
 
+use crate::cloud::api_error::ensure_success;
+use crate::errors::{AppError, AppResult};
 use crate::network::API_CLIENT;
 use serde::{Deserialize, Serialize};
 use tauri::command;
@@ -72,7 +74,7 @@ pub struct ResolvedShare {
 pub async fn create_remote_share_link(
     game_id: String,
     expires_in_days: Option<u32>,
-) -> Result<String, String> {
+) -> AppResult<String> {
     let api_ctx = crate::commands::sync::context::resolve_api_context()?;
     let base_url = api_ctx.base_url;
     let api_key = api_ctx.api_key;
@@ -92,20 +94,18 @@ pub async fn create_remote_share_link(
         .json(&payload)
         .send()
         .await
-        .map_err(|e| format!("Fallo de red: {}", e))?;
+        .map_err(|_| AppError::network())?;
 
-    if !response.status().is_success() {
-        return Err(format!(
-            "API Error ({}): {}",
-            response.status(),
-            response.text().await.unwrap_or_default()
-        ));
-    }
-
-    let data = response
+    let data = ensure_success(response)
+        .await?
         .json::<ShareResponse>()
         .await
-        .map_err(|e| format!("Error de deserialización: {}", e))?;
+        .map_err(|_| {
+            AppError::new(
+                "INVALID_RESPONSE",
+                "El servidor devolvió una respuesta inválida.",
+            )
+        })?;
 
     Ok(data.share_url)
 }
@@ -117,7 +117,7 @@ pub async fn create_remote_share_link(
 /// # Arguments
 /// * `token` - El código único del enlace compartido.
 #[command]
-pub async fn resolve_remote_share_token(token: String) -> Result<ResolvedShare, String> {
+pub async fn resolve_remote_share_token(token: String) -> AppResult<ResolvedShare> {
     let api_ctx = crate::commands::sync::context::resolve_api_context()?;
     let base_url = api_ctx.base_url;
 
@@ -127,14 +127,16 @@ pub async fn resolve_remote_share_token(token: String) -> Result<ResolvedShare, 
         .get(&endpoint)
         .send()
         .await
-        .map_err(|e| format!("Fallo de red: {}", e))?;
+        .map_err(|_| AppError::network())?;
 
-    if !response.status().is_success() {
-        return Err(format!("Token inválido o expirado ({})", response.status()));
-    }
-
-    response
+    ensure_success(response)
+        .await?
         .json::<ResolvedShare>()
         .await
-        .map_err(|e| format!("Error al procesar metadatos del token: {}", e))
+        .map_err(|_| {
+            AppError::new(
+                "INVALID_RESPONSE",
+                "El servidor devolvió una respuesta inválida.",
+            )
+        })
 }

@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { Button, Card, CardHeader, CardBody, Slider, Switch, Chip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { Video, Monitor, Gamepad2, Sliders, ShieldCheck, Zap, Layers, Radio, UserX } from "lucide-react";

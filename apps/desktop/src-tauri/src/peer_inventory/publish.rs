@@ -1,5 +1,6 @@
 //! Publicación del manifiesto al API cloud.
 
+use crate::cloud::api_error;
 use crate::commands::sync::context::resolve_api_context;
 use crate::config::load_settings;
 use crate::network::API_CLIENT;
@@ -57,12 +58,10 @@ async fn put_cloud_manifest(manifest: &DeviceInventoryManifest) -> Result<(), St
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Error publicando inventario: {e}"))?;
+        .map_err(|_| api_error::network_message())?;
 
     if !res.status().is_success() {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("Inventario rechazado ({status}): {text}"));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -86,12 +85,10 @@ pub async fn post_cloud_heartbeat(device_id: &str) -> Result<(), String> {
         .json(&body)
         .send()
         .await
-        .map_err(|e| format!("Heartbeat inventario: {e}"))?;
+        .map_err(|_| api_error::network_message())?;
 
     if !res.status().is_success() {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("Heartbeat rechazado ({status}): {text}"));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -110,12 +107,10 @@ pub async fn delete_cloud_inventory(device_id: &str) -> Result<(), String> {
         .header("x-user-id", &ctx.user_id)
         .send()
         .await
-        .map_err(|e| format!("Error borrando inventario: {e}"))?;
+        .map_err(|_| api_error::network_message())?;
 
     if !res.status().is_success() && res.status() != reqwest::StatusCode::NOT_FOUND {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("DELETE inventario ({status}): {text}"));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -164,12 +159,10 @@ pub async fn list_providers_from_api(game_key: &str) -> Result<GameProvidersResp
         .header("x-user-id", &ctx.user_id)
         .send()
         .await
-        .map_err(|e| format!("Error listando proveedores: {e}"))?;
+        .map_err(|_| api_error::network_message())?;
 
     if !res.status().is_success() {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("Proveedores ({status}): {text}"));
+        return Err(api_error::response_message(res).await);
     }
 
     res.json::<GameProvidersResponseDto>()

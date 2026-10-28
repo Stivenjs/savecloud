@@ -5,12 +5,14 @@
 //! - Consultar la lista de clips subidos para un juego o de su cuenta.
 //! - Eliminar clips existentes tanto de S3 como de la base de datos de metadatos.
 
+use crate::cloud::api_error::ensure_success;
 use crate::commands::sync::events::{
     emit_sync_terminal, emit_sync_upload_done, emit_sync_upload_progress,
 };
 use crate::commands::sync::models::{
     SyncOperationState, SyncOperationStrategy, SyncProgressPayload,
 };
+use crate::errors::{AppError, AppResult};
 use crate::network::{API_CLIENT, DATA_CLIENT};
 use bytes::Bytes;
 use futures_util::stream::Stream;
@@ -198,7 +200,7 @@ fn detect_content_type(path: &Path) -> &'static str {
         Some("webm") => "video/webm",
         Some("mov") => "video/quicktime",
         Some("mkv") => "video/x-matroska",
-        Some("mp4") | _ => "video/mp4",
+        _ => "video/mp4",
     }
 }
 
@@ -215,13 +217,14 @@ pub async fn upload_game_clip(
     game_id: String,
     file_path: String,
     thumbnail_base64: Option<String>,
-) -> Result<ClipUploadResult, String> {
+) -> AppResult<ClipUploadResult> {
     let path = Path::new(&file_path);
     if !path.exists() || !path.is_file() {
         return Err(format!(
             "El archivo especificado no existe o no es válido: {}",
             file_path
-        ));
+        )
+        .into());
     }
 
     let file_metadata = tokio::fs::metadata(path)
@@ -230,7 +233,10 @@ pub async fn upload_game_clip(
     let file_size = file_metadata.len();
 
     if file_size == 0 {
-        return Err("El archivo de video seleccionado está vacío.".to_string());
+        return Err(AppError::new(
+            "INVALID_ARGUMENT",
+            "El archivo de video seleccionado está vacío.",
+        ));
     }
 
     let filename = path
@@ -249,8 +255,10 @@ pub async fn upload_game_clip(
 
     let found_game = crate::config::load_game(&game_id).ok().flatten();
 
-    let detected_steam_id: Option<String> =
-        found_game.as_ref().and_then(|g| g.steam_app_id.clone()).or_else(|| {
+    let detected_steam_id: Option<String> = found_game
+        .as_ref()
+        .and_then(|g| g.steam_app_id.clone())
+        .or_else(|| {
             if game_id.chars().all(|c| c.is_ascii_digit()) {
                 Some(game_id.clone())
             } else if let Some(pos) = game_id.rfind('-') {
@@ -297,18 +305,18 @@ pub async fn upload_game_clip(
         .json(&payload)
         .send()
         .await
-        .map_err(|e| format!("Fallo de red al solicitar URL de subida: {}", e))?;
+        .map_err(|_| AppError::network())?;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let err_body = response.text().await.unwrap_or_default();
-        return Err(format!("API Error ({}): {}", status, err_body));
-    }
-
-    let upload_info = response
+    let upload_info = ensure_success(response)
+        .await?
         .json::<ClipUploadApiResponse>()
         .await
-        .map_err(|e| format!("Error al decodificar respuesta de la API: {}", e))?;
+        .map_err(|_| {
+            AppError::new(
+                "INVALID_RESPONSE",
+                "El servidor devolvió una respuesta inválida.",
+            )
+        })?;
 
     let operation_id = format!("clip-upload-{}", upload_info.clip_id);
 
@@ -385,9 +393,9 @@ pub async fn upload_game_clip(
                 Some("S3_UPLOAD_ERROR".to_string()),
             );
             emit_sync_upload_done(&app);
-            Err(format!(
-                "Fallo al transferir video a S3 (Código HTTP {})",
-                status
+            Err(AppError::new(
+                "STORAGE_UPLOAD_ERROR",
+                format!("Fallo al transferir video a S3 (Código HTTP {})", status),
             ))
         }
         Err(e) => {
@@ -401,14 +409,18 @@ pub async fn upload_game_clip(
                 Some("NETWORK_ERROR".to_string()),
             );
             emit_sync_upload_done(&app);
-            Err(format!("Error de red al transferir video a S3: {}", e))
+            let _ = e;
+            Err(AppError::new(
+                "NETWORK_ERROR",
+                "No se pudo transferir el video al almacenamiento. Inténtalo de nuevo.",
+            ))
         }
     }
 }
 
 /// Consulta la lista de clips pertenecientes al usuario actual (opcionalmente filtrados por juego).
 #[command]
-pub async fn list_game_clips(game_id: Option<String>) -> Result<Vec<ClipItemDto>, String> {
+pub async fn list_game_clips(game_id: Option<String>) -> AppResult<Vec<ClipItemDto>> {
     let api_ctx = crate::commands::sync::context::resolve_api_context()?;
     let base_url = api_ctx.base_url;
     let api_key = api_ctx.api_key;
@@ -427,27 +439,27 @@ pub async fn list_game_clips(game_id: Option<String>) -> Result<Vec<ClipItemDto>
         .header("x-user-id", user_id)
         .send()
         .await
-        .map_err(|e| format!("Fallo de red al listar clips: {}", e))?;
+        .map_err(|_| AppError::network())?;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let err_body = response.text().await.unwrap_or_default();
-        return Err(format!("API Error ({}): {}", status, err_body));
-    }
-
-    let result = response
+    let result = ensure_success(response)
+        .await?
         .json::<ListClipsApiResponse>()
         .await
-        .map_err(|e| format!("Error al decodificar lista de clips: {}", e))?;
+        .map_err(|_| {
+            AppError::new(
+                "INVALID_RESPONSE",
+                "El servidor devolvió una respuesta inválida.",
+            )
+        })?;
 
     Ok(result.clips)
 }
 
 /// Elimina un clip específico de la nube.
 #[command]
-pub async fn delete_game_clip(clip_id: String) -> Result<(), String> {
+pub async fn delete_game_clip(clip_id: String) -> AppResult<()> {
     if clip_id.trim().is_empty() {
-        return Err("clip_id es requerido".to_string());
+        return Err(AppError::new("INVALID_ARGUMENT", "clip_id es requerido"));
     }
 
     let api_ctx = crate::commands::sync::context::resolve_api_context()?;
@@ -467,13 +479,9 @@ pub async fn delete_game_clip(clip_id: String) -> Result<(), String> {
         .header("x-user-id", user_id)
         .send()
         .await
-        .map_err(|e| format!("Fallo de red al eliminar clip: {}", e))?;
+        .map_err(|_| AppError::network())?;
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let err_body = response.text().await.unwrap_or_default();
-        return Err(format!("API Error ({}): {}", status, err_body));
-    }
+    ensure_success(response).await?;
 
     Ok(())
 }

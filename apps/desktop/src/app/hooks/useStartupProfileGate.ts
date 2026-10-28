@@ -13,6 +13,7 @@ import {
 } from "@services/tauri/profile.service";
 import type { StartupProfileOption } from "@features/profile/ProfileStartupSelector";
 import { profileDtoToOption, profileDtoToSession } from "@/app/profileSessionMappers";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 export interface CreateProfileInput {
   readonly name: string;
@@ -107,7 +108,7 @@ export function useStartupProfileGate(): StartupProfileGateState {
         await queryClient.refetchQueries({ queryKey: CONFIG_QUERY_KEY, type: "all" });
         setScreenVisible(false);
       } catch (error) {
-        setScreenError(error instanceof Error ? error.message : String(error));
+        setScreenError(getUnknownErrorMessage(error));
       } finally {
         setSelectingId(null);
       }
@@ -128,7 +129,7 @@ export function useStartupProfileGate(): StartupProfileGateState {
 
       await queryClient.refetchQueries({ queryKey: CONFIG_QUERY_KEY, type: "all" });
     } catch (error) {
-      setScreenError(error instanceof Error ? error.message : String(error));
+      setScreenError(getUnknownErrorMessage(error));
     } finally {
       setCreatingProfile(false);
     }
@@ -143,7 +144,7 @@ export function useStartupProfileGate(): StartupProfileGateState {
       setOptions((prev) => prev.filter((item) => item.id !== profileId));
       await queryClient.refetchQueries({ queryKey: CONFIG_QUERY_KEY, type: "all" });
     } catch (error) {
-      setScreenError(error instanceof Error ? error.message : String(error));
+      setScreenError(getUnknownErrorMessage(error));
     } finally {
       setDeletingId(null);
     }

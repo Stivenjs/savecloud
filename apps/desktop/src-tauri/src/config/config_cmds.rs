@@ -4,11 +4,13 @@
 //! almacenamiento S3, importación/exportación de estado y manipulaciones
 //! del árbol de juegos.
 
+use crate::cloud::api_error::ensure_success;
 use crate::commands::sync::api::{api_request, get_download_urls, sync_list_remote_saves_for_user};
 use crate::commands::sync::context::resolve_api_context;
+use crate::config::encrypted_export;
 use crate::config::gamification::GamificationStateDto;
 use crate::config::{self, Config, ConfigDto, ConfiguredGame, GameDto, OperationLogEntryDto};
-use crate::config::encrypted_export;
+use crate::errors::{AppError, AppResult};
 use crate::steam;
 use crate::time;
 use crate::utils::launch_exe;
@@ -522,7 +524,9 @@ pub async fn set_torrent_rate_limits(
     config::save_settings(&settings)?;
 
     // Aplicar inmediatamente en la sesión activa si el motor torrent está instanciado
-    if let Some(engine_state) = app.try_state::<std::sync::Arc<tokio::sync::Mutex<crate::torrent::engine::TorrentEngine>>>() {
+    if let Some(engine_state) =
+        app.try_state::<std::sync::Arc<tokio::sync::Mutex<crate::torrent::engine::TorrentEngine>>>()
+    {
         let eng = engine_state.lock().await;
         eng.update_rate_limits(download_limit_kbs, upload_limit_kbs);
     }
@@ -1149,9 +1153,7 @@ pub fn import_config_from_file(
         current.api_base_url = current.api_base_url.or(imported.api_base_url);
         current.ws_base_url = current.ws_base_url.or(imported.ws_base_url);
         current.api_key = current.api_key.or(imported.api_key);
-        current.steam_web_api_key = current
-            .steam_web_api_key
-            .or(imported.steam_web_api_key);
+        current.steam_web_api_key = current.steam_web_api_key.or(imported.steam_web_api_key);
         current.user_id = current.user_id.or(imported.user_id);
         current.active_cloud_host_user_id = current
             .active_cloud_host_user_id
@@ -1242,11 +1244,11 @@ pub(super) async fn s3_transfer(
     filename_or_key: &str,
     bytes: Option<Vec<u8>>,
     is_upload: bool,
-) -> Result<Vec<u8>, String> {
+) -> AppResult<Vec<u8>> {
     let client = reqwest::Client::builder()
         .user_agent("SaveCloud-desktop/1.0")
         .build()
-        .unwrap();
+        .map_err(|_| AppError::unexpected())?;
 
     if is_upload {
         let body = serde_json::json!({ "gameId": "__config__", "filename": filename_or_key });
@@ -1260,17 +1262,22 @@ pub(super) async fn s3_transfer(
         )
         .await
         .map_err(|e| e.to_string())?;
-        if !res.status().is_success() {
-            let status = res.status();
-            let detail = res.text().await.unwrap_or_default();
-            return Err(format!("API POST /saves/upload-url: {} {}", status, detail));
-        }
-        let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+        let json: serde_json::Value = ensure_success(res).await?.json().await.map_err(|_| {
+            AppError::new(
+                "INVALID_RESPONSE",
+                "El servidor devolvió una respuesta inválida.",
+            )
+        })?;
         let url = json
             .get("uploadUrl")
             .and_then(|v| v.as_str())
             .ok_or("Payload API sin puntero URL")?;
-        let b = bytes.unwrap();
+        let b = bytes.ok_or_else(|| {
+            AppError::new(
+                "INVALID_ARGUMENT",
+                "Faltan los datos de configuración para subir.",
+            )
+        })?;
         let put_res = client
             .put(url)
             .body(b.clone())
@@ -1278,11 +1285,11 @@ pub(super) async fn s3_transfer(
             .header("Content-Length", b.len().to_string())
             .send()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|_| AppError::network())?;
         if !put_res.status().is_success() {
-            return Err(format!(
-                "Almacenamiento rechazó la subida (PUT): {}",
-                put_res.status()
+            return Err(AppError::new(
+                "STORAGE_UPLOAD_ERROR",
+                "El almacenamiento rechazó la subida de la copia.",
             ));
         }
         Ok(vec![])
@@ -1299,18 +1306,20 @@ pub(super) async fn s3_transfer(
             .get(url)
             .send()
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(|_| AppError::network())?
             .bytes()
             .await
             .map(|b| b.to_vec())
-            .map_err(|e| e.to_string())
+            .map_err(|_| AppError::network())
     }
 }
 
 /// Extrae la imagen en memoria hacia un flujo que termina escrito en S3, simulando el nodo `__config__`.
 #[tauri::command]
-pub async fn backup_config_to_cloud() -> Result<(), String> {
-    crate::config::cloud_backup::backup_config_force().await
+pub async fn backup_config_to_cloud() -> AppResult<()> {
+    crate::config::cloud_backup::backup_config_force()
+        .await
+        .map_err(AppError::from)
 }
 
 /// Extrae el archivo estático de S3 y lo reparte dinámicamente sobre la arquitectura de persistencia.
@@ -1321,7 +1330,7 @@ pub async fn backup_config_to_cloud() -> Result<(), String> {
 /// 3. Inicia stream remoto para consumirlo sobre una estructura monolítica pre-allocada.
 /// 4. Distribuye la ingesta atómicamente por cada subsistema.
 #[tauri::command]
-pub async fn restore_config_from_cloud() -> Result<(), String> {
+pub async fn restore_config_from_cloud() -> AppResult<()> {
     let ctx = resolve_api_context()?;
 
     let saves =
@@ -1348,8 +1357,12 @@ pub async fn restore_config_from_cloud() -> Result<(), String> {
         false,
     )
     .await?;
-    let mut imported: Config = serde_json::from_slice(&bytes)
-        .map_err(|e| format!("Incapacidad de mutar buffer: {}", e))?;
+    let mut imported: Config = serde_json::from_slice(&bytes).map_err(|_| {
+        AppError::new(
+            "INVALID_RESPONSE",
+            "La copia descargada no tiene un formato válido.",
+        )
+    })?;
 
     super::local_backup::migrate_legacy_backups()?;
     super::local_backup::create_before_restore(&config::get_combined_config())?;
@@ -1357,7 +1370,7 @@ pub async fn restore_config_from_cloud() -> Result<(), String> {
     imported.steam_web_api_key = None;
     imported.proxy_url = config::load_settings().proxy_url;
 
-    config::apply_combined_config(&imported)
+    config::apply_combined_config(&imported).map_err(AppError::from)
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1387,7 +1400,7 @@ pub struct FriendGameDto {
 
 /// Realiza una solicitud pasiva para parsear el bloque público alojado por otro usuario.
 #[tauri::command]
-pub async fn get_friend_config(friend_user_id: String) -> Result<FriendProfileDto, String> {
+pub async fn get_friend_config(friend_user_id: String) -> AppResult<FriendProfileDto> {
     let friend_id = friend_user_id.trim();
     if friend_id.is_empty() {
         return Err("Escribe el usuario del amigo.".into());
@@ -1407,24 +1420,25 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<FriendProfileDt
         .header("x-user-id", ctx.user_id)
         .send()
         .await
-        .map_err(|e| format!("Fallo de red: {}", e))?;
+        .map_err(|_| AppError::network())?;
 
     if response.status().as_u16() == 404 {
-        return Err("Ese usuario no tiene configuración respaldada en la nube.".into());
-    }
-
-    if !response.status().is_success() {
-        return Err(format!(
-            "Error del servidor ({}): {}",
-            response.status(),
-            response.text().await.unwrap_or_default()
+        return Err(AppError::new(
+            "USER_PROFILE_NOT_FOUND",
+            "Ese usuario no tiene configuración respaldada en la nube.",
         ));
     }
 
-    let profile = response
+    let profile = ensure_success(response)
+        .await?
         .json::<FriendProfileDto>()
         .await
-        .map_err(|e| format!("Error al procesar el perfil del amigo: {}", e))?;
+        .map_err(|_| {
+            AppError::new(
+                "INVALID_RESPONSE",
+                "El servidor devolvió un perfil inválido.",
+            )
+        })?;
 
     Ok(profile)
 }
@@ -1433,7 +1447,7 @@ pub async fn get_friend_config(friend_user_id: String) -> Result<FriendProfileDt
 #[tauri::command]
 pub async fn get_friends_configs(
     friend_user_ids: Vec<String>,
-) -> Result<std::collections::HashMap<String, Option<FriendProfileDto>>, String> {
+) -> AppResult<std::collections::HashMap<String, Option<FriendProfileDto>>> {
     let ctx = resolve_api_context()?;
 
     let futures = friend_user_ids.into_iter().map(|id| {
@@ -1442,7 +1456,7 @@ pub async fn get_friends_configs(
 
         async move {
             if friend_id.is_empty() {
-                return (id, None);
+                return Ok::<_, AppError>((id, None));
             }
 
             let endpoint = format!(
@@ -1451,38 +1465,36 @@ pub async fn get_friends_configs(
                 friend_id
             );
 
-            let response = match crate::network::API_CLIENT
+            let response = crate::network::API_CLIENT
                 .get(&endpoint)
                 .header("x-api-key", &ctx.api_key)
                 .header("x-user-id", &ctx.user_id)
                 .send()
                 .await
-            {
-                Ok(resp) => resp,
-                Err(_) => return (id, None),
-            };
+                .map_err(|_| AppError::network())?;
 
             if response.status().as_u16() == 404 {
-                return (id, None);
+                return Ok::<_, AppError>((id, None));
             }
 
-            if !response.status().is_success() {
-                return (id, None);
-            }
+            let response = ensure_success(response).await?;
 
-            let profile = match response.json::<FriendProfileDto>().await {
-                Ok(p) => p,
-                Err(_) => return (id, None),
-            };
+            let profile = response.json::<FriendProfileDto>().await.map_err(|_| {
+                AppError::new(
+                    "INVALID_RESPONSE",
+                    "El servidor devolvió un perfil inválido.",
+                )
+            })?;
 
-            (id, Some(profile))
+            Ok::<_, AppError>((id, Some(profile)))
         }
     });
 
     let results = futures_util::future::join_all(futures).await;
 
     let mut map = std::collections::HashMap::new();
-    for (id, config) in results {
+    for result in results {
+        let (id, config) = result?;
         map.insert(id, config);
     }
 
@@ -1530,7 +1542,7 @@ pub fn add_games_from_friend(friend_games: Vec<GameDto>) -> Result<usize, String
 
 /// Secuestra el snapshot en la nube adjunto a un Target ID y asume control lógico mutando el root ID local.
 #[tauri::command]
-pub async fn import_friend_config(friend_user_id: String) -> Result<(), String> {
+pub async fn import_friend_config(friend_user_id: String) -> AppResult<()> {
     let friend_id = friend_user_id.trim();
     if friend_id.is_empty() {
         return Err("Escribe el usuario del amigo.".into());
@@ -1562,12 +1574,16 @@ pub async fn import_friend_config(friend_user_id: String) -> Result<(), String> 
         false,
     )
     .await?;
-    let mut imported: Config = serde_json::from_slice(&bytes)
-        .map_err(|e| format!("El archivo de configuración descargado no es válido: {}", e))?;
+    let mut imported: Config = serde_json::from_slice(&bytes).map_err(|_| {
+        AppError::new(
+            "INVALID_RESPONSE",
+            "El archivo de configuración descargado no es válido.",
+        )
+    })?;
 
     imported.user_id = Some(friend_id.to_string());
 
-    config::apply_combined_config(&imported)
+    config::apply_combined_config(&imported).map_err(AppError::from)
 }
 
 #[tauri::command]

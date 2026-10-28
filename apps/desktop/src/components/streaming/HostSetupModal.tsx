@@ -5,11 +5,12 @@
  */
 
 import { useState, useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Spinner, Chip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { Radio, ShieldCheck, Copy, Check, AlertCircle } from "lucide-react";
 import { useStreamingState } from "@hooks/queries/useStreamingQueries";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 interface HostSetupModalProps {
   isOpen: boolean;
@@ -48,7 +49,7 @@ export const HostSetupModal = ({ isOpen, onClose }: HostSetupModalProps) => {
         });
         if (isMounted) setPin(generatedPin);
       } catch (err: unknown) {
-        if (isMounted) setError(err instanceof Error ? err.message : String(err));
+        if (isMounted) setError(getUnknownErrorMessage(err));
       } finally {
         if (isMounted) setIsLoading(false);
       }

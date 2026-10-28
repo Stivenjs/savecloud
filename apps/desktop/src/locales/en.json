@@ -62,6 +62,11 @@
   },
   "errors": {
     "unexpected": "An unexpected error occurred",
+    "serverFailure": "The server ran into a problem. Please try again later.",
+    "networkFailure": "Could not connect to the server. Check your connection and try again.",
+    "unauthenticated": "Your session is not authorized. Sign in again and try again.",
+    "forbidden": "You don't have permission to perform this action.",
+    "serviceUnavailable": "The service is unavailable right now. Please try again later.",
     "tryRestart": "Something went wrong. Try restarting the application.",
     "reloadApp": "Restart app",
     "bootstrapTitle": "Error loading the application",

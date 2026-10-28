@@ -62,6 +62,11 @@
   },
   "errors": {
     "unexpected": "Ocurrió un error inesperado",
+    "serverFailure": "El servidor tuvo un problema. Inténtalo de nuevo más tarde.",
+    "networkFailure": "No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.",
+    "unauthenticated": "Tu sesión no está autorizada. Vuelve a iniciar sesión e inténtalo de nuevo.",
+    "forbidden": "No tienes permiso para realizar esta acción.",
+    "serviceUnavailable": "El servicio no está disponible ahora. Inténtalo de nuevo más tarde.",
     "tryRestart": "Algo salió mal. Intenta reiniciar la aplicación.",
     "reloadApp": "Reiniciar app",
     "bootstrapTitle": "Error al cargar la aplicación",

@@ -14,7 +14,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
+import { isTauri } from "@tauri-apps/api/core";
 import { useNavigationStore } from "@features/input/store";
 import { useNavigable } from "@features/input/useNavigable";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";

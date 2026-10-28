@@ -13,6 +13,7 @@ import {
   startTorrentFileDownload,
 } from "@services/tauri";
 import { formatBytes } from "@utils/format";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import type { GameFormState } from "@/hooks/useGameForm";
 
 interface TorrentTabProps {
@@ -71,7 +72,7 @@ export function GameDrawerTorrentTab({
         setLocalTorrentPath(selected);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getUnknownErrorMessage(e));
     }
   };
 
@@ -86,7 +87,7 @@ export function GameDrawerTorrentTab({
         setTorrentDownloadPath(selected);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getUnknownErrorMessage(e));
     }
   };
 
@@ -99,7 +100,7 @@ export function GameDrawerTorrentTab({
       setLocalTorrentPath("");
       await queryClient.invalidateQueries({ queryKey: ["cloud-torrents", effectiveGameId] });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getUnknownErrorMessage(e));
     } finally {
       setUploading(false);
     }
@@ -115,7 +116,7 @@ export function GameDrawerTorrentTab({
     try {
       await downloadTorrentFromCloud(effectiveGameId, torrentKey, effectiveDownloadPath);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getUnknownErrorMessage(e));
     } finally {
       setDownloadingKey(null);
     }
@@ -128,7 +129,7 @@ export function GameDrawerTorrentTab({
       await deleteCloudTorrent(effectiveGameId, torrentKey);
       await queryClient.invalidateQueries({ queryKey: ["cloud-torrents", effectiveGameId] });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getUnknownErrorMessage(e));
     } finally {
       setDeletingKey(null);
     }
@@ -141,7 +142,7 @@ export function GameDrawerTorrentTab({
     try {
       await startTorrentDownload(form.magnetLink.trim(), effectiveDownloadPath);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getUnknownErrorMessage(e));
     } finally {
       setStartingMagnet(false);
     }
@@ -154,7 +155,7 @@ export function GameDrawerTorrentTab({
     try {
       await startTorrentFileDownload(localTorrentPath, effectiveDownloadPath);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getUnknownErrorMessage(e));
     } finally {
       setStartingFile(false);
     }

@@ -17,6 +17,7 @@ import { useProfileSession } from "@hooks/useProfileSession";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastError, toastSuccess } from "@utils/toast";
 import i18n from "@lib/i18n";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import {
   CONFIG_EXPORT_MIN_PASSWORD_LENGTH,
   CONFIG_PASSWORD_REQUIRED_MARKER,
@@ -177,7 +178,7 @@ export function useConfigManagement() {
       setPendingEncryptedImportPath(null);
       await relaunchAfterConfigImport();
     } catch (e) {
-      setConfigEncryptionError(e instanceof Error ? e.message : String(e));
+      setConfigEncryptionError(getUnknownErrorMessage(e));
     } finally {
       setImporting(false);
     }
@@ -248,7 +249,7 @@ export function useConfigManagement() {
 
       toastSuccess(i18n.t("settings.toast.connectionSaved"), path);
     } catch (e) {
-      setCreateConfigError(e instanceof Error ? e.message : String(e));
+      setCreateConfigError(getUnknownErrorMessage(e));
     } finally {
       setCreatingConfig(false);
     }

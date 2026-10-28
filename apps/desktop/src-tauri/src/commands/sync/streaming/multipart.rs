@@ -38,6 +38,7 @@ use std::time::Instant;
 use bytes::{BufMut, BytesMut};
 use tokio::sync::Semaphore;
 
+use crate::cloud::api_error;
 use crate::network::DATA_CLIENT;
 
 use super::super::api;
@@ -150,9 +151,7 @@ async fn multipart_init(
     .map_err(|e| format!("multipart/init: {}", e))?;
 
     if !res.status().is_success() {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("API multipart/init: {} {}", status, text));
+        return Err(api_error::response_message(res).await);
     }
     let parsed: MultipartInitResponse = res.json().await.map_err(|e| e.to_string())?;
     Ok((parsed.upload_id, parsed.key))
@@ -180,9 +179,7 @@ async fn multipart_part_urls(
     .map_err(|e| format!("multipart/part-urls: {}", e))?;
 
     if !res.status().is_success() {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("API multipart/part-urls: {} {}", status, text));
+        return Err(api_error::response_message(res).await);
     }
     let parsed: PartUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
     Ok(parsed
@@ -217,9 +214,7 @@ async fn multipart_complete(ctx: &UploadCtx<'_>, parts: &[(u32, String)]) -> Res
     .map_err(|e| format!("multipart/complete: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("API multipart/complete: {} {}", status, text));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -238,9 +233,7 @@ async fn multipart_abort(ctx: &UploadCtx<'_>) -> Result<(), String> {
     .map_err(|e| format!("multipart/abort: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("API multipart/abort: {} {}", status, text));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }

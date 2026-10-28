@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
+use crate::cloud::api_error;
 use crate::commands::sync::context::resolve_api_context;
 use crate::network::stream_download::{stream_url_to_file, GlobalDownloadProgress};
 use crate::network::{API_CLIENT, PEER_LAN_CLIENT};
@@ -23,8 +24,6 @@ pub struct PeerDownloadParams {
     pub manifest_hash: String,
     pub checkpoint: Option<PeerDownloadCheckpoint>,
 }
-
-
 
 const FILE_DOWNLOAD_ATTEMPTS: u32 = 3;
 const SESSION_READY_MAX_WAIT: Duration = Duration::from_secs(45);
@@ -326,16 +325,15 @@ async fn create_transfer_session(
         .json(&body)
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|_| api_error::network_message())?;
 
     if !res.status().is_success() {
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("Sesión transferencia: {text}"));
+        return Err(api_error::response_message(res).await);
     }
 
     res.json::<TransferSessionDto>()
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|_| api_error::invalid_response_message())
 }
 
 /// Parsea error de pausa y devuelve checkpoint si aplica.

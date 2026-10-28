@@ -26,6 +26,7 @@ use std::path::{Path, PathBuf};
 use super::api;
 use super::events::emit_sync_upload_progress;
 use super::models::{SyncOperationStrategy, SyncProgressPayload};
+use crate::cloud::api_error;
 use crate::commands::logs::sync_logger;
 use crate::network::DATA_CLIENT;
 use futures_util::stream::StreamExt;
@@ -160,9 +161,13 @@ async fn multipart_init(
 
     if !res.status().is_success() {
         let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        sync_logger::log_api("multipart/init", "/multipart/init", status.as_u16(), &text);
-        return Err(format!("API multipart/init: {} {}", status, text));
+        sync_logger::log_api(
+            "multipart/init",
+            "/multipart/init",
+            status.as_u16(),
+            "API error",
+        );
+        return Err(api_error::response_message(res).await);
     }
 
     let parsed: MultipartInitResponse =
@@ -201,14 +206,13 @@ async fn multipart_part_urls(
 
     if !res.status().is_success() {
         let status = res.status();
-        let text = res.text().await.unwrap_or_default();
         sync_logger::log_api(
             "multipart/part-urls",
             "/multipart/part-urls",
             status.as_u16(),
-            &text,
+            "API error",
         );
-        return Err(format!("API multipart/part-urls: {} {}", status, text));
+        return Err(api_error::response_message(res).await);
     }
 
     let parsed: PartUrlsResponse = res
@@ -255,14 +259,13 @@ async fn multipart_complete(
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
         let status = res.status();
-        let text = res.text().await.unwrap_or_default();
         sync_logger::log_api(
             "multipart/complete",
             "/multipart/complete",
             status.as_u16(),
-            &text,
+            "API error",
         );
-        return Err(format!("API multipart/complete: {} {}", status, text));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -288,14 +291,13 @@ async fn multipart_abort(
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
         let status = res.status();
-        let text = res.text().await.unwrap_or_default();
         sync_logger::log_api(
             "multipart/abort",
             "/multipart/abort",
             status.as_u16(),
-            &text,
+            "API error",
         );
-        return Err(format!("API multipart/abort: {} {}", status, text));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }

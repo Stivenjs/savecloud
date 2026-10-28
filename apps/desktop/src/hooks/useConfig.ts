@@ -3,6 +3,7 @@ import { getConfig } from "@services/tauri";
 import { listen } from "@tauri-apps/api/event";
 import { queryClient } from "@lib/queryClient";
 import { LIBRARY_QUERY_KEY } from "@hooks/useLibrary";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 export const CONFIG_QUERY_KEY = ["config"] as const;
 
@@ -40,7 +41,7 @@ export function useConfig() {
   return {
     config: config ?? null,
     loading,
-    error: isError ? (error instanceof Error ? error.message : String(error)) : null,
+    error: isError ? getUnknownErrorMessage(error) : null,
     refetch,
     isStale: !config,
   };

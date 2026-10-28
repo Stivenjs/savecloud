@@ -4,6 +4,7 @@ import { useLanguageInitialization } from "@hooks/useLanguageInitialization";
 import { checkForUpdatesWithPrompt, listSteamCatalogPage } from "@services/tauri";
 import { toastSyncResult } from "@utils/toast";
 import { notifySyncComplete, notifySyncError } from "@utils/notification";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { useInputManager } from "@features/input/useInputManager";
 import { initSyncListeners } from "@store/SyncStore";
@@ -102,17 +103,18 @@ export function useAppInitialization() {
       error: string;
     }>("auto-sync-error", (ev) => {
       const gameName = formatGameDisplayName(ev.payload.gameId);
+      const message = getUnknownErrorMessage(ev.payload.error);
 
       toastSyncResult(
         {
           okCount: 0,
           errCount: 1,
-          errors: [ev.payload.error],
+          errors: [message],
         },
         gameName
       );
 
-      notifySyncError(gameName, ev.payload.error);
+      notifySyncError(gameName, message);
     });
 
     return () => {
