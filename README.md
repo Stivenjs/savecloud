@@ -1,5 +1,5 @@
 <h1>
-  <img src="/assets/icon.ico" width="60" style="vertical-align: middle; margin-right: 10px;" />
+  <img src="/assets/icon.ico?v=80cb5c5f" width="60" style="vertical-align: middle; margin-right: 10px;" />
   SaveCloud
 </h1>
 
