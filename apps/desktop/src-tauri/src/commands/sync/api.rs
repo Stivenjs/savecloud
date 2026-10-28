@@ -20,10 +20,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 
-use crate::utils::transfer_metrics::{TransferSample, TransferSpeedTracker};
+use crate::utils::transfer_metrics::{
+    TransferProgressThrottle, TransferSample, TransferSpeedTracker, PACKAGED_PROGRESS_POLICY,
+};
 
 const S3_ACCELERATE_HOST: &str = "s3-accelerate.amazonaws.com";
 
@@ -797,8 +799,18 @@ pub async fn sync_rename_game_in_cloud(
     Ok(())
 }
 
-const FRIEND_COPY_PROGRESS_EMIT_BYTES: u64 = 256 * 1024;
-const FRIEND_COPY_PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(250);
+const FRIEND_COPY_FILE_CONCURRENCY: usize = 4;
+
+fn should_emit_friend_copy_progress(
+    throttle: &Mutex<TransferProgressThrottle>,
+    loaded: u64,
+    is_final: bool,
+) -> bool {
+    throttle
+        .lock()
+        .map(|mut state| state.should_emit(loaded, is_final))
+        .unwrap_or(is_final)
+}
 
 fn emit_friend_copy_progress(
     app: &AppHandle,
@@ -870,6 +882,9 @@ async fn copy_friend_saves_with_plan_impl(
         .unwrap_or(0);
     let loaded = Arc::new(AtomicU64::new(0));
     let metrics = Arc::new(Mutex::new(TransferSpeedTracker::new()));
+    let progress_throttle = Arc::new(Mutex::new(TransferProgressThrottle::new(
+        PACKAGED_PROGRESS_POLICY,
+    )));
 
     let result = copy_friend_saves_with_plan_transfer(
         game_id,
@@ -878,6 +893,7 @@ async fn copy_friend_saves_with_plan_impl(
         operation_id.clone(),
         loaded,
         metrics,
+        progress_throttle,
         total,
     )
     .await;
@@ -906,6 +922,7 @@ async fn copy_friend_saves_with_plan_transfer(
     operation_id: String,
     loaded: Arc<AtomicU64>,
     metrics: Arc<Mutex<TransferSpeedTracker>>,
+    progress_throttle: Arc<Mutex<TransferProgressThrottle>>,
     total: u64,
 ) -> Result<SyncResultDto, String> {
     let ctx = get_api_context()?;
@@ -964,6 +981,7 @@ async fn copy_friend_saves_with_plan_transfer(
         .collect();
 
     let mut set = tokio::task::JoinSet::new();
+    let file_semaphore = Arc::new(tokio::sync::Semaphore::new(FRIEND_COPY_FILE_CONCURRENCY));
 
     for item in plan {
         let download_url = download_map.get(&item.key).cloned();
@@ -974,6 +992,8 @@ async fn copy_friend_saves_with_plan_transfer(
         let game_id = game_id.to_string();
         let loaded = Arc::clone(&loaded);
         let metrics = Arc::clone(&metrics);
+        let progress_throttle = Arc::clone(&progress_throttle);
+        let file_semaphore = Arc::clone(&file_semaphore);
         set.spawn(async move {
             let mut item_err = None;
             let mut success = false;
@@ -985,6 +1005,17 @@ async fn copy_friend_saves_with_plan_transfer(
             let u_url = match upload_url {
                 Some(u) => u,
                 None => return (item, false, Some("Sin URL de subida".to_string())),
+            };
+
+            let _permit = match file_semaphore.acquire_owned().await {
+                Ok(permit) => permit,
+                Err(error) => {
+                    return (
+                        item,
+                        false,
+                        Some(format!("No se pudo iniciar la transferencia: {}", error)),
+                    )
+                }
             };
 
             let response = match API_CLIENT.get(&d_url).send().await {
@@ -1013,18 +1044,13 @@ async fn copy_friend_saves_with_plan_transfer(
                 let filename = item.filename.clone();
                 let loaded = Arc::clone(&loaded);
                 let metrics = Arc::clone(&metrics);
-                let mut last_emit = loaded.load(Ordering::Relaxed);
-                let mut last_emit_at = Instant::now();
+                let progress_throttle = Arc::clone(&progress_throttle);
 
                 move |chunk| {
                     if let Ok(bytes) = &chunk {
                         let current = loaded.fetch_add(bytes.len() as u64, Ordering::Relaxed)
                             + bytes.len() as u64;
-                        if current.saturating_sub(last_emit) >= FRIEND_COPY_PROGRESS_EMIT_BYTES
-                            || last_emit_at.elapsed() >= FRIEND_COPY_PROGRESS_EMIT_INTERVAL
-                        {
-                            last_emit = current;
-                            last_emit_at = Instant::now();
+                        if should_emit_friend_copy_progress(&progress_throttle, current, false) {
                             emit_friend_copy_progress(
                                 &app,
                                 &operation_id,
@@ -1047,18 +1073,13 @@ async fn copy_friend_saves_with_plan_transfer(
                 let filename = item.target_filename.clone();
                 let loaded = Arc::clone(&loaded);
                 let metrics = Arc::clone(&metrics);
-                let mut last_emit = loaded.load(Ordering::Relaxed);
-                let mut last_emit_at = Instant::now();
+                let progress_throttle = Arc::clone(&progress_throttle);
 
                 move |chunk| {
                     if let Ok(bytes) = &chunk {
                         let current = loaded.fetch_add(bytes.len() as u64, Ordering::Relaxed)
                             + bytes.len() as u64;
-                        if current.saturating_sub(last_emit) >= FRIEND_COPY_PROGRESS_EMIT_BYTES
-                            || last_emit_at.elapsed() >= FRIEND_COPY_PROGRESS_EMIT_INTERVAL
-                        {
-                            last_emit = current;
-                            last_emit_at = Instant::now();
+                        if should_emit_friend_copy_progress(&progress_throttle, current, false) {
                             emit_friend_copy_progress(
                                 &app,
                                 &operation_id,
@@ -1096,20 +1117,12 @@ async fn copy_friend_saves_with_plan_transfer(
     let mut ok_count = 0;
     let mut err_count = 0;
     let mut errors = Vec::new();
+    let mut last_completed_filename = String::new();
 
     while let Some(res) = set.join_next().await {
         match res {
             Ok((item, success, err_opt)) => {
-                emit_friend_copy_progress(
-                    &app,
-                    &operation_id,
-                    game_id,
-                    &item.target_filename,
-                    loaded.load(Ordering::Relaxed),
-                    total,
-                    &metrics,
-                    true,
-                );
+                last_completed_filename.clone_from(&item.target_filename);
                 if success {
                     ok_count += 1;
                 } else {
@@ -1124,6 +1137,20 @@ async fn copy_friend_saves_with_plan_transfer(
                 errors.push(format!("Fallo crítico en hilo de transferencia: {}", e));
             }
         }
+    }
+
+    let final_loaded = loaded.load(Ordering::Relaxed);
+    if should_emit_friend_copy_progress(&progress_throttle, final_loaded, true) {
+        emit_friend_copy_progress(
+            &app,
+            &operation_id,
+            game_id,
+            &last_completed_filename,
+            final_loaded,
+            total,
+            &metrics,
+            true,
+        );
     }
 
     let result = SyncResultDto {

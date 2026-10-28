@@ -216,7 +216,8 @@ export function useDownloadsData() {
       return {
         id,
         label: gameName,
-        subtitle: task.filename,
+        subtitle:
+          task.status === "extracting" ? `${task.filename} · ${t("downloads.status.extracting")}` : task.filename,
         value,
         source: "sync",
         gameId: task.gameId,

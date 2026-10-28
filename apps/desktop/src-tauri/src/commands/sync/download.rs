@@ -11,7 +11,7 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant, UNIX_EPOCH};
+use std::time::{Duration, UNIX_EPOCH};
 
 use chrono::{DateTime, Utc};
 use futures_util::stream::{self, StreamExt};
@@ -33,6 +33,9 @@ use crate::commands::logs::sync_logger;
 use crate::network::DATA_CLIENT;
 use crate::tray::tray_state::TrayState;
 use crate::utils::path_utils;
+use crate::utils::transfer_metrics::{
+    TransferProgressThrottle, FILE_PROGRESS_POLICY, PACKAGED_PROGRESS_POLICY,
+};
 use tauri::{AppHandle, Manager, State};
 
 /// Número máximo de reintentos al intentar crear un archivo bloqueado.
@@ -42,13 +45,6 @@ const FILE_CREATE_MAX_RETRIES: u32 = 3;
 ///
 /// El tiempo de espera real en el intento `n` es `FILE_CREATE_BACKOFF_BASE_MS * (n + 1)`.
 const FILE_CREATE_BACKOFF_BASE_MS: u64 = 200;
-
-/// Umbral en bytes entre emisiones sucesivas de eventos de progreso de descarga.
-const DOWNLOAD_PROGRESS_EMIT_BYTES: u64 = 256 * 1024;
-/// Umbral de emisión para archivos empaquetados grandes (.tar / backups/*).
-const DOWNLOAD_PROGRESS_EMIT_BYTES_PACKAGED: u64 = 2 * 1024 * 1024;
-/// Intervalo mínimo entre emisiones para evitar saturar IPC/UI.
-const DOWNLOAD_PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(180);
 
 /// Número máximo de descargas de archivos individuales en paralelo por juego.
 const DOWNLOAD_FILE_CONCURRENCY: usize = 16;
@@ -156,11 +152,12 @@ async fn download_file_attempt(
     let total = response.content_length().or(save.size).unwrap_or(0);
     let is_packaged_backup =
         save.filename.starts_with("backups/") || save.filename.ends_with(".tar");
-    let emit_bytes_threshold = if is_packaged_backup {
-        DOWNLOAD_PROGRESS_EMIT_BYTES_PACKAGED
+    let progress_policy = if is_packaged_backup {
+        PACKAGED_PROGRESS_POLICY
     } else {
-        DOWNLOAD_PROGRESS_EMIT_BYTES
+        FILE_PROGRESS_POLICY
     };
+    let mut progress_throttle = TransferProgressThrottle::new(progress_policy);
 
     let file = create_file_with_retry(temp_path).await.map_err(|error| {
         DownloadAttemptFailure::Permanent(file_write_error_message(&save.filename, &error))
@@ -168,8 +165,6 @@ async fn download_file_attempt(
     let mut writer = BufWriter::with_capacity(WRITE_BUF_SIZE, file);
     let mut stream = response.bytes_stream();
     let mut loaded = 0_u64;
-    let mut last_emit = 0_u64;
-    let mut last_emit_at = Instant::now();
 
     while let Some(chunk_result) = stream.next().await {
         let chunk = match chunk_result {
@@ -184,11 +179,7 @@ async fn download_file_attempt(
         };
         loaded += chunk.len() as u64;
 
-        let bytes_step = loaded.saturating_sub(last_emit) >= emit_bytes_threshold;
-        let time_step = last_emit_at.elapsed() >= DOWNLOAD_PROGRESS_EMIT_INTERVAL;
-        if bytes_step && time_step {
-            last_emit = loaded;
-            last_emit_at = Instant::now();
+        if progress_throttle.should_emit(loaded, false) {
             emit_sync_download_progress(
                 app,
                 SyncProgressPayload {

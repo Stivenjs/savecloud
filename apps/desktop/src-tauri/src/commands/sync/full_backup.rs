@@ -35,6 +35,7 @@ use crate::config;
 use crate::config::models::FULL_BACKUP_PACKAGED_ZSTD_DEFAULT;
 use crate::network::DATA_CLIENT;
 use crate::tray::tray_state::TrayState;
+use crate::utils::transfer_metrics::{TransferProgressThrottle, PACKAGED_PROGRESS_POLICY};
 use tauri::{AppHandle, Manager, State};
 
 use crate::shutdown::coordinator::{ShutdownCoordinator, ShutdownPhase};
@@ -221,9 +222,6 @@ pub async fn list_cloud_backups(
         })
         .collect())
 }
-
-/// Cada cuántos bytes emitimos progreso de descarga del empaquetado.
-const FULL_BACKUP_DOWNLOAD_EMIT_BYTES: u64 = 256 * 1024;
 
 /// Quita solo lectura para poder borrar/sobrescribir (Unity y otros suelen dejar `.json` read-only).
 #[cfg(windows)]
@@ -496,7 +494,7 @@ pub async fn download_and_restore_full_backup_impl(
     });
 
     let mut loaded: u64 = 0;
-    let mut last_emit: u64 = 0;
+    let mut progress_throttle = TransferProgressThrottle::new(PACKAGED_PROGRESS_POLICY);
 
     // Consumo del flujo de red
     while let Some(item) = stream.next().await {
@@ -509,8 +507,8 @@ pub async fn download_and_restore_full_backup_impl(
             .await
             .map_err(|e| format!("Error en tubería de memoria: {}", e))?;
 
-        if loaded - last_emit >= FULL_BACKUP_DOWNLOAD_EMIT_BYTES || (total > 0 && loaded >= total) {
-            last_emit = loaded;
+        let download_finished = total > 0 && loaded >= total;
+        if !download_finished && progress_throttle.should_emit(loaded, false) {
             emit_sync_download_progress(
                 &app,
                 SyncProgressPayload {
@@ -533,36 +531,48 @@ pub async fn download_and_restore_full_backup_impl(
         }
     }
 
-    if total > 0 && loaded < total {
-        emit_sync_download_progress(
-            &app,
-            SyncProgressPayload {
-                operation_id: Some(format!("sync-download-{game_id}")),
-                status: Some("running".to_string()),
-                game_id: game_id.clone(),
-                filename: tar_name.to_string(),
-                loaded: total,
-                total,
-                downloaded_bytes: Some(total),
-                total_bytes: Some(total),
-                can_pause: None,
-                can_cancel: None,
-                can_resume: None,
-                strategy: Some(SyncOperationStrategy::DownloadPackaged),
-                state: None,
-                reason_code: None,
-            },
-        );
-    }
-
     // Clausura del transmisor. Esto inyecta una señal EOF (End Of File) en el receptor,
     // indicando a 'tar::Archive' que el archivo ha finalizado de forma limpia.
     drop(tx);
 
+    // Mantiene la operación visible mientras el hilo bloqueante termina de extraer.
+    emit_sync_download_progress(
+        &app,
+        SyncProgressPayload {
+            operation_id: Some(format!("sync-download-{game_id}")),
+            status: Some("extracting".to_string()),
+            game_id: game_id.clone(),
+            filename: tar_name.to_string(),
+            loaded,
+            total,
+            downloaded_bytes: Some(loaded),
+            total_bytes: Some(total),
+            can_pause: None,
+            can_cancel: None,
+            can_resume: None,
+            strategy: Some(SyncOperationStrategy::DownloadPackaged),
+            state: None,
+            reason_code: None,
+        },
+    );
+
     // Sincronización del hilo principal con la finalización del hilo extractor
-    extract_task
-        .await
-        .map_err(|e| format!("Pánico en hilo de descompresión: {}", e))??;
+    let extraction_result = match extract_task.await {
+        Ok(result) => result,
+        Err(error) => Err(format!("Pánico en hilo de descompresión: {}", error)),
+    };
+    if let Err(error) = extraction_result {
+        emit_sync_terminal(
+            &app,
+            format!("sync-download-{game_id}"),
+            "failed",
+            "download",
+            Some(game_id.clone()),
+            None,
+            Some("EXTRACTION_FAILED".to_string()),
+        );
+        return Err(error);
+    }
 
     tray_state.set_just_restored(&game_id);
     emit_sync_terminal(

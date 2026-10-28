@@ -15,6 +15,65 @@ const MIN_PUBLISH_INTERVAL: Duration = Duration::from_millis(750);
 /// Máximo cambio de ETA por publicación (segundos), evita saltos bruscos.
 const ETA_MAX_STEP_SECS: u64 = 15;
 
+/// Política común para limitar la frecuencia de eventos de progreso hacia la UI.
+#[derive(Debug, Clone, Copy)]
+pub struct TransferProgressPolicy {
+    /// Bytes que deben avanzar antes de publicar otra muestra.
+    pub min_bytes: u64,
+    /// Intervalo mínimo entre publicaciones.
+    pub min_interval: Duration,
+    /// Intervalo máximo sin publicar mientras siga llegando progreso.
+    pub max_interval: Duration,
+}
+
+/// Política para transferencias de archivos normales.
+pub const FILE_PROGRESS_POLICY: TransferProgressPolicy = TransferProgressPolicy {
+    min_bytes: 256 * 1024,
+    min_interval: Duration::from_millis(180),
+    max_interval: Duration::from_secs(1),
+};
+
+/// Política para archivos empaquetados y transferencias de varios pasos.
+pub const PACKAGED_PROGRESS_POLICY: TransferProgressPolicy = TransferProgressPolicy {
+    min_bytes: 2 * 1024 * 1024,
+    min_interval: Duration::from_millis(180),
+    max_interval: Duration::from_secs(1),
+};
+
+/// Limitador de progreso por operación. No debe compartirse entre operaciones distintas.
+#[derive(Debug)]
+pub struct TransferProgressThrottle {
+    policy: TransferProgressPolicy,
+    last_loaded: u64,
+    last_emitted_at: Instant,
+}
+
+impl TransferProgressThrottle {
+    pub fn new(policy: TransferProgressPolicy) -> Self {
+        Self {
+            policy,
+            last_loaded: 0,
+            last_emitted_at: Instant::now(),
+        }
+    }
+
+    /// Decide si se publica esta muestra. Las emisiones finales siempre pasan.
+    pub fn should_emit(&mut self, loaded: u64, is_final: bool) -> bool {
+        let elapsed = self.last_emitted_at.elapsed();
+        let enough_bytes = loaded.saturating_sub(self.last_loaded) >= self.policy.min_bytes;
+        let min_interval_elapsed = elapsed >= self.policy.min_interval;
+        let max_interval_elapsed = elapsed >= self.policy.max_interval;
+
+        if is_final || (min_interval_elapsed && (enough_bytes || max_interval_elapsed)) {
+            self.last_loaded = loaded;
+            self.last_emitted_at = Instant::now();
+            true
+        } else {
+            false
+        }
+    }
+}
+
 /// Estima el tiempo restante para completar una descarga, en segundos.
 ///
 /// Devuelve `None` cuando la descarga ya está completa (`downloaded >= total`)

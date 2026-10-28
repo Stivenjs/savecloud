@@ -18,7 +18,16 @@ import { useStreamingMetricsStore } from "@store/StreamingMetricsStore";
 export interface SyncProgressState {
   type: "upload" | "download";
   operationId?: string;
-  status?: "queued" | "running" | "pausing" | "paused" | "cancelling" | "cancelled" | "completed" | "failed";
+  status?:
+    | "queued"
+    | "running"
+    | "extracting"
+    | "pausing"
+    | "paused"
+    | "cancelling"
+    | "cancelled"
+    | "completed"
+    | "failed";
   canPause?: boolean;
   canCancel?: boolean;
   canResume?: boolean;
@@ -86,6 +95,7 @@ function markFriendImportFinished(operationId?: string): void {
 }
 
 function isTaskFinished(task: SyncProgressState): boolean {
+  if (task.status === "extracting") return false;
   const reachedTotal = task.total > 0 && task.loaded >= task.total;
   return reachedTotal || task.status === "completed" || task.status === "failed";
 }
@@ -126,7 +136,12 @@ export const useSyncStore = create<SyncStore>((set) => ({
         staleTimer = null;
       }
 
-      if (nextProgress && nextProgress.total > 0 && nextProgress.loaded >= nextProgress.total) {
+      if (
+        nextProgress &&
+        nextProgress.status !== "extracting" &&
+        nextProgress.total > 0 &&
+        nextProgress.loaded >= nextProgress.total
+      ) {
         staleTimer = setTimeout(() => {
           set({ progress: null, syncOperation: null });
           staleTimer = null;
