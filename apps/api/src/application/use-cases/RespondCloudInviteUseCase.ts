@@ -14,6 +14,9 @@ export class RespondCloudInviteUseCase {
 
   async execute(input: RespondCloudInviteInput): Promise<CloudInvite> {
     const userId = input.userId.trim();
+    if (input.token !== undefined && !/^[a-f0-9]{48}$/.test(input.token)) {
+      throw new ApplicationError("INVALID_ARGUMENT", "El código de invitación no es válido.");
+    }
     const invite = input.inviteId
       ? await this.repository.getInviteById(input.inviteId)
       : input.token

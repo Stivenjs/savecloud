@@ -5,6 +5,43 @@ use crate::network::API_CLIENT;
 use serde::{Deserialize, Serialize};
 use tauri::command;
 
+const INVITE_TOKEN_LENGTH: usize = 48;
+
+fn validate_invite_token(token: &str) -> AppResult<()> {
+    if token.len() == INVITE_TOKEN_LENGTH
+        && token
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        Ok(())
+    } else {
+        Err(AppError::new(
+            "INVALID_ARGUMENT",
+            "El código de invitación no es válido.",
+        ))
+    }
+}
+
+fn parse_invite_url(invite_url: &str) -> AppResult<(String, String)> {
+    let trimmed = invite_url.trim();
+    let marker = "/invites/accept/";
+    let idx = trimmed.find(marker).ok_or_else(|| {
+        AppError::new(
+            "INVALID_ARGUMENT",
+            "El enlace no tiene un formato de invitación válido.",
+        )
+    })?;
+    let base_url = normalize_base_url(&trimmed[..idx]);
+    let suffix = &trimmed[idx + marker.len()..];
+    let token = suffix
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches('/');
+    validate_invite_token(token)?;
+    Ok((base_url, token.to_string()))
+}
+
 fn is_local_net(s: &str) -> bool {
     let cleaned = s
         .trim_start_matches("https://")
@@ -369,6 +406,7 @@ pub async fn respond_cloud_invite(invite_id: String, action: String) -> AppResul
 
 #[command]
 pub async fn accept_cloud_invite_by_token(token: String) -> AppResult<()> {
+    validate_invite_token(token.trim())?;
     let (base_url, api_key, user_id) = load_active_member_api_auth()?;
     let endpoint = format!("{}/invites/accept-token", base_url);
     let payload = serde_json::json!({ "token": token.trim() });
@@ -405,21 +443,8 @@ pub async fn accept_cloud_invite_by_url(invite_url: String) -> AppResult<()> {
         .trim()
         .to_string();
 
-    let trimmed = invite_url.trim().to_string();
-    if trimmed.is_empty() {
-        return Err("URL vacía".into());
-    }
-
-    // Espera algo como: https://host.tld/invites/accept/<token>
-    let marker = "/invites/accept/";
-    let idx = trimmed
-        .find(marker)
-        .ok_or("URL inválida: falta /invites/accept/<token>")?;
-    let base_url = normalize_base_url(&trimmed[..idx]);
-    let token = trimmed[idx + marker.len()..].trim().to_string();
-    if token.is_empty() {
-        return Err("URL inválida: token vacío".into());
-    }
+    // Rechaza enlaces concatenados o malformados antes de generar una solicitud a la API.
+    let (base_url, token) = parse_invite_url(&invite_url)?;
 
     let endpoint = format!("{}/invites/accept-token", base_url);
     let payload = serde_json::json!({ "token": token });
@@ -619,4 +644,36 @@ pub async fn list_cloud_presence() -> AppResult<Vec<CloudPresenceDto>> {
         })?;
 
     Ok(parsed.items)
+}
+
+#[cfg(test)]
+mod invite_token_tests {
+    use super::{parse_invite_url, validate_invite_token};
+
+    const VALID_TOKEN: &str = "5571a1ade6ee46173aa026bd6c22a6e65a7a11ca9c4b7740";
+
+    #[test]
+    fn accepts_only_generated_hex_tokens() {
+        assert!(validate_invite_token(VALID_TOKEN).is_ok());
+        assert!(validate_invite_token(&format!("{VALID_TOKEN}https://localhost:3000")).is_err());
+    }
+
+    #[test]
+    fn extracts_token_and_ignores_query_and_fragment() {
+        let (base_url, token) = parse_invite_url(&format!(
+            "https://cloud.example/invites/accept/{VALID_TOKEN}?source=copy#{VALID_TOKEN}"
+        ))
+        .expect("a well-formed invite URL should be accepted");
+
+        assert_eq!(base_url, "https://cloud.example");
+        assert_eq!(token, VALID_TOKEN);
+    }
+
+    #[test]
+    fn rejects_concatenated_invite_urls() {
+        let malformed = format!(
+            "https://cloud.example/invites/accept/{VALID_TOKEN}https://cloud.example/invites/accept/{VALID_TOKEN}"
+        );
+        assert!(parse_invite_url(&malformed).is_err());
+    }
 }

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import Fastify from "fastify";
 import rateLimit from "@fastify/rate-limit";
-import { ApplicationError } from "../../application/errors/ApplicationError";
-import { registerHttpErrorHandler } from "./error-handler";
+import { ApplicationError } from "@application/errors/ApplicationError";
+import { registerHttpErrorHandler } from "@interfaces/http/error-handler";
 
 describe("HTTP error contract", () => {
   async function makeApp() {
