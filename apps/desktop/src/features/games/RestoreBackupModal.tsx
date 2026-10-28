@@ -468,7 +468,7 @@ export function RestoreBackupModal({
         <ModalContent>
           <ModalHeader className="flex items-center gap-3">
             {game && (
-              <div className="size-12 shrink-0 overflow-hidden rounded-xl border border-divider bg-default-100">
+              <div className="h-12 w-[4.5rem] shrink-0 overflow-hidden rounded-xl border border-divider bg-default-100">
                 {hasCapsuleImage ? (
                   <img
                     src={capsuleImage ?? undefined}
