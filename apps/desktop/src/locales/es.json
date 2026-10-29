@@ -1849,7 +1849,9 @@
       "scheduledDeletionTooltip": "Purga programada: {{date}}",
       "purgeIn": "Purga en {{count}} día",
       "purgeIn_other": "Purga en {{count}} días",
-      "purgeImminent": "Purga inminente"
+      "purgeImminent": "Purga inminente",
+      "pendingDeletion": "Eliminación programada",
+      "deletionScheduledAt": "Purga el {{date}}"
     },
     "cloudMembersPanel": {
       "loading": "Cargando miembros...",

@@ -94,6 +94,7 @@ function FriendsPageContent() {
     handleRespondInvite,
     handleLeaveMembership,
     handleRemoveMember,
+    handleCancelMemberDeletion,
     handleUseHostCloud,
     activeCloudHostUserId,
     lastCreatedInviteToken,
@@ -272,6 +273,7 @@ function FriendsPageContent() {
             handleRespondInvite={handleRespondInvite}
             handleLeaveMembership={handleLeaveMembership}
             handleRemoveMember={handleRemoveMember}
+            onCancelMemberDeletion={handleCancelMemberDeletion}
             handleUseHostCloud={handleUseHostCloud}
             activeCloudHostUserId={activeCloudHostUserId}
             lastCreatedInviteToken={lastCreatedInviteToken}

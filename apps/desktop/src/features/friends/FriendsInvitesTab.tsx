@@ -2,7 +2,22 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button, Chip, Divider, Input, Skeleton, Tab, Tabs } from "@heroui/react";
 import { useTranslation } from "react-i18next";
-import { Check, Clock, Cloud, Copy, LogOut, Mail, Plus, RefreshCcw, Trash2, UserRound, Eye, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Clock,
+  Cloud,
+  Copy,
+  LogOut,
+  Mail,
+  Plus,
+  RefreshCcw,
+  RotateCcw,
+  Trash2,
+  UserRound,
+  Eye,
+  X,
+} from "lucide-react";
 import type { CloudInvite, CloudMembership, CloudPresenceItem } from "@services/tauri/invites.service";
 import { listCloudPresence } from "@services/tauri/invites.service";
 import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
@@ -109,6 +124,7 @@ interface FriendsInvitesTabProps {
   handleRespondInvite: (inviteId: string, action: "accept" | "reject") => void | Promise<void>;
   handleLeaveMembership: (hostUserId: string) => void | Promise<void>;
   handleRemoveMember: (memberUserId: string) => void | Promise<void>;
+  onCancelMemberDeletion?: (memberUserId: string) => void | Promise<void>;
   handleUseHostCloud: (hostUserId: string | null) => void | Promise<void>;
   activeCloudHostUserId: string | null;
   lastCreatedInviteToken: string | null;
@@ -135,6 +151,7 @@ export function FriendsInvitesTab({
   handleRespondInvite,
   handleLeaveMembership,
   handleRemoveMember,
+  onCancelMemberDeletion,
   handleUseHostCloud,
   activeCloudHostUserId,
   lastCreatedInviteToken,
@@ -225,6 +242,11 @@ export function FriendsInvitesTab({
     }
 
     setPendingCloudAction(null);
+  };
+
+  const handleCancelDeletion = async (memberUserId: string) => {
+    if (!onCancelMemberDeletion) return;
+    await onCancelMemberDeletion(memberUserId);
   };
 
   return (
@@ -528,49 +550,91 @@ export function FriendsInvitesTab({
                   />
                 ) : (
                   <div className="space-y-2">
-                    {hostMemberships.map((m) => (
-                      <div
-                        key={`${m.hostUserId}-${m.memberUserId}`}
-                        className="flex flex-col gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <ProfileAvatar
-                            rawAvatar={memberAvatarByUser.get(m.memberUserId)}
-                            userId={m.memberUserId}
-                            size="sm"
-                          />
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-medium">{m.memberUserId}</p>
-                            <FriendPresenceSubtitle
+                    {hostMemberships.map((m) => {
+                      const isPendingDeletion = !m.active && Boolean(m.scheduledDeletionAt);
+                      return (
+                        <div
+                          key={`${m.hostUserId}-${m.memberUserId}`}
+                          className={`flex flex-col gap-2 rounded-lg border px-3 py-2 sm:flex-row sm:items-center sm:justify-between ${
+                            isPendingDeletion ? "border-warning/40 bg-warning/5" : "border-default-200 bg-default-50"
+                          }`}>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <ProfileAvatar
+                              rawAvatar={memberAvatarByUser.get(m.memberUserId)}
                               userId={m.memberUserId}
-                              roleLabel={t("friends.invitesTab.member")}
-                              presence={getPresence(m.memberUserId)}
+                              size="sm"
+                              className={isPendingDeletion ? "opacity-50" : undefined}
                             />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <p
+                                  className={`truncate text-xs font-medium ${isPendingDeletion ? "text-default-400" : ""}`}>
+                                  {m.memberUserId}
+                                </p>
+                                {isPendingDeletion && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning">
+                                    <AlertTriangle className="h-2.5 w-2.5" />
+                                    {t("friends.cloudMembers.pendingDeletion")}
+                                  </span>
+                                )}
+                              </div>
+                              {isPendingDeletion && m.scheduledDeletionAt ? (
+                                <p className="text-[10px] text-warning/70">
+                                  {t("friends.cloudMembers.deletionScheduledAt", {
+                                    date: new Date(m.scheduledDeletionAt).toLocaleDateString(),
+                                  })}
+                                </p>
+                              ) : (
+                                <FriendPresenceSubtitle
+                                  userId={m.memberUserId}
+                                  roleLabel={t("friends.invitesTab.member")}
+                                  presence={getPresence(m.memberUserId)}
+                                />
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                            {!isPendingDeletion && (
+                              <PresenceStatusChip
+                                loading={cloudPresenceLoading}
+                                status={getPresence(m.memberUserId)?.status}
+                              />
+                            )}
+                            <Button
+                              size="sm"
+                              variant="flat"
+                              color="primary"
+                              startContent={<Eye className="h-3.5 w-3.5" />}
+                              onPress={() => onViewCloudPeerProfile(m.memberUserId)}>
+                              {t("friends.invitesTab.viewProfile")}
+                            </Button>
+                            {isPendingDeletion && onCancelMemberDeletion ? (
+                              <Button
+                                size="sm"
+                                variant="flat"
+                                color="warning"
+                                isLoading={inviteBusy}
+                                startContent={!inviteBusy && <RotateCcw className="h-3.5 w-3.5" />}
+                                onPress={() => void handleCancelDeletion(m.memberUserId)}>
+                                {t("friends.cloudMembers.cancelDeletion")}
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="light"
+                                color="danger"
+                                isDisabled={isPendingDeletion}
+                                startContent={<Trash2 className="h-3.5 w-3.5" />}
+                                onPress={() =>
+                                  setPendingCloudAction({ type: "remove-member", userId: m.memberUserId })
+                                }>
+                                {t("friends.invitesTab.delete")}
+                              </Button>
+                            )}
                           </div>
                         </div>
-                        <div className="flex shrink-0 flex-wrap justify-end gap-2">
-                          <PresenceStatusChip
-                            loading={cloudPresenceLoading}
-                            status={getPresence(m.memberUserId)?.status}
-                          />
-                          <Button
-                            size="sm"
-                            variant="flat"
-                            color="primary"
-                            startContent={<Eye className="h-3.5 w-3.5" />}
-                            onPress={() => onViewCloudPeerProfile(m.memberUserId)}>
-                            {t("friends.invitesTab.viewProfile")}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="light"
-                            color="danger"
-                            startContent={<Trash2 className="h-3.5 w-3.5" />}
-                            onPress={() => setPendingCloudAction({ type: "remove-member", userId: m.memberUserId })}>
-                            {t("friends.invitesTab.delete")}
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
