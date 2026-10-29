@@ -1,4 +1,5 @@
 import type { SaveRepository } from "@domain/ports/SaveRepository";
+import { assertSafeSavePath } from "@application/helpers/savePathValidator";
 
 export const MAX_PARTS_INIT_WITH_URLS = 200;
 
@@ -17,12 +18,13 @@ export interface CreateMultipartUploadWithPartUrlsOutput {
 
 /**
  * Inicia multipart y devuelve todas las URLs de partes en una sola invocación (menos Lambda).
- * partCount se limita a MAX_PARTS_INIT_WITH_URLS para evitar timeouts/respuestas enormes.
+ * Valida los parámetros de ruta y limita partCount a MAX_PARTS_INIT_WITH_URLS.
  */
 export class CreateMultipartUploadWithPartUrlsUseCase {
   constructor(private readonly saveRepository: SaveRepository) {}
 
   async execute(input: CreateMultipartUploadWithPartUrlsInput): Promise<CreateMultipartUploadWithPartUrlsOutput> {
+    assertSafeSavePath(input.gameId, input.filename);
     const partCount = Math.min(Math.max(1, Math.floor(input.partCount)), MAX_PARTS_INIT_WITH_URLS);
     return this.saveRepository.createMultipartUploadWithPartUrls(input.userId, input.gameId, input.filename, partCount);
   }
