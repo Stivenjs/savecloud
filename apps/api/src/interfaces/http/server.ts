@@ -28,6 +28,9 @@ if (process.env.NODE_ENV === "production") {
   if (!process.env.API_KEY?.trim()) {
     throw new Error("[bootstrap] API_KEY es obligatoria en producción; la API no puede iniciar sin autenticación.");
   }
+  if (!process.env.ACCESS_TOKEN_SECRET?.trim()) {
+    throw new Error("[bootstrap] ACCESS_TOKEN_SECRET es obligatoria en producción para firmar sesiones de invitados.");
+  }
 
   // Las instalaciones con DynamoDB local (por ejemplo, Docker) también deben
   // proteger sus rutas. La validación completa solo aplica al despliegue sin
@@ -153,6 +156,7 @@ async function main(): Promise<void> {
       app,
       connectionRepository,
       webSocketNotifier,
+      accessSessionRepository: stores.accessSessionRepository,
     });
   } else {
     app.listen({ port, host }, (err, address) => {

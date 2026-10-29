@@ -42,6 +42,7 @@ pub fn invalidate_config_cache() {
 pub const KEYRING_SERVICE: &str = "savecloud_api";
 pub const KEYRING_ACCOUNT: &str = "default_user";
 const KEYRING_ACCOUNT_CLOUD_HOST_PREFIX: &str = "cloud_host_";
+const KEYRING_ACCOUNT_CLOUD_HOST_REFRESH_PREFIX: &str = "cloud_host_refresh_";
 const KEYRING_ACCOUNT_STEAM_WEB_API: &str = "steam_web_api";
 const KEYRING_PROFILE_SERVICE_PREFIX: &str = "savecloud_api_profile_";
 const KEYRING_PROFILE_ACCOUNT_API_KEY: &str = "api_key";
@@ -107,6 +108,14 @@ fn cloud_host_keyring_account(host_user_id: &str) -> String {
     )
 }
 
+fn cloud_host_refresh_keyring_account(host_user_id: &str) -> String {
+    format!(
+        "{}{}",
+        KEYRING_ACCOUNT_CLOUD_HOST_REFRESH_PREFIX,
+        host_user_id.trim()
+    )
+}
+
 pub fn get_secure_api_key_for_cloud_host(host_user_id: &str) -> Option<String> {
     if let Some(profile_id) = active_profile_id() {
         let account = cloud_host_keyring_account(host_user_id);
@@ -136,13 +145,36 @@ pub fn set_secure_api_key_for_cloud_host(host_user_id: &str, key: &str) -> Resul
     set_secret(KEYRING_SERVICE, &account, key, MASKED_API_KEY)
 }
 
+pub fn get_secure_refresh_token_for_cloud_host(host_user_id: &str) -> Option<String> {
+    let account = cloud_host_refresh_keyring_account(host_user_id);
+    if let Some(profile_id) = active_profile_id() {
+        let service = profile_service(&profile_id);
+        if let Some(value) = get_secret(&service, &account, MASKED_API_KEY) {
+            return Some(value);
+        }
+        return get_secret(KEYRING_SERVICE, &account, MASKED_API_KEY);
+    }
+    get_secret(KEYRING_SERVICE, &account, MASKED_API_KEY)
+}
+
+pub fn set_secure_refresh_token_for_cloud_host(host_user_id: &str, token: &str) -> Result<(), String> {
+    let account = cloud_host_refresh_keyring_account(host_user_id);
+    if let Some(profile_id) = active_profile_id() {
+        return set_secret(&profile_service(&profile_id), &account, token, MASKED_API_KEY);
+    }
+    set_secret(KEYRING_SERVICE, &account, token, MASKED_API_KEY)
+}
+
 pub fn delete_secure_api_key_for_cloud_host_in_profile(
     profile_id: &str,
     host_user_id: &str,
 ) -> Result<(), String> {
     let account = cloud_host_keyring_account(host_user_id);
+    let refresh_account = cloud_host_refresh_keyring_account(host_user_id);
     let _ = delete_secret(&profile_service(profile_id), &account);
+    let _ = delete_secret(&profile_service(profile_id), &refresh_account);
     let _ = delete_secret(KEYRING_SERVICE, &account);
+    let _ = delete_secret(KEYRING_SERVICE, &refresh_account);
     Ok(())
 }
 pub fn delete_secure_api_key_for_cloud_host(host_user_id: &str) -> Result<(), String> {
@@ -154,7 +186,9 @@ pub fn delete_secure_api_key_for_cloud_host(host_user_id: &str) -> Result<(), St
         let _ = delete_secure_api_key_for_cloud_host_in_profile(&profile_id, host);
     } else {
         let account = cloud_host_keyring_account(host);
+        let refresh_account = cloud_host_refresh_keyring_account(host);
         let _ = delete_secret(KEYRING_SERVICE, &account);
+        let _ = delete_secret(KEYRING_SERVICE, &refresh_account);
     }
     Ok(())
 }

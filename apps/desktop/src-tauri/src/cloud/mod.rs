@@ -5,6 +5,7 @@
 //! sincronización de estado entre usuarios y broadcasts de actividad de juegos.
 
 pub mod api_error;
+pub mod session_refresh;
 pub mod ws_client; // Lógica de bajo nivel de la conexión (tungstenite).
 pub mod ws_commands; // Comandos de la API de Tauri expuestos al frontend.
 pub mod ws_manager; // Gestión del estado compartido de la conexión en Tauri.

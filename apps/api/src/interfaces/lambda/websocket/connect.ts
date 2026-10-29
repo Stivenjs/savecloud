@@ -4,7 +4,8 @@ import { NodeHttpHandler } from "@smithy/node-http-handler";
 import { Agent } from "https";
 import { DynamoDbConnectionRepository } from "@infrastructure/persistence/DynamoDbConnectionRepository";
 import { verifyUserAccessToken } from "@shared/accessToken";
-import { timingSafeEqual } from "crypto";
+import { DynamoDbAccessSessionRepository } from "@infrastructure/persistence/DynamoDbAccessSessionRepository";
+import { safeCompareSecret } from "@shared/safeCompare";
 
 const CONNECTION_TTL_SECONDS = 24 * 60 * 60; // 24 h
 
@@ -15,6 +16,7 @@ function requireEnv(name: string): string {
 }
 
 const connectionsTable = requireEnv("CONNECTIONS_TABLE");
+const cloudInvitesTable = requireEnv("CLOUD_INVITES_TABLE");
 const expectedApiKey = requireEnv("API_KEY");
 
 const dynamoClient = new DynamoDBClient({
@@ -26,6 +28,7 @@ const dynamoClient = new DynamoDBClient({
 });
 
 const connectionRepo = new DynamoDbConnectionRepository(dynamoClient, connectionsTable);
+const accessSessionRepository = new DynamoDbAccessSessionRepository(dynamoClient, cloudInvitesTable);
 
 type APIGatewayWebsocketConnectEvent = APIGatewayProxyWebsocketEventV2 & {
   headers?: Record<string, string>;
@@ -38,19 +41,11 @@ type LambdaWebsocketResult = { statusCode: 200 | 401 | 500; body: string };
  * Evita el bug de UTF-8 donde caracteres multi-byte producen buffers
  * de distinta longitud aunque los strings sean lógicamente iguales.
  */
-function safeCompare(a: string, b: string): boolean {
-  if (!a || !b) return false;
-  const ba = Buffer.from(a, "base64");
-  const bb = Buffer.from(b, "base64");
-  if (ba.length !== bb.length) return false;
-  return timingSafeEqual(ba, bb);
-}
-
 /**
  * Resuelve el userId verificado desde los headers del handshake.
  *
  * - Host (dueño del cloud): x-user-id + x-api-key
- * - Invitado:               x-user-id + x-api-key (token sc1 firmado)
+ * - Invitado:               x-user-id + x-api-key (token sc2 firmado y sesión activa)
  *
  * Retorna null si las credenciales no son válidas o no coinciden con el userId declarado.
  */
@@ -60,7 +55,9 @@ function getHeader(headers: Record<string, string> | undefined, name: string): s
   return entry?.[1]?.trim() ?? "";
 }
 
-function resolveVerifiedUserId(headers: Record<string, string> | undefined): string | null {
+async function resolveVerifiedUserId(
+  headers: Record<string, string> | undefined
+): Promise<{ userId: string; sessionId?: string } | null> {
   if (!headers) {
     console.debug("[ws:connect] NO HEADERS — reject");
     return null;
@@ -73,9 +70,9 @@ function resolveVerifiedUserId(headers: Record<string, string> | undefined): str
   }
 
   const apiKey = getHeader(headers, "x-api-key");
-  if (apiKey && expectedApiKey && safeCompare(apiKey, expectedApiKey)) {
+  if (apiKey && safeCompareSecret(apiKey, expectedApiKey)) {
     console.info("[ws:connect] HOST AUTHORIZED", { userId: declaredUserId });
-    return declaredUserId;
+    return { userId: declaredUserId };
   }
 
   const authorization = getHeader(headers, "authorization");
@@ -99,15 +96,27 @@ function resolveVerifiedUserId(headers: Record<string, string> | undefined): str
     return null;
   }
 
+  if (!verified.sessionId || !verified.hostUserId) return null;
+  const session = await accessSessionRepository.get(verified.sessionId);
+  if (
+    !session ||
+    !session.active ||
+    session.userId !== verified.userId ||
+    session.hostUserId !== verified.hostUserId ||
+    session.expiresAtEpoch <= Math.floor(Date.now() / 1000)
+  ) {
+    return null;
+  }
+
   console.info("[ws:connect] GUEST AUTHORIZED", { userId: declaredUserId });
-  return declaredUserId;
+  return { userId: declaredUserId, sessionId: verified.sessionId };
 }
 
 export const handler = async (event: APIGatewayWebsocketConnectEvent): Promise<LambdaWebsocketResult> => {
   const connectionId = event.requestContext.connectionId;
-  const verifiedUserId = resolveVerifiedUserId(event.headers);
+  const identity = await resolveVerifiedUserId(event.headers);
 
-  if (!verifiedUserId) {
+  if (!identity) {
     console.warn("[ws:connect] REJECTED", {
       connectionId,
       headerNames: Object.keys(event.headers ?? {}).map((key) => key.toLowerCase()),
@@ -118,8 +127,8 @@ export const handler = async (event: APIGatewayWebsocketConnectEvent): Promise<L
   const deviceId = getHeader(event.headers, "x-device-id");
   const ttl = Math.floor(Date.now() / 1000) + CONNECTION_TTL_SECONDS;
   try {
-    await connectionRepo.saveConnection(connectionId, verifiedUserId, ttl, deviceId);
-    console.info("[ws:connect] Connection saved", { connectionId, userId: verifiedUserId, deviceId });
+    await connectionRepo.saveConnection(connectionId, identity.userId, ttl, deviceId);
+    console.info("[ws:connect] Connection saved", { connectionId, userId: identity.userId, deviceId });
   } catch (error) {
     console.error("[ws:connect] Failed to save connection", { connectionId, error });
     return { statusCode: 500, body: "Internal Server Error" };

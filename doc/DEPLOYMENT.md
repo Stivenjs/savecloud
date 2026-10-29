@@ -56,6 +56,9 @@ Crea un archivo `.env` en la raíz con las siguientes variables:
 # Clave generada en el paso anterior
 SYNC_GAMES_API_KEY=sg_test_...
 
+# Secreto de firma de sesiones; debe ser distinto de SYNC_GAMES_API_KEY.
+ACCESS_TOKEN_SECRET=<secreto-aleatorio-largo>
+
 # Configuración de AWS
 AWS_REGION=us-east-2
 
@@ -65,6 +68,9 @@ USE_ACCELERATE_ENDPOINT=false
 # Puerto para desarrollo local
 PORT=3000
 ```
+
+> [!NOTE]
+> Para consultar la lista completa y detallada de todas las variables, sus valores por defecto y casos de uso, consulta la [Guía de Variables de Entorno](ENVIRONMENT_VARIABLES.md).
 
 ### Sobre la variable `USE_ACCELERATE_ENDPOINT`
 

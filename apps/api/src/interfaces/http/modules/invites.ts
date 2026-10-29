@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 import type { SaveRepository } from "@domain/ports/SaveRepository";
+import type { AccessSessionRepository } from "@domain/ports/AccessSessionRepository";
+import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
 import { CreateCloudInviteUseCase } from "@application/use-cases/CreateCloudInviteUseCase";
 import { GetFriendProfileUseCase } from "@application/use-cases/GetFriendProfileUseCase";
 import { ListCloudPresenceUseCase } from "@application/use-cases/ListCloudPresenceUseCase";
@@ -19,6 +21,8 @@ export async function registerInvitesModule(
     cloudInviteRepository?: CloudInviteRepository;
     connectionRepository?: ConnectionRepository;
     resolveCloudStorageScopeUseCase?: ResolveCloudStorageScopeUseCase;
+    accessSessionRepository?: AccessSessionRepository;
+    webSocketNotifier?: WebSocketNotifier;
   }
 ): Promise<void> {
   if (!deps.cloudInviteRepository) return;
@@ -32,6 +36,8 @@ export async function registerInvitesModule(
       ? new ListCloudPresenceUseCase(deps.cloudInviteRepository, deps.connectionRepository)
       : undefined,
     cloudInviteRepository: deps.cloudInviteRepository,
+    accessSessionRepository: deps.accessSessionRepository,
+    webSocketNotifier: deps.webSocketNotifier,
   });
 
   if (deps.resolveCloudStorageScopeUseCase) {

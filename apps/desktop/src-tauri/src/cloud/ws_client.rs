@@ -124,6 +124,7 @@ pub struct CloudWsAuth {
     pub credential: String,
     pub user_id: String,
     pub device_id: String,
+    pub host_user_id: Option<String>,
 }
 
 /// Cursor de la última mutación remota del inbox.
@@ -248,10 +249,15 @@ pub async fn start_ws_loop(
     let mut last_friend_game: HashMap<String, String> = HashMap::new();
 
     loop {
+        let current_credential = auth
+            .host_user_id
+            .as_deref()
+            .and_then(crate::config::get_secure_api_key_for_cloud_host)
+            .unwrap_or_else(|| auth.credential.clone());
         let request = match url_str.as_str().into_client_request() {
             Ok(mut request) => {
                 let headers = request.headers_mut();
-                let credential = HeaderValue::from_str(&auth.credential);
+                let credential = HeaderValue::from_str(&current_credential);
                 let user_id = HeaderValue::from_str(&auth.user_id);
                 let device_id = HeaderValue::from_str(&auth.device_id);
                 match (credential, user_id, device_id) {

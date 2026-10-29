@@ -113,6 +113,7 @@ pub fn run() {
             tray::create_tray(app)?;
 
             setup::init_states_and_background_tasks(app)?;
+            cloud::session_refresh::start_session_refresh_task();
 
             app.manage(crate::game_mode::GameModeCtl::default());
             let game_mode_handle = app.handle().clone();

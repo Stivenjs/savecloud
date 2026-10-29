@@ -4,9 +4,9 @@
  * Formato de respuesta: 2.0 simple (isAuthorized).
  */
 
-import { timingSafeEqual } from "crypto";
 import { verifyUserAccessToken } from "@shared/accessToken";
 import { isPublicHttpRoute } from "@interfaces/http/security/public-routes";
+import { safeCompareSecret } from "@shared/safeCompare";
 
 const expectedApiKey = process.env.API_KEY?.trim() ?? "";
 const logAuthorizerSuccess = process.env.AUTH_LOG_SUCCESS === "true";
@@ -44,13 +44,6 @@ function getHeader(headers: Record<string, string | string[] | undefined>, name:
   return "";
 }
 
-function safeCompare(a: string, b: string): boolean {
-  const ba = Buffer.from(a, "base64");
-  const bb = Buffer.from(b, "base64");
-  if (ba.length !== bb.length) return false;
-  return timingSafeEqual(ba, bb);
-}
-
 /** Registra y devuelve una respuesta denegada. */
 function deny(reason: string, context: Record<string, string>): DenyResult {
   console.warn(JSON.stringify({ level: "WARN", authorizer: "DENIED", reason, ...context }));
@@ -86,7 +79,7 @@ export async function handler(event: AuthorizerEvent): Promise<AuthorizerResult>
     return deny("missing x-api-key header", { path: rawPath, method });
   }
 
-  if (expectedApiKey && safeCompare(key, expectedApiKey)) {
+  if (expectedApiKey && safeCompareSecret(key, expectedApiKey)) {
     return allow("api-key", { path: rawPath, method });
   }
 
@@ -105,8 +98,17 @@ export async function handler(event: AuthorizerEvent): Promise<AuthorizerResult>
     if (userId !== token.userId) {
       return deny("x-user-id does not match access token", { path: rawPath, method });
     }
+    if (!token.sessionId || !token.hostUserId) {
+      return deny("access token has no active session binding", { path: rawPath, method });
+    }
 
-    return allow("access-token", { path: rawPath, method, userId });
+    return allow("access-token", {
+      path: rawPath,
+      method,
+      userId,
+      sessionId: token.sessionId,
+      hostUserId: token.hostUserId,
+    });
   }
 
   return deny("invalid x-api-key/access-token", { path: rawPath, method });

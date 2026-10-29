@@ -17,7 +17,7 @@ Compose crea una red privada y los servicios se encuentran por nombre DNS de ser
 
 Caddy termina TLS para `DOMAIN` y `s3.DOMAIN`, renueva los certificados y conserva su estado en los volúmenes `caddy_data` y `caddy_config`. El proxy inverso maneja automáticamente el upgrade de WebSocket. El cliente se conecta a `wss://<DOMAIN>/ws` cuando configura la URL `https://<DOMAIN>`.
 
-La API configura CORS con reflejo del origen solicitado (`@fastify/cors`, `origin: true`) y no usa cookies de sesión. En todos los modos, la autenticación HTTP usa `API_KEY`, que Compose alimenta desde `SYNC_GAMES_API_KEY`; WebSocket valida la clave/token que envía el cliente en la query. TLS se termina en Caddy; Fastify tiene `trustProxy` habilitado para reconocer el protocolo y la IP reenviados.
+La API configura CORS con reflejo del origen solicitado (`@fastify/cors`, `origin: true`) y no usa cookies de sesión. `SYNC_GAMES_API_KEY` es la credencial del dueño; los invitados reciben tokens de acceso firmados de una hora y refresh tokens rotativos de treinta días, que el cliente guarda en el llavero del sistema. `ACCESS_TOKEN_SECRET` debe ser un secreto aleatorio distinto de la API key. El WebSocket autentica en el handshake mediante headers, nunca con credenciales en la URL. TLS se termina en Caddy; Fastify confía en los headers reenviados solo desde `TRUSTED_PROXY_CIDRS`.
 
 En Docker, la API guarda las notificaciones de MinIO en una cola SQS compatible y responde al recibir la confirmación de almacenamiento de la cola. `s3-events-worker` reúne eventos concurrentes durante una ventana breve, procesa hasta diez por lote, actualiza DynamoDB e invalida las cachés de la API antes de confirmar los mensajes. La indexación sucede en segundo plano; una carga puede tardar unos instantes en aparecer en una lista. ElasticMQ persiste la cola y los mensajes en el volumen `elasticmq_data`; usa long polling para dormir cuando la cola está vacía. En AWS se conserva el flujo S3 → SQS → Lambda.
 
@@ -100,6 +100,9 @@ bash scripts/docker-setup.sh
 
 `S3_PUBLIC_ENDPOINT` queda configurado como `https://s3.<DOMAIN>`. La API lo usa para firmar las URLs de cargas y descargas. Su endpoint interno sigue siendo `http://minio:9000`.
 
+> [!TIP]
+> Puedes revisar el desglose y propósito de cada variable en la [Guía de Variables de Entorno](ENVIRONMENT_VARIABLES.md).
+
 ### Usar los scripts automatizados
 
 Los scripts construyen e inician la pila con `docker compose up -d --build`, esperan hasta dos minutos a que la API esté saludable, a que termine la inicialización del bucket y a que arranque el worker. Al finalizar imprimen las URLs apropiadas para el modo local o VPS, además de los endpoints internos de Docker. Leen `DOMAIN`, `S3_PUBLIC_ENDPOINT` y `API_PORT` del entorno o del archivo `.env`.
@@ -134,7 +137,7 @@ Para confirmar la emisión del certificado busca en `docker compose logs caddy` 
 curl -I https://savecloud.example.com/health
 ```
 
-En la aplicación de escritorio, ve a **Configuración → Conexión de servidor** y configura `https://savecloud.example.com` junto con `SYNC_GAMES_API_KEY`. La aplicación deriva la conexión WebSocket segura (`wss://`) desde la URL HTTPS. Las cargas y descargas presignadas usan `https://s3.savecloud.example.com`.
+En la aplicación de escritorio, ve a **Configuración → Conexión de servidor** y configura `https://savecloud.example.com` junto con `SYNC_GAMES_API_KEY`. La API key pertenece al dueño y no se comparte con invitados; al aceptar una invitación, SaveCloud guarda una sesión individual en el llavero del sistema. La aplicación deriva la conexión WebSocket segura (`wss://`) desde la URL HTTPS. Las cargas y descargas presignadas usan `https://s3.savecloud.example.com`.
 
 ## Desarrollo local
 

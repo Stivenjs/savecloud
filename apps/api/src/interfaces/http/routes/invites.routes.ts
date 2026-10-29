@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { resolvePublicBaseUrl } from "@shared/utils";
-import { getUserId } from "@interfaces/http/helpers/request-context";
+import { getBootstrapUserId, getUserId } from "@interfaces/http/helpers/request-context";
 import { ApplicationError } from "@application/errors/ApplicationError";
 import type { CreateCloudInviteUseCase } from "@application/use-cases/CreateCloudInviteUseCase";
 import type { ListPendingCloudInvitesUseCase } from "@application/use-cases/ListPendingCloudInvitesUseCase";
@@ -8,7 +8,9 @@ import type { RespondCloudInviteUseCase } from "@application/use-cases/RespondCl
 import type { SetCloudGameShareUseCase } from "@application/use-cases/SetCloudGameShareUseCase";
 import type { ListCloudPresenceUseCase } from "@application/use-cases/ListCloudPresenceUseCase";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
-import { issueUserAccessToken } from "@shared/accessToken";
+import { createAccessSession } from "@shared/accessSession";
+import type { AccessSessionRepository } from "@domain/ports/AccessSessionRepository";
+import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
 import { inviteAcceptanceRateLimit, inviteCreationRateLimit } from "@interfaces/http/rate-limits/invite";
 import {
   AcceptByTokenSchema,
@@ -32,6 +34,8 @@ export async function registerInviteRoutes(
     setCloudGameShareUseCase: SetCloudGameShareUseCase;
     listCloudPresenceUseCase?: ListCloudPresenceUseCase;
     cloudInviteRepository: CloudInviteRepository;
+    accessSessionRepository?: AccessSessionRepository;
+    webSocketNotifier?: WebSocketNotifier;
   }
 ): Promise<void> {
   app.post<{ Body: CreateInviteBody }>(
@@ -91,17 +95,19 @@ export async function registerInviteRoutes(
     },
     async (request, reply: FastifyReply) => {
       {
-        const userId = getUserId(request);
+        const userId = getBootstrapUserId(request);
         const invite = await deps.respondCloudInviteUseCase.execute({
           userId,
           token: request.body.token.trim(),
           action: "accept",
         });
-        const accessToken = issueUserAccessToken(userId, 0);
+        if (!deps.accessSessionRepository) {
+          throw new ApplicationError("SERVICE_UNAVAILABLE", "No se puede crear una sesión segura ahora.");
+        }
+        const session = await createAccessSession(deps.accessSessionRepository, userId, invite.hostUserId);
         return reply.send({
-          accessToken,
+          ...session,
           apiUrl: `${request.protocol}://${request.hostname}`,
-          hostUserId: invite.hostUserId,
           wsUrl: invite.wsUrl,
         });
       }
@@ -203,6 +209,8 @@ export async function registerInviteRoutes(
           throw new ApplicationError("FORBIDDEN", "Solo el miembro puede abandonar su propia membresía.");
         }
         await deps.cloudInviteRepository.deactivateMembership(hostUserId, memberUserId);
+        await deps.accessSessionRepository?.revokeMembershipSessions(hostUserId, memberUserId);
+        await deps.webSocketNotifier?.disconnectUser?.(memberUserId);
         return reply.status(204).send();
       }
     }
@@ -220,6 +228,8 @@ export async function registerInviteRoutes(
           throw new ApplicationError("FORBIDDEN", "Solo el anfitrión puede quitar miembros.");
         }
         await deps.cloudInviteRepository.deactivateMembership(hostUserId, memberUserId);
+        await deps.accessSessionRepository?.revokeMembershipSessions(hostUserId, memberUserId);
+        await deps.webSocketNotifier?.disconnectUser?.(memberUserId);
         return reply.status(204).send();
       }
     }
