@@ -249,6 +249,7 @@ pub async fn start_ws_loop(
     let mut last_friend_game: HashMap<String, String> = HashMap::new();
 
     loop {
+        let _ = crate::cloud::session_refresh::ensure_active_guest_token_valid().await;
         let current_credential = auth
             .host_user_id
             .as_deref()

@@ -38,6 +38,7 @@ pub async fn poll_and_serve_pending_sessions() -> Result<u32, String> {
     }
 
     let device_id = resolve_device_id()?;
+    crate::cloud::session_refresh::ensure_active_guest_token_valid().await?;
     let ctx = resolve_api_context()?;
 
     let url = format!(

@@ -30,6 +30,7 @@ pub async fn push_batch(items: Vec<NotificationRecordDto>) -> Result<(), String>
     if items.is_empty() {
         return Ok(());
     }
+    crate::cloud::session_refresh::ensure_active_guest_token_valid().await?;
     let ctx = crate::commands::sync::context::resolve_api_context()?;
     let url = notifications_url(&ctx.base_url, "/batch");
     let body = NotificationBatchBody { items };
@@ -53,6 +54,7 @@ pub async fn pull_since(
     cursor: Option<&str>,
     limit: i64,
 ) -> Result<NotificationListResponse, String> {
+    crate::cloud::session_refresh::ensure_active_guest_token_valid().await?;
     let ctx = crate::commands::sync::context::resolve_api_context()?;
     let mut url = notifications_url(&ctx.base_url, "");
     let mut q = format!("?limit={limit}");
@@ -82,6 +84,7 @@ pub async fn ack_remote(ids: Vec<String>, read: bool, dismiss: bool) -> Result<(
     if ids.is_empty() {
         return Ok(());
     }
+    crate::cloud::session_refresh::ensure_active_guest_token_valid().await?;
     let ctx = crate::commands::sync::context::resolve_api_context()?;
     let url = notifications_url(&ctx.base_url, "/ack");
     let body = NotificationAckBody {

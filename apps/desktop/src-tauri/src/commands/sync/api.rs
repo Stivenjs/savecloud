@@ -134,6 +134,7 @@ pub(crate) async fn api_request_with_etag(
     body: Option<&[u8]>,
     if_none_match: Option<&str>,
 ) -> Result<reqwest::Response, String> {
+    crate::cloud::session_refresh::ensure_active_guest_token_valid().await?;
     let url = format!("{}/saves{}", base_url.trim_end_matches('/'), path);
     let active_host = crate::config::load_settings()
         .active_cloud_host_user_id
@@ -141,6 +142,13 @@ pub(crate) async fn api_request_with_etag(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
+
+    let effective_api_key = if let Some(host) = active_host.as_deref() {
+        crate::config::get_secure_api_key_for_cloud_host(host).unwrap_or_else(|| api_key.to_string())
+    } else {
+        api_key.to_string()
+    };
+
     let method = reqwest::Method::from_bytes(method.as_bytes())
         .map_err(|error| format!("Método HTTP inválido '{method}': {error}"))?;
     let retry_safe = super::retry::is_safe_to_retry(&method, path);
@@ -150,7 +158,7 @@ pub(crate) async fn api_request_with_etag(
         let mut req = API_CLIENT
             .request(method.clone(), &url)
             .header("x-user-id", user_id)
-            .header("x-api-key", api_key);
+            .header("x-api-key", &effective_api_key);
 
         if let Some(etag) = if_none_match {
             req = req.header("If-None-Match", etag);

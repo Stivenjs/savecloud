@@ -55,6 +55,7 @@ pub async fn backup_config_force() -> Result<(), String> {
 
 async fn backup_config(force: bool) -> Result<bool, String> {
     let _guard = BACKUP_LOCK.lock().await;
+    crate::cloud::session_refresh::ensure_active_guest_token_valid().await?;
     let context = crate::commands::sync::context::resolve_api_context()?;
     let combined = crate::config::backup_snapshot::sanitized_config_snapshot(
         &crate::config::get_combined_config(),
