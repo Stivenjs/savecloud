@@ -113,6 +113,7 @@ services:
       - MINIO_ROOT_PASSWORD=${OBJECT_STORAGE_SECRET_KEY:-minioadmin}
       - MINIO_NOTIFY_WEBHOOK_ENABLE_primary=on
       - MINIO_NOTIFY_WEBHOOK_ENDPOINT_primary=http://savecloud-api:3000/webhooks/minio
+      - MINIO_NOTIFY_WEBHOOK_AUTH_TOKEN_primary=${SYNC_GAMES_API_KEY}
     command: server /mnt/data --console-address ":9001" --license /minio.license
     volumes:
       - minio_data:/mnt/data
