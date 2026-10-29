@@ -2,9 +2,13 @@
 	encode gzip zstd
 
 	# Bloquear acceso externo a webhooks internos
-	respond /webhooks/* 403
+	handle /webhooks/* {
+		respond 403
+	}
 
-	reverse_proxy savecloud-api:3000
+	handle {
+		reverse_proxy savecloud-api:3000
+	}
 }
 
 s3.{$DOMAIN} {
