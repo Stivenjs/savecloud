@@ -71,11 +71,6 @@ export function isPublicHttpRoute(method: string, path: string): boolean {
     return true;
   }
 
-  // Webhook de MinIO solo queda público en Docker; en AWS lo protege API Gateway.
-  if (upperMethod === "POST" && path === "/webhooks/minio" && process.env.DYNAMODB_ENDPOINT?.trim()) {
-    return true;
-  }
-
   // Todo lo demás requiere autenticación
   return false;
 }

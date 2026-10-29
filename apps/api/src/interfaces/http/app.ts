@@ -17,8 +17,7 @@ import type { GameInventoryRepository } from "@domain/ports/GameInventoryReposit
 import { registerObservabilityRoutes } from "@interfaces/http/routes/observability.routes";
 import type { ClipRepository } from "@domain/ports/ClipRepository";
 import type { AccessSessionRepository } from "@domain/ports/AccessSessionRepository";
-import { verifyUserAccessToken } from "@shared/accessToken";
-import { isPublicRoute } from "@interfaces/http/security/public-routes";
+import { registerApiKeyAuthHook } from "@interfaces/http/security/auth-hook";
 import { ProcessS3EventUseCase } from "@application/use-cases/ProcessS3EventUseCase";
 import { registerWebhookRoutes } from "@interfaces/http/routes/webhooks.routes";
 import { registerWebSocketRoutes } from "@interfaces/http/routes/websocket.routes";
@@ -31,10 +30,8 @@ import { registerShareModule } from "@interfaces/http/modules/share";
 import { registerClipsModule } from "@interfaces/http/modules/clips";
 import { registerHttpErrorHandler } from "@interfaces/http/error-handler";
 import { healthRateLimit } from "@interfaces/http/rate-limits/health";
-import { ApplicationError } from "@application/errors/ApplicationError";
 import { resolveHttpLoggingConfig } from "@interfaces/http/helpers/http-logging";
 import { registerAuthRoutes } from "@interfaces/http/routes/auth.routes";
-import { safeCompareSecret } from "@shared/safeCompare";
 
 export interface AppDependencies {
   saveRepository: SaveRepository;
@@ -196,93 +193,5 @@ function registerHttpMetricsHooks(app: FastifyInstance, requestLoggingEnabled: b
       statusCode: reply.statusCode,
       durationMs,
     });
-  });
-}
-
-function registerApiKeyAuthHook(
-  app: FastifyInstance,
-  expectedApiKey?: string,
-  accessSessionRepository?: AccessSessionRepository
-): void {
-  app.addHook("onRequest", async (request, reply) => {
-    if (isPublicRoute(request)) return;
-
-    const rawReq = request.raw as {
-      apiGateway?: { event?: { requestContext?: { authorizer?: { lambda?: Record<string, unknown> } } } };
-    };
-    const authorizerLambda =
-      rawReq.apiGateway?.event?.requestContext?.authorizer?.lambda ??
-      request.awsLambda?.event?.requestContext?.authorizer?.lambda;
-
-    if (
-      authorizerLambda &&
-      (authorizerLambda.authMode || authorizerLambda.isAuthorized === true || authorizerLambda.isAuthorized === "true")
-    ) {
-      const authorizedUserId = authorizerLambda.userId;
-      if (typeof authorizedUserId === "string" && authorizedUserId.trim()) {
-        if (authorizerLambda.authMode === "access-token") {
-          const sessionId = authorizerLambda.sessionId;
-          const hostUserId = authorizerLambda.hostUserId;
-          if (typeof sessionId !== "string" || typeof hostUserId !== "string" || !accessSessionRepository) {
-            throw new ApplicationError("UNAUTHENTICATED", "La sesión del usuario no es válida.");
-          }
-          const session = await accessSessionRepository.get(sessionId);
-          if (
-            !session ||
-            !session.active ||
-            session.userId !== authorizedUserId.trim() ||
-            session.hostUserId !== hostUserId.trim() ||
-            session.expiresAtEpoch <= Math.floor(Date.now() / 1000)
-          ) {
-            throw new ApplicationError("UNAUTHENTICATED", "La sesión venció o fue revocada.");
-          }
-        }
-        request.scAuthenticatedUserId = authorizedUserId.trim();
-        if (authorizerLambda.authMode === "access-token") {
-          request.scRateLimitUserId = authorizedUserId.trim();
-        }
-      } else if (authorizerLambda.authMode === "api-key") {
-        const declaredUserId = request.headers["x-user-id"];
-        request.scAuthenticatedUserId = typeof declaredUserId === "string" ? declaredUserId.trim() : undefined;
-      }
-      return;
-    }
-
-    const headerKey = request.headers["x-api-key"];
-    const authorization = request.headers.authorization;
-    const bearer = typeof authorization === "string" ? authorization.match(/^Bearer\s+(.+)$/i)?.[1] : undefined;
-    const key = typeof headerKey === "string" && headerKey.trim() ? headerKey.trim() : bearer?.trim();
-
-    if (expectedApiKey && safeCompareSecret(key ?? "", expectedApiKey)) {
-      const declaredUserId = request.headers["x-user-id"];
-      request.scAuthenticatedUserId = typeof declaredUserId === "string" ? declaredUserId.trim() : undefined;
-      return;
-    }
-
-    if (typeof key === "string" && key.trim()) {
-      const token = verifyUserAccessToken(key);
-      if (token) {
-        const headerUserId = request.headers["x-user-id"];
-        const userId = typeof headerUserId === "string" ? headerUserId.trim() : "";
-
-        if (userId && userId === token.userId) {
-          const session = token.sessionId ? await accessSessionRepository?.get(token.sessionId) : null;
-          if (
-            !session ||
-            !session.active ||
-            session.userId !== token.userId ||
-            session.hostUserId !== token.hostUserId ||
-            session.expiresAtEpoch <= Math.floor(Date.now() / 1000)
-          ) {
-            throw new ApplicationError("UNAUTHENTICATED", "La sesión venció o fue revocada.");
-          }
-          request.scAuthenticatedUserId = token.userId;
-          request.scRateLimitUserId = token.userId;
-          return;
-        }
-      }
-    }
-
-    throw new ApplicationError("UNAUTHENTICATED", "No autorizado.");
   });
 }

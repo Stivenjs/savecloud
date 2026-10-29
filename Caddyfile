@@ -1,11 +1,19 @@
 {$DOMAIN} {
 	encode gzip zstd
-	reverse_proxy savecloud-api:3000
+
+	# Bloquear acceso externo a webhooks internos
+	handle /webhooks/* {
+		respond 403
+	}
+
+	handle {
+		reverse_proxy savecloud-api:3000
+	}
 }
 
 s3.{$DOMAIN} {
 	reverse_proxy minio:9000 {
-		# Presigned uploads can be large; stream them through Caddy without buffering.
+		# Las subidas prefirmadas pueden ser de gran tamaño; transmitirlas en streaming a través de Caddy sin almacenamiento en búfer.
 		flush_interval -1
 	}
 }
