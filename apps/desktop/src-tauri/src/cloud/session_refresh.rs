@@ -1,6 +1,7 @@
 use crate::commands::share::invites::normalize_base_url;
 use crate::config;
 use base64::Engine;
+use rand::Rng;
 use serde::Deserialize;
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -22,12 +23,23 @@ struct SessionTokensDto {
     host_user_id: String,
 }
 
-/// Renueva tokens de invitado al arrancar y periódicamente mientras SaveCloud siga abierto.
+const BASE_REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
+
+/// Aplica jitter aleatorio (±15%) al intervalo de renovación para evitar
+/// que múltiples clientes saturen la API simultáneamente (thundering herd).
+fn next_refresh_interval() -> Duration {
+    let mut rng = rand::thread_rng();
+    let jitter_factor: f64 = rng.gen_range(0.85..=1.15);
+    let millis = (BASE_REFRESH_INTERVAL.as_millis() as f64 * jitter_factor).max(60_000.0);
+    Duration::from_millis(millis as u64)
+}
+
+/// Renueva tokens de invitado al arrancar y periódicamente con jitter mientras SaveCloud siga abierto.
 pub fn start_session_refresh_task() {
     tauri::async_runtime::spawn(async move {
         refresh_all_guest_sessions().await;
         loop {
-            tokio::time::sleep(Duration::from_secs(5 * 60)).await;
+            tokio::time::sleep(next_refresh_interval()).await;
             refresh_all_guest_sessions().await;
         }
     });
