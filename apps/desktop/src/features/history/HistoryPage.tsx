@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useBigPictureConsole } from "@hooks/useBigPictureConsole";
 import { BigPictureHistoryPage } from "@features/history/big-picture/BigPictureHistoryPage";
 import { Card, CardBody, Chip, Spinner, Tab, Tabs } from "@heroui/react";
-import { ChevronDown, ChevronRight, History } from "lucide-react";
+import { ChevronDown, History } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { listOperationHistory, type OperationLogEntry } from "@services/tauri";
 import { formatGameDisplayName } from "@utils/gameImage";
@@ -42,7 +42,7 @@ function HistoryEntryCard({ entry }: HistoryEntryCardProps) {
     <Card
       className={`transition-all duration-200 hover:border-default-400/60 ${
         hasErrors
-          ? "border border-warning-300/80 bg-warning-50/40 dark:border-warning-500/40 dark:bg-warning-500/10"
+          ? "border border-default-300/80 bg-content1 shadow-xs dark:border-white/10 dark:bg-content1"
           : "border border-default-200/60 bg-content1/80 shadow-xs backdrop-blur-xs"
       }`}>
       <CardBody className="flex flex-col gap-0 p-0">
@@ -78,7 +78,7 @@ function HistoryEntryCard({ entry }: HistoryEntryCardProps) {
                 {hasErrors ? (
                   <>
                     <span className="text-default-400">·</span>
-                    <Chip size="sm" color="warning" variant="flat" className="h-5 text-[10.5px] font-semibold">
+                    <Chip size="sm" color="danger" variant="flat" className="h-5 text-[10.5px] font-semibold">
                       {t("history.entry.errors", { count: entry.errCount })}
                     </Chip>
                   </>
@@ -94,27 +94,38 @@ function HistoryEntryCard({ entry }: HistoryEntryCardProps) {
               </span>
             </div>
             {hasErrorDetails ? (
-              <span className="text-warning-500 shrink-0">
-                {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+              <span className="text-default-400 hover:text-foreground shrink-0 transition-colors">
+                <ChevronDown
+                  size={15}
+                  className={`transition-transform duration-300 ease-in-out ${expanded ? "rotate-0" : "-rotate-90"}`}
+                />
               </span>
             ) : null}
           </div>
         </div>
 
-        {hasErrorDetails && expanded ? (
-          <div className="border-t border-warning-300/60 dark:border-warning-500/30 bg-warning-50/60 dark:bg-warning-900/20 px-3 pb-3 pt-2.5">
-            <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-warning-600 dark:text-warning-400">
-              {t("history.entry.errorDetails", { count: entry.errors.length })}
-            </p>
-            <ul className="flex flex-col gap-1.5">
-              {entry.errors.map((msg, i) => (
-                <li
-                  key={i}
-                  className="rounded-md bg-warning-100/80 dark:bg-warning-900/40 px-2.5 py-1.5 font-mono text-[11px] leading-snug text-warning-800 dark:text-warning-200 break-all">
-                  {msg}
-                </li>
-              ))}
-            </ul>
+        {hasErrorDetails ? (
+          <div
+            className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${
+              expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0 pointer-events-none"
+            }`}>
+            <div className="overflow-hidden">
+              <div className="border-t border-default-200/60 bg-default-50/60 px-3 pb-3 pt-2.5 dark:border-white/5 dark:bg-black/30">
+                <div className="mb-2 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-default-500">
+                  <span className="h-1.5 w-1.5 rounded-full bg-danger shrink-0" />
+                  <span>{t("history.entry.errorDetails", { count: entry.errors.length })}</span>
+                </div>
+                <ul className="flex flex-col gap-1.5">
+                  {entry.errors.map((msg, i) => (
+                    <li
+                      key={i}
+                      className="rounded-lg border border-default-200/80 bg-default-100/70 px-3 py-2 font-mono text-[11px] leading-relaxed text-default-800 break-all select-text shadow-xs dark:border-white/10 dark:bg-zinc-950/80 dark:text-zinc-200">
+                      {msg}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
           </div>
         ) : null}
       </CardBody>

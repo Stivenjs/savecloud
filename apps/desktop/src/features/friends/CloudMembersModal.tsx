@@ -6,6 +6,7 @@ interface CloudMembersModalProps {
   onClose: () => void;
   onViewProfile: (userId: string) => void;
   onRemoveMember?: (userId: string) => Promise<void>;
+  onCancelMemberDeletion?: (userId: string) => Promise<void>;
   onLeaveMembership?: (hostId: string) => Promise<void>;
   modalRef: React.RefObject<HTMLElement>;
   onDetachToWindow?: () => void;
@@ -16,6 +17,7 @@ export function CloudMembersModal({
   onClose,
   onViewProfile,
   onRemoveMember,
+  onCancelMemberDeletion,
   onLeaveMembership,
   modalRef,
   onDetachToWindow,
@@ -44,6 +46,7 @@ export function CloudMembersModal({
             onClose={onClose}
             onViewProfile={onViewProfile}
             onRemoveMember={onRemoveMember}
+            onCancelMemberDeletion={onCancelMemberDeletion}
             onLeaveMembership={onLeaveMembership}
             containerRef={modalRef}
             draggable

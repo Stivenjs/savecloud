@@ -220,6 +220,10 @@ pub struct CloudMembershipDto {
     pub created_at: String,
     pub updated_at: String,
     pub active: bool,
+    #[serde(default)]
+    pub scheduled_deletion_at: Option<String>,
+    #[serde(default)]
+    pub scheduled_deletion_by: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -591,6 +595,35 @@ pub async fn remove_cloud_member(member_user_id: String) -> AppResult<()> {
       "memberUserId": member_user_id.trim(),
     });
     let response = cloud_api(reqwest::Method::POST, "/invites/memberships/remove")
+        .for_owner()
+        .json(&payload)
+        .map_err(|e| AppError::new("SERIALIZATION_ERROR", e))?
+        .send()
+        .await
+        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
+    ensure_success(response).await?;
+    Ok(())
+}
+
+/// Cancela una eliminación programada de un miembro de la nube compartida.
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si el usuario local no está configurado o la solicitud falla.
+#[command]
+pub async fn cancel_cloud_member_deletion(member_user_id: String) -> AppResult<()> {
+    let settings = config::load_settings();
+    let user_id = settings
+        .user_id
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Usuario no configurado")?;
+
+    let payload = serde_json::json!({
+      "hostUserId": user_id,
+      "memberUserId": member_user_id.trim(),
+    });
+    let response = cloud_api(reqwest::Method::POST, "/invites/memberships/cancel-removal")
         .for_owner()
         .json(&payload)
         .map_err(|e| AppError::new("SERIALIZATION_ERROR", e))?

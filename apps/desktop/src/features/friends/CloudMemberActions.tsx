@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Button, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem } from "@heroui/react";
-import { Eye, LogOut, Trash2, MoreVertical } from "lucide-react";
+import { Eye, LogOut, Trash2, MoreVertical, RotateCcw } from "lucide-react";
 import type { CloudMembership } from "@services/tauri/invites.service";
 import { useTranslation } from "react-i18next";
 
@@ -13,6 +13,7 @@ interface CloudMemberActionsProps {
   onRequestRemoveMember?: (userId: string) => void;
   onRequestLeaveMembership?: (hostId: string) => void;
   onRemoveMember?: (userId: string) => Promise<void>;
+  onCancelMemberDeletion?: (userId: string) => Promise<void>;
   onLeaveMembership?: (hostId: string) => Promise<void>;
 }
 
@@ -25,6 +26,7 @@ export function CloudMemberActions({
   onRequestRemoveMember,
   onRequestLeaveMembership,
   onRemoveMember,
+  onCancelMemberDeletion,
   onLeaveMembership,
 }: CloudMemberActionsProps) {
   const { t } = useTranslation();
@@ -40,7 +42,24 @@ export function CloudMemberActions({
       },
     ];
 
-    if (isHost && onRemoveMember) {
+    if (isHost && onCancelMemberDeletion && membership.scheduledDeletionAt) {
+      items.push({
+        key: "cancel-deletion",
+        label: t("friends.cloudMembers.cancelDeletion"),
+        icon: <RotateCcw className="h-4 w-4" />,
+        color: "primary",
+        action: () => {
+          void (async () => {
+            setIsActionLoading(true);
+            try {
+              await onCancelMemberDeletion(userId);
+            } finally {
+              setIsActionLoading(false);
+            }
+          })();
+        },
+      });
+    } else if (isHost && onRemoveMember && !membership.scheduledDeletionAt) {
       items.push({
         key: "remove",
         label: t("friends.cloudMembers.removeMember"),
@@ -94,8 +113,10 @@ export function CloudMemberActions({
     onRequestRemoveMember,
     onRequestLeaveMembership,
     onRemoveMember,
+    onCancelMemberDeletion,
     onLeaveMembership,
     membership.hostUserId,
+    membership.scheduledDeletionAt,
     t,
   ]);
 

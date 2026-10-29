@@ -2,7 +2,8 @@ import { useCallback } from "react";
 import { useFriendsPage } from "@hooks/useFriendsPage";
 
 export function useCloudMembersActions() {
-  const { handleRemoveMember, handleLeaveMembership, loadFriendProfileById } = useFriendsPage();
+  const { handleRemoveMember, handleCancelMemberDeletion, handleLeaveMembership, loadFriendProfileById } =
+    useFriendsPage();
 
   const handleViewProfile = useCallback(
     async (userId: string) => {
@@ -27,6 +28,18 @@ export function useCloudMembersActions() {
     [handleRemoveMember]
   );
 
+  const handleCancel = useCallback(
+    async (userId: string) => {
+      try {
+        await handleCancelMemberDeletion(userId);
+      } catch (error) {
+        console.error("Error cancelling member deletion:", error);
+        throw error;
+      }
+    },
+    [handleCancelMemberDeletion]
+  );
+
   const handleLeave = useCallback(
     async (hostId: string) => {
       try {
@@ -42,6 +55,7 @@ export function useCloudMembersActions() {
   return {
     handleViewProfile,
     handleRemoveMember: handleRemove,
+    handleCancelMemberDeletion: handleCancel,
     handleLeaveMembership: handleLeave,
   };
 }

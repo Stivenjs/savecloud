@@ -20,6 +20,8 @@ export interface CloudMembership {
   createdAt: string;
   updatedAt: string;
   active: boolean;
+  scheduledDeletionAt?: string | null;
+  scheduledDeletionBy?: string | null;
 }
 
 export interface CloudMembershipsResponse {
@@ -80,6 +82,10 @@ export async function leaveCloudMembership(hostUserId: string): Promise<void> {
 
 export async function removeCloudMember(memberUserId: string): Promise<void> {
   await invoke("remove_cloud_member", { memberUserId });
+}
+
+export async function cancelCloudMemberDeletion(memberUserId: string): Promise<void> {
+  await invoke("cancel_cloud_member_deletion", { memberUserId });
 }
 
 export async function listCloudMemberships(): Promise<CloudMembershipsResponse> {

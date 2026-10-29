@@ -1622,6 +1622,10 @@
       "memberRemoved": "Member removed",
       "memberRemovedDesc": "{{memberUserId}} was removed from your cloud.",
       "cannotRemove": "Could not remove",
+      "memberDeletionCancelled": "Deletion cancelled",
+      "memberDeletionCancelledDesc": "{{memberUserId}} will remain in your cloud.",
+      "cannotCancelDeletion": "Could not cancel deletion",
+      "cannotCancelDeletionDesc": "Try again or contact support.",
       "activeCloudUpdated": "Active cloud updated",
       "useHostCloudDesc": "You will now use {{hostUserId}}'s cloud.",
       "useOwnCloudDesc": "You will now use your own cloud.",
@@ -1839,8 +1843,13 @@
       "host": "Host",
       "viewProfile": "View profile",
       "removeMember": "Remove member",
+      "cancelDeletion": "Cancel deletion",
       "leaveMembership": "Leave membership",
-      "actionsAria": "Member actions"
+      "actionsAria": "Member actions",
+      "scheduledDeletionTooltip": "Scheduled purge: {{date}}",
+      "purgeIn": "Purge in {{count}} day",
+      "purgeIn_other": "Purge in {{count}} days",
+      "purgeImminent": "Purge imminent"
     },
     "cloudMembersPanel": {
       "loading": "Loading members...",

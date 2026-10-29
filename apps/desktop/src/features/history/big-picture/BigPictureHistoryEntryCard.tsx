@@ -27,7 +27,7 @@ export function BigPictureHistoryEntryCard({ entry }: BigPictureHistoryEntryCard
     <Card
       className={`transition-all duration-200 border ${
         hasErrors
-          ? "border-warning-400/80 bg-warning-950/20"
+          ? "border-white/20 bg-zinc-900/80 shadow-lg backdrop-blur-md ring-1 ring-white/10"
           : "border-white/10 bg-zinc-900/60 shadow-lg backdrop-blur-md ring-1 ring-white/5"
       }`}>
       <CardBody className="flex flex-col gap-3 p-4 sm:p-5">
@@ -59,7 +59,7 @@ export function BigPictureHistoryEntryCard({ entry }: BigPictureHistoryEntryCard
                 {hasErrors ? (
                   <>
                     <span className="text-default-400">·</span>
-                    <Chip size="md" color="warning" variant="flat" className="font-semibold">
+                    <Chip size="md" color="danger" variant="flat" className="font-semibold">
                       {t("history.entry.errors", { count: entry.errCount })}
                     </Chip>
                   </>

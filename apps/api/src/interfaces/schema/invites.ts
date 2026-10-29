@@ -29,3 +29,10 @@ export const MembershipActionSchema = Type.Object({
   memberUserId: Type.String({ minLength: 1 }),
 });
 export type MembershipActionBody = Static<typeof MembershipActionSchema>;
+
+export const RemoveMemberSchema = Type.Object({
+  hostUserId: Type.String({ minLength: 1 }),
+  memberUserId: Type.String({ minLength: 1 }),
+  gracePeriodDays: Type.Optional(Type.Integer({ minimum: 1, maximum: 365 })),
+});
+export type RemoveMemberBody = Static<typeof RemoveMemberSchema>;

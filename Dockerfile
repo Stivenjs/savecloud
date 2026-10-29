@@ -23,6 +23,7 @@ COPY apps/api ./apps/api
 RUN bun build apps/api/src/interfaces/http/server.ts --target bun --outdir ./dist
 RUN bun build apps/api/src/interfaces/worker/steam-seed-worker.ts --target bun --outfile ./dist/steam-seed-worker.js
 RUN bun build apps/api/src/interfaces/worker/s3-events-worker.ts --target bun --outfile ./dist/s3-events-worker.js
+RUN bun build apps/api/src/interfaces/worker/member-purge-worker.ts --target bun --outfile ./dist/member-purge-worker.js
 RUN bun build apps/api/src/interfaces/worker/storage-bootstrap.ts --target bun --outfile ./dist/storage-bootstrap.js
 # Copiar el icono de la app desde el proyecto para storage-bootstrap local (sin meterlo a apps/api ni a la Lambda)
 RUN mkdir -p ./dist/assets

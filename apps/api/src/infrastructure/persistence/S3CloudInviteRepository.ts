@@ -1,4 +1,10 @@
-import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  type S3Client,
+} from "@aws-sdk/client-s3";
 import crypto from "crypto";
 import type { CloudInvite, CloudMembership } from "@domain/entities/CloudInvite";
 import type { CloudInviteRepository, CreateInviteInput } from "@domain/ports/CloudInviteRepository";
@@ -338,5 +344,105 @@ export class S3CloudInviteRepository implements CloudInviteRepository {
       wsUrl: updatedMembership.wsUrl ?? null,
       updatedAt: updatedMembership.updatedAt,
     });
+  }
+
+  async scheduleMemberDeletion(
+    hostUserId: string,
+    memberUserId: string,
+    scheduledDeletionAt: string,
+    deletedBy: string
+  ): Promise<void> {
+    const file = await this.loadMembershipFile(hostUserId);
+    const idx = file.items.findIndex((x) => x.memberUserId === memberUserId);
+    if (idx < 0) return;
+    const current = file.items[idx];
+    const updatedMembership: CloudMembership = {
+      ...current,
+      active: false,
+      scheduledDeletionAt,
+      scheduledDeletionBy: deletedBy,
+      updatedAt: nowIso(),
+    };
+    file.items[idx] = updatedMembership;
+    await this.saveMembershipFile(hostUserId, file);
+
+    await this.putJson(this.memberHostIndexKey(memberUserId, hostUserId), {
+      hostUserId,
+      memberUserId,
+      active: false,
+      wsUrl: updatedMembership.wsUrl ?? null,
+      updatedAt: updatedMembership.updatedAt,
+    });
+  }
+
+  async cancelScheduledMemberDeletion(hostUserId: string, memberUserId: string): Promise<void> {
+    const file = await this.loadMembershipFile(hostUserId);
+    const idx = file.items.findIndex((x) => x.memberUserId === memberUserId);
+    if (idx < 0) return;
+    const current = file.items[idx];
+    const updatedMembership: CloudMembership = {
+      ...current,
+      active: true,
+      scheduledDeletionAt: null,
+      scheduledDeletionBy: null,
+      updatedAt: nowIso(),
+    };
+    file.items[idx] = updatedMembership;
+    await this.saveMembershipFile(hostUserId, file);
+
+    await this.putJson(this.memberHostIndexKey(memberUserId, hostUserId), {
+      hostUserId,
+      memberUserId,
+      active: true,
+      wsUrl: updatedMembership.wsUrl ?? null,
+      updatedAt: updatedMembership.updatedAt,
+    });
+  }
+
+  async listMembershipsReadyForPurge(now: string): Promise<CloudMembership[]> {
+    const keys = await this.listKeys("cloud-invites-memberships/");
+    const ready: CloudMembership[] = [];
+
+    for (const key of keys) {
+      const file = await this.getJsonOrNull<MembershipFile>(key);
+      if (!file?.items) continue;
+      for (const item of file.items) {
+        if (item.scheduledDeletionAt && item.scheduledDeletionAt <= now) {
+          ready.push(item);
+        }
+      }
+    }
+
+    return ready;
+  }
+
+  async deleteMembershipRecord(hostUserId: string, memberUserId: string): Promise<void> {
+    const file = await this.loadMembershipFile(hostUserId);
+    file.items = file.items.filter((x) => x.memberUserId !== memberUserId);
+    await this.saveMembershipFile(hostUserId, file);
+
+    try {
+      await this.s3.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucketName,
+          Key: this.memberHostIndexKey(memberUserId, hostUserId),
+        })
+      );
+    } catch {
+      // Ignore if index file does not exist
+    }
+  }
+
+  async deleteAllGameSharesForMember(hostUserId: string, memberUserId: string): Promise<void> {
+    try {
+      await this.s3.send(
+        new DeleteObjectCommand({
+          Bucket: this.bucketName,
+          Key: this.sharedGamesKey(hostUserId, memberUserId),
+        })
+      );
+    } catch {
+      // Ignore if file does not exist
+    }
   }
 }

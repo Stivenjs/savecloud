@@ -4,7 +4,7 @@
 //! y manejo del archivo `profiles.json` en el directorio de configuración.
 
 use super::paths;
-use super::profile_defaults::ensure_default_profile;
+use super::profile_defaults::{auto_discover_profiles_from_disk, ensure_default_profile};
 use super::profiles::ProfilesIndex;
 use std::fs;
 use std::path::PathBuf;
@@ -51,7 +51,12 @@ pub fn load_profiles_index() -> Result<ProfilesIndex, String> {
             .map_err(|e| format!("Failed to parse profiles.json: {e}"))?
     };
 
-    if ensure_default_profile(&mut index) {
+    let mut modified = ensure_default_profile(&mut index);
+    if auto_discover_profiles_from_disk(&mut index) {
+        modified = true;
+    }
+
+    if modified {
         save_profiles_index(&index)?;
     }
 

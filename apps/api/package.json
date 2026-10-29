@@ -7,6 +7,8 @@
     "dev": "bun --watch src/interfaces/http/server.ts",
     "dev:steam-seed-worker": "bun --watch src/interfaces/worker/steam-seed-worker.ts",
     "worker:steam-seed": "bun src/interfaces/worker/steam-seed-worker.ts",
+    "dev:member-purge-worker": "bun --watch src/interfaces/worker/member-purge-worker.ts",
+    "worker:member-purge": "bun src/interfaces/worker/member-purge-worker.ts",
     "build": "tsc",
     "check": "bun check && bun ./scripts/check-architecture.ts",
     "check:architecture": "bun ./scripts/check-architecture.ts"

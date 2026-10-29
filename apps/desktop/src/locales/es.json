@@ -1622,6 +1622,10 @@
       "memberRemoved": "Miembro eliminado",
       "memberRemovedDesc": "{{memberUserId}} fue removido de tu nube.",
       "cannotRemove": "No se pudo eliminar",
+      "memberDeletionCancelled": "Eliminación cancelada",
+      "memberDeletionCancelledDesc": "{{memberUserId}} permanecerá en tu nube.",
+      "cannotCancelDeletion": "No se pudo cancelar la eliminación",
+      "cannotCancelDeletionDesc": "Inténtalo de nuevo o contacta soporte.",
       "activeCloudUpdated": "Nube activa actualizada",
       "useHostCloudDesc": "Ahora usarás la nube de {{hostUserId}}.",
       "useOwnCloudDesc": "Ahora usarás tu nube propia.",
@@ -1839,8 +1843,13 @@
       "host": "Anfitrión",
       "viewProfile": "Ver perfil",
       "removeMember": "Remover miembro",
+      "cancelDeletion": "Cancelar eliminación",
       "leaveMembership": "Dejar membresía",
-      "actionsAria": "Acciones de miembro"
+      "actionsAria": "Acciones de miembro",
+      "scheduledDeletionTooltip": "Purga programada: {{date}}",
+      "purgeIn": "Purga en {{count}} día",
+      "purgeIn_other": "Purga en {{count}} días",
+      "purgeImminent": "Purga inminente"
     },
     "cloudMembersPanel": {
       "loading": "Cargando miembros...",
