@@ -1,6 +1,14 @@
 {$DOMAIN} {
 	encode gzip zstd
 
+	# Cabeceras de seguridad HTTP
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-XSS-Protection "1; mode=block"
+	}
+
 	# Bloquear acceso externo a webhooks internos
 	handle /webhooks/* {
 		respond 403
