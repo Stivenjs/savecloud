@@ -3,6 +3,7 @@ import type { S3Client } from "@aws-sdk/client-s3";
 import { ClipStore } from "@infrastructure/clips/ClipStore";
 import { DynamoDbClipStore } from "@infrastructure/clips/DynamoDbClipStore";
 import { DynamoDbCloudInviteRepository } from "@infrastructure/persistence/DynamoDbCloudInviteRepository";
+import { DynamoDbAccessSessionRepository } from "@infrastructure/persistence/DynamoDbAccessSessionRepository";
 import { DynamoDbConnectionRepository } from "@infrastructure/persistence/DynamoDbConnectionRepository";
 import { DynamoDbGameInventoryRepository } from "@infrastructure/persistence/DynamoDbGameInventoryRepository";
 import { DynamoDbGameStatRepository } from "@infrastructure/persistence/DynamoDbGameStatRepository";
@@ -63,6 +64,9 @@ export function createApiStores(input: ApiStoresFactoryInput) {
     clipRepository,
     notificationRepository,
     cloudInviteRepository,
+    accessSessionRepository: tables.cloudInvites
+      ? new DynamoDbAccessSessionRepository(dynamo, tables.cloudInvites)
+      : undefined,
     gameInventoryRepository,
     gameStatRepository: tables.gameStats ? new DynamoDbGameStatRepository(dynamo, tables.gameStats) : undefined,
     saveFileIndexRepository: tables.saveFilesIndex

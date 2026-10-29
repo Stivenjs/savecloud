@@ -18,6 +18,7 @@ provider:
   environment:
     BUCKET_NAME: { Ref: SavesBucket }
     API_KEY: ${env:SYNC_GAMES_API_KEY, ''}
+    ACCESS_TOKEN_SECRET: ${env:ACCESS_TOKEN_SECRET, ''}
     DOWNLOAD_BASE_URL: ${self:custom.downloadBaseUrl.${sls:stage}, ''}
     CONNECTIONS_TABLE: { Ref: ActiveConnectionsTable }
     GAME_STATS_TABLE: { Ref: GameStatsTable }
@@ -182,6 +183,12 @@ functions:
           method: GET
       - httpApi:
           path: /invites/accept-token
+          method: POST
+      - httpApi:
+          path: /auth/refresh
+          method: POST
+      - httpApi:
+          path: /auth/upgrade
           method: POST
       - httpApi:
           path: /webhooks/minio

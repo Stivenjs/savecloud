@@ -124,6 +124,14 @@ if (-not $apiKey -or $apiKey -match '^replace-with-' -or $apiKey -eq "sg_secret_
   Set-EnvValue "SYNC_GAMES_API_KEY" $apiKey
 }
 
+$accessTokenSecret = Get-EnvValue "ACCESS_TOKEN_SECRET"
+if (-not $accessTokenSecret -or $accessTokenSecret -match '^replace-with-' -or $accessTokenSecret -eq $apiKey) {
+  do {
+    $accessTokenSecret = New-HexSecret
+  } while ($accessTokenSecret -eq $apiKey)
+  Set-EnvValue "ACCESS_TOKEN_SECRET" $accessTokenSecret
+}
+
 $objectUser = Get-EnvValue "OBJECT_STORAGE_ACCESS_KEY"
 if (-not $objectUser -or $objectUser -match '^replace-with-' -or $objectUser -eq "minioadmin") {
   $objectUser = "savecloud_$(New-HexSecret -ByteCount 8)"
@@ -153,6 +161,7 @@ $env:API_PORT = $apiPort
 $env:LOG_LEVEL = $logLevel
 $env:HTTP_REQUEST_LOGS = $httpRequestLogs
 $env:SYNC_GAMES_API_KEY = $apiKey
+$env:ACCESS_TOKEN_SECRET = $accessTokenSecret
 $env:OBJECT_STORAGE_ACCESS_KEY = $objectUser
 $env:OBJECT_STORAGE_SECRET_KEY = $objectSecret
 $env:MINIO_LICENSE_PATH = $licensePath

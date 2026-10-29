@@ -3,7 +3,7 @@ import type { WebSocket, RawData } from "ws";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 
 interface LocalSocketRegistry {
-  registerSocket(connectionId: string, socket: WebSocket): void;
+  registerSocket(connectionId: string, socket: WebSocket, userId?: string): void;
   unregisterSocket(connectionId: string): void;
 }
 
@@ -33,7 +33,7 @@ export function createWebSocketConnectionHandler(deps: WebSocketConnectionDepend
       `[SaveCloud WS] Handshake exitoso! connectionId=${connectionId}, userId=${userId || "anónimo"}, path=${request.url.split("?")[0]}`
     );
 
-    deps.webSocketNotifier?.registerSocket(connectionId, socket);
+    deps.webSocketNotifier?.registerSocket(connectionId, socket, userId);
 
     if (deps.connectionRepository && userId) {
       const ttl = Math.floor(Date.now() / 1000) + CONNECTION_TTL_SECONDS;

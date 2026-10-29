@@ -1,4 +1,8 @@
-import { ApiGatewayManagementApiClient, PostToConnectionCommand } from "@aws-sdk/client-apigatewaymanagementapi";
+import {
+  ApiGatewayManagementApiClient,
+  DeleteConnectionCommand,
+  PostToConnectionCommand,
+} from "@aws-sdk/client-apigatewaymanagementapi";
 import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 
@@ -31,5 +35,22 @@ export class ApiGatewayNotifier implements WebSocketNotifier {
         await this.connectionRepo.deleteConnection(connectionId);
       }
     }
+  }
+
+  async disconnectUser(userId: string): Promise<void> {
+    const connectionIds = await this.connectionRepo.getConnectionsByUser(userId);
+    await Promise.all(
+      connectionIds.map(async (connectionId) => {
+        try {
+          await this.client.send(new DeleteConnectionCommand({ ConnectionId: connectionId }));
+        } catch (error: any) {
+          if (error.$metadata?.httpStatusCode !== 410) {
+            console.warn("[WS] No se pudo cerrar una conexión revocada", { connectionId });
+          }
+        } finally {
+          await this.connectionRepo.deleteConnection(connectionId);
+        }
+      })
+    );
   }
 }

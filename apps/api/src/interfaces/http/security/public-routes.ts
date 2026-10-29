@@ -57,6 +57,12 @@ export function isPublicHttpRoute(method: string, path: string): boolean {
     return true;
   }
 
+  // La renovación usa el refresh token rotativo; la migración autentica
+  // explícitamente una credencial sc1 anterior antes de emitir una sesión sc2.
+  if (upperMethod === "POST" && (path === "/auth/refresh" || path === "/auth/upgrade")) {
+    return true;
+  }
+
   // Reproductor público de clips de vídeo y API de visualización
   if (
     upperMethod === "GET" &&

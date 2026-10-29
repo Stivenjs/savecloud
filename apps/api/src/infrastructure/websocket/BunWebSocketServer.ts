@@ -9,6 +9,8 @@ import type { FastifyInstance, InjectOptions } from "fastify";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 import type { FastifyWebSocketNotifier } from "@infrastructure/websocket/FastifyWebSocketNotifier";
 import { verifyUserAccessToken } from "@shared/accessToken";
+import { safeCompareSecret } from "@shared/safeCompare";
+import type { AccessSessionRepository } from "@domain/ports/AccessSessionRepository";
 
 /**
  * Datos asociados al contexto de cada conexión WebSocket en Bun.
@@ -52,12 +54,16 @@ export interface StartBunServerOptions {
   connectionRepository?: ConnectionRepository;
   /** Notificador WebSocket local en memoria */
   webSocketNotifier?: FastifyWebSocketNotifier;
+  accessSessionRepository?: AccessSessionRepository;
 }
 
 /** Tiempo de vida predeterminado para registros de conexión en DynamoDB (24 horas) */
 const CONNECTION_TTL_SECONDS = 24 * 60 * 60;
 
-function getAuthorizedWebSocketIdentity(request: Request): { userId: string; deviceId?: string } | null {
+async function getAuthorizedWebSocketIdentity(
+  request: Request,
+  accessSessionRepository?: AccessSessionRepository
+): Promise<{ userId: string; deviceId?: string } | null> {
   const expectedApiKey = process.env.API_KEY?.trim();
   const userId = request.headers.get("x-user-id")?.trim() ?? "";
   const deviceId = request.headers.get("x-device-id")?.trim() || undefined;
@@ -66,10 +72,23 @@ function getAuthorizedWebSocketIdentity(request: Request): { userId: string; dev
   const credential = request.headers.get("x-api-key")?.trim() || bearer || "";
 
   if (!userId || !credential) return null;
-  if (expectedApiKey && credential === expectedApiKey) return { userId, deviceId };
+  if (expectedApiKey && safeCompareSecret(credential, expectedApiKey)) return { userId, deviceId };
 
   const accessToken = verifyUserAccessToken(credential);
-  return accessToken !== null && userId === accessToken.userId ? { userId, deviceId } : null;
+  if (!accessToken?.sessionId || !accessToken.hostUserId || userId !== accessToken.userId || !accessSessionRepository) {
+    return null;
+  }
+  const session = await accessSessionRepository.get(accessToken.sessionId);
+  if (
+    !session ||
+    !session.active ||
+    session.userId !== accessToken.userId ||
+    session.hostUserId !== accessToken.hostUserId ||
+    session.expiresAtEpoch <= Math.floor(Date.now() / 1000)
+  ) {
+    return null;
+  }
+  return { userId, deviceId };
 }
 
 /**
@@ -132,11 +151,11 @@ export async function startBunServer(options: StartBunServerOptions): Promise<vo
   bunApi.serve<BunWsSocketData>({
     port,
     hostname: host,
-    fetch(req, server) {
+    async fetch(req, server) {
       const url = new URL(req.url);
 
       const isWebSocket = req.headers.get("upgrade")?.toLowerCase() === "websocket";
-      const identity = isWebSocket ? getAuthorizedWebSocketIdentity(req) : null;
+      const identity = isWebSocket ? await getAuthorizedWebSocketIdentity(req, options.accessSessionRepository) : null;
       if (isWebSocket && !identity) return new Response("No autorizado.", { status: 401 });
 
       const userId = identity?.userId;
@@ -158,7 +177,7 @@ export async function startBunServer(options: StartBunServerOptions): Promise<vo
       open(ws) {
         const { connectionId, userId, deviceId } = ws.data;
         if (webSocketNotifier) {
-          webSocketNotifier.registerSocket(connectionId, ws);
+          webSocketNotifier.registerSocket(connectionId, ws, userId);
         }
 
         if (connectionRepository && userId) {

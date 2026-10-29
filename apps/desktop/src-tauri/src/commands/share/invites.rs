@@ -183,7 +183,10 @@ pub fn normalize_ws_url(input: &str) -> String {
 #[serde(rename_all = "camelCase")]
 pub struct AcceptInviteProvisionResponseDto {
     pub access_token: String,
-    pub api_url: String,
+    pub refresh_token: Option<String>,
+    pub access_token_expires_at: Option<u64>,
+    pub refresh_token_expires_at: Option<u64>,
+    pub api_url: Option<String>,
     pub ws_url: Option<String>,
     pub host_user_id: String,
 }
@@ -269,6 +272,14 @@ fn persist_cloud_invite_provision(
             .unwrap_or_default(),
         parsed.access_token.as_str(),
     )?;
+    if let Some(refresh_token) = parsed.refresh_token.as_deref() {
+        config::set_secure_refresh_token_for_cloud_host(
+            next.active_cloud_host_user_id
+                .as_deref()
+                .unwrap_or_default(),
+            refresh_token,
+        )?;
+    }
 
     config::save_settings(&next)
 }

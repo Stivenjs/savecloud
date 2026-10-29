@@ -26,6 +26,7 @@ export interface GenericWebSocketConnection {
  */
 export class FastifyWebSocketNotifier implements WebSocketNotifier {
   private readonly activeSockets = new Map<string, GenericWebSocketConnection>();
+  private readonly socketUsers = new Map<string, string>();
 
   constructor(private readonly connectionRepo?: ConnectionRepository) {}
 
@@ -35,8 +36,9 @@ export class FastifyWebSocketNotifier implements WebSocketNotifier {
    * @param connectionId - Identificador único de la conexión.
    * @param socket - Socket activo (instancia de ws o ServerWebSocket de Bun).
    */
-  registerSocket(connectionId: string, socket: GenericWebSocketConnection): void {
+  registerSocket(connectionId: string, socket: GenericWebSocketConnection, userId?: string): void {
     this.activeSockets.set(connectionId, socket);
+    if (userId) this.socketUsers.set(connectionId, userId);
   }
 
   /**
@@ -46,6 +48,16 @@ export class FastifyWebSocketNotifier implements WebSocketNotifier {
    */
   unregisterSocket(connectionId: string): void {
     this.activeSockets.delete(connectionId);
+    this.socketUsers.delete(connectionId);
+  }
+
+  async disconnectUser(userId: string): Promise<void> {
+    for (const [connectionId, connectedUserId] of this.socketUsers) {
+      if (connectedUserId !== userId) continue;
+      this.activeSockets.get(connectionId)?.close?.(1008, "Membresía revocada");
+      this.unregisterSocket(connectionId);
+      await this.connectionRepo?.deleteConnection(connectionId).catch(() => {});
+    }
   }
 
   /** Número de sockets abiertos registrados en este proceso de API. */

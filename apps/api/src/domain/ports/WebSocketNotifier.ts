@@ -9,4 +9,7 @@ export interface WebSocketNotifier {
    * @param {any} payload - El cuerpo de la notificación.
    */
   sendToConnection(connectionId: string, payload: any): Promise<void>;
+
+  /** Cierra todas las conexiones activas de un usuario al revocar su membresía. */
+  disconnectUser?(userId: string): Promise<void>;
 }

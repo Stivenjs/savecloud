@@ -120,6 +120,7 @@ pub async fn start_cloud_ws(
                 credential,
                 user_id,
                 device_id,
+                host_user_id: active_host,
             },
         )
         .await;
