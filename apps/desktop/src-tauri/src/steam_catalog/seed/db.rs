@@ -190,7 +190,6 @@ pub fn apply_seed_updates(
 
     tx.execute_batch(
         "
-        -- Géneros: reemplazar solo los del batch actual
         DELETE FROM steam_app_genres
         WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
 
@@ -201,7 +200,7 @@ pub fn apply_seed_updates(
                 WHEN json_valid(g.value) AND json_type(g.value) = 'object'
                 THEN COALESCE(NULLIF(json_extract(g.value, '$.description'), ''), g.value)
                 ELSE g.value
-            END
+            END AS genre_label
         FROM steam_catalog_apps a,
              json_each(
                  CASE
@@ -213,9 +212,11 @@ pub fn apply_seed_updates(
              ) AS g
         WHERE a.app_id IN (SELECT app_id FROM _seed_batch_ids)
           AND a.details_json IS NOT NULL
-          AND length(trim(a.details_json)) > 0;
+          AND length(trim(a.details_json)) > 0
+          AND genre_label IS NOT NULL
+          AND trim(genre_label) != ''
+        GROUP BY a.app_id, genre_label COLLATE NOCASE;
 
-        -- Tags: reemplazar solo los del batch actual
         DELETE FROM steam_app_tags
         WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
 
@@ -226,7 +227,7 @@ pub fn apply_seed_updates(
                 WHEN json_valid(t.value) AND json_type(t.value) = 'object'
                 THEN COALESCE(NULLIF(json_extract(t.value, '$.description'), ''), t.value)
                 ELSE t.value
-            END
+            END AS tag_label
         FROM steam_catalog_apps a,
              json_each(
                  CASE
@@ -238,9 +239,11 @@ pub fn apply_seed_updates(
              ) AS t
         WHERE a.app_id IN (SELECT app_id FROM _seed_batch_ids)
           AND a.details_json IS NOT NULL
-          AND length(trim(a.details_json)) > 0;
+          AND length(trim(a.details_json)) > 0
+          AND tag_label IS NOT NULL
+          AND trim(tag_label) != ''
+        GROUP BY a.app_id, tag_label COLLATE NOCASE;
 
-        -- FTS: reemplazar entradas del batch
         DELETE FROM steam_catalog_search
         WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
 
