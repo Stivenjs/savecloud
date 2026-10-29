@@ -1066,6 +1066,7 @@ async fn copy_friend_saves_with_plan_transfer(
         game_id,
         result.ok_count,
         result.err_count,
+        result.errors.clone(),
     );
 
     Ok(result)

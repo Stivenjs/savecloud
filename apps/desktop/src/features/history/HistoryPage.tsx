@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useBigPictureConsole } from "@hooks/useBigPictureConsole";
 import { BigPictureHistoryPage } from "@features/history/big-picture/BigPictureHistoryPage";
 import { Card, CardBody, Chip, Spinner, Tab, Tabs } from "@heroui/react";
-import { History } from "lucide-react";
+import { ChevronDown, ChevronRight, History } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { listOperationHistory, type OperationLogEntry } from "@services/tauri";
 import { formatGameDisplayName } from "@utils/gameImage";
@@ -33,8 +33,10 @@ function HistoryEntryCard({ entry }: HistoryEntryCardProps) {
   const Icon = OPERATION_LOG_KIND_ICON[entry.kind];
   const chipColor = OPERATION_LOG_KIND_CHIP_COLOR[entry.kind];
   const hasErrors = entry.errCount > 0;
+  const hasErrorDetails = hasErrors && entry.errors.length > 0;
   const relative = formatOperationLogRelativeTime(entry.timestamp);
   const displayName = formatGameDisplayName(entry.gameId);
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <Card
@@ -43,8 +45,12 @@ function HistoryEntryCard({ entry }: HistoryEntryCardProps) {
           ? "border border-warning-300/80 bg-warning-50/40 dark:border-warning-500/40 dark:bg-warning-500/10"
           : "border border-default-200/60 bg-content1/80 shadow-xs backdrop-blur-xs"
       }`}>
-      <CardBody className="flex flex-col gap-2 p-3 sm:p-3.5">
-        <div className="flex items-center justify-between gap-3">
+      <CardBody className="flex flex-col gap-0 p-0">
+        <div
+          className={`flex items-center justify-between gap-3 p-3 sm:p-3.5 ${hasErrorDetails ? "cursor-pointer select-none" : ""}`}
+          onClick={() => hasErrorDetails && setExpanded((v) => !v)}
+          role={hasErrorDetails ? "button" : undefined}
+          aria-expanded={hasErrorDetails ? expanded : undefined}>
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <PlayingGameThumbnail gameId={entry.gameId} size="md" />
             <div className="min-w-0 flex-1">
@@ -80,13 +86,37 @@ function HistoryEntryCard({ entry }: HistoryEntryCardProps) {
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
-            {relative ? <span className="text-xs font-semibold text-foreground/90">{relative}</span> : null}
-            <span className="text-[11px] text-default-400 font-mono">
-              {formatOperationLogTimestamp(entry.timestamp)}
-            </span>
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="flex flex-col items-end gap-0.5 text-right">
+              {relative ? <span className="text-xs font-semibold text-foreground/90">{relative}</span> : null}
+              <span className="text-[11px] text-default-400 font-mono">
+                {formatOperationLogTimestamp(entry.timestamp)}
+              </span>
+            </div>
+            {hasErrorDetails ? (
+              <span className="text-warning-500 shrink-0">
+                {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+              </span>
+            ) : null}
           </div>
         </div>
+
+        {hasErrorDetails && expanded ? (
+          <div className="border-t border-warning-300/60 dark:border-warning-500/30 bg-warning-50/60 dark:bg-warning-900/20 px-3 pb-3 pt-2.5">
+            <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-warning-600 dark:text-warning-400">
+              {t("history.entry.errorDetails", { count: entry.errors.length })}
+            </p>
+            <ul className="flex flex-col gap-1.5">
+              {entry.errors.map((msg, i) => (
+                <li
+                  key={i}
+                  className="rounded-md bg-warning-100/80 dark:bg-warning-900/40 px-2.5 py-1.5 font-mono text-[11px] leading-snug text-warning-800 dark:text-warning-200 break-all">
+                  {msg}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </CardBody>
     </Card>
   );

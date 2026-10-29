@@ -188,6 +188,7 @@ pub fn list_operation_history() -> Vec<OperationLogEntryDto> {
             game_id: e.game_id,
             file_count: e.file_count,
             err_count: e.err_count,
+            errors: e.errors,
         })
         .collect()
 }

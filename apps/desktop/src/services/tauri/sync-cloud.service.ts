@@ -94,6 +94,8 @@ export interface OperationLogEntry {
   gameId: string;
   fileCount: number;
   errCount: number;
+  /** Mensajes de error individuales; vacío cuando la operación fue exitosa. */
+  errors: string[];
 }
 
 /** Sube los guardados de un juego a la nube */

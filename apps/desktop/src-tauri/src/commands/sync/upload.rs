@@ -447,6 +447,7 @@ pub(crate) async fn sync_upload_game_impl(
                 &game_id,
                 result.ok_count,
                 result.err_count,
+                result.errors.clone(),
             );
             return Ok(result);
         }
@@ -635,7 +636,8 @@ pub(crate) async fn sync_upload_game_impl(
     }
 
     let _ =
-        crate::config::append_operation_log("upload", &game_id, result.ok_count, result.err_count);
+        crate::config::append_operation_log("upload", &game_id, result.ok_count, result.err_count, result.errors.clone());
+
 
     if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
         let pm = pm.lock().await;

@@ -2223,6 +2223,8 @@
     "entry": {
       "errors_one": "{{count}} error",
       "errors_other": "{{count}} errors",
+      "errorDetails_one": "{{count}} error detail",
+      "errorDetails_other": "{{count}} error details",
       "filesOk": "Files: {{count}} ok",
       "filesWithErrors": " / {{count}} with error"
     },
