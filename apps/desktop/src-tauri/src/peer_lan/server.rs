@@ -47,6 +47,7 @@ struct LanHttpState {
 
 struct LanRuntime {
     port: u16,
+    tls_fingerprint: String,
     handle: tokio::task::JoinHandle<()>,
     state: LanHttpState,
 }
@@ -58,7 +59,7 @@ pub fn lan_tls_fingerprint() -> Option<String> {
     LAN_TLS_FINGERPRINT.lock().ok()?.clone()
 }
 
-pub fn generate_self_signed_cert() -> Result<(String, String), String> {
+pub fn generate_self_signed_cert() -> Result<(String, String, String), String> {
     let subject_alt_names = vec!["localhost".to_string(), "127.0.0.1".to_string()];
     let cert = rcgen::generate_simple_self_signed(subject_alt_names)
         .map_err(|e| format!("Fallo al generar cert: {e}"))?;
@@ -66,24 +67,43 @@ pub fn generate_self_signed_cert() -> Result<(String, String), String> {
     let cert_der = cert.serialize_der().map_err(|e| e.to_string())?;
     let fingerprint = hex::encode(Sha256::digest(&cert_der));
     if let Ok(mut stored) = LAN_TLS_FINGERPRINT.lock() {
-        *stored = Some(fingerprint);
+        *stored = Some(fingerprint.clone());
     }
-    let cert_pem = cert.serialize_pem().map_err(|e| e.to_string())?;
+    // Encode the exact DER bytes we fingerprinted. Serializing the certificate
+    // again can produce a different DER signature and therefore a different pin.
+    use base64::Engine;
+    let cert_base64 = base64::engine::general_purpose::STANDARD.encode(&cert_der);
+    let mut cert_pem = String::from("-----BEGIN CERTIFICATE-----\n");
+    for chunk in cert_base64.as_bytes().chunks(64) {
+        let line = std::str::from_utf8(chunk)
+            .map_err(|e| format!("Certificado DER no se pudo codificar a PEM: {e}"))?;
+        cert_pem.push_str(line);
+        cert_pem.push('\n');
+    }
+    cert_pem.push_str("-----END CERTIFICATE-----\n");
     let key_pem = cert.serialize_private_key_pem();
 
-    Ok((cert_pem, key_pem))
+    Ok((cert_pem, key_pem, fingerprint))
 }
 
 pub async fn ensure_lan_http_server(
     host: Option<Arc<crate::streaming::host::SunshineHost>>,
 ) -> Result<u16, String> {
+    ensure_lan_http_server_with_fingerprint(host)
+        .await
+        .map(|(port, _)| port)
+}
+
+pub async fn ensure_lan_http_server_with_fingerprint(
+    host: Option<Arc<crate::streaming::host::SunshineHost>>,
+) -> Result<(u16, String), String> {
     if let Ok(guard) = LAN_RUNTIME.lock() {
         if let Some(runtime) = guard.as_ref() {
             if !runtime.handle.is_finished() {
                 if let Ok(mut inner) = runtime.state.inner.write() {
                     inner.host = host;
                 }
-                return Ok(runtime.port);
+                return Ok((runtime.port, runtime.tls_fingerprint.clone()));
             }
         }
     }
@@ -107,7 +127,7 @@ pub async fn ensure_lan_http_server(
         .layer(middleware::from_fn(auth_middleware))
         .with_state(state.clone());
 
-    let (cert_pem, key_pem) = generate_self_signed_cert()?;
+    let (cert_pem, key_pem, tls_fingerprint) = generate_self_signed_cert()?;
     let config = axum_server::tls_rustls::RustlsConfig::from_pem(
         cert_pem.into_bytes(),
         key_pem.into_bytes(),
@@ -131,13 +151,14 @@ pub async fn ensure_lan_http_server(
     if let Ok(mut guard) = LAN_RUNTIME.lock() {
         *guard = Some(LanRuntime {
             port,
+            tls_fingerprint: tls_fingerprint.clone(),
             handle,
             state,
         });
     }
 
     log::info!("Servidor LAN HTTPS escuchando en puerto {port}");
-    Ok(port)
+    Ok((port, tls_fingerprint))
 }
 
 pub async fn start_lan_server_for_session(token: &str, game_key: &str) -> Result<u16, String> {
@@ -407,12 +428,11 @@ async fn handle_streaming_pair(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    if !address.ip().is_loopback()
-        && (payload.pairing_code.len() != 6
-            || !payload
-                .pairing_code
-                .bytes()
-                .all(|byte| byte.is_ascii_digit()))
+    if payload.pairing_code.len() != 6
+        || !payload
+            .pairing_code
+            .bytes()
+            .all(|byte| byte.is_ascii_digit())
     {
         return Err(StatusCode::UNAUTHORIZED);
     }
@@ -437,13 +457,12 @@ async fn handle_streaming_pair(
             return Err(StatusCode::TOO_MANY_REQUESTS);
         }
 
-        let authorized = (address.ip().is_loopback() && payload.pairing_code.is_empty())
-            || inner
-                .streaming_pairing
-                .as_ref()
-                .is_some_and(|(expected, expires)| {
-                    *expires > now && constant_time_string_eq(expected, &payload.pairing_code)
-                });
+        let authorized = inner
+            .streaming_pairing
+            .as_ref()
+            .is_some_and(|(expected, expires)| {
+                *expires > now && constant_time_string_eq(expected, &payload.pairing_code)
+            });
         if !authorized {
             let attempts = inner
                 .pairing_attempts

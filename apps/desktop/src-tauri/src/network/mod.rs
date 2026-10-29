@@ -235,6 +235,9 @@ pub fn build_peer_lan_client(expected_fingerprint: &str) -> Result<reqwest::Clie
 
     reqwest::Client::builder()
         .user_agent(USER_AGENT)
+        // Peer LAN traffic must go directly to the advertised device. A system
+        // proxy can intercept even loopback HTTPS and present a different cert.
+        .no_proxy()
         .timeout(DATA_REQUEST_TIMEOUT)
         .connect_timeout(DATA_CONNECT_TIMEOUT)
         .tcp_keepalive(DATA_TCP_KEEPALIVE)

@@ -77,7 +77,7 @@ pub async fn streaming_start_host(
 pub async fn streaming_connect_lan(
     ip_address: String,
     mut savecloud_port: u16,
-    pairing_code: String,
+    mut pairing_code: String,
     mut tls_fingerprint: String,
     width: Option<i32>,
     height: Option<i32>,
@@ -90,21 +90,34 @@ pub async fn streaming_connect_lan(
     app: tauri::AppHandle,
 ) -> Result<super::client::ConnectResult, String> {
     let is_loopback = ip_address == "127.0.0.1" || ip_address == "localhost" || ip_address == "::1";
+    let should_start_local_host = ip_address == "127.0.0.1" && savecloud_port == 0;
     super::set_mirror_mode(is_loopback);
 
-    if ip_address == "127.0.0.1" && savecloud_port == 0 {
-        savecloud_port =
-            crate::peer_lan::server::ensure_lan_http_server(Some(state.host.clone())).await?;
-        state
-            .host
-            .start(Some(state.session.clone()))
-            .await
-            .map_err(|e| e.to_string())?;
-        tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+    if is_loopback {
+        // Loopback connections must use the active local listener. Values from
+        // discovery/UI state can be stale after the LAN server restarts.
+        let (local_port, local_tls_fingerprint) =
+            crate::peer_lan::server::ensure_lan_http_server_with_fingerprint(
+                Some(state.host.clone()),
+            )
+            .await?;
+        savecloud_port = local_port;
+        tls_fingerprint = local_tls_fingerprint;
+
+        if should_start_local_host {
+            state
+                .host
+                .start(Some(state.session.clone()))
+                .await
+                .map_err(|e| e.to_string())?;
+            tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+        }
     }
-    if tls_fingerprint.trim().is_empty() && is_loopback {
-        tls_fingerprint = crate::peer_lan::server::lan_tls_fingerprint()
-            .ok_or_else(|| "No se pudo obtener la huella TLS del servidor local".to_string())?;
+    if is_loopback && pairing_code.trim().is_empty() {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        pairing_code = format!("{:06}", rng.gen_range(0..1_000_000));
+        crate::peer_lan::server::set_streaming_pairing_code(pairing_code.clone())?;
     }
 
     let video_format = match codec.as_deref() {
