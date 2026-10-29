@@ -17,12 +17,14 @@ import {
   acceptCloudInviteByUrl,
   leaveCloudMembership,
   removeCloudMember,
+  cancelCloudMemberDeletion,
   type CloudInvite,
   type CloudMembership,
   listCloudMemberships,
   setActiveCloudHostUserId,
   setCloudHostWsUrl,
 } from "@services/tauri";
+import { listen } from "@tauri-apps/api/event";
 import { extractShareTokenFromUrl, resolveShareToken } from "@/services/tauri/share.service";
 import { toastError, toastInfo, toastSyncResult } from "@utils/toast";
 import { useConfig } from "@hooks/useConfig";
@@ -360,8 +362,14 @@ export function useFriendsPage() {
     try {
       const result = await listCloudMemberships();
       if (requestProfileIdRef.current !== requestedProfileId) return;
-      dispatch({ type: "SET_HOST_MEMBERSHIPS", payload: result.hostMemberships.filter((x) => x.active) });
-      dispatch({ type: "SET_MEMBER_MEMBERSHIPS", payload: result.memberMemberships.filter((x) => x.active) });
+      dispatch({
+        type: "SET_HOST_MEMBERSHIPS",
+        payload: result.hostMemberships.filter((x) => x.active || Boolean(x.scheduledDeletionAt)),
+      });
+      dispatch({
+        type: "SET_MEMBER_MEMBERSHIPS",
+        payload: result.memberMemberships.filter((x) => x.active || Boolean(x.scheduledDeletionAt)),
+      });
     } catch {
       if (requestProfileIdRef.current !== requestedProfileId) return;
       dispatch({ type: "SET_HOST_MEMBERSHIPS", payload: [] });
@@ -486,6 +494,35 @@ export function useFriendsPage() {
       dispatch({ type: "SET_INVITE_BUSY", payload: false });
     }
   };
+
+  const handleCancelMemberDeletion = async (memberUserId: string) => {
+    dispatch({ type: "SET_INVITE_BUSY", payload: true });
+    try {
+      await cancelCloudMemberDeletion(memberUserId);
+      toastInfo(
+        i18n.t("friends.toast.memberDeletionCancelled"),
+        i18n.t("friends.toast.memberDeletionCancelledDesc", { memberUserId })
+      );
+      await queryClient.invalidateQueries({ queryKey: ["config"] });
+      await queryClient.invalidateQueries({ queryKey: ["cloud-presence"] });
+      await queryClient.invalidateQueries({ queryKey: ["cloud-memberships"] });
+      await refreshInvitesState();
+    } catch (e) {
+      toastError(i18n.t("friends.toast.cannotCancelDeletion"), i18n.t("friends.toast.cannotCancelDeletionDesc"));
+    } finally {
+      dispatch({ type: "SET_INVITE_BUSY", payload: false });
+    }
+  };
+
+  useEffect(() => {
+    const unlistenPromise = listen("cloud-membership-changed", () => {
+      void queryClient.invalidateQueries({ queryKey: ["cloud-memberships"] });
+      void refreshInvitesState();
+    });
+    return () => {
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [queryClient, refreshInvitesState]);
 
   const handleUseHostCloud = async (hostUserId: string | null) => {
     dispatch({ type: "SET_INVITE_BUSY", payload: true });
@@ -805,6 +842,7 @@ export function useFriendsPage() {
     handleRespondInvite,
     handleLeaveMembership,
     handleRemoveMember,
+    handleCancelMemberDeletion,
     handleUseHostCloud,
     activeCloudHostUserId,
     lastCreatedInviteToken,

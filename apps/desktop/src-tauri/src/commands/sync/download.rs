@@ -844,6 +844,7 @@ pub(crate) async fn sync_download_game_impl(
             &game_id,
             result.ok_count,
             result.err_count,
+            result.errors.clone(),
         );
         return Ok(result);
     }
@@ -924,6 +925,7 @@ pub(crate) async fn sync_download_game_impl(
         &game_id,
         result.ok_count,
         result.err_count,
+        result.errors.clone(),
     );
 
     if backup_dir.is_some() && result.err_count == 0 {

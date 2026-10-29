@@ -188,6 +188,7 @@ pub fn list_operation_history() -> Vec<OperationLogEntryDto> {
             game_id: e.game_id,
             file_count: e.file_count,
             err_count: e.err_count,
+            errors: e.errors,
         })
         .collect()
 }
@@ -1399,6 +1400,18 @@ pub struct FriendGameDto {
 }
 
 /// Realiza una solicitud pasiva para parsear el bloque público alojado por otro usuario.
+///
+/// # Arguments
+///
+/// * `friend_user_id` - Identificador de usuario del amigo a consultar.
+///
+/// # Returns
+///
+/// Estructura [`FriendProfileDto`] con la configuración visual y juegos compartidos.
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si el usuario no existe en la nube o la respuesta no es válida.
 #[tauri::command]
 pub async fn get_friend_config(friend_user_id: String) -> AppResult<FriendProfileDto> {
     let friend_id = friend_user_id.trim();
@@ -1406,21 +1419,12 @@ pub async fn get_friend_config(friend_user_id: String) -> AppResult<FriendProfil
         return Err("Escribe el usuario del amigo.".into());
     }
 
-    let ctx = resolve_api_context()?;
+    let path = format!("/users/{}/profile", friend_id);
 
-    let endpoint = format!(
-        "{}/users/{}/profile",
-        ctx.base_url.trim_end_matches('/'),
-        friend_id
-    );
-
-    let response = crate::network::API_CLIENT
-        .get(&endpoint)
-        .header("x-api-key", ctx.api_key)
-        .header("x-user-id", ctx.user_id)
+    let response = crate::cloud::cloud_api(reqwest::Method::GET, &path)
         .send()
         .await
-        .map_err(|_| AppError::network())?;
+        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
 
     if response.status().as_u16() == 404 {
         return Err(AppError::new(
@@ -1444,34 +1448,36 @@ pub async fn get_friend_config(friend_user_id: String) -> AppResult<FriendProfil
 }
 
 /// Realiza solicitudes pasivas en lote para parsear los bloques públicos alojados por varios usuarios.
+///
+/// # Arguments
+///
+/// * `friend_user_ids` - Lista de identificadores de usuario a consultar.
+///
+/// # Returns
+///
+/// Mapa que relaciona cada identificador de usuario con su perfil opcional [`Option<FriendProfileDto>`].
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si ocurre un error irrecuperable durante la consulta en lote.
 #[tauri::command]
 pub async fn get_friends_configs(
     friend_user_ids: Vec<String>,
 ) -> AppResult<std::collections::HashMap<String, Option<FriendProfileDto>>> {
-    let ctx = resolve_api_context()?;
-
     let futures = friend_user_ids.into_iter().map(|id| {
         let friend_id = id.trim().to_string();
-        let ctx = ctx.clone();
 
         async move {
             if friend_id.is_empty() {
                 return Ok::<_, AppError>((id, None));
             }
 
-            let endpoint = format!(
-                "{}/users/{}/profile",
-                ctx.base_url.trim_end_matches('/'),
-                friend_id
-            );
+            let path = format!("/users/{}/profile", friend_id);
 
-            let response = crate::network::API_CLIENT
-                .get(&endpoint)
-                .header("x-api-key", &ctx.api_key)
-                .header("x-user-id", &ctx.user_id)
-                .send()
-                .await
-                .map_err(|_| AppError::network())?;
+            let response = match crate::cloud::cloud_api(reqwest::Method::GET, &path).send().await {
+                Ok(r) => r,
+                Err(_) => return Ok::<_, AppError>((id, None)),
+            };
 
             if response.status().as_u16() == 404 {
                 return Ok::<_, AppError>((id, None));

@@ -85,6 +85,54 @@ export class S3SaveRepository implements SaveRepository {
     return (response.CommonPrefixes || []).map((p) => p.Prefix?.replace(/\/$/, "")).filter((p): p is string => !!p);
   }
 
+  /**
+   * Elimina permanentemente todos los objetos S3 bajo el prefijo `userId/`.
+   *
+   * Utiliza paginación con ListObjectsV2 y borrado en lotes con DeleteObjects
+   * (máx. 1000 keys/request) con concurrencia acotada para no saturar S3.
+   * Operación irreversible: no copia a papelera. Solo debe llamarse desde el
+   * worker de purga tras confirmar que el grace period expiró.
+   *
+   * @param userId - ID del usuario cuyos datos se eliminan permanentemente.
+   */
+  async deleteAllForUser(userId: string): Promise<void> {
+    const prefix = `${userId}/`;
+    const limit = pLimit(DELETE_BATCH_CONCURRENCY);
+    const deletePromises: Promise<unknown>[] = [];
+    let continuationToken: string | undefined;
+
+    do {
+      const list = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.bucketName,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        })
+      );
+
+      const keys = (list.Contents ?? []).filter((c): c is { Key: string } => !!c.Key).map((c) => ({ Key: c.Key }));
+
+      if (keys.length > 0) {
+        for (const batch of S3SaveRepository.chunk(keys, DELETE_BATCH_SIZE)) {
+          deletePromises.push(
+            limit(() =>
+              this.s3.send(
+                new DeleteObjectsCommand({
+                  Bucket: this.bucketName,
+                  Delete: { Objects: batch, Quiet: true },
+                })
+              )
+            )
+          );
+        }
+      }
+
+      continuationToken = list.IsTruncated ? list.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    await Promise.all(deletePromises);
+  }
+
   /** Descarga y devuelve el contenido de un archivo en texto plano desde S3 */
   async getFileContent(key: string): Promise<string> {
     const command = new GetObjectCommand({ Bucket: this.bucketName, Key: key });

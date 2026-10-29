@@ -101,6 +101,24 @@ services:
       create-bucket:
         condition: service_completed_successfully
 
+  member-purge-worker:
+    extends:
+      service: savecloud-api
+    container_name: savecloud-member-purge-worker
+    command: ["bun", "dist/member-purge-worker.js"]
+    ports: !reset []
+    healthcheck:
+      disable: true
+    depends_on:
+      savecloud-api:
+        condition: service_healthy
+      dynamodb-local:
+        condition: service_started
+      create-bucket:
+        condition: service_completed_successfully
+    environment:
+      - MEMBER_PURGE_INTERVAL_MS=${MEMBER_PURGE_INTERVAL_MS:-3600000}
+
   minio:
     image: quay.io/minio/aistor/minio:latest
     container_name: savecloud-minio
@@ -114,6 +132,8 @@ services:
       - MINIO_NOTIFY_WEBHOOK_ENABLE_primary=on
       - MINIO_NOTIFY_WEBHOOK_ENDPOINT_primary=http://savecloud-api:3000/webhooks/minio
       - MINIO_NOTIFY_WEBHOOK_AUTH_TOKEN_primary=${SYNC_GAMES_API_KEY}
+      - MINIO_NOTIFY_WEBHOOK_QUEUE_DIR_primary=/mnt/data/.minio-events
+      - MINIO_NOTIFY_WEBHOOK_QUEUE_LIMIT_primary=100000
     command: server /mnt/data --console-address ":9001" --license /minio.license
     volumes:
       - minio_data:/mnt/data

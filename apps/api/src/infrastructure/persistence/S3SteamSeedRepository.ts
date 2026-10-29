@@ -136,7 +136,10 @@ export class S3SteamSeedRepository implements SteamSeedRepositoryPort {
         updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : null,
       };
     } catch (error) {
-      if (isNoSuchKey(error)) return { paused: false, updatedAt: null };
+      if (isNoSuchKey(error)) {
+        void this.setWorkerPaused(ownerId, false).catch(() => {});
+        return { paused: false, updatedAt: null };
+      }
       throw error;
     }
   }

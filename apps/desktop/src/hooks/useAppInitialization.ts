@@ -59,6 +59,26 @@ export function useAppInitialization() {
   }, []);
 
   /**
+   * Cuando Rust completa la renovación de sesiones de invitado en segundo plano,
+   * invalida las queries para que TanStack Query refresque los datos con el nuevo token.
+   */
+  useEffect(() => {
+    const unsub = listen("session-refreshed", () => {
+      void queryClient.invalidateQueries().catch((error: unknown) => {
+        console.error("Failed to invalidate queries:", error);
+      });
+    });
+
+    return () => {
+      void unsub
+        .then((unlisten) => unlisten())
+        .catch((error: unknown) => {
+          console.error("Failed to clean up session-refreshed listener:", error);
+        });
+    };
+  }, [queryClient]);
+
+  /**
    * Comprueba si hay nuevas versiones disponibles.
    *
    * - Solo en producción

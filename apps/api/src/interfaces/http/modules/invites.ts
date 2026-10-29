@@ -11,6 +11,8 @@ import { ListPendingCloudInvitesUseCase } from "@application/use-cases/ListPendi
 import { ResolveCloudStorageScopeUseCase } from "@application/use-cases/ResolveCloudStorageScopeUseCase";
 import { RespondCloudInviteUseCase } from "@application/use-cases/RespondCloudInviteUseCase";
 import { SetCloudGameShareUseCase } from "@application/use-cases/SetCloudGameShareUseCase";
+import { RemoveMemberUseCase } from "@application/use-cases/RemoveMemberUseCase";
+import { CancelMemberDeletionUseCase } from "@application/use-cases/CancelMemberDeletionUseCase";
 import { registerInviteRoutes } from "@interfaces/http/routes/invites.routes";
 import { registerProfileRoutes } from "@interfaces/http/routes/users.routes";
 
@@ -35,6 +37,17 @@ export async function registerInvitesModule(
     listCloudPresenceUseCase: deps.connectionRepository
       ? new ListCloudPresenceUseCase(deps.cloudInviteRepository, deps.connectionRepository)
       : undefined,
+    removeMemberUseCase: new RemoveMemberUseCase(
+      deps.cloudInviteRepository,
+      deps.accessSessionRepository,
+      deps.webSocketNotifier,
+      deps.connectionRepository
+    ),
+    cancelMemberDeletionUseCase: new CancelMemberDeletionUseCase(
+      deps.cloudInviteRepository,
+      deps.webSocketNotifier,
+      deps.connectionRepository
+    ),
     cloudInviteRepository: deps.cloudInviteRepository,
     accessSessionRepository: deps.accessSessionRepository,
     webSocketNotifier: deps.webSocketNotifier,

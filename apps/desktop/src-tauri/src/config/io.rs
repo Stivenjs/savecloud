@@ -443,8 +443,9 @@ pub fn append_operation_log(
     game_id: &str,
     file_count: u32,
     err_count: u32,
+    errors: Vec<String>,
 ) -> Result<(), String> {
-    profile_storage::append_operation_log(kind, game_id, file_count, err_count)
+    profile_storage::append_operation_log(kind, game_id, file_count, err_count, errors)
 }
 
 pub fn get_combined_config() -> Config {

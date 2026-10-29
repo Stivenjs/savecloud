@@ -13,8 +13,10 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  ScanCommand,
   UpdateCommand,
   DeleteCommand,
+  BatchWriteCommand,
 } from "@aws-sdk/lib-dynamodb";
 import crypto from "node:crypto";
 import type { CloudInvite, CloudMembership } from "@domain/entities/CloudInvite";
@@ -53,6 +55,10 @@ interface MembershipDbRecord {
   sk: string;
   gsi1pk: string;
   gsi1sk: string;
+  /** GSI2 hash key — presente solo cuando scheduledDeletionAt existe. Valor fijo: "PENDING_DELETION". */
+  gsi2pk?: string;
+  /** GSI2 range key — ISO timestamp de la purga programada. Permite range queries `<= now`. */
+  gsi2sk?: string;
   entityType: "MEMBERSHIP";
   hostUserId: string;
   memberUserId: string;
@@ -61,6 +67,8 @@ interface MembershipDbRecord {
   createdAt: string;
   updatedAt: string;
   active: boolean;
+  scheduledDeletionAt?: string | null;
+  scheduledDeletionBy?: string | null;
 }
 
 /**
@@ -509,7 +517,7 @@ export class DynamoDbCloudInviteRepository implements CloudInviteRepository {
   }
 
   /**
-   * Desactiva de forma atómica una membresía.
+   * Desactiva de forma atómica una membresía (sin eliminación programada).
    */
   async deactivateMembership(hostUserId: string, memberUserId: string): Promise<void> {
     const now = nowIso();
@@ -527,6 +535,214 @@ export class DynamoDbCloudInviteRepository implements CloudInviteRepository {
         },
       })
     );
+  }
+
+  /**
+   * Programa la eliminación diferida de un miembro.
+   *
+   * Desactiva la membresía de inmediato y establece los campos de soft
+   * delete + GSI2 para que el worker de purga pueda encontrarla eficientemente.
+   */
+  async scheduleMemberDeletion(
+    hostUserId: string,
+    memberUserId: string,
+    scheduledDeletionAt: string,
+    deletedBy: string
+  ): Promise<void> {
+    const now = nowIso();
+    await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: {
+          pk: `HOST#${hostUserId.trim()}`,
+          sk: `MEMBER#${memberUserId.trim()}`,
+        },
+        UpdateExpression: [
+          "SET active = :active",
+          "updatedAt = :updatedAt",
+          "scheduledDeletionAt = :scheduledDeletionAt",
+          "scheduledDeletionBy = :scheduledDeletionBy",
+          "gsi2pk = :gsi2pk",
+          "gsi2sk = :gsi2sk",
+        ].join(", "),
+        ExpressionAttributeValues: {
+          ":active": false,
+          ":updatedAt": now,
+          ":scheduledDeletionAt": scheduledDeletionAt,
+          ":scheduledDeletionBy": deletedBy,
+          ":gsi2pk": "PENDING_DELETION",
+          ":gsi2sk": scheduledDeletionAt,
+        },
+      })
+    );
+  }
+
+  /**
+   * Cancela una eliminación programada y restaura la membresía a activa.
+   *
+   * Limpia los atributos de soft delete y los proyectados en GSI2 usando
+   * REMOVE para que DynamoDB los elimine físicamente del ítem.
+   */
+  async cancelScheduledMemberDeletion(hostUserId: string, memberUserId: string): Promise<void> {
+    const now = nowIso();
+    await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: {
+          pk: `HOST#${hostUserId.trim()}`,
+          sk: `MEMBER#${memberUserId.trim()}`,
+        },
+        UpdateExpression:
+          "SET active = :active, updatedAt = :updatedAt REMOVE scheduledDeletionAt, scheduledDeletionBy, gsi2pk, gsi2sk",
+        ExpressionAttributeValues: {
+          ":active": true,
+          ":updatedAt": now,
+        },
+      })
+    );
+  }
+
+  /**
+   * Lista las membresías cuyo grace period ya expiró.
+   *
+   * Consulta el índice GSI2 con `gsi2pk = "PENDING_DELETION" AND gsi2sk <= :now`
+   * para obtener solo los ítems listos para purga, sin escanear la tabla completa.
+   *
+   * @param now - ISO timestamp de referencia (normalmente `new Date().toISOString()`).
+   */
+  async listMembershipsReadyForPurge(now: string): Promise<CloudMembership[]> {
+    const memberships: CloudMembership[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+    try {
+      do {
+        const res = await this.docClient.send(
+          new QueryCommand({
+            TableName: this.tableName,
+            IndexName: "GSI2",
+            KeyConditionExpression: "gsi2pk = :pk AND gsi2sk <= :now",
+            ExpressionAttributeValues: {
+              ":pk": "PENDING_DELETION",
+              ":now": now,
+            },
+            ExclusiveStartKey: lastEvaluatedKey,
+          })
+        );
+
+        for (const item of res.Items ?? []) {
+          memberships.push(this.mapMembershipRecord(item as MembershipDbRecord));
+        }
+
+        lastEvaluatedKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+      } while (lastEvaluatedKey);
+
+      return memberships;
+    } catch (err: unknown) {
+      const isMissingIndex =
+        err instanceof Error &&
+        (err.name === "ValidationException" || err.message.includes("does not have the specified index"));
+      if (isMissingIndex) {
+        return this.scanMembershipsReadyForPurge(now);
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Fallback mediante Scan para entornos donde la tabla existente aún no ha provisionado GSI2.
+   */
+  private async scanMembershipsReadyForPurge(now: string): Promise<CloudMembership[]> {
+    const memberships: CloudMembership[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+    do {
+      const res = await this.docClient.send(
+        new ScanCommand({
+          TableName: this.tableName,
+          FilterExpression:
+            "entityType = :entityType AND attribute_exists(scheduledDeletionAt) AND scheduledDeletionAt <= :now",
+          ExpressionAttributeValues: {
+            ":entityType": "MEMBERSHIP",
+            ":now": now,
+          },
+          ExclusiveStartKey: lastEvaluatedKey,
+        })
+      );
+
+      for (const item of res.Items ?? []) {
+        memberships.push(this.mapMembershipRecord(item as MembershipDbRecord));
+      }
+
+      lastEvaluatedKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+    } while (lastEvaluatedKey);
+
+    return memberships;
+  }
+
+  /**
+   * Elimina físicamente la entrada MEMBERSHIP de DynamoDB.
+   *
+   * Llamar únicamente tras confirmar que los datos S3 y ACLs del miembro
+   * han sido borrados por el use case de purga.
+   */
+  async deleteMembershipRecord(hostUserId: string, memberUserId: string): Promise<void> {
+    await this.docClient.send(
+      new DeleteCommand({
+        TableName: this.tableName,
+        Key: {
+          pk: `HOST#${hostUserId.trim()}`,
+          sk: `MEMBER#${memberUserId.trim()}`,
+        },
+      })
+    );
+  }
+
+  /**
+   * Elimina todos los registros GAME_SHARE de un miembro con un host.
+   *
+   * Realiza una Query paginada por `pk = HOST#{hostUserId}` con prefix
+   * `SHARE#{memberUserId}#` y borra en lotes de hasta 25 ítems con
+   * BatchWriteItem para no saturar DynamoDB.
+   */
+  async deleteAllGameSharesForMember(hostUserId: string, memberUserId: string): Promise<void> {
+    const pk = `HOST#${hostUserId.trim()}`;
+    const skPrefix = `SHARE#${memberUserId.trim()}#`;
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+    const MAX_BATCH_WRITE = 25; // Límite de DynamoDB BatchWriteItem
+
+    do {
+      const res = await this.docClient.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          KeyConditionExpression: "pk = :pk AND begins_with(sk, :skPrefix)",
+          ExpressionAttributeValues: {
+            ":pk": pk,
+            ":skPrefix": skPrefix,
+          },
+          ProjectionExpression: "pk, sk",
+          ExclusiveStartKey: lastEvaluatedKey,
+        })
+      );
+
+      const items = res.Items ?? [];
+
+      // Borrar en lotes de hasta 25 ítems (límite de BatchWrite)
+      for (let i = 0; i < items.length; i += MAX_BATCH_WRITE) {
+        const batch = items.slice(i, i + MAX_BATCH_WRITE);
+        await this.docClient.send(
+          new BatchWriteCommand({
+            RequestItems: {
+              [this.tableName]: batch.map((item) => ({
+                DeleteRequest: { Key: { pk: item["pk"], sk: item["sk"] } },
+              })),
+            },
+          })
+        );
+      }
+
+      lastEvaluatedKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+    } while (lastEvaluatedKey);
   }
 
   private mapInviteRecord(item: InviteDbRecord): CloudInvite {
@@ -555,6 +771,8 @@ export class DynamoDbCloudInviteRepository implements CloudInviteRepository {
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       active: item.active,
+      scheduledDeletionAt: item.scheduledDeletionAt ?? null,
+      scheduledDeletionBy: item.scheduledDeletionBy ?? null,
     };
   }
 }

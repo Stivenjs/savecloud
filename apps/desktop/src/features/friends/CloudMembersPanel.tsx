@@ -4,7 +4,13 @@ import { Spinner, useDraggable } from "@heroui/react";
 import { motion } from "framer-motion";
 import { UserRound } from "lucide-react";
 import { getFriendsConfigs } from "@services/tauri";
-import { listCloudMemberships, listCloudPresence, type CloudPresenceItem } from "@services/tauri/invites.service";
+import {
+  listCloudMemberships,
+  listCloudPresence,
+  cancelCloudMemberDeletion,
+  type CloudPresenceItem,
+} from "@services/tauri/invites.service";
+import { listen } from "@tauri-apps/api/event";
 import { CloudMembersHeader } from "@features/friends/CloudMembersHeader";
 import {
   CloudMembershipActionConfirmModal,
@@ -29,6 +35,7 @@ interface CloudMembersPanelProps {
   onClose: () => void;
   onViewProfile: (userId: string) => void;
   onRemoveMember?: (userId: string) => Promise<void>;
+  onCancelMemberDeletion?: (userId: string) => Promise<void>;
   onLeaveMembership?: (hostId: string) => Promise<void>;
   containerRef?: React.RefObject<HTMLElement>;
   draggable?: boolean;
@@ -97,6 +104,7 @@ export function CloudMembersPanel({
   onClose,
   onViewProfile,
   onRemoveMember,
+  onCancelMemberDeletion,
   onLeaveMembership,
   containerRef,
   draggable = true,
@@ -161,9 +169,12 @@ export function CloudMembersPanel({
   const localRawAvatar = config?.profileAvatar;
   const localPresence = localUserId ? presenceByUser.get(localUserId) : undefined;
 
-  const hostMemberships = useMemo(() => (memberships?.hostMemberships ?? []).filter((m) => m.active), [memberships]);
+  const hostMemberships = useMemo(
+    () => (memberships?.hostMemberships ?? []).filter((m) => m.active || Boolean(m.scheduledDeletionAt)),
+    [memberships]
+  );
   const memberMemberships = useMemo(
-    () => (memberships?.memberMemberships ?? []).filter((m) => m.active),
+    () => (memberships?.memberMemberships ?? []).filter((m) => m.active || Boolean(m.scheduledDeletionAt)),
     [memberships]
   );
   const hasAnyMembers = hostMemberships.length > 0 || memberMemberships.length > 0;
@@ -251,6 +262,32 @@ export function CloudMembersPanel({
     [onLeaveMembership]
   );
 
+  const handleCancelMemberDeletion = useCallback(
+    async (userId: string) => {
+      setIsActionLoading(userId);
+      try {
+        if (onCancelMemberDeletion) {
+          await onCancelMemberDeletion(userId);
+        } else {
+          await cancelCloudMemberDeletion(userId);
+          await refetchMemberships();
+        }
+      } finally {
+        setIsActionLoading(null);
+      }
+    },
+    [onCancelMemberDeletion, refetchMemberships]
+  );
+
+  useEffect(() => {
+    const unlistenPromise = listen("cloud-membership-changed", () => {
+      void refetchMemberships();
+    });
+    return () => {
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [refetchMemberships]);
+
   const handleConfirmPendingAction = useCallback(async () => {
     if (!pendingAction) return;
 
@@ -327,6 +364,7 @@ export function CloudMembersPanel({
                 onViewProfile={handleViewProfile}
                 onRequestRemoveMember={(userId) => setPendingAction({ type: "remove-member", userId })}
                 onRemoveMember={onRemoveMember ? handleRemoveMember : undefined}
+                onCancelMemberDeletion={handleCancelMemberDeletion}
                 searchQuery={debouncedSearchQuery}
                 localUserId={localUserId}
               />

@@ -12,7 +12,7 @@ export function CloudMembersLauncher() {
   const [open, setIsOpen] = useState(false);
   const modalRef = useRef<HTMLElement>(null as unknown as HTMLElement);
 
-  const { handleRemoveMember, handleLeaveMembership } = useCloudMembersActions();
+  const { handleRemoveMember, handleCancelMemberDeletion, handleLeaveMembership } = useCloudMembersActions();
 
   const handleViewProfileWithNavigation = (userId: string) => {
     requestOpenFriendProfile(userId);
@@ -44,6 +44,7 @@ export function CloudMembersLauncher() {
         onClose={() => setIsOpen(false)}
         onViewProfile={handleViewProfileWithNavigation}
         onRemoveMember={handleRemoveMember}
+        onCancelMemberDeletion={handleCancelMemberDeletion}
         onLeaveMembership={handleLeaveMembership}
         modalRef={modalRef}
         onDetachToWindow={() => {

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { CloudMembership } from "@services/tauri/invites.service";
 import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
 import { CloudMemberActions } from "@features/friends/CloudMemberActions";
@@ -5,7 +6,7 @@ import { ProfileAvatar } from "@features/profile";
 import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
 import { useGameSessionDuration } from "@store/GameSessionStore";
 import { useTranslation } from "react-i18next";
-import { Clock } from "lucide-react";
+import { Clock, AlertTriangle } from "lucide-react";
 
 interface CloudMemberRowProps {
   membership: CloudMembership;
@@ -22,6 +23,7 @@ interface CloudMemberRowProps {
   onRequestRemoveMember?: (userId: string) => void;
   onRequestLeaveMembership?: (hostId: string) => void;
   onRemoveMember?: (userId: string) => Promise<void>;
+  onCancelMemberDeletion?: (userId: string) => Promise<void>;
   onLeaveMembership?: (hostId: string) => Promise<void>;
 }
 
@@ -40,6 +42,7 @@ export function CloudMemberRow({
   onRequestRemoveMember,
   onRequestLeaveMembership,
   onRemoveMember,
+  onCancelMemberDeletion,
   onLeaveMembership,
 }: CloudMemberRowProps) {
   const { t } = useTranslation();
@@ -51,6 +54,13 @@ export function CloudMemberRow({
     fallbackStartedAt: lastSeenAt,
     isRunning: isPlaying,
   });
+
+  const daysUntilDeletion = useMemo(() => {
+    if (!membership.scheduledDeletionAt) return null;
+    const diff = new Date(membership.scheduledDeletionAt).getTime() - Date.now();
+    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    return days > 0 ? days : 0;
+  }, [membership.scheduledDeletionAt]);
 
   return (
     <div className="flex items-center justify-between gap-2 rounded-lg border border-default-200/60 bg-default-50/30 px-2.5 py-2 backdrop-blur-sm hover:border-default-300/80 hover:bg-default-50/50 transition-colors">
@@ -66,6 +76,24 @@ export function CloudMemberRow({
                   ? t("friends.cloudMembers.host")
                   : t("friends.cloudMembers.member")}
             </p>
+            {daysUntilDeletion !== null && (
+              <span
+                title={
+                  membership.scheduledDeletionAt
+                    ? t("friends.cloudMembers.scheduledDeletionTooltip", {
+                        date: new Date(membership.scheduledDeletionAt).toLocaleString(),
+                      })
+                    : undefined
+                }
+                className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[9.5px] font-medium text-amber-500 border border-amber-500/20">
+                <AlertTriangle size={9} className="text-amber-500" />
+                <span>
+                  {daysUntilDeletion === 0
+                    ? t("friends.cloudMembers.purgeImminent")
+                    : t("friends.cloudMembers.purgeIn", { count: daysUntilDeletion })}
+                </span>
+              </span>
+            )}
             {isPlaying && (
               <div className="flex items-center gap-1.5 min-w-0">
                 <span className="text-[10px] text-default-400">·</span>
@@ -96,6 +124,7 @@ export function CloudMemberRow({
           onRequestRemoveMember={onRequestRemoveMember}
           onRequestLeaveMembership={onRequestLeaveMembership}
           onRemoveMember={onRemoveMember}
+          onCancelMemberDeletion={onCancelMemberDeletion}
           onLeaveMembership={onLeaveMembership}
         />
       </div>

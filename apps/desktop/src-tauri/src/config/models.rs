@@ -217,6 +217,9 @@ pub struct OperationLogEntry {
     pub game_id: String,
     pub file_count: u32,
     pub err_count: u32,
+    /// Mensajes de error individuales; vacío cuando la operación fue exitosa.
+    #[serde(default)]
+    pub errors: Vec<String>,
 }
 
 /// Gamificación y estadísticas locales; viaja en el JSON monolítico (export, import, nube).
@@ -479,6 +482,8 @@ pub struct OperationLogEntryDto {
     pub game_id: String,
     pub file_count: u32,
     pub err_count: u32,
+    /// Lista de mensajes de error; vacía cuando la operación fue exitosa.
+    pub errors: Vec<String>,
 }
 
 /// Valor centinela utilizado para enmascarar la API Key hacia el frontend.

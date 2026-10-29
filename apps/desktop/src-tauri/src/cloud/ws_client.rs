@@ -51,6 +51,13 @@ pub enum CloudIncomingMessage {
     TransferSessionPending { data: TransferSessionPendingData },
     /// El inbox cloud cambió y el cliente debe descargar desde su cursor local.
     NotificationsChanged { data: NotificationsChangedData },
+    /// Notificación de que el usuario ha sido removido de una nube con fecha programada de purga.
+    MemberRemoved { data: MemberRemovedData },
+    /// Notificación de que la eliminación programada fue cancelada.
+    MemberRemovalCancelled { data: MemberRemovalCancelledData },
+    /// Mensaje no reconocido de forma nativa por esta versión del cliente.
+    #[serde(other)]
+    Unknown,
 }
 
 /// Datos asociados a un evento `FriendPlaying`.
@@ -132,6 +139,21 @@ pub struct CloudWsAuth {
 #[serde(rename_all = "camelCase")]
 pub struct NotificationsChangedData {
     pub cursor: String,
+}
+
+/// Datos de notificación cuando el usuario es removido de una nube.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberRemovedData {
+    pub host_user_id: String,
+    pub scheduled_deletion_at: String,
+}
+
+/// Datos de notificación cuando se cancela la eliminación programada de un usuario.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MemberRemovalCancelledData {
+    pub host_user_id: String,
 }
 
 /// Payload para difusión de presencia enviada desde el cliente al servidor.
@@ -249,6 +271,7 @@ pub async fn start_ws_loop(
     let mut last_friend_game: HashMap<String, String> = HashMap::new();
 
     loop {
+        let _ = crate::cloud::session_refresh::ensure_active_guest_token_valid().await;
         let current_credential = auth
             .host_user_id
             .as_deref()
@@ -265,6 +288,11 @@ pub async fn start_ws_loop(
                         headers.insert("x-api-key", credential);
                         headers.insert("x-user-id", user_id);
                         headers.insert("x-device-id", device_id);
+                        if let Some(ref host) = auth.host_user_id {
+                            if let Ok(host_hdr) = HeaderValue::from_str(host) {
+                                headers.insert("x-cloud-host-user-id", host_hdr);
+                            }
+                        }
                         request
                     }
                     _ => {
@@ -453,6 +481,9 @@ async fn handle_incoming_text(
                 CloudIncomingMessage::StreamSignal { .. } => "STREAM_SIGNAL",
                 CloudIncomingMessage::TransferSessionPending { .. } => "TRANSFER_SESSION_PENDING",
                 CloudIncomingMessage::NotificationsChanged { .. } => "NOTIFICATIONS_CHANGED",
+                CloudIncomingMessage::MemberRemoved { .. } => "MEMBER_REMOVED",
+                CloudIncomingMessage::MemberRemovalCancelled { .. } => "MEMBER_REMOVAL_CANCELLED",
+                CloudIncomingMessage::Unknown => "UNKNOWN",
             };
 
             sync_logger::log_operation("cloud_ws_message_parsed", &format!("kind={}", msg_kind));
@@ -571,6 +602,62 @@ async fn process_incoming_payload(
                     sync_logger::log_error("ws_register_and_serve_session_failed", &e, &e);
                 }
             });
+        }
+        CloudIncomingMessage::MemberRemoved { data } => {
+            log_cloud(
+                app_handle,
+                logs,
+                "warn",
+                &format!(
+                    "Has sido removido de la nube de {}. Purga programada para: {}",
+                    data.host_user_id, data.scheduled_deletion_at
+                ),
+            )
+            .await;
+
+            let _ = crate::overlay::show_overlay_notification(
+                app_handle.clone(),
+                "Membresía Cloud eliminada".to_string(),
+                Some(format!(
+                    "Has sido removido de la nube de {}. Tus datos se eliminarán el {}",
+                    data.host_user_id, data.scheduled_deletion_at
+                )),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+
+            let _ = app_handle.emit("cloud-membership-changed", data);
+        }
+        CloudIncomingMessage::MemberRemovalCancelled { data } => {
+            log_cloud(
+                app_handle,
+                logs,
+                "info",
+                &format!(
+                    "Se ha cancelado la eliminación de tu membresía en la nube de {}",
+                    data.host_user_id
+                ),
+            )
+            .await;
+
+            let _ = crate::overlay::show_overlay_notification(
+                app_handle.clone(),
+                "Membresía restaurada".to_string(),
+                Some(format!(
+                    "{} canceló la eliminación de tu membresía.",
+                    data.host_user_id
+                )),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+
+            let _ = app_handle.emit("cloud-membership-changed", data);
         }
         _ => {}
     }

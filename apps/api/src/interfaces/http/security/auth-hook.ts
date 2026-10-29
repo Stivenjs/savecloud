@@ -107,10 +107,7 @@ async function handleLambdaAuthorizer(
     rawReq.apiGateway?.event?.requestContext?.authorizer?.lambda ??
     request.awsLambda?.event?.requestContext?.authorizer?.lambda;
 
-  if (
-    !authorizerLambda ||
-    (!authorizerLambda.authMode && authorizerLambda.isAuthorized !== true && authorizerLambda.isAuthorized === "true")
-  ) {
+  if (!authorizerLambda || (!authorizerLambda.authMode && authorizerLambda.isAuthorized !== true)) {
     return false;
   }
 

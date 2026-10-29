@@ -94,6 +94,17 @@ export interface SaveRepository {
   /** Lista todos los usuarios en la nube. */
   listAllUsers(): Promise<string[]>;
 
+  /**
+   * Elimina permanentemente todos los objetos S3 bajo el prefijo `userId/`.
+   *
+   * Diseñado para la purga de datos de un miembro removido. Opera de forma
+   * eficiente con ListObjectsV2 + DeleteObjects en lotes sin afectar
+   * otros prefijos/usuarios del bucket.
+   *
+   * @param userId - ID del usuario cuyos datos se eliminan permanentemente.
+   */
+  deleteAllForUser(userId: string): Promise<void>;
+
   // --- Multipart upload (archivos grandes, pausar/cancelar) ---
   /** Inicia una subida multipart; devuelve uploadId y key para las siguientes llamadas. */
   createMultipartUpload(userId: string, gameId: string, filename: string): Promise<CreateMultipartUploadResult>;

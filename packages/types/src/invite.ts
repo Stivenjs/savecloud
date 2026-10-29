@@ -23,6 +23,13 @@ export interface CloudMembership {
   createdAt: string;
   updatedAt: string;
   active: boolean;
+  /**
+   * ISO timestamp en el que se ejecutará la purga real de datos (S3 + DynamoDB).
+   * `null` o ausente significa que no hay eliminación programada.
+   */
+  scheduledDeletionAt?: string | null;
+  /** userId del host que programó la eliminación. */
+  scheduledDeletionBy?: string | null;
 }
 
 export interface GameShareAcl {

@@ -16,6 +16,7 @@ interface CloudMembersSectionProps {
   onRequestRemoveMember?: (userId: string) => void;
   onRequestLeaveMembership?: (hostId: string) => void;
   onRemoveMember?: (userId: string) => Promise<void>;
+  onCancelMemberDeletion?: (userId: string) => Promise<void>;
   onLeaveMembership?: (hostId: string) => Promise<void>;
   searchQuery?: string;
   localUserId: string;
@@ -33,6 +34,7 @@ export function CloudMembersSection({
   onRequestRemoveMember,
   onRequestLeaveMembership,
   onRemoveMember,
+  onCancelMemberDeletion,
   onLeaveMembership,
   searchQuery = "",
   localUserId,
@@ -94,6 +96,7 @@ export function CloudMembersSection({
                       onRequestRemoveMember={onRequestRemoveMember}
                       onRequestLeaveMembership={onRequestLeaveMembership}
                       onRemoveMember={onRemoveMember}
+                      onCancelMemberDeletion={onCancelMemberDeletion}
                       onLeaveMembership={onLeaveMembership}
                     />
                   );

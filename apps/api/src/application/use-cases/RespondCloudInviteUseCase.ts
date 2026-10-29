@@ -37,7 +37,7 @@ export class RespondCloudInviteUseCase {
 
       const existingMembership = await this.repository.getMembership(invite.hostUserId, userId);
       if (existingMembership?.active) {
-        throw new ApplicationError("CONFLICT", "Este ID ya pertenece a un miembro activo de esta nube.");
+        throw new ApplicationError("CONFLICT", "Ya eres un miembro activo de esta nube.");
       }
 
       const now = new Date().toISOString();
@@ -51,9 +51,11 @@ export class RespondCloudInviteUseCase {
         memberUserId: invite.inviteeUserId,
         invitedById: invite.id,
         wsUrl: invite.wsUrl,
-        createdAt: now,
+        createdAt: existingMembership?.createdAt ?? now,
         updatedAt: now,
         active: true,
+        scheduledDeletionAt: null,
+        scheduledDeletionBy: null,
       });
       return invite;
     }

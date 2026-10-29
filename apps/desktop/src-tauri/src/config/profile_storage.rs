@@ -513,6 +513,7 @@ pub fn append_operation_log(
     game_id: &str,
     file_count: u32,
     err_count: u32,
+    errors: Vec<String>,
 ) -> Result<(), String> {
     let mut history = load_history();
     let mut gamification = load_gamification();
@@ -523,6 +524,7 @@ pub fn append_operation_log(
         game_id: game_id.to_string(),
         file_count,
         err_count,
+        errors,
     });
 
     const MAX_ENTRIES: usize = 200;

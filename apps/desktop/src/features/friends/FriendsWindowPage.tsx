@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 export function FriendsWindowPage() {
   useProfileSessionHydration();
   const { t } = useTranslation();
-  const { handleRemoveMember, handleLeaveMembership } = useCloudMembersActions();
+  const { handleRemoveMember, handleCancelMemberDeletion, handleLeaveMembership } = useCloudMembersActions();
 
   useEffect(() => {
     void getCurrentWindow().setTitle(t("friends.cloudMembers.title"));
@@ -40,6 +40,7 @@ export function FriendsWindowPage() {
             void handleViewProfile(userId);
           }}
           onRemoveMember={handleRemoveMember}
+          onCancelMemberDeletion={handleCancelMemberDeletion}
           onLeaveMembership={handleLeaveMembership}
           draggable={false}
           showCloseButton={false}

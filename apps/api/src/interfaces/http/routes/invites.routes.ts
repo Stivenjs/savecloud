@@ -7,11 +7,19 @@ import type { ListPendingCloudInvitesUseCase } from "@application/use-cases/List
 import type { RespondCloudInviteUseCase } from "@application/use-cases/RespondCloudInviteUseCase";
 import type { SetCloudGameShareUseCase } from "@application/use-cases/SetCloudGameShareUseCase";
 import type { ListCloudPresenceUseCase } from "@application/use-cases/ListCloudPresenceUseCase";
+import type { RemoveMemberUseCase } from "@application/use-cases/RemoveMemberUseCase";
+import type { CancelMemberDeletionUseCase } from "@application/use-cases/CancelMemberDeletionUseCase";
 import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import { createAccessSession } from "@shared/accessSession";
 import type { AccessSessionRepository } from "@domain/ports/AccessSessionRepository";
 import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
-import { inviteAcceptanceRateLimit, inviteCreationRateLimit } from "@interfaces/http/rate-limits/invite";
+import {
+  inviteAcceptanceRateLimit,
+  inviteCreationRateLimit,
+  memberCancelRemovalRateLimit,
+  memberRemovalRateLimit,
+  membershipLeaveRateLimit,
+} from "@interfaces/http/rate-limits/invite";
 import {
   AcceptByTokenSchema,
   type AcceptByTokenBody,
@@ -23,6 +31,8 @@ import {
   type SetGameShareBody,
   MembershipActionSchema,
   type MembershipActionBody,
+  RemoveMemberSchema,
+  type RemoveMemberBody,
 } from "@interfaces/schema/invites";
 
 export async function registerInviteRoutes(
@@ -33,6 +43,8 @@ export async function registerInviteRoutes(
     respondCloudInviteUseCase: RespondCloudInviteUseCase;
     setCloudGameShareUseCase: SetCloudGameShareUseCase;
     listCloudPresenceUseCase?: ListCloudPresenceUseCase;
+    removeMemberUseCase?: RemoveMemberUseCase;
+    cancelMemberDeletionUseCase?: CancelMemberDeletionUseCase;
     cloudInviteRepository: CloudInviteRepository;
     accessSessionRepository?: AccessSessionRepository;
     webSocketNotifier?: WebSocketNotifier;
@@ -199,7 +211,10 @@ export async function registerInviteRoutes(
 
   app.post<{ Body: MembershipActionBody }>(
     "/invites/memberships/leave",
-    { schema: { body: MembershipActionSchema } },
+    {
+      schema: { body: MembershipActionSchema },
+      config: { rateLimit: membershipLeaveRateLimit },
+    },
     async (request, reply: FastifyReply) => {
       {
         const userId = getUserId(request);
@@ -216,22 +231,59 @@ export async function registerInviteRoutes(
     }
   );
 
-  app.post<{ Body: MembershipActionBody }>(
+  app.post<{ Body: RemoveMemberBody }>(
     "/invites/memberships/remove",
-    { schema: { body: MembershipActionSchema } },
+    {
+      schema: { body: RemoveMemberSchema },
+      config: { rateLimit: memberRemovalRateLimit },
+    },
     async (request, reply: FastifyReply) => {
-      {
-        const userId = getUserId(request);
-        const hostUserId = request.body.hostUserId.trim();
-        const memberUserId = request.body.memberUserId.trim();
-        if (userId !== hostUserId) {
-          throw new ApplicationError("FORBIDDEN", "Solo el anfitrión puede quitar miembros.");
-        }
-        await deps.cloudInviteRepository.deactivateMembership(hostUserId, memberUserId);
-        await deps.accessSessionRepository?.revokeMembershipSessions(hostUserId, memberUserId);
-        await deps.webSocketNotifier?.disconnectUser?.(memberUserId);
-        return reply.status(204).send();
+      const userId = getUserId(request);
+      const hostUserId = request.body.hostUserId.trim();
+      const memberUserId = request.body.memberUserId.trim();
+
+      if (deps.removeMemberUseCase) {
+        const result = await deps.removeMemberUseCase.execute({
+          requesterId: userId,
+          hostUserId,
+          memberUserId,
+          gracePeriodDays: request.body.gracePeriodDays,
+        });
+        return reply.status(200).send(result);
       }
+
+      if (userId !== hostUserId) {
+        throw new ApplicationError("FORBIDDEN", "Solo el anfitrión puede quitar miembros.");
+      }
+      await deps.cloudInviteRepository.deactivateMembership(hostUserId, memberUserId);
+      await deps.accessSessionRepository?.revokeMembershipSessions(hostUserId, memberUserId);
+      await deps.webSocketNotifier?.disconnectUser?.(memberUserId);
+      return reply.status(204).send();
+    }
+  );
+
+  app.post<{ Body: MembershipActionBody }>(
+    "/invites/memberships/cancel-removal",
+    {
+      schema: { body: MembershipActionSchema },
+      config: { rateLimit: memberCancelRemovalRateLimit },
+    },
+    async (request, reply: FastifyReply) => {
+      const userId = getUserId(request);
+      const hostUserId = request.body.hostUserId.trim();
+      const memberUserId = request.body.memberUserId.trim();
+
+      if (!deps.cancelMemberDeletionUseCase) {
+        throw new ApplicationError("NOT_IMPLEMENTED", "Caso de uso cancelMemberDeletion no configurado.");
+      }
+
+      await deps.cancelMemberDeletionUseCase.execute({
+        requesterId: userId,
+        hostUserId,
+        memberUserId,
+      });
+
+      return reply.status(204).send();
     }
   );
 }

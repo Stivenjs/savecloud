@@ -231,6 +231,17 @@ functions:
           rate: ${self:custom.steamSeedScheduleRate.${sls:stage}, 'rate(15 minutes)'}
           enabled: ${self:custom.steamSeedScheduleEnabled.${sls:stage}, false}
 
+  memberPurgeWorker:
+    handler: apps/api/src/interfaces/lambda/member-purge/handler.handler
+    description: Purga saves en S3 y membresías de miembros soft-deleted cuyo grace period expiró - ${sls:stage}
+    timeout: 300
+    memorySize: 256
+    reservedConcurrency: 1
+    events:
+      - schedule:
+          rate: rate(1 hour)
+          enabled: true
+
   syncGameStats:
     handler: apps/api/src/interfaces/lambda/s3-events/syncGameStats.handler
     description: Actualiza DynamoDB cuando se sube/borra un save en S3 procesando lotes desde SQS - ${sls:stage}
