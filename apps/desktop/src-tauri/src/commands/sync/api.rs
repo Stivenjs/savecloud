@@ -15,7 +15,6 @@ use super::models::{
 };
 use crate::cloud::api_error;
 use crate::network::API_CLIENT;
-use crate::observability;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -126,93 +125,27 @@ fn get_api_context() -> Result<ApiContext, String> {
 }
 
 pub(crate) async fn api_request_with_etag(
-    base_url: &str,
-    user_id: &str,
-    api_key: &str,
+    _base_url: &str,
+    _user_id: &str,
+    _api_key: &str,
     method: &str,
     path: &str,
     body: Option<&[u8]>,
     if_none_match: Option<&str>,
 ) -> Result<reqwest::Response, String> {
-    crate::cloud::session_refresh::ensure_active_guest_token_valid().await?;
-    let url = format!("{}/saves{}", base_url.trim_end_matches('/'), path);
-    let active_host = crate::config::load_settings()
-        .active_cloud_host_user_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string());
-
-    let effective_api_key = if let Some(host) = active_host.as_deref() {
-        crate::config::get_secure_api_key_for_cloud_host(host).unwrap_or_else(|| api_key.to_string())
-    } else {
-        api_key.to_string()
-    };
-
     let method = reqwest::Method::from_bytes(method.as_bytes())
         .map_err(|error| format!("Método HTTP inválido '{method}': {error}"))?;
-    let retry_safe = super::retry::is_safe_to_retry(&method, path);
-    let max_attempts = if retry_safe { 3 } else { 1 };
+    let saves_path = if path.starts_with("/saves") {
+        path.to_string()
+    } else {
+        format!("/saves{}", path)
+    };
 
-    for attempt in 0..max_attempts {
-        let mut req = API_CLIENT
-            .request(method.clone(), &url)
-            .header("x-user-id", user_id)
-            .header("x-api-key", &effective_api_key);
-
-        if let Some(etag) = if_none_match {
-            req = req.header("If-None-Match", etag);
-        }
-        if let Some(host) = active_host.as_deref() {
-            req = req.header("x-cloud-host-user-id", host);
-        }
-        if let Some(body) = body {
-            req = req
-                .header("Content-Type", "application/json")
-                .body(body.to_vec());
-        }
-
-        let start = Instant::now();
-        let response = match req.send().await {
-            Ok(response) => response,
-            Err(error) => {
-                let can_retry = retry_safe
-                    && attempt + 1 < max_attempts
-                    && (error.is_timeout() || error.is_connect());
-                if can_retry {
-                    super::retry::wait_before_retry(attempt, None).await;
-                    continue;
-                }
-
-                observability::record_error("sync_api_send", &error.to_string(), None);
-                return Err(api_error::network_message());
-            }
-        };
-
-        if retry_safe
-            && attempt + 1 < max_attempts
-            && super::retry::is_retryable_status(response.status())
-        {
-            super::retry::wait_before_retry(attempt, Some(response.headers())).await;
-            continue;
-        }
-
-        let elapsed_ms = start.elapsed().as_millis() as u64;
-        let status = response.status();
-        let is_ok = status.is_success() || status == reqwest::StatusCode::NOT_MODIFIED;
-        observability::record_saves_api_timing(elapsed_ms, is_ok, path);
-        if !is_ok {
-            let status_code = status.as_u16();
-            observability::record_error(
-                "sync_api_http",
-                &format!("path={path} status={status_code}"),
-                Some(status_code),
-            );
-        }
-        return Ok(response);
-    }
-
-    Err(api_error::network_message())
+    crate::cloud::client::cloud_api(method, &saves_path)
+        .if_none_match(if_none_match)
+        .body_opt(body)
+        .send()
+        .await
 }
 
 pub(crate) async fn api_request(

@@ -9,11 +9,12 @@ use crate::cloud::api_error::ensure_success;
 use crate::commands::sync::events::{
     emit_sync_terminal, emit_sync_upload_done, emit_sync_upload_progress,
 };
+use crate::cloud::cloud_api;
 use crate::commands::sync::models::{
     SyncOperationState, SyncOperationStrategy, SyncProgressPayload,
 };
 use crate::errors::{AppError, AppResult};
-use crate::network::{API_CLIENT, DATA_CLIENT};
+use crate::network::DATA_CLIENT;
 use bytes::Bytes;
 use futures_util::stream::Stream;
 use serde::{Deserialize, Serialize};
@@ -246,13 +247,6 @@ pub async fn upload_game_clip(
         .to_string();
 
     let content_type = detect_content_type(path);
-
-    // 1. Obtener contexto de API (usuario, clave, URL)
-    let api_ctx = crate::commands::sync::context::resolve_api_context()?;
-    let base_url = api_ctx.base_url;
-    let api_key = api_ctx.api_key;
-    let user_id = api_ctx.user_id;
-
     let found_game = crate::config::load_game(&game_id).ok().flatten();
 
     let detected_steam_id: Option<String> = found_game
@@ -285,8 +279,6 @@ pub async fn upload_game_clip(
             })
         });
 
-    let endpoint = format!("{}/clips/upload-url", base_url.trim_end_matches('/'));
-
     let payload = ClipUploadRequest {
         game_id: &game_id,
         filename: &filename,
@@ -297,15 +289,13 @@ pub async fn upload_game_clip(
         thumbnail_base64: thumbnail_base64.as_deref(),
     };
 
-    // 2. Solicitar URL presignada a la API
-    let response = API_CLIENT
-        .post(&endpoint)
-        .header("x-api-key", api_key)
-        .header("x-user-id", user_id)
+    // 2. Solicitar URL presignada a la API mediante el cliente unificado
+    let response = cloud_api(reqwest::Method::POST, "/clips/upload-url")
         .json(&payload)
+        .map_err(|e| AppError::new("SERIALIZATION_ERROR", e))?
         .send()
         .await
-        .map_err(|_| AppError::network())?;
+        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
 
     let upload_info = ensure_success(response)
         .await?
@@ -419,27 +409,34 @@ pub async fn upload_game_clip(
 }
 
 /// Consulta la lista de clips pertenecientes al usuario actual (opcionalmente filtrados por juego).
+///
+/// # Arguments
+///
+/// * `game_id` - Identificador de juego opcional para filtrar los clips consultados.
+///
+/// # Returns
+///
+/// Vector de [`ClipItemDto`] con los clips registrados en la nube.
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si ocurre un error de red o la respuesta no es válida.
 #[command]
 pub async fn list_game_clips(game_id: Option<String>) -> AppResult<Vec<ClipItemDto>> {
-    let api_ctx = crate::commands::sync::context::resolve_api_context()?;
-    let base_url = api_ctx.base_url;
-    let api_key = api_ctx.api_key;
-    let user_id = api_ctx.user_id;
-
-    let mut endpoint = format!("{}/clips", base_url.trim_end_matches('/'));
-    if let Some(ref gid) = game_id {
+    let path = if let Some(ref gid) = game_id {
         if !gid.trim().is_empty() {
-            endpoint = format!("{}?gameId={}", endpoint, urlencoding::encode(gid.trim()));
+            format!("/clips?gameId={}", urlencoding::encode(gid.trim()))
+        } else {
+            "/clips".to_string()
         }
-    }
+    } else {
+        "/clips".to_string()
+    };
 
-    let response = API_CLIENT
-        .get(&endpoint)
-        .header("x-api-key", api_key)
-        .header("x-user-id", user_id)
+    let response = cloud_api(reqwest::Method::GET, &path)
         .send()
         .await
-        .map_err(|_| AppError::network())?;
+        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
 
     let result = ensure_success(response)
         .await?
@@ -456,30 +453,31 @@ pub async fn list_game_clips(game_id: Option<String>) -> AppResult<Vec<ClipItemD
 }
 
 /// Elimina un clip específico de la nube.
+///
+/// # Arguments
+///
+/// * `clip_id` - Identificador único del clip a eliminar.
+///
+/// # Returns
+///
+/// `Ok(())` si el clip fue eliminado correctamente.
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si el identificador es inválido o el servidor retorna un error.
 #[command]
 pub async fn delete_game_clip(clip_id: String) -> AppResult<()> {
-    if clip_id.trim().is_empty() {
+    let trimmed = clip_id.trim();
+    if trimmed.is_empty() {
         return Err(AppError::new("INVALID_ARGUMENT", "clip_id es requerido"));
     }
 
-    let api_ctx = crate::commands::sync::context::resolve_api_context()?;
-    let base_url = api_ctx.base_url;
-    let api_key = api_ctx.api_key;
-    let user_id = api_ctx.user_id;
+    let path = format!("/clips/{}", urlencoding::encode(trimmed));
 
-    let endpoint = format!(
-        "{}/clips/{}",
-        base_url.trim_end_matches('/'),
-        urlencoding::encode(clip_id.trim())
-    );
-
-    let response = API_CLIENT
-        .delete(&endpoint)
-        .header("x-api-key", api_key)
-        .header("x-user-id", user_id)
+    let response = cloud_api(reqwest::Method::DELETE, &path)
         .send()
         .await
-        .map_err(|_| AppError::network())?;
+        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
 
     ensure_success(response).await?;
 

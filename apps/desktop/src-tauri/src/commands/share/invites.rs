@@ -1,7 +1,7 @@
 use crate::cloud::api_error::ensure_success;
+use crate::cloud::cloud_api;
 use crate::config;
 use crate::errors::{AppError, AppResult};
-use crate::network::API_CLIENT;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tauri::command;
@@ -284,75 +284,27 @@ fn persist_cloud_invite_provision(
     config::save_settings(&next)
 }
 
-fn load_host_api_auth() -> Result<(String, String, String), String> {
-    let settings = config::load_settings();
-    let base_url_raw = settings
-        .api_base_url
-        .as_deref()
-        .ok_or("Configuración de API ausente")?
-        .trim_end_matches('/');
-    let base_url = normalize_base_url(base_url_raw);
-    let api_key = settings
-        .api_key
-        .as_deref()
-        .ok_or("API Key no encontrada en el almacenamiento seguro")?
-        .to_string();
-    let user_id = settings
-        .user_id
-        .as_deref()
-        .ok_or("Usuario no configurado")?
-        .to_string();
-    Ok((base_url, api_key, user_id))
-}
-
-fn load_member_api_auth(host_user_id: &str) -> Result<(String, String, String), String> {
-    let host = host_user_id.trim();
-    if host.is_empty() {
-        return Err("Host inválido".into());
-    }
-
-    let settings = config::load_settings();
-
-    let base_url_raw = settings
-        .cloud_host_api_base_urls
-        .get(host)
-        .ok_or("No existe conexión guardada para este host")?;
-    let base_url = normalize_base_url(base_url_raw);
-
-    let api_key = config::get_secure_api_key_for_cloud_host(host)
-        .ok_or("Faltan credenciales de acceso para este host")?;
-
-    let user_id = settings
-        .user_id
-        .as_deref()
-        .ok_or("Usuario no configurado")?
-        .trim()
-        .to_string();
-
-    Ok((base_url, api_key, user_id))
-}
-
-fn load_active_member_api_auth() -> Result<(String, String, String), String> {
-    let settings = config::load_settings();
-    if let Some(active_host) = settings
-        .active_cloud_host_user_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
-        return load_member_api_auth(active_host);
-    }
-    load_host_api_auth()
-}
-
+/// Crea una nueva invitación para unirse a la nube personal.
+///
+/// # Arguments
+///
+/// * `invitee_user_id` - Identificador de usuario opcional para limitar la invitación a un destinatario específico.
+/// * `with_token` - Indica si se debe generar un token transferible para el acceso.
+/// * `expires_in_days` - Tiempo de expiración de la invitación en días.
+///
+/// # Returns
+///
+/// Estructura [`CloudInviteDto`] con los datos de la invitación creada.
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si falla la serialización, la comunicación de red o el servidor responde con error.
 #[command]
 pub async fn create_cloud_invite(
     invitee_user_id: Option<String>,
     with_token: Option<bool>,
     expires_in_days: Option<u32>,
 ) -> AppResult<CloudInviteDto> {
-    let (base_url, api_key, user_id) = load_host_api_auth()?;
-    let endpoint = format!("{}/invites", base_url);
     let mut payload = serde_json::Map::new();
     payload.insert(
         "withToken".to_string(),
@@ -385,14 +337,14 @@ pub async fn create_cloud_invite(
         );
     }
 
-    let response = API_CLIENT
-        .post(&endpoint)
-        .header("x-api-key", api_key)
-        .header("x-user-id", user_id)
+    let response = cloud_api(reqwest::Method::POST, "/invites")
+        .for_owner()
         .json(&serde_json::Value::Object(payload))
+        .map_err(|e| AppError::new("SERIALIZATION_ERROR", e))?
         .send()
         .await
-        .map_err(|_| AppError::network())?;
+        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
+
     ensure_success(response)
         .await?
         .json::<CloudInviteDto>()
@@ -405,17 +357,21 @@ pub async fn create_cloud_invite(
         })
 }
 
+/// Obtiene la lista de invitaciones pendientes para la nube activa.
+///
+/// # Returns
+///
+/// Vector de [`CloudInviteDto`] con las invitaciones recibidas pendientes de respuesta.
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si falla la petición HTTP o la deserialización de la respuesta.
 #[command]
 pub async fn list_pending_cloud_invites() -> AppResult<Vec<CloudInviteDto>> {
-    let (base_url, api_key, user_id) = load_active_member_api_auth()?;
-    let endpoint = format!("{}/invites/pending", base_url);
-    let response = API_CLIENT
-        .get(&endpoint)
-        .header("x-api-key", api_key)
-        .header("x-user-id", user_id)
+    let response = cloud_api(reqwest::Method::GET, "/invites/pending")
         .send()
         .await
-        .map_err(|_| AppError::network())?;
+        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
     let parsed = ensure_success(response)
         .await?
         .json::<PendingInvitesResponseDto>()
@@ -429,37 +385,56 @@ pub async fn list_pending_cloud_invites() -> AppResult<Vec<CloudInviteDto>> {
     Ok(parsed.items)
 }
 
+/// Responde a una invitación de nube aceptándola o rechazándola.
+///
+/// # Arguments
+///
+/// * `invite_id` - Identificador único de la invitación a responder.
+/// * `action` - Acción a ejecutar (`accept` o `reject`).
+///
+/// # Returns
+///
+/// `Ok(())` si la respuesta fue aceptada por el servidor.
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si la petición falla o el servidor retorna un error de negocio.
 #[command]
 pub async fn respond_cloud_invite(invite_id: String, action: String) -> AppResult<()> {
-    let (base_url, api_key, user_id) = load_active_member_api_auth()?;
-    let endpoint = format!("{}/invites/{}/respond", base_url, invite_id.trim());
     let payload = serde_json::json!({ "action": action.trim() });
-    let response = API_CLIENT
-        .post(&endpoint)
-        .header("x-api-key", api_key)
-        .header("x-user-id", user_id)
+    let response = cloud_api(reqwest::Method::POST, &format!("/invites/{}/respond", invite_id.trim()))
         .json(&payload)
+        .map_err(|e| AppError::new("SERIALIZATION_ERROR", e))?
         .send()
         .await
-        .map_err(|_| AppError::network())?;
+        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
     ensure_success(response).await?;
     Ok(())
 }
 
+/// Acepta una invitación a una nube compartida mediante un token de invitación.
+///
+/// # Arguments
+///
+/// * `token` - Token hexadecimal de invitación.
+///
+/// # Returns
+///
+/// `Ok(())` si la provisión de membresía fue procesada y almacenada correctamente.
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si el token es inválido o la API rechaza la solicitud.
 #[command]
 pub async fn accept_cloud_invite_by_token(token: String) -> AppResult<()> {
     validate_invite_token(token.trim())?;
-    let (base_url, api_key, user_id) = load_active_member_api_auth()?;
-    let endpoint = format!("{}/invites/accept-token", base_url);
     let payload = serde_json::json!({ "token": token.trim() });
-    let response = API_CLIENT
-        .post(&endpoint)
-        .header("x-api-key", api_key)
-        .header("x-user-id", user_id)
+    let response = cloud_api(reqwest::Method::POST, "/invites/accept-token")
         .json(&payload)
+        .map_err(|e| AppError::new("SERIALIZATION_ERROR", e))?
         .send()
         .await
-        .map_err(|_| AppError::network())?;
+        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
     let response = ensure_success(response).await?;
     let parsed = response
         .json::<AcceptInviteProvisionResponseDto>()
@@ -471,10 +446,38 @@ pub async fn accept_cloud_invite_by_token(token: String) -> AppResult<()> {
             )
         })?;
 
+    let settings = config::load_settings();
+    let base_url = if let Some(active_host) = settings
+        .active_cloud_host_user_id
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+    {
+        settings
+            .cloud_host_api_base_urls
+            .get(active_host)
+            .cloned()
+            .unwrap_or_default()
+    } else {
+        settings.api_base_url.clone().unwrap_or_default()
+    };
+
     persist_cloud_invite_provision(&base_url, parsed)?;
     Ok(())
 }
 
+/// Acepta una invitación a una nube compartida a partir de su URL pública.
+///
+/// # Arguments
+///
+/// * `invite_url` - Cadena con la URL completa de invitación.
+///
+/// # Returns
+///
+/// `Ok(())` si la provisión fue completada con éxito.
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si el usuario no está configurado, la URL es inválida o la API falla.
 #[command]
 pub async fn accept_cloud_invite_by_url(invite_url: String) -> AppResult<()> {
     let settings = config::load_settings();
@@ -485,19 +488,15 @@ pub async fn accept_cloud_invite_by_url(invite_url: String) -> AppResult<()> {
         .trim()
         .to_string();
 
-    // Rechaza enlaces concatenados o malformados antes de generar una solicitud a la API.
     let (base_url, token) = parse_invite_url(&invite_url)?;
 
     let endpoint = format!("{}/invites/accept-token", base_url);
     let payload = serde_json::json!({ "token": token });
 
-    // El primer contacto no tiene credenciales para el host invitante. Solo se envía
-    // el ID local requerido para validar invitaciones dirigidas; nunca una API key.
-    // Se desactivan redirecciones para evitar reenviar encabezados a otro dominio.
     let bootstrap_client = invite_bootstrap_client()?;
     let response = bootstrap_client
         .post(&endpoint)
-        .header("x-user-id", user_id.clone())
+        .header("x-user-id", user_id)
         .json(&payload)
         .send()
         .await
@@ -520,6 +519,19 @@ pub async fn accept_cloud_invite_by_url(invite_url: String) -> AppResult<()> {
     Ok(())
 }
 
+/// Abandona la membresía en la nube de un anfitrión específico y limpia sus recursos locales.
+///
+/// # Arguments
+///
+/// * `host_user_id` - Identificador de usuario del anfitrión de la nube.
+///
+/// # Returns
+///
+/// `Ok(())` si la membresía fue revocada con éxito.
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si el anfitrión es inválido o la API rechaza la solicitud.
 #[command]
 pub async fn leave_cloud_membership(host_user_id: String) -> AppResult<()> {
     let host = host_user_id.trim().to_string();
@@ -527,20 +539,24 @@ pub async fn leave_cloud_membership(host_user_id: String) -> AppResult<()> {
         return Err("Host inválido".into());
     }
 
-    let (base_url, api_key, user_id) = load_member_api_auth(&host)?;
-    let endpoint = format!("{}/invites/memberships/leave", base_url);
+    let settings = config::load_settings();
+    let user_id = settings
+        .user_id
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Usuario no configurado")?;
+
     let payload = serde_json::json!({
         "hostUserId": host,
         "memberUserId": user_id,
     });
-    let response = API_CLIENT
-        .post(&endpoint)
-        .header("x-api-key", api_key)
-        .header("x-user-id", &user_id)
+    let response = cloud_api(reqwest::Method::POST, "/invites/memberships/leave")
+        .for_host(&host)
         .json(&payload)
+        .map_err(|e| AppError::new("SERIALIZATION_ERROR", e))?
         .send()
         .await
-        .map_err(|_| AppError::network())?;
+        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
     ensure_success(response).await?;
 
     config::clean_up_cloud_host(&host)?;
@@ -548,32 +564,52 @@ pub async fn leave_cloud_membership(host_user_id: String) -> AppResult<()> {
     Ok(())
 }
 
+/// Remueve a un miembro de la nube propia administrada por el usuario.
+///
+/// # Arguments
+///
+/// * `member_user_id` - Identificador de usuario del miembro a expulsar.
+///
+/// # Returns
+///
+/// `Ok(())` si el miembro fue removido con éxito en el servidor.
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si el usuario local no está configurado o la solicitud falla.
 #[command]
 pub async fn remove_cloud_member(member_user_id: String) -> AppResult<()> {
-    let (base_url, api_key, user_id) = load_host_api_auth()?;
-    let endpoint = format!("{}/invites/memberships/remove", base_url);
+    let settings = config::load_settings();
+    let user_id = settings
+        .user_id
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or("Usuario no configurado")?;
+
     let payload = serde_json::json!({
       "hostUserId": user_id,
       "memberUserId": member_user_id.trim(),
     });
-    let response = API_CLIENT
-        .post(&endpoint)
-        .header("x-api-key", api_key)
-        .header(
-            "x-user-id",
-            payload
-                .get("hostUserId")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default(),
-        )
+    let response = cloud_api(reqwest::Method::POST, "/invites/memberships/remove")
+        .for_owner()
         .json(&payload)
+        .map_err(|e| AppError::new("SERIALIZATION_ERROR", e))?
         .send()
         .await
-        .map_err(|_| AppError::network())?;
+        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
     ensure_success(response).await?;
     Ok(())
 }
 
+/// Obtiene el listado consolidado de membresías tanto de la nube propia como de nubes anfitrionas.
+///
+/// # Returns
+///
+/// Estructura [`CloudMembershipsResponseDto`] con las listas de anfitrión e invitado.
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si el identificador de usuario local no está configurado.
 #[command]
 pub async fn list_cloud_memberships() -> AppResult<CloudMembershipsResponseDto> {
     let settings = config::load_settings();
@@ -587,67 +623,44 @@ pub async fn list_cloud_memberships() -> AppResult<CloudMembershipsResponseDto> 
     let mut host_memberships: Vec<CloudMembershipDto> = vec![];
     let mut member_memberships: Vec<CloudMembershipDto> = vec![];
 
-    // 1) Tu propia nube: solo nos interesa host_memberships.
-    if let (Some(base_url_raw), Some(api_key_raw)) = (
-        settings.api_base_url.as_deref(),
-        settings.api_key.as_deref(),
-    ) {
-        if !base_url_raw.trim().is_empty() && !api_key_raw.trim().is_empty() {
-            let base_url = normalize_base_url(base_url_raw);
-            let endpoint = format!("{}/invites/memberships", base_url);
-            let response = API_CLIENT
-                .get(&endpoint)
-                .header("x-api-key", api_key_raw)
-                .header("x-user-id", &user_id)
-                .send()
-                .await
-                .map_err(|_| AppError::network())?;
-            let parsed = ensure_success(response)
-                .await?
-                .json::<CloudMembershipsResponseDto>()
-                .await
-                .map_err(|_| {
-                    AppError::new(
-                        "INVALID_RESPONSE",
-                        "El servidor devolvió una respuesta inválida.",
-                    )
-                })?;
-            host_memberships = parsed.host_memberships;
+    if settings.api_base_url.is_some() && settings.api_key.is_some() {
+        if let Ok(response) = cloud_api(reqwest::Method::GET, "/invites/memberships")
+            .for_owner()
+            .send()
+            .await
+        {
+            if let Ok(res) = ensure_success(response).await {
+                if let Ok(parsed) = res.json::<CloudMembershipsResponseDto>().await {
+                    host_memberships = parsed.host_memberships;
+                }
+            }
         }
     }
 
-    // 2) Nubes de hosts donde eres miembro: solo nos interesan member_memberships.
     let host_ids: Vec<String> = settings.cloud_host_api_base_urls.keys().cloned().collect();
     for host in host_ids {
-        let (base_url, api_key, _) = match load_member_api_auth(&host) {
-            Ok(v) => v,
+        let req_res = cloud_api(reqwest::Method::GET, "/invites/memberships")
+            .for_host(&host)
+            .send()
+            .await;
+        let response = match req_res {
+            Ok(res) => res,
             Err(_) => {
                 let _ = config::clean_up_cloud_host(&host);
                 continue;
             }
         };
-        let endpoint = format!("{}/invites/memberships", base_url);
-        let response = API_CLIENT
-            .get(&endpoint)
-            .header("x-api-key", api_key)
-            .header("x-user-id", &user_id)
-            .send()
-            .await
-            .map_err(|_| AppError::network())?;
         if response.status().as_u16() == 401 || response.status().as_u16() == 403 {
             let _ = config::clean_up_cloud_host(&host);
             continue;
         }
-        let parsed = ensure_success(response)
-            .await?
-            .json::<CloudMembershipsResponseDto>()
-            .await
-            .map_err(|_| {
-                AppError::new(
-                    "INVALID_RESPONSE",
-                    "El servidor devolvió una respuesta inválida.",
-                )
-            })?;
+        let parsed = match ensure_success(response).await {
+            Ok(res) => match res.json::<CloudMembershipsResponseDto>().await {
+                Ok(p) => p,
+                Err(_) => continue,
+            },
+            Err(_) => continue,
+        };
         let is_active = parsed
             .member_memberships
             .iter()
@@ -665,17 +678,21 @@ pub async fn list_cloud_memberships() -> AppResult<CloudMembershipsResponseDto> 
     })
 }
 
+/// Consulta los estados de presencia de los miembros conectados en la nube activa.
+///
+/// # Returns
+///
+/// Vector con la presencia de cada miembro (`Vec<CloudPresenceDto>`).
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si la petición falla o la respuesta no puede deserializarse.
 #[command]
 pub async fn list_cloud_presence() -> AppResult<Vec<CloudPresenceDto>> {
-    let (base_url, api_key, user_id) = load_active_member_api_auth()?;
-    let endpoint = format!("{}/invites/presence", base_url);
-    let response = API_CLIENT
-        .get(&endpoint)
-        .header("x-api-key", api_key)
-        .header("x-user-id", user_id)
+    let response = cloud_api(reqwest::Method::GET, "/invites/presence")
         .send()
         .await
-        .map_err(|_| AppError::network())?;
+        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
 
     let parsed = ensure_success(response)
         .await?

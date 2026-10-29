@@ -1,9 +1,7 @@
 //! Publicación del manifiesto al API cloud.
 
-use crate::cloud::api_error;
-use crate::commands::sync::context::resolve_api_context;
+use crate::cloud::{api_error, cloud_api};
 use crate::config::load_settings;
-use crate::network::API_CLIENT;
 
 use super::models::DeviceInventoryManifest;
 use super::scanner::scan_full_inventory;
@@ -42,7 +40,6 @@ pub async fn publish_manifest_to_cloud(manifest: &DeviceInventoryManifest) -> Re
 }
 
 async fn put_cloud_manifest(manifest: &DeviceInventoryManifest) -> Result<(), String> {
-    let ctx = resolve_api_context()?;
     let tls_fingerprint = if manifest.sharing_enabled {
         crate::peer_lan::ensure_lan_presence().await;
         Some(
@@ -53,19 +50,14 @@ async fn put_cloud_manifest(manifest: &DeviceInventoryManifest) -> Result<(), St
     } else {
         None
     };
-    let url = format!(
-        "{}/inventory/devices/{}",
-        ctx.base_url,
+    let path = format!(
+        "/inventory/devices/{}",
         urlencoding::encode(&manifest.device_id)
     );
     let body = manifest.to_publish_body(tls_fingerprint);
 
-    let client = API_CLIENT.clone();
-    let res = client
-        .put(&url)
-        .header("x-api-key", &ctx.api_key)
-        .header("x-user-id", &ctx.user_id)
-        .json(&body)
+    let res = cloud_api(reqwest::Method::PUT, &path)
+        .json(&body)?
         .send()
         .await
         .map_err(|_| api_error::network_message())?;
@@ -77,22 +69,16 @@ async fn put_cloud_manifest(manifest: &DeviceInventoryManifest) -> Result<(), St
 }
 
 pub async fn post_cloud_heartbeat(device_id: &str) -> Result<(), String> {
-    let ctx = resolve_api_context()?;
-    let url = format!(
-        "{}/inventory/devices/{}/heartbeat",
-        ctx.base_url,
+    let path = format!(
+        "/inventory/devices/{}/heartbeat",
         urlencoding::encode(device_id)
     );
     let body = serde_json::json!({
         "appVersion": env!("CARGO_PKG_VERSION"),
     });
 
-    let client = API_CLIENT.clone();
-    let res = client
-        .post(&url)
-        .header("x-api-key", &ctx.api_key)
-        .header("x-user-id", &ctx.user_id)
-        .json(&body)
+    let res = cloud_api(reqwest::Method::POST, &path)
+        .json(&body)?
         .send()
         .await
         .map_err(|_| api_error::network_message())?;
@@ -104,17 +90,11 @@ pub async fn post_cloud_heartbeat(device_id: &str) -> Result<(), String> {
 }
 
 pub async fn delete_cloud_inventory(device_id: &str) -> Result<(), String> {
-    let ctx = resolve_api_context()?;
-    let url = format!(
-        "{}/inventory/devices/{}",
-        ctx.base_url,
+    let path = format!(
+        "/inventory/devices/{}",
         urlencoding::encode(device_id)
     );
-    let client = API_CLIENT.clone();
-    let res = client
-        .delete(&url)
-        .header("x-api-key", &ctx.api_key)
-        .header("x-user-id", &ctx.user_id)
+    let res = cloud_api(reqwest::Method::DELETE, &path)
         .send()
         .await
         .map_err(|_| api_error::network_message())?;
@@ -157,17 +137,11 @@ pub struct GameProvidersResponseDto {
 }
 
 pub async fn list_providers_from_api(game_key: &str) -> Result<GameProvidersResponseDto, String> {
-    let ctx = resolve_api_context()?;
-    let url = format!(
-        "{}/inventory/providers?gameKey={}",
-        ctx.base_url,
+    let path = format!(
+        "/inventory/providers?gameKey={}",
         urlencoding::encode(game_key)
     );
-    let client = API_CLIENT.clone();
-    let res = client
-        .get(&url)
-        .header("x-api-key", &ctx.api_key)
-        .header("x-user-id", &ctx.user_id)
+    let res = cloud_api(reqwest::Method::GET, &path)
         .send()
         .await
         .map_err(|_| api_error::network_message())?;

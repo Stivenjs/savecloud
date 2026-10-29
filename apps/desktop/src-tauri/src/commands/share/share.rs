@@ -1,13 +1,12 @@
 //! Gestión de recursos compartidos de SaveCloud.
 //!
-//! Este módulo implementa la lógica de comunicación con la API de AWS para
-//! la creación y resolución de enlaces de compartición de partidas guardadas.
-//! Utiliza el estado gestionado de Tauri para mantener un pool de conexiones
-//! HTTP persistente, reduciendo la latencia en las negociaciones TLS.
+//! Este módulo implementa la lógica de comunicación con la API de SaveCloud para
+//! la creación y resolución de enlaces de compartición de partidas guardadas,
+//! canalizada mediante el cliente unificado de nube.
 
 use crate::cloud::api_error::ensure_success;
+use crate::cloud::cloud_api;
 use crate::errors::{AppError, AppResult};
-use crate::network::API_CLIENT;
 use serde::{Deserialize, Serialize};
 use tauri::command;
 
@@ -65,36 +64,34 @@ pub struct ResolvedShare {
 
 /// Crea un enlace de compartición remoto invocando la API de SaveCloud.
 ///
-/// Recupera las credenciales del Keyring local y realiza una petición POST autenticada.
-///
 /// # Arguments
-/// * `game_id` - ID del juego a compartir.
-/// * `expires_in_days` - Días de expiración (por defecto 7).
+///
+/// * `game_id` - Identificador único del juego a compartir.
+/// * `expires_in_days` - Días de validez para el enlace (por defecto 7).
+///
+/// # Returns
+///
+/// URL pública del recurso compartido.
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si falla la serialización, la red o el servidor responde con error.
 #[command]
 pub async fn create_remote_share_link(
     game_id: String,
     expires_in_days: Option<u32>,
 ) -> AppResult<String> {
-    let api_ctx = crate::commands::sync::context::resolve_api_context()?;
-    let base_url = api_ctx.base_url;
-    let api_key = api_ctx.api_key;
-    let user_id = api_ctx.user_id;
-
-    let endpoint = format!("{}/share", base_url.trim_end_matches('/'));
-
     let payload = ShareRequest {
         game_id,
         expires_in_days: expires_in_days.unwrap_or(7),
     };
 
-    let response = API_CLIENT
-        .post(&endpoint)
-        .header("x-api-key", api_key)
-        .header("x-user-id", user_id)
+    let response = cloud_api(reqwest::Method::POST, "/share")
         .json(&payload)
+        .map_err(|e| AppError::new("SERIALIZATION_ERROR", e))?
         .send()
         .await
-        .map_err(|_| AppError::network())?;
+        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
 
     let data = ensure_success(response)
         .await?
@@ -112,26 +109,24 @@ pub async fn create_remote_share_link(
 
 /// Resuelve un token de compartición para obtener los metadatos del recurso.
 ///
-/// La API requiere autenticación para resolver el enlace.
-///
 /// # Arguments
-/// * `token` - El código único del enlace compartido.
+///
+/// * `token` - Código único del enlace compartido.
+///
+/// # Returns
+///
+/// Estructura [`ResolvedShare`] con los metadatos del recurso.
+///
+/// # Errors
+///
+/// Devuelve [`AppError`] si la petición falla o la respuesta no es válida.
 #[command]
 pub async fn resolve_remote_share_token(token: String) -> AppResult<ResolvedShare> {
-    let api_ctx = crate::commands::sync::context::resolve_api_context()?;
-    let base_url = api_ctx.base_url;
-    let api_key = api_ctx.api_key;
-    let user_id = api_ctx.user_id;
-
-    let endpoint = format!("{}/share/{}", base_url.trim_end_matches('/'), token);
-
-    let response = API_CLIENT
-        .get(&endpoint)
-        .header("x-api-key", api_key)
-        .header("x-user-id", user_id)
+    let path = format!("/share/{}", token.trim());
+    let response = cloud_api(reqwest::Method::GET, &path)
         .send()
         .await
-        .map_err(|_| AppError::network())?;
+        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
 
     ensure_success(response)
         .await?

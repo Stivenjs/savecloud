@@ -3,46 +3,35 @@
 use serde_json::Value;
 use tauri::command;
 
-use crate::commands::sync::context::resolve_api_context;
-use crate::network::API_CLIENT;
+use crate::cloud::cloud_api;
 
-/// `None` si no hay contexto de API válido o la petición falla (el panel sigue mostrando datos locales).
+/// Obtiene el resumen de observabilidad remota desde la API para la ventana de tiempo indicada.
+///
+/// # Arguments
+///
+/// * `window` - Ventana temporal de agregación (por defecto "15m").
+///
+/// # Returns
+///
+/// `Ok(Some(Value))` con el JSON de métricas si la solicitud fue exitosa, o `Ok(None)` si no hay contexto o falla.
+///
+/// # Errors
+///
+/// Devuelve `Err(String)` si ocurre un fallo irrecuperable al procesar la respuesta.
 #[command]
 pub async fn get_remote_observability_summary(window: Option<String>) -> Result<Option<Value>, String> {
-    let ctx = match resolve_api_context() {
-        Ok(c) => c,
-        Err(_) => return Ok(None),
-    };
-
     let w = window
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or("15m")
-        .to_string();
+        .unwrap_or("15m");
 
-    let url = format!(
-        "{}/observability/desktop/summary?window={}",
-        ctx.base_url.trim_end_matches('/'),
-        urlencoding::encode(&w)
-    );
+    let path = format!("/observability/desktop/summary?window={}", urlencoding::encode(w));
 
-    let response = {
-        let mut req = API_CLIENT
-            .get(&url)
-            .header("x-user-id", &ctx.user_id)
-            .header("x-api-key", &ctx.api_key);
-        if let Some(host) = crate::config::load_settings()
-            .active_cloud_host_user_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-        {
-            req = req.header("x-cloud-host-user-id", host);
-        }
-        req.send().await
-    }
-    .map_err(|e| e.to_string())?;
+    let response = match cloud_api(reqwest::Method::GET, &path).send().await {
+        Ok(res) => res,
+        Err(_) => return Ok(None),
+    };
 
     if !response.status().is_success() {
         return Ok(None);

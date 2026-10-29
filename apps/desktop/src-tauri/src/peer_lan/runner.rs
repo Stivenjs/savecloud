@@ -8,9 +8,8 @@ use std::time::Duration;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
 use crate::cloud::api_error;
-use crate::commands::sync::context::resolve_api_context;
+use crate::network::build_peer_lan_client;
 use crate::network::stream_download::{stream_url_to_file, GlobalDownloadProgress};
-use crate::network::{build_peer_lan_client, API_CLIENT};
 use crate::peer_inventory::{list_providers_from_api, InventoryFileDto};
 use crate::peer_lan::checkpoint::{PeerDownloadCheckpoint, PeerJobMeta, PAUSED_BY_USER};
 use crate::peer_lan::discovery::{probe_lan_devices, LanDeviceProbe};
@@ -374,21 +373,11 @@ struct TransferSessionDto {
 }
 
 async fn consume_transfer_session(session_id: &str) {
-    let Ok(ctx) = resolve_api_context() else {
-        return;
-    };
-    let url = format!(
-        "{}/inventory/transfer-sessions/{}/consume",
-        ctx.base_url,
+    let path = format!(
+        "/inventory/transfer-sessions/{}/consume",
         urlencoding::encode(session_id)
     );
-    match API_CLIENT
-        .post(url)
-        .header("x-api-key", &ctx.api_key)
-        .header("x-user-id", &ctx.user_id)
-        .send()
-        .await
-    {
+    match crate::cloud::cloud_api(reqwest::Method::POST, &path).send().await {
         Ok(response) if response.status().is_success() || response.status().as_u16() == 404 => {}
         Ok(response) => log::warn!(
             "No se pudo limpiar la sesión de transferencia: HTTP {}",
@@ -401,8 +390,6 @@ async fn consume_transfer_session(session_id: &str) {
 async fn create_transfer_session(
     params: &PeerDownloadParams,
 ) -> Result<TransferSessionDto, String> {
-    let ctx = resolve_api_context()?;
-
     let body = serde_json::json!({
         "targetUserId": params.target_user_id,
         "targetDeviceId": params.target_device_id,
@@ -410,12 +397,8 @@ async fn create_transfer_session(
         "manifestHash": params.manifest_hash,
     });
 
-    let url = format!("{}/inventory/transfer-sessions", ctx.base_url);
-    let res = API_CLIENT
-        .post(&url)
-        .header("x-api-key", &ctx.api_key)
-        .header("x-user-id", &ctx.user_id)
-        .json(&body)
+    let res = crate::cloud::cloud_api(reqwest::Method::POST, "/inventory/transfer-sessions")
+        .json(&body)?
         .send()
         .await
         .map_err(|_| api_error::network_message())?;

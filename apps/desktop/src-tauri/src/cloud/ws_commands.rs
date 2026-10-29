@@ -49,6 +49,8 @@ pub async fn start_cloud_ws(
 
     let device_id = crate::peer_inventory::resolve_device_id()?;
 
+    crate::cloud::session_refresh::ensure_active_guest_token_valid().await?;
+
     let (final_url, credential) = if let Some(ref host) = active_host {
         let ws_base_raw = settings
             .cloud_host_ws_base_urls

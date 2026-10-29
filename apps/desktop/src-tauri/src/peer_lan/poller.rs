@@ -5,9 +5,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
 use crate::cloud::CloudWsState;
-use crate::commands::sync::context::resolve_api_context;
 use crate::config::load_settings;
-use crate::network::API_CLIENT;
 use crate::peer_inventory::resolve_device_id;
 use crate::peer_lan::server::{start_lan_server_for_session, stop_lan_server};
 use crate::peer_lan::session::{
@@ -38,19 +36,12 @@ pub async fn poll_and_serve_pending_sessions() -> Result<u32, String> {
     }
 
     let device_id = resolve_device_id()?;
-    crate::cloud::session_refresh::ensure_active_guest_token_valid().await?;
-    let ctx = resolve_api_context()?;
-
-    let url = format!(
-        "{}/inventory/transfer-sessions/pending?deviceId={}",
-        ctx.base_url,
+    let path = format!(
+        "/inventory/transfer-sessions/pending?deviceId={}",
         urlencoding::encode(&device_id)
     );
 
-    let res = API_CLIENT
-        .get(&url)
-        .header("x-api-key", &ctx.api_key)
-        .header("x-user-id", &ctx.user_id)
+    let res = crate::cloud::client::cloud_api(reqwest::Method::GET, &path)
         .send()
         .await
         .map_err(|e| e.to_string())?;

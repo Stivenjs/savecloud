@@ -39,6 +39,7 @@ pub(crate) async fn wait_before_retry(retry_index: u32, headers: Option<&HeaderM
 ///
 /// Los `POST` de URLs firmadas solo consultan/generan credenciales de transferencia;
 /// las mutaciones de estado quedan fuera para evitar duplicarlas tras un timeout.
+#[allow(dead_code)]
 pub(crate) fn is_safe_to_retry(method: &reqwest::Method, path: &str) -> bool {
     method == reqwest::Method::GET
         || method == reqwest::Method::HEAD

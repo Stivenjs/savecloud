@@ -266,6 +266,11 @@ pub async fn start_ws_loop(
                         headers.insert("x-api-key", credential);
                         headers.insert("x-user-id", user_id);
                         headers.insert("x-device-id", device_id);
+                        if let Some(ref host) = auth.host_user_id {
+                            if let Ok(host_hdr) = HeaderValue::from_str(host) {
+                                headers.insert("x-cloud-host-user-id", host_hdr);
+                            }
+                        }
                         request
                     }
                     _ => {

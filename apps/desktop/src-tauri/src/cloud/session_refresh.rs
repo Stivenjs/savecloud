@@ -3,11 +3,13 @@ use crate::config;
 use base64::Engine;
 use rand::Rng;
 use serde::Deserialize;
-use std::sync::LazyLock;
+use std::sync::{LazyLock, OnceLock};
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 
 use crate::network::API_CLIENT;
+
+static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
 
 /// Margen de tiempo antes de la expiración a partir del cual se renueva
 /// proactivamente el access token durante los ciclos periódicos.
@@ -40,17 +42,13 @@ fn next_refresh_interval() -> Duration {
 /// # Fases
 ///
 /// 1. **Startup (forzado):** renueva todos los tokens expirados o próximos a
-///    expirar *antes* de que el frontend empiece a hacer peticiones, y emite el
-///    evento `session-refreshed` para que el frontend pueda invalidar sus caches.
+///    expirar de forma atómica y single-flight.
 /// 2. **Periódico (con jitter):** renueva proactivamente cada ~5 minutos los
 ///    tokens que expiren en menos de [`PROACTIVE_REFRESH_MARGIN_SECS`].
-///
-/// El evento `session-refreshed` es fire-and-forget; si la ventana aún no está
-/// disponible (arranque muy temprano), simplemente no se entrega.
 pub fn start_session_refresh_task(app: tauri::AppHandle) {
+    let _ = APP_HANDLE.set(app);
     tauri::async_runtime::spawn(async move {
         refresh_expired_sessions().await;
-        emit_session_refreshed(&app);
 
         loop {
             tokio::time::sleep(next_refresh_interval()).await;
@@ -61,8 +59,8 @@ pub fn start_session_refresh_task(app: tauri::AppHandle) {
 
 /// Emite `session-refreshed` a la ventana principal del frontend.
 ///
-/// Se usa después del refresh de startup para que TanStack Query invalide sus
-/// caches y no sirva datos con un token obsoleto.
+/// Se usa después de cada renovación para que TanStack Query invalide sus
+/// caches y sincronice el estado con el nuevo token.
 fn emit_session_refreshed(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         if let Err(err) = window.emit("session-refreshed", ()) {
@@ -73,6 +71,61 @@ fn emit_session_refreshed(app: &tauri::AppHandle) {
 
 static GUEST_REFRESH_MUTEX: LazyLock<tokio::sync::Mutex<()>> =
     LazyLock::new(|| tokio::sync::Mutex::new(()));
+
+/// Renueva la sesión de un host específico de forma atómica y single-flight.
+///
+/// Si múltiples tareas solicitan la renovación en paralelo, solo una ejecuta la
+/// petición HTTP hacia `/auth/refresh` rotando el refresh token; las demás esperan
+/// en el mutex y leen el token ya renovado sin emitir solicitudes concurrentes.
+///
+/// # Arguments
+///
+/// * `host` - Identificador de usuario del anfitrión.
+/// * `base_url` - URL base del anfitrión normalizada.
+/// * `required_margin_secs` - Margen mínimo de validez requerido en segundos.
+///
+/// # Returns
+///
+/// `Ok(())` si la sesión está vigente o fue renovada exitosamente.
+///
+/// # Errors
+///
+/// Devuelve `Err(String)` si el servidor rechaza el refresh token o falla la red.
+pub async fn refresh_guest_session_single_flight(
+    host: &str,
+    base_url: &str,
+    required_margin_secs: u64,
+) -> Result<(), String> {
+    let current_access = config::get_secure_api_key_for_cloud_host(host);
+    if current_access
+        .as_deref()
+        .and_then(access_token_expiry)
+        .is_some_and(|exp| exp > unix_now() + required_margin_secs)
+    {
+        return Ok(());
+    }
+
+    let _guard = GUEST_REFRESH_MUTEX.lock().await;
+
+    let current_access = config::get_secure_api_key_for_cloud_host(host);
+    if current_access
+        .as_deref()
+        .and_then(access_token_expiry)
+        .is_some_and(|exp| exp > unix_now() + required_margin_secs)
+    {
+        return Ok(());
+    }
+
+    log::info!("[session_refresh] Renovando token de invitado para {host} de forma atómica...");
+
+    if let Some(refresh_token) = config::get_secure_refresh_token_for_cloud_host(host) {
+        refresh_session(host, base_url, &refresh_token).await?;
+    } else if let Some(legacy_token) = current_access.filter(|t| t.starts_with("sc1.")) {
+        upgrade_legacy_session(host, base_url, &legacy_token).await?;
+    }
+
+    Ok(())
+}
 
 /// Asegura que el token de la nube de invitado activa esté vigente antes de realizar
 /// cualquier petición de red hacia el backend.
@@ -93,7 +146,6 @@ pub async fn ensure_active_guest_token_valid() -> Result<(), String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
     else {
-
         return Ok(());
     };
 
@@ -102,60 +154,13 @@ pub async fn ensure_active_guest_token_valid() -> Result<(), String> {
         _ => return Ok(()),
     };
 
-    let current_access = config::get_secure_api_key_for_cloud_host(active_host);
-    let is_valid = current_access
-        .as_deref()
-        .and_then(access_token_expiry)
-        .is_some_and(|exp| exp > unix_now() + 15);
-
-    if is_valid {
-        return Ok(());
-    }
-
-    let _guard = GUEST_REFRESH_MUTEX.lock().await;
-
-    let current_access = config::get_secure_api_key_for_cloud_host(active_host);
-    if current_access
-        .as_deref()
-        .and_then(access_token_expiry)
-        .is_some_and(|exp| exp > unix_now() + 15)
-    {
-        return Ok(());
-    }
-
-    log::info!("[session_refresh] Renovando token de invitado para {active_host} antes de despachar petición...");
-
-    if let Some(refresh_token) = config::get_secure_refresh_token_for_cloud_host(active_host) {
-        refresh_session(active_host, &base_url, &refresh_token).await?;
-    } else if let Some(legacy_token) = current_access.filter(|t| t.starts_with("sc1.")) {
-        upgrade_legacy_session(active_host, &base_url, &legacy_token).await?;
-    }
-
-    Ok(())
+    refresh_guest_session_single_flight(active_host, &base_url, 15).await
 }
 
-/// Renueva forzosamente todas las sesiones cuyos tokens hayan expirado o no
-/// existan. No aplica ningún margen proactivo — es el modo de startup.
+/// Renueva forzosamente todas las sesiones cuyos tokens hayan expirado o no existan.
 async fn refresh_expired_sessions() {
-    for_each_cloud_host(|host, base_url, state| async move {
-        match state {
-            HostSessionState::HasRefreshToken { refresh_token, current_access } => {
-                let token_still_valid = current_access
-                    .as_deref()
-                    .and_then(access_token_expiry)
-                    .is_some_and(|exp| exp > unix_now());
-
-                if token_still_valid {
-                    // Token vigente: no hacer nada en startup para no gastar RTTs innecesarios.
-                    Ok(())
-                } else {
-                    refresh_session(&host, &base_url, &refresh_token).await
-                }
-            }
-            HostSessionState::LegacyToken(token) => {
-                upgrade_legacy_session(&host, &base_url, &token).await
-            }
-        }
+    for_each_cloud_host(|host, base_url| async move {
+        refresh_guest_session_single_flight(&host, &base_url, 0).await
     })
     .await;
 }
@@ -163,45 +168,16 @@ async fn refresh_expired_sessions() {
 /// Renueva de forma proactiva los tokens que expiren pronto, usando el margen
 /// configurado en [`PROACTIVE_REFRESH_MARGIN_SECS`].
 async fn refresh_sessions_proactively() {
-    for_each_cloud_host(|host, base_url, state| async move {
-        match state {
-            HostSessionState::HasRefreshToken { refresh_token, current_access } => {
-                let still_fresh = current_access
-                    .as_deref()
-                    .and_then(access_token_expiry)
-                    .is_some_and(|exp| exp > unix_now() + PROACTIVE_REFRESH_MARGIN_SECS);
-
-                if still_fresh {
-                    Ok(())
-                } else {
-                    refresh_session(&host, &base_url, &refresh_token).await
-                }
-            }
-            HostSessionState::LegacyToken(token) => {
-                upgrade_legacy_session(&host, &base_url, &token).await
-            }
-        }
+    for_each_cloud_host(|host, base_url| async move {
+        refresh_guest_session_single_flight(&host, &base_url, PROACTIVE_REFRESH_MARGIN_SECS).await
     })
     .await;
 }
 
-
-enum HostSessionState {
-    HasRefreshToken {
-        refresh_token: String,
-        current_access: Option<String>,
-    },
-    LegacyToken(String),
-}
-
-/// Itera sobre todas las nubes configuradas y aplica `action` a cada una,
-/// registrando advertencias por las que fallen.
-///
-/// Usa `async_fn_traits`-style con un closure que retorna un `Future` para
-/// mantener el código DRY sin duplicar la lógica de iteración.
+/// Itera sobre todas las nubes configuradas y ejecuta la acción indicada de forma segura.
 async fn for_each_cloud_host<F, Fut>(action: F)
 where
-    F: Fn(String, String, HostSessionState) -> Fut,
+    F: Fn(String, String) -> Fut,
     Fut: std::future::Future<Output = Result<(), String>>,
 {
     let settings = config::load_settings();
@@ -210,20 +186,7 @@ where
         let host = host_user_id.trim().to_owned();
         let base_url = normalize_base_url(&api_url);
 
-        let current_access = config::get_secure_api_key_for_cloud_host(&host);
-
-        let state = match config::get_secure_refresh_token_for_cloud_host(&host) {
-            Some(refresh_token) => HostSessionState::HasRefreshToken {
-                refresh_token,
-                current_access,
-            },
-            None => match current_access {
-                Some(token) if token.starts_with("sc1.") => HostSessionState::LegacyToken(token),
-                _ => continue,
-            },
-        };
-
-        if let Err(err) = action(host.clone(), base_url, state).await {
+        if let Err(err) = action(host.clone(), base_url).await {
             log::warn!("[session_refresh] No se pudo renovar la sesión de la nube {host}: {err}");
         }
     }
@@ -310,5 +273,11 @@ fn persist_tokens(host: &str, tokens: SessionTokensDto) -> Result<(), String> {
         return Err("el servidor devolvió una sesión para otra nube".into());
     }
     config::set_secure_api_key_for_cloud_host(host, &tokens.access_token)?;
-    config::set_secure_refresh_token_for_cloud_host(host, &tokens.refresh_token)
+    config::set_secure_refresh_token_for_cloud_host(host, &tokens.refresh_token)?;
+
+    if let Some(app) = APP_HANDLE.get() {
+        emit_session_refreshed(app);
+    }
+
+    Ok(())
 }
