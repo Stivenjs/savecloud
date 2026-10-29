@@ -1,4 +1,5 @@
 {$DOMAIN} {
+	encode gzip zstd
 	reverse_proxy savecloud-api:3000
 }
 
