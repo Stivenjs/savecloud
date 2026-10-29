@@ -9,6 +9,7 @@ import type { ConfiguredGame } from "@app-types/config";
 import { formatGameDisplayName } from "@utils/gameImage";
 import { buildActiveCloudConfig } from "@utils/activeCloudConfig";
 import { hasUsableCloudConnection } from "@utils/cloudConnection";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 interface SyncPageProps {
   onNavigateToSettings?: () => void;
@@ -38,7 +39,7 @@ export function SyncPage({ onNavigateToSettings }: SyncPageProps) {
         result: {
           okCount: 0,
           errCount: 1,
-          errors: [e instanceof Error ? e.message : String(e)],
+          errors: [getUnknownErrorMessage(e)],
         },
       });
     } finally {
@@ -62,7 +63,7 @@ export function SyncPage({ onNavigateToSettings }: SyncPageProps) {
           result: {
             okCount: 0,
             errCount: 1,
-            errors: [e instanceof Error ? e.message : String(e)],
+            errors: [getUnknownErrorMessage(e)],
           },
         });
       }
@@ -193,7 +194,7 @@ export function SyncPage({ onNavigateToSettings }: SyncPageProps) {
                     {result.errors.length > 0 && (
                       <ul className="mt-1 list-inside list-disc text-default-500">
                         {result.errors.slice(0, 5).map((err, i) => (
-                          <li key={i}>{err}</li>
+                          <li key={i}>{getUnknownErrorMessage(err)}</li>
                         ))}
                         {result.errors.length > 5 && <li>… y {result.errors.length - 5} más</li>}
                       </ul>
@@ -212,7 +213,7 @@ export function SyncPage({ onNavigateToSettings }: SyncPageProps) {
                 {lastResult.result.errors.length > 0 && (
                   <ul className="mt-2 list-inside list-disc text-default-500">
                     {lastResult.result.errors.map((err, i) => (
-                      <li key={i}>{err}</li>
+                      <li key={i}>{getUnknownErrorMessage(err)}</li>
                     ))}
                   </ul>
                 )}

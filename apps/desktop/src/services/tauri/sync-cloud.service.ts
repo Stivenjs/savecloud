@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 
 /** Resultado de subida o descarga */
 export interface SyncResult {
@@ -33,6 +33,7 @@ export interface CopyFriendFilePlan {
   key: string;
   filename: string;
   targetFilename: string;
+  size?: number;
 }
 
 /** Información de un guardado en la nube */
@@ -147,12 +148,12 @@ export function syncUploadResume(): Promise<SyncResult> {
 }
 
 /** Copia los guardados de un amigo para un juego concreto a tu cuenta */
-export async function copyFriendSaves(friendUserId: string, gameId: string): Promise<SyncResult> {
+export async function copyFriendSaves(friendUserId: string, gameId: string, operationId: string): Promise<SyncResult> {
   const r = await invoke<{
     okCount: number;
     errCount: number;
     errors: string[];
-  }>("copy_friend_saves", { friendUserId, gameId });
+  }>("copy_friend_saves", { friendUserId, gameId, operationId });
   return {
     okCount: r.okCount,
     errCount: r.errCount,
@@ -164,13 +165,14 @@ export async function copyFriendSaves(friendUserId: string, gameId: string): Pro
 export async function copyFriendSavesWithPlan(
   friendUserId: string,
   gameId: string,
-  plan: CopyFriendFilePlan[]
+  plan: CopyFriendFilePlan[],
+  operationId: string
 ): Promise<SyncResult> {
   const r = await invoke<{
     okCount: number;
     errCount: number;
     errors: string[];
-  }>("copy_friend_saves_with_plan", { friendUserId, gameId, plan });
+  }>("copy_friend_saves_with_plan", { friendUserId, gameId, plan, operationId });
   return {
     okCount: r.okCount,
     errCount: r.errCount,
@@ -196,8 +198,14 @@ export async function syncListRemoteSavesForUser(userId: string): Promise<Remote
 }
 
 /** Comprueba si hay conflictos (archivos locales más recientes que en la nube) */
-export async function syncCheckDownloadConflicts(gameId: string): Promise<{ conflicts: DownloadConflict[] }> {
-  return invoke<{ conflicts: DownloadConflict[] }>("sync_check_download_conflicts", { gameId });
+export async function syncCheckDownloadConflicts(
+  gameId: string,
+  destinationPath?: string
+): Promise<{ conflicts: DownloadConflict[] }> {
+  return invoke<{ conflicts: DownloadConflict[] }>("sync_check_download_conflicts", {
+    gameId,
+    destinationPath: destinationPath ?? null,
+  });
 }
 
 /** Comprueba conflictos de descarga para varios juegos en una sola llamada */
@@ -216,12 +224,12 @@ export async function syncCheckUnsyncedGames(): Promise<UnsyncedGame[]> {
 }
 
 /** Descarga los guardados de un juego desde la nube */
-export async function syncDownloadGame(gameId: string): Promise<SyncResult> {
+export async function syncDownloadGame(gameId: string, destinationPath?: string): Promise<SyncResult> {
   const r = await invoke<{
     okCount: number;
     errCount: number;
     errors: string[];
-  }>("sync_download_game", { gameId });
+  }>("sync_download_game", { gameId, destinationPath: destinationPath ?? null });
   return {
     okCount: r.okCount,
     errCount: r.errCount,
@@ -259,8 +267,8 @@ export async function previewUploadBatch(gameIds: string[]): Promise<Record<stri
 }
 
 /** Previsualiza qué archivos se descargarían */
-export async function previewDownload(gameId: string): Promise<PreviewDownload> {
-  return invoke<PreviewDownload>("preview_download", { gameId });
+export async function previewDownload(gameId: string, destinationPath?: string): Promise<PreviewDownload> {
+  return invoke<PreviewDownload>("preview_download", { gameId, destinationPath: destinationPath ?? null });
 }
 
 /** Borra todos los guardados del juego en la nube (S3). Por defecto mueve a papelera a menos que permanent sea true. */

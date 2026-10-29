@@ -2,6 +2,7 @@ import { sileo, type SileoOptions } from "sileo";
 import { formatGameDisplayName } from "@/utils/gameImage";
 import type { SyncResult } from "@services/tauri";
 import i18n from "@lib/i18n";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 export interface ToastOptions {
   /** Duración en ms antes de cerrar el toast. */
@@ -48,7 +49,13 @@ export function toastSuccess(title: string, description?: string, options?: Toas
  * Muestra un toast de error.
  */
 export function toastError(title: string, description?: string, options?: ToastOptions): void {
-  showToast(sileo.error, "error", title, description, { timeout: 8000, ...options });
+  showToast(
+    sileo.error,
+    "error",
+    getUnknownErrorMessage(title, title),
+    description ? getUnknownErrorMessage(description, description) : undefined,
+    { timeout: 8000, ...options }
+  );
 }
 
 /**

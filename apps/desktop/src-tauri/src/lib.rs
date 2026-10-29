@@ -4,6 +4,7 @@ mod compat;
 mod config;
 mod controller;
 mod devtools_cmds;
+mod errors;
 mod game_mode;
 mod ipc;
 mod manifest;
@@ -99,7 +100,9 @@ pub fn run() {
                 tauri::WindowEvent::Focused(focused) => {
                     if *focused {
                         crate::system::window_memory::set_window_memory_level(window, false);
-                    } else if !window.is_visible().unwrap_or(true) || window.is_minimized().unwrap_or(false) {
+                    } else if !window.is_visible().unwrap_or(true)
+                        || window.is_minimized().unwrap_or(false)
+                    {
                         crate::system::window_memory::set_window_memory_level(window, true);
                     }
                 }

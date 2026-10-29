@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import type { SyncResult } from "./sync-cloud.service";
 
 /** Información de un backup local */
@@ -78,10 +78,15 @@ export async function listFullBackupsBatch(gameIds: string[]): Promise<Record<st
 }
 
 /** Descarga un backup completo por key y lo extrae en la carpeta del juego. */
-export async function downloadAndRestoreFullBackup(gameId: string, backupKey: string): Promise<void> {
+export async function downloadAndRestoreFullBackup(
+  gameId: string,
+  backupKey: string,
+  destinationPath?: string
+): Promise<void> {
   await invoke("download_and_restore_full_backup", {
     gameId,
     backupKey,
+    destinationPath: destinationPath ?? null,
   });
 }
 

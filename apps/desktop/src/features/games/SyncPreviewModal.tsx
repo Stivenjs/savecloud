@@ -13,6 +13,7 @@ interface SyncPreviewModalProps {
   onClose: () => void;
   type: "upload" | "download";
   gameId: string;
+  destinationPath?: string;
   onConfirm: () => void;
   /** Si se pasa y type es "upload", muestra opción para empaquetar y subir (backup completo). */
   onFullBackupInstead?: () => void;
@@ -24,6 +25,7 @@ export function SyncPreviewModal({
   onClose,
   type,
   gameId,
+  destinationPath,
   onConfirm,
   onFullBackupInstead,
   isLoading = false,
@@ -32,8 +34,8 @@ export function SyncPreviewModal({
   const gameName = formatGameDisplayName(gameId);
 
   const { data, isLoading: loadingPreview } = useQuery({
-    queryKey: ["sync-preview", type, gameId],
-    queryFn: () => (type === "upload" ? previewUpload(gameId) : previewDownload(gameId)),
+    queryKey: ["sync-preview", type, gameId, destinationPath],
+    queryFn: () => (type === "upload" ? previewUpload(gameId) : previewDownload(gameId, destinationPath)),
     enabled: isOpen,
   });
 

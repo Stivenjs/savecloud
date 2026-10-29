@@ -15,6 +15,7 @@ import { ShieldAlert, Cpu } from "lucide-react";
 import { createVideoStreamDecoder, VideoDecoderInstance } from "./VideoStreamDecoder";
 import { createStreamingSocket, StreamingSocketInstance, StreamingTransportType } from "./StreamingSocket";
 import { createVideoRenderer, VideoRenderer, VideoRendererBackend } from "./VideoRenderer";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 interface VideoPlayerProps {
   wsPort: number;
@@ -82,7 +83,7 @@ export const VideoPlayer = ({ wsPort, webTransportPort, certHash }: VideoPlayerP
       } catch (err: any) {
         if (!isCancelled) {
           console.error("[VideoPlayer] Error al inicializar el sistema de renderizado:", err);
-          setError(err?.message || tRef.current("remotePlay.canvasContextError"));
+          setError(getUnknownErrorMessage(err, tRef.current("remotePlay.canvasContextError")));
         }
       }
     };

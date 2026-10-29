@@ -35,6 +35,7 @@ export interface DeviceInventoryRecord {
   sharingEnabled: boolean;
   lastSeenAt?: string;
   appVersion?: string;
+  tlsFingerprint?: string;
   games: GameInventoryEntry[];
 }
 
@@ -47,6 +48,7 @@ export interface GameProviderDevice {
   manifestHash: string;
   verifiedAt: string;
   lastSeenAt?: string;
+  tlsFingerprint?: string;
   files?: InventoryFileEntry[];
 }
 

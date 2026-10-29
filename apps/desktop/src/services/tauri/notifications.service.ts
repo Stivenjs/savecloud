@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 
 /** Debe coincidir con `NOTIFICATIONS_CHANGED_EVENT` en `notifications/writer.rs`. */
 export const NOTIFICATIONS_CHANGED_EVENT = "notifications-changed";

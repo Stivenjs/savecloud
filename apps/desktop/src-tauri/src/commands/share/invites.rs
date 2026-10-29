@@ -1,7 +1,77 @@
+use crate::cloud::api_error::ensure_success;
 use crate::config;
+use crate::errors::{AppError, AppResult};
 use crate::network::API_CLIENT;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tauri::command;
+
+const INVITE_TOKEN_LENGTH: usize = 48;
+
+fn validate_invite_token(token: &str) -> AppResult<()> {
+    if token.len() == INVITE_TOKEN_LENGTH
+        && token
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        Ok(())
+    } else {
+        Err(AppError::new(
+            "INVALID_ARGUMENT",
+            "El código de invitación no es válido.",
+        ))
+    }
+}
+
+fn invite_bootstrap_client() -> AppResult<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .connect_timeout(Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| AppError::network())
+}
+
+fn parse_invite_url(invite_url: &str) -> AppResult<(String, String)> {
+    let trimmed = invite_url.trim();
+    let marker = "/invites/accept/";
+    let mut parsed_url = url::Url::parse(trimmed).map_err(|_| {
+        AppError::new(
+            "INVALID_ARGUMENT",
+            "El enlace no tiene un formato de invitación válido.",
+        )
+    })?;
+
+    if !matches!(parsed_url.scheme(), "http" | "https")
+        || parsed_url.host_str().is_none()
+        || !parsed_url.username().is_empty()
+        || parsed_url.password().is_some()
+    {
+        return Err(AppError::new(
+            "INVALID_ARGUMENT",
+            "El enlace debe usar HTTP o HTTPS y no puede incluir credenciales.",
+        ));
+    }
+
+    let path = parsed_url.path();
+    let idx = path.rfind(marker).ok_or_else(|| {
+        AppError::new(
+            "INVALID_ARGUMENT",
+            "El enlace no tiene un formato de invitación válido.",
+        )
+    })?;
+    let base_path = path[..idx].to_string();
+    let token = path[idx + marker.len()..].trim_end_matches('/').to_string();
+    validate_invite_token(&token)?;
+
+    // El endpoint de bootstrap no usa API key. Limpia cualquier dato no necesario
+    // del enlace y conserva solo el origen y el prefijo de ruta del servidor invitante.
+    parsed_url.set_path(&base_path);
+    parsed_url.set_query(None);
+    parsed_url.set_fragment(None);
+    let base_url = normalize_base_url(parsed_url.as_str());
+    Ok((base_url, token))
+}
 
 fn is_local_net(s: &str) -> bool {
     let cleaned = s
@@ -10,7 +80,14 @@ fn is_local_net(s: &str) -> bool {
         .trim_start_matches("wss://")
         .trim_start_matches("ws://");
 
-    let host = cleaned.split(':').next().unwrap_or("").split('/').next().unwrap_or("").trim();
+    let host = cleaned
+        .split(':')
+        .next()
+        .unwrap_or("")
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .trim();
 
     if host.is_empty() {
         return false;
@@ -262,7 +339,7 @@ pub async fn create_cloud_invite(
     invitee_user_id: Option<String>,
     with_token: Option<bool>,
     expires_in_days: Option<u32>,
-) -> Result<CloudInviteDto, String> {
+) -> AppResult<CloudInviteDto> {
     let (base_url, api_key, user_id) = load_host_api_auth()?;
     let endpoint = format!("{}/invites", base_url);
     let mut payload = serde_json::Map::new();
@@ -304,22 +381,21 @@ pub async fn create_cloud_invite(
         .json(&serde_json::Value::Object(payload))
         .send()
         .await
-        .map_err(|e| format!("Fallo de red: {}", e))?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "API Error ({}): {}",
-            response.status(),
-            response.text().await.unwrap_or_default()
-        ));
-    }
-    response
+        .map_err(|_| AppError::network())?;
+    ensure_success(response)
+        .await?
         .json::<CloudInviteDto>()
         .await
-        .map_err(|e| format!("Error de deserialización: {}", e))
+        .map_err(|_| {
+            AppError::new(
+                "INVALID_RESPONSE",
+                "El servidor devolvió una respuesta inválida.",
+            )
+        })
 }
 
 #[command]
-pub async fn list_pending_cloud_invites() -> Result<Vec<CloudInviteDto>, String> {
+pub async fn list_pending_cloud_invites() -> AppResult<Vec<CloudInviteDto>> {
     let (base_url, api_key, user_id) = load_active_member_api_auth()?;
     let endpoint = format!("{}/invites/pending", base_url);
     let response = API_CLIENT
@@ -328,23 +404,22 @@ pub async fn list_pending_cloud_invites() -> Result<Vec<CloudInviteDto>, String>
         .header("x-user-id", user_id)
         .send()
         .await
-        .map_err(|e| format!("Fallo de red: {}", e))?;
-    if !response.status().is_success() {
-        return Err(format!(
-            "API Error ({}): {}",
-            response.status(),
-            response.text().await.unwrap_or_default()
-        ));
-    }
-    let parsed = response
+        .map_err(|_| AppError::network())?;
+    let parsed = ensure_success(response)
+        .await?
         .json::<PendingInvitesResponseDto>()
         .await
-        .map_err(|e| format!("Error de deserialización: {}", e))?;
+        .map_err(|_| {
+            AppError::new(
+                "INVALID_RESPONSE",
+                "El servidor devolvió una respuesta inválida.",
+            )
+        })?;
     Ok(parsed.items)
 }
 
 #[command]
-pub async fn respond_cloud_invite(invite_id: String, action: String) -> Result<(), String> {
+pub async fn respond_cloud_invite(invite_id: String, action: String) -> AppResult<()> {
     let (base_url, api_key, user_id) = load_active_member_api_auth()?;
     let endpoint = format!("{}/invites/{}/respond", base_url, invite_id.trim());
     let payload = serde_json::json!({ "action": action.trim() });
@@ -355,19 +430,14 @@ pub async fn respond_cloud_invite(invite_id: String, action: String) -> Result<(
         .json(&payload)
         .send()
         .await
-        .map_err(|e| format!("Fallo de red: {}", e))?;
-    if response.status().is_success() || response.status().as_u16() == 204 {
-        return Ok(());
-    }
-    Err(format!(
-        "API Error ({}): {}",
-        response.status(),
-        response.text().await.unwrap_or_default()
-    ))
+        .map_err(|_| AppError::network())?;
+    ensure_success(response).await?;
+    Ok(())
 }
 
 #[command]
-pub async fn accept_cloud_invite_by_token(token: String) -> Result<(), String> {
+pub async fn accept_cloud_invite_by_token(token: String) -> AppResult<()> {
+    validate_invite_token(token.trim())?;
     let (base_url, api_key, user_id) = load_active_member_api_auth()?;
     let endpoint = format!("{}/invites/accept-token", base_url);
     let payload = serde_json::json!({ "token": token.trim() });
@@ -378,26 +448,24 @@ pub async fn accept_cloud_invite_by_token(token: String) -> Result<(), String> {
         .json(&payload)
         .send()
         .await
-        .map_err(|e| format!("Fallo de red: {}", e))?;
-    if response.status().is_success() || response.status().as_u16() == 204 {
-        let parsed = response
-            .json::<AcceptInviteProvisionResponseDto>()
-            .await
-            .map_err(|e| format!("Error de deserialización: {}", e))?;
+        .map_err(|_| AppError::network())?;
+    let response = ensure_success(response).await?;
+    let parsed = response
+        .json::<AcceptInviteProvisionResponseDto>()
+        .await
+        .map_err(|_| {
+            AppError::new(
+                "INVALID_RESPONSE",
+                "El servidor devolvió una respuesta inválida.",
+            )
+        })?;
 
-        persist_cloud_invite_provision(&base_url, parsed)?;
-
-        return Ok(());
-    }
-    Err(format!(
-        "API Error ({}): {}",
-        response.status(),
-        response.text().await.unwrap_or_default()
-    ))
+    persist_cloud_invite_provision(&base_url, parsed)?;
+    Ok(())
 }
 
 #[command]
-pub async fn accept_cloud_invite_by_url(invite_url: String) -> Result<(), String> {
+pub async fn accept_cloud_invite_by_url(invite_url: String) -> AppResult<()> {
     let settings = config::load_settings();
     let user_id = settings
         .user_id
@@ -406,46 +474,35 @@ pub async fn accept_cloud_invite_by_url(invite_url: String) -> Result<(), String
         .trim()
         .to_string();
 
-    let trimmed = invite_url.trim().to_string();
-    if trimmed.is_empty() {
-        return Err("URL vacía".into());
-    }
-
-    // Espera algo como: https://host.tld/invites/accept/<token>
-    let marker = "/invites/accept/";
-    let idx = trimmed
-        .find(marker)
-        .ok_or("URL inválida: falta /invites/accept/<token>")?;
-    let base_url = normalize_base_url(&trimmed[..idx]);
-    let token = trimmed[idx + marker.len()..].trim().to_string();
-    if token.is_empty() {
-        return Err("URL inválida: token vacío".into());
-    }
+    // Rechaza enlaces concatenados o malformados antes de generar una solicitud a la API.
+    let (base_url, token) = parse_invite_url(&invite_url)?;
 
     let endpoint = format!("{}/invites/accept-token", base_url);
     let payload = serde_json::json!({ "token": token });
 
-    // Bootstrap: esta llamada NO requiere x-api-key (ruta pública en backend).
-    let response = API_CLIENT
+    // El primer contacto no tiene credenciales para el host invitante. Solo se envía
+    // el ID local requerido para validar invitaciones dirigidas; nunca una API key.
+    // Se desactivan redirecciones para evitar reenviar encabezados a otro dominio.
+    let bootstrap_client = invite_bootstrap_client()?;
+    let response = bootstrap_client
         .post(&endpoint)
         .header("x-user-id", user_id.clone())
         .json(&payload)
         .send()
         .await
-        .map_err(|e| format!("Fallo de red: {}", e))?;
+        .map_err(|_| AppError::network())?;
 
-    if !response.status().is_success() {
-        return Err(format!(
-            "API Error ({}): {}",
-            response.status(),
-            response.text().await.unwrap_or_default()
-        ));
-    }
+    let response = ensure_success(response).await?;
 
     let parsed = response
         .json::<AcceptInviteProvisionResponseDto>()
         .await
-        .map_err(|e| format!("Error de deserialización: {}", e))?;
+        .map_err(|_| {
+            AppError::new(
+                "INVALID_RESPONSE",
+                "El servidor devolvió una respuesta inválida.",
+            )
+        })?;
 
     persist_cloud_invite_provision(&base_url, parsed)?;
 
@@ -453,26 +510,27 @@ pub async fn accept_cloud_invite_by_url(invite_url: String) -> Result<(), String
 }
 
 #[command]
-pub async fn leave_cloud_membership(host_user_id: String) -> Result<(), String> {
+pub async fn leave_cloud_membership(host_user_id: String) -> AppResult<()> {
     let host = host_user_id.trim().to_string();
     if host.is_empty() {
         return Err("Host inválido".into());
     }
 
-    if let Ok((base_url, api_key, user_id)) = load_member_api_auth(&host) {
-        let endpoint = format!("{}/invites/memberships/leave", base_url);
-        let payload = serde_json::json!({
-            "hostUserId": host,
-            "memberUserId": user_id,
-        });
-        let _ = API_CLIENT
-            .post(&endpoint)
-            .header("x-api-key", api_key)
-            .header("x-user-id", &user_id)
-            .json(&payload)
-            .send()
-            .await;
-    }
+    let (base_url, api_key, user_id) = load_member_api_auth(&host)?;
+    let endpoint = format!("{}/invites/memberships/leave", base_url);
+    let payload = serde_json::json!({
+        "hostUserId": host,
+        "memberUserId": user_id,
+    });
+    let response = API_CLIENT
+        .post(&endpoint)
+        .header("x-api-key", api_key)
+        .header("x-user-id", &user_id)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|_| AppError::network())?;
+    ensure_success(response).await?;
 
     config::clean_up_cloud_host(&host)?;
 
@@ -480,7 +538,7 @@ pub async fn leave_cloud_membership(host_user_id: String) -> Result<(), String> 
 }
 
 #[command]
-pub async fn remove_cloud_member(member_user_id: String) -> Result<(), String> {
+pub async fn remove_cloud_member(member_user_id: String) -> AppResult<()> {
     let (base_url, api_key, user_id) = load_host_api_auth()?;
     let endpoint = format!("{}/invites/memberships/remove", base_url);
     let payload = serde_json::json!({
@@ -500,19 +558,13 @@ pub async fn remove_cloud_member(member_user_id: String) -> Result<(), String> {
         .json(&payload)
         .send()
         .await
-        .map_err(|e| format!("Fallo de red: {}", e))?;
-    if response.status().is_success() || response.status().as_u16() == 204 {
-        return Ok(());
-    }
-    Err(format!(
-        "API Error ({}): {}",
-        response.status(),
-        response.text().await.unwrap_or_default()
-    ))
+        .map_err(|_| AppError::network())?;
+    ensure_success(response).await?;
+    Ok(())
 }
 
 #[command]
-pub async fn list_cloud_memberships() -> Result<CloudMembershipsResponseDto, String> {
+pub async fn list_cloud_memberships() -> AppResult<CloudMembershipsResponseDto> {
     let settings = config::load_settings();
     let user_id = settings
         .user_id
@@ -532,20 +584,24 @@ pub async fn list_cloud_memberships() -> Result<CloudMembershipsResponseDto, Str
         if !base_url_raw.trim().is_empty() && !api_key_raw.trim().is_empty() {
             let base_url = normalize_base_url(base_url_raw);
             let endpoint = format!("{}/invites/memberships", base_url);
-            let response_result = API_CLIENT
+            let response = API_CLIENT
                 .get(&endpoint)
                 .header("x-api-key", api_key_raw)
                 .header("x-user-id", &user_id)
                 .send()
-                .await;
-
-            if let Ok(response) = response_result {
-                if response.status().is_success() {
-                    if let Ok(parsed) = response.json::<CloudMembershipsResponseDto>().await {
-                        host_memberships = parsed.host_memberships;
-                    }
-                }
-            }
+                .await
+                .map_err(|_| AppError::network())?;
+            let parsed = ensure_success(response)
+                .await?
+                .json::<CloudMembershipsResponseDto>()
+                .await
+                .map_err(|_| {
+                    AppError::new(
+                        "INVALID_RESPONSE",
+                        "El servidor devolvió una respuesta inválida.",
+                    )
+                })?;
+            host_memberships = parsed.host_memberships;
         }
     }
 
@@ -560,29 +616,35 @@ pub async fn list_cloud_memberships() -> Result<CloudMembershipsResponseDto, Str
             }
         };
         let endpoint = format!("{}/invites/memberships", base_url);
-        let response_result = API_CLIENT
+        let response = API_CLIENT
             .get(&endpoint)
             .header("x-api-key", api_key)
             .header("x-user-id", &user_id)
             .send()
-            .await;
-
-        if let Ok(response) = response_result {
-            let status = response.status();
-            if status.is_success() {
-                if let Ok(parsed) = response.json::<CloudMembershipsResponseDto>().await {
-                    let is_active = parsed.member_memberships.iter().any(|m| {
-                        m.host_user_id == host && m.member_user_id == user_id && m.active
-                    });
-                    if is_active {
-                        member_memberships.extend(parsed.member_memberships);
-                    } else {
-                        let _ = config::clean_up_cloud_host(&host);
-                    }
-                }
-            } else if status.as_u16() == 401 || status.as_u16() == 403 {
-                let _ = config::clean_up_cloud_host(&host);
-            }
+            .await
+            .map_err(|_| AppError::network())?;
+        if response.status().as_u16() == 401 || response.status().as_u16() == 403 {
+            let _ = config::clean_up_cloud_host(&host);
+            continue;
+        }
+        let parsed = ensure_success(response)
+            .await?
+            .json::<CloudMembershipsResponseDto>()
+            .await
+            .map_err(|_| {
+                AppError::new(
+                    "INVALID_RESPONSE",
+                    "El servidor devolvió una respuesta inválida.",
+                )
+            })?;
+        let is_active = parsed
+            .member_memberships
+            .iter()
+            .any(|m| m.host_user_id == host && m.member_user_id == user_id && m.active);
+        if is_active {
+            member_memberships.extend(parsed.member_memberships);
+        } else {
+            let _ = config::clean_up_cloud_host(&host);
         }
     }
 
@@ -593,7 +655,7 @@ pub async fn list_cloud_memberships() -> Result<CloudMembershipsResponseDto, Str
 }
 
 #[command]
-pub async fn list_cloud_presence() -> Result<Vec<CloudPresenceDto>, String> {
+pub async fn list_cloud_presence() -> AppResult<Vec<CloudPresenceDto>> {
     let (base_url, api_key, user_id) = load_active_member_api_auth()?;
     let endpoint = format!("{}/invites/presence", base_url);
     let response = API_CLIENT
@@ -602,20 +664,50 @@ pub async fn list_cloud_presence() -> Result<Vec<CloudPresenceDto>, String> {
         .header("x-user-id", user_id)
         .send()
         .await
-        .map_err(|e| format!("Fallo de red: {}", e))?;
+        .map_err(|_| AppError::network())?;
 
-    if !response.status().is_success() {
-        return Err(format!(
-            "API Error ({}): {}",
-            response.status(),
-            response.text().await.unwrap_or_default()
-        ));
-    }
-
-    let parsed = response
+    let parsed = ensure_success(response)
+        .await?
         .json::<CloudPresenceResponseDto>()
         .await
-        .map_err(|e| format!("Error de deserialización: {}", e))?;
+        .map_err(|_| {
+            AppError::new(
+                "INVALID_RESPONSE",
+                "El servidor devolvió una respuesta inválida.",
+            )
+        })?;
 
     Ok(parsed.items)
+}
+
+#[cfg(test)]
+mod invite_token_tests {
+    use super::{parse_invite_url, validate_invite_token};
+
+    const VALID_TOKEN: &str = "5571a1ade6ee46173aa026bd6c22a6e65a7a11ca9c4b7740";
+
+    #[test]
+    fn accepts_only_generated_hex_tokens() {
+        assert!(validate_invite_token(VALID_TOKEN).is_ok());
+        assert!(validate_invite_token(&format!("{VALID_TOKEN}https://localhost:3000")).is_err());
+    }
+
+    #[test]
+    fn extracts_token_and_ignores_query_and_fragment() {
+        let (base_url, token) = parse_invite_url(&format!(
+            "https://cloud.example/invites/accept/{VALID_TOKEN}?source=copy#{VALID_TOKEN}"
+        ))
+        .expect("a well-formed invite URL should be accepted");
+
+        assert_eq!(base_url, "https://cloud.example");
+        assert_eq!(token, VALID_TOKEN);
+    }
+
+    #[test]
+    fn rejects_concatenated_invite_urls() {
+        let malformed = format!(
+            "https://cloud.example/invites/accept/{VALID_TOKEN}https://cloud.example/invites/accept/{VALID_TOKEN}"
+        );
+        assert!(parse_invite_url(&malformed).is_err());
+    }
 }

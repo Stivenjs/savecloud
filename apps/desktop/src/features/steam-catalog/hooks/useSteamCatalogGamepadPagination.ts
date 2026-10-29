@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { useQuery } from "@tanstack/react-query";
 import type { GamepadLayoutKind } from "@/lib/gamepadLabelMaps";
 

@@ -6,7 +6,7 @@
 import { useMemo } from "react";
 import { Card, CardBody, Select, SelectItem } from "@heroui/react";
 import { Volume2 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toastError, toastSuccess } from "@utils/toast";

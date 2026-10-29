@@ -29,6 +29,7 @@ import { registerSavesModule } from "@interfaces/http/modules/saves";
 import { registerShareModule } from "@interfaces/http/modules/share";
 import { registerClipsModule } from "@interfaces/http/modules/clips";
 import { registerHttpErrorHandler } from "@interfaces/http/error-handler";
+import { healthRateLimit } from "@interfaces/http/rate-limits/health";
 import { ApplicationError } from "@application/errors/ApplicationError";
 import { resolveHttpLoggingConfig } from "@interfaces/http/helpers/http-logging";
 
@@ -57,9 +58,12 @@ export interface AppDependencies {
 declare module "fastify" {
   interface FastifyRequest {
     _scMetricsStartNs?: bigint;
+    scAuthenticatedUserId?: string;
+    scRateLimitUserId?: string;
     awsLambda?: {
       event?: {
         requestContext?: {
+          http?: { sourceIp?: string };
           authorizer?: {
             lambda?: Record<string, unknown>;
           };
@@ -77,7 +81,10 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       level: loggingConfig.level,
     },
     logController: new LogController({ disableRequestLogging: true }),
-    trustProxy: true,
+    trustProxy:
+      process.env.TRUSTED_PROXY_CIDRS?.split(",")
+        .map((cidr) => cidr.trim())
+        .filter(Boolean) ?? false,
   });
 
   await app.register(cors, { origin: true });
@@ -91,10 +98,8 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   await app.register(rateLimit, {
     global: false,
     keyGenerator(request) {
-      const forwarded = request.headers["x-forwarded-for"] as string | undefined;
-      if (forwarded) {
-        return forwarded.split(",")[0]?.trim() || "unknown";
-      }
+      const lambdaSourceIp = request.awsLambda?.event?.requestContext?.http?.sourceIp;
+      if (lambdaSourceIp) return `ip:${lambdaSourceIp}`;
       return request.ip || "unknown";
     },
   });
@@ -131,12 +136,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   app.get(
     "/health",
     {
-      config: {
-        rateLimit: {
-          max: 60,
-          timeWindow: "1 minute",
-        },
-      },
+      config: { rateLimit: healthRateLimit },
     },
     async (_, reply: FastifyReply) => {
       return reply.send({ status: "ok" });
@@ -190,8 +190,6 @@ function registerHttpMetricsHooks(app: FastifyInstance, requestLoggingEnabled: b
 }
 
 function registerApiKeyAuthHook(app: FastifyInstance, expectedApiKey?: string): void {
-  if (!expectedApiKey) return;
-
   app.addHook("onRequest", async (request, reply) => {
     if (isPublicRoute(request)) return;
 
@@ -206,26 +204,41 @@ function registerApiKeyAuthHook(app: FastifyInstance, expectedApiKey?: string): 
       authorizerLambda &&
       (authorizerLambda.authMode || authorizerLambda.isAuthorized === true || authorizerLambda.isAuthorized === "true")
     ) {
+      const authorizedUserId = authorizerLambda.userId;
+      if (typeof authorizedUserId === "string" && authorizedUserId.trim()) {
+        request.scAuthenticatedUserId = authorizedUserId.trim();
+        if (authorizerLambda.authMode === "access-token") {
+          request.scRateLimitUserId = authorizedUserId.trim();
+        }
+      } else if (authorizerLambda.authMode === "api-key") {
+        const declaredUserId = request.headers["x-user-id"];
+        request.scAuthenticatedUserId = typeof declaredUserId === "string" ? declaredUserId.trim() : undefined;
+      }
       return;
     }
 
-    const query = (request.query as Record<string, string> | undefined) ?? {};
     const headerKey = request.headers["x-api-key"];
-    const key =
-      typeof headerKey === "string" && headerKey.trim()
-        ? headerKey.trim()
-        : query.apiKey?.trim() || query.token?.trim();
+    const authorization = request.headers.authorization;
+    const bearer = typeof authorization === "string" ? authorization.match(/^Bearer\s+(.+)$/i)?.[1] : undefined;
+    const key = typeof headerKey === "string" && headerKey.trim() ? headerKey.trim() : bearer?.trim();
 
-    if (key === expectedApiKey) return;
+    if (expectedApiKey && key === expectedApiKey) {
+      const declaredUserId = request.headers["x-user-id"];
+      request.scAuthenticatedUserId = typeof declaredUserId === "string" ? declaredUserId.trim() : undefined;
+      return;
+    }
 
     if (typeof key === "string" && key.trim()) {
       const token = verifyUserAccessToken(key);
       if (token) {
         const headerUserId = request.headers["x-user-id"];
-        const userId =
-          typeof headerUserId === "string" && headerUserId.trim() ? headerUserId.trim() : query.userId?.trim();
+        const userId = typeof headerUserId === "string" ? headerUserId.trim() : "";
 
-        if (userId && userId === token.userId) return;
+        if (userId && userId === token.userId) {
+          request.scAuthenticatedUserId = token.userId;
+          request.scRateLimitUserId = token.userId;
+          return;
+        }
       }
     }
 

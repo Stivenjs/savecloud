@@ -7,9 +7,10 @@ use std::time::Duration;
 
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
+use crate::cloud::api_error;
 use crate::commands::sync::context::resolve_api_context;
 use crate::network::stream_download::{stream_url_to_file, GlobalDownloadProgress};
-use crate::network::{API_CLIENT, PEER_LAN_CLIENT};
+use crate::network::{build_peer_lan_client, API_CLIENT};
 use crate::peer_inventory::{list_providers_from_api, InventoryFileDto};
 use crate::peer_lan::checkpoint::{PeerDownloadCheckpoint, PeerJobMeta, PAUSED_BY_USER};
 use crate::peer_lan::discovery::{probe_lan_devices, LanDeviceProbe};
@@ -24,8 +25,6 @@ pub struct PeerDownloadParams {
     pub checkpoint: Option<PeerDownloadCheckpoint>,
 }
 
-
-
 const FILE_DOWNLOAD_ATTEMPTS: u32 = 3;
 const SESSION_READY_MAX_WAIT: Duration = Duration::from_secs(45);
 
@@ -35,7 +34,7 @@ pub async fn run_peer_download(
     pause_flag: Arc<AtomicBool>,
     mut on_progress: impl FnMut(u64, u64, u64, Option<u64>) -> Result<(), String>,
 ) -> Result<(), String> {
-    let files = fetch_file_list(&params).await?;
+    let (files, expected_tls_fingerprint) = fetch_file_list(&params).await?;
     let total_bytes: u64 = files.iter().map(|f| f.size).sum();
 
     let start_index = params
@@ -48,19 +47,31 @@ pub async fn run_peer_download(
         .as_ref()
         .map(|c| c.loaded_total)
         .unwrap_or(0);
+    let checkpoint_session_id = params
+        .checkpoint
+        .as_ref()
+        .and_then(|c| c.session_id.clone());
 
     if start_index >= files.len() && total_bytes > 0 && loaded_total >= total_bytes {
+        if let Some(session_id) = checkpoint_session_id.as_deref() {
+            consume_transfer_session(session_id).await;
+        }
         return Ok(());
     }
 
-    let session_token = match params
+    let transfer_session = match params
         .checkpoint
         .as_ref()
         .and_then(|c| c.session_token.clone())
     {
-        Some(token) if !token.is_empty() => token,
-        _ => create_transfer_session(&params).await?.token,
+        Some(token) if !token.is_empty() => TransferSessionDto {
+            session_id: checkpoint_session_id.clone().unwrap_or_default(),
+            token,
+        },
+        _ => create_transfer_session(&params).await?,
     };
+    let session_token = transfer_session.token;
+    let session_id = transfer_session.session_id;
 
     let sample_rel = files
         .get(start_index)
@@ -71,6 +82,8 @@ pub async fn run_peer_download(
     let peer = wait_for_transfer_peer(
         &params.target_device_id,
         &session_token,
+        &session_id,
+        &expected_tls_fingerprint,
         &sample_rel,
         &cancel_flag,
         &pause_flag,
@@ -83,7 +96,7 @@ pub async fn run_peer_download(
         .map_err(|e| e.to_string())?;
 
     let mut speed_tracker = TransferSpeedTracker::new();
-    let client = PEER_LAN_CLIENT.clone();
+    let client = build_peer_lan_client(&peer.tls_fingerprint)?;
     let base = format!("https://{}:{}", peer.lan_host, peer.port);
 
     for (index, file) in files.iter().enumerate().skip(start_index) {
@@ -91,7 +104,12 @@ pub async fn run_peer_download(
             return Err("stopped_by_user".to_string());
         }
         if pause_flag.load(Ordering::Relaxed) {
-            return Err(build_pause_error(index, loaded_total, &session_token));
+            return Err(build_pause_error(
+                index,
+                loaded_total,
+                &session_token,
+                &session_id,
+            ));
         }
 
         let rel = file.relative_path.replace('\\', "/");
@@ -123,7 +141,12 @@ pub async fn run_peer_download(
                 return Err("stopped_by_user".to_string());
             }
             if pause_flag.load(Ordering::Relaxed) {
-                return Err(build_pause_error(index, loaded_total, &session_token));
+                return Err(build_pause_error(
+                    index,
+                    loaded_total,
+                    &session_token,
+                    &session_id,
+                ));
             }
 
             match stream_url_to_file(
@@ -158,7 +181,12 @@ pub async fn run_peer_download(
                     break;
                 }
                 Err(e) if e == crate::network::stream_download::STREAM_PAUSED_BY_USER => {
-                    return Err(build_pause_error(index, loaded_total, &session_token));
+                    return Err(build_pause_error(
+                        index,
+                        loaded_total,
+                        &session_token,
+                        &session_id,
+                    ));
                 }
                 Err(e) => {
                     last_err = e;
@@ -184,14 +212,23 @@ pub async fn run_peer_download(
         }
     }
 
+    if !session_id.is_empty() {
+        consume_transfer_session(&session_id).await;
+    }
     Ok(())
 }
 
-fn build_pause_error(index: usize, loaded_total: u64, session_token: &str) -> String {
+fn build_pause_error(
+    index: usize,
+    loaded_total: u64,
+    session_token: &str,
+    session_id: &str,
+) -> String {
     let checkpoint = PeerDownloadCheckpoint {
         next_file_index: index,
         loaded_total,
         session_token: Some(session_token.to_string()),
+        session_id: (!session_id.is_empty()).then(|| session_id.to_string()),
     };
     format!(
         "{PAUSED_BY_USER}:{}",
@@ -207,7 +244,9 @@ async fn file_already_complete(path: &std::path::Path, expected_size: u64) -> Re
     Ok(meta.is_file() && meta.len() == expected_size)
 }
 
-async fn fetch_file_list(params: &PeerDownloadParams) -> Result<Vec<InventoryFileDto>, String> {
+async fn fetch_file_list(
+    params: &PeerDownloadParams,
+) -> Result<(Vec<InventoryFileDto>, String), String> {
     let providers = list_providers_from_api(&params.game_key).await?;
     let provider = providers
         .providers
@@ -215,16 +254,27 @@ async fn fetch_file_list(params: &PeerDownloadParams) -> Result<Vec<InventoryFil
         .find(|p| p.device_id == params.target_device_id)
         .ok_or_else(|| "Proveedor no encontrado en inventario".to_string())?;
 
+    let tls_fingerprint = provider
+        .tls_fingerprint
+        .filter(|fingerprint| {
+            fingerprint.len() == 64 && fingerprint.bytes().all(|b| b.is_ascii_hexdigit())
+        })
+        .ok_or_else(|| {
+            "El proveedor no publicó una huella TLS verificable. Actualiza su inventario."
+                .to_string()
+        })?;
     let files = provider.files.unwrap_or_default();
     if files.is_empty() {
         return Err("El proveedor no tiene archivos indexados para este juego".to_string());
     }
-    Ok(files)
+    Ok((files, tls_fingerprint))
 }
 
 async fn wait_for_transfer_peer(
     target_device_id: &str,
     session_token: &str,
+    session_id: &str,
+    expected_tls_fingerprint: &str,
     sample_relative_path: &str,
     cancel_flag: &AtomicBool,
     pause_flag: &AtomicBool,
@@ -236,15 +286,27 @@ async fn wait_for_transfer_peer(
             return Err("stopped_by_user".to_string());
         }
         if pause_flag.load(Ordering::Relaxed) {
-            return Err(build_pause_error(0, 0, session_token));
+            return Err(build_pause_error(0, 0, session_token, session_id));
         }
 
         let probes = probe_lan_devices(vec![target_device_id.to_string()]).await?;
         if let Some(peer) = probes.into_iter().find(|p| {
-            p.device_id == target_device_id && p.reachable && !p.lan_host.is_empty() && p.port > 0
+            p.device_id == target_device_id
+                && p.reachable
+                && !p.lan_host.is_empty()
+                && p.port > 0
+                && p.tls_fingerprint
+                    .eq_ignore_ascii_case(expected_tls_fingerprint)
         }) {
             let base = format!("https://{}:{}", peer.lan_host, peer.port);
-            if peer_serves_file(&base, session_token, sample_relative_path).await {
+            if peer_serves_file(
+                &base,
+                session_token,
+                sample_relative_path,
+                expected_tls_fingerprint,
+            )
+            .await
+            {
                 log::info!(
                     "Peer LAN listo en {}:{} para transferencia HTTPS",
                     peer.lan_host,
@@ -263,14 +325,17 @@ async fn wait_for_transfer_peer(
     )
 }
 
-async fn peer_serves_file(base: &str, token: &str, relative_path: &str) -> bool {
+async fn peer_serves_file(base: &str, token: &str, relative_path: &str, fingerprint: &str) -> bool {
+    let Ok(client) = build_peer_lan_client(fingerprint) else {
+        return false;
+    };
     let url = format!("{base}/files/{}", encode_url_path(relative_path));
     let mut headers = HeaderMap::new();
     if let Ok(value) = HeaderValue::from_str(&format!("Bearer {token}")) {
         headers.insert(AUTHORIZATION, value);
     }
 
-    match PEER_LAN_CLIENT.head(&url).headers(headers).send().await {
+    match client.head(&url).headers(headers).send().await {
         Ok(res) => res.status().is_success(),
         Err(_) => false,
     }
@@ -302,8 +367,35 @@ fn is_retryable_transfer_error(message: &str) -> bool {
 }
 
 #[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct TransferSessionDto {
+    session_id: String,
     token: String,
+}
+
+async fn consume_transfer_session(session_id: &str) {
+    let Ok(ctx) = resolve_api_context() else {
+        return;
+    };
+    let url = format!(
+        "{}/inventory/transfer-sessions/{}/consume",
+        ctx.base_url,
+        urlencoding::encode(session_id)
+    );
+    match API_CLIENT
+        .post(url)
+        .header("x-api-key", &ctx.api_key)
+        .header("x-user-id", &ctx.user_id)
+        .send()
+        .await
+    {
+        Ok(response) if response.status().is_success() || response.status().as_u16() == 404 => {}
+        Ok(response) => log::warn!(
+            "No se pudo limpiar la sesión de transferencia: HTTP {}",
+            response.status()
+        ),
+        Err(error) => log::warn!("No se pudo limpiar la sesión de transferencia: {error}"),
+    }
 }
 
 async fn create_transfer_session(
@@ -326,16 +418,15 @@ async fn create_transfer_session(
         .json(&body)
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|_| api_error::network_message())?;
 
     if !res.status().is_success() {
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("Sesión transferencia: {text}"));
+        return Err(api_error::response_message(res).await);
     }
 
     res.json::<TransferSessionDto>()
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|_| api_error::invalid_response_message())
 }
 
 /// Parsea error de pausa y devuelve checkpoint si aplica.

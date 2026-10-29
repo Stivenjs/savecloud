@@ -223,7 +223,12 @@ async function run(): Promise<void> {
   if (generatedToken) {
     const startResolve = performance.now();
     try {
-      const resolveRes = await fetch(`${cfg.apiBaseUrl}/share/${generatedToken}`);
+      const resolveRes = await fetch(`${cfg.apiBaseUrl}/share/${generatedToken}`, {
+        headers: {
+          "x-api-key": cfg.apiKey,
+          "x-user-id": cfg.testUserId,
+        },
+      });
       const resolveDuration = Math.round((performance.now() - startResolve) * 10) / 10;
 
       if (resolveRes.status === 200) {
@@ -234,7 +239,7 @@ async function run(): Promise<void> {
 
         const hasFiles = Array.isArray(body.files) && body.files.length > 0;
         results.push({
-          name: "GET /share/:token (Resolucion Publica de Archivos Empaquetados)",
+          name: "GET /share/:token (Resolucion Autenticada de Archivos Empaquetados)",
           passed: hasFiles,
           status: 200,
           durationMs: resolveDuration,
@@ -242,7 +247,7 @@ async function run(): Promise<void> {
         });
       } else {
         results.push({
-          name: "GET /share/:token (Resolucion Publica de Archivos Empaquetados)",
+          name: "GET /share/:token (Resolucion Autenticada de Archivos Empaquetados)",
           passed: false,
           status: resolveRes.status,
           durationMs: resolveDuration,
@@ -261,8 +266,14 @@ async function run(): Promise<void> {
     // Probar token invalido publico
     results.push(
       await executeCheck(
-        "GET /share/000000000000000000000000 (Token Inexistente Publico)",
-        () => fetch(`${cfg.apiBaseUrl}/share/000000000000000000000000000000000000000000000000`),
+        "GET /share/000000000000000000000000 (Token Inexistente Autenticado)",
+        () =>
+          fetch(`${cfg.apiBaseUrl}/share/000000000000000000000000000000000000000000000000`, {
+            headers: {
+              "x-api-key": cfg.apiKey,
+              "x-user-id": cfg.testUserId,
+            },
+          }),
         404
       )
     );

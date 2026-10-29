@@ -1,12 +1,13 @@
 //! Servidor HTTP LAN unificado: presencia (`/health`) + archivos (`/files/*`).
 
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 use axum::{
-    extract::{Path as AxumPath, Request, State},
+    extract::{ConnectInfo, Path as AxumPath, Request, State},
     http::{header, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -14,6 +15,7 @@ use axum::{
     Router,
 };
 use once_cell::sync::Lazy;
+use sha2::{Digest, Sha256};
 use tokio::fs::File;
 use tokio::io::AsyncSeekExt;
 use tokio_util::io::ReaderStream;
@@ -34,6 +36,8 @@ struct TransferServeState {
 struct LanServerInner {
     transfer: Option<TransferServeState>,
     host: Option<Arc<crate::streaming::host::SunshineHost>>,
+    streaming_pairing: Option<(String, std::time::Instant)>,
+    pairing_attempts: HashMap<std::net::IpAddr, (u8, std::time::Instant)>,
 }
 
 #[derive(Clone)]
@@ -43,33 +47,63 @@ struct LanHttpState {
 
 struct LanRuntime {
     port: u16,
+    tls_fingerprint: String,
     handle: tokio::task::JoinHandle<()>,
     state: LanHttpState,
 }
 
 static LAN_RUNTIME: Lazy<Mutex<Option<LanRuntime>>> = Lazy::new(|| Mutex::new(None));
+static LAN_TLS_FINGERPRINT: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 
-pub fn generate_self_signed_cert() -> Result<(String, String), String> {
+pub fn lan_tls_fingerprint() -> Option<String> {
+    LAN_TLS_FINGERPRINT.lock().ok()?.clone()
+}
+
+pub fn generate_self_signed_cert() -> Result<(String, String, String), String> {
     let subject_alt_names = vec!["localhost".to_string(), "127.0.0.1".to_string()];
     let cert = rcgen::generate_simple_self_signed(subject_alt_names)
         .map_err(|e| format!("Fallo al generar cert: {e}"))?;
 
-    let cert_pem = cert.serialize_pem().map_err(|e| e.to_string())?;
+    let cert_der = cert.serialize_der().map_err(|e| e.to_string())?;
+    let fingerprint = hex::encode(Sha256::digest(&cert_der));
+    if let Ok(mut stored) = LAN_TLS_FINGERPRINT.lock() {
+        *stored = Some(fingerprint.clone());
+    }
+    // Encode the exact DER bytes we fingerprinted. Serializing the certificate
+    // again can produce a different DER signature and therefore a different pin.
+    use base64::Engine;
+    let cert_base64 = base64::engine::general_purpose::STANDARD.encode(&cert_der);
+    let mut cert_pem = String::from("-----BEGIN CERTIFICATE-----\n");
+    for chunk in cert_base64.as_bytes().chunks(64) {
+        let line = std::str::from_utf8(chunk)
+            .map_err(|e| format!("Certificado DER no se pudo codificar a PEM: {e}"))?;
+        cert_pem.push_str(line);
+        cert_pem.push('\n');
+    }
+    cert_pem.push_str("-----END CERTIFICATE-----\n");
     let key_pem = cert.serialize_private_key_pem();
 
-    Ok((cert_pem, key_pem))
+    Ok((cert_pem, key_pem, fingerprint))
 }
 
 pub async fn ensure_lan_http_server(
     host: Option<Arc<crate::streaming::host::SunshineHost>>,
 ) -> Result<u16, String> {
+    ensure_lan_http_server_with_fingerprint(host)
+        .await
+        .map(|(port, _)| port)
+}
+
+pub async fn ensure_lan_http_server_with_fingerprint(
+    host: Option<Arc<crate::streaming::host::SunshineHost>>,
+) -> Result<(u16, String), String> {
     if let Ok(guard) = LAN_RUNTIME.lock() {
         if let Some(runtime) = guard.as_ref() {
             if !runtime.handle.is_finished() {
                 if let Ok(mut inner) = runtime.state.inner.write() {
                     inner.host = host;
                 }
-                return Ok(runtime.port);
+                return Ok((runtime.port, runtime.tls_fingerprint.clone()));
             }
         }
     }
@@ -78,6 +112,8 @@ pub async fn ensure_lan_http_server(
         inner: Arc::new(RwLock::new(LanServerInner {
             transfer: None,
             host,
+            streaming_pairing: None,
+            pairing_attempts: HashMap::new(),
         })),
     };
 
@@ -91,7 +127,7 @@ pub async fn ensure_lan_http_server(
         .layer(middleware::from_fn(auth_middleware))
         .with_state(state.clone());
 
-    let (cert_pem, key_pem) = generate_self_signed_cert()?;
+    let (cert_pem, key_pem, tls_fingerprint) = generate_self_signed_cert()?;
     let config = axum_server::tls_rustls::RustlsConfig::from_pem(
         cert_pem.into_bytes(),
         key_pem.into_bytes(),
@@ -105,7 +141,7 @@ pub async fn ensure_lan_http_server(
 
     let handle = tokio::spawn(async move {
         if let Err(e) = axum_server::from_tcp_rustls(listener, config)
-            .serve(app.into_make_service())
+            .serve(app.into_make_service_with_connect_info::<SocketAddr>())
             .await
         {
             log::warn!("Servidor LAN HTTPS finalizado: {e}");
@@ -115,13 +151,14 @@ pub async fn ensure_lan_http_server(
     if let Ok(mut guard) = LAN_RUNTIME.lock() {
         *guard = Some(LanRuntime {
             port,
+            tls_fingerprint: tls_fingerprint.clone(),
             handle,
             state,
         });
     }
 
     log::info!("Servidor LAN HTTPS escuchando en puerto {port}");
-    Ok(port)
+    Ok((port, tls_fingerprint))
 }
 
 pub async fn start_lan_server_for_session(token: &str, game_key: &str) -> Result<u16, String> {
@@ -225,6 +262,37 @@ pub async fn stop_lan_server() {
     clear_transfer_state();
 }
 
+pub fn set_streaming_pairing_code(code: String) -> Result<(), String> {
+    let guard = LAN_RUNTIME
+        .lock()
+        .map_err(|error| format!("LAN runtime lock: {error}"))?;
+    let runtime = guard
+        .as_ref()
+        .ok_or_else(|| "Servidor LAN no iniciado".to_string())?;
+    let mut inner = runtime
+        .state
+        .inner
+        .write()
+        .map_err(|error| format!("LAN state lock: {error}"))?;
+    inner.streaming_pairing = Some((
+        code,
+        std::time::Instant::now() + std::time::Duration::from_secs(600),
+    ));
+    inner.pairing_attempts.clear();
+    Ok(())
+}
+
+pub fn clear_streaming_pairing_code() {
+    if let Ok(guard) = LAN_RUNTIME.lock() {
+        if let Some(runtime) = guard.as_ref() {
+            if let Ok(mut inner) = runtime.state.inner.write() {
+                inner.streaming_pairing = None;
+                inner.pairing_attempts.clear();
+            }
+        }
+    }
+}
+
 pub async fn shutdown_lan_http_server() {
     clear_transfer_state();
     if let Ok(mut guard) = LAN_RUNTIME.lock() {
@@ -246,6 +314,7 @@ fn clear_transfer_state() {
 }
 
 async fn auth_middleware(request: Request, next: Next) -> Result<Response, StatusCode> {
+    // El endpoint de pairing realiza su propia autorización mediante código temporal.
     if request.uri().path() == "/health" || request.uri().path() == "/streaming/pair" {
         return Ok(next.run(request).await);
     }
@@ -333,12 +402,80 @@ async fn serve_file(
 struct StreamingPairRequest {
     client_cert: String,
     unique_id: String,
+    pairing_code: String,
 }
 
 async fn handle_streaming_pair(
     State(http_state): State<LanHttpState>,
+    ConnectInfo(address): ConnectInfo<SocketAddr>,
     axum::extract::Json(payload): axum::extract::Json<StreamingPairRequest>,
 ) -> Result<Response, StatusCode> {
+    if payload.client_cert.len() > 16 * 1024
+        || !payload
+            .client_cert
+            .starts_with("-----BEGIN CERTIFICATE-----")
+        || !payload
+            .client_cert
+            .trim_end()
+            .ends_with("-----END CERTIFICATE-----")
+        || payload.unique_id.is_empty()
+        || payload.unique_id.len() > 128
+        || !payload
+            .unique_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    if payload.pairing_code.len() != 6
+        || !payload
+            .pairing_code
+            .bytes()
+            .all(|byte| byte.is_ascii_digit())
+    {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let authorized = {
+        let mut inner = http_state
+            .inner
+            .write()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let now = std::time::Instant::now();
+        let blocked = {
+            let attempts = inner
+                .pairing_attempts
+                .entry(address.ip())
+                .or_insert((0, now));
+            if now.duration_since(attempts.1) >= std::time::Duration::from_secs(60) {
+                *attempts = (0, now);
+            }
+            attempts.0 >= 5
+        };
+        if blocked {
+            return Err(StatusCode::TOO_MANY_REQUESTS);
+        }
+
+        let authorized = inner
+            .streaming_pairing
+            .as_ref()
+            .is_some_and(|(expected, expires)| {
+                *expires > now && constant_time_string_eq(expected, &payload.pairing_code)
+            });
+        if !authorized {
+            let attempts = inner
+                .pairing_attempts
+                .entry(address.ip())
+                .or_insert((0, now));
+            attempts.0 = attempts.0.saturating_add(1);
+        }
+        authorized
+    };
+    if !authorized {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
     let data_dir = dirs::data_dir().unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
     let state_path = data_dir
         .join("SaveCloud")
@@ -446,4 +583,15 @@ async fn handle_streaming_pair(
     }
 
     Ok((StatusCode::OK, "Paired").into_response())
+}
+
+fn constant_time_string_eq(expected: &str, actual: &str) -> bool {
+    if expected.len() != actual.len() {
+        return false;
+    }
+    expected
+        .bytes()
+        .zip(actual.bytes())
+        .fold(0_u8, |diff, (left, right)| diff | (left ^ right))
+        == 0
 }

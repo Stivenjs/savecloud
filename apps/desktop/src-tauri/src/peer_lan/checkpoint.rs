@@ -9,6 +9,8 @@ pub struct PeerDownloadCheckpoint {
     pub loaded_total: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_token: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

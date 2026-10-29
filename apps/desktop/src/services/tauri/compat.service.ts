@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import type { RunCompatibilityReport } from "@app-types/runCompatibility";
 
 export async function evaluateRunCompatibility(

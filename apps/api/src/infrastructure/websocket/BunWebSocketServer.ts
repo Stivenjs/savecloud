@@ -57,17 +57,19 @@ export interface StartBunServerOptions {
 /** Tiempo de vida predeterminado para registros de conexión en DynamoDB (24 horas) */
 const CONNECTION_TTL_SECONDS = 24 * 60 * 60;
 
-function isAuthorizedWebSocketRequest(url: URL): boolean {
+function getAuthorizedWebSocketIdentity(request: Request): { userId: string; deviceId?: string } | null {
   const expectedApiKey = process.env.API_KEY?.trim();
-  if (!expectedApiKey) return true;
+  const userId = request.headers.get("x-user-id")?.trim() ?? "";
+  const deviceId = request.headers.get("x-device-id")?.trim() || undefined;
+  const authorization = request.headers.get("authorization") ?? "";
+  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  const credential = request.headers.get("x-api-key")?.trim() || bearer || "";
 
-  const userId = url.searchParams.get("userId")?.trim();
-  const credential = url.searchParams.get("apiKey")?.trim() || url.searchParams.get("token")?.trim();
-  if (!credential) return false;
-  if (credential === expectedApiKey) return true;
+  if (!userId || !credential) return null;
+  if (expectedApiKey && credential === expectedApiKey) return { userId, deviceId };
 
   const accessToken = verifyUserAccessToken(credential);
-  return accessToken !== null && Boolean(userId) && userId === accessToken.userId;
+  return accessToken !== null && userId === accessToken.userId ? { userId, deviceId } : null;
 }
 
 /**
@@ -133,12 +135,12 @@ export async function startBunServer(options: StartBunServerOptions): Promise<vo
     fetch(req, server) {
       const url = new URL(req.url);
 
-      if (req.headers.get("upgrade")?.toLowerCase() === "websocket" && !isAuthorizedWebSocketRequest(url)) {
-        return new Response("No autorizado.", { status: 401 });
-      }
+      const isWebSocket = req.headers.get("upgrade")?.toLowerCase() === "websocket";
+      const identity = isWebSocket ? getAuthorizedWebSocketIdentity(req) : null;
+      if (isWebSocket && !identity) return new Response("No autorizado.", { status: 401 });
 
-      const userId = url.searchParams.get("userId")?.trim() || undefined;
-      const deviceId = url.searchParams.get("deviceId")?.trim() || undefined;
+      const userId = identity?.userId;
+      const deviceId = identity?.deviceId;
       const connectionId = `ws_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
       const upgraded = server.upgrade(req, {

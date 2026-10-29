@@ -14,7 +14,7 @@ export const RespondInviteSchema = Type.Object({
 export type RespondInviteBody = Static<typeof RespondInviteSchema>;
 
 export const AcceptByTokenSchema = Type.Object({
-  token: Type.String({ minLength: 8 }),
+  token: Type.String({ minLength: 48, maxLength: 48, pattern: "^[a-f0-9]{48}$" }),
 });
 export type AcceptByTokenBody = Static<typeof AcceptByTokenSchema>;
 

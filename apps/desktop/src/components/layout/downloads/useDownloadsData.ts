@@ -7,6 +7,9 @@ import {
   pauseTorrent,
   resumeSourceDownload,
   resumeTorrent,
+  requestUploadCancel,
+  requestUploadPause,
+  syncUploadResume,
 } from "@services/tauri";
 import { useSourcesDownloadsStore } from "@store/SourcesDownloadsStore";
 import { useSyncStore } from "@store/SyncStore";
@@ -68,6 +71,8 @@ function formatCrawlerStage(stageOrKey: string, t: (key: string) => string): str
 export function useDownloadsData() {
   const { t } = useTranslation();
   const syncOperation = useSyncStore((s) => s.syncOperation);
+  const pausedUploadInfo = useSyncStore((s) => s.pausedUploadInfo);
+  const clearPausedUploadInfo = useSyncStore((s) => s.clearPausedUploadInfo);
   const syncTasks = useSyncStore((s) => s.activeTasksById);
   const aggregate = useSyncStore((s) => s.aggregateProgress);
   const sourcesTasks = useSourcesDownloadsStore((s) => s.activeByJobId);
@@ -89,6 +94,14 @@ export function useDownloadsData() {
     const nextMetrics: Record<string, { speedBps: number | null; etaSeconds: number | null }> = {};
 
     for (const [id, task] of Object.entries(syncTasks)) {
+      if (task.speedBytesPerSecond !== undefined) {
+        nextMetrics[id] = {
+          speedBps: task.speedBytesPerSecond,
+          etaSeconds: task.etaSeconds ?? null,
+        };
+        continue;
+      }
+
       const prev = metricsRef.current[id];
       const changedFile = !prev || prev.gameId !== task.gameId || prev.filename !== task.filename;
       const reset = changedFile || task.loaded < (prev?.lastLoaded ?? 0);
@@ -176,6 +189,23 @@ export function useDownloadsData() {
     void resumeSourceDownload(jobId);
   }, []);
 
+  const onPauseSync = useCallback(() => {
+    void requestUploadPause().catch(() => {});
+  }, []);
+
+  const onCancelSync = useCallback(() => {
+    void requestUploadCancel().catch(() => {});
+  }, []);
+
+  const onResumeSync = useCallback(async () => {
+    try {
+      await syncUploadResume();
+      clearPausedUploadInfo();
+    } catch {
+      // El estado pausado se conserva para que el usuario pueda reintentar.
+    }
+  }, [clearPausedUploadInfo]);
+
   const rows = useMemo<DownloadRow[]>(() => {
     const syncRows: DownloadRow[] = Object.entries(syncTasks).map(([id, task]) => {
       const value = task.total > 0 ? Math.min(100, Math.round((task.loaded / task.total) * 100)) : 0;
@@ -186,7 +216,8 @@ export function useDownloadsData() {
       return {
         id,
         label: gameName,
-        subtitle: task.filename,
+        subtitle:
+          task.status === "extracting" ? `${task.filename} · ${t("downloads.status.extracting")}` : task.filename,
         value,
         source: "sync",
         gameId: task.gameId,
@@ -194,13 +225,35 @@ export function useDownloadsData() {
         steamAppId: meta?.steamAppId,
         imageUrl: meta?.imageUrl,
         canPause: !!task.canPause,
+        canResume: task.status === "paused",
         canCancel: !!task.canCancel,
+        isPaused: task.status === "paused",
         loaded: task.loaded,
         total: task.total,
-        speedBps: syncMetrics[id]?.speedBps ?? null,
-        etaSeconds: syncMetrics[id]?.etaSeconds ?? null,
+        status: task.status,
+        speedBps: task.speedBytesPerSecond ?? syncMetrics[id]?.speedBps ?? null,
+        etaSeconds:
+          task.speedBytesPerSecond !== undefined ? (task.etaSeconds ?? null) : (syncMetrics[id]?.etaSeconds ?? null),
       };
     });
+
+    const pausedSyncRows: DownloadRow[] = pausedUploadInfo
+      ? [
+          {
+            id: `sync-paused-${pausedUploadInfo.gameId}`,
+            label: formatGameDisplayName(pausedUploadInfo.gameId),
+            subtitle: pausedUploadInfo.filename,
+            value: 0,
+            source: "sync",
+            gameId: pausedUploadInfo.gameId,
+            isPaused: true,
+            canResume: true,
+            loaded: 0,
+            total: 0,
+            status: "paused",
+          },
+        ]
+      : [];
 
     const sourceTorrentHashes = new Set(
       Object.values(sourcesTasks)
@@ -332,8 +385,8 @@ export function useDownloadsData() {
         ]
       : [];
 
-    return [...syncSourcesRow, ...syncRows, ...sourceRows, ...torrentRows];
-  }, [syncTasks, syncMetrics, sourcesTasks, torrentTasks, sourcesSyncProgress, metadataByKey, t]);
+    return [...syncSourcesRow, ...syncRows, ...pausedSyncRows, ...sourceRows, ...torrentRows];
+  }, [syncTasks, syncMetrics, pausedUploadInfo, sourcesTasks, torrentTasks, sourcesSyncProgress, metadataByKey, t]);
 
   const aggregateData: DownloadsAggregateData = useMemo(() => {
     const totalLoaded = aggregate.loaded + sourcesAggregate.loaded;
@@ -356,6 +409,9 @@ export function useDownloadsData() {
     togglingHash,
     onToggleTorrentPause,
     onCancelTorrent,
+    onPauseSync,
+    onCancelSync,
+    onResumeSync,
     onCancelSource,
     onPauseSource,
     onResumeSource,

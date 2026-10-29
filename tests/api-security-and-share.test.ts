@@ -178,13 +178,20 @@ describe("Suite de Enlaces Compartidos y Juegos Empaquetados", () => {
     createdToken = body.token;
   });
 
-  test("GET /share/:token debe resolver publicamente el juego compartido con su lista de archivos", async () => {
+  test("GET /share/:token rechaza solicitudes públicas y permite resolverlo autenticado", async () => {
     if (!createdToken) {
       return;
     }
 
-    // Peticion publica (sin cabecera x-api-key)
-    const response = await fetch(`${config.apiBaseUrl}/share/${createdToken}`);
+    const publicResponse = await fetch(`${config.apiBaseUrl}/share/${createdToken}`);
+    expect(publicResponse.status).toBe(401);
+
+    const response = await fetch(`${config.apiBaseUrl}/share/${createdToken}`, {
+      headers: {
+        "x-api-key": config.apiKey!,
+        "x-user-id": config.testUserId,
+      },
+    });
     expect(response.status).toBe(200);
 
     const body = (await response.json()) as ResolvedShareResponse;
@@ -205,7 +212,12 @@ describe("Suite de Enlaces Compartidos y Juegos Empaquetados", () => {
 
   test("GET /share/:token debe responder 404 para tokens inexistentes", async () => {
     const invalidToken = "000000000000000000000000000000000000000000000000";
-    const response = await fetch(`${config.apiBaseUrl}/share/${invalidToken}`);
+    const response = await fetch(`${config.apiBaseUrl}/share/${invalidToken}`, {
+      headers: {
+        "x-api-key": config.apiKey!,
+        "x-user-id": config.testUserId,
+      },
+    });
     expect(response.status).toBe(404);
   });
 });

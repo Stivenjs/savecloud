@@ -1,7 +1,8 @@
 import { Button, Card, CardBody, Chip, Select, SelectItem } from "@heroui/react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { AlertCircle, Mic } from "lucide-react";
 import { toastError, toastInfo } from "@utils/toast";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import { useSpeechRecognition } from "@/features/voice-commands/useSpeechRecognition";
 import { type NoiseSensitivity, useVoiceStore } from "@/features/voice-commands/voiceStore";
 import { useTranslation, Trans } from "react-i18next";
@@ -47,7 +48,7 @@ export function VoiceCommandsCard() {
       await invoke("emit_test_wake_word");
       toastInfo(t("voiceCommands.card.testWakeWordSuccess"), t("voiceCommands.card.testWakeWordSuccessDesc"));
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getUnknownErrorMessage(error);
       toastError(t("voiceCommands.card.testWakeWordError"), message);
     }
   };

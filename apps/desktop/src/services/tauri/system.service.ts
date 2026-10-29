@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 
 export async function openWebviewDevtools(windowLabel: string): Promise<void> {
   await invoke("open_webview_devtools", { windowLabel });

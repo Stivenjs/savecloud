@@ -7,6 +7,7 @@ import { listOperationHistory, type OperationLogEntry } from "@services/tauri";
 import { computeOperationLogSummary, groupOperationLogEntriesByDay } from "@utils/operationHistory";
 import { useNavigationStore } from "@features/input/store";
 import { useRegisterGlobalBack } from "@hooks/useRegisterGlobalBack";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import { BigPictureHistoryEntryCard } from "./BigPictureHistoryEntryCard";
 import { BigPictureHistorySummary } from "./BigPictureHistorySummary";
 
@@ -78,7 +79,7 @@ export function BigPictureHistoryPage() {
         <Card>
           <CardBody>
             <p className="text-base text-danger">
-              {t("history.error")}: {error instanceof Error ? error.message : t("history.unknownError")}
+              {t("history.error")}: {getUnknownErrorMessage(error, t("history.unknownError"))}
             </p>
           </CardBody>
         </Card>

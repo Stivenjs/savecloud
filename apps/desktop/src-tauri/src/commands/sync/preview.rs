@@ -14,8 +14,7 @@ use crate::utils::path_utils;
 #[tauri::command]
 pub async fn preview_upload(game_id: String) -> Result<PreviewUploadDto, String> {
     let game = crate::config::load_game(&game_id)?
-        .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?
-        ;
+        .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     let result = tokio::task::spawn_blocking(move || {
         let files = path_utils::list_all_files_with_mtime(&game.paths);
@@ -91,16 +90,20 @@ pub async fn preview_upload_batch(
 
 /// Previsualiza qué archivos se descargarían y cuáles conflictuarían con locales más recientes.
 #[tauri::command]
-pub async fn preview_download(game_id: String) -> Result<PreviewDownloadDto, String> {
+pub async fn preview_download(
+    game_id: String,
+    destination_path: Option<String>,
+) -> Result<PreviewDownloadDto, String> {
     let game = crate::config::load_game(&game_id)?
-        .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?
-        ;
+        .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
+    let download_roots =
+        path_utils::resolve_cloud_download_roots(&game.paths, destination_path.as_deref())?;
 
     // Lanza ambas operaciones de red en paralelo en vez de secuencial,
     // reduciendo la latencia total a max(t_saves, t_conflicts) en vez de su suma.
     let (saves_result, conflicts_result) = tokio::try_join!(
         api::sync_list_remote_saves_for_game(game_id.clone()),
-        download::sync_check_download_conflicts(game_id.clone()),
+        download::sync_check_download_conflicts(game_id.clone(), destination_path),
     )?;
 
     let conflict_keys: std::collections::HashSet<&str> = conflicts_result
@@ -119,7 +122,7 @@ pub async fn preview_download(game_id: String) -> Result<PreviewDownloadDto, Str
                 filename: save.filename.clone(),
                 size: save.size.unwrap_or(0),
                 local_newer: if path_utils::sync_abs_path_for_cloud_save(
-                    &game.paths,
+                    &download_roots,
                     &save.filename,
                 )
                 .as_ref()

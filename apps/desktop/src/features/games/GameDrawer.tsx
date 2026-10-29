@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { ConfiguredGame } from "@app-types/config";
 import { toGameId } from "@utils/gameImage";
 import { dedupePreserveGamePaths } from "@utils/gameSavePaths";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import {
   addGame,
   renameGame,
@@ -99,7 +100,7 @@ export function GameDrawer({
       onSuccess();
       handleClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getUnknownErrorMessage(e));
     } finally {
       setLoading(false);
     }

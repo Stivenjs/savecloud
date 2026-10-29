@@ -7,6 +7,7 @@ import type { GameFormState } from "@/hooks/useGameForm";
 import { usePathValidation } from "@/hooks/usePathValidation";
 import { formatBytes } from "@/utils/format";
 import { dedupePreserveGamePaths } from "@utils/gameSavePaths";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 interface GeneralTabProps {
   form: GameFormState;
@@ -107,7 +108,7 @@ export function GameDrawerGeneralTab({ form, setField, setError, error, mode }: 
         selected == null ? [] : Array.isArray(selected) ? selected : typeof selected === "string" ? [selected] : [];
       mergePathsFromPicker(list);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getUnknownErrorMessage(e));
     }
   };
 

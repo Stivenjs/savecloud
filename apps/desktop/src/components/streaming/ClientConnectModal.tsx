@@ -4,21 +4,22 @@
  * utilizando la configuración de streaming activa (resolución, FPS, bitrate y códec).
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Spinner, Chip } from "@heroui/react";
+import { useState, useEffect, useCallback } from "react";
+import { invoke } from "@services/tauri/invoke";
+import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Spinner, Chip, Input } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { Monitor, AlertCircle, RefreshCw } from "lucide-react";
 import { openOrFocusStreamingWindow } from "@/windows/streamingWindow";
 import { getSavedStreamingConfig, RESOLUTION_OPTIONS, StreamingConfig } from "@components/streaming/streamingTypes";
 import { getBestSupportedCodec } from "./VideoStreamDecoder";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 /**
  * Propiedades para el modal de conexión a anfitrión.
  */
 interface ClientConnectModalProps {
   /** Objeto con datos del host descubierto (IP, nombre, puerto) */
-  host: { ip: string; hostname: string; savecloud_port: number };
+  host: { ip: string; hostname: string; savecloud_port: number; tls_fingerprint?: string };
   /** Estado de visibilidad del modal */
   isOpen: boolean;
   /** Función callback al cerrar el modal */
@@ -37,12 +38,17 @@ export const ClientConnectModal = ({ host, isOpen, onClose, config }: ClientConn
   const { t } = useTranslation();
   const [error, setError] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
-  const hasConnectedRef = useRef(false);
+  const [pairingCode, setPairingCode] = useState("");
+  const isMirror = host.ip === "127.0.0.1" || host.ip === "localhost";
 
   const activeConfig = config ?? getSavedStreamingConfig();
   const resDetails = RESOLUTION_OPTIONS[activeConfig.resolution];
 
   const handleConnect = useCallback(async () => {
+    if (!isMirror && !/^\d{6}$/.test(pairingCode)) {
+      setError(t("remotePlay.clientConnect.invalidPairingCode", "Ingresa el código de 6 dígitos que muestra el host."));
+      return;
+    }
     setIsConnecting(true);
     setError(null);
     try {
@@ -52,6 +58,8 @@ export const ClientConnectModal = ({ host, isOpen, onClose, config }: ClientConn
         {
           ipAddress: host.ip,
           savecloudPort: host.savecloud_port,
+          pairingCode,
+          tlsFingerprint: host.tls_fingerprint ?? "",
           width: resDetails.width,
           height: resDetails.height,
           fps: activeConfig.fps,
@@ -61,17 +69,20 @@ export const ClientConnectModal = ({ host, isOpen, onClose, config }: ClientConn
           refreshRateX100: activeConfig.fps * 100,
         }
       );
-      const isMirror = host.ip === "127.0.0.1" || host.ip === "localhost";
       await openOrFocusStreamingWindow(connectRes, isMirror);
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(getUnknownErrorMessage(err));
     } finally {
       setIsConnecting(false);
     }
   }, [
     host.ip,
     host.savecloud_port,
+    host.tls_fingerprint,
+    pairingCode,
+    isMirror,
+    t,
     resDetails.width,
     resDetails.height,
     activeConfig.fps,
@@ -81,14 +92,11 @@ export const ClientConnectModal = ({ host, isOpen, onClose, config }: ClientConn
   ]);
 
   useEffect(() => {
-    if (isOpen && !hasConnectedRef.current) {
-      hasConnectedRef.current = true;
-      void handleConnect();
-    }
     if (!isOpen) {
-      hasConnectedRef.current = false;
+      setPairingCode("");
+      setError(null);
     }
-  }, [isOpen, handleConnect]);
+  }, [isOpen]);
 
   return (
     <Modal
@@ -117,6 +125,22 @@ export const ClientConnectModal = ({ host, isOpen, onClose, config }: ClientConn
             </ModalHeader>
 
             <ModalBody className="px-6 py-4 gap-4">
+              {!isMirror && !isConnecting ? (
+                <Input
+                  label={t("remotePlay.clientConnect.pairingCode", "Código de emparejamiento")}
+                  description={t(
+                    "remotePlay.clientConnect.pairingCodeHelp",
+                    "Pide al host el código que aparece en su pantalla."
+                  )}
+                  value={pairingCode}
+                  onValueChange={(value) => setPairingCode(value.replace(/\D/g, "").slice(0, 6))}
+                  inputMode="numeric"
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                  isDisabled={isConnecting}
+                  classNames={{ input: "font-mono tracking-[0.35em]" }}
+                />
+              ) : null}
               {isConnecting ? (
                 <div className="flex flex-col items-center justify-center py-8 gap-5 text-center">
                   <div className="relative flex items-center justify-center">
@@ -167,16 +191,15 @@ export const ClientConnectModal = ({ host, isOpen, onClose, config }: ClientConn
                 className="font-semibold text-xs flex-1">
                 {t("remotePlay.clientConnect.close")}
               </Button>
-              {error ? (
-                <Button
-                  color="primary"
-                  onPress={handleConnect}
-                  isLoading={isConnecting}
-                  className="font-semibold text-xs flex-1 gap-1.5">
-                  <RefreshCw size={14} />
-                  {t("remotePlay.clientConnect.retry")}
-                </Button>
-              ) : null}
+              <Button
+                color="primary"
+                onPress={handleConnect}
+                isLoading={isConnecting}
+                isDisabled={!isMirror && pairingCode.length !== 6}
+                className="font-semibold text-xs flex-1 gap-1.5">
+                {error ? <RefreshCw size={14} /> : null}
+                {error ? t("remotePlay.clientConnect.retry") : t("remotePlay.clientConnect.connect", "Conectar")}
+              </Button>
             </ModalFooter>
           </>
         )}

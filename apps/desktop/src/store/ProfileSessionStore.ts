@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import type { AppSettingsConfig } from "@app-types/config";
 import { queryClient } from "@lib/queryClient";
 import { getConfig } from "@services/tauri/config.service";
@@ -101,7 +102,7 @@ export const useProfileSessionStore = create<ProfileSessionStore>((set) => ({
           loading: false,
           activeProfile: null,
           source: null,
-          error: error instanceof Error ? error.message : String(error),
+          error: getUnknownErrorMessage(error),
         });
       } finally {
         hydrationPromise = null;

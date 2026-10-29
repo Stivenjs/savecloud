@@ -175,12 +175,19 @@ pub fn restore_backup(game_id: String, backup_id: String) -> Result<SyncResultDt
 
 /// Cuántos backups se mantienen por juego tras cada descarga (auto-limpieza).
 pub const DEFAULT_KEEP_BACKUPS_PER_GAME: u32 = 10;
+/// Límite superior configurable para la retención local por juego.
+pub const MAX_KEEP_BACKUPS_PER_GAME: u32 = 20;
 
 /// Elimina backups antiguos: mantiene solo los `keep_last_n` más recientes por juego.
 /// Devuelve cuántos backups se borraron y en cuántos juegos.
 #[tauri::command]
 pub fn cleanup_old_backups(keep_last_n: u32) -> Result<CleanupBackupsResultDto, String> {
-    let library = crate::config::load_library();
+    if keep_last_n > MAX_KEEP_BACKUPS_PER_GAME {
+        return Err(format!(
+            "La retención máxima es de {MAX_KEEP_BACKUPS_PER_GAME} copias por juego."
+        ));
+    }
+
     let backup_root = crate::config::config_dir()
         .ok_or("No se pudo obtener directorio de configuración")?
         .join("backups");
@@ -195,8 +202,11 @@ pub fn cleanup_old_backups(keep_last_n: u32) -> Result<CleanupBackupsResultDto, 
     let mut total_deleted = 0u32;
     let mut games_affected = 0u32;
 
-    for game in &library.games {
-        let game_backup_dir = backup_root.join(&game.id);
+    for game_entry in fs::read_dir(&backup_root)
+        .map_err(|error| error.to_string())?
+        .flatten()
+    {
+        let game_backup_dir = game_entry.path();
         if !game_backup_dir.exists() || !game_backup_dir.is_dir() {
             continue;
         }

@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Spinner, Chip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
 import { Network, RefreshCw, Laptop, Monitor, Wifi, ChevronRight } from "lucide-react";
@@ -20,6 +20,7 @@ interface DiscoveredStreamHost {
   ip: string;
   port: number;
   savecloud_port: number;
+  tls_fingerprint: string;
   hostname: string;
 }
 
@@ -75,6 +76,7 @@ export const LanHostList = ({ isOpen, onClose, config }: LanHostListProps) => {
       ip: "127.0.0.1",
       port: 47989,
       savecloud_port: 0,
+      tls_fingerprint: "",
       hostname: mirrorHostLabel,
     });
 

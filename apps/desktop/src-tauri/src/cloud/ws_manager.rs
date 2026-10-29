@@ -11,12 +11,12 @@
 
 use std::sync::Arc;
 use tauri::AppHandle;
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tokio::task::JoinHandle;
 
 use super::ws_client::{
     start_ws_loop, CloudBroadcastPayload, CloudOutgoingMessage, CloudStreamSignalPayload,
-    WsRuntimeMetrics,
+    CloudWsAuth, WsRuntimeMetrics,
 };
 use crate::plugins::log_buffer::AppLogs;
 
@@ -35,6 +35,8 @@ pub struct CloudWsState {
 
     /// Métricas de tiempo de ejecución acumuladas para observabilidad y diagnósticos de salud.
     pub ws_metrics: Arc<Mutex<WsRuntimeMetrics>>,
+
+    connection_status: watch::Sender<bool>,
 }
 
 impl Default for CloudWsState {
@@ -47,12 +49,18 @@ impl CloudWsState {
     /// Crea una nueva instancia limpia del gestor de estado WebSocket.
     #[must_use]
     pub fn new() -> Self {
+        let (connection_status, _) = watch::channel(false);
         Self {
             tx: Arc::new(Mutex::new(None)),
             handle: Arc::new(Mutex::new(None)),
             pending_queue: Arc::new(Mutex::new(Vec::new())),
             ws_metrics: Arc::new(Mutex::new(WsRuntimeMetrics::default())),
+            connection_status,
         }
+    }
+
+    pub fn subscribe_connection_status(&self) -> watch::Receiver<bool> {
+        self.connection_status.subscribe()
     }
 
     /// Obtiene una captura instantánea de las métricas de runtime y el tamaño de la cola de espera.
@@ -72,7 +80,13 @@ impl CloudWsState {
     /// * `app_handle` - Instancia de la aplicación Tauri.
     /// * `url_str` - URL completa de WebSocket a la cual conectarse.
     /// * `logs` - Búfer de logs en memoria para el sistema de diagnóstico.
-    pub async fn start(&self, app_handle: AppHandle, url_str: String, logs: AppLogs) {
+    pub async fn start(
+        &self,
+        app_handle: AppHandle,
+        url_str: String,
+        logs: AppLogs,
+        auth: CloudWsAuth,
+    ) {
         let mut tx_guard = self.tx.lock().await;
         let mut handle_guard = self.handle.lock().await;
 
@@ -82,6 +96,7 @@ impl CloudWsState {
 
         *tx_guard = None;
         self.pending_queue.lock().await.clear();
+        self.connection_status.send_replace(false);
 
         {
             let mut met = self.ws_metrics.lock().await;
@@ -108,6 +123,7 @@ impl CloudWsState {
 
         let app_handle_clone = app_handle.clone();
         let metrics = Arc::clone(&self.ws_metrics);
+        let connection_status = self.connection_status.clone();
 
         let join_handle = tokio::spawn(async move {
             start_ws_loop(
@@ -117,6 +133,8 @@ impl CloudWsState {
                 logs,
                 Some(ready_tx),
                 Some(metrics),
+                Some(connection_status),
+                auth,
             )
             .await;
         });
@@ -136,6 +154,7 @@ impl CloudWsState {
 
         *tx_guard = None;
         self.pending_queue.lock().await.clear();
+        self.connection_status.send_replace(false);
 
         let mut met = self.ws_metrics.lock().await;
         met.connected = false;

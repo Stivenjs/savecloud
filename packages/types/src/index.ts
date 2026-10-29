@@ -6,6 +6,7 @@ export * from "./stat";
 export * from "./invite";
 export * from "./inventory";
 export * from "./notification";
+export * from "./apiProblem";
 export * from "./observability";
 export * from "./saveGraph";
 export * from "./gamification";

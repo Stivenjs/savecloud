@@ -17,7 +17,7 @@ import { cleanupOldBackups, setKeepBackupsPerGame, deleteAllLocalBackups } from 
 import { toastError, toastSuccess } from "@utils/toast";
 import { useConfig } from "@hooks/useConfig";
 
-const KEEP_OPTIONS = [3, 5, 10, 20] as const;
+const KEEP_OPTIONS = [0, 3, 5, 10, 20] as const;
 const DEFAULT_KEEP = 10;
 
 export function LocalBackupInfoCard() {
@@ -39,16 +39,24 @@ export function LocalBackupInfoCard() {
       if (result.backupsDeleted > 0) {
         toastSuccess(
           t("settings.localBackup.toastSpaceFreed"),
-          t("settings.localBackup.toastSpaceFreedDesc", {
-            count: result.backupsDeleted,
-            games: result.gamesAffected,
-            keep: keepLastN,
-          })
+          t(
+            keepLastN === 0
+              ? "settings.localBackup.toastSpaceFreedDescZero"
+              : "settings.localBackup.toastSpaceFreedDesc",
+            {
+              count: result.backupsDeleted,
+              games: result.gamesAffected,
+              keep: keepLastN,
+            }
+          )
         );
       } else {
         toastSuccess(
           t("settings.localBackup.toastNoChanges"),
-          t("settings.localBackup.toastNoChangesDesc", { keep: keepLastN })
+          t(
+            keepLastN === 0 ? "settings.localBackup.toastNoChangesDescZero" : "settings.localBackup.toastNoChangesDesc",
+            { keep: keepLastN }
+          )
         );
       }
     } catch (e) {
@@ -90,12 +98,17 @@ export function LocalBackupInfoCard() {
             <Select
               selectedKeys={[String(keepLastN)]}
               onSelectionChange={async (keys) => {
-                const value = Number(Array.from(keys)[0]) as (typeof KEEP_OPTIONS)[number];
+                const selectedKey = Array.from(keys)[0];
+                if (selectedKey === undefined) return;
+                const value = Number(selectedKey);
+                if (!KEEP_OPTIONS.includes(value as (typeof KEEP_OPTIONS)[number])) return;
+                const previousValue = keepLastN;
                 setKeepLastN(value);
                 try {
                   await setKeepBackupsPerGame(value);
                   await refetch();
                 } catch (e) {
+                  setKeepLastN(previousValue);
                   toastError(t("settings.localBackup.toastSaveError"), e instanceof Error ? e.message : String(e));
                 }
               }}
@@ -124,6 +137,8 @@ export function LocalBackupInfoCard() {
             {t("settings.localBackup.deleteAll")}
           </Button>
         </div>
+
+        {keepLastN === 0 && <p className="text-sm text-warning">{t("settings.localBackup.disabledDesc")}</p>}
 
         <Modal
           isOpen={isDeleteAllModalOpen}

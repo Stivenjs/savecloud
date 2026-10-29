@@ -1,4 +1,5 @@
 use super::types::*;
+use crate::cloud::api_error;
 use crate::commands::sync::api::api_request;
 use crate::commands::sync::context::ApiContext;
 use crate::network::API_CLIENT;
@@ -31,11 +32,7 @@ pub async fn list_batch_page(
     .map_err(|e| format!("steam-seed/batches: {}", e))?;
 
     if !list_res.status().is_success() {
-        return Err(format!(
-            "API steam-seed/batches: {} {}",
-            list_res.status(),
-            list_res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(list_res).await);
     }
     list_res.json().await.map_err(|e| e.to_string())
 }
@@ -65,11 +62,7 @@ pub async fn list_reviews_batch_page(
     .map_err(|e| format!("steam-seed/reviews/batches: {}", e))?;
 
     if !list_res.status().is_success() {
-        return Err(format!(
-            "API steam-seed/reviews/batches: {} {}",
-            list_res.status(),
-            list_res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(list_res).await);
     }
     list_res.json().await.map_err(|e| e.to_string())
 }
@@ -213,11 +206,7 @@ pub async fn resolve_batch_download_urls(
     .map_err(|e| format!("steam-seed/batch/download-url (bulk): {}", e))?;
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API steam-seed/batch/download-url (bulk): {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     let bulk: SteamSeedBatchDownloadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
@@ -251,11 +240,7 @@ pub async fn resolve_reviews_batch_download_urls(
     .map_err(|e| format!("steam-seed/reviews/batch/download-url (bulk): {}", e))?;
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API steam-seed/reviews/batch/download-url (bulk): {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     let bulk: SteamSeedBatchDownloadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;

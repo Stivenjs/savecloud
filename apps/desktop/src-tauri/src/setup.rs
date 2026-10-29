@@ -6,6 +6,7 @@
 //! demonios de sincronización automática.
 
 use crate::cloud;
+use crate::config::cloud_backup::spawn_config_backup_watcher;
 use crate::config::storage_layout::ensure_storage_layout;
 use crate::controller::start_gamepad_loop;
 use crate::peer_lan::spawn_lan_presence_advertiser;
@@ -26,7 +27,6 @@ use crate::system::process_check;
 use crate::torrent::{engine::TorrentEngine, state::TorrentState};
 use crate::tray::tray_state::TrayState;
 use crate::voice::VoiceState;
-use crate::config::cloud_backup::spawn_config_backup_watcher;
 use std::sync::Arc;
 use tauri::{App, Manager};
 use tokio::sync::Mutex;
@@ -301,7 +301,7 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     app.manage(shutdown_bus);
     app.manage(coordinator);
 
-    spawn_pending_session_poller();
+    spawn_pending_session_poller(app.handle().clone());
     spawn_lan_presence_advertiser();
     if let Err(error) = crate::config::local_backup::migrate_legacy_backups() {
         log::warn!("[config_backup] No se pudieron cifrar los respaldos JSON antiguos: {error}");

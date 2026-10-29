@@ -118,6 +118,7 @@ export class S3GameInventoryRepository implements GameInventoryRepository {
       manifestHash: game.manifestHash,
       verifiedAt: game.verifiedAt,
       lastSeenAt: d.lastSeenAt,
+      tlsFingerprint: d.tlsFingerprint,
     };
   }
 
@@ -169,6 +170,7 @@ export class S3GameInventoryRepository implements GameInventoryRepository {
       updatedAt: input.updatedAt,
       sharingEnabled: input.sharingEnabled,
       lastSeenAt: nowIso(),
+      tlsFingerprint: input.tlsFingerprint,
       games: verified,
     };
 
@@ -248,7 +250,7 @@ export class S3GameInventoryRepository implements GameInventoryRepository {
     });
   }
 
-  async listPendingTransferSessions(targetDeviceId: string): Promise<TransferSessionRecord[]> {
+  async listPendingTransferSessions(targetUserId: string, targetDeviceId: string): Promise<TransferSessionRecord[]> {
     const prefix = this.pendingSessionsPrefix(targetDeviceId);
     const keys = await this.listKeys(prefix);
     const out: TransferSessionRecord[] = [];
@@ -267,15 +269,20 @@ export class S3GameInventoryRepository implements GameInventoryRepository {
         await this.deleteKey(this.transferSessionKey(session.sessionId));
         continue;
       }
-      out.push(session);
+      if (session.targetUserId === targetUserId) out.push(session);
     }
     return out;
   }
 
-  async consumeTransferSession(sessionId: string): Promise<void> {
+  async consumeTransferSession(
+    sessionId: string,
+    requesterUserId: string
+  ): Promise<"consumed" | "not_found" | "forbidden"> {
     const session = await this.getJsonOrNull<TransferSessionRecord>(this.transferSessionKey(sessionId));
-    if (!session) return;
+    if (!session) return "not_found";
+    if (session.requesterUserId !== requesterUserId) return "forbidden";
     await this.deleteKey(this.transferSessionKey(sessionId));
     await this.deleteKey(`${this.pendingSessionsPrefix(session.targetDeviceId)}${sessionId}.json`);
+    return "consumed";
   }
 }

@@ -15,7 +15,7 @@ function requireEnv(name: string): string {
 }
 
 const connectionsTable = requireEnv("CONNECTIONS_TABLE");
-const expectedApiKey = process.env.API_KEY?.trim() ?? "";
+const expectedApiKey = requireEnv("API_KEY");
 
 const dynamoClient = new DynamoDBClient({
   requestHandler: new NodeHttpHandler({
@@ -28,7 +28,6 @@ const dynamoClient = new DynamoDBClient({
 const connectionRepo = new DynamoDbConnectionRepository(dynamoClient, connectionsTable);
 
 type APIGatewayWebsocketConnectEvent = APIGatewayProxyWebsocketEventV2 & {
-  queryStringParameters?: Record<string, string>;
   headers?: Record<string, string>;
 };
 
@@ -48,32 +47,39 @@ function safeCompare(a: string, b: string): boolean {
 }
 
 /**
- * Resuelve el userId verificado desde las credenciales de la query string.
+ * Resuelve el userId verificado desde los headers del handshake.
  *
- * - Host (dueño del cloud): ?userId=X&apiKey=<global_api_key>
- * - Invitado:               ?userId=X&token=sc1.<payload>.<sig>
+ * - Host (dueño del cloud): x-user-id + x-api-key
+ * - Invitado:               x-user-id + x-api-key (token sc1 firmado)
  *
  * Retorna null si las credenciales no son válidas o no coinciden con el userId declarado.
  */
-function resolveVerifiedUserId(params: Record<string, string> | undefined): string | null {
-  if (!params) {
-    console.debug("[ws:connect] NO PARAMS — reject");
+function getHeader(headers: Record<string, string> | undefined, name: string): string {
+  if (!headers) return "";
+  const entry = Object.entries(headers).find(([key]) => key.toLowerCase() === name.toLowerCase());
+  return entry?.[1]?.trim() ?? "";
+}
+
+function resolveVerifiedUserId(headers: Record<string, string> | undefined): string | null {
+  if (!headers) {
+    console.debug("[ws:connect] NO HEADERS — reject");
     return null;
   }
 
-  const declaredUserId = params.userId?.trim() ?? "";
+  const declaredUserId = getHeader(headers, "x-user-id");
   if (!declaredUserId) {
     console.debug("[ws:connect] NO userId — reject");
     return null;
   }
 
-  const apiKey = params.apiKey?.trim() ?? "";
+  const apiKey = getHeader(headers, "x-api-key");
   if (apiKey && expectedApiKey && safeCompare(apiKey, expectedApiKey)) {
     console.info("[ws:connect] HOST AUTHORIZED", { userId: declaredUserId });
     return declaredUserId;
   }
 
-  const token = (params.token ?? params.accessToken ?? "").trim();
+  const authorization = getHeader(headers, "authorization");
+  const token = (apiKey || authorization.match(/^Bearer\s+(.+)$/i)?.[1] || "").trim();
   if (!token) {
     console.debug("[ws:connect] NO token/apiKey — reject");
     return null;
@@ -99,17 +105,17 @@ function resolveVerifiedUserId(params: Record<string, string> | undefined): stri
 
 export const handler = async (event: APIGatewayWebsocketConnectEvent): Promise<LambdaWebsocketResult> => {
   const connectionId = event.requestContext.connectionId;
-  const verifiedUserId = resolveVerifiedUserId(event.queryStringParameters);
+  const verifiedUserId = resolveVerifiedUserId(event.headers);
 
   if (!verifiedUserId) {
     console.warn("[ws:connect] REJECTED", {
       connectionId,
-      paramKeys: Object.keys(event.queryStringParameters ?? {}),
+      headerNames: Object.keys(event.headers ?? {}).map((key) => key.toLowerCase()),
     });
     return { statusCode: 401, body: "Unauthorized" };
   }
 
-  const deviceId = event.queryStringParameters?.deviceId?.trim();
+  const deviceId = getHeader(event.headers, "x-device-id");
   const ttl = Math.floor(Date.now() / 1000) + CONNECTION_TTL_SECONDS;
   try {
     await connectionRepo.saveConnection(connectionId, verifiedUserId, ttl, deviceId);

@@ -6,6 +6,7 @@ import type { ListGameProvidersUseCase } from "@application/use-cases/ListGamePr
 import type { CreateTransferSessionUseCase } from "@application/use-cases/CreateTransferSessionUseCase";
 import type { RecordInventoryHeartbeatUseCase } from "@application/use-cases/RecordInventoryHeartbeatUseCase";
 import type { ListPendingTransferSessionsUseCase } from "@application/use-cases/ListPendingTransferSessionsUseCase";
+import type { ConsumeTransferSessionUseCase } from "@application/use-cases/ConsumeTransferSessionUseCase";
 import type { GameInventoryRepository } from "@domain/ports/GameInventoryRepository";
 import {
   CreateTransferSessionSchema,
@@ -24,6 +25,7 @@ export async function registerInventoryRoutes(
     createTransferSessionUseCase: CreateTransferSessionUseCase;
     recordInventoryHeartbeatUseCase: RecordInventoryHeartbeatUseCase;
     listPendingTransferSessionsUseCase: ListPendingTransferSessionsUseCase;
+    consumeTransferSessionUseCase: ConsumeTransferSessionUseCase;
     gameInventoryRepository: GameInventoryRepository;
   }
 ): Promise<void> {
@@ -43,6 +45,7 @@ export async function registerInventoryRoutes(
           contentHash: body.contentHash,
           updatedAt: body.updatedAt,
           sharingEnabled: body.sharingEnabled,
+          tlsFingerprint: body.tlsFingerprint,
           games: body.games,
         });
         return reply.send({ ok: true });
@@ -86,12 +89,12 @@ export async function registerInventoryRoutes(
     "/inventory/transfer-sessions/pending",
     async (request, reply: FastifyReply) => {
       {
-        getUserId(request);
+        const userId = getUserId(request);
         const deviceId = (request.query.deviceId ?? "").trim();
         if (!deviceId) {
           throw new ApplicationError("INVALID_ARGUMENT", "El identificador del dispositivo es obligatorio.");
         }
-        const items = await deps.listPendingTransferSessionsUseCase.execute(deviceId);
+        const items = await deps.listPendingTransferSessionsUseCase.execute(userId, deviceId);
         return reply.send({ items });
       }
     }
@@ -113,6 +116,15 @@ export async function registerInventoryRoutes(
         });
         return reply.send(session);
       }
+    }
+  );
+
+  app.post<{ Params: { sessionId: string } }>(
+    "/inventory/transfer-sessions/:sessionId/consume",
+    async (request, reply: FastifyReply) => {
+      const userId = getUserId(request);
+      await deps.consumeTransferSessionUseCase.execute(request.params.sessionId, userId);
+      return reply.code(204).send();
     }
   );
 }

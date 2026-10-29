@@ -222,6 +222,37 @@ pub fn sync_abs_path_for_cloud_save(
     CloudSavePathResolver::new(game_paths).resolve(remote_filename)
 }
 
+/// Elige las raíces de destino para descargar guardados, usando una carpeta
+/// puntual si el usuario la seleccionó o las rutas del juego en caso contrario.
+pub fn resolve_cloud_download_roots(
+    game_paths: &[String],
+    destination_path: Option<&str>,
+) -> Result<Vec<String>, String> {
+    if let Some(raw_path) = destination_path
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+    {
+        let path = PathBuf::from(raw_path);
+        if !path.is_absolute() {
+            return Err("La carpeta de destino debe ser una ruta absoluta".to_string());
+        }
+
+        let canonical_path = fs::canonicalize(&path)
+            .map_err(|error| format!("No se pudo abrir la carpeta de destino: {}", error))?;
+        if !canonical_path.is_dir() {
+            return Err("La ruta de destino seleccionada no es una carpeta".to_string());
+        }
+
+        return Ok(vec![canonical_path.to_string_lossy().into_owned()]);
+    }
+
+    if game_paths.is_empty() {
+        return Err("El juego no tiene rutas de guardado configuradas".to_string());
+    }
+
+    Ok(game_paths.to_vec())
+}
+
 pub fn collect_files_with_mtime(
     dir: &Path,
     base: &Path,

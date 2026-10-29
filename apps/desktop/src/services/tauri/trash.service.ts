@@ -4,7 +4,7 @@
  * @module services/tauri/trash.service
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import type { TrashGameItem } from "@savecloud/types";
 
 /**

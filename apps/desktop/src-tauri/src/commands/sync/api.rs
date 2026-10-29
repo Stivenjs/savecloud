@@ -8,14 +8,25 @@
 //! reintentos en solicitudes críticas.
 
 use super::context::ApiContext;
-use super::models::SyncResultDto;
-use super::models::{CloudSavesSummaryDto, RemoteSaveDto, RemoteSaveInfoDto};
+use super::events::{emit_sync_download_progress, emit_sync_terminal};
+use super::models::{
+    CloudSavesSummaryDto, RemoteSaveDto, RemoteSaveInfoDto, SyncOperationStrategy,
+    SyncProgressPayload, SyncResultDto,
+};
+use crate::cloud::api_error;
 use crate::network::API_CLIENT;
 use crate::observability;
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::LazyLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Instant;
+use tauri::{AppHandle, Emitter};
+
+use crate::utils::transfer_metrics::{
+    TransferProgressThrottle, TransferSample, TransferSpeedTracker, PACKAGED_PROGRESS_POLICY,
+};
 
 const S3_ACCELERATE_HOST: &str = "s3-accelerate.amazonaws.com";
 
@@ -28,11 +39,13 @@ struct EtagCacheEntry<T> {
     data: T,
 }
 
-static SAVES_CACHE: LazyLock<std::sync::RwLock<HashMap<String, EtagCacheEntry<Vec<RemoteSaveInfoDto>>>>> =
-    LazyLock::new(|| std::sync::RwLock::new(HashMap::new()));
+static SAVES_CACHE: LazyLock<
+    std::sync::RwLock<HashMap<String, EtagCacheEntry<Vec<RemoteSaveInfoDto>>>>,
+> = LazyLock::new(|| std::sync::RwLock::new(HashMap::new()));
 
-static SUMMARY_CACHE: LazyLock<std::sync::RwLock<HashMap<String, EtagCacheEntry<Vec<CloudSavesSummaryDto>>>>> =
-    LazyLock::new(|| std::sync::RwLock::new(HashMap::new()));
+static SUMMARY_CACHE: LazyLock<
+    std::sync::RwLock<HashMap<String, EtagCacheEntry<Vec<CloudSavesSummaryDto>>>>,
+> = LazyLock::new(|| std::sync::RwLock::new(HashMap::new()));
 
 /// Invalida la caché ETag en memoria para un usuario y opcionalmente un juego concreto.
 /// Debe llamarse tras operaciones que modifiquen el estado en S3 (subida, borrado, renombrado).
@@ -104,6 +117,8 @@ pub struct CopyFriendFilePlanDto {
     pub key: String,
     pub filename: String,
     pub target_filename: String,
+    #[serde(default)]
+    pub size: Option<u64>,
 }
 
 fn get_api_context() -> Result<ApiContext, String> {
@@ -120,50 +135,76 @@ pub(crate) async fn api_request_with_etag(
     if_none_match: Option<&str>,
 ) -> Result<reqwest::Response, String> {
     let url = format!("{}/saves{}", base_url.trim_end_matches('/'), path);
-
-    let mut req = API_CLIENT
-        .request(method.parse().unwrap(), &url)
-        .header("x-user-id", user_id)
-        .header("x-api-key", api_key);
-
-    if let Some(etag) = if_none_match {
-        req = req.header("If-None-Match", etag);
-    }
-
     let active_host = crate::config::load_settings()
         .active_cloud_host_user_id
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
-    if let Some(host) = active_host {
-        req = req.header("x-cloud-host-user-id", host);
+    let method = reqwest::Method::from_bytes(method.as_bytes())
+        .map_err(|error| format!("Método HTTP inválido '{method}': {error}"))?;
+    let retry_safe = super::retry::is_safe_to_retry(&method, path);
+    let max_attempts = if retry_safe { 3 } else { 1 };
+
+    for attempt in 0..max_attempts {
+        let mut req = API_CLIENT
+            .request(method.clone(), &url)
+            .header("x-user-id", user_id)
+            .header("x-api-key", api_key);
+
+        if let Some(etag) = if_none_match {
+            req = req.header("If-None-Match", etag);
+        }
+        if let Some(host) = active_host.as_deref() {
+            req = req.header("x-cloud-host-user-id", host);
+        }
+        if let Some(body) = body {
+            req = req
+                .header("Content-Type", "application/json")
+                .body(body.to_vec());
+        }
+
+        let start = Instant::now();
+        let response = match req.send().await {
+            Ok(response) => response,
+            Err(error) => {
+                let can_retry = retry_safe
+                    && attempt + 1 < max_attempts
+                    && (error.is_timeout() || error.is_connect());
+                if can_retry {
+                    super::retry::wait_before_retry(attempt, None).await;
+                    continue;
+                }
+
+                observability::record_error("sync_api_send", &error.to_string(), None);
+                return Err(api_error::network_message());
+            }
+        };
+
+        if retry_safe
+            && attempt + 1 < max_attempts
+            && super::retry::is_retryable_status(response.status())
+        {
+            super::retry::wait_before_retry(attempt, Some(response.headers())).await;
+            continue;
+        }
+
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+        let status = response.status();
+        let is_ok = status.is_success() || status == reqwest::StatusCode::NOT_MODIFIED;
+        observability::record_saves_api_timing(elapsed_ms, is_ok, path);
+        if !is_ok {
+            let status_code = status.as_u16();
+            observability::record_error(
+                "sync_api_http",
+                &format!("path={path} status={status_code}"),
+                Some(status_code),
+            );
+        }
+        return Ok(response);
     }
 
-    if let Some(b) = body {
-        req = req
-            .header("Content-Type", "application/json")
-            .body(b.to_vec());
-    }
-
-    let start = Instant::now();
-    let res = req.send().await.map_err(|e| {
-        observability::record_error("sync_api_send", &e.to_string(), None);
-        e.to_string()
-    })?;
-    let elapsed_ms = start.elapsed().as_millis() as u64;
-    let status = res.status();
-    let is_ok = status.is_success() || status == reqwest::StatusCode::NOT_MODIFIED;
-    observability::record_saves_api_timing(elapsed_ms, is_ok, path);
-    if !is_ok {
-        let st = status.as_u16();
-        observability::record_error(
-            "sync_api_http",
-            &format!("path={} status={}", path, st),
-            Some(st),
-        );
-    }
-    Ok(res)
+    Err(api_error::network_message())
 }
 
 pub(crate) async fn api_request(
@@ -209,11 +250,7 @@ pub(crate) async fn get_upload_urls(
     .map_err(|e| format!("upload-urls: {}", e))?;
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API upload-urls: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     let parsed: UploadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
@@ -255,11 +292,7 @@ pub(crate) async fn get_download_urls(
     .map_err(|e| format!("download-urls: {}", e))?;
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API download-urls: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     let parsed: DownloadUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
@@ -311,11 +344,7 @@ async fn list_remote_saves_for_user(
     }
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     let etag_header = res
@@ -379,9 +408,17 @@ async fn list_remote_saves_for_user_and_game(
     let if_none_match = cached_entry.as_ref().map(|e| e.etag.as_str());
 
     let path = format!("?gameId={}", urlencoding::encode(trimmed_game_id));
-    let res = api_request_with_etag(api_base, user_id, api_key, "GET", &path, None, if_none_match)
-        .await
-        .map_err(|e| format!("GET /saves?gameId: {}", e))?;
+    let res = api_request_with_etag(
+        api_base,
+        user_id,
+        api_key,
+        "GET",
+        &path,
+        None,
+        if_none_match,
+    )
+    .await
+    .map_err(|e| format!("GET /saves?gameId: {}", e))?;
 
     if res.status() == reqwest::StatusCode::NOT_MODIFIED {
         if let Some(entry) = cached_entry {
@@ -390,11 +427,7 @@ async fn list_remote_saves_for_user_and_game(
     }
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     let etag_header = res
@@ -479,11 +512,7 @@ async fn list_remote_saves_summary_for_user(
     }
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     let etag_header = res
@@ -557,13 +586,17 @@ pub async fn sync_list_remote_saves_for_user(
 }
 
 #[tauri::command]
-pub async fn sync_delete_game_from_cloud(game_id: String, permanent: Option<bool>) -> Result<(), String> {
+pub async fn sync_delete_game_from_cloud(
+    game_id: String,
+    permanent: Option<bool>,
+) -> Result<(), String> {
     let ctx = get_api_context()?;
     let is_perm = permanent.unwrap_or(false);
     let body = serde_json::json!({
         "gameId": game_id.trim(),
         "permanent": is_perm
-    }).to_string();
+    })
+    .to_string();
 
     let res = api_request(
         &ctx.base_url,
@@ -577,11 +610,7 @@ pub async fn sync_delete_game_from_cloud(game_id: String, permanent: Option<bool
     .map_err(|e| format!("delete-game: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        return Err(format!(
-            "API delete-game: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     invalidate_remote_saves_cache(&ctx.user_id, Some(game_id.trim()));
     Ok(())
@@ -626,7 +655,7 @@ pub async fn sync_list_trash() -> Result<Vec<TrashGameItem>, String> {
     .map_err(|e| format!("list-trash: {}", e))?;
 
     if !res.status().is_success() {
-        return Err(format!("API list-trash: {}", res.status()));
+        return Err(api_error::response_message(res).await);
     }
 
     let parsed: TrashListResponse = res
@@ -654,11 +683,7 @@ pub async fn sync_restore_from_trash(game_id: String) -> Result<(), String> {
     .map_err(|e| format!("restore-from-trash: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        return Err(format!(
-            "API restore-from-trash: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -680,11 +705,7 @@ pub async fn sync_delete_from_trash(game_id: String) -> Result<(), String> {
     .map_err(|e| format!("delete-from-trash: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        return Err(format!(
-            "API delete-from-trash: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -705,11 +726,7 @@ pub async fn sync_empty_trash() -> Result<(), String> {
     .map_err(|e| format!("empty-trash: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        return Err(format!(
-            "API empty-trash: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -738,19 +755,136 @@ pub async fn sync_rename_game_in_cloud(
     .map_err(|e| format!("rename-game: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        return Err(format!(
-            "API rename-game: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
+}
+
+const FRIEND_COPY_FILE_CONCURRENCY: usize = 4;
+
+fn should_emit_friend_copy_progress(
+    throttle: &Mutex<TransferProgressThrottle>,
+    loaded: u64,
+    is_final: bool,
+) -> bool {
+    throttle
+        .lock()
+        .map(|mut state| state.should_emit(loaded, is_final))
+        .unwrap_or(is_final)
+}
+
+fn emit_friend_copy_progress(
+    app: &AppHandle,
+    operation_id: &str,
+    game_id: &str,
+    filename: &str,
+    loaded: u64,
+    total: u64,
+    metrics: &Mutex<TransferSpeedTracker>,
+    is_final: bool,
+) {
+    emit_sync_download_progress(
+        app,
+        SyncProgressPayload {
+            operation_id: Some(operation_id.to_string()),
+            status: Some("running".to_string()),
+            game_id: game_id.to_string(),
+            filename: filename.to_string(),
+            loaded,
+            total,
+            downloaded_bytes: Some(loaded),
+            total_bytes: Some(total),
+            can_pause: Some(false),
+            can_cancel: Some(false),
+            can_resume: Some(false),
+            strategy: Some(SyncOperationStrategy::DownloadFile),
+            state: None,
+            reason_code: None,
+        },
+    );
+
+    let sample = metrics.lock().ok().map(|mut tracker| {
+        let now = Instant::now();
+        if is_final {
+            tracker.record_final(loaded, total, now)
+        } else {
+            tracker.record(loaded, total, now)
+        }
+    });
+    if let Some(TransferSample {
+        download_speed_bytes,
+        eta_seconds,
+    }) = sample
+    {
+        let _ = app.emit(
+            "sync-transfer-metrics",
+            serde_json::json!({
+                "operationId": operation_id,
+                "speedBytesPerSecond": download_speed_bytes,
+                "etaSeconds": eta_seconds,
+            }),
+        );
+    }
 }
 
 async fn copy_friend_saves_with_plan_impl(
     _friend_user_id: &str,
     game_id: &str,
     plan: Vec<CopyFriendFilePlanDto>,
+    operation_id: String,
+    app: AppHandle,
+) -> Result<SyncResultDto, String> {
+    let total = plan
+        .iter()
+        .try_fold(0_u64, |total, item| {
+            item.size
+                .map(|size| total.saturating_add(size.saturating_mul(2)))
+        })
+        .unwrap_or(0);
+    let loaded = Arc::new(AtomicU64::new(0));
+    let metrics = Arc::new(Mutex::new(TransferSpeedTracker::new()));
+    let progress_throttle = Arc::new(Mutex::new(TransferProgressThrottle::new(
+        PACKAGED_PROGRESS_POLICY,
+    )));
+
+    let result = copy_friend_saves_with_plan_transfer(
+        game_id,
+        plan,
+        app.clone(),
+        operation_id.clone(),
+        loaded,
+        metrics,
+        progress_throttle,
+        total,
+    )
+    .await;
+
+    let status = match &result {
+        Ok(result) if result.err_count == 0 => "completed",
+        _ => "failed",
+    };
+    emit_sync_terminal(
+        &app,
+        operation_id,
+        status,
+        "download",
+        Some(game_id.to_string()),
+        None,
+        None,
+    );
+
+    result
+}
+
+async fn copy_friend_saves_with_plan_transfer(
+    game_id: &str,
+    plan: Vec<CopyFriendFilePlanDto>,
+    app: AppHandle,
+    operation_id: String,
+    loaded: Arc<AtomicU64>,
+    metrics: Arc<Mutex<TransferSpeedTracker>>,
+    progress_throttle: Arc<Mutex<TransferProgressThrottle>>,
+    total: u64,
 ) -> Result<SyncResultDto, String> {
     let ctx = get_api_context()?;
 
@@ -758,7 +892,7 @@ async fn copy_friend_saves_with_plan_impl(
         return Ok(SyncResultDto {
             ok_count: 0,
             err_count: 0,
-            errors: vec!["No hay archivos en el plan".into()],
+            errors: vec!["El amigo no tiene guardados".into()],
         });
     }
 
@@ -808,11 +942,19 @@ async fn copy_friend_saves_with_plan_impl(
         .collect();
 
     let mut set = tokio::task::JoinSet::new();
+    let file_semaphore = Arc::new(tokio::sync::Semaphore::new(FRIEND_COPY_FILE_CONCURRENCY));
 
     for item in plan {
         let download_url = download_map.get(&item.key).cloned();
         let upload_url = upload_map.get(&item.target_filename).cloned();
 
+        let app = app.clone();
+        let operation_id = operation_id.clone();
+        let game_id = game_id.to_string();
+        let loaded = Arc::clone(&loaded);
+        let metrics = Arc::clone(&metrics);
+        let progress_throttle = Arc::clone(&progress_throttle);
+        let file_semaphore = Arc::clone(&file_semaphore);
         set.spawn(async move {
             let mut item_err = None;
             let mut success = false;
@@ -826,11 +968,19 @@ async fn copy_friend_saves_with_plan_impl(
                 None => return (item, false, Some("Sin URL de subida".to_string())),
             };
 
-            let bytes = match API_CLIENT.get(&d_url).send().await {
-                Ok(resp) if resp.status().is_success() => match resp.bytes().await {
-                    Ok(b) => b,
-                    Err(e) => return (item, false, Some(format!("error leyendo descarga: {}", e))),
-                },
+            let _permit = match file_semaphore.acquire_owned().await {
+                Ok(permit) => permit,
+                Err(error) => {
+                    return (
+                        item,
+                        false,
+                        Some(format!("No se pudo iniciar la transferencia: {}", error)),
+                    )
+                }
+            };
+
+            let response = match API_CLIENT.get(&d_url).send().await {
+                Ok(resp) if resp.status().is_success() => resp,
                 Ok(resp) => {
                     return (
                         item,
@@ -847,15 +997,75 @@ async fn copy_friend_saves_with_plan_impl(
                 }
             };
 
-            let content_length = bytes.len();
-            match API_CLIENT
+            let content_length = response.content_length().or(item.size);
+            let download_stream = response.bytes_stream().map({
+                let app = app.clone();
+                let operation_id = operation_id.clone();
+                let game_id = game_id.clone();
+                let filename = item.filename.clone();
+                let loaded = Arc::clone(&loaded);
+                let metrics = Arc::clone(&metrics);
+                let progress_throttle = Arc::clone(&progress_throttle);
+
+                move |chunk| {
+                    if let Ok(bytes) = &chunk {
+                        let current = loaded.fetch_add(bytes.len() as u64, Ordering::Relaxed)
+                            + bytes.len() as u64;
+                        if should_emit_friend_copy_progress(&progress_throttle, current, false) {
+                            emit_friend_copy_progress(
+                                &app,
+                                &operation_id,
+                                &game_id,
+                                &filename,
+                                current,
+                                total,
+                                &metrics,
+                                false,
+                            );
+                        }
+                    }
+                    chunk
+                }
+            });
+            let upload_stream = download_stream.map({
+                let app = app.clone();
+                let operation_id = operation_id.clone();
+                let game_id = game_id.clone();
+                let filename = item.target_filename.clone();
+                let loaded = Arc::clone(&loaded);
+                let metrics = Arc::clone(&metrics);
+                let progress_throttle = Arc::clone(&progress_throttle);
+
+                move |chunk| {
+                    if let Ok(bytes) = &chunk {
+                        let current = loaded.fetch_add(bytes.len() as u64, Ordering::Relaxed)
+                            + bytes.len() as u64;
+                        if should_emit_friend_copy_progress(&progress_throttle, current, false) {
+                            emit_friend_copy_progress(
+                                &app,
+                                &operation_id,
+                                &game_id,
+                                &filename,
+                                current,
+                                total,
+                                &metrics,
+                                false,
+                            );
+                        }
+                    }
+                    chunk
+                }
+            });
+
+            let mut request = API_CLIENT
                 .put(&u_url)
-                .body(bytes)
-                .header("Content-Type", "application/octet-stream")
-                .header("Content-Length", content_length.to_string())
-                .send()
-                .await
-            {
+                .body(reqwest::Body::wrap_stream(upload_stream))
+                .header("Content-Type", "application/octet-stream");
+            if let Some(content_length) = content_length {
+                request = request.header("Content-Length", content_length.to_string());
+            }
+
+            match request.send().await {
                 Ok(put_res) if put_res.status().is_success() => success = true,
                 Ok(put_res) => item_err = Some(format!("error S3 PUT: {}", put_res.status())),
                 Err(e) => item_err = Some(format!("falla de red en subida: {}", e)),
@@ -868,10 +1078,12 @@ async fn copy_friend_saves_with_plan_impl(
     let mut ok_count = 0;
     let mut err_count = 0;
     let mut errors = Vec::new();
+    let mut last_completed_filename = String::new();
 
     while let Some(res) = set.join_next().await {
         match res {
             Ok((item, success, err_opt)) => {
+                last_completed_filename.clone_from(&item.target_filename);
                 if success {
                     ok_count += 1;
                 } else {
@@ -886,6 +1098,20 @@ async fn copy_friend_saves_with_plan_impl(
                 errors.push(format!("Fallo crítico en hilo de transferencia: {}", e));
             }
         }
+    }
+
+    let final_loaded = loaded.load(Ordering::Relaxed);
+    if should_emit_friend_copy_progress(&progress_throttle, final_loaded, true) {
+        emit_friend_copy_progress(
+            &app,
+            &operation_id,
+            game_id,
+            &last_completed_filename,
+            final_loaded,
+            total,
+            &metrics,
+            true,
+        );
     }
 
     let result = SyncResultDto {
@@ -908,6 +1134,8 @@ async fn copy_friend_saves_with_plan_impl(
 pub async fn copy_friend_saves(
     friend_user_id: String,
     game_id: String,
+    operation_id: String,
+    app: AppHandle,
 ) -> Result<SyncResultDto, String> {
     let friend_id = friend_user_id.trim();
     if friend_id.is_empty() {
@@ -935,18 +1163,11 @@ pub async fn copy_friend_saves(
             key: s.key,
             filename: s.filename.clone(),
             target_filename: s.filename,
+            size: s.size,
         })
         .collect();
 
-    if plan.is_empty() {
-        return Ok(SyncResultDto {
-            ok_count: 0,
-            err_count: 0,
-            errors: vec!["El amigo no tiene guardados".into()],
-        });
-    }
-
-    copy_friend_saves_with_plan_impl(friend_id, game_id_trimmed, plan).await
+    copy_friend_saves_with_plan_impl(friend_id, game_id_trimmed, plan, operation_id, app).await
 }
 
 #[tauri::command]
@@ -954,6 +1175,8 @@ pub async fn copy_friend_saves_with_plan(
     friend_user_id: String,
     game_id: String,
     plan: Vec<CopyFriendFilePlanDto>,
+    operation_id: String,
+    app: AppHandle,
 ) -> Result<SyncResultDto, String> {
     let friend_id = friend_user_id.trim();
     let game_id_trimmed = game_id.trim();
@@ -962,7 +1185,7 @@ pub async fn copy_friend_saves_with_plan(
         return Err("friendUserId o gameId están vacíos".into());
     }
 
-    copy_friend_saves_with_plan_impl(friend_id, game_id_trimmed, plan).await
+    copy_friend_saves_with_plan_impl(friend_id, game_id_trimmed, plan, operation_id, app).await
 }
 
 #[tauri::command]

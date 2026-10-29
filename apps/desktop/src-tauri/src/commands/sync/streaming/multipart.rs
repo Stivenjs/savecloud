@@ -38,6 +38,7 @@ use std::time::Instant;
 use bytes::{BufMut, BytesMut};
 use tokio::sync::Semaphore;
 
+use crate::cloud::api_error;
 use crate::network::DATA_CLIENT;
 
 use super::super::api;
@@ -52,7 +53,6 @@ use crate::commands::logs::sync_logger;
 const PART_URL_BATCH: u32 = 32;
 
 const MAX_RETRIES: u32 = 3;
-const RETRY_DELAY_SECS: u64 = 1;
 
 /// Contexto compartido para las operaciones del API.
 /// Evita repetir los mismos parámetros en cada función auxiliar.
@@ -123,8 +123,7 @@ where
             Err(e) => {
                 last_err = e.clone();
                 if attempt + 1 < MAX_RETRIES {
-                    let delay = RETRY_DELAY_SECS * (attempt + 1) as u64;
-                    tokio::time::sleep(tokio::time::Duration::from_secs(delay)).await;
+                    super::super::retry::wait_before_retry(attempt, None).await;
                 }
             }
         }
@@ -152,9 +151,7 @@ async fn multipart_init(
     .map_err(|e| format!("multipart/init: {}", e))?;
 
     if !res.status().is_success() {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("API multipart/init: {} {}", status, text));
+        return Err(api_error::response_message(res).await);
     }
     let parsed: MultipartInitResponse = res.json().await.map_err(|e| e.to_string())?;
     Ok((parsed.upload_id, parsed.key))
@@ -182,9 +179,7 @@ async fn multipart_part_urls(
     .map_err(|e| format!("multipart/part-urls: {}", e))?;
 
     if !res.status().is_success() {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("API multipart/part-urls: {} {}", status, text));
+        return Err(api_error::response_message(res).await);
     }
     let parsed: PartUrlsResponse = res.json().await.map_err(|e| e.to_string())?;
     Ok(parsed
@@ -219,9 +214,7 @@ async fn multipart_complete(ctx: &UploadCtx<'_>, parts: &[(u32, String)]) -> Res
     .map_err(|e| format!("multipart/complete: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("API multipart/complete: {} {}", status, text));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -240,9 +233,7 @@ async fn multipart_abort(ctx: &UploadCtx<'_>) -> Result<(), String> {
     .map_err(|e| format!("multipart/abort: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
-        let status = res.status();
-        let text = res.text().await.unwrap_or_default();
-        return Err(format!("API multipart/abort: {} {}", status, text));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -342,7 +333,7 @@ async fn ensure_part_url_cached(
         // Fetch bloqueante: la URL es necesaria ahora y no está en caché.
         let batch_end = part_number.saturating_add(PART_URL_BATCH - 1);
         let part_numbers: Vec<u32> = (part_number..=batch_end).collect();
-        let urls = with_retry(|| multipart_part_urls(ctx, &part_numbers)).await?;
+        let urls = multipart_part_urls(ctx, &part_numbers).await?;
         for (n, u) in urls {
             cache.insert(n, u);
         }
@@ -388,12 +379,7 @@ enum TaskResult {
 }
 
 /// Normaliza el resultado de `JoinSet::join_next` absorbiendo panics del runtime.
-fn normalize_join_result(
-    res: Result<
-        PartTaskOutput,
-        tokio::task::JoinError,
-    >,
-) -> TaskResult {
+fn normalize_join_result(res: Result<PartTaskOutput, tokio::task::JoinError>) -> TaskResult {
     match res {
         Ok(Ok((pn, etag, bytes_sent, elapsed_ms, permit))) => TaskResult::Part {
             part_number: pn,
@@ -614,8 +600,7 @@ pub(crate) async fn upload_tar_stream_multipart(
     let semaphore = std::sync::Arc::new(Semaphore::new(max_permits));
 
     let (upload_id, key) =
-        with_retry(|| multipart_init(api_base, user_id, api_key, game_id, relative_filename))
-            .await?;
+        multipart_init(api_base, user_id, api_key, game_id, relative_filename).await?;
 
     let ctx = UploadCtx {
         api_base,
@@ -807,7 +792,7 @@ pub(crate) async fn upload_tar_stream_multipart(
     );
 
     completed_parts.sort_by_key(|p| p.0);
-    with_retry(|| multipart_complete(&ctx, &completed_parts)).await?;
+    multipart_complete(&ctx, &completed_parts).await?;
 
     let ctx_stats = format!(
         "{} | original_mb={:.1} uploaded_mb={:.1} ratio={:.2}x concurrency=[{}]",

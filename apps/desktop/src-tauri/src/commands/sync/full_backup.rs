@@ -1,7 +1,8 @@
 //! Módulo de backup completo de juegos mediante archivo `.tar` en S3.
 //!
-//! Agrupa todos los archivos de un juego en un único archivo `.tar`
-//! para optimizar la transferencia hacia y desde almacenamiento remoto.
+//! Agrupa todos los archivos de un juego en un único archivo TAR para optimizar
+//! la transferencia hacia y desde almacenamiento remoto. El modo streaming almacena
+//! el TAR comprimido con Zstandard; el modo multipart tradicional almacena TAR puro.
 //!
 //! Flujo de operación:
 //!
@@ -16,7 +17,7 @@
 
 use futures_util::StreamExt;
 use std::fs;
-use std::io::{BufWriter, ErrorKind};
+use std::io::{BufWriter, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::SyncIoBridge;
@@ -30,10 +31,13 @@ use super::events::{
 use super::models::{SyncOperationStrategy, SyncProgressPayload};
 use super::multipart_upload;
 use super::streaming;
+use crate::cloud::api_error;
 use crate::config;
 use crate::config::models::FULL_BACKUP_PACKAGED_ZSTD_DEFAULT;
 use crate::network::DATA_CLIENT;
 use crate::tray::tray_state::TrayState;
+use crate::utils::path_utils;
+use crate::utils::transfer_metrics::{TransferProgressThrottle, PACKAGED_PROGRESS_POLICY};
 use tauri::{AppHandle, Manager, State};
 
 use crate::shutdown::coordinator::{ShutdownCoordinator, ShutdownPhase};
@@ -65,7 +69,10 @@ fn create_tar_archive(paths: &[String], dest_path: &Path) -> Result<u64, String>
             continue;
         }
 
-        let prefix = folder_prefixes.get(root_idx).map(|s| s.as_str()).unwrap_or("");
+        let prefix = folder_prefixes
+            .get(root_idx)
+            .map(|s| s.as_str())
+            .unwrap_or("");
 
         if root_path.is_file() {
             let file_name = root_path
@@ -196,11 +203,7 @@ pub async fn list_cloud_backups(
         .map_err(|e| format!("GET /backups: {}", e))?;
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API backups: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     #[derive(serde::Deserialize)]
@@ -220,9 +223,6 @@ pub async fn list_cloud_backups(
         })
         .collect())
 }
-
-/// Cada cuántos bytes emitimos progreso de descarga del empaquetado.
-const FULL_BACKUP_DOWNLOAD_EMIT_BYTES: u64 = 256 * 1024;
 
 /// Quita solo lectura para poder borrar/sobrescribir (Unity y otros suelen dejar `.json` read-only).
 #[cfg(windows)]
@@ -327,7 +327,11 @@ fn unpack_archive_resilient<R: std::io::Read>(
         let entry_type = entry.header().entry_type();
         if entry_type.is_dir() {
             fs::create_dir_all(&target_path).map_err(|e| {
-                format!("Fallo creando directorio [{}]: {}", target_path.display(), e)
+                format!(
+                    "Fallo creando directorio [{}]: {}",
+                    target_path.display(),
+                    e
+                )
             })?;
         } else if entry_type.is_file() {
             if let Some(parent) = target_path.parent() {
@@ -372,6 +376,31 @@ fn unpack_archive_resilient<R: std::io::Read>(
     Ok(())
 }
 
+/// Detecta si el flujo contiene TAR puro o un TAR comprimido con Zstandard y lo extrae.
+///
+/// La detección por magic bytes mantiene compatibles los backups creados por ambos
+/// modos de subida, aunque ambos usen la extensión `.tar` en S3.
+fn unpack_tar_or_zstd<R: std::io::Read>(reader: R, game_paths: &[String]) -> Result<(), String> {
+    const ZSTD_FRAME_MAGIC: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
+
+    let mut reader = reader;
+    let mut prefix = [0_u8; ZSTD_FRAME_MAGIC.len()];
+    reader
+        .read_exact(&mut prefix)
+        .map_err(|e| format!("Backup truncado o inválido: {}", e))?;
+
+    let reader = std::io::Cursor::new(prefix).chain(reader);
+    if prefix == ZSTD_FRAME_MAGIC {
+        let decoder = zstd::stream::read::Decoder::new(reader)
+            .map_err(|e| format!("Fallo al inicializar descompresor Zstandard: {}", e))?;
+        let mut archive = tar::Archive::new(decoder);
+        unpack_archive_resilient(&mut archive, game_paths)
+    } else {
+        let mut archive = tar::Archive::new(reader);
+        unpack_archive_resilient(&mut archive, game_paths)
+    }
+}
+
 /// Implementa la descarga y extracción en streaming puro de un backup empaquetado.
 ///
 /// Esta arquitectura elimina la necesidad de archivos temporales. Crea una tubería
@@ -397,24 +426,22 @@ fn unpack_archive_resilient<R: std::io::Read>(
 pub async fn download_and_restore_full_backup_impl(
     game_id: String,
     backup_key: String,
+    destination_path: Option<String>,
     app: AppHandle,
     tray_state: std::sync::Arc<crate::tray::tray_state::TrayStateInner>,
     emit_done: bool,
 ) -> Result<(), String> {
     let ctx = get_api_context()?;
-    let game = config::load_game(&game_id)?
-        .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
+    let game =
+        config::load_game(&game_id)?.ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
-    if game.paths.is_empty() {
-        return Err("El juego no tiene rutas de guardado configuradas".to_string());
-    }
+    let game_paths =
+        path_utils::resolve_cloud_download_roots(&game.paths, destination_path.as_deref())?;
 
     if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
         let pm = pm.lock().await;
         pm.execute_pre_download(&game_id);
     }
-
-    let game_paths = game.paths.clone();
 
     // Resolución de URL pre-firmada
     let body = serde_json::json!({ "gameId": game_id, "key": backup_key });
@@ -430,11 +457,7 @@ pub async fn download_and_restore_full_backup_impl(
     .map_err(|e| format!("download-url: {}", e))?;
 
     if !res.status().is_success() {
-        return Err(format!(
-            "API download-url: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
 
     let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
@@ -465,19 +488,12 @@ pub async fn download_and_restore_full_backup_impl(
 
     // Hilo dedicado a la descompresión y extracción. Se ejecuta en paralelo a la descarga.
     let extract_task = tokio::task::spawn_blocking(move || {
-        // SyncIoBridge convierte el canal asíncrono 'rx' en un lector implementando std::io::Read.
-        let sync_reader = SyncIoBridge::new(rx);
-
-        // Capa de descompresión: extrae los datos Zstd antes de pasarlos al TAR.
-        let zstd_decoder = zstd::stream::read::Decoder::new(sync_reader)
-            .map_err(|e| format!("fallo al inicializar descompresor Zstd: {}", e))?;
-
-        let mut archive = tar::Archive::new(zstd_decoder);
-        unpack_archive_resilient(&mut archive, &game_paths)
+        // SyncIoBridge convierte el canal asíncrono 'rx' en un lector bloqueante.
+        unpack_tar_or_zstd(SyncIoBridge::new(rx), &game_paths)
     });
 
     let mut loaded: u64 = 0;
-    let mut last_emit: u64 = 0;
+    let mut progress_throttle = TransferProgressThrottle::new(PACKAGED_PROGRESS_POLICY);
 
     // Consumo del flujo de red
     while let Some(item) = stream.next().await {
@@ -490,8 +506,8 @@ pub async fn download_and_restore_full_backup_impl(
             .await
             .map_err(|e| format!("Error en tubería de memoria: {}", e))?;
 
-        if loaded - last_emit >= FULL_BACKUP_DOWNLOAD_EMIT_BYTES || (total > 0 && loaded >= total) {
-            last_emit = loaded;
+        let download_finished = total > 0 && loaded >= total;
+        if !download_finished && progress_throttle.should_emit(loaded, false) {
             emit_sync_download_progress(
                 &app,
                 SyncProgressPayload {
@@ -514,36 +530,48 @@ pub async fn download_and_restore_full_backup_impl(
         }
     }
 
-    if total > 0 && loaded < total {
-        emit_sync_download_progress(
-            &app,
-            SyncProgressPayload {
-                operation_id: Some(format!("sync-download-{game_id}")),
-                status: Some("running".to_string()),
-                game_id: game_id.clone(),
-                filename: tar_name.to_string(),
-                loaded: total,
-                total,
-                downloaded_bytes: Some(total),
-                total_bytes: Some(total),
-                can_pause: None,
-                can_cancel: None,
-                can_resume: None,
-                strategy: Some(SyncOperationStrategy::DownloadPackaged),
-                state: None,
-                reason_code: None,
-            },
-        );
-    }
-
     // Clausura del transmisor. Esto inyecta una señal EOF (End Of File) en el receptor,
     // indicando a 'tar::Archive' que el archivo ha finalizado de forma limpia.
     drop(tx);
 
+    // Mantiene la operación visible mientras el hilo bloqueante termina de extraer.
+    emit_sync_download_progress(
+        &app,
+        SyncProgressPayload {
+            operation_id: Some(format!("sync-download-{game_id}")),
+            status: Some("extracting".to_string()),
+            game_id: game_id.clone(),
+            filename: tar_name.to_string(),
+            loaded,
+            total,
+            downloaded_bytes: Some(loaded),
+            total_bytes: Some(total),
+            can_pause: None,
+            can_cancel: None,
+            can_resume: None,
+            strategy: Some(SyncOperationStrategy::DownloadPackaged),
+            state: None,
+            reason_code: None,
+        },
+    );
+
     // Sincronización del hilo principal con la finalización del hilo extractor
-    extract_task
-        .await
-        .map_err(|e| format!("Pánico en hilo de descompresión: {}", e))??;
+    let extraction_result = match extract_task.await {
+        Ok(result) => result,
+        Err(error) => Err(format!("Pánico en hilo de descompresión: {}", error)),
+    };
+    if let Err(error) = extraction_result {
+        emit_sync_terminal(
+            &app,
+            format!("sync-download-{game_id}"),
+            "failed",
+            "download",
+            Some(game_id.clone()),
+            None,
+            Some("EXTRACTION_FAILED".to_string()),
+        );
+        return Err(error);
+    }
 
     tray_state.set_just_restored(&game_id);
     emit_sync_terminal(
@@ -575,17 +603,18 @@ pub async fn create_and_upload_full_backup(
 ) -> Result<String, String> {
     let ctx = get_api_context()?;
     let cfg = config::load_settings();
-    let game = config::load_game(&game_id)?
-        .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
+    let game =
+        config::load_game(&game_id)?.ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     if game.paths.is_empty() {
         return Err("El juego no tiene rutas de guardado configuradas".to_string());
     }
 
     let paths_for_size = game.paths.clone();
-    let estimated_total = tokio::task::spawn_blocking(move || calculate_total_paths_size(&paths_for_size))
-        .await
-        .unwrap_or(0);
+    let estimated_total =
+        tokio::task::spawn_blocking(move || calculate_total_paths_size(&paths_for_size))
+            .await
+            .unwrap_or(0);
 
     let temp_dir = std::env::temp_dir();
     let filename = format!("{}.tar", chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S"));
@@ -834,11 +863,19 @@ pub async fn list_full_backups_batch(
 pub async fn download_and_restore_full_backup(
     game_id: String,
     backup_key: String,
+    destination_path: Option<String>,
     app: AppHandle,
     tray_state: State<'_, TrayState>,
 ) -> Result<(), String> {
-    download_and_restore_full_backup_impl(game_id, backup_key, app, tray_state.0.clone(), true)
-        .await
+    download_and_restore_full_backup_impl(
+        game_id,
+        backup_key,
+        destination_path,
+        app,
+        tray_state.0.clone(),
+        true,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -858,11 +895,7 @@ pub async fn delete_cloud_backup(game_id: String, backup_key: String) -> Result<
     .map_err(|e| format!("delete backup: {}", e))?;
 
     if !res.status().is_success() && res.status() != reqwest::StatusCode::NO_CONTENT {
-        return Err(format!(
-            "API delete backup: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -901,11 +934,7 @@ pub async fn rename_cloud_backup(
     .map_err(|e| format!("rename backup: {}", e))?;
 
     if !res.status().is_success() && res.status() != reqwest::StatusCode::NO_CONTENT {
-        return Err(format!(
-            "API rename backup: {} {}",
-            res.status(),
-            res.text().await.unwrap_or_default()
-        ));
+        return Err(api_error::response_message(res).await);
     }
     Ok(())
 }
@@ -920,17 +949,18 @@ pub async fn test_streaming_full_backup(
     tray_state: State<'_, TrayState>,
 ) -> Result<streaming::multipart::StreamingDryRunMetrics, String> {
     let cfg = config::load_settings();
-    let game = config::load_game(&game_id)?
-        .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
+    let game =
+        config::load_game(&game_id)?.ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     if game.paths.is_empty() {
         return Err("El juego no tiene rutas de guardado configuradas".to_string());
     }
 
     let paths_for_size = game.paths.clone();
-    let estimated_total = tokio::task::spawn_blocking(move || calculate_total_paths_size(&paths_for_size))
-        .await
-        .unwrap_or(0);
+    let estimated_total =
+        tokio::task::spawn_blocking(move || calculate_total_paths_size(&paths_for_size))
+            .await
+            .unwrap_or(0);
 
     let filename = format!("{}.tar", chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S"));
     let relative_filename = format!("{}{}", BACKUPS_PREFIX, filename);

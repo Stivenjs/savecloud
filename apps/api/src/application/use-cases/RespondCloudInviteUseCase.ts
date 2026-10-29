@@ -14,6 +14,9 @@ export class RespondCloudInviteUseCase {
 
   async execute(input: RespondCloudInviteInput): Promise<CloudInvite> {
     const userId = input.userId.trim();
+    if (input.token !== undefined && !/^[a-f0-9]{48}$/.test(input.token)) {
+      throw new ApplicationError("INVALID_ARGUMENT", "El código de invitación no es válido.");
+    }
     const invite = input.inviteId
       ? await this.repository.getInviteById(input.inviteId)
       : input.token
@@ -26,17 +29,22 @@ export class RespondCloudInviteUseCase {
       throw new ApplicationError("FORBIDDEN", "No puedes aceptar tu propia invitación.");
     }
 
-    const now = new Date().toISOString();
     if (input.action === "accept") {
+      const invitedUserId = invite.inviteeUserId?.trim();
+      if (invitedUserId && invitedUserId !== userId) {
+        throw new ApplicationError("FORBIDDEN", "La invitación no pertenece a este usuario.");
+      }
+
+      const existingMembership = await this.repository.getMembership(invite.hostUserId, userId);
+      if (existingMembership?.active) {
+        throw new ApplicationError("CONFLICT", "Este ID ya pertenece a un miembro activo de esta nube.");
+      }
+
+      const now = new Date().toISOString();
       invite.status = "accepted";
       invite.acceptedAt = now;
       invite.updatedAt = now;
-      if (!invite.inviteeUserId) {
-        invite.inviteeUserId = userId;
-      }
-      if (invite.inviteeUserId !== userId) {
-        throw new ApplicationError("FORBIDDEN", "La invitación no pertenece a este usuario.");
-      }
+      invite.inviteeUserId = invitedUserId || userId;
       await this.repository.updateInvite(invite);
       await this.repository.upsertMembership({
         hostUserId: invite.hostUserId,
@@ -50,9 +58,10 @@ export class RespondCloudInviteUseCase {
       return invite;
     }
 
-    if (invite.inviteeUserId && invite.inviteeUserId !== input.userId.trim()) {
+    if (invite.inviteeUserId?.trim() && invite.inviteeUserId.trim() !== userId) {
       throw new ApplicationError("FORBIDDEN", "La invitación no pertenece a este usuario.");
     }
+    const now = new Date().toISOString();
     invite.status = "rejected";
     invite.rejectedAt = now;
     invite.updatedAt = now;

@@ -32,7 +32,7 @@ import {
   Zap,
   LogOut,
 } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { useProfileSessionStore } from "@store/ProfileSessionStore";
 import { resetAppStateForProfileSwitch } from "@utils/resetAppState";
 import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";

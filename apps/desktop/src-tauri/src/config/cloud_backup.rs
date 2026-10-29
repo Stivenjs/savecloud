@@ -65,8 +65,9 @@ async fn backup_config(force: bool) -> Result<bool, String> {
     let path = fingerprint_path()?;
 
     if !force
-        && read_fingerprint(&path)
-            .is_some_and(|previous| previous.scope == scope && previous.content_hash == content_hash)
+        && read_fingerprint(&path).is_some_and(|previous| {
+            previous.scope == scope && previous.content_hash == content_hash
+        })
     {
         return Ok(false);
     }
@@ -79,7 +80,8 @@ async fn backup_config(force: bool) -> Result<bool, String> {
         Some(bytes),
         true,
     )
-    .await?;
+    .await
+    .map_err(|error| error.to_string())?;
 
     write_fingerprint(
         &path,
@@ -102,8 +104,9 @@ pub fn spawn_config_backup_watcher() -> Result<(), String> {
     use notify::{RecursiveMode, Watcher};
     use std::time::Duration;
 
-    let data_dir = crate::config::paths::data_dir()
-        .ok_or_else(|| "No se pudo resolver el directorio de configuración de SaveCloud".to_string())?;
+    let data_dir = crate::config::paths::data_dir().ok_or_else(|| {
+        "No se pudo resolver el directorio de configuración de SaveCloud".to_string()
+    })?;
     let profile_dir = data_dir.join("profiles");
     let (event_tx, mut event_rx) = tokio::sync::mpsc::channel::<()>(16);
 
@@ -133,11 +136,9 @@ pub fn spawn_config_backup_watcher() -> Result<(), String> {
     tauri::async_runtime::spawn(async move {
         let _watcher = watcher;
         while event_rx.recv().await.is_some() {
-            loop {
-                match tokio::time::timeout(Duration::from_millis(1800), event_rx.recv()).await {
-                    Ok(Some(())) => continue,
-                    _ => break,
-                }
+            while let Ok(Some(())) =
+                tokio::time::timeout(Duration::from_millis(1800), event_rx.recv()).await
+            {
             }
 
             if let Err(error) = backup_config_if_changed().await {

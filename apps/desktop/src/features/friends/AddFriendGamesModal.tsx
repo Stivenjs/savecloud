@@ -69,6 +69,7 @@ export function AddFriendGamesModal({ isOpen, onClose, friendGames, ourGameIds, 
       const payload = toAdd.map((g) => ({
         id: g.id,
         paths: [...g.paths],
+        playtimeSeconds: g.playtimeSeconds ?? 0,
         steamAppId: g.steamAppId,
         imageUrl: g.imageUrl,
         editionLabel: g.editionLabel,

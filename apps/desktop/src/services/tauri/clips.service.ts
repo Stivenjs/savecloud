@@ -1,4 +1,5 @@
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
 export interface ClipUploadResult {
   clipId: string;

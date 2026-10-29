@@ -19,6 +19,12 @@ export class CreateCloudInviteUseCase {
     if (invitee && invitee === host) {
       throw new ApplicationError("INVALID_ARGUMENT", "No puedes enviarte una invitación a ti mismo.");
     }
+    if (invitee) {
+      const membership = await this.repository.getMembership(host, invitee);
+      if (membership?.active) {
+        throw new ApplicationError("CONFLICT", "Este ID ya pertenece a un miembro activo de esta nube.");
+      }
+    }
 
     // Política de invitaciones pendientes antes de ser aceptadas: hasta 365 días de vigencia (por defecto 30 días).
     const ttlDays = Math.max(1, Math.min(input.expiresInDays ?? 30, 365));

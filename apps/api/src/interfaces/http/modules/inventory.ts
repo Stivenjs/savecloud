@@ -4,6 +4,7 @@ import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 import type { GameInventoryRepository } from "@domain/ports/GameInventoryRepository";
 import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
 import { CreateTransferSessionUseCase } from "@application/use-cases/CreateTransferSessionUseCase";
+import { ConsumeTransferSessionUseCase } from "@application/use-cases/ConsumeTransferSessionUseCase";
 import { ListGameProvidersUseCase } from "@application/use-cases/ListGameProvidersUseCase";
 import { ListPendingTransferSessionsUseCase } from "@application/use-cases/ListPendingTransferSessionsUseCase";
 import { PublishDeviceInventoryUseCase } from "@application/use-cases/PublishDeviceInventoryUseCase";
@@ -32,6 +33,7 @@ export async function registerInventoryModule(
     ),
     recordInventoryHeartbeatUseCase: new RecordInventoryHeartbeatUseCase(deps.gameInventoryRepository),
     listPendingTransferSessionsUseCase: new ListPendingTransferSessionsUseCase(deps.gameInventoryRepository),
+    consumeTransferSessionUseCase: new ConsumeTransferSessionUseCase(deps.gameInventoryRepository),
     gameInventoryRepository: deps.gameInventoryRepository,
   });
 }

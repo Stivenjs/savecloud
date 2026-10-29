@@ -8,6 +8,7 @@ export interface PublishDeviceInventoryInput {
   contentHash: string;
   updatedAt: string;
   sharingEnabled: boolean;
+  tlsFingerprint?: string;
   games: GameInventoryEntry[];
 }
 
@@ -29,6 +30,6 @@ export interface GameInventoryRepository {
   listProvidersForGame(hostUserId: string, gameKey: string, excludeUserId?: string): Promise<GameProviderDevice[]>;
   getDeviceRecord(userId: string, deviceId: string): Promise<DeviceInventoryRecord | null>;
   putTransferSession(record: TransferSessionRecord): Promise<void>;
-  listPendingTransferSessions(targetDeviceId: string): Promise<TransferSessionRecord[]>;
-  consumeTransferSession(sessionId: string): Promise<void>;
+  listPendingTransferSessions(targetUserId: string, targetDeviceId: string): Promise<TransferSessionRecord[]>;
+  consumeTransferSession(sessionId: string, requesterUserId: string): Promise<"consumed" | "not_found" | "forbidden">;
 }

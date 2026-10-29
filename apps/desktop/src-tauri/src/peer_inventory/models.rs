@@ -65,17 +65,20 @@ pub struct PublishDeviceInventoryBody {
     pub content_hash: String,
     pub updated_at: String,
     pub sharing_enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls_fingerprint: Option<String>,
     pub games: Vec<GameInventoryEntry>,
 }
 
 impl DeviceInventoryManifest {
-    pub fn to_publish_body(&self) -> PublishDeviceInventoryBody {
+    pub fn to_publish_body(&self, tls_fingerprint: Option<String>) -> PublishDeviceInventoryBody {
         PublishDeviceInventoryBody {
             device_name: self.device_name.clone(),
             manifest_version: self.manifest_version,
             content_hash: self.content_hash.clone(),
             updated_at: self.updated_at.clone(),
             sharing_enabled: self.sharing_enabled,
+            tls_fingerprint,
             games: self.games.clone(),
         }
     }

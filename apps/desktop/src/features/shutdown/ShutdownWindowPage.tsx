@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@services/tauri/invoke";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Spinner } from "@heroui/react";
 import { LogOut } from "lucide-react";

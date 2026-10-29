@@ -2,6 +2,7 @@ import { Button, Card, CardBody } from "@heroui/react";
 import { RefreshCw, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { OperationResult } from "@/hooks/useGamesPage";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 interface OperationErrorCardProps {
   operationResult: OperationResult;
@@ -46,7 +47,7 @@ export function OperationErrorCard({ operationResult, onDismiss, onRetry }: Oper
         </div>
         <ul className="list-inside list-disc text-sm text-default-600">
           {result.errors.slice(0, 5).map((err, i) => (
-            <li key={i}>{err}</li>
+            <li key={i}>{getUnknownErrorMessage(err)}</li>
           ))}
           {result.errors.length > 5 && (
             <li>{t("library.operationError.andMore", { count: result.errors.length - 5 })}</li>

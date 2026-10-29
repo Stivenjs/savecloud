@@ -1,21 +1,12 @@
 /**
  * @fileoverview Suite de pruebas automatizadas para la base de datos local SQLite y motor FTS5 de SaveCloud.
  *
- * Todas las rutas se resuelven dinámicamente mediante variables de entorno estándar del sistema
- * operativo para evitar paths hardcodeados y garantizar portabilidad en CI/CD y entornos locales.
- *
- * Variables de entorno soportadas:
- * - `SAVECLOUD_DB_PATH`: Ruta absoluta personalizada a `catalog.sqlite` (Opcional)
- * - `APPDATA` / `USERPROFILE`: Directorio de configuración en Windows
- * - `XDG_CONFIG_HOME` / `HOME`: Directorio de configuración en Linux y macOS
- *
  * @module tests/database.test
  */
 
-import { beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { Database } from "bun:sqlite";
-import fs from "node:fs";
-import path from "node:path";
+import { createSqliteDatabaseFixture } from "./helpers/sqlite-database-fixture";
 
 interface UserVersionRow {
   readonly user_version: number;
@@ -48,44 +39,18 @@ interface SourceItemRow {
   readonly file_size: string | null;
 }
 
-/**
- * Resuelve la ruta absoluta al archivo SQLite `catalog.sqlite` según el sistema operativo.
- *
- * @returns {string} Ruta absoluta resuelta hacia la base de datos.
- */
-function resolveDatabasePath(): string {
-  if (process.env.SAVECLOUD_DB_PATH) {
-    return process.env.SAVECLOUD_DB_PATH;
-  }
-
-  const isWindows = process.platform === "win32";
-  const isMac = process.platform === "darwin";
-
-  if (isWindows) {
-    const appData = process.env.APPDATA || path.join(process.env.USERPROFILE || "", "AppData", "Roaming");
-    return path.join(appData, "SaveCloud", "data", "db", "catalog.sqlite");
-  }
-
-  if (isMac) {
-    const home = process.env.HOME || "";
-    return path.join(home, "Library", "Application Support", "SaveCloud", "data", "db", "catalog.sqlite");
-  }
-
-  const home = process.env.HOME || "";
-  const configHome = process.env.XDG_CONFIG_HOME || path.join(home, ".config");
-  return path.join(configHome, "SaveCloud", "data", "db", "catalog.sqlite");
-}
-
 describe("SaveCloud SQLite Database Suite", () => {
   let db: Database;
-  let dbPath: string;
 
   beforeAll(() => {
-    dbPath = resolveDatabasePath();
-    if (!fs.existsSync(dbPath)) {
-      throw new Error(`Base de datos no encontrada en la ruta resuelta: ${dbPath}`);
-    }
-    db = new Database(dbPath, { readonly: true });
+    db = createSqliteDatabaseFixture();
+  });
+
+  afterAll(() => {
+    db.close();
+  });
+  afterAll(() => {
+    db.close();
   });
 
   describe("Esquema e Integridad", () => {
@@ -94,9 +59,9 @@ describe("SaveCloud SQLite Database Suite", () => {
       expect(row.quick_check).toBe("ok");
     });
 
-    it("debe contar con una version de migracion igual o superior a v23", () => {
+    it("debe contar con una version de migracion igual o superior a v26", () => {
       const row = db.query("PRAGMA user_version").get() as UserVersionRow;
-      expect(row.user_version).toBeGreaterThanOrEqual(23);
+      expect(row.user_version).toBeGreaterThanOrEqual(26);
     });
 
     it("debe contener todas las tablas relacionales y virtuales FTS5 requeridas", () => {
@@ -107,7 +72,6 @@ describe("SaveCloud SQLite Database Suite", () => {
         "steam_catalog_trigram",
         "sources",
         "source_items",
-        "source_items_trigram",
         "steam_app_genres",
         "steam_app_tags",
         "steam_appdetails_media_cache",
@@ -122,6 +86,8 @@ describe("SaveCloud SQLite Database Suite", () => {
       for (const table of requiredTables) {
         expect(existingTables.has(table)).toBe(true);
       }
+
+      expect(existingTables.has("source_items_trigram")).toBe(false);
     });
   });
 
@@ -203,26 +169,13 @@ describe("SaveCloud SQLite Database Suite", () => {
       }
     });
 
-    it("debe consultar la tabla virtual source_items_trigram eficientemente", () => {
-      const queries = ["overcooked", "resident evil", "forza"];
+    it("debe mantener los items de fuentes sin la tabla FTS5 retirada en la migración 024", () => {
+      const row = db
+        .query("SELECT title, normalized_title FROM source_items WHERE source_id = ? AND item_id = ?")
+        .get("fixture-source", "fixture-item") as Pick<SourceItemRow, "title" | "normalized_title"> | null;
 
-      for (const query of queries) {
-        const start = performance.now();
-        const rows = db
-          .query(
-            `SELECT s.source_id, s.item_id, s.title
-             FROM source_items_trigram t
-             JOIN source_items s ON s.source_id = t.source_id AND s.item_id = t.item_id
-             WHERE source_items_trigram MATCH ?
-             LIMIT 5`
-          )
-          .all(`"${query}"`) as SourceItemRow[];
-
-        const elapsedMs = performance.now() - start;
-
-        expect(rows.length).toBeGreaterThan(0);
-        expect(elapsedMs).toBeLessThan(50);
-      }
+      expect(row?.title).toBe("Overcooked Save Pack");
+      expect(row?.normalized_title).toBe("overcooked save pack");
     });
   });
 

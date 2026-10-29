@@ -7,6 +7,7 @@ import { History } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { listOperationHistory, type OperationLogEntry } from "@services/tauri";
 import { formatGameDisplayName } from "@utils/gameImage";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import {
   OPERATION_LOG_KIND_CHIP_COLOR,
   OPERATION_LOG_KIND_ICON,
@@ -181,7 +182,7 @@ export function HistoryPage() {
         <Card>
           <CardBody>
             <p className="text-sm text-danger">
-              {t("history.error")}: {error instanceof Error ? error.message : t("history.unknownError")}
+              {t("history.error")}: {getUnknownErrorMessage(error, t("history.unknownError"))}
             </p>
           </CardBody>
         </Card>

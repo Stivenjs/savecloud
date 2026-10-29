@@ -15,9 +15,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tokio::net::TcpStream;
-use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tokio_tungstenite::{
-    connect_async, tungstenite::protocol::Message, MaybeTlsStream, WebSocketStream,
+    connect_async,
+    tungstenite::{client::IntoClientRequest, http::HeaderValue, protocol::Message},
+    MaybeTlsStream, WebSocketStream,
 };
 use url::Url;
 
@@ -115,6 +117,13 @@ pub struct TransferSessionPendingData {
     pub manifest_hash: String,
     /// Fecha/hora ISO-8601 de expiración de la sesión.
     pub expires_at: String,
+}
+
+#[derive(Clone)]
+pub struct CloudWsAuth {
+    pub credential: String,
+    pub user_id: String,
+    pub device_id: String,
 }
 
 /// Cursor de la última mutación remota del inbox.
@@ -219,7 +228,11 @@ pub async fn start_ws_loop(
     logs: AppLogs,
     mut ready_notify: Option<oneshot::Sender<()>>,
     metrics: Option<Arc<Mutex<WsRuntimeMetrics>>>,
+    connection_status: Option<watch::Sender<bool>>,
+    auth: CloudWsAuth,
 ) {
+    set_connection_status(&connection_status, false);
+
     if let Err(e) = Url::parse(&url_str) {
         log_cloud(&app_handle, &logs, "error", &format!("URL inválida: {}", e)).await;
         if let Some(ref m) = metrics {
@@ -235,7 +248,43 @@ pub async fn start_ws_loop(
     let mut last_friend_game: HashMap<String, String> = HashMap::new();
 
     loop {
-        match connect_async(url_str.as_str()).await {
+        let request = match url_str.as_str().into_client_request() {
+            Ok(mut request) => {
+                let headers = request.headers_mut();
+                let credential = HeaderValue::from_str(&auth.credential);
+                let user_id = HeaderValue::from_str(&auth.user_id);
+                let device_id = HeaderValue::from_str(&auth.device_id);
+                match (credential, user_id, device_id) {
+                    (Ok(credential), Ok(user_id), Ok(device_id)) => {
+                        headers.insert("x-api-key", credential);
+                        headers.insert("x-user-id", user_id);
+                        headers.insert("x-device-id", device_id);
+                        request
+                    }
+                    _ => {
+                        log_cloud(
+                            &app_handle,
+                            &logs,
+                            "error",
+                            "Credenciales WebSocket inválidas.",
+                        )
+                        .await;
+                        return;
+                    }
+                }
+            }
+            Err(error) => {
+                log_cloud(
+                    &app_handle,
+                    &logs,
+                    "error",
+                    &format!("No se pudo preparar WebSocket: {error}"),
+                )
+                .await;
+                return;
+            }
+        };
+        match connect_async(request).await {
             Ok((ws_stream, _)) => {
                 backoff = Duration::from_secs(INITIAL_BACKOFF_SECS);
                 last_friend_game.clear();
@@ -256,6 +305,7 @@ pub async fn start_ws_loop(
                     g.total_successful_connections =
                         g.total_successful_connections.saturating_add(1);
                 }
+                set_connection_status(&connection_status, true);
 
                 if let Some(tx) = ready_notify.take() {
                     let _ = tx.send(());
@@ -366,6 +416,7 @@ pub async fn start_ws_loop(
             }
         }
 
+        set_connection_status(&connection_status, false);
         let sleep_duration = apply_backoff_jitter(backoff);
         tokio::time::sleep(sleep_duration).await;
         backoff = std::cmp::min(backoff * 2, Duration::from_secs(MAX_BACKOFF_SECS));
@@ -560,6 +611,12 @@ async fn record_disconnect_metric(metrics: &Option<Arc<Mutex<WsRuntimeMetrics>>>
         let mut g = m.lock().await;
         g.connected = false;
         g.last_disconnected_at_ms = Some(utc_now_ms());
+    }
+}
+
+fn set_connection_status(status: &Option<watch::Sender<bool>>, connected: bool) {
+    if let Some(sender) = status {
+        sender.send_replace(connected);
     }
 }
 

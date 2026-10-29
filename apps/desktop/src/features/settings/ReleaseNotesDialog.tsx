@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import { useTranslation } from "react-i18next";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 import {
   fetchGitHubReleaseNotes,
   linkifyReleaseMarkdown,
@@ -28,7 +29,7 @@ export function ReleaseNotesDialog({ isOpen, onClose }: ReleaseNotesDialogProps)
 
   const releases = releaseNotesQuery.data ?? [];
   const loading = releaseNotesQuery.isLoading;
-  const error = releaseNotesQuery.error instanceof Error ? releaseNotesQuery.error.message : null;
+  const error = releaseNotesQuery.error ? getUnknownErrorMessage(releaseNotesQuery.error) : null;
 
   const fallbackMarkdown = useMemo(() => getReleaseNotesFallbackMarkdown(), []);
   const dateLocale = i18n.language === "es" ? "es-ES" : "en-US";

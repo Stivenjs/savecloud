@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getLibrary } from "@services/tauri/config.service";
+import { getUnknownErrorMessage } from "@utils/errorMessage";
 
 export const LIBRARY_QUERY_KEY = ["library"] as const;
 
@@ -14,7 +15,7 @@ export function useLibrary() {
   return {
     games: query.data ?? [],
     loading: query.isLoading,
-    error: query.error instanceof Error ? query.error.message : query.error ? String(query.error) : null,
+    error: query.error ? getUnknownErrorMessage(query.error) : null,
     refetch: query.refetch,
   };
 }
