@@ -36,6 +36,9 @@ export class RespondCloudInviteUseCase {
       }
 
       const existingMembership = await this.repository.getMembership(invite.hostUserId, userId);
+      if (existingMembership?.active) {
+        throw new ApplicationError("CONFLICT", "Ya eres un miembro activo de esta nube.");
+      }
 
       const now = new Date().toISOString();
       invite.status = "accepted";
