@@ -1,6 +1,8 @@
 import type { Context } from "aws-lambda";
 import { createApiStores } from "@infrastructure/factories/apiStoresFactory";
 import { createDynamoDbClient } from "@infrastructure/factories/dynamoDbFactory";
+import { createDatabaseClient } from "@infrastructure/factories/databaseClientFactory";
+import { readDatabaseConfiguration } from "@interfaces/configuration/databaseConfiguration";
 import { createS3Client, getBucketName } from "@infrastructure/factories/storageFactory";
 import { PurgeSoftDeletedMembersUseCase } from "@application/use-cases/PurgeSoftDeletedMembersUseCase";
 
@@ -11,6 +13,8 @@ function getPurgeUseCase(): PurgeSoftDeletedMembersUseCase {
 
   const bucketName = getBucketName();
   const cloudInvitesTable = process.env.CLOUD_INVITES_TABLE?.trim() || undefined;
+  const databaseConfiguration = readDatabaseConfiguration();
+  const database = databaseConfiguration ? createDatabaseClient(databaseConfiguration) : undefined;
 
   const s3 = createS3Client();
   const dynamoClient = createDynamoDbClient();
@@ -18,6 +22,7 @@ function getPurgeUseCase(): PurgeSoftDeletedMembersUseCase {
   const stores = createApiStores({
     s3,
     dynamo: dynamoClient,
+    database,
     bucketName,
     tables: {
       cloudInvites: cloudInvitesTable,

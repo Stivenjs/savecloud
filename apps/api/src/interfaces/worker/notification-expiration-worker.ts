@@ -1,6 +1,7 @@
 import { PurgeExpiredNotificationsUseCase } from "@application/use-cases/PurgeExpiredNotificationsUseCase";
 import { createDatabaseClient } from "@infrastructure/factories/databaseClientFactory";
 import { PostgresNotificationStore } from "@infrastructure/persistence/PostgresNotificationStore";
+import { purgeExpiredCloudInviteData } from "@infrastructure/persistence/PostgresCloudInviteRepository";
 import { readDatabaseConfiguration } from "@interfaces/configuration/databaseConfiguration";
 
 const DEFAULT_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -47,8 +48,12 @@ async function runWorker(signal: AbortSignal): Promise<void> {
       const startedAt = Date.now();
       try {
         const deleted = await useCase.execute();
+        const collaboration = await purgeExpiredCloudInviteData(sql, Math.floor(Date.now() / 1000));
         if (deleted > 0) {
           console.info(JSON.stringify({ msg: "notifications-expiration.purged", deleted }));
+        }
+        if (collaboration.invites > 0 || collaboration.sessions > 0) {
+          console.info(JSON.stringify({ msg: "cloud-collaboration-expiration.purged", ...collaboration }));
         }
       } catch (error) {
         console.error(

@@ -12,6 +12,7 @@ import { FastifyWebSocketNotifier } from "@infrastructure/websocket/FastifyWebSo
 import { startBunServer } from "@infrastructure/websocket/BunWebSocketServer";
 import { ensurePostgresNotificationSchema } from "@infrastructure/persistence/PostgresNotificationStore";
 import { ensurePostgresSaveFileIndexSchema } from "@infrastructure/persistence/PostgresSaveFileIndexRepository";
+import { ensurePostgresCloudInviteSchema } from "@infrastructure/persistence/PostgresCloudInviteRepository";
 import { readDatabaseConfiguration } from "@interfaces/configuration/databaseConfiguration";
 import { validateRuntimeConfiguration } from "@interfaces/configuration/runtimeConfiguration";
 import { buildApp } from "@interfaces/http/app";
@@ -94,7 +95,9 @@ function readTableConfiguration(usePostgresStorage: boolean): DynamoDbTablesConf
       ? undefined
       : resolveTableName("NOTIFICATIONS_TABLE", DEFAULT_TABLE_NAMES.notifications, useLocalDefaults),
     shareTokensTable: resolveTableName("SHARE_TOKENS_TABLE", DEFAULT_TABLE_NAMES.shareTokens, useLocalDefaults),
-    cloudInvitesTable: resolveTableName("CLOUD_INVITES_TABLE", DEFAULT_TABLE_NAMES.cloudInvites, useLocalDefaults),
+    cloudInvitesTable: usePostgresStorage
+      ? undefined
+      : resolveTableName("CLOUD_INVITES_TABLE", DEFAULT_TABLE_NAMES.cloudInvites, useLocalDefaults),
     gameInventoryTable: resolveTableName("GAME_INVENTORY_TABLE", DEFAULT_TABLE_NAMES.gameInventory, useLocalDefaults),
   };
 }
@@ -140,8 +143,10 @@ async function initializeStorage(
   if (database) {
     await ensurePostgresNotificationSchema(database);
     await ensurePostgresSaveFileIndexSchema(database);
+    await ensurePostgresCloudInviteSchema(database);
     console.log("[SaveCloud API] PostgreSQL notifications schema verified.");
     console.log("[SaveCloud API] PostgreSQL save file index schema verified.");
+    console.log("[SaveCloud API] PostgreSQL cloud collaboration schema verified.");
   }
 
   if (queue.client && queue.name) {

@@ -11,6 +11,7 @@ import { DynamoDbGameStatRepository } from "@infrastructure/persistence/DynamoDb
 import { DynamoDbNotificationStore } from "@infrastructure/persistence/DynamoDbNotificationStore";
 import { PostgresNotificationStore } from "@infrastructure/persistence/PostgresNotificationStore";
 import { PostgresSaveFileIndexRepository } from "@infrastructure/persistence/PostgresSaveFileIndexRepository";
+import { PostgresCloudInviteRepository } from "@infrastructure/persistence/PostgresCloudInviteRepository";
 import { DynamoDbSaveFileIndexRepository } from "@infrastructure/persistence/DynamoDbSaveFileIndexRepository";
 import { S3CloudInviteRepository } from "@infrastructure/persistence/S3CloudInviteRepository";
 import { S3GameInventoryRepository } from "@infrastructure/persistence/S3GameInventoryRepository";
@@ -82,8 +83,9 @@ function createSaveFileIndexRepository(input: ApiStoresFactoryInput) {
 
 /** Crea el repositorio de invitaciones y su alternativa respaldada por S3. */
 function createCloudInviteRepository(input: ApiStoresFactoryInput) {
-  const { s3, dynamo, bucketName, tables } = input;
+  const { s3, dynamo, bucketName, database, tables } = input;
   const fallback = new S3CloudInviteRepository(s3, bucketName);
+  if (database) return new PostgresCloudInviteRepository(database, fallback);
   const tableName = tables.cloudInvites;
 
   if (!tableName) return fallback;
@@ -130,10 +132,12 @@ export function createApiStores(input: ApiStoresFactoryInput) {
     clipRepository,
     notificationRepository,
     cloudInviteRepository,
-    accessSessionRepository: createOptionalTableRepository(
-      tables.cloudInvites,
-      (tableName) => new DynamoDbAccessSessionRepository(dynamo, tableName)
-    ),
+    accessSessionRepository: database
+      ? new PostgresCloudInviteRepository(database)
+      : createOptionalTableRepository(
+          tables.cloudInvites,
+          (tableName) => new DynamoDbAccessSessionRepository(dynamo, tableName)
+        ),
     gameInventoryRepository,
     gameStatRepository: createOptionalTableRepository(
       tables.gameStats,
