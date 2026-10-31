@@ -2,6 +2,7 @@ import type { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import type { S3Client } from "@aws-sdk/client-s3";
 import type { SQL } from "bun";
 import { ClipStore } from "@infrastructure/clips/ClipStore";
+import { PostgresClipStore } from "@infrastructure/clips/PostgresClipStore";
 import { DynamoDbClipStore } from "@infrastructure/clips/DynamoDbClipStore";
 import { DynamoDbCloudInviteRepository } from "@infrastructure/persistence/DynamoDbCloudInviteRepository";
 import { DynamoDbAccessSessionRepository } from "@infrastructure/persistence/DynamoDbAccessSessionRepository";
@@ -9,6 +10,9 @@ import { DynamoDbConnectionRepository } from "@infrastructure/persistence/Dynamo
 import { DynamoDbGameInventoryRepository } from "@infrastructure/persistence/DynamoDbGameInventoryRepository";
 import { DynamoDbGameStatRepository } from "@infrastructure/persistence/DynamoDbGameStatRepository";
 import { DynamoDbNotificationStore } from "@infrastructure/persistence/DynamoDbNotificationStore";
+import { PostgresConnectionRepository } from "@infrastructure/persistence/PostgresConnectionRepository";
+import { PostgresGameInventoryRepository } from "@infrastructure/persistence/PostgresGameInventoryRepository";
+import { PostgresGameStatRepository } from "@infrastructure/persistence/PostgresGameStatRepository";
 import { PostgresNotificationStore } from "@infrastructure/persistence/PostgresNotificationStore";
 import { PostgresSaveFileIndexRepository } from "@infrastructure/persistence/PostgresSaveFileIndexRepository";
 import { PostgresCloudInviteRepository } from "@infrastructure/persistence/PostgresCloudInviteRepository";
@@ -20,6 +24,7 @@ import { S3SaveRepository } from "@infrastructure/persistence/S3SaveRepository";
 import { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRepository";
 import { DynamoDbShareTokenStore } from "@infrastructure/share/DynamoDbShareTokenStore";
 import { ShareTokenS3 } from "@infrastructure/share/ShareTokenS3";
+import { PostgresShareTokenRepository } from "@infrastructure/share/PostgresShareTokenRepository";
 
 export interface ApiStoresFactoryInput {
   s3: S3Client;
@@ -43,18 +48,21 @@ export interface ApiStoresFactoryInput {
 
 /** Crea el repositorio de tokens compartidos según la tabla configurada. */
 function createShareTokenRepository(input: ApiStoresFactoryInput) {
-  const { dynamo, s3, bucketName, tables } = input;
+  const { dynamo, s3, bucketName, database, tables } = input;
   const tableName = tables.shareTokens;
+  const fallback = new ShareTokenS3(s3, bucketName);
 
-  if (!tableName) return new ShareTokenS3(s3, bucketName);
+  if (database) return new PostgresShareTokenRepository(database, fallback);
+  if (!tableName) return fallback;
   return new DynamoDbShareTokenStore(dynamo, tableName, s3, bucketName);
 }
 
 /** Crea el repositorio de clips según la tabla configurada. */
 function createClipRepository(input: ApiStoresFactoryInput) {
-  const { s3, dynamo, bucketName, presignS3, tables } = input;
+  const { s3, dynamo, bucketName, presignS3, database, tables } = input;
   const tableName = tables.clips;
 
+  if (database) return new PostgresClipStore(s3, bucketName, database, presignS3);
   if (!tableName) return new ClipStore(s3, bucketName, presignS3);
   return new DynamoDbClipStore(s3, bucketName, dynamo, tableName, presignS3);
 }
@@ -97,10 +105,11 @@ function createGameInventoryRepository(
   input: ApiStoresFactoryInput,
   cloudInviteRepository: ReturnType<typeof createCloudInviteRepository>
 ) {
-  const { s3, dynamo, bucketName, tables } = input;
+  const { s3, dynamo, bucketName, database, tables } = input;
   const fallback = new S3GameInventoryRepository(s3, bucketName, cloudInviteRepository);
   const tableName = tables.gameInventory;
 
+  if (database) return new PostgresGameInventoryRepository(database, cloudInviteRepository, fallback);
   if (!tableName) return fallback;
   return new DynamoDbGameInventoryRepository(dynamo, tableName, cloudInviteRepository, fallback);
 }
@@ -112,6 +121,26 @@ function createOptionalTableRepository<T>(
 ): T | undefined {
   if (!tableName) return undefined;
   return createRepository(tableName);
+}
+
+/** Crea el repositorio de estadísticas en PostgreSQL o DynamoDB. */
+function createGameStatRepository(input: ApiStoresFactoryInput) {
+  const { database, dynamo, tables } = input;
+  if (database) return new PostgresGameStatRepository(database);
+  return createOptionalTableRepository(
+    tables.gameStats,
+    (tableName) => new DynamoDbGameStatRepository(dynamo, tableName)
+  );
+}
+
+/** Crea el repositorio de conexiones en PostgreSQL o DynamoDB. */
+function createConnectionRepository(input: ApiStoresFactoryInput) {
+  const { database, dynamo, tables } = input;
+  if (database) return new PostgresConnectionRepository(database);
+  return createOptionalTableRepository(
+    tables.connections,
+    (tableName) => new DynamoDbConnectionRepository(dynamo, tableName)
+  );
 }
 
 /** Construye adaptadores de almacenamiento compartidos por los entrypoints HTTP. */
@@ -139,14 +168,8 @@ export function createApiStores(input: ApiStoresFactoryInput) {
           (tableName) => new DynamoDbAccessSessionRepository(dynamo, tableName)
         ),
     gameInventoryRepository,
-    gameStatRepository: createOptionalTableRepository(
-      tables.gameStats,
-      (tableName) => new DynamoDbGameStatRepository(dynamo, tableName)
-    ),
+    gameStatRepository: createGameStatRepository(input),
     saveFileIndexRepository: createSaveFileIndexRepository(input),
-    connectionRepository: createOptionalTableRepository(
-      tables.connections,
-      (tableName) => new DynamoDbConnectionRepository(dynamo, tableName)
-    ),
+    connectionRepository: createConnectionRepository(input),
   };
 }

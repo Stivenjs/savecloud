@@ -347,63 +347,6 @@ export async function ensurePostgresCloudInviteSchema(sql: SQL): Promise<void> {
   await sql`CREATE INDEX IF NOT EXISTS savecloud_access_sessions_expiration_idx ON savecloud_access_sessions (expires_at_epoch)`;
 }
 
-/** Elimina invitaciones y sesiones vencidas en lotes pequeños, como el TTL de DynamoDB.
- *
- * @param sql - Pool de conexiones PostgreSQL de la aplicación.
- * @param nowEpoch - Instante de referencia expresado en segundos desde Unix epoch.
- * @param batchSize - Cantidad máxima de registros que se bloquean por consulta.
- * @returns Cantidades de invitaciones y sesiones eliminadas.
- */
-export async function purgeExpiredCloudInviteData(
-  sql: SQL,
-  nowEpoch: number,
-  batchSize = 500
-): Promise<{ invites: number; sessions: number }> {
-  if (!Number.isSafeInteger(batchSize) || batchSize < 1) {
-    throw new Error("El tamaño del lote de expiración debe ser un entero positivo.");
-  }
-
-  let invites = 0;
-  let sessions = 0;
-  let deletedInBatch: Array<{ id: string }>;
-
-  do {
-    deletedInBatch = await sql<Array<{ id: string }>>`
-      WITH expired AS (
-        SELECT id FROM savecloud_cloud_invites
-        WHERE expires_at_epoch <= ${nowEpoch}
-        ORDER BY expires_at_epoch
-        LIMIT ${batchSize}
-        FOR UPDATE SKIP LOCKED
-      )
-      DELETE FROM savecloud_cloud_invites AS invites
-      USING expired
-      WHERE invites.id = expired.id
-      RETURNING invites.id
-    `;
-    invites += deletedInBatch.length;
-  } while (deletedInBatch.length === batchSize);
-
-  do {
-    deletedInBatch = await sql<Array<{ id: string }>>`
-      WITH expired AS (
-        SELECT session_id FROM savecloud_access_sessions
-        WHERE expires_at_epoch <= ${nowEpoch}
-        ORDER BY expires_at_epoch
-        LIMIT ${batchSize}
-        FOR UPDATE SKIP LOCKED
-      )
-      DELETE FROM savecloud_access_sessions AS sessions
-      USING expired
-      WHERE sessions.session_id = expired.session_id
-      RETURNING sessions.session_id AS id
-    `;
-    sessions += deletedInBatch.length;
-  } while (deletedInBatch.length === batchSize);
-
-  return { invites, sessions };
-}
-
 /** Convierte una fila PostgreSQL de invitación a la entidad de aplicación. */
 function mapInvite(row: InviteRow): CloudInvite {
   return {

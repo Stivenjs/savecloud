@@ -153,7 +153,7 @@ Este documento especifica todas las variables de entorno de **SaveCloud**, organ
 
 ### PostgreSQL de la API
 
-Docker Compose usa una conexión PostgreSQL compartida por la aplicación. PostgreSQL almacena las notificaciones, el índice de metadatos de archivos de guardado, las invitaciones, las membresías, los permisos de juegos compartidos y las sesiones de acceso; las demás tablas locales continúan en DynamoDB. La conexión y sus opciones tienen nombres genéricos para que otros adaptadores puedan reutilizarla. El worker de expiración elimina en lotes los datos vencidos. El asistente `scripts/docker-setup` genera `DATABASE_PASSWORD` si falta o conserva el valor de ejemplo.
+Docker Compose usa una conexión PostgreSQL compartida por la aplicación. PostgreSQL almacena todas las tablas de persistencia de la API: notificaciones, índice de archivos, estadísticas, conexiones, metadatos de clips, invitaciones, membresías, permisos de juegos compartidos, sesiones, inventarios, transferencias y tokens compartidos. Los archivos binarios siguen en S3/MinIO. DynamoDB Local permanece disponible como respaldo de los registros migrados; el despliegue AWS Serverless conserva DynamoDB. El worker de expiración elimina en lotes los datos vencidos. El asistente `scripts/docker-setup` genera `DATABASE_PASSWORD` si falta o conserva el valor de ejemplo.
 
 | Variable                               |  Requerida  | Defecto              | Propósito                                                                             |
 | :------------------------------------- | :---------: | :------------------- | :------------------------------------------------------------------------------------ |

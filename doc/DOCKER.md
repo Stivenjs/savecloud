@@ -4,23 +4,23 @@ Esta guía cubre el uso local y el despliegue de SaveCloud en un VPS. En el VPS,
 
 ## Arquitectura y exposición de servicios
 
-| Servicio                                             | Acceso desde contenedores | Acceso desde Internet                                                   |
-| ---------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------- |
-| Caddy                                                | `caddy:80/443`            | Puertos `80/tcp`, `443/tcp` y `443/udp`                                 |
-| SaveCloud API y WebSocket                            | `savecloud-api:3000`      | Solo a través de Caddy; en el host, `127.0.0.1:3000` para desarrollo    |
-| MinIO S3                                             | `minio:9000`              | Solo a través de `https://s3.<DOMAIN>` en Caddy; `127.0.0.1:9000` local |
-| Consola MinIO                                        | `minio:9001`              | Solo `127.0.0.1:9001`                                                   |
-| DynamoDB Local                                       | `dynamodb-local:8000`     | Solo `127.0.0.1:8000`                                                   |
-| PostgreSQL (notificaciones, archivos y colaboración) | `postgres:5432`           | Sin puerto publicado                                                    |
-| Cola de eventos S3                                   | `elasticmq:9324`          | Sin puertos publicados                                                  |
+| Servicio                            | Acceso desde contenedores | Acceso desde Internet                                                   |
+| ----------------------------------- | ------------------------- | ----------------------------------------------------------------------- |
+| Caddy                               | `caddy:80/443`            | Puertos `80/tcp`, `443/tcp` y `443/udp`                                 |
+| SaveCloud API y WebSocket           | `savecloud-api:3000`      | Solo a través de Caddy; en el host, `127.0.0.1:3000` para desarrollo    |
+| MinIO S3                            | `minio:9000`              | Solo a través de `https://s3.<DOMAIN>` en Caddy; `127.0.0.1:9000` local |
+| Consola MinIO                       | `minio:9001`              | Solo `127.0.0.1:9001`                                                   |
+| DynamoDB Local                      | `dynamodb-local:8000`     | Solo `127.0.0.1:8000`                                                   |
+| PostgreSQL (persistencia de la API) | `postgres:5432`           | Sin puerto publicado                                                    |
+| Cola de eventos S3                  | `elasticmq:9324`          | Sin puertos publicados                                                  |
 
-Compose crea una red privada y los servicios se encuentran por nombre DNS de servicio. La API usa `minio:9000`, `dynamodb-local:8000` y `postgres:5432`; no usa `localhost` para hablar con otros contenedores. DynamoDB Local conserva las demás tablas de la API; las invitaciones, membresías, ACL de juegos compartidos y sesiones de acceso usan PostgreSQL en Docker. Caddy no tiene una dependencia de arranque respecto de la API: reintenta las conexiones al upstream cuando la API termina de iniciar.
+Compose crea una red privada y los servicios se encuentran por nombre DNS de servicio. La API usa `minio:9000` y `postgres:5432`; no usa `localhost` para hablar con otros contenedores. DynamoDB Local y su volumen se conservan como respaldo de las tablas migradas, pero la API Docker usa PostgreSQL para esas lecturas y escrituras. Caddy no tiene una dependencia de arranque respecto de la API: reintenta las conexiones al upstream cuando la API termina de iniciar.
 
 Caddy termina TLS para `DOMAIN` y `s3.DOMAIN`, renueva los certificados y conserva su estado en los volúmenes `caddy_data` y `caddy_config`. El proxy inverso maneja automáticamente el upgrade de WebSocket. El cliente se conecta a `wss://<DOMAIN>/ws` cuando configura la URL `https://<DOMAIN>`.
 
 La API configura CORS con reflejo del origen solicitado (`@fastify/cors`, `origin: true`) y no usa cookies de sesión. `SYNC_GAMES_API_KEY` es la credencial del dueño; los invitados reciben tokens de acceso firmados de una hora y refresh tokens rotativos de treinta días, que el cliente guarda en el llavero del sistema. `ACCESS_TOKEN_SECRET` debe ser un secreto aleatorio distinto de la API key. El WebSocket autentica en el handshake mediante headers, nunca con credenciales en la URL. TLS se termina en Caddy; Fastify confía en los headers reenviados solo desde `TRUSTED_PROXY_CIDRS`.
 
-En Docker, las notificaciones, el índice de metadatos de archivos de guardado y los datos de invitaciones, membresías, ACL de juegos compartidos y sesiones de acceso se almacenan en PostgreSQL; las demás tablas continúan en DynamoDB Local. Las notificaciones vencen después de 30 días; el worker las elimina junto con invitaciones y sesiones vencidas en lotes cada seis horas. `s3-events-worker` procesa los eventos de MinIO en lotes, actualiza el índice en PostgreSQL y las estadísticas de juego en DynamoDB, e invalida las cachés de la API antes de confirmar los mensajes. En AWS Serverless se conservan DynamoDB y su TTL para estas tablas. ElasticMQ persiste la cola y los mensajes en `elasticmq_data` y usa long polling cuando la cola está vacía. En AWS se conserva el flujo S3 → SQS → Lambda.
+En Docker, PostgreSQL almacena notificaciones, índice de archivos, estadísticas, conexiones, metadatos de clips, invitaciones y membresías, permisos de juegos compartidos, sesiones de acceso, inventarios de dispositivos, transferencias y tokens compartidos. Los archivos binarios de guardado y clips permanecen en S3/MinIO. El worker de expiración elimina en lotes notificaciones, invitaciones, sesiones, conexiones y tokens vencidos cada seis horas. `s3-events-worker` actualiza el índice y las estadísticas en PostgreSQL e invalida las cachés de la API antes de confirmar los mensajes. DynamoDB Local se conserva como respaldo de los registros originales durante la validación. En AWS Serverless se mantienen los adaptadores DynamoDB y su TTL. ElasticMQ persiste la cola y los mensajes en `elasticmq_data` y usa long polling cuando la cola está vacía. En AWS se conserva el flujo S3 → SQS → Lambda.
 
 ## Requisitos del VPS
 
