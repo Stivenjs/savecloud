@@ -10,6 +10,7 @@ import { DynamoDbGameInventoryRepository } from "@infrastructure/persistence/Dyn
 import { DynamoDbGameStatRepository } from "@infrastructure/persistence/DynamoDbGameStatRepository";
 import { DynamoDbNotificationStore } from "@infrastructure/persistence/DynamoDbNotificationStore";
 import { PostgresNotificationStore } from "@infrastructure/persistence/PostgresNotificationStore";
+import { PostgresSaveFileIndexRepository } from "@infrastructure/persistence/PostgresSaveFileIndexRepository";
 import { DynamoDbSaveFileIndexRepository } from "@infrastructure/persistence/DynamoDbSaveFileIndexRepository";
 import { S3CloudInviteRepository } from "@infrastructure/persistence/S3CloudInviteRepository";
 import { S3GameInventoryRepository } from "@infrastructure/persistence/S3GameInventoryRepository";
@@ -66,6 +67,17 @@ function createNotificationRepository(input: ApiStoresFactoryInput) {
   const tableName = tables.notifications;
   if (tableName) return new DynamoDbNotificationStore(dynamo, tableName, s3, bucketName);
   return new S3NotificationStore(s3, bucketName);
+}
+
+/** Crea el índice de archivos en PostgreSQL o DynamoDB según el almacén configurado. */
+function createSaveFileIndexRepository(input: ApiStoresFactoryInput) {
+  const { database, dynamo, tables } = input;
+
+  if (database) return new PostgresSaveFileIndexRepository(database);
+  return createOptionalTableRepository(
+    tables.saveFilesIndex,
+    (tableName) => new DynamoDbSaveFileIndexRepository(dynamo, tableName)
+  );
 }
 
 /** Crea el repositorio de invitaciones y su alternativa respaldada por S3. */
@@ -127,10 +139,7 @@ export function createApiStores(input: ApiStoresFactoryInput) {
       tables.gameStats,
       (tableName) => new DynamoDbGameStatRepository(dynamo, tableName)
     ),
-    saveFileIndexRepository: createOptionalTableRepository(
-      tables.saveFilesIndex,
-      (tableName) => new DynamoDbSaveFileIndexRepository(dynamo, tableName)
-    ),
+    saveFileIndexRepository: createSaveFileIndexRepository(input),
     connectionRepository: createOptionalTableRepository(
       tables.connections,
       (tableName) => new DynamoDbConnectionRepository(dynamo, tableName)

@@ -11,6 +11,7 @@ import { createS3EventQueueClient, enqueueS3Events, ensureS3EventQueue } from "@
 import { FastifyWebSocketNotifier } from "@infrastructure/websocket/FastifyWebSocketNotifier";
 import { startBunServer } from "@infrastructure/websocket/BunWebSocketServer";
 import { ensurePostgresNotificationSchema } from "@infrastructure/persistence/PostgresNotificationStore";
+import { ensurePostgresSaveFileIndexSchema } from "@infrastructure/persistence/PostgresSaveFileIndexRepository";
 import { readDatabaseConfiguration } from "@interfaces/configuration/databaseConfiguration";
 import { validateRuntimeConfiguration } from "@interfaces/configuration/runtimeConfiguration";
 import { buildApp } from "@interfaces/http/app";
@@ -79,19 +80,17 @@ function resolveTableName(
 }
 
 /** Lee todos los nombres de tablas necesarios para construir los repositorios de la API. */
-function readTableConfiguration(usePostgresForNotifications: boolean): DynamoDbTablesConfig {
+function readTableConfiguration(usePostgresStorage: boolean): DynamoDbTablesConfig {
   const useLocalDefaults = isDynamoDbLocal();
 
   return {
     gameStatsTable: resolveTableName("GAME_STATS_TABLE", DEFAULT_TABLE_NAMES.gameStats, useLocalDefaults),
-    saveFilesIndexTable: resolveTableName(
-      "SAVE_FILES_INDEX_TABLE",
-      DEFAULT_TABLE_NAMES.saveFilesIndex,
-      useLocalDefaults
-    ),
+    saveFilesIndexTable: usePostgresStorage
+      ? undefined
+      : resolveTableName("SAVE_FILES_INDEX_TABLE", DEFAULT_TABLE_NAMES.saveFilesIndex, useLocalDefaults),
     connectionsTable: resolveTableName("CONNECTIONS_TABLE", DEFAULT_TABLE_NAMES.connections, useLocalDefaults),
     clipsTable: resolveTableName("CLIPS_TABLE", DEFAULT_TABLE_NAMES.clips, useLocalDefaults),
-    notificationsTable: usePostgresForNotifications
+    notificationsTable: usePostgresStorage
       ? undefined
       : resolveTableName("NOTIFICATIONS_TABLE", DEFAULT_TABLE_NAMES.notifications, useLocalDefaults),
     shareTokensTable: resolveTableName("SHARE_TOKENS_TABLE", DEFAULT_TABLE_NAMES.shareTokens, useLocalDefaults),
@@ -140,7 +139,9 @@ async function initializeStorage(
 ): Promise<void> {
   if (database) {
     await ensurePostgresNotificationSchema(database);
+    await ensurePostgresSaveFileIndexSchema(database);
     console.log("[SaveCloud API] PostgreSQL notifications schema verified.");
+    console.log("[SaveCloud API] PostgreSQL save file index schema verified.");
   }
 
   if (queue.client && queue.name) {

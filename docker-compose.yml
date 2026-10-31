@@ -57,7 +57,6 @@ services:
       - CONNECTIONS_TABLE=savecloud-connections
       - GAME_INVENTORY_TABLE=savecloud-game-inventory
       - GAME_STATS_TABLE=savecloud-game-stats
-      - SAVE_FILES_INDEX_TABLE=savecloud-save-files-index
       - SHARE_TOKENS_TABLE=savecloud-share-tokens
     depends_on:
       minio:
