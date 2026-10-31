@@ -10,7 +10,7 @@ Este documento especifica todas las variables de entorno de **SaveCloud**, organ
 2. [Seguridad y Autenticación](#2-seguridad-y-autenticación)
 3. [Red, Dominios y Proxies](#3-red-dominios-y-proxies)
 4. [Almacenamiento de Objetos (S3 y MinIO)](#4-almacenamiento-de-objetos-s3-y-minio)
-5. [Base de Datos (DynamoDB / DynamoDB Local)](#5-base-de-datos-dynamodb--dynamodb-local)
+5. [Bases de datos (PostgreSQL y DynamoDB en AWS)](#5-bases-de-datos-postgresql-y-dynamodb-en-aws)
 6. [Colas y Procesamiento Asíncrono (SQS y Workers)](#6-colas-y-procesamiento-asíncrono-sqs-y-workers)
 7. [Observabilidad y Registro (Logs y Métricas)](#7-observabilidad-y-registro-logs-y-métricas)
 8. [Pruebas de Carga y Rendimiento (K6)](#8-pruebas-de-carga-y-rendimiento-k6)
@@ -149,53 +149,54 @@ Este documento especifica todas las variables de entorno de **SaveCloud**, organ
 
 ---
 
-## 5. Bases de Datos (PostgreSQL y DynamoDB Local)
+## 5. Bases de datos (PostgreSQL y DynamoDB en AWS)
 
 ### PostgreSQL de la API
 
-Docker Compose usa una conexión PostgreSQL compartida por la aplicación. PostgreSQL almacena todas las tablas de persistencia de la API: notificaciones, índice de archivos, estadísticas, conexiones, metadatos de clips, invitaciones, membresías, permisos de juegos compartidos, sesiones, inventarios, transferencias y tokens compartidos. Los archivos binarios siguen en S3/MinIO. DynamoDB Local permanece disponible como respaldo de los registros migrados; el despliegue AWS Serverless conserva DynamoDB. El worker de expiración elimina en lotes los datos vencidos. El asistente `scripts/docker-setup` genera `DATABASE_PASSWORD` si falta o conserva el valor de ejemplo.
+Docker Compose usa PostgreSQL para todas las tablas de persistencia de la API: notificaciones, índice de archivos, estadísticas, conexiones, metadatos de clips, invitaciones, membresías, permisos de juegos compartidos, sesiones, inventarios, transferencias y tokens compartidos. Los archivos binarios siguen en S3/MinIO. DynamoDB se conserva para los despliegues AWS Serverless y para entornos de desarrollo que lo configuren explícitamente; Docker Compose no inicia ni se conecta a DynamoDB. El worker de expiración elimina en lotes los datos vencidos. El asistente `scripts/docker-setup` genera `DATABASE_PASSWORD` si falta o conserva el valor de ejemplo.
 
-| Variable                               |  Requerida  | Defecto              | Propósito                                                                             |
-| :------------------------------------- | :---------: | :------------------- | :------------------------------------------------------------------------------------ |
-| `DATABASE_URL`                         | Alternativa | —                    | URL `postgres://` o `postgresql://`; si se define, reemplaza los campos individuales. |
-| `DATABASE_HOST`                        |   Docker    | `postgres`           | Nombre DNS del servicio PostgreSQL.                                                   |
-| `DATABASE_PORT`                        |  Opcional   | `5432`               | Puerto TCP PostgreSQL.                                                                |
-| `DATABASE_USER`                        |  Opcional   | `savecloud`          | Usuario PostgreSQL.                                                                   |
-| `DATABASE_PASSWORD`                    |   Docker    | Sin defecto          | Contraseña PostgreSQL.                                                                |
-| `DATABASE_NAME`                        |  Opcional   | `savecloud`          | Base de datos PostgreSQL de la aplicación.                                            |
-| `DATABASE_POOL_SIZE`                   |  Opcional   | `10`                 | Máximo de conexiones por proceso API.                                                 |
-| `NOTIFICATIONS_EXPIRATION_INTERVAL_MS` |  Opcional   | `21600000` (6 horas) | Intervalo entre ciclos de limpieza de notificaciones vencidas.                        |
+| Variable                          |  Requerida  | Defecto              | Propósito                                                                             |
+| :-------------------------------- | :---------: | :------------------- | :------------------------------------------------------------------------------------ |
+| `DATABASE_URL`                    | Alternativa | —                    | URL `postgres://` o `postgresql://`; si se define, reemplaza los campos individuales. |
+| `DATABASE_HOST`                   |   Docker    | `postgres`           | Nombre DNS del servicio PostgreSQL.                                                   |
+| `DATABASE_PORT`                   |  Opcional   | `5432`               | Puerto TCP PostgreSQL.                                                                |
+| `DATABASE_USER`                   |  Opcional   | `savecloud`          | Usuario PostgreSQL.                                                                   |
+| `DATABASE_PASSWORD`               |   Docker    | Sin defecto          | Contraseña PostgreSQL.                                                                |
+| `DATABASE_NAME`                   |  Opcional   | `savecloud`          | Base de datos PostgreSQL de la aplicación.                                            |
+| `DATABASE_POOL_SIZE`              |  Opcional   | `10`                 | Máximo de conexiones por proceso API.                                                 |
+| `POSTGRES_EXPIRATION_INTERVAL_MS` |  Opcional   | `21600000` (6 horas) | Intervalo entre ciclos de limpieza de registros PostgreSQL vencidos.                  |
+| `MEMBER_PURGE_INTERVAL_MS`        |  Opcional   | `3600000` (1 hora)   | Intervalo entre ciclos de eliminación definitiva de membresías vencidas y sus saves.  |
 
-Los registros expiran a los 30 días. La API deja de devolverlos al vencer y el worker dedicado los elimina por lotes.
+Las notificaciones expiran a los 30 días. La API deja de devolverlas al vencer y el worker de mantenimiento las elimina por lotes junto con otros registros PostgreSQL vencidos. El mismo proceso purga las membresías cuyo período de gracia terminó, incluyendo sus saves en S3; cada tarea conserva su propio intervalo y manejo de errores.
 
-### DynamoDB Local
+### DynamoDB para AWS y desarrollo explícito
 
 ### `DYNAMODB_ENDPOINT`
 
-- **Requerida en:** Docker Compose y desarrollo local.
-- **Defecto en Docker:** `http://dynamodb-local:8000`.
-- **Descripción:** Si está presente, la API sabe que está en entorno autohospedado/local y auto-crea las tablas de DynamoDB necesarias al iniciar. En AWS se omite para usar DynamoDB administrado por IAM.
+- **Requerida en:** Solo en entornos locales que elijan usar DynamoDB Local.
+- **Defecto:** Sin valor; Docker Compose no lo define.
+- **Descripción:** Si se configura explícitamente, el runtime usa ese endpoint y crea las tablas configuradas. En AWS se omite para usar DynamoDB administrado por IAM.
 
 ### `DYNAMODB_ACCESS_KEY_ID` & `DYNAMODB_SECRET_ACCESS_KEY`
 
-- **Requerida en:** Docker Compose y local.
+- **Requerida en:** Solo al usar DynamoDB Local.
 - **Defecto:** `local`.
 - **Descripción:** Credenciales ficticias exigidas por el SDK de AWS al interactuar con DynamoDB Local.
 
 ### Tablas de DynamoDB (Variables de Nombres)
 
-En Docker Compose las variables de las tablas que siguen toman nombres por defecto predecibles. Las notificaciones y el índice de archivos ya no usan DynamoDB en Docker; AWS Serverless continúa usando `NOTIFICATIONS_TABLE` y `SAVE_FILES_INDEX_TABLE`. En AWS Serverless los nombres se inyectan desde `serverless.yml`:
+Estas variables configuran tablas usadas por los adaptadores DynamoDB de AWS Serverless o por entornos de desarrollo configurados explícitamente. Docker Compose no define nombres de tablas DynamoDB y no depende de este servicio. En AWS Serverless los nombres se inyectan desde `serverless.yml`:
 
-| Variable de Entorno          | Valor por Defecto en Docker | Propósito                                                                                            |
-| :--------------------------- | :-------------------------- | :--------------------------------------------------------------------------------------------------- |
-| **`CLOUD_INVITES_TABLE`**    | `savecloud-cloud-invites`   | Invitaciones, membresías de nubes compartidas y **sesiones revocables (`sc2`/`scr1`)**.              |
-| **`SAVE_FILES_INDEX_TABLE`** | No se usa                   | Índice de archivos de save en AWS Serverless; incluye rutas y metadatos de integridad.               |
-| **`GAME_STATS_TABLE`**       | `savecloud-game-stats`      | Estadísticas por juego (horas jugadas, número de sincronizaciones, última actividad).                |
-| **`CONNECTIONS_TABLE`**      | `savecloud-connections`     | IDs de conexión de WebSockets para presencia e invitaciones activas.                                 |
-| **`NOTIFICATIONS_TABLE`**    | No se usa                   | Tabla de notificaciones en AWS Lambda y origen de datos para migrar instalaciones Docker existentes. |
-| **`SHARE_TOKENS_TABLE`**     | `savecloud-share-tokens`    | Enlaces públicos temporales para compartir saves específicos con amigos.                             |
-| **`GAME_INVENTORY_TABLE`**   | `savecloud-game-inventory`  | Catálogo de juegos detectados y sincronizados por cada usuario.                                      |
-| **`CLIPS_TABLE`**            | `savecloud-clips`           | Metadatos de clips de video y capturas vinculadas a saves.                                           |
+| Variable de Entorno          | Valor por Defecto AWS        | Propósito                                                                           |
+| :--------------------------- | :--------------------------- | :---------------------------------------------------------------------------------- |
+| **`CLOUD_INVITES_TABLE`**    | `savecloud-cloud-invites`    | Invitaciones, membresías de nubes compartidas y sesiones revocables (`sc2`/`scr1`). |
+| **`SAVE_FILES_INDEX_TABLE`** | `savecloud-save-files-index` | Índice de archivos de guardado con rutas y metadatos de integridad.                 |
+| **`GAME_STATS_TABLE`**       | `savecloud-game-stats`       | Estadísticas de archivos por juego.                                                 |
+| **`CONNECTIONS_TABLE`**      | `savecloud-connections`      | IDs de conexión de WebSockets para presencia e invitaciones activas.                |
+| **`NOTIFICATIONS_TABLE`**    | `savecloud-notifications`    | Notificaciones de usuarios y expiración TTL.                                        |
+| **`SHARE_TOKENS_TABLE`**     | `savecloud-share-tokens`     | Enlaces públicos temporales para compartir saves específicos con amigos.            |
+| **`GAME_INVENTORY_TABLE`**   | `savecloud-game-inventory`   | Inventarios de dispositivos y sesiones temporales de transferencia.                 |
+| **`CLIPS_TABLE`**            | `savecloud-clips`            | Metadatos de clips de video y capturas vinculadas a saves.                          |
 
 ---
 
@@ -294,7 +295,7 @@ Estas variables aplican al entorno de ejecución de la aplicación de escritorio
 | **`OBJECT_STORAGE_SECRET_KEY`** | **Obligatoria** |       N/A       |    Opcional     | Contraseña de MinIO.                               |
 | **`MINIO_LICENSE_PATH`**        | **Obligatoria** |       N/A       |    Opcional     | Licencia de MinIO AIStor.                          |
 | **`BUCKET_NAME`**               |   Automática    |   Automática    |   Automática    | Nombre del bucket para partidas y archivos.        |
-| **`DYNAMODB_ENDPOINT`**         |   Automática    |       N/A       |   Automática    | Endpoint local para auto-crear tablas DynamoDB.    |
+| **`DYNAMODB_ENDPOINT`**         |       N/A       |       N/A       |    Opcional     | Endpoint DynamoDB para desarrollo local explícito. |
 | **`DATABASE_PASSWORD`**         | **Obligatoria** |       N/A       |    Opcional     | Contraseña PostgreSQL del entorno Docker.          |
 | **`DATABASE_URL`**              |    Opcional     |       N/A       |    Opcional     | URL PostgreSQL alternativa a `DATABASE_*`.         |
 | **`API_PORT`**                  |    Opcional     |       N/A       |    Opcional     | Puerto de loopback en el host (`3000`).            |

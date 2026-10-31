@@ -109,10 +109,6 @@
         "label": "Yuzu (Switch)"
       },
       {
-        "path": "%APPDATA%\\Ryujinx\\bis\\user\\save",
-        "label": "Ryujinx (Switch)"
-      },
-      {
         "path": "%LOCALAPPDATA%\\Suyu\\nand\\user\\save",
         "label": "Suyu (Switch)"
       }

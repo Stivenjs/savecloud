@@ -97,6 +97,29 @@ export class DynamoDbSaveFileIndexRepository implements SaveFileIndexRepository 
       .filter((item): item is GameSave => item !== null);
   }
 
+  async listBackupsByUserAndGame(userId: string, gameId: string): Promise<GameSave[]> {
+    const prefix = `${userId}/${gameId}/backups/`;
+    const items: Record<string, unknown>[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+    do {
+      const res = await this.docClient.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          KeyConditionExpression: "userId = :u AND begins_with(#k, :prefix)",
+          ProjectionExpression: "userId, #k, gameId, #s, #lm",
+          ExpressionAttributeNames: { "#k": "objectKey", "#s": "size", "#lm": "lastModified" },
+          ExpressionAttributeValues: { ":u": userId, ":prefix": prefix },
+          ExclusiveStartKey: lastEvaluatedKey,
+        })
+      );
+      if (res.Items) items.push(...(res.Items as Record<string, unknown>[]));
+      lastEvaluatedKey = res.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+    return items
+      .map((item) => this.mapItemToGameSave(userId, item, gameId))
+      .filter((item): item is GameSave => item !== null);
+  }
+
   async getByObjectKey(userId: string, objectKey: string): Promise<GameSave | null> {
     const res = await this.docClient.send(
       new GetCommand({

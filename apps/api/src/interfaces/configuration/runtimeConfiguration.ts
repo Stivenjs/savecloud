@@ -19,20 +19,7 @@ const REQUIRED_SETTINGS: Record<RuntimeDeploymentMode, string[]> = {
     "CLOUD_INVITES_TABLE",
     "GAME_INVENTORY_TABLE",
   ],
-  "self-hosted": [
-    "AWS_REGION",
-    "BUCKET_NAME",
-    "API_KEY",
-    "ACCESS_TOKEN_SECRET",
-    "DOWNLOAD_BASE_URL",
-    "GAME_STATS_TABLE",
-    "SAVE_FILES_INDEX_TABLE",
-    "CONNECTIONS_TABLE",
-    "CLIPS_TABLE",
-    "SHARE_TOKENS_TABLE",
-    "CLOUD_INVITES_TABLE",
-    "GAME_INVENTORY_TABLE",
-  ],
+  "self-hosted": ["AWS_REGION", "BUCKET_NAME", "API_KEY", "ACCESS_TOKEN_SECRET"],
 };
 
 /** Valida las variables y URLs que cada modo necesita antes de construir sus adaptadores. */

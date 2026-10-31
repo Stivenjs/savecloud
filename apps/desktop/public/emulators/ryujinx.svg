@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="960" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#15201F"/>
+      <stop offset="1" stop-color="#273C38"/>
+    </linearGradient>
+    <linearGradient id="rail" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#B6F2D5"/>
+      <stop offset="1" stop-color="#60CBA1"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="420" rx="28" fill="url(#bg)"/>
+  <path d="M620 0h340v420H620z" fill="#FFFFFF" fill-opacity=".025"/>
+  <circle cx="788" cy="207" r="123" stroke="#B6F2D5" stroke-opacity=".12" stroke-width="2"/>
+  <circle cx="788" cy="207" r="91" stroke="#B6F2D5" stroke-opacity=".1"/>
+  <rect x="696" y="108" width="51" height="198" rx="25.5" fill="url(#rail)"/>
+  <rect x="829" y="108" width="51" height="198" rx="25.5" fill="#E9F4EE"/>
+  <circle cx="721.5" cy="151" r="5.5" fill="#19312A"/>
+  <circle cx="721.5" cy="174" r="5.5" fill="#19312A"/>
+  <circle cx="855" cy="246" r="5.5" fill="#30463E"/>
+  <circle cx="855" cy="269" r="5.5" fill="#30463E"/>
+  <path d="M854 148v25m-12.5-12.5h25" stroke="#30463E" stroke-width="4" stroke-linecap="round"/>
+  <text x="112" y="88" fill="#B6F2D5" font-family="Arial,sans-serif" font-size="15" font-weight="700" letter-spacing="3">NINTENDO SWITCH</text>
+  <text x="108" y="218" fill="#F2F5F3" font-family="Arial,sans-serif" font-size="70" font-weight="700" letter-spacing="-3">RYUJINX</text>
+  <path d="M112 228h78" stroke="#80DDB8" stroke-width="4" stroke-linecap="round"/>
+  <text x="112" y="274" fill="#B6C7C0" font-family="Arial,sans-serif" font-size="20">SaveCloud emulator catalog</text>
+</svg>

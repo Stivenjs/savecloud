@@ -115,12 +115,11 @@ pub struct AppSettings {
     /// Idioma preferido de la aplicación ("es", "en", etc.).
     #[serde(default)]
     pub language: Option<String>,
-    /// Ruta al ejecutable de Ryujinx
     #[serde(default)]
-    pub ryujinx_path: Option<String>,
-    /// Ruta al ejecutable de ShadPS4
-    #[serde(default)]
-    pub shadps4_path: Option<String>,
+    pub emulator_paths: BTreeMap<String, String>,
+    /// Campos antiguos capturados para migraciones hacia metadata dinámica.
+    #[serde(flatten, default, skip_serializing)]
+    pub(crate) legacy_fields: BTreeMap<String, serde_json::Value>,
     /// Si el sonido del overlay en juego está habilitado.
     #[serde(default = "default_true")]
     pub overlay_sound_enabled: bool,
@@ -320,9 +319,10 @@ pub struct Config {
     #[serde(default)]
     pub disable_hardware_acceleration: bool,
     #[serde(default)]
-    pub ryujinx_path: Option<String>,
-    #[serde(default)]
-    pub shadps4_path: Option<String>,
+    pub emulator_paths: BTreeMap<String, String>,
+    /// Campos de configuraciones antiguas, usados únicamente durante la importación.
+    #[serde(flatten, default, skip_serializing)]
+    pub(crate) legacy_fields: BTreeMap<String, serde_json::Value>,
     #[serde(default = "default_true")]
     pub overlay_sound_enabled: bool,
     #[serde(default = "default_overlay_volume")]
@@ -406,9 +406,7 @@ pub struct ConfigDto {
     #[serde(default)]
     pub language: Option<String>,
     #[serde(default)]
-    pub ryujinx_path: Option<String>,
-    #[serde(default)]
-    pub shadps4_path: Option<String>,
+    pub emulator_paths: BTreeMap<String, String>,
     #[serde(default = "default_true")]
     pub overlay_sound_enabled: bool,
     #[serde(default = "default_overlay_volume")]

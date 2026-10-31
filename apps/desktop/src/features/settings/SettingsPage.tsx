@@ -43,6 +43,7 @@ import {
 import {
   SourcesTabSkeleton,
   IntegrationsTabSkeleton,
+  EmulatorsTabSkeleton,
   CloudTabSkeleton,
   PluginsTabSkeleton,
   ObservabilityCardSkeleton,
@@ -79,8 +80,8 @@ const SourceInstallSettingsCardLazy = lazy(() =>
 const ProxySettingsCardLazy = lazy(() =>
   import("@features/settings/ProxySettingsCard").then((m) => ({ default: m.ProxySettingsCard }))
 );
-const EmulatorIntegrationsCardLazy = lazy(() =>
-  import("@features/settings/EmulatorIntegrationsCard").then((m) => ({ default: m.EmulatorIntegrationsCard }))
+const EmulatorMarketplacePageLazy = lazy(() =>
+  import("@features/emulators/EmulatorMarketplacePage").then((m) => ({ default: m.EmulatorMarketplacePage }))
 );
 const VoiceCommandsCardLazy = lazy(() =>
   import("@features/voice-commands").then((m) => ({ default: m.VoiceCommandsCard }))
@@ -119,6 +120,7 @@ const SETTINGS_TABS: Array<{
   { key: "big-picture", label: "Big Picture", icon: <Monitor size={17} className="opacity-90" /> },
   { key: "sources", label: "Fuentes", icon: <Download size={17} className="opacity-90" /> },
   { key: "integrations", label: "Integraciones", icon: <Bell size={17} className="opacity-90" /> },
+  { key: "emulators", label: "Emuladores", icon: <Gamepad2 size={17} className="opacity-90" /> },
   { key: "gamepad", label: "Mando", icon: <Gamepad2 size={17} className="opacity-90" /> },
   { key: "plugins", label: "Plugins", icon: <Blocks size={17} className="opacity-90" /> },
   { key: "updates", label: "Versiones", icon: <RefreshCw size={17} className="opacity-90" /> },
@@ -407,8 +409,13 @@ export function SettingsPage({ compactWindowMode = false, initialSelectedTab = n
                 onTestNotification={handleTestNotification}
               />
               <VoiceCommandsCardLazy />
-              <EmulatorIntegrationsCardLazy />
             </div>
+          </Suspense>
+        );
+      case "emulators":
+        return (
+          <Suspense fallback={<EmulatorsTabSkeleton />}>
+            <EmulatorMarketplacePageLazy />
           </Suspense>
         );
       case "gamepad":

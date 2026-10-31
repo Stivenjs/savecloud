@@ -13,14 +13,14 @@ export interface PurgeSoftDeletedMembersOutput {
  *
  * Para cada membresía con `scheduledDeletionAt <= now`:
  *  1. Borra todos los archivos S3 del miembro (`userId/` prefix completo).
- *  2. Borra todos los registros GAME_SHARE en DynamoDB para ese par host/member.
- *  3. Elimina la entrada MEMBERSHIP de DynamoDB.
+ *  2. Borra los permisos de juegos compartidos para ese par host/member.
+ *  3. Elimina el registro de membresía.
  *
  * Cada membresía se procesa de forma independiente: si una falla, el resto
  * continúa y el worker volverá a intentarla en el siguiente ciclo.
  *
  * @remarks
- * Solo debe invocarse desde el worker de purga (member-purge-worker.ts),
+ * Solo debe invocarse desde una tarea de mantenimiento,
  * nunca desde rutas HTTP. Es una operación irreversible.
  */
 export class PurgeSoftDeletedMembersUseCase {

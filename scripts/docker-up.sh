@@ -1,7 +1,11 @@
 #!/usr/bin/env sh
 set -eu
 
-docker compose up -d --build
+docker compose up -d --build --remove-orphans
+legacy_dynamo_image=$(docker image ls --quiet amazon/dynamodb-local:latest)
+if [ -n "$legacy_dynamo_image" ]; then
+  docker image rm amazon/dynamodb-local:latest >/dev/null
+fi
 
 deadline=$(( $(date +%s) + 120 ))
 ready=false
@@ -61,12 +65,10 @@ SaveCloud está listo. Endpoints locales:
   WebSocket:            ws://localhost:${api_port}/ws
   S3 público/presigned: ${s3_public_endpoint}
   Consola AIStor:       http://localhost:9001
-  DynamoDB Local:       http://localhost:8000
 
 Endpoints internos Docker:
   API:                  savecloud-api:3000
   S3:                   minio:9000
-  DynamoDB:             dynamodb-local:8000
 EOF
 else
   cat <<EOF
@@ -79,11 +81,9 @@ SaveCloud está listo. URLs públicas:
 Endpoints disponibles solo desde el VPS:
   API local:            http://127.0.0.1:${api_port}
   Consola AIStor:       http://127.0.0.1:9001
-  DynamoDB Local:       http://127.0.0.1:8000
 
 Endpoints internos Docker:
   API:                  savecloud-api:3000
   S3:                   minio:9000
-  DynamoDB:             dynamodb-local:8000
 EOF
 fi

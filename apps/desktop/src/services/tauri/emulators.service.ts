@@ -24,6 +24,18 @@ export function setEmulatorPath(emulator: string, path: string): Promise<void> {
   return invoke("set_emulator_path", { emulator, path });
 }
 
-export function downloadEmulator(emulator: string): Promise<void> {
-  return invoke("download_emulator", { emulator });
+export interface EmulatorDownloadRequest {
+  emulator: string;
+  downloadUrl: string;
+  fileName: string;
+  artifactType: "archive" | "appImage";
+}
+
+export function downloadEmulator(request: EmulatorDownloadRequest): Promise<void> {
+  return invoke("download_emulator", {
+    emulator: request.emulator,
+    downloadUrl: request.downloadUrl,
+    fileName: request.fileName,
+    artifactType: request.artifactType,
+  });
 }

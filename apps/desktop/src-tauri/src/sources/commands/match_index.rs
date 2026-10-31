@@ -25,8 +25,12 @@ static MATCH_CACHE: Lazy<Arc<RwLock<HashMap<String, Vec<SourceBestMatch>>>>> =
 pub fn load_stopwords() -> Result<Vec<u64>, String> {
     let raw = include_str!("../stopwords.json");
 
-    let words: Vec<String> =
+    let mut words: Vec<String> =
         serde_json::from_str(raw).map_err(|e| format!("stopwords.json inválido: {e}"))?;
+    for emulator in crate::commands::emulators::catalog::all()? {
+        let normalized_name = normalize_title(&emulator.name);
+        words.extend(normalized_name.split_whitespace().map(str::to_string));
+    }
 
     let mut hashes: Vec<u64> = words.iter().map(|w| fnv1a(&normalize_title(w))).collect();
     hashes.sort_unstable();

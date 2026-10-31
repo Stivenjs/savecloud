@@ -146,7 +146,7 @@ export function OverlaySoundCardSkeleton() {
 
 /**
  * Skeleton para la pestaña "Integraciones".
- * Replica exactamente AudioOutputSettingsCard, NotificationsCard, VoiceCommandsCard y EmulatorIntegrationsCard.
+ * Replica AudioOutputSettingsCard, NotificationsCard y VoiceCommandsCard.
  */
 export function IntegrationsTabSkeleton() {
   return (
@@ -187,39 +187,11 @@ export function IntegrationsTabSkeleton() {
           </div>
         </CardBody>
       </Card>
-
-      {/* EmulatorIntegrationsCard Skeleton */}
-      <Card className="shadow-sm border border-default-200/60">
-        <CardBody className="gap-4 p-5">
-          <div className="flex items-start gap-3">
-            <Skeleton className="h-10 w-10 shrink-0 rounded-xl" />
-            <div className="space-y-1.5 flex-1">
-              <Skeleton className="h-4 w-48 rounded-md" />
-              <Skeleton className="h-3 w-80 rounded-md" />
-            </div>
-          </div>
-          <div className="space-y-2 pt-1">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between p-3 rounded-xl bg-default-50/70 border border-default-200/50">
-                <div className="flex items-center gap-3">
-                  <Skeleton className="h-8 w-8 rounded-lg" />
-                  <div className="space-y-1">
-                    <Skeleton className="h-3.5 w-28 rounded-md" />
-                    <Skeleton className="h-2.5 w-44 rounded-md" />
-                  </div>
-                </div>
-                <Skeleton className="h-7 w-20 rounded-lg" />
-              </div>
-            ))}
-          </div>
-        </CardBody>
-      </Card>
     </div>
   );
 }
 
+/** Skeleton del catálogo de emuladores mientras se consulta el estado instalado. */
 /**
  * Skeleton para la pestaña "Nube".
  * Replica GameInventorySettingsCard, resumen KPI de 3 columnas y tabla de partidas en la nube.
@@ -295,6 +267,33 @@ export function CloudTabSkeleton() {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Skeleton de la pestaña de emuladores mientras carga el catálogo. */
+export function EmulatorsTabSkeleton() {
+  return (
+    <div className="space-y-5 animate-pulse">
+      <div className="space-y-2">
+        <Skeleton className="h-3 w-28 rounded-md" />
+        <Skeleton className="h-7 w-64 rounded-md" />
+        <Skeleton className="h-4 w-full max-w-2xl rounded-md" />
+      </div>
+      <Skeleton className="h-10 w-full max-w-md rounded-xl" />
+      <div className="grid gap-4 xl:grid-cols-2">
+        {[0, 1].map((item) => (
+          <Card key={item} className="overflow-hidden border border-default-200/60 shadow-sm">
+            <Skeleton className="h-36 w-full rounded-none" />
+            <CardBody className="gap-3 p-5">
+              <Skeleton className="h-5 w-36 rounded-md" />
+              <Skeleton className="h-3 w-full rounded-md" />
+              <Skeleton className="h-3 w-3/4 rounded-md" />
+              <Skeleton className="mt-2 h-9 w-36 rounded-lg" />
+            </CardBody>
+          </Card>
+        ))}
       </div>
     </div>
   );

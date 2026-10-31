@@ -31,7 +31,7 @@ const DEFAULT_SERVER_HOST = "0.0.0.0";
 /** Tamaño máximo aceptado por una solicitud de envío a SQS. */
 const SQS_MAX_BATCH_SIZE = 10;
 
-/** Nombres predeterminados de tablas usadas en DynamoDB Local. */
+/** Nombres predeterminados para las tablas DynamoDB de entornos de desarrollo AWS. */
 const DEFAULT_TABLE_NAMES = {
   gameStats: "savecloud-game-stats",
   saveFilesIndex: "savecloud-save-files-index",
@@ -54,7 +54,7 @@ function optionalEnv(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
 }
 
-/** Indica si la API está configurada para conectarse a DynamoDB Local. */
+/** Indica si se configuró explícitamente un endpoint local de DynamoDB. */
 function isDynamoDbLocal(): boolean {
   return optionalEnv("DYNAMODB_ENDPOINT") !== undefined;
 }
@@ -149,15 +149,17 @@ function createS3EventProcessor(
 }
 
 /**
- * Initializes dependencies and ensures that all required tables exist.
+ * Inicializa las dependencias y crea los esquemas de almacenamiento configurados.
  */
 async function initializeStorage(
   database: ReturnType<typeof createDatabaseClient> | undefined,
-  dynamoClient: ReturnType<typeof createDynamoDbClient>,
+  dynamoClient: ReturnType<typeof createDynamoDbClient> | undefined,
   tableConfiguration: DynamoDbTablesConfig,
   queue: S3EventQueueConfiguration
 ): Promise<void> {
-  const initializationTasks: Promise<unknown>[] = [ensureDynamoDbTablesExist(dynamoClient, tableConfiguration)];
+  const initializationTasks: Promise<unknown>[] = [];
+
+  if (dynamoClient) initializationTasks.push(ensureDynamoDbTablesExist(dynamoClient, tableConfiguration));
 
   if (database) {
     initializationTasks.push(
@@ -184,7 +186,7 @@ async function initializeStorage(
     console.log("[SaveCloud API] PostgreSQL schemas verified.");
   }
 
-  console.log("[SaveCloud API] DynamoDB tables verified.");
+  if (dynamoClient) console.log("[SaveCloud API] DynamoDB tables verified.");
 
   if (queue.client && queue.name) {
     console.log("[SaveCloud API] S3 event queue verified.");
@@ -239,7 +241,8 @@ async function main(): Promise<void> {
 
   const tableConfiguration = readTableConfiguration(database !== undefined);
   const queue = createS3EventQueueConfiguration();
-  const dynamoClient = createDynamoDbClient();
+  const hasDynamoTables = Object.values(tableConfiguration).some((tableName) => tableName !== undefined);
+  const dynamoClient = hasDynamoTables ? createDynamoDbClient() : undefined;
   const s3 = createS3Client();
   const presignS3 = createPresignS3Client();
   const stores = createApiStores({

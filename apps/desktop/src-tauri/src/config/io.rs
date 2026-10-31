@@ -12,7 +12,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::sync::RwLock;
 
-static SETTINGS_CACHE: Lazy<RwLock<Option<(u64, Arc<AppSettings>)>>> = Lazy::new(|| RwLock::new(None));
+static SETTINGS_CACHE: Lazy<RwLock<Option<(u64, Arc<AppSettings>)>>> =
+    Lazy::new(|| RwLock::new(None));
 static CONFIG_REVISION: AtomicU64 = AtomicU64::new(1);
 static LIBRARY_REVISION: AtomicU64 = AtomicU64::new(1);
 
@@ -157,10 +158,18 @@ pub fn get_secure_refresh_token_for_cloud_host(host_user_id: &str) -> Option<Str
     get_secret(KEYRING_SERVICE, &account, MASKED_API_KEY)
 }
 
-pub fn set_secure_refresh_token_for_cloud_host(host_user_id: &str, token: &str) -> Result<(), String> {
+pub fn set_secure_refresh_token_for_cloud_host(
+    host_user_id: &str,
+    token: &str,
+) -> Result<(), String> {
     let account = cloud_host_refresh_keyring_account(host_user_id);
     if let Some(profile_id) = active_profile_id() {
-        return set_secret(&profile_service(&profile_id), &account, token, MASKED_API_KEY);
+        return set_secret(
+            &profile_service(&profile_id),
+            &account,
+            token,
+            MASKED_API_KEY,
+        );
     }
     set_secret(KEYRING_SERVICE, &account, token, MASKED_API_KEY)
 }
@@ -383,7 +392,39 @@ fn load_settings_snapshot() -> Arc<AppSettings> {
 }
 
 pub fn load_settings() -> AppSettings {
-    load_settings_snapshot().as_ref().clone()
+    let mut settings = load_settings_snapshot().as_ref().clone();
+    migrate_legacy_emulator_paths(&mut settings.emulator_paths, &settings.legacy_fields);
+    settings
+}
+
+fn migrate_legacy_emulator_paths(
+    emulator_paths: &mut std::collections::BTreeMap<String, String>,
+    legacy_fields: &std::collections::BTreeMap<String, serde_json::Value>,
+) {
+    for (field_name, value) in legacy_fields {
+        let Some(emulator_id) = field_name
+            .strip_suffix("Path")
+            .or_else(|| field_name.strip_suffix("_path"))
+        else {
+            continue;
+        };
+        let Some(emulator) = crate::commands::emulators::catalog::find(emulator_id)
+            .ok()
+            .flatten()
+        else {
+            continue;
+        };
+        let Some(path) = value
+            .as_str()
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+        else {
+            continue;
+        };
+        emulator_paths
+            .entry(emulator.id.clone())
+            .or_insert_with(|| path.to_string());
+    }
 }
 
 /// Lee una preferencia usando una referencia compartida, sin clonar la estructura
@@ -489,8 +530,8 @@ pub fn get_combined_config() -> Config {
         game_mode_boost_detected_game_cpu: settings.game_mode_boost_detected_game_cpu,
         developer_mode: settings.developer_mode,
         proxy_url: settings.proxy_url,
-        ryujinx_path: settings.ryujinx_path,
-        shadps4_path: settings.shadps4_path,
+        emulator_paths: settings.emulator_paths,
+        legacy_fields: Default::default(),
         overlay_sound_enabled: settings.overlay_sound_enabled,
         overlay_notification_volume: settings.overlay_notification_volume,
         gamepad_ignore_background: settings.gamepad_ignore_background,
@@ -530,6 +571,10 @@ pub fn apply_combined_config(cfg: &Config) -> Result<(), String> {
     current_settings.cloud_host_api_base_urls = cfg.cloud_host_api_base_urls.clone();
     current_settings.cloud_host_ws_base_urls = cfg.cloud_host_ws_base_urls.clone();
     current_settings.custom_scan_paths = cfg.custom_scan_paths.clone();
+    if !cfg.emulator_paths.is_empty() {
+        current_settings.emulator_paths = cfg.emulator_paths.clone();
+    }
+    migrate_legacy_emulator_paths(&mut current_settings.emulator_paths, &cfg.legacy_fields);
     current_settings.keep_backups_per_game = cfg.keep_backups_per_game;
     current_settings.full_backup_streaming = cfg.full_backup_streaming;
     current_settings.full_backup_streaming_dry_run = cfg.full_backup_streaming_dry_run;

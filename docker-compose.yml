@@ -36,8 +36,6 @@ services:
       - AWS_REGION=us-east-1
       - AWS_ACCESS_KEY_ID=${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
       - AWS_SECRET_ACCESS_KEY=${OBJECT_STORAGE_SECRET_KEY:-minioadmin}
-      - DYNAMODB_ACCESS_KEY_ID=local
-      - DYNAMODB_SECRET_ACCESS_KEY=local
       - DATABASE_URL=${DATABASE_URL:-}
       - DATABASE_HOST=postgres
       - DATABASE_PORT=5432
@@ -48,14 +46,11 @@ services:
       - S3_ENDPOINT=http://minio:9000
       - S3_PUBLIC_ENDPOINT=${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       - S3_FORCE_PATH_STYLE=true
-      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
       - SQS_ENDPOINT=http://elasticmq:9324
       - S3_EVENT_QUEUE_NAME=savecloud-s3-events
       - S3_EVENT_QUEUE_URL=http://elasticmq:9324/000000000000/savecloud-s3-events
     depends_on:
       minio:
-        condition: service_started
-      dynamodb-local:
         condition: service_started
       elasticmq:
         condition: service_started
@@ -78,6 +73,8 @@ services:
     container_name: savecloud-steam-seed-worker
     command: ["bun", "dist/steam-seed-worker.js"]
     ports: !reset []
+    healthcheck:
+      disable: true
     depends_on:
       create-bucket:
         condition: service_completed_successfully
@@ -97,34 +94,14 @@ services:
         condition: service_started
       savecloud-api:
         condition: service_healthy
-      dynamodb-local:
-        condition: service_started
       create-bucket:
         condition: service_completed_successfully
 
-  member-purge-worker:
+  postgres-expiration-worker:
     extends:
       service: savecloud-api
-    container_name: savecloud-member-purge-worker
-    command: ["bun", "dist/member-purge-worker.js"]
-    ports: !reset []
-    healthcheck:
-      disable: true
-    depends_on:
-      savecloud-api:
-        condition: service_healthy
-      dynamodb-local:
-        condition: service_started
-      create-bucket:
-        condition: service_completed_successfully
-    environment:
-      - MEMBER_PURGE_INTERVAL_MS=${MEMBER_PURGE_INTERVAL_MS:-3600000}
-
-  notifications-expiration-worker:
-    extends:
-      service: savecloud-api
-    container_name: savecloud-notifications-expiration-worker
-    command: ["bun", "dist/notification-expiration-worker.js"]
+    container_name: savecloud-postgres-expiration-worker
+    command: ["bun", "dist/postgres-expiration-worker.js"]
     ports: !reset []
     healthcheck:
       disable: true
@@ -134,7 +111,8 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - NOTIFICATIONS_EXPIRATION_INTERVAL_MS=${NOTIFICATIONS_EXPIRATION_INTERVAL_MS:-21600000}
+      - POSTGRES_EXPIRATION_INTERVAL_MS=${POSTGRES_EXPIRATION_INTERVAL_MS:-${NOTIFICATIONS_EXPIRATION_INTERVAL_MS:-21600000}}
+      - MEMBER_PURGE_INTERVAL_MS=${MEMBER_PURGE_INTERVAL_MS:-3600000}
 
   minio:
     image: quay.io/minio/aistor/minio:latest
@@ -174,17 +152,6 @@ services:
       savecloud-api:
         condition: service_healthy
 
-  dynamodb-local:
-    image: amazon/dynamodb-local:latest
-    container_name: savecloud-dynamodb
-    restart: unless-stopped
-    user: root
-    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data"
-    ports:
-      - "127.0.0.1:8000:8000"
-    volumes:
-      - dynamodb_data:/home/dynamodblocal/data
-
   postgres:
     image: postgres:18-alpine
     container_name: savecloud-postgres
@@ -214,6 +181,5 @@ volumes:
   caddy_data:
   caddy_config:
   minio_data:
-  dynamodb_data:
   postgres_data:
   elasticmq_data:

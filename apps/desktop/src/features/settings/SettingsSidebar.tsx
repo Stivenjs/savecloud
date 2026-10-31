@@ -10,6 +10,7 @@ export type SettingsTabKey =
   | "big-picture"
   | "sources"
   | "integrations"
+  | "emulators"
   | "gamepad"
   | "plugins"
   | "updates"
@@ -41,6 +42,8 @@ export function SettingsSidebar({ tabs, selectedTab, onSelectTab }: SettingsSide
         return t("settings.sections.integrations");
       case "Sistema":
         return t("settings.sections.system");
+      case "Emuladores":
+        return t("settings.sections.emulators");
       default:
         return title;
     }
@@ -60,6 +63,8 @@ export function SettingsSidebar({ tabs, selectedTab, onSelectTab }: SettingsSide
         return t("settings.tabs.sources");
       case "integrations":
         return t("settings.tabs.integrations");
+      case "emulators":
+        return t("settings.tabs.emulators");
       case "gamepad":
         return t("settings.tabs.gamepad");
       case "plugins":

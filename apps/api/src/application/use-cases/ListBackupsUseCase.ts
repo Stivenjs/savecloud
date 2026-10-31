@@ -23,7 +23,9 @@ export class ListBackupsUseCase {
 
   async execute(input: ListBackupsInput): Promise<ListBackupsOutput> {
     if (this.saveFileIndexRepository) {
-      const saves = await this.saveFileIndexRepository.listByUserAndGame(input.userId, input.gameId);
+      const saves = this.saveFileIndexRepository.listBackupsByUserAndGame
+        ? await this.saveFileIndexRepository.listBackupsByUserAndGame(input.userId, input.gameId)
+        : await this.saveFileIndexRepository.listByUserAndGame(input.userId, input.gameId);
       const backupSaves = saves.filter((s) => s.filename.startsWith("backups/"));
       if (backupSaves.length > 0) {
         const backups: BackupMetadata[] = backupSaves.map((s) => {

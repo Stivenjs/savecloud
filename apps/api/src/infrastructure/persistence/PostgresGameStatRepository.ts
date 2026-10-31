@@ -10,11 +10,6 @@ interface GameStatRow {
   last_modified: Date | string | null;
 }
 
-interface GameStatDeltaRow {
-  file_count: number | string;
-  total_size_bytes: number | string;
-}
-
 /** Implementación PostgreSQL del repositorio de estadísticas de juegos. */
 export class PostgresGameStatRepository implements GameStatRepository {
   constructor(private readonly sql: SQL) {}
@@ -64,24 +59,21 @@ export class PostgresGameStatRepository implements GameStatRepository {
 
     const hasLastModified = lastModified !== undefined;
     const lastModifiedValue = lastModified?.toISOString() ?? null;
-    const rows = await this.sql<GameStatDeltaRow[]>`
-      INSERT INTO savecloud_game_stats (user_id, game_id, file_count, total_size_bytes, last_modified)
-      VALUES (${userId}, ${gameId}, ${deltaFileCount}, ${deltaSizeBytes}, ${lastModifiedValue})
-      ON CONFLICT (user_id, game_id) DO UPDATE SET
-        file_count = savecloud_game_stats.file_count + EXCLUDED.file_count,
-        total_size_bytes = savecloud_game_stats.total_size_bytes + EXCLUDED.total_size_bytes,
-        last_modified = CASE WHEN ${hasLastModified} THEN EXCLUDED.last_modified ELSE savecloud_game_stats.last_modified END
-      RETURNING file_count, total_size_bytes
+    await this.sql`
+      WITH updated AS (
+        INSERT INTO savecloud_game_stats (user_id, game_id, file_count, total_size_bytes, last_modified)
+        VALUES (${userId}, ${gameId}, ${deltaFileCount}, ${deltaSizeBytes}, ${lastModifiedValue})
+        ON CONFLICT (user_id, game_id) DO UPDATE SET
+          file_count = savecloud_game_stats.file_count + EXCLUDED.file_count,
+          total_size_bytes = savecloud_game_stats.total_size_bytes + EXCLUDED.total_size_bytes,
+          last_modified = CASE WHEN ${hasLastModified} THEN EXCLUDED.last_modified ELSE savecloud_game_stats.last_modified END
+        RETURNING user_id, game_id, file_count, total_size_bytes
+      )
+      DELETE FROM savecloud_game_stats AS stats
+      USING updated
+      WHERE stats.user_id = updated.user_id AND stats.game_id = updated.game_id
+        AND updated.file_count <= 0 AND updated.total_size_bytes <= 0
     `;
-
-    const updated = rows[0];
-    if (updated && (Number(updated.file_count) <= 0 || Number(updated.total_size_bytes) < 0)) {
-      await this.sql`
-        DELETE FROM savecloud_game_stats
-        WHERE user_id = ${userId} AND game_id = ${gameId}
-          AND file_count <= 0 AND total_size_bytes <= 0
-      `;
-    }
   }
 }
 

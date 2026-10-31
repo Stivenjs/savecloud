@@ -57,6 +57,21 @@ export class PostgresSaveFileIndexRepository implements SaveFileIndexRepository 
     return rows.map(mapRowToGameSave);
   }
 
+  /** Lista exclusivamente backups, usando el índice por usuario/juego/clave. */
+  async listBackupsByUserAndGame(userId: string, gameId: string): Promise<GameSave[]> {
+    const cleanUserId = userId.trim();
+    const cleanGameId = gameId.trim();
+    if (!cleanUserId || !cleanGameId) return [];
+    const prefix = `${cleanUserId}/${cleanGameId}/backups/`;
+    const rows = await this.sql<SaveFileIndexRow[]>`
+      SELECT user_id, object_key, game_id, size, last_modified
+      FROM savecloud_save_file_index
+      WHERE user_id = ${cleanUserId} AND game_id = ${cleanGameId} AND object_key LIKE ${`${prefix}%`}
+      ORDER BY object_key ASC
+    `;
+    return rows.map(mapRowToGameSave);
+  }
+
   /** Busca los metadatos de un objeto S3 para un usuario. */
   async getByObjectKey(userId: string, objectKey: string): Promise<GameSave | null> {
     const cleanUserId = userId.trim();

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="320" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#202222"/>
+      <stop offset="1" stop-color="#353a38"/>
+    </linearGradient>
+    <linearGradient id="console" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#414746"/>
+      <stop offset=".42" stop-color="#171b1a"/>
+      <stop offset="1" stop-color="#080a09"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#c9d1cd" stop-opacity=".65"/><stop offset="1" stop-color="#7f8984" stop-opacity=".08"/></linearGradient>
+  </defs>
+  <path fill="url(#bg)" d="M0 0h1200v320H0z"/>
+  <circle cx="962" cy="160" r="137" stroke="#e0e5e2" stroke-opacity=".08" stroke-width="2"/>
+  <circle cx="962" cy="160" r="105" stroke="#e0e5e2" stroke-opacity=".05" stroke-width="2"/>
+  <ellipse cx="970" cy="253" rx="142" ry="24" fill="#000" fill-opacity=".34"/>
+  <path d="m827 128 196-39c13-3 25 6 25 19v98c0 11-8 20-18 22l-196 39c-13 3-25-6-25-19v-98c0-11 8-20 18-22Z" fill="url(#console)" stroke="#59615e" stroke-opacity=".55" stroke-width="2"/>
+  <path d="m832 132 198-39" stroke="url(#edge)" stroke-width="3"/>
+  <path d="m838 239 195-39" stroke="#070908" stroke-opacity=".8" stroke-width="5"/>
+  <path d="M864 158v60m8-62v60m8-62v60" stroke="#a9b1ad" stroke-opacity=".38" stroke-width="3"/>
+  <rect x="1002" y="183" width="10" height="3" rx="1.5" transform="rotate(-11 1002 183)" fill="#d0d6d2" fill-opacity=".68"/>
+  <circle cx="1008" cy="201" r="4" fill="#7dc8ad"/>
+  <text x="82" y="166" fill="#f0f3f1" font-family="Arial,sans-serif" font-size="76" font-weight="700" letter-spacing="-2">RPCS3</text>
+  <rect x="84" y="201" width="104" height="5" rx="2.5" fill="#7dc8ad"/>
+  <text x="84" y="248" fill="#b8c0bc" font-family="Arial,sans-serif" font-size="22">SaveCloud emulator catalog</text>
+</svg>

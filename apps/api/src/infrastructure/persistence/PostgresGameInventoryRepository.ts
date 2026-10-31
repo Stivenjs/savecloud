@@ -85,6 +85,7 @@ export class PostgresGameInventoryRepository implements GameInventoryRepository 
     await this.sql`
       DELETE FROM savecloud_device_inventories WHERE user_id = ${userId.trim()} AND device_id = ${deviceId.trim()}
     `;
+    if (this.s3Fallback) await this.s3Fallback.deleteDeviceInventory(userId, deviceId);
   }
 
   /** Actualiza la última conexión y, si se indicó, la versión del cliente. */
@@ -164,6 +165,8 @@ export class PostgresGameInventoryRepository implements GameInventoryRepository 
         manifest_hash AS "manifestHash", expires_at AS "expiresAt", expires_at_epoch AS "expiresAtEpoch"
       FROM savecloud_transfer_sessions
       WHERE target_device_id = ${targetDeviceId.trim()}
+        AND target_user_id = ${targetUserId.trim()}
+        AND expires_at_epoch >= ${Math.floor(Date.now() / 1000)}
       ORDER BY expires_at
     `;
     if (rows.length > 0) {

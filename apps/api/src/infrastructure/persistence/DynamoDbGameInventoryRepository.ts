@@ -405,22 +405,23 @@ export class DynamoDbGameInventoryRepository implements GameInventoryRepository 
    * Lista las sesiones de transferencia pendientes para un dispositivo destino.
    */
   async listPendingTransferSessions(targetUserId: string, targetDeviceId: string): Promise<TransferSessionRecord[]> {
-    const res = await this.docClient.send(
-      new QueryCommand({
-        TableName: this.tableName,
-        IndexName: "GSI1",
-        KeyConditionExpression: "gsi1pk = :targetPk",
-        ExpressionAttributeValues: {
-          ":targetPk": `TARGET_DEVICE#${targetDeviceId.trim()}`,
-        },
-      })
-    );
-
     const now = Date.now();
     const sessions: TransferSessionRecord[] = [];
-
-    if (res.Items && res.Items.length > 0) {
-      for (const raw of res.Items) {
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+    let foundAny = false;
+    do {
+      const res = await this.docClient.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          IndexName: "GSI1",
+          KeyConditionExpression: "gsi1pk = :targetPk",
+          ExpressionAttributeValues: { ":targetPk": `TARGET_DEVICE#${targetDeviceId.trim()}` },
+          ExclusiveStartKey: lastEvaluatedKey,
+        })
+      );
+      const items = res.Items ?? [];
+      foundAny ||= items.length > 0;
+      for (const raw of items) {
         const item = raw as TransferSessionDbRecord;
         const exp = Date.parse(item.expiresAt);
         if (item.targetUserId === targetUserId && Number.isFinite(exp) && exp >= now) {
@@ -436,8 +437,9 @@ export class DynamoDbGameInventoryRepository implements GameInventoryRepository 
           });
         }
       }
-      return sessions;
-    }
+      lastEvaluatedKey = res.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+    if (foundAny) return sessions;
 
     if (this.s3Fallback) {
       return this.s3Fallback.listPendingTransferSessions(targetUserId, targetDeviceId);

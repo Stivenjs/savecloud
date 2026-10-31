@@ -23,9 +23,8 @@ COPY apps/api ./apps/api
 RUN bun build apps/api/src/interfaces/http/server.ts --target bun --outdir ./dist
 RUN bun build apps/api/src/interfaces/worker/steam-seed-worker.ts --target bun --outfile ./dist/steam-seed-worker.js
 RUN bun build apps/api/src/interfaces/worker/s3-events-worker.ts --target bun --outfile ./dist/s3-events-worker.js
-RUN bun build apps/api/src/interfaces/worker/member-purge-worker.ts --target bun --outfile ./dist/member-purge-worker.js
 RUN bun build apps/api/src/interfaces/worker/storage-bootstrap.ts --target bun --outfile ./dist/storage-bootstrap.js
-RUN bun build apps/api/src/interfaces/worker/notification-expiration-worker.ts --target bun --outfile ./dist/notification-expiration-worker.js
+RUN bun build apps/api/src/interfaces/worker/postgres-expiration-worker.ts --target bun --outfile ./dist/postgres-expiration-worker.js
 # Copiar el icono de la app desde el proyecto para storage-bootstrap local (sin meterlo a apps/api ni a la Lambda)
 RUN mkdir -p ./dist/assets
 COPY apps/desktop/src-tauri/icons/Square310x310Logo.png ./dist/assets/savecloud-clip-cover.png

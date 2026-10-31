@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="20" y1="20" x2="940" y2="400" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#21191A"/>
+      <stop offset="1" stop-color="#3C2929"/>
+    </linearGradient>
+    <linearGradient id="console" x1="690" y1="106" x2="873" y2="291" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0E6E1"/>
+      <stop offset="1" stop-color="#B5A8A4"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="420" rx="28" fill="url(#bg)"/>
+  <path d="M620 0h340v420H620z" fill="#FFFFFF" fill-opacity=".025"/>
+  <circle cx="786" cy="208" r="123" stroke="#FFC0A7" stroke-opacity=".12" stroke-width="2"/>
+  <circle cx="786" cy="208" r="91" stroke="#FFC0A7" stroke-opacity=".1"/>
+  <path d="m692 151 190-42-11 32-179 40v-30Z" fill="url(#console)"/>
+  <path d="m692 180 179-40v18l-179 42v-20Z" fill="#A99C98"/>
+  <path d="m692 210 179-42v101l-179 42V210Z" fill="url(#console)"/>
+  <path d="M714 229v63m10-65v63m10-66v63" stroke="#756966" stroke-opacity=".7" stroke-width="3"/>
+  <circle cx="842" cy="266" r="4" fill="#D36F57"/>
+  <text x="112" y="88" fill="#FFC0A7" font-family="Arial,sans-serif" font-size="15" font-weight="700" letter-spacing="3">PLAYSTATION 4</text>
+  <text x="108" y="218" fill="#F7F2F0" font-family="Arial,sans-serif" font-size="70" font-weight="700" letter-spacing="-3">shadPS4</text>
+  <path d="M112 228h78" stroke="#F09A7D" stroke-width="4" stroke-linecap="round"/>
+  <text x="112" y="274" fill="#D0BCB6" font-family="Arial,sans-serif" font-size="20">SaveCloud emulator catalog</text>
+</svg>
