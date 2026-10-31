@@ -2,7 +2,9 @@ import {
   DynamoDBClient,
   CreateTableCommand,
   DescribeTableCommand,
+  DescribeTimeToLiveCommand,
   ResourceNotFoundException,
+  UpdateTimeToLiveCommand,
   type CreateTableCommandInput,
 } from "@aws-sdk/client-dynamodb";
 import { resolveAwsCredentials } from "./awsCredentials";
@@ -130,6 +132,7 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
         ],
         BillingMode: "PAY_PER_REQUEST",
       });
+      await ensureTimeToLiveEnabled(client, connectionsTable, "ttl");
     }
 
     if (clipsTable) {
@@ -168,6 +171,7 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
         ],
         BillingMode: "PAY_PER_REQUEST",
       });
+      await ensureTimeToLiveEnabled(client, notificationsTable, "expiresAtEpoch");
     }
 
     if (shareTokensTable) {
@@ -177,6 +181,7 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
         KeySchema: [{ AttributeName: "token", KeyType: "HASH" }],
         BillingMode: "PAY_PER_REQUEST",
       });
+      await ensureTimeToLiveEnabled(client, shareTokensTable, "expiresAtEpoch");
     }
 
     if (cloudInvitesTable) {
@@ -214,6 +219,7 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
         ],
         BillingMode: "PAY_PER_REQUEST",
       });
+      await ensureTimeToLiveEnabled(client, cloudInvitesTable, "expiresAtEpoch");
     }
 
     if (gameInventoryTable) {
@@ -241,6 +247,7 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
         ],
         BillingMode: "PAY_PER_REQUEST",
       });
+      await ensureTimeToLiveEnabled(client, gameInventoryTable, "expiresAtEpoch");
     }
   };
 
@@ -257,6 +264,51 @@ export async function ensureDynamoDbTablesExist(client: DynamoDBClient, tables: 
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }
+}
+
+/** Habilita el TTL configurado para cada tabla local/Docker, incluidas las tablas creadas antes de esta configuración. */
+async function ensureTimeToLiveEnabled(
+  client: DynamoDBClient,
+  tableName: string,
+  attributeName: string
+): Promise<void> {
+  const result = await client.send(new DescribeTimeToLiveCommand({ TableName: tableName }));
+  const ttl = result.TimeToLiveDescription;
+  const status = ttl?.TimeToLiveStatus;
+
+  if (status === "ENABLED" || status === "ENABLING") {
+    if (ttl?.AttributeName !== attributeName) {
+      throw new Error(
+        `[DynamoDB Local] TTL de '${tableName}' usa '${ttl?.AttributeName ?? "un atributo desconocido"}', ` +
+          `pero la aplicación requiere '${attributeName}'.`
+      );
+    }
+    return;
+  }
+
+  if (status === "DISABLING") {
+    throw new Error(`[DynamoDB Local] El TTL de '${tableName}' se está deshabilitando; no se puede habilitar todavía.`);
+  }
+
+  try {
+    await client.send(
+      new UpdateTimeToLiveCommand({
+        TableName: tableName,
+        TimeToLiveSpecification: { AttributeName: attributeName, Enabled: true },
+      })
+    );
+  } catch (error) {
+    const latest = await client.send(new DescribeTimeToLiveCommand({ TableName: tableName }));
+    const latestTtl = latest.TimeToLiveDescription;
+    if (
+      (latestTtl?.TimeToLiveStatus === "ENABLED" || latestTtl?.TimeToLiveStatus === "ENABLING") &&
+      latestTtl.AttributeName === attributeName
+    ) {
+      return;
+    }
+    throw error;
+  }
+  console.log(`[DynamoDB Local] TTL habilitado para '${tableName}' con el atributo '${attributeName}'.`);
 }
 
 /**
