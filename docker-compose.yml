@@ -52,12 +52,6 @@ services:
       - SQS_ENDPOINT=http://elasticmq:9324
       - S3_EVENT_QUEUE_NAME=savecloud-s3-events
       - S3_EVENT_QUEUE_URL=http://elasticmq:9324/000000000000/savecloud-s3-events
-      - CLIPS_TABLE=savecloud-clips
-      - CLOUD_INVITES_TABLE=savecloud-cloud-invites
-      - CONNECTIONS_TABLE=savecloud-connections
-      - GAME_INVENTORY_TABLE=savecloud-game-inventory
-      - GAME_STATS_TABLE=savecloud-game-stats
-      - SHARE_TOKENS_TABLE=savecloud-share-tokens
     depends_on:
       minio:
         condition: service_started
