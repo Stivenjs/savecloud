@@ -1,9 +1,11 @@
+pub(crate) mod catalog;
+
 use crate::config;
 use crate::network;
 use crate::network::stream_download::{stream_url_to_file, GlobalDownloadProgress};
 use crate::sources::extractor::extract_archive;
 use crate::utils::transfer_metrics::TransferSpeedTracker;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -30,147 +32,171 @@ pub struct EmulatorProgressPayload {
     pub error: Option<String>,
 }
 
-fn is_valid_exe(path_str: &Option<String>) -> bool {
-    if let Some(ref p) = path_str {
-        if p.trim().is_empty() {
-            return false;
-        }
-        let path = Path::new(p);
-        path.exists() && path.is_file()
-    } else {
-        false
-    }
-}
-
-fn find_in_standard_paths(exe_names: &[&str]) -> Option<String> {
-    let mut paths_to_check = vec![];
-
-    if let Some(config_dir) = config::paths::config_dir() {
-        paths_to_check.push(config_dir.join("emulators/ryujinx/publish/Ryujinx.exe"));
-        paths_to_check.push(config_dir.join("emulators/ryujinx/Ryujinx.exe"));
-        paths_to_check.push(config_dir.join("emulators/ryujinx/Ryujinx"));
-        paths_to_check.push(config_dir.join("emulators/shadps4/shadps4.exe"));
-        paths_to_check.push(config_dir.join("emulators/shadps4/shadps4"));
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let appdata = std::env::var("APPDATA").unwrap_or_default();
-        let localappdata = std::env::var("LOCALAPPDATA").unwrap_or_default();
-        if !appdata.is_empty() {
-            paths_to_check.push(PathBuf::from(&appdata).join("Ryujinx/publish/Ryujinx.exe"));
-            paths_to_check.push(PathBuf::from(&appdata).join("Ryujinx/Ryujinx.exe"));
-            paths_to_check.push(PathBuf::from(&appdata).join("shadps4/shadps4.exe"));
-        }
-        if !localappdata.is_empty() {
-            paths_to_check.push(PathBuf::from(&localappdata).join("Ryujinx/publish/Ryujinx.exe"));
-            paths_to_check.push(PathBuf::from(&localappdata).join("Ryujinx/Ryujinx.exe"));
-            paths_to_check.push(PathBuf::from(&localappdata).join("shadps4/shadps4.exe"));
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        paths_to_check.push(PathBuf::from(
-            "/Applications/Ryujinx.app/Contents/MacOS/Ryujinx",
-        ));
-        paths_to_check.push(PathBuf::from(
-            "/Applications/shadps4.app/Contents/MacOS/shadps4",
-        ));
-        if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
-            paths_to_check.push(home.join("Applications/Ryujinx.app/Contents/MacOS/Ryujinx"));
-            paths_to_check.push(home.join("Applications/shadps4.app/Contents/MacOS/shadps4"));
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        paths_to_check.push(PathBuf::from("/usr/bin/ryujinx"));
-        paths_to_check.push(PathBuf::from("/usr/local/bin/ryujinx"));
-        paths_to_check.push(PathBuf::from("/usr/bin/shadps4"));
-        paths_to_check.push(PathBuf::from("/usr/local/bin/shadps4"));
-    }
-
-    for path in paths_to_check {
-        if path.exists() && path.is_file() {
-            if let Some(filename) = path.file_name().and_then(|f| f.to_str()) {
-                if exe_names.contains(&filename.to_lowercase().as_str()) {
-                    return Some(path.to_string_lossy().into_owned());
-                }
+pub(crate) fn find_named_file(directory: &Path, names: &[String]) -> Option<PathBuf> {
+    let entries = std::fs::read_dir(directory).ok()?;
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        let Ok(entry_type) = entry.file_type() else {
+            continue;
+        };
+        if entry_type.is_dir() {
+            if let Some(found) = find_named_file(&path, names) {
+                return Some(found);
             }
+        } else if entry_type.is_file()
+            && path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    names
+                        .iter()
+                        .any(|candidate| candidate.eq_ignore_ascii_case(name))
+                })
+        {
+            return Some(path);
         }
     }
     None
 }
 
+fn find_emulator_path(
+    emulator: &catalog::EmulatorMetadata,
+    settings: &config::AppSettings,
+) -> Option<String> {
+    let configured = settings.emulator_paths.get(&emulator.id);
+    if let Some(path) = configured.filter(|path| Path::new(path).is_file()) {
+        return Some(path.clone());
+    }
+
+    let platform = catalog::platform_key();
+    let search_paths = emulator
+        .executable_search_paths
+        .get(platform)
+        .into_iter()
+        .flatten()
+        .map(|path| PathBuf::from(catalog::expand_path(path)))
+        .chain(
+            config::paths::config_dir()
+                .into_iter()
+                .map(|directory| directory.join("emulators").join(&emulator.id)),
+        );
+    for path in search_paths {
+        if path.is_file() {
+            return Some(path.to_string_lossy().into_owned());
+        }
+        if path.is_dir() {
+            if let Some(found) = find_named_file(&path, &emulator.executable_names) {
+                return Some(found.to_string_lossy().into_owned());
+            }
+        }
+    }
+
+    let path_value = std::env::var_os("PATH").unwrap_or_default();
+    let executable_paths = std::env::split_paths(&path_value);
+    for directory in executable_paths {
+        for name in &emulator.executable_names {
+            let candidate = directory.join(name);
+            if candidate.is_file() {
+                return Some(candidate.to_string_lossy().into_owned());
+            }
+        }
+    }
+
+    configured.cloned()
+}
+
 #[tauri::command]
 pub fn detect_emulators() -> Result<HashMap<String, EmulatorStatus>, String> {
     let settings = config::load_settings();
-    let mut map = HashMap::new();
-
-    // Ryujinx
-    let ryujinx_installed = is_valid_exe(&settings.ryujinx_path);
-    let ryujinx_path = if ryujinx_installed {
-        settings.ryujinx_path.clone()
-    } else {
-        find_in_standard_paths(&["ryujinx.exe", "ryujinx"])
-    };
-
-    map.insert(
-        "ryujinx".to_string(),
-        EmulatorStatus {
-            name: "Ryujinx".to_string(),
-            installed: ryujinx_path.is_some(),
-            path: ryujinx_path,
-        },
-    );
-
-    // ShadPS4
-    let shadps4_installed = is_valid_exe(&settings.shadps4_path);
-    let shadps4_path = if shadps4_installed {
-        settings.shadps4_path.clone()
-    } else {
-        find_in_standard_paths(&["shadps4.exe", "shadps4"])
-    };
-
-    map.insert(
-        "shadps4".to_string(),
-        EmulatorStatus {
-            name: "ShadPS4".to_string(),
-            installed: shadps4_path.is_some(),
-            path: shadps4_path,
-        },
-    );
-
-    Ok(map)
+    Ok(catalog::all()?
+        .iter()
+        .map(|emulator| {
+            let path = find_emulator_path(emulator, &settings);
+            let installed = path.as_ref().is_some_and(|path| Path::new(path).exists())
+                || config::paths::config_dir().is_some_and(|directory| {
+                    directory
+                        .join("emulators")
+                        .join(&emulator.id)
+                        .join(".savecloud-installed")
+                        .is_file()
+                });
+            (
+                emulator.id.clone(),
+                EmulatorStatus {
+                    name: emulator.name.clone(),
+                    installed,
+                    path,
+                },
+            )
+        })
+        .collect())
 }
 
 #[tauri::command]
 pub fn set_emulator_path(emulator: String, path: String) -> Result<(), String> {
-    let mut settings = config::load_settings();
-    let normalized_path = Some(path.trim().to_string()).filter(|s| !s.is_empty());
-
-    if emulator.to_lowercase() == "ryujinx" {
-        settings.ryujinx_path = normalized_path;
-    } else if emulator.to_lowercase() == "shadps4" {
-        settings.shadps4_path = normalized_path;
-    } else {
-        return Err(format!("Emulador desconocido: {}", emulator));
+    let emulator_metadata =
+        catalog::find(&emulator)?.ok_or_else(|| format!("Emulador desconocido: {emulator}"))?;
+    if !emulator_metadata.save_sync_supported {
+        return Err(format!(
+            "{} no tiene soporte de rutas de ejecutable en SaveCloud",
+            emulator_metadata.name
+        ));
     }
-
+    let mut settings = config::load_settings();
+    let normalized_path = path.trim();
+    if !Path::new(normalized_path).is_file() {
+        return Err("La ruta seleccionada no apunta a un ejecutable existente".to_string());
+    }
+    settings
+        .emulator_paths
+        .insert(emulator_metadata.id.clone(), normalized_path.to_string());
     config::save_settings(&settings)?;
     Ok(())
 }
 
-#[tauri::command]
-pub fn download_emulator(app: AppHandle, emulator: String) -> Result<(), String> {
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EmulatorArtifactType {
+    Archive,
+    AppImage,
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn download_emulator(
+    app: AppHandle,
+    emulator: String,
+    download_url: String,
+    file_name: String,
+    artifact_type: EmulatorArtifactType,
+) -> Result<(), String> {
     let emulator_key = emulator.to_lowercase();
-    if emulator_key != "ryujinx" && emulator_key != "shadps4" {
-        return Err(format!("Emulador no soportado para descarga: {}", emulator));
+    if emulator_key.is_empty()
+        || !emulator_key.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '-' || character == '_'
+        })
+    {
+        return Err("Identificador de emulador inválido".to_string());
     }
+    let emulator_metadata = catalog::find(&emulator_key)?
+        .ok_or_else(|| format!("Emulador desconocido: {emulator_key}"))?;
+    if !emulator_metadata.managed_install {
+        return Err(format!(
+            "{} no permite instalación administrada",
+            emulator_metadata.name
+        ));
+    }
+    let emulator_key = emulator_metadata.id.clone();
+    validate_download_request(&download_url, &file_name)?;
 
     tauri::async_runtime::spawn(async move {
-        let res = download_emulator_async(&app, &emulator_key).await;
+        let res = download_emulator_async(
+            &app,
+            &emulator_key,
+            &download_url,
+            &file_name,
+            artifact_type,
+        )
+        .await;
         if let Err(e) = res {
             log::error!("Error al descargar emulador {}: {}", emulator_key, e);
             let _ = app.emit(
@@ -191,99 +217,33 @@ pub fn download_emulator(app: AppHandle, emulator: String) -> Result<(), String>
     Ok(())
 }
 
-async fn download_emulator_async(app: &AppHandle, emulator: &str) -> Result<(), String> {
-    let api_url = if emulator == "ryujinx" {
-        "https://git.ryujinx.app/api/v1/repos/Ryubing/Ryujinx/releases/latest".to_string()
-    } else {
-        "https://api.github.com/repos/shadps4-emu/shadps4/releases/latest".to_string()
-    };
-
-    let response = network::API_CLIENT
-        .get(&api_url)
-        .header("User-Agent", "SaveCloud-desktop/1.0")
-        .send()
-        .await
-        .map_err(|e| format!("Error conectando con la API del emulador: {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!(
-            "La API del emulador respondió con error: {}",
-            response.status()
-        ));
+fn validate_download_request(download_url: &str, file_name: &str) -> Result<(), String> {
+    let parsed_url = url::Url::parse(download_url)
+        .map_err(|error| format!("URL de descarga inválida: {error}"))?;
+    if parsed_url.scheme() != "https" || parsed_url.host_str().is_none() {
+        return Err("La descarga debe usar una URL HTTPS".to_string());
     }
-
-    let release_json: serde_json::Value = response.json().await.map_err(|e| {
-        format!(
-            "Error decodificando respuesta de la API del emulador: {}",
-            e
-        )
-    })?;
-
-    let assets = release_json["assets"]
-        .as_array()
-        .ok_or_else(|| "No se encontraron assets en la release de GitHub".to_string())?;
-
-    let mut download_url = None;
-    let mut file_name = None;
-
-    for asset in assets {
-        if let Some(name) = asset["name"].as_str() {
-            let lower_name = name.to_lowercase();
-            let is_match = if emulator == "ryujinx" {
-                if cfg!(target_os = "windows") {
-                    lower_name.contains("win")
-                        && lower_name.contains("x64")
-                        && lower_name.ends_with(".zip")
-                } else if cfg!(target_os = "macos") {
-                    lower_name.contains("macos")
-                        && (lower_name.ends_with(".tar.gz") || lower_name.ends_with(".zip"))
-                } else {
-                    lower_name.contains("linux")
-                        && lower_name.contains("x64")
-                        && (lower_name.ends_with(".tar.gz") || lower_name.ends_with(".zip"))
-                }
-            } else {
-                if cfg!(target_os = "windows") {
-                    lower_name.contains("win") && lower_name.ends_with(".zip")
-                } else if cfg!(target_os = "macos") {
-                    lower_name.contains("macos") && lower_name.ends_with(".zip")
-                } else {
-                    (lower_name.contains("linux")
-                        || lower_name.contains("ubuntu")
-                        || lower_name.contains("sdl"))
-                        && lower_name.ends_with(".zip")
-                }
-            };
-
-            if is_match {
-                download_url = asset["browser_download_url"]
-                    .as_str()
-                    .map(|s| s.to_string());
-                file_name = Some(name.to_string());
-                break;
-            }
-        }
+    if file_name.trim().is_empty()
+        || Path::new(file_name)
+            .file_name()
+            .and_then(|name| name.to_str())
+            != Some(file_name)
+    {
+        return Err("Nombre de archivo de descarga inválido".to_string());
     }
+    Ok(())
+}
 
-    let download_url = download_url.ok_or_else(|| {
-        format!(
-            "No se encontró un archivo compatible para tu sistema en los assets de {}",
-            emulator
-        )
-    })?;
-
-    let file_ext = if download_url.ends_with(".tar.gz") {
-        "tar.gz"
-    } else if download_url.ends_with(".tgz") {
-        "tgz"
-    } else {
-        "zip"
-    };
-    let file_name = file_name.unwrap_or_else(|| format!("{}.{}", emulator, file_ext));
-
+async fn download_emulator_async(
+    app: &AppHandle,
+    emulator: &str,
+    download_url: &str,
+    file_name: &str,
+    artifact_type: EmulatorArtifactType,
+) -> Result<(), String> {
     let cache_dir = config::paths::cache_dir()
         .ok_or_else(|| "No se pudo obtener el directorio de caché".to_string())?;
-    let temp_zip_path = cache_dir.join(&file_name);
+    let temp_zip_path = cache_dir.join(file_name);
 
     let config_dir = config::paths::config_dir()
         .ok_or_else(|| "No se pudo obtener el directorio de configuración".to_string())?;
@@ -318,7 +278,7 @@ async fn download_emulator_async(app: &AppHandle, emulator: &str) -> Result<(), 
 
     stream_url_to_file(
         &network::API_CLIENT,
-        &download_url,
+        download_url,
         &temp_zip_path,
         0,
         None,
@@ -348,72 +308,49 @@ async fn download_emulator_async(app: &AppHandle, emulator: &str) -> Result<(), 
         },
     );
 
-    extract_archive(app, "dummy-emu-job", &temp_zip_path, &dest_dir)?;
-
-    let _ = std::fs::remove_file(&temp_zip_path);
-
-    let mut exe_path = None;
-
-    fn find_exe(dir: &Path, exe_name: &str) -> Option<PathBuf> {
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.filter_map(Result::ok) {
-                let path = entry.path();
-                if path.is_dir() {
-                    if let Some(p) = find_exe(&path, exe_name) {
-                        return Some(p);
-                    }
-                } else if path.is_file() {
-                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                        if name.to_lowercase() == exe_name.to_lowercase() {
-                            return Some(path);
-                        }
-                    }
-                }
-            }
-        }
-        None
-    }
-
-    let exe_name = if emulator == "ryujinx" {
-        if cfg!(target_os = "windows") {
-            "Ryujinx.exe"
-        } else {
-            "Ryujinx"
+    if matches!(artifact_type, EmulatorArtifactType::AppImage) {
+        let appimage_path = dest_dir.join(file_name);
+        std::fs::rename(&temp_zip_path, &appimage_path)
+            .map_err(|error| format!("No se pudo instalar el AppImage: {error}"))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = std::fs::metadata(&appimage_path)
+                .map_err(|error| format!("No se pudieron leer los permisos del AppImage: {error}"))?
+                .permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&appimage_path, permissions)
+                .map_err(|error| format!("No se pudieron aplicar permisos al AppImage: {error}"))?;
         }
     } else {
-        if cfg!(target_os = "windows") {
-            "shadps4.exe"
-        } else {
-            "shadps4"
-        }
-    };
-    if let Some(found_path) = find_exe(&dest_dir, exe_name) {
-        exe_path = Some(found_path.to_string_lossy().into_owned());
+        extract_archive(app, "dummy-emu-job", &temp_zip_path, &dest_dir)?;
+        let _ = std::fs::remove_file(&temp_zip_path);
     }
 
-    let exe_path_str = exe_path.ok_or_else(|| {
-        format!(
-            "No se pudo encontrar el ejecutable {} en el archivo descomprimido",
-            exe_name
-        )
-    })?;
+    let emulator_metadata =
+        catalog::find(emulator)?.ok_or_else(|| format!("Emulador desconocido: {emulator}"))?;
+    let executable = find_named_file(&dest_dir, &emulator_metadata.executable_names);
+    let install_path = executable
+        .as_ref()
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|| dest_dir.to_string_lossy().into_owned());
 
     #[cfg(unix)]
-    {
+    if let Some(path) = executable.as_ref() {
         use std::os::unix::fs::PermissionsExt;
-        if let Ok(metadata) = std::fs::metadata(&exe_path_str) {
-            let mut perms = metadata.permissions();
-            perms.set_mode(0o755);
-            let _ = std::fs::set_permissions(&exe_path_str, perms);
+        if let Ok(metadata) = std::fs::metadata(path) {
+            let mut permissions = metadata.permissions();
+            permissions.set_mode(0o755);
+            let _ = std::fs::set_permissions(path, permissions);
         }
     }
 
+    std::fs::write(dest_dir.join(".savecloud-installed"), b"installed")
+        .map_err(|error| format!("No se pudo registrar la instalación: {error}"))?;
     let mut settings = config::load_settings();
-    if emulator == "ryujinx" {
-        settings.ryujinx_path = Some(exe_path_str.clone());
-    } else {
-        settings.shadps4_path = Some(exe_path_str.clone());
-    }
+    settings
+        .emulator_paths
+        .insert(emulator.to_string(), install_path);
     config::save_settings(&settings)?;
 
     let _ = app.emit(

@@ -1,0 +1,195 @@
+[
+  {
+    "id": "ryujinx",
+    "name": "Ryujinx",
+    "console": "Nintendo Switch",
+    "developer": "Ryubing",
+    "description": {
+      "es": "Emulador de Nintendo Switch de código abierto con soporte de gestión de partidas en SaveCloud.",
+      "en": "Open-source Nintendo Switch emulator with save management support in SaveCloud."
+    },
+    "imageUrl": "/emulators/ryujinx.svg",
+    "websiteUrl": "https://ryujinx.app",
+    "downloadUrl": "https://git.ryujinx.app/ryubing/ryujinx/-/releases",
+    "releaseAssets": {
+      "windows": {
+        "apiUrl": "https://git.ryujinx.app/api/v1/repos/Ryubing/Ryujinx/releases/latest",
+        "nameIncludes": ["win", "x64"],
+        "extension": ".zip",
+        "artifactType": "archive"
+      },
+      "macos": {
+        "apiUrl": "https://git.ryujinx.app/api/v1/repos/Ryubing/Ryujinx/releases/latest",
+        "nameIncludes": ["macos"],
+        "extension": ".zip",
+        "artifactType": "archive"
+      },
+      "linux": {
+        "apiUrl": "https://git.ryujinx.app/api/v1/repos/Ryubing/Ryujinx/releases/latest",
+        "nameIncludes": ["linux", "x64"],
+        "extension": ".tar.gz",
+        "artifactType": "archive"
+      }
+    },
+    "supportedPlatforms": ["Windows", "macOS", "Linux"],
+    "executableNames": ["Ryujinx.exe", "Ryujinx"],
+    "executableSearchPaths": {
+      "windows": [
+        "%APPDATA%/Ryujinx/publish/Ryujinx.exe",
+        "%APPDATA%/Ryujinx/Ryujinx.exe",
+        "%LOCALAPPDATA%/Ryujinx/publish/Ryujinx.exe",
+        "%LOCALAPPDATA%/Ryujinx/Ryujinx.exe"
+      ],
+      "macos": [
+        "/Applications/Ryujinx.app/Contents/MacOS/Ryujinx",
+        "~/Applications/Ryujinx.app/Contents/MacOS/Ryujinx"
+      ],
+      "linux": ["/usr/bin/ryujinx", "/usr/local/bin/ryujinx"]
+    },
+    "savePaths": {
+      "windows": ["%APPDATA%/Ryujinx/bis/user/save"],
+      "macos": ["~/Library/Application Support/Ryujinx/bis/user/save"],
+      "linux": ["~/.config/Ryujinx/bis/user/save"]
+    },
+    "portableSavePath": "portable/bis/user/save",
+    "launchRules": [{ "extensions": ["nsp", "xci", "nsz"], "arguments": ["{file}"] }],
+    "license": "MIT",
+    "saveSyncSupported": true,
+    "managedInstall": true
+  },
+  {
+    "id": "shadps4",
+    "name": "shadPS4",
+    "console": "PlayStation 4",
+    "developer": "shadPS4 team",
+    "description": {
+      "es": "Emulador experimental de PlayStation 4 con detección y sincronización de partidas en SaveCloud.",
+      "en": "Experimental PlayStation 4 emulator with save detection and sync in SaveCloud."
+    },
+    "imageUrl": "/emulators/shadps4.svg",
+    "websiteUrl": "https://github.com/shadps4-emu/shadPS4",
+    "downloadUrl": "https://shadps4.net/downloads/",
+    "releaseAssets": {
+      "windows": {
+        "apiUrl": "https://api.github.com/repos/shadps4-emu/shadPS4/releases/latest",
+        "nameIncludes": ["win"],
+        "extension": ".zip",
+        "artifactType": "archive"
+      },
+      "macos": {
+        "apiUrl": "https://api.github.com/repos/shadps4-emu/shadPS4/releases/latest",
+        "nameIncludes": ["macos"],
+        "extension": ".zip",
+        "artifactType": "archive"
+      },
+      "linux": {
+        "apiUrl": "https://api.github.com/repos/shadps4-emu/shadPS4/releases/latest",
+        "nameIncludes": ["linux"],
+        "extension": ".zip",
+        "artifactType": "archive"
+      }
+    },
+    "supportedPlatforms": ["Windows", "macOS", "Linux"],
+    "executableNames": ["shadps4.exe", "shadps4"],
+    "executableSearchPaths": {
+      "windows": ["%APPDATA%/shadps4/shadps4.exe", "%LOCALAPPDATA%/shadps4/shadps4.exe"],
+      "macos": [
+        "/Applications/shadps4.app/Contents/MacOS/shadps4",
+        "~/Applications/shadps4.app/Contents/MacOS/shadps4"
+      ],
+      "linux": ["/usr/bin/shadps4", "/usr/local/bin/shadps4"]
+    },
+    "savePaths": {
+      "windows": ["%APPDATA%/shadps4/user/savedata", "%LOCALAPPDATA%/shadps4/user/savedata"],
+      "macos": ["~/Library/Application Support/shadps4/user/savedata"],
+      "linux": ["~/.config/shadps4/user/savedata", "~/.local/share/shadps4/user/savedata"]
+    },
+    "portableSavePath": "user/savedata",
+    "launchRules": [{ "extensions": ["pkg"], "arguments": ["-g", "{file}"] }],
+    "license": "GPL-2.0",
+    "saveSyncSupported": true,
+    "managedInstall": true
+  },
+  {
+    "id": "kytyps5",
+    "name": "KytyPS5",
+    "console": "PlayStation 5",
+    "developer": "KytyPS5 contributors",
+    "description": {
+      "es": "Capa de traducción de PlayStation 5 para Windows y Linux, con soporte experimental para macOS.",
+      "en": "PlayStation 5 translation layer for Windows and Linux, with experimental macOS support."
+    },
+    "imageUrl": "/emulators/kytyps5.svg",
+    "websiteUrl": "https://github.com/KytyPS5/KytyPS5",
+    "downloadUrl": "https://github.com/KytyPS5/KytyPS5/releases",
+    "releaseAssets": {
+      "windows": {
+        "apiUrl": "https://api.github.com/repos/KytyPS5/KytyPS5/releases/latest",
+        "nameIncludes": ["windows", "x64"],
+        "extension": ".zip",
+        "artifactType": "archive"
+      },
+      "macos": {
+        "apiUrl": "https://api.github.com/repos/KytyPS5/KytyPS5/releases/latest",
+        "nameIncludes": ["macos"],
+        "extension": ".zip",
+        "artifactType": "archive"
+      },
+      "linux": {
+        "apiUrl": "https://api.github.com/repos/KytyPS5/KytyPS5/releases/latest",
+        "nameIncludes": ["linux"],
+        "extension": ".tar.gz",
+        "artifactType": "archive"
+      }
+    },
+    "supportedPlatforms": ["Windows", "Linux", "macOS (experimental)"],
+    "executableNames": [],
+    "executableSearchPaths": {},
+    "savePaths": {},
+    "launchRules": [],
+    "license": "GPL-2.0",
+    "saveSyncSupported": false,
+    "managedInstall": true
+  },
+  {
+    "id": "rpcs3",
+    "name": "RPCS3",
+    "console": "PlayStation 3",
+    "developer": "RPCS3 team",
+    "description": {
+      "es": "Emulador y depurador de PlayStation 3 de código abierto.",
+      "en": "Open-source PlayStation 3 emulator and debugger."
+    },
+    "imageUrl": "/emulators/rpcs3.svg",
+    "websiteUrl": "https://rpcs3.net/",
+    "downloadUrl": "https://github.com/RPCS3/rpcs3-binaries-win/releases",
+    "releaseAssets": {
+      "windows": {
+        "apiUrl": "https://api.github.com/repos/RPCS3/rpcs3-binaries-win/releases/latest",
+        "nameIncludes": ["win64"],
+        "extension": ".7z",
+        "artifactType": "archive"
+      },
+      "macos": {
+        "apiUrl": "https://api.github.com/repos/RPCS3/rpcs3-binaries-mac/releases/latest",
+        "nameIncludes": ["macos"],
+        "extension": ".7z",
+        "artifactType": "archive"
+      },
+      "linux": {
+        "apiUrl": "https://api.github.com/repos/RPCS3/rpcs3-binaries-linux/releases/latest",
+        "nameIncludes": ["linux64"],
+        "extension": ".appimage",
+        "artifactType": "appImage"
+      }
+    },
+    "supportedPlatforms": ["Windows", "Linux", "macOS"],
+    "executableNames": [],
+    "executableSearchPaths": {},
+    "savePaths": {},
+    "launchRules": [],
+    "license": "GPL-2.0",
+    "saveSyncSupported": false,
+    "managedInstall": true
+  }
+]

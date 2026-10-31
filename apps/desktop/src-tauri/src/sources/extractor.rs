@@ -93,9 +93,10 @@ fn system_tools() -> &'static SystemTools {
 enum ArchiveKind {
     Zip,
     Rar,
+    SevenZip,
     /// `.tar`, `.tar.gz`, `.tgz`, `.tar.zst`
     Tar,
-    /// `.7z`, `.gz`, `.zst` y cualquier otro formato soportado.
+    /// `.gz`, `.zst` y cualquier otro formato soportado por 7z.
     Other,
 }
 
@@ -112,6 +113,8 @@ impl ArchiveKind {
             Self::Zip
         } else if name.ends_with(".rar") {
             Self::Rar
+        } else if name.ends_with(".7z") {
+            Self::SevenZip
         } else if name.ends_with(".tar")
             || name.ends_with(".tgz")
             || name.ends_with(".tar.gz")
@@ -122,6 +125,31 @@ impl ArchiveKind {
             Self::Other
         }
     }
+}
+
+/// Extrae un archivo 7z con la implementación Rust integrada.
+///
+/// Este respaldo permite instalar archivos 7z sin depender de que el usuario
+/// tenga 7-Zip instalado en el sistema.
+fn extract_7z_native(
+    app: &AppHandle,
+    job_id: &str,
+    archive_path: &Path,
+    destination_dir: &Path,
+) -> Result<(), String> {
+    let archive_size = archive_path
+        .metadata()
+        .map(|metadata| metadata.len())
+        .unwrap_or(1)
+        .max(1);
+    let state = app.state::<SourcesState>();
+    push_progress(app, &state, job_id, 0, archive_size);
+
+    sevenz_rust2::decompress_file(archive_path, destination_dir)
+        .map_err(|error| format!("No se pudo extraer el archivo 7z: {error}"))?;
+
+    push_progress(app, &state, job_id, archive_size, archive_size);
+    Ok(())
 }
 
 /// Indica si un nombre de archivo corresponde a un formato comprimido soportado.
@@ -438,7 +466,9 @@ pub fn extract_zip(
         let reporter_thread = scope.spawn(move || {
             let mut reporter = ProgressReporter::new(app, state_ref, job_id);
             while let Err(RecvTimeoutError::Timeout) = stop_rx.recv_timeout(PROGRESS_INTERVAL) {
-                let loaded = extracted_ref.load(Ordering::Relaxed).min(total_uncompressed);
+                let loaded = extracted_ref
+                    .load(Ordering::Relaxed)
+                    .min(total_uncompressed);
                 reporter.report_now(loaded, total_uncompressed);
             }
             reporter
@@ -532,7 +562,13 @@ fn count_rar_entries(archive_path: &Path) -> u64 {
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .output()
-        .map(|output| output.stdout.split(|&b| b == b'\n').filter(|l| !l.is_empty()).count() as u64)
+        .map(|output| {
+            output
+                .stdout
+                .split(|&b| b == b'\n')
+                .filter(|l| !l.is_empty())
+                .count() as u64
+        })
         .unwrap_or(0)
         .max(1)
 }
@@ -684,7 +720,8 @@ fn extract_tar(
 /// 1. ZIP → extractor nativo paralelo.
 /// 2. RAR → `unrar` (más rápido que 7z), con `7z` como respaldo.
 /// 3. TAR/TGZ/TAR.ZST → `tar` (descomprime y desempaqueta en un paso), con `7z` de respaldo.
-/// 4. Resto → `7z`, con `tar` como último recurso.
+/// 4. 7z → ejecutable `7z` si existe, con extractor Rust integrado como respaldo.
+/// 5. Otros formatos → `7z`; `tar` nunca se usa como respaldo para formatos distintos de TAR.
 ///
 /// # Argumentos
 /// * `app` - Handle de Tauri.
@@ -709,6 +746,10 @@ pub fn extract_archive(
     let tools = system_tools();
 
     match kind {
+        ArchiveKind::SevenZip if tools.has_7z => {
+            extract_7z(app, job_id, archive_path, destination_dir)
+        }
+        ArchiveKind::SevenZip => extract_7z_native(app, job_id, archive_path, destination_dir),
         ArchiveKind::Rar if tools.has_unrar => {
             extract_unrar(app, job_id, archive_path, destination_dir)
         }
@@ -716,14 +757,13 @@ pub fn extract_archive(
             extract_tar(app, job_id, archive_path, destination_dir)
         }
         _ if tools.has_7z => extract_7z(app, job_id, archive_path, destination_dir),
-        _ if tools.has_tar => extract_tar(app, job_id, archive_path, destination_dir),
         _ => {
             let ext = archive_path
                 .extension()
                 .and_then(|e| e.to_str())
                 .unwrap_or("");
             Err(format!(
-                "No se encontró herramienta de extracción (7z, unrar, tar) para .{ext}"
+                "No se encontró un extractor compatible para .{ext}; instala 7-Zip o UnRAR para este formato"
             ))
         }
     }

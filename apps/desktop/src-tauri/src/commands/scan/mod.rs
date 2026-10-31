@@ -523,7 +523,10 @@ mod windows_scanners {
         };
         let steam_path_str = steam_path.to_string_lossy().to_string();
 
-        candidate_list.extend(find_steam_userdata_candidates(&steam_path_str, manifest_index));
+        candidate_list.extend(find_steam_userdata_candidates(
+            &steam_path_str,
+            manifest_index,
+        ));
 
         let mut libraries = vec![steam_path_str.clone()];
         libraries.extend(find_steam_library_paths(&steam_path_str));
@@ -654,69 +657,40 @@ fn base_scan_jobs(cfg: &config::AppSettings, env: &EnvContext) -> Vec<(String, S
         .filter_map(|entry| expand_path(&entry.path, env).map(|exp| (exp, entry.label.clone())))
         .collect();
 
-    let mut ryujinx_added = false;
-    if let Some(ref ryujinx_exe) = cfg.ryujinx_path {
-        let exe_path = Path::new(ryujinx_exe);
-        if let Some(parent) = exe_path.parent() {
-            let portable_save = parent.join("portable/bis/user/save");
-            if portable_save.exists() && portable_save.is_dir() {
-                jobs.push((
-                    portable_save.to_string_lossy().into_owned(),
-                    "Ryujinx Portable (Switch)".to_string(),
-                ));
-                ryujinx_added = true;
+    if let Ok(emulators) = crate::commands::emulators::catalog::all() {
+        let platform = crate::commands::emulators::catalog::platform_key();
+        for emulator in emulators {
+            if !emulator.save_sync_supported {
+                continue;
             }
-        }
-    }
-    if !ryujinx_added {
-        let ryujinx_std = if cfg!(target_os = "windows") {
-            expand_path("%APPDATA%/Ryujinx/bis/user/save", env)
-        } else if cfg!(target_os = "macos") {
-            expand_path("~/Library/Application Support/Ryujinx/bis/user/save", env)
-        } else {
-            expand_path("~/.config/Ryujinx/bis/user/save", env)
-        };
-        if let Some(path) = ryujinx_std {
-            if Path::new(&path).exists() {
-                jobs.push((path, "Ryujinx (Switch)".to_string()));
+            let mut portable_save_found = false;
+            if let (Some(executable), Some(portable_save_path)) = (
+                cfg.emulator_paths.get(&emulator.id),
+                emulator.portable_save_path.as_deref(),
+            ) {
+                if let Some(executable_directory) = Path::new(executable).parent() {
+                    let portable_save = executable_directory.join(portable_save_path);
+                    if portable_save.is_dir() {
+                        jobs.push((
+                            portable_save.to_string_lossy().into_owned(),
+                            format!("{} Portable ({})", emulator.name, emulator.console),
+                        ));
+                        portable_save_found = true;
+                    }
+                }
             }
-        }
-    }
+            if portable_save_found {
+                continue;
+            }
 
-    let mut shadps4_added = false;
-    if let Some(ref shadps4_exe) = cfg.shadps4_path {
-        let exe_path = Path::new(shadps4_exe);
-        if let Some(parent) = exe_path.parent() {
-            let portable_save = parent.join("user/savedata");
-            if portable_save.exists() && portable_save.is_dir() {
-                jobs.push((
-                    portable_save.to_string_lossy().into_owned(),
-                    "ShadPS4 Portable (PS4)".to_string(),
-                ));
-                shadps4_added = true;
-            }
-        }
-    }
-    if !shadps4_added {
-        let shadps4_paths = if cfg!(target_os = "windows") {
-            vec![
-                expand_path("%APPDATA%/shadps4/user/savedata", env),
-                expand_path("%LOCALAPPDATA%/shadps4/user/savedata", env),
-            ]
-        } else if cfg!(target_os = "macos") {
-            vec![expand_path(
-                "~/Library/Application Support/shadps4/user/savedata",
-                env,
-            )]
-        } else {
-            vec![
-                expand_path("~/.config/shadps4/user/savedata", env),
-                expand_path("~/.local/share/shadps4/user/savedata", env),
-            ]
-        };
-        for path in shadps4_paths.into_iter().flatten() {
-            if Path::new(&path).exists() {
-                jobs.push((path, "ShadPS4 (PS4)".to_string()));
+            if let Some(paths) = emulator.save_paths.get(platform) {
+                for template in paths {
+                    if let Some(path) = expand_path(template, env) {
+                        if Path::new(&path).is_dir() {
+                            jobs.push((path, format!("{} ({})", emulator.name, emulator.console)));
+                        }
+                    }
+                }
             }
         }
     }
@@ -957,9 +931,7 @@ pub fn scan_path_candidates_sync(
 pub async fn scan_path_candidates() -> Result<Vec<PathCandidateDto>, String> {
     let manifest_index = crate::manifest::load_manifest_index_async().await.ok();
 
-    tauri::async_runtime::spawn_blocking(move || {
-        scan_path_candidates_sync(manifest_index)
-    })
-    .await
-    .map_err(|e| format!("Error en el hilo de escaneo: {}", e))
+    tauri::async_runtime::spawn_blocking(move || scan_path_candidates_sync(manifest_index))
+        .await
+        .map_err(|e| format!("Error en el hilo de escaneo: {}", e))
 }

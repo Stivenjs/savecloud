@@ -158,15 +158,17 @@ export function EmulatorCatalogCard({
                 ? t("settings.emulators.alreadyInstalled")
                 : t("settings.emulators.downloadButton")}
           </Button>
-          <Button
-            size="sm"
-            variant="flat"
-            isDisabled={busy}
-            onPress={() => onPickExecutable(emulator.id, emulator.name)}
-            startContent={<FolderOpen size={13} />}
-            className="h-8 text-xs active:scale-[0.98]">
-            {installed ? t("settings.emulators.changeExecutable") : t("settings.emulators.selectExecutable")}
-          </Button>
+          {emulator.saveSyncSupported && (
+            <Button
+              size="sm"
+              variant="flat"
+              isDisabled={busy}
+              onPress={() => onPickExecutable(emulator.id, emulator.name)}
+              startContent={<FolderOpen size={13} />}
+              className="h-8 text-xs active:scale-[0.98]">
+              {installed ? t("settings.emulators.changeExecutable") : t("settings.emulators.selectExecutable")}
+            </Button>
+          )}
           <div className="ml-auto flex items-center gap-1">
             <Button
               size="sm"

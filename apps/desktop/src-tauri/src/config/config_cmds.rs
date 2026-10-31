@@ -110,8 +110,7 @@ pub fn get_config() -> ConfigDto {
         developer_mode: settings.developer_mode,
         proxy_url: settings.proxy_url.clone(),
         language: settings.language.clone(),
-        ryujinx_path: settings.ryujinx_path.clone(),
-        shadps4_path: settings.shadps4_path.clone(),
+        emulator_paths: settings.emulator_paths.clone(),
         overlay_sound_enabled: settings.overlay_sound_enabled,
         overlay_notification_volume: settings.overlay_notification_volume,
         gamepad_ignore_background: settings.gamepad_ignore_background,
@@ -939,40 +938,55 @@ pub fn launch_game(game_id: String) -> Result<(), String> {
         .unwrap_or("")
         .to_lowercase();
 
-    if ext == "nsp" || ext == "xci" || ext == "nsz" {
+    let matching_launch_rule =
+        crate::commands::emulators::catalog::all()?
+            .iter()
+            .find_map(|emulator| {
+                emulator
+                    .launch_rules
+                    .iter()
+                    .find(|rule| {
+                        rule.extensions
+                            .iter()
+                            .any(|extension| extension.eq_ignore_ascii_case(&ext))
+                    })
+                    .map(|rule| (emulator, rule))
+            });
+
+    if let Some((emulator, rule)) = matching_launch_rule {
         let settings = config::load_settings();
-        if let Some(ref emu_path) = settings.ryujinx_path {
-            if Path::new(emu_path).exists() {
-                let emu_dir = Path::new(emu_path).parent();
-                let mut cmd = std::process::Command::new(emu_path);
-                if let Some(dir) = emu_dir {
-                    cmd.current_dir(dir);
-                }
-                cmd.arg(path)
-                    .spawn()
-                    .map(|_| ())
-                    .map_err(|e| format!("Error al lanzar Ryujinx: {}", e))?;
-                return Ok(());
+        let configured_path = settings.emulator_paths.get(&emulator.id).map(Path::new);
+        let executable = configured_path.and_then(|configured_path| {
+            if configured_path.is_file() {
+                Some(configured_path.to_path_buf())
+            } else if configured_path.is_dir() {
+                crate::commands::emulators::find_named_file(
+                    configured_path,
+                    &emulator.executable_names,
+                )
+            } else {
+                None
             }
+        });
+        let Some(executable) = executable else {
+            return Err(format!(
+                "{} no está configurado. Selecciona su ejecutable en Ajustes > Emuladores.",
+                emulator.name
+            ));
+        };
+        let mut command = std::process::Command::new(&executable);
+        if let Some(directory) = executable.parent() {
+            command.current_dir(directory);
         }
-        return Err("Ryujinx no está configurado o no existe en la ruta guardada. Por favor, instálalo o configúralo en los Ajustes.".to_string());
-    } else if ext == "pkg" {
-        let settings = config::load_settings();
-        if let Some(ref emu_path) = settings.shadps4_path {
-            if Path::new(emu_path).exists() {
-                let emu_dir = Path::new(emu_path).parent();
-                let mut cmd = std::process::Command::new(emu_path);
-                if let Some(dir) = emu_dir {
-                    cmd.current_dir(dir);
-                }
-                cmd.args(["-g", path])
-                    .spawn()
-                    .map(|_| ())
-                    .map_err(|e| format!("Error al lanzar ShadPS4: {}", e))?;
-                return Ok(());
-            }
-        }
-        return Err("ShadPS4 no está configurado o no existe en la ruta guardada. Por favor, instálalo o configúralo en los Ajustes.".to_string());
+        command
+            .args(crate::commands::emulators::catalog::launch_arguments(
+                &rule.arguments,
+                path,
+            ))
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("No se pudo iniciar {}: {error}", emulator.name))?;
+        return Ok(());
     }
 
     launch_exe::launch_game_executable(path)
@@ -1474,7 +1488,10 @@ pub async fn get_friends_configs(
 
             let path = format!("/users/{}/profile", friend_id);
 
-            let response = match crate::cloud::cloud_api(reqwest::Method::GET, &path).send().await {
+            let response = match crate::cloud::cloud_api(reqwest::Method::GET, &path)
+                .send()
+                .await
+            {
                 Ok(r) => r,
                 Err(_) => return Ok::<_, AppError>((id, None)),
             };
