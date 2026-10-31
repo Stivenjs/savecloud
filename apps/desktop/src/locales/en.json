@@ -837,23 +837,30 @@
       "bringToDevice": "Bring to this device"
     },
     "emulators": {
-      "title": "Emulators & Tools",
-      "subtitle": "Download or configure your emulator paths to manage and sync your console saves.",
-      "loading": "Loading status...",
+      "marketplaceEyebrow": "Emulation library",
+      "marketplaceTitle": "Emulator catalog",
+      "marketplaceSubtitle": "Find compatible emulators, review supported platforms and licenses, and manage installation or executable paths from SaveCloud.",
+      "catalogCount": "{{count}} available",
+      "installedCount": "{{count}} installed",
+      "searchPlaceholder": "Search by name, console, or system",
+      "statusError": "Could not detect emulator status",
+      "retry": "Retry",
+      "noResults": "No emulators found",
+      "noResultsHint": "Try another name, console, or operating system.",
+      "coverAlt": "{{name}} artwork",
+      "saveSyncSupported": "SaveCloud compatible",
+      "developer": "By {{name}}",
+      "officialDownloads": "Official downloads",
+      "changeExecutable": "Change path",
+      "selectExecutable": "Choose executable",
+      "alreadyInstalled": "Already installed",
       "detected": "Detected",
       "notInstalled": "Not installed",
       "downloading": "Downloading...",
       "extracting": "Extracting...",
       "downloadButton": "Download",
-      "pickExecutableTooltip": "Select executable",
-      "changeExecutableTooltip": "Change executable",
-      "searchExecutableTooltip": "Browse local executable",
-      "decompressing": "Extracting files...",
       "selectExecutableTitle": "Select {{name}} executable",
-      "executablesFilter": "Executables",
-      "allFilesFilter": "All files",
-      "ryujinxSubtitle": "Nintendo Switch emulator (Ryujinx.exe executable)",
-      "shadps4Subtitle": "PlayStation 4 emulator (shadps4.exe executable)"
+      "allFilesFilter": "All files"
     },
     "createConfigModal": {
       "title": "Connect SaveCloud",
@@ -1147,11 +1154,12 @@
       "confirm": "Import Configuration"
     },
     "title": "Settings",
-    "subtitle": "Account, cloud, app, gamepads, and integrations",
+    "subtitle": "Account, cloud, app, emulators, gamepads, and integrations",
     "sections": {
       "account": "Account & Data",
       "app": "Application",
       "integrations": "Devices & Integrations",
+      "emulators": "Emulators",
       "system": "System"
     },
     "tabs": {
@@ -1161,6 +1169,7 @@
       "bigPicture": "Big Picture",
       "sources": "Sources & Downloads",
       "integrations": "Integrations",
+      "emulators": "Emulators",
       "gamepad": "Gamepad",
       "plugins": "Plugins",
       "updates": "Updates",
