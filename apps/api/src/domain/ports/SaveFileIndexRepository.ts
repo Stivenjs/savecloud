@@ -18,6 +18,8 @@ export type SaveFileIndexMutation =
 export interface SaveFileIndexRepository {
   listByUser(userId: string): Promise<GameSave[]>;
   listByUserAndGame(userId: string, gameId: string): Promise<GameSave[]>;
+  /** Lista solo los objetos de backup de un juego, cuando el adaptador soporta el filtro. */
+  listBackupsByUserAndGame?(userId: string, gameId: string): Promise<GameSave[]>;
   getByObjectKey(userId: string, objectKey: string): Promise<GameSave | null>;
   upsert(input: {
     userId: string;

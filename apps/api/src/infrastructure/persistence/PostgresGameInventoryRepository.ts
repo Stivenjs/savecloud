@@ -165,6 +165,8 @@ export class PostgresGameInventoryRepository implements GameInventoryRepository 
         manifest_hash AS "manifestHash", expires_at AS "expiresAt", expires_at_epoch AS "expiresAtEpoch"
       FROM savecloud_transfer_sessions
       WHERE target_device_id = ${targetDeviceId.trim()}
+        AND target_user_id = ${targetUserId.trim()}
+        AND expires_at_epoch >= ${Math.floor(Date.now() / 1000)}
       ORDER BY expires_at
     `;
     if (rows.length > 0) {
