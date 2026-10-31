@@ -42,6 +42,11 @@ import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
 import { openOrFocusSettingsWindow } from "@/windows/settingsWindow";
 import { useDownloadMetadataStore } from "@store/DownloadMetadataStore";
 
+const NOTIFICATION_ROW_HEIGHT = 112;
+const NOTIFICATION_ROW_GAP = 4;
+const NOTIFICATION_ROW_SIZE = NOTIFICATION_ROW_HEIGHT + NOTIFICATION_ROW_GAP;
+const NOTIFICATION_LIST_OVERSCAN = 4;
+
 /** Toma el directorio de destino de payloadJson si kind es una descarga terminal, sino null */
 function getDownloadDir(n: NotificationRecord): string | null {
   if (n.kind !== "source_download_terminal") return null;
@@ -151,7 +156,7 @@ function NotificationRow({
       onClick={() => {
         if (unread) onRead(n.id);
       }}
-      className={`group relative flex items-start gap-3 p-3 rounded-xl transition-all duration-150 cursor-pointer ${
+      className={`group relative h-full flex items-start gap-3 p-3 rounded-xl transition-all duration-150 cursor-pointer ${
         unread
           ? "bg-primary/5 hover:bg-primary/10 dark:bg-primary/10 dark:hover:bg-primary/15 border border-primary/15"
           : "hover:bg-default-100/70 border border-transparent"
@@ -276,6 +281,78 @@ function NotificationRow({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Renderiza solo las filas de notificación visibles y unas pocas filas de margen. */
+function VirtualizedNotificationList({
+  items,
+  onRead,
+  onDismiss,
+  resetKey,
+}: {
+  items: NotificationRecord[];
+  onRead: (id: string) => void;
+  onDismiss: (id: string) => void;
+  resetKey: boolean;
+}) {
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const rowCount = items.length;
+  const firstVisibleIndex = Math.floor(scrollTop / NOTIFICATION_ROW_SIZE);
+  const visibleRowCount = Math.ceil((viewportHeight || 520) / NOTIFICATION_ROW_SIZE);
+  const firstIndex = Math.max(0, firstVisibleIndex - NOTIFICATION_LIST_OVERSCAN);
+  const lastIndex = Math.min(rowCount, firstVisibleIndex + visibleRowCount + NOTIFICATION_LIST_OVERSCAN);
+  const visibleItems = items.slice(firstIndex, lastIndex);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+
+    const updateViewportHeight = () => setViewportHeight(list.clientHeight);
+    updateViewportHeight();
+
+    const observer = new ResizeObserver(updateViewportHeight);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    setScrollTop(0);
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, [resetKey]);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+
+    const maxScrollTop = Math.max(0, rowCount * NOTIFICATION_ROW_SIZE - list.clientHeight);
+    if (list.scrollTop > maxScrollTop) {
+      list.scrollTop = maxScrollTop;
+      setScrollTop(maxScrollTop);
+    }
+  }, [rowCount]);
+
+  const topSpacerHeight = firstIndex > 0 ? firstIndex * NOTIFICATION_ROW_SIZE - NOTIFICATION_ROW_GAP : 0;
+  const bottomSpacerHeight =
+    lastIndex < rowCount ? (rowCount - lastIndex) * NOTIFICATION_ROW_SIZE - NOTIFICATION_ROW_GAP : 0;
+
+  return (
+    <ScrollShadow
+      ref={listRef}
+      onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+      className="flex-1 min-h-0 w-full px-3 pb-3">
+      <div className="flex flex-col gap-1">
+        {topSpacerHeight > 0 && <div aria-hidden="true" style={{ height: topSpacerHeight }} />}
+        {visibleItems.map((n) => (
+          <div key={n.id} style={{ height: NOTIFICATION_ROW_HEIGHT }}>
+            <NotificationRow n={n} onRead={onRead} onDismiss={onDismiss} />
+          </div>
+        ))}
+        {bottomSpacerHeight > 0 && <div aria-hidden="true" style={{ height: bottomSpacerHeight }} />}
+      </div>
+    </ScrollShadow>
   );
 }
 
@@ -554,12 +631,14 @@ export function NotificationCenter({ placement = "right-start" }: { placement?: 
         )}
 
         {/* Lista alargada de notificaciones con ScrollShadow flexible */}
-        <ScrollShadow className="flex-1 min-h-0 w-full px-3 pb-3">
-          {loading ? (
+        {loading ? (
+          <ScrollShadow className="flex-1 min-h-0 w-full px-3 pb-3">
             <div className="flex justify-center py-16">
               <Spinner size="md" color="primary" />
             </div>
-          ) : filteredItems.length === 0 ? (
+          </ScrollShadow>
+        ) : filteredItems.length === 0 ? (
+          <ScrollShadow className="flex-1 min-h-0 w-full px-3 pb-3">
             <div className="flex flex-col items-center justify-center gap-2.5 py-16 text-center px-4">
               {showUnreadOnly ? (
                 <>
@@ -587,19 +666,15 @@ export function NotificationCenter({ placement = "right-start" }: { placement?: 
                 </>
               )}
             </div>
-          ) : (
-            <div className="flex flex-col space-y-1">
-              {regularItems.map((n: NotificationRecord) => (
-                <NotificationRow
-                  key={n.id}
-                  n={n}
-                  onRead={(id) => void markRead(id)}
-                  onDismiss={(id) => void dismiss(id)}
-                />
-              ))}
-            </div>
-          )}
-        </ScrollShadow>
+          </ScrollShadow>
+        ) : (
+          <VirtualizedNotificationList
+            items={regularItems}
+            onRead={(id) => void markRead(id)}
+            onDismiss={(id) => void dismiss(id)}
+            resetKey={showUnreadOnly}
+          />
+        )}
       </PopoverContent>
     </Popover>
   );
