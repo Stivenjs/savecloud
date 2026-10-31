@@ -12,6 +12,12 @@ import { FastifyWebSocketNotifier } from "@infrastructure/websocket/FastifyWebSo
 import { startBunServer } from "@infrastructure/websocket/BunWebSocketServer";
 import { ensurePostgresNotificationSchema } from "@infrastructure/persistence/PostgresNotificationStore";
 import { ensurePostgresSaveFileIndexSchema } from "@infrastructure/persistence/PostgresSaveFileIndexRepository";
+import { ensurePostgresCloudInviteSchema } from "@infrastructure/persistence/PostgresCloudInviteRepository";
+import { ensurePostgresConnectionSchema } from "@infrastructure/persistence/PostgresConnectionRepository";
+import { ensurePostgresGameInventorySchema } from "@infrastructure/persistence/PostgresGameInventoryRepository";
+import { ensurePostgresGameStatSchema } from "@infrastructure/persistence/PostgresGameStatRepository";
+import { ensurePostgresClipSchema } from "@infrastructure/clips/PostgresClipStore";
+import { ensurePostgresShareTokenSchema } from "@infrastructure/share/PostgresShareTokenRepository";
 import { readDatabaseConfiguration } from "@interfaces/configuration/databaseConfiguration";
 import { validateRuntimeConfiguration } from "@interfaces/configuration/runtimeConfiguration";
 import { buildApp } from "@interfaces/http/app";
@@ -84,18 +90,30 @@ function readTableConfiguration(usePostgresStorage: boolean): DynamoDbTablesConf
   const useLocalDefaults = isDynamoDbLocal();
 
   return {
-    gameStatsTable: resolveTableName("GAME_STATS_TABLE", DEFAULT_TABLE_NAMES.gameStats, useLocalDefaults),
+    gameStatsTable: usePostgresStorage
+      ? undefined
+      : resolveTableName("GAME_STATS_TABLE", DEFAULT_TABLE_NAMES.gameStats, useLocalDefaults),
     saveFilesIndexTable: usePostgresStorage
       ? undefined
       : resolveTableName("SAVE_FILES_INDEX_TABLE", DEFAULT_TABLE_NAMES.saveFilesIndex, useLocalDefaults),
-    connectionsTable: resolveTableName("CONNECTIONS_TABLE", DEFAULT_TABLE_NAMES.connections, useLocalDefaults),
-    clipsTable: resolveTableName("CLIPS_TABLE", DEFAULT_TABLE_NAMES.clips, useLocalDefaults),
+    connectionsTable: usePostgresStorage
+      ? undefined
+      : resolveTableName("CONNECTIONS_TABLE", DEFAULT_TABLE_NAMES.connections, useLocalDefaults),
+    clipsTable: usePostgresStorage
+      ? undefined
+      : resolveTableName("CLIPS_TABLE", DEFAULT_TABLE_NAMES.clips, useLocalDefaults),
     notificationsTable: usePostgresStorage
       ? undefined
       : resolveTableName("NOTIFICATIONS_TABLE", DEFAULT_TABLE_NAMES.notifications, useLocalDefaults),
-    shareTokensTable: resolveTableName("SHARE_TOKENS_TABLE", DEFAULT_TABLE_NAMES.shareTokens, useLocalDefaults),
-    cloudInvitesTable: resolveTableName("CLOUD_INVITES_TABLE", DEFAULT_TABLE_NAMES.cloudInvites, useLocalDefaults),
-    gameInventoryTable: resolveTableName("GAME_INVENTORY_TABLE", DEFAULT_TABLE_NAMES.gameInventory, useLocalDefaults),
+    shareTokensTable: usePostgresStorage
+      ? undefined
+      : resolveTableName("SHARE_TOKENS_TABLE", DEFAULT_TABLE_NAMES.shareTokens, useLocalDefaults),
+    cloudInvitesTable: usePostgresStorage
+      ? undefined
+      : resolveTableName("CLOUD_INVITES_TABLE", DEFAULT_TABLE_NAMES.cloudInvites, useLocalDefaults),
+    gameInventoryTable: usePostgresStorage
+      ? undefined
+      : resolveTableName("GAME_INVENTORY_TABLE", DEFAULT_TABLE_NAMES.gameInventory, useLocalDefaults),
   };
 }
 
@@ -130,26 +148,47 @@ function createS3EventProcessor(
   };
 }
 
-/** Inicializa las dependencias y confirma que las tablas locales existan. */
+/**
+ * Initializes dependencies and ensures that all required tables exist.
+ */
 async function initializeStorage(
   database: ReturnType<typeof createDatabaseClient> | undefined,
   dynamoClient: ReturnType<typeof createDynamoDbClient>,
   tableConfiguration: DynamoDbTablesConfig,
   queue: S3EventQueueConfiguration
 ): Promise<void> {
+  const initializationTasks: Promise<unknown>[] = [ensureDynamoDbTablesExist(dynamoClient, tableConfiguration)];
+
   if (database) {
-    await ensurePostgresNotificationSchema(database);
-    await ensurePostgresSaveFileIndexSchema(database);
-    console.log("[SaveCloud API] PostgreSQL notifications schema verified.");
-    console.log("[SaveCloud API] PostgreSQL save file index schema verified.");
+    initializationTasks.push(
+      Promise.all([
+        ensurePostgresNotificationSchema(database),
+        ensurePostgresSaveFileIndexSchema(database),
+        ensurePostgresCloudInviteSchema(database),
+        ensurePostgresConnectionSchema(database),
+        ensurePostgresGameStatSchema(database),
+        ensurePostgresGameInventorySchema(database),
+        ensurePostgresClipSchema(database),
+        ensurePostgresShareTokenSchema(database),
+      ])
+    );
   }
 
   if (queue.client && queue.name) {
-    await ensureS3EventQueue(queue.client, queue.name);
+    initializationTasks.push(ensureS3EventQueue(queue.client, queue.name));
   }
 
-  await ensureDynamoDbTablesExist(dynamoClient, tableConfiguration);
+  await Promise.all(initializationTasks);
+
+  if (database) {
+    console.log("[SaveCloud API] PostgreSQL schemas verified.");
+  }
+
   console.log("[SaveCloud API] DynamoDB tables verified.");
+
+  if (queue.client && queue.name) {
+    console.log("[SaveCloud API] S3 event queue verified.");
+  }
 }
 
 /** Inicia Fastify usando el servidor nativo de Bun o el listener de Fastify. */
