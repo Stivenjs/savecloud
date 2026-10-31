@@ -2,6 +2,7 @@ import type { SQL } from "bun";
 import type { NotificationInboxFile, NotificationRecord } from "@domain/entities/NotificationRecord";
 import type { ExpiredNotificationRepository } from "@domain/ports/ExpiredNotificationRepository";
 import type { NotificationRepository } from "@domain/ports/NotificationRepository";
+import { mergeNotificationRecord } from "@domain/services/notification-merge";
 
 const MAX_ITEMS = 500;
 const NOTIFICATION_TTL_DAYS = 30;
@@ -73,6 +74,61 @@ export class PostgresNotificationStore implements NotificationRepository, Expire
       userId: cleanUserId,
     }));
     await this.upsert(rows, expiresAtEpoch);
+  }
+
+  /**
+   * Sincroniza solo los registros recibidos, evitando cargar y volver a escribir el inbox completo.
+   *
+   * El conflicto se resuelve con las mismas reglas del dominio: gana la versión mayor y,
+   * si ambas versiones coinciden, gana la fecha de actualización más reciente.
+   */
+  async syncBatch(userId: string, items: NotificationRecord[]): Promise<boolean> {
+    const cleanUserId = userId?.trim();
+    if (!cleanUserId || items.length === 0) return false;
+
+    const recordsById = new Map<string, NotificationRecord>();
+    for (const item of items) {
+      const id = item.id;
+      if (!id) continue;
+
+      const record = { ...item, userId: cleanUserId };
+      const previous = recordsById.get(id);
+      recordsById.set(id, previous ? mergeNotificationRecord(previous, record) : record);
+    }
+
+    if (recordsById.size === 0) return false;
+
+    const expiresAtEpoch = expirationEpoch();
+    const values = [...recordsById.values()].map((item) => {
+      const updatedAt = Number.isNaN(Date.parse(item.updatedAt)) ? new Date().toISOString() : item.updatedAt;
+      return {
+        user_id: cleanUserId,
+        notification_id: item.id,
+        updated_at: updatedAt,
+        expires_at_epoch: expiresAtEpoch,
+        item_json: { ...item, updatedAt },
+      };
+    });
+
+    const changedRows = await this.sql<{ notification_id: string }[]>`
+      INSERT INTO savecloud_notifications
+      ${this.sql(values, "user_id", "notification_id", "updated_at", "expires_at_epoch", "item_json")}
+      ON CONFLICT (user_id, notification_id) DO UPDATE SET
+        updated_at = EXCLUDED.updated_at,
+        expires_at_epoch = EXCLUDED.expires_at_epoch,
+        item_json = EXCLUDED.item_json
+      WHERE
+        COALESCE((EXCLUDED.item_json->>'syncVersion')::numeric, 0) >
+          COALESCE((savecloud_notifications.item_json->>'syncVersion')::numeric, 0)
+        OR (
+          COALESCE((EXCLUDED.item_json->>'syncVersion')::numeric, 0) =
+            COALESCE((savecloud_notifications.item_json->>'syncVersion')::numeric, 0)
+          AND EXCLUDED.updated_at > savecloud_notifications.updated_at
+        )
+      RETURNING notification_id
+    `;
+
+    return changedRows.length > 0;
   }
 
   /**
