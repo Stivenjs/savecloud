@@ -46,6 +46,10 @@ export function isPublicHttpRoute(method: string, path: string): boolean {
     return true;
   }
 
+  if (upperMethod === "GET" && path === "/.well-known/appspecific/com.chrome.devtools.json") {
+    return true;
+  }
+
   // Endpoint de salud. Los handshakes WebSocket requieren autenticación igual que HTTP.
   if (path === HEALTH_PATH) {
     return true;
@@ -64,10 +68,7 @@ export function isPublicHttpRoute(method: string, path: string): boolean {
   }
 
   // Reproductor público de clips de vídeo y API de visualización
-  if (
-    upperMethod === "GET" &&
-    (path.startsWith("/v/") || path.startsWith("/clip/") || path.startsWith("/api/clips/"))
-  ) {
+  if (upperMethod === "GET" && (/^\/(?:v|clip)\/[^/]+$/.test(path) || /^\/api\/clips\/[^/]+$/.test(path))) {
     return true;
   }
 
