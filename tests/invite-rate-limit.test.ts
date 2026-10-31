@@ -26,6 +26,14 @@ describe("invite creation rate limit", () => {
     registerHttpErrorHandler(app as unknown as Parameters<typeof registerHttpErrorHandler>[0]);
     await app.register(rateLimit, { global: false });
 
+    (app as any).addHook("onRequest", async (request: any) => {
+      const userId = request.headers["x-user-id"];
+      if (typeof userId === "string" && userId.trim()) {
+        request.scAuthenticatedUserId = userId.trim();
+        request.scRateLimitUserId = userId.trim();
+      }
+    });
+
     const createCloudInviteUseCase = {
       execute: async (input: { hostUserId: string; inviteeUserId?: string }) => {
         const now = new Date().toISOString();

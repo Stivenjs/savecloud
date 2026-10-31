@@ -16,6 +16,13 @@ function calculateTtlEpoch(days = NOTIFICATION_TTL_DAYS): number {
   return Math.floor(Date.now() / 1000) + days * 86400;
 }
 
+/** Ordena por `updatedAt` de más reciente a más antiguo. */
+function compareUpdatedAtDescending(first: NotificationRecord, second: NotificationRecord): number {
+  if (first.updatedAt > second.updatedAt) return -1;
+  if (first.updatedAt < second.updatedAt) return 1;
+  return 0;
+}
+
 export class DynamoDbNotificationStore implements NotificationRepository {
   private readonly dynamoClient: DynamoDBClient;
   private readonly docClient: DynamoDBDocumentClient;
@@ -63,7 +70,7 @@ export class DynamoDbNotificationStore implements NotificationRepository {
       } while (lastEvaluatedKey);
 
       if (items.length > 0) {
-        items.sort((a, b) => (b.updatedAt > a.updatedAt ? 1 : b.updatedAt < a.updatedAt ? -1 : 0));
+        items.sort(compareUpdatedAtDescending);
         return { version: 1, items: items.slice(0, MAX_ITEMS) };
       }
 

@@ -38,6 +38,13 @@ services:
       - AWS_SECRET_ACCESS_KEY=${OBJECT_STORAGE_SECRET_KEY:-minioadmin}
       - DYNAMODB_ACCESS_KEY_ID=local
       - DYNAMODB_SECRET_ACCESS_KEY=local
+      - DATABASE_URL=${DATABASE_URL:-}
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_USER=${DATABASE_USER:-savecloud}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:?Define DATABASE_PASSWORD in .env}
+      - DATABASE_NAME=${DATABASE_NAME:-savecloud}
+      - DATABASE_POOL_SIZE=${DATABASE_POOL_SIZE:-10}
       - S3_ENDPOINT=http://minio:9000
       - S3_PUBLIC_ENDPOINT=${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       - S3_FORCE_PATH_STYLE=true
@@ -50,7 +57,6 @@ services:
       - CONNECTIONS_TABLE=savecloud-connections
       - GAME_INVENTORY_TABLE=savecloud-game-inventory
       - GAME_STATS_TABLE=savecloud-game-stats
-      - NOTIFICATIONS_TABLE=savecloud-notifications
       - SAVE_FILES_INDEX_TABLE=savecloud-save-files-index
       - SHARE_TOKENS_TABLE=savecloud-share-tokens
     depends_on:
@@ -60,6 +66,8 @@ services:
         condition: service_started
       elasticmq:
         condition: service_started
+      postgres:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -119,6 +127,22 @@ services:
     environment:
       - MEMBER_PURGE_INTERVAL_MS=${MEMBER_PURGE_INTERVAL_MS:-3600000}
 
+  notifications-expiration-worker:
+    extends:
+      service: savecloud-api
+    container_name: savecloud-notifications-expiration-worker
+    command: ["bun", "dist/notification-expiration-worker.js"]
+    ports: !reset []
+    healthcheck:
+      disable: true
+    depends_on:
+      savecloud-api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - NOTIFICATIONS_EXPIRATION_INTERVAL_MS=${NOTIFICATIONS_EXPIRATION_INTERVAL_MS:-21600000}
+
   minio:
     image: quay.io/minio/aistor/minio:latest
     container_name: savecloud-minio
@@ -168,6 +192,23 @@ services:
     volumes:
       - dynamodb_data:/home/dynamodblocal/data
 
+  postgres:
+    image: postgres:18-alpine
+    container_name: savecloud-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${DATABASE_USER:-savecloud}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD:?Define DATABASE_PASSWORD in .env}
+      - POSTGRES_DB=${DATABASE_NAME:-savecloud}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
   elasticmq:
     image: softwaremill/elasticmq-native:1.7.1
     container_name: savecloud-elasticmq
@@ -181,4 +222,5 @@ volumes:
   caddy_config:
   minio_data:
   dynamodb_data:
+  postgres_data:
   elasticmq_data:
