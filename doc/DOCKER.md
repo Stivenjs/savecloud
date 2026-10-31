@@ -10,17 +10,16 @@ Esta guía cubre el uso local y el despliegue de SaveCloud en un VPS. En el VPS,
 | SaveCloud API y WebSocket           | `savecloud-api:3000`      | Solo a través de Caddy; en el host, `127.0.0.1:3000` para desarrollo    |
 | MinIO S3                            | `minio:9000`              | Solo a través de `https://s3.<DOMAIN>` en Caddy; `127.0.0.1:9000` local |
 | Consola MinIO                       | `minio:9001`              | Solo `127.0.0.1:9001`                                                   |
-| DynamoDB Local                      | `dynamodb-local:8000`     | Solo `127.0.0.1:8000`                                                   |
 | PostgreSQL (persistencia de la API) | `postgres:5432`           | Sin puerto publicado                                                    |
 | Cola de eventos S3                  | `elasticmq:9324`          | Sin puertos publicados                                                  |
 
-Compose crea una red privada y los servicios se encuentran por nombre DNS de servicio. La API usa `minio:9000` y `postgres:5432`; no usa `localhost` para hablar con otros contenedores. DynamoDB Local y su volumen se conservan como respaldo de las tablas migradas, pero la API Docker usa PostgreSQL para esas lecturas y escrituras. Caddy no tiene una dependencia de arranque respecto de la API: reintenta las conexiones al upstream cuando la API termina de iniciar.
+Compose crea una red privada y los servicios se encuentran por nombre DNS de servicio. La API usa `minio:9000` y `postgres:5432`; no usa `localhost` para hablar con otros contenedores. Todas las tablas de persistencia de la API en Docker usan PostgreSQL. Caddy no tiene una dependencia de arranque respecto de la API: reintenta las conexiones al upstream cuando la API termina de iniciar.
 
 Caddy termina TLS para `DOMAIN` y `s3.DOMAIN`, renueva los certificados y conserva su estado en los volúmenes `caddy_data` y `caddy_config`. El proxy inverso maneja automáticamente el upgrade de WebSocket. El cliente se conecta a `wss://<DOMAIN>/ws` cuando configura la URL `https://<DOMAIN>`.
 
 La API configura CORS con reflejo del origen solicitado (`@fastify/cors`, `origin: true`) y no usa cookies de sesión. `SYNC_GAMES_API_KEY` es la credencial del dueño; los invitados reciben tokens de acceso firmados de una hora y refresh tokens rotativos de treinta días, que el cliente guarda en el llavero del sistema. `ACCESS_TOKEN_SECRET` debe ser un secreto aleatorio distinto de la API key. El WebSocket autentica en el handshake mediante headers, nunca con credenciales en la URL. TLS se termina en Caddy; Fastify confía en los headers reenviados solo desde `TRUSTED_PROXY_CIDRS`.
 
-En Docker, PostgreSQL almacena notificaciones, índice de archivos, estadísticas, conexiones, metadatos de clips, invitaciones y membresías, permisos de juegos compartidos, sesiones de acceso, inventarios de dispositivos, transferencias y tokens compartidos. Los archivos binarios de guardado y clips permanecen en S3/MinIO. El worker de expiración elimina en lotes notificaciones, invitaciones, sesiones, conexiones y tokens vencidos cada seis horas. `s3-events-worker` actualiza el índice y las estadísticas en PostgreSQL e invalida las cachés de la API antes de confirmar los mensajes. DynamoDB Local se conserva como respaldo de los registros originales durante la validación. En AWS Serverless se mantienen los adaptadores DynamoDB y su TTL. ElasticMQ persiste la cola y los mensajes en `elasticmq_data` y usa long polling cuando la cola está vacía. En AWS se conserva el flujo S3 → SQS → Lambda.
+En Docker, PostgreSQL almacena notificaciones, índice de archivos, estadísticas, conexiones, metadatos de clips, invitaciones y membresías, permisos de juegos compartidos, sesiones de acceso, inventarios de dispositivos, transferencias y tokens compartidos. Los archivos binarios de guardado y clips permanecen en S3/MinIO. El worker de expiración elimina en lotes notificaciones, invitaciones, sesiones, conexiones y tokens vencidos cada seis horas. `s3-events-worker` actualiza el índice y las estadísticas en PostgreSQL e invalida las cachés de la API antes de confirmar los mensajes. En AWS Serverless se mantienen los adaptadores DynamoDB y su TTL. ElasticMQ persiste la cola y los mensajes en `elasticmq_data` y usa long polling cuando la cola está vacía. En AWS se conserva el flujo S3 → SQS → Lambda.
 
 ## Requisitos del VPS
 
@@ -28,7 +27,7 @@ En Docker, PostgreSQL almacena notificaciones, índice de archivos, estadística
 - Un dominio y acceso para crear registros DNS.
 - Puertos entrantes `80/tcp`, `443/tcp` y opcionalmente `443/udp` abiertos en el firewall del VPS y del proveedor. UDP 443 habilita HTTP/3; TCP 443 es suficiente para HTTPS.
 - Una licencia MinIO AIStor para esta instalación. AIStor Free es de un solo nodo y cada usuario debe obtener su propia licencia.
-- Espacio persistente para los volúmenes de datos de MinIO, PostgreSQL, DynamoDB y Caddy.
+- Espacio persistente para los volúmenes de datos de MinIO, PostgreSQL y Caddy.
 
 ### Configurar la licencia de MinIO AIStor
 
@@ -106,9 +105,9 @@ bash scripts/docker-setup.sh
 
 ### Usar los scripts automatizados
 
-Los scripts construyen e inician la pila con `docker compose up -d --build`, esperan hasta dos minutos a que la API esté saludable, a que termine la inicialización del bucket y a que arranque el worker. Al finalizar imprimen las URLs apropiadas para el modo local o VPS, además de los endpoints internos de Docker. Leen `DOMAIN`, `S3_PUBLIC_ENDPOINT` y `API_PORT` del entorno o del archivo `.env`.
+Los scripts construyen e inician la pila con `docker compose up -d --build --remove-orphans`, eliminan el contenedor huérfano de DynamoDB Local y tratan de quitar su imagen, esperan hasta dos minutos a que la API esté saludable, a que termine la inicialización del bucket y a que arranquen los workers. Al finalizar imprimen las URLs apropiadas para el modo local o VPS y los endpoints internos de Docker. Leen `DOMAIN`, `S3_PUBLIC_ENDPOINT` y `API_PORT` del entorno o de `.env`.
 
-Si ya configuraste `.env` y no necesitas el asistente, ejecuta desde la raíz del repositorio `docker compose up -d` o usa el script correspondiente. Los scripts construyen e inician la pila; ejecuta desde la raíz, donde están `docker-compose.yml` y `.env`:
+Si ya configuraste `.env` y no necesitas el asistente, ejecuta desde la raíz del repositorio `docker compose up -d --remove-orphans` o usa el script correspondiente. `--remove-orphans` retira los contenedores de servicios que Compose ya no configura.
 
 Windows PowerShell:
 
@@ -122,7 +121,7 @@ Linux/macOS:
 bash scripts/docker-up.sh
 ```
 
-En el VPS, la salida muestra `https://<DOMAIN>`, `wss://<DOMAIN>/ws` y el endpoint S3 configurado. En local muestra `http://localhost:<API_PORT>`, `ws://localhost:<API_PORT>/ws`, MinIO y DynamoDB en loopback. Si un servicio no queda listo, el script muestra el estado de Compose y los últimos registros de Caddy, API, MinIO, inicializador y worker, y termina con error.
+En el VPS, la salida muestra `https://<DOMAIN>`, `wss://<DOMAIN>/ws` y el endpoint S3 configurado. En local muestra `http://localhost:<API_PORT>`, `ws://localhost:<API_PORT>/ws` y MinIO. Si un servicio no queda listo, el script muestra el estado de Compose y los últimos registros de Caddy, API, MinIO, inicializador y worker, y termina con error.
 
 Comprueba el estado y los registros:
 
@@ -156,17 +155,15 @@ bash scripts/docker-setup.sh
 
 El asistente configura `DOMAIN=localhost`, `S3_PUBLIC_ENDPOINT=http://localhost:9000`, prepara `.env` si hace falta e inicia los servicios. La API key también es obligatoria localmente: el asistente la muestra al terminar para que la guardes en **Configuración → Conexión de servidor → Clave de acceso**. Si después ejecutas el script de arranque directamente, usa `bash scripts/docker-up.sh` o `.\scripts\docker-up.ps1`.
 
-La consola MinIO sigue disponible en `http://localhost:9001`; DynamoDB Local, si se necesita desde herramientas del host, en `http://localhost:8000`. Para iniciar localmente:
+La consola MinIO sigue disponible en `http://localhost:9001`. Para iniciar localmente:
 
 ```bash
-docker compose up -d
+docker compose up -d --remove-orphans
 ```
 
 También puedes usar los scripts automatizados de la sección anterior. En Windows ejecuta `.\scripts\docker-up.ps1`; en Linux/macOS ejecuta `bash scripts/docker-up.sh`. La salida confirma cuándo la API, el bucket y el worker están listos y muestra las URLs locales.
 
-Para observar el volumen y la latencia agregada de las operaciones DynamoDB durante una prueba, configura `DYNAMODB_OPERATION_METRICS=true` en `.env` y recrea la API y el worker. Cada minuto se registra un resumen por operación, con cantidad, errores, promedio y máximo; los valores quedan desactivados por defecto.
-
-En el cliente de escritorio local configura `http://localhost:3000`; el WebSocket correspondiente usa `ws://localhost:3000/ws`. Los puertos de MinIO, su consola y DynamoDB no escuchan en interfaces públicas.
+En el cliente de escritorio local configura `http://localhost:3000`; el WebSocket correspondiente usa `ws://localhost:3000/ws`. Los puertos de MinIO y su consola no escuchan en interfaces públicas.
 
 ## Comprobación de servicios
 
@@ -175,11 +172,11 @@ docker compose ps
 docker compose logs --tail=100 savecloud-api create-bucket steam-seed-worker
 ```
 
-`savecloud-api` debe aparecer `Healthy`, `steam-seed-worker` debe permanecer activo y `savecloud-storage-bootstrap` puede aparecer como `Exited (0)`, porque es una tarea de inicialización. Desde la red de Compose, Caddy usa `savecloud-api:3000` y `minio:9000`; la API usa `minio:9000` y `dynamodb-local:8000`. DynamoDB Local usa credenciales simuladas independientes (`local`/`local`); las credenciales aleatorias de `.env` son para MinIO. El bootstrap permite lectura pública de objetos bajo `clips/` para que los clips compartidos puedan abrirse sin autenticación. No concede lectura pública a `clips-meta/` ni al resto del bucket.
+`savecloud-api` debe aparecer `Healthy`, `steam-seed-worker` debe permanecer activo y `savecloud-storage-bootstrap` puede aparecer como `Exited (0)`, porque es una tarea de inicialización. Desde la red de Compose, Caddy usa `savecloud-api:3000` y la API usa `minio:9000` y `postgres:5432`. El bootstrap permite lectura pública de objetos bajo `clips/` para que los clips compartidos puedan abrirse sin autenticación. No concede lectura pública a `clips-meta/` ni al resto del bucket.
 
 ## Persistencia y comandos útiles
 
-Compose persiste los objetos de MinIO, las tablas de DynamoDB y los certificados/configuración de Caddy en volúmenes nombrados. `docker compose down` conserva esos datos. Para ver los registros continuamente o detener la instalación:
+Compose persiste los objetos de MinIO, los datos de PostgreSQL y los certificados/configuración de Caddy en volúmenes nombrados. `docker compose down` conserva esos datos. Para ver los registros continuamente o detener la instalación:
 
 ```bash
 docker compose logs -f

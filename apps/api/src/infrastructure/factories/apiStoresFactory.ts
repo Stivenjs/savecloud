@@ -28,7 +28,7 @@ import { PostgresShareTokenRepository } from "@infrastructure/share/PostgresShar
 
 export interface ApiStoresFactoryInput {
   s3: S3Client;
-  dynamo: DynamoDBClient;
+  dynamo?: DynamoDBClient;
   bucketName: string;
   presignS3?: S3Client;
   /** Pool SQL compartido por los adaptadores PostgreSQL que se habiliten en la API. */
@@ -46,58 +46,64 @@ export interface ApiStoresFactoryInput {
   };
 }
 
+/** Devuelve el cliente DynamoDB cuando se seleccionó un adaptador AWS/DynamoDB. */
+function requireDynamoClient(input: ApiStoresFactoryInput): DynamoDBClient {
+  if (!input.dynamo) throw new Error("El adaptador seleccionado requiere un cliente DynamoDB.");
+  return input.dynamo;
+}
+
 /** Crea el repositorio de tokens compartidos según la tabla configurada. */
 function createShareTokenRepository(input: ApiStoresFactoryInput) {
-  const { dynamo, s3, bucketName, database, tables } = input;
+  const { s3, bucketName, database, tables } = input;
   const tableName = tables.shareTokens;
   const fallback = new ShareTokenS3(s3, bucketName);
 
   if (database) return new PostgresShareTokenRepository(database, fallback);
   if (!tableName) return fallback;
-  return new DynamoDbShareTokenStore(dynamo, tableName, s3, bucketName);
+  return new DynamoDbShareTokenStore(requireDynamoClient(input), tableName, s3, bucketName);
 }
 
 /** Crea el repositorio de clips según la tabla configurada. */
 function createClipRepository(input: ApiStoresFactoryInput) {
-  const { s3, dynamo, bucketName, presignS3, database, tables } = input;
+  const { s3, bucketName, presignS3, database, tables } = input;
   const tableName = tables.clips;
 
   if (database) return new PostgresClipStore(s3, bucketName, database, presignS3);
   if (!tableName) return new ClipStore(s3, bucketName, presignS3);
-  return new DynamoDbClipStore(s3, bucketName, dynamo, tableName, presignS3);
+  return new DynamoDbClipStore(s3, bucketName, requireDynamoClient(input), tableName, presignS3);
 }
 
 /** Crea el repositorio de notificaciones y prioriza PostgreSQL si está configurado. */
 function createNotificationRepository(input: ApiStoresFactoryInput) {
-  const { s3, dynamo, bucketName, database, tables } = input;
+  const { s3, bucketName, database, tables } = input;
 
   if (database) return new PostgresNotificationStore(database);
 
   const tableName = tables.notifications;
-  if (tableName) return new DynamoDbNotificationStore(dynamo, tableName, s3, bucketName);
+  if (tableName) return new DynamoDbNotificationStore(requireDynamoClient(input), tableName, s3, bucketName);
   return new S3NotificationStore(s3, bucketName);
 }
 
 /** Crea el índice de archivos en PostgreSQL o DynamoDB según el almacén configurado. */
 function createSaveFileIndexRepository(input: ApiStoresFactoryInput) {
-  const { database, dynamo, tables } = input;
+  const { database, tables } = input;
 
   if (database) return new PostgresSaveFileIndexRepository(database);
   return createOptionalTableRepository(
     tables.saveFilesIndex,
-    (tableName) => new DynamoDbSaveFileIndexRepository(dynamo, tableName)
+    (tableName) => new DynamoDbSaveFileIndexRepository(requireDynamoClient(input), tableName)
   );
 }
 
 /** Crea el repositorio de invitaciones y su alternativa respaldada por S3. */
 function createCloudInviteRepository(input: ApiStoresFactoryInput) {
-  const { s3, dynamo, bucketName, database, tables } = input;
+  const { s3, bucketName, database, tables } = input;
   const fallback = new S3CloudInviteRepository(s3, bucketName);
   if (database) return new PostgresCloudInviteRepository(database, fallback);
   const tableName = tables.cloudInvites;
 
   if (!tableName) return fallback;
-  return new DynamoDbCloudInviteRepository(dynamo, tableName, fallback);
+  return new DynamoDbCloudInviteRepository(requireDynamoClient(input), tableName, fallback);
 }
 
 /** Crea el repositorio de inventario con una alternativa S3 vinculada a invitaciones. */
@@ -105,13 +111,13 @@ function createGameInventoryRepository(
   input: ApiStoresFactoryInput,
   cloudInviteRepository: ReturnType<typeof createCloudInviteRepository>
 ) {
-  const { s3, dynamo, bucketName, database, tables } = input;
+  const { s3, bucketName, database, tables } = input;
   const fallback = new S3GameInventoryRepository(s3, bucketName, cloudInviteRepository);
   const tableName = tables.gameInventory;
 
   if (database) return new PostgresGameInventoryRepository(database, cloudInviteRepository, fallback);
   if (!tableName) return fallback;
-  return new DynamoDbGameInventoryRepository(dynamo, tableName, cloudInviteRepository, fallback);
+  return new DynamoDbGameInventoryRepository(requireDynamoClient(input), tableName, cloudInviteRepository, fallback);
 }
 
 /** Crea un repositorio basado en tabla solo cuando se configuró su nombre. */
@@ -125,27 +131,27 @@ function createOptionalTableRepository<T>(
 
 /** Crea el repositorio de estadísticas en PostgreSQL o DynamoDB. */
 function createGameStatRepository(input: ApiStoresFactoryInput) {
-  const { database, dynamo, tables } = input;
+  const { database, tables } = input;
   if (database) return new PostgresGameStatRepository(database);
   return createOptionalTableRepository(
     tables.gameStats,
-    (tableName) => new DynamoDbGameStatRepository(dynamo, tableName)
+    (tableName) => new DynamoDbGameStatRepository(requireDynamoClient(input), tableName)
   );
 }
 
 /** Crea el repositorio de conexiones en PostgreSQL o DynamoDB. */
 function createConnectionRepository(input: ApiStoresFactoryInput) {
-  const { database, dynamo, tables } = input;
+  const { database, tables } = input;
   if (database) return new PostgresConnectionRepository(database);
   return createOptionalTableRepository(
     tables.connections,
-    (tableName) => new DynamoDbConnectionRepository(dynamo, tableName)
+    (tableName) => new DynamoDbConnectionRepository(requireDynamoClient(input), tableName)
   );
 }
 
 /** Construye adaptadores de almacenamiento compartidos por los entrypoints HTTP. */
 export function createApiStores(input: ApiStoresFactoryInput) {
-  const { s3, dynamo, bucketName, presignS3, database, tables } = input;
+  const { s3, bucketName, presignS3, database, tables } = input;
   const saveRepository = new S3SaveRepository(s3, bucketName, presignS3);
   const steamSeedRepository = new S3SteamSeedRepository(s3, bucketName, presignS3);
   const shareTokenRepository = createShareTokenRepository(input);
@@ -165,7 +171,7 @@ export function createApiStores(input: ApiStoresFactoryInput) {
       ? new PostgresCloudInviteRepository(database)
       : createOptionalTableRepository(
           tables.cloudInvites,
-          (tableName) => new DynamoDbAccessSessionRepository(dynamo, tableName)
+          (tableName) => new DynamoDbAccessSessionRepository(requireDynamoClient(input), tableName)
         ),
     gameInventoryRepository,
     gameStatRepository: createGameStatRepository(input),

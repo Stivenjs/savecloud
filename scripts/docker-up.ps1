@@ -5,10 +5,12 @@ if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }
 
-& docker compose up -d --no-build
+& docker compose up -d --no-build --remove-orphans
 if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }
+
+& docker image rm amazon/dynamodb-local:latest 2>$null | Out-Null
 
 function Get-ContainerInspectValue {
   param(
@@ -81,7 +83,6 @@ if ($domain -eq "localhost") {
   Write-Host "  WebSocket:            ws://localhost:$apiPort/ws"
   Write-Host "  S3 público/presigned: $s3PublicEndpoint"
   Write-Host "  Consola AIStor:       http://localhost:9001"
-  Write-Host "  DynamoDB Local:       http://localhost:8000"
 } else {
   Write-Host "SaveCloud está listo. URLs públicas:"
   Write-Host "  API HTTPS:            https://$domain"
@@ -92,10 +93,8 @@ if ($domain -eq "localhost") {
   Write-Host "Endpoints disponibles solo desde el VPS:"
   Write-Host "  API local:            http://127.0.0.1:$apiPort"
   Write-Host "  Consola AIStor:       http://127.0.0.1:9001"
-  Write-Host "  DynamoDB Local:       http://127.0.0.1:8000"
 }
 Write-Host ""
 Write-Host "Endpoints internos Docker:"
 Write-Host "  API:                  savecloud-api:3000"
 Write-Host "  S3:                   minio:9000"
-Write-Host "  DynamoDB:             dynamodb-local:8000"

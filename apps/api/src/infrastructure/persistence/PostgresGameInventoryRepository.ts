@@ -85,6 +85,7 @@ export class PostgresGameInventoryRepository implements GameInventoryRepository 
     await this.sql`
       DELETE FROM savecloud_device_inventories WHERE user_id = ${userId.trim()} AND device_id = ${deviceId.trim()}
     `;
+    if (this.s3Fallback) await this.s3Fallback.deleteDeviceInventory(userId, deviceId);
   }
 
   /** Actualiza la última conexión y, si se indicó, la versión del cliente. */

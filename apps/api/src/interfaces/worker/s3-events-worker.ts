@@ -33,8 +33,8 @@ if (!apiKey) {
 
 const activeApiKey = apiKey;
 
-const dynamo = createDynamoDbClient();
 const database = databaseConfiguration ? createDatabaseClient(databaseConfiguration) : undefined;
+const dynamo = database ? undefined : createDynamoDbClient();
 const queue = createS3EventQueueClient();
 
 let saveFileIndexRepository: PostgresSaveFileIndexRepository | DynamoDbSaveFileIndexRepository;
@@ -42,14 +42,14 @@ let saveFileIndexRepository: PostgresSaveFileIndexRepository | DynamoDbSaveFileI
 if (database) {
   saveFileIndexRepository = new PostgresSaveFileIndexRepository(database);
 } else if (indexTable) {
-  saveFileIndexRepository = new DynamoDbSaveFileIndexRepository(dynamo, indexTable);
+  saveFileIndexRepository = new DynamoDbSaveFileIndexRepository(dynamo!, indexTable);
 } else {
   throw new Error("Falta DATABASE_* o SAVE_FILES_INDEX_TABLE para el almacén del índice de archivos.");
 }
 
 const gameStatRepository = database
   ? new PostgresGameStatRepository(database)
-  : new DynamoDbGameStatRepository(dynamo, statsTable!);
+  : new DynamoDbGameStatRepository(dynamo!, statsTable!);
 
 const useCase = new ProcessS3EventUseCase(saveFileIndexRepository, gameStatRepository);
 
@@ -203,7 +203,7 @@ async function run(): Promise<void> {
       queue.destroy();
     } finally {
       try {
-        dynamo.destroy();
+        dynamo?.destroy();
       } finally {
         await database?.close();
       }

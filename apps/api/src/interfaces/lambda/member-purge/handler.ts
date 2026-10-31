@@ -17,7 +17,7 @@ function getPurgeUseCase(): PurgeSoftDeletedMembersUseCase {
   const database = databaseConfiguration ? createDatabaseClient(databaseConfiguration) : undefined;
 
   const s3 = createS3Client();
-  const dynamoClient = createDynamoDbClient();
+  const dynamoClient = database ? undefined : createDynamoDbClient();
 
   const stores = createApiStores({
     s3,
