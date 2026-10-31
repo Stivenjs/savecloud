@@ -56,6 +56,7 @@ type FetchWithRetryResult = {
   data?: unknown;
   error?: string;
   rateLimited: boolean;
+  retryAfterMs?: number | null;
 };
 
 /**
@@ -84,8 +85,18 @@ async function fetchWithRetry(params: {
         data: res.data,
         error: res.error,
         rateLimited: false,
+        retryAfterMs: res.retryAfterMs,
       };
     }
+
+    console.warn(
+      JSON.stringify({
+        msg: "steam-seed.rate-limit-response",
+        appId,
+        attempt: attempt + 1,
+        retryAfterMs: res.retryAfterMs,
+      })
+    );
 
     if (attempt >= maxRetries429) {
       return {
@@ -95,10 +106,11 @@ async function fetchWithRetry(params: {
         steamSuccess: null,
         error: "rate_limited",
         rateLimited: true,
+        retryAfterMs: res.retryAfterMs,
       };
     }
 
-    const backoffMs = retryBaseDelayMs * 2 ** attempt;
+    const backoffMs = Math.max(retryBaseDelayMs * 2 ** attempt, res.retryAfterMs ?? 0);
     await sleep(jitterMs(backoffMs));
     attempt += 1;
   }
@@ -163,6 +175,7 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
   stateAfter: SteamSeedStateV1;
   wroteBatchKey?: string;
   done: boolean;
+  errors?: Array<{ appId: number; httpStatus: number; error: string }>;
   reason?: "backoff_active" | "no_manifest_parts" | "catalog_complete" | "batch_written";
   priorityChangedDetected?: boolean;
 }> {
@@ -173,7 +186,7 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
   const backoffMinutes = envInt("STEAM_BACKOFF_MINUTES", 30);
   const lang = envStr("STEAM_LANG", "spanish");
   const filters = envStr("STEAM_FILTERS", DEFAULT_STEAM_FILTERS);
-  const maxConcurrency = envInt("STEAM_MAX_CONCURRENCY", 4);
+  const maxConcurrency = envInt("STEAM_MAX_CONCURRENCY", 1);
   const retry429 = envInt("STEAM_429_RETRIES", 2);
   const retryBaseDelayMs = envInt("STEAM_429_BASE_DELAY_MS", 1500);
 
@@ -297,6 +310,7 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
   let httpErrors = 0;
   let sawRateLimit = false;
   let newlyProcessedCount = 0;
+  let retryAfterMsMax = 0;
 
   const results = await processWithConcurrencyLimit(appIds, maxConcurrency, async (appId) => {
     await sleep(jitterMs(delayMs));
@@ -306,6 +320,7 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
   for (const r of results) {
     if (r.rateLimited) {
       sawRateLimit = true;
+      retryAfterMsMax = Math.max(retryAfterMsMax, r.retryAfterMs ?? 0);
       httpErrors += 1;
       const line: BatchLineV1 = {
         appId: r.appId,
@@ -354,6 +369,18 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
     }
   }
 
+  if (sawRateLimit) {
+    console.warn(
+      JSON.stringify({
+        msg: "steam-seed.rate-limit-observed",
+        seedPrefix,
+        count: results.filter((result) => result.rateLimited).length,
+        retryAfterMs: retryAfterMsMax || null,
+        backoffMinutes,
+      })
+    );
+  }
+
   const wroteKey = `${seedPrefix}/${batchKey(state.batchSeq)}`;
   await s3.send(
     new PutObjectCommand({
@@ -369,10 +396,23 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
     await saveProcessedAppIds(s3, bucket, seedPrefix, processedSet);
   }
 
+  const retryableFailures = httpErrors > 0;
   state = {
     ...stateAfter,
+    ...(retryableFailures
+      ? {
+          priorityLine: state.priorityLine,
+          priorityDone: state.priorityDone,
+          manifestPart: state.manifestPart,
+          manifestLine: state.manifestLine,
+        }
+      : {}),
     batchSeq: state.batchSeq + 1,
-    backoffUntil: sawRateLimit ? new Date(Date.now() + backoffMinutes * 60_000).toISOString() : null,
+    backoffUntil: retryableFailures
+      ? new Date(
+          Date.now() + Math.max(sawRateLimit ? backoffMinutes * 60_000 : 5 * 60_000, retryAfterMsMax)
+        ).toISOString()
+      : null,
     totals: {
       processed: state.totals.processed + appIds.length,
       steamOk: state.totals.steamOk + steamOk,
@@ -390,5 +430,9 @@ export async function runSteamSeedTick(params: { s3: S3Client; bucket: string; s
     done: false,
     reason: "batch_written",
     priorityChangedDetected,
+    errors: results
+      .filter((result) => result.steamSuccess === null)
+      .slice(0, 20)
+      .map(({ appId, httpStatus, error }) => ({ appId, httpStatus, error: error ?? "http_error" })),
   };
 }

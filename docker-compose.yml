@@ -79,7 +79,10 @@ services:
       create-bucket:
         condition: service_completed_successfully
     environment:
-      - SEED_INTERVAL_MS=${SEED_INTERVAL_MS:-120000}
+      - SEED_DETAILS_INTERVAL_MS=${SEED_DETAILS_INTERVAL_MS:-30000}
+      - SEED_REVIEWS_INTERVAL_MS=${SEED_REVIEWS_INTERVAL_MS:-120000}
+      - STEAM_MIN_REQUEST_INTERVAL_MS=${STEAM_MIN_REQUEST_INTERVAL_MS:-4000}
+      - REVIEWS_MIN_REQUEST_INTERVAL_MS=${REVIEWS_MIN_REQUEST_INTERVAL_MS:-3000}
 
   s3-events-worker:
     extends:

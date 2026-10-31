@@ -12,15 +12,19 @@ import { S3SteamSeedRepository } from "@infrastructure/persistence/S3SteamSeedRe
  * - `event.ownerId` (opcional): fuerza el owner a procesar (útil para invocación manual).
  * - En ejecución programada sin owner, hace auto-discovery + round-robin.
  *
- * Cada invocación ejecuta dos ticks secuenciales:
- *   1. Tick de detalles de apps  (comportamiento existente, sin cambios)
- *   2. Tick de reseñas           (nuevo — itera sobre processed_appids.json)
+ * `event.task` permite ejecutar solo `details`, solo `reviews` o ambos (`all`, valor por defecto).
  *
- * Ambos ticks son independientes: si uno está en backoff o completo, el otro
- * continúa con normalidad. Los errores del tick de reseñas se registran pero NO
- * provocan que el Lambda lance una excepción — el progreso de detalles nunca es
- * bloqueado por las reseñas.
+ * Los ticks de detalles y reseñas mantienen cursores y backoffs independientes.
+ * Los errores del tick de reseñas se registran sin lanzar una excepción del Lambda.
  */
+type SteamSeedTask = "all" | "details" | "reviews";
+
+function readTask(event: unknown): SteamSeedTask {
+  if (typeof event !== "object" || event === null || !("task" in event)) return "all";
+  const task = (event as { task?: unknown }).task;
+  return task === "details" || task === "reviews" ? task : "all";
+}
+
 export async function handler(_event: unknown, _context?: Partial<Context>): Promise<Record<string, unknown>> {
   const requestId =
     typeof _context === "object" && _context !== null && "awsRequestId" in _context
@@ -28,6 +32,7 @@ export async function handler(_event: unknown, _context?: Partial<Context>): Pro
       : "";
 
   try {
+    const task = readTask(_event);
     const bucket = process.env.BUCKET_NAME?.trim();
     if (!bucket) {
       console.error("[steam-seed] BUCKET_NAME missing");
@@ -72,73 +77,79 @@ export async function handler(_event: unknown, _context?: Partial<Context>): Pro
       })
     );
 
-    const detailsResult = await runSteamSeedTick({ s3, bucket, seedPrefix });
-
-    console.log(
-      JSON.stringify({
-        msg: "steam-seed.done",
-        requestId,
-        seedPrefix: detailsResult.seedPrefix,
-        reason: detailsResult.reason ?? null,
-        priorityChangedDetected: detailsResult.priorityChangedDetected ?? false,
-        wroteBatchKey: detailsResult.wroteBatchKey ?? null,
-        done: detailsResult.done,
-        backoffUntil: detailsResult.stateAfter.backoffUntil,
-        catalogComplete: detailsResult.stateAfter.catalogComplete,
-        totals: detailsResult.stateAfter.totals,
-      })
-    );
-
-    let reviewsResult: Awaited<ReturnType<typeof runReviewsTick>> | null = null;
-    const controlAfterDetails = ownerId
-      ? await seedRepository.getWorkerControl(ownerId)
-      : { paused: false, updatedAt: null };
-    try {
-      if (controlAfterDetails.paused) {
-        return {
-          ok: true,
-          paused: true,
-          ownerId: ownerId || null,
-          reason: "paused_after_details_tick",
-          totals: detailsResult.stateAfter.totals,
-        };
-      }
-      reviewsResult = await runReviewsTick({ s3, bucket, seedPrefix });
-
+    let detailsResult: Awaited<ReturnType<typeof runSteamSeedTick>> | null = null;
+    if (task !== "reviews") {
+      detailsResult = await runSteamSeedTick({ s3, bucket, seedPrefix });
       console.log(
         JSON.stringify({
-          msg: "steam-reviews.done",
+          msg: "steam-seed.done",
           requestId,
-          seedPrefix: reviewsResult.seedPrefix,
-          reason: reviewsResult.reason ?? null,
-          wroteBatchKey: reviewsResult.wroteBatchKey ?? null,
-          done: reviewsResult.done,
-          backoffUntil: reviewsResult.stateAfter.backoffUntil,
-          offset: reviewsResult.stateAfter.offset,
-          totals: reviewsResult.stateAfter.totals,
-          errors: reviewsResult.errors ?? [],
-        })
-      );
-    } catch (reviewsErr) {
-      console.error(
-        JSON.stringify({
-          msg: "steam-reviews.error",
-          requestId,
-          errorName: reviewsErr instanceof Error ? reviewsErr.name : typeof reviewsErr,
-          errorMessage: reviewsErr instanceof Error ? reviewsErr.message : String(reviewsErr),
-          errorStack: reviewsErr instanceof Error ? reviewsErr.stack : undefined,
+          seedPrefix: detailsResult.seedPrefix,
+          reason: detailsResult.reason ?? null,
+          priorityChangedDetected: detailsResult.priorityChangedDetected ?? false,
+          wroteBatchKey: detailsResult.wroteBatchKey ?? null,
+          done: detailsResult.done,
+          backoffUntil: detailsResult.stateAfter.backoffUntil,
+          catalogComplete: detailsResult.stateAfter.catalogComplete,
+          totals: detailsResult.stateAfter.totals,
+          errors: detailsResult.errors ?? [],
         })
       );
     }
 
+    let reviewsResult: Awaited<ReturnType<typeof runReviewsTick>> | null = null;
+    if (task !== "details") {
+      const controlAfterDetails = ownerId
+        ? await seedRepository.getWorkerControl(ownerId)
+        : { paused: false, updatedAt: null };
+      try {
+        if (controlAfterDetails.paused) {
+          return {
+            ok: true,
+            paused: true,
+            ownerId: ownerId || null,
+            reason: "paused_before_reviews_tick",
+            totals: detailsResult?.stateAfter.totals,
+          };
+        }
+        reviewsResult = await runReviewsTick({ s3, bucket, seedPrefix });
+
+        console.log(
+          JSON.stringify({
+            msg: "steam-reviews.done",
+            requestId,
+            seedPrefix: reviewsResult.seedPrefix,
+            reason: reviewsResult.reason ?? null,
+            wroteBatchKey: reviewsResult.wroteBatchKey ?? null,
+            done: reviewsResult.done,
+            backoffUntil: reviewsResult.stateAfter.backoffUntil,
+            offset: reviewsResult.stateAfter.offset,
+            totals: reviewsResult.stateAfter.totals,
+            errors: reviewsResult.errors ?? [],
+          })
+        );
+      } catch (reviewsErr) {
+        console.error(
+          JSON.stringify({
+            msg: "steam-reviews.error",
+            requestId,
+            errorName: reviewsErr instanceof Error ? reviewsErr.name : typeof reviewsErr,
+            errorMessage: reviewsErr instanceof Error ? reviewsErr.message : String(reviewsErr),
+            errorStack: reviewsErr instanceof Error ? reviewsErr.stack : undefined,
+          })
+        );
+      }
+    }
+
     return {
       ok: true,
-      seedPrefix: detailsResult.seedPrefix,
-      reason: detailsResult.reason,
-      priorityChangedDetected: detailsResult.priorityChangedDetected ?? false,
-      wroteBatchKey: detailsResult.wroteBatchKey,
-      done: detailsResult.done,
-      totals: detailsResult.stateAfter.totals,
+      task,
+      seedPrefix,
+      reason: detailsResult?.reason,
+      priorityChangedDetected: detailsResult?.priorityChangedDetected ?? false,
+      wroteBatchKey: detailsResult?.wroteBatchKey,
+      done: detailsResult?.done,
+      totals: detailsResult?.stateAfter.totals,
       steamFiltersEffective: process.env.STEAM_FILTERS ?? DEFAULT_STEAM_FILTERS,
       reviews: reviewsResult
         ? {

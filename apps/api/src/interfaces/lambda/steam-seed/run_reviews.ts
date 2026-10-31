@@ -39,6 +39,7 @@ type FetchReviewsWithRetryResult = {
   contentType?: string;
   bodyPreview?: string;
   rateLimited: boolean;
+  retryAfterMs?: number | null;
 };
 
 async function fetchWithRetry(params: {
@@ -65,14 +66,32 @@ async function fetchWithRetry(params: {
         contentType: res.contentType,
         bodyPreview: res.bodyPreview,
         rateLimited: false,
+        retryAfterMs: res.retryAfterMs,
       };
     }
 
+    console.warn(
+      JSON.stringify({
+        msg: "steam-reviews.rate-limit-response",
+        appId,
+        attempt: attempt + 1,
+        retryAfterMs: res.retryAfterMs,
+      })
+    );
+
     if (attempt >= maxRetries429) {
-      return { appId, fetchedAt, httpStatus: 429, reviewsSuccess: null, error: "rate_limited", rateLimited: true };
+      return {
+        appId,
+        fetchedAt,
+        httpStatus: 429,
+        reviewsSuccess: null,
+        error: "rate_limited",
+        rateLimited: true,
+        retryAfterMs: res.retryAfterMs,
+      };
     }
 
-    const backoffMs = retryBaseDelayMs * 2 ** attempt;
+    const backoffMs = Math.max(retryBaseDelayMs * 2 ** attempt, res.retryAfterMs ?? 0);
     await sleep(jitterMs(backoffMs));
     attempt += 1;
   }
@@ -127,7 +146,7 @@ export async function runReviewsTick(params: {
 
   const batchSize = envInt("REVIEWS_BATCH_SIZE", 25);
   const delayMs = envInt("REVIEWS_DELAY_MS", 600);
-  const maxConcurrency = envInt("REVIEWS_MAX_CONCURRENCY", 8);
+  const maxConcurrency = envInt("REVIEWS_MAX_CONCURRENCY", 1);
   const backoffMinutes = envInt("REVIEWS_BACKOFF_MINUTES", 15);
   const retry429 = envInt("REVIEWS_429_RETRIES", 3);
   const retryBaseDelayMs = envInt("REVIEWS_429_BASE_DELAY_MS", 2000);
@@ -171,6 +190,7 @@ export async function runReviewsTick(params: {
   let notFound = 0;
   let httpErrors = 0;
   let sawRateLimit = false;
+  let retryAfterMsMax = 0;
   const errorSummary = new Map<
     string,
     {
@@ -186,6 +206,7 @@ export async function runReviewsTick(params: {
   for (const r of fetchResults) {
     if (r.rateLimited) {
       sawRateLimit = true;
+      retryAfterMsMax = Math.max(retryAfterMsMax, r.retryAfterMs ?? 0);
       httpErrors += 1;
       const error = "rate_limited";
       const errorKey = `${r.httpStatus}:${error}`;
@@ -249,6 +270,18 @@ export async function runReviewsTick(params: {
     }
   }
 
+  if (sawRateLimit) {
+    console.warn(
+      JSON.stringify({
+        msg: "steam-reviews.rate-limit-observed",
+        seedPrefix,
+        count: fetchResults.filter((result) => result.rateLimited).length,
+        retryAfterMs: retryAfterMsMax || null,
+        backoffMinutes,
+      })
+    );
+  }
+
   const wroteKey = `${seedPrefix}/${reviewsBatchKey(state.batchSeq)}`;
   await s3.send(
     new PutObjectCommand({
@@ -261,9 +294,14 @@ export async function runReviewsTick(params: {
 
   state = {
     ...state,
-    offset: state.offset + appIds.length,
+    offset: httpErrors > 0 ? state.offset : state.offset + appIds.length,
     batchSeq: state.batchSeq + 1,
-    backoffUntil: sawRateLimit ? new Date(Date.now() + backoffMinutes * 60_000).toISOString() : null,
+    backoffUntil:
+      httpErrors > 0
+        ? new Date(
+            Date.now() + Math.max(sawRateLimit ? backoffMinutes * 60_000 : 5 * 60_000, retryAfterMsMax)
+          ).toISOString()
+        : null,
     totals: {
       processed: state.totals.processed + appIds.length,
       ok: state.totals.ok + ok,

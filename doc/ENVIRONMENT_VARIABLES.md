@@ -214,11 +214,23 @@ Estas variables configuran tablas usadas por los adaptadores DynamoDB de AWS Ser
 - **Defecto:** `savecloud-s3-events` y `http://elasticmq:9324/000000000000/savecloud-s3-events`.
 - **Descripción:** Nombre y URL de la cola donde MinIO emite notificaciones de creación de objetos para que el worker indexe los saves en segundo plano.
 
-### `SEED_INTERVAL_MS`
+### `SEED_DETAILS_INTERVAL_MS` y `SEED_REVIEWS_INTERVAL_MS`
 
 - **Requerida en:** Docker Compose (`steam-seed-worker`).
-- **Defecto:** `120000` (2 minutos).
-- **Descripción:** Intervalo en milisegundos con el que el worker sondea y sincroniza catálogos y seeds de Steam.
+- **Defectos:** `30000` (30 segundos) para detalles y `120000` (2 minutos) para reseñas.
+- **Descripción:** Intervalos independientes en milisegundos. Mantenerlos separados evita que acelerar el catálogo multiplique también las consultas de reseñas.
+
+### `STEAM_MIN_REQUEST_INTERVAL_MS` y `REVIEWS_MIN_REQUEST_INTERVAL_MS`
+
+- **Requerida en:** Docker Compose (`steam-seed-worker`).
+- **Defectos:** `4000` ms por solicitud de detalles y `3000` ms por solicitud de reseñas.
+- **Descripción:** Espaciamiento mínimo entre inicios de solicitudes al host correspondiente dentro de cada proceso. Ante un HTTP 429, el worker respeta `Retry-After`, aplica backoff y conserva el cursor para reintentar los IDs pendientes.
+
+### `SEED_INTERVAL_MS`
+
+- **Requerida en:** Opcional, para compatibilidad con ejecuciones independientes del worker.
+- **Defecto:** Sin definir; se usan los intervalos independientes indicados arriba.
+- **Descripción:** Intervalo heredado que se usa como alternativa cuando no se define una de las dos variables de intervalo nuevas.
 
 ---
 
