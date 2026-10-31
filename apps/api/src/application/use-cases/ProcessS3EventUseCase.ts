@@ -60,8 +60,16 @@ const ROOT_SYSTEM_PREFIXES = new Set([
 const GAME_SYSTEM_SEGMENTS = new Set(["__torrent__", "__config__", "__tmp__", "__temp__", "clips", "clips-meta"]);
 
 /**
+ * Obtiene el prefijo de Steam Seed configurado y elimina las barras externas.
+ * Si no se define, utiliza el prefijo predeterminado del catálogo.
+ */
+function getSteamSeedPrefix(): string {
+  return (process.env.STEAM_SEED_PREFIX ?? "steam-seed").replace(/^\/+|\/+$/g, "");
+}
+
+/**
  * Determina si una clave S3 corresponde a archivos de sistema, metadatos, clips
- * o marcadores de directorio que no deben ser indexados como archivos de guardado.
+ * o marcadores de directorio que no deben encolarse ni indexarse como partidas.
  */
 export function isIgnoredS3Key(s3Key: string, parts: string[]): boolean {
   if (!s3Key || s3Key.endsWith("/")) {
@@ -74,6 +82,14 @@ export function isIgnoredS3Key(s3Key: string, parts: string[]): boolean {
 
   const rootPrefix = parts[0]?.toLowerCase();
   if (rootPrefix && ROOT_SYSTEM_PREFIXES.has(rootPrefix)) {
+    return true;
+  }
+
+  const configuredSteamSeedPrefix = getSteamSeedPrefix();
+  if (
+    configuredSteamSeedPrefix &&
+    (s3Key === configuredSteamSeedPrefix || s3Key.startsWith(`${configuredSteamSeedPrefix}/`))
+  ) {
     return true;
   }
 

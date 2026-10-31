@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { ProcessS3EventUseCase } from "@application/use-cases/ProcessS3EventUseCase";
+import { isIgnoredS3Key, type ProcessS3EventUseCase } from "@application/use-cases/ProcessS3EventUseCase";
 import { parseMinioNotification } from "@interfaces/http/webhooks/minioNotificationParser";
 import { invalidateEventCaches } from "@interfaces/http/helpers/saves-cache";
 
@@ -22,7 +22,9 @@ export async function registerWebhookRoutes(
       return reply.send({ status: "ignored", reason: "DynamoDB event indexer is disabled" });
     }
 
-    const events = parseMinioNotification(request.body);
+    const receivedEvents = parseMinioNotification(request.body);
+    // Reutiliza el filtro del indexador antes de encolar eventos de objetos del sistema.
+    const events = receivedEvents.filter((event) => !isIgnoredS3Key(event.s3Key, event.s3Key.split("/")));
     if (events.length > 0) {
       if (deps.processS3Events) {
         await deps.processS3Events(events);
@@ -33,7 +35,7 @@ export async function registerWebhookRoutes(
       }
     }
 
-    return reply.send({ status: "ok", processed: events.length });
+    return reply.send({ status: "ok", processed: events.length, ignored: receivedEvents.length - events.length });
   });
 }
 
