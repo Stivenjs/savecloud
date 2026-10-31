@@ -139,6 +139,11 @@ case "$object_secret" in
   ""|replace-with-*|minioadmin) object_secret=$(new_hex_secret 32); set_env OBJECT_STORAGE_SECRET_KEY "$object_secret" ;;
 esac
 
+database_password=$(read_env DATABASE_PASSWORD)
+case "$database_password" in
+  ""|replace-with-*) database_password=$(new_hex_secret 32); set_env DATABASE_PASSWORD "$database_password" ;;
+esac
+
 license_path=$(read_env MINIO_LICENSE_PATH)
 license_path=${license_path:-./minio.license}
 while :; do
@@ -162,6 +167,7 @@ export HTTP_REQUEST_LOGS="$http_request_logs"
 export SYNC_GAMES_API_KEY="$api_key"
 export OBJECT_STORAGE_ACCESS_KEY="$object_user"
 export OBJECT_STORAGE_SECRET_KEY="$object_secret"
+export DATABASE_PASSWORD="$database_password"
 export MINIO_LICENSE_PATH="$resolved_license_path"
 
 echo

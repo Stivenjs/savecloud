@@ -1,3 +1,5 @@
+import { readDatabaseConfiguration } from "@interfaces/configuration/databaseConfiguration";
+
 export type RuntimeDeploymentMode = "lambda" | "self-hosted";
 
 const REQUIRED_SETTINGS: Record<RuntimeDeploymentMode, string[]> = {
@@ -27,7 +29,6 @@ const REQUIRED_SETTINGS: Record<RuntimeDeploymentMode, string[]> = {
     "SAVE_FILES_INDEX_TABLE",
     "CONNECTIONS_TABLE",
     "CLIPS_TABLE",
-    "NOTIFICATIONS_TABLE",
     "SHARE_TOKENS_TABLE",
     "CLOUD_INVITES_TABLE",
     "GAME_INVENTORY_TABLE",
@@ -37,6 +38,8 @@ const REQUIRED_SETTINGS: Record<RuntimeDeploymentMode, string[]> = {
 /** Valida las variables y URLs que cada modo necesita antes de construir sus adaptadores. */
 export function validateRuntimeConfiguration(mode: RuntimeDeploymentMode, env: NodeJS.ProcessEnv = process.env): void {
   const missing = REQUIRED_SETTINGS[mode].filter((name) => !env[name]?.trim());
+  const database = readDatabaseConfiguration(env);
+  if (mode === "self-hosted" && !database) missing.push("DATABASE_URL or DATABASE_* fields");
   if (missing.length > 0) {
     throw new Error(`[bootstrap] Configuración incompleta para modo ${mode}. Faltan: ${missing.join(", ")}.`);
   }
