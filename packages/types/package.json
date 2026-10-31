@@ -13,7 +13,8 @@
     }
   },
   "scripts": {
-    "check": "bun check"
+    "check": "bun check",
+    "build": "tsc -p tsconfig.json"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

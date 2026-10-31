@@ -43,21 +43,18 @@ export function registerApiKeyAuthHook(
   app.addHook("onRequest", async (request) => {
     if (isPublicRoute(request)) return;
 
-    // 1. Manejo del autorizador de AWS Lambda (API Gateway)
     const handledLambda = await handleLambdaAuthorizer(request, accessSessionRepository);
     if (handledLambda) return;
 
-    // 2. Extracción de credenciales (x-api-key o Bearer token)
     const key = extractCredential(request);
 
-    // 3. Validación de la API Key global
     if (expectedApiKey && safeCompareSecret(key ?? "", expectedApiKey)) {
       const declaredUserId = request.headers["x-user-id"];
       request.scAuthenticatedUserId = typeof declaredUserId === "string" ? declaredUserId.trim() : undefined;
+      request.scRateLimitUserId = request.scAuthenticatedUserId;
       return;
     }
 
-    // 4. Validación de Access Token de usuario y sesión activa
     if (typeof key === "string" && key.trim()) {
       const handledUserSession = await handleUserSessionToken(request, key.trim(), accessSessionRepository);
       if (handledUserSession) return;
