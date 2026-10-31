@@ -143,6 +143,12 @@ if (-not $objectSecret -or $objectSecret -match '^replace-with-' -or $objectSecr
   Set-EnvValue "OBJECT_STORAGE_SECRET_KEY" (New-HexSecret)
 }
 
+$databasePassword = Get-EnvValue "DATABASE_PASSWORD"
+if (-not $databasePassword -or $databasePassword -match '^replace-with-') {
+  $databasePassword = New-HexSecret
+  Set-EnvValue "DATABASE_PASSWORD" $databasePassword
+}
+
 $licensePath = Get-EnvValue "MINIO_LICENSE_PATH"
 if (-not $licensePath) { $licensePath = "./minio.license" }
 $resolvedLicensePath = if ([System.IO.Path]::IsPathRooted($licensePath)) { $licensePath } else { Join-Path (Get-Location) $licensePath }
@@ -164,6 +170,7 @@ $env:SYNC_GAMES_API_KEY = $apiKey
 $env:ACCESS_TOKEN_SECRET = $accessTokenSecret
 $env:OBJECT_STORAGE_ACCESS_KEY = $objectUser
 $env:OBJECT_STORAGE_SECRET_KEY = $objectSecret
+$env:DATABASE_PASSWORD = $databasePassword
 $env:MINIO_LICENSE_PATH = $licensePath
 
 Write-Host ""

@@ -4,22 +4,23 @@ Esta guía cubre el uso local y el despliegue de SaveCloud en un VPS. En el VPS,
 
 ## Arquitectura y exposición de servicios
 
-| Servicio                  | Acceso desde contenedores | Acceso desde Internet                                                   |
-| ------------------------- | ------------------------- | ----------------------------------------------------------------------- |
-| Caddy                     | `caddy:80/443`            | Puertos `80/tcp`, `443/tcp` y `443/udp`                                 |
-| SaveCloud API y WebSocket | `savecloud-api:3000`      | Solo a través de Caddy; en el host, `127.0.0.1:3000` para desarrollo    |
-| MinIO S3                  | `minio:9000`              | Solo a través de `https://s3.<DOMAIN>` en Caddy; `127.0.0.1:9000` local |
-| Consola MinIO             | `minio:9001`              | Solo `127.0.0.1:9001`                                                   |
-| DynamoDB Local            | `dynamodb-local:8000`     | Solo `127.0.0.1:8000`                                                   |
-| Cola de eventos S3        | `elasticmq:9324`          | Sin puertos publicados                                                  |
+| Servicio                    | Acceso desde contenedores | Acceso desde Internet                                                   |
+| --------------------------- | ------------------------- | ----------------------------------------------------------------------- |
+| Caddy                       | `caddy:80/443`            | Puertos `80/tcp`, `443/tcp` y `443/udp`                                 |
+| SaveCloud API y WebSocket   | `savecloud-api:3000`      | Solo a través de Caddy; en el host, `127.0.0.1:3000` para desarrollo    |
+| MinIO S3                    | `minio:9000`              | Solo a través de `https://s3.<DOMAIN>` en Caddy; `127.0.0.1:9000` local |
+| Consola MinIO               | `minio:9001`              | Solo `127.0.0.1:9001`                                                   |
+| DynamoDB Local              | `dynamodb-local:8000`     | Solo `127.0.0.1:8000`                                                   |
+| PostgreSQL (notificaciones) | `postgres:5432`           | Sin puerto publicado                                                    |
+| Cola de eventos S3          | `elasticmq:9324`          | Sin puertos publicados                                                  |
 
-Compose crea una red privada y los servicios se encuentran por nombre DNS de servicio. La API usa `minio:9000` y `dynamodb-local:8000`; no usa `localhost` para hablar con otros contenedores. Caddy no tiene una dependencia de arranque respecto de la API: reintenta las conexiones al upstream cuando la API termina de iniciar.
+Compose crea una red privada y los servicios se encuentran por nombre DNS de servicio. La API usa `minio:9000`, `dynamodb-local:8000` y `postgres:5432`; no usa `localhost` para hablar con otros contenedores. DynamoDB Local conserva las demás tablas de la API. Caddy no tiene una dependencia de arranque respecto de la API: reintenta las conexiones al upstream cuando la API termina de iniciar.
 
 Caddy termina TLS para `DOMAIN` y `s3.DOMAIN`, renueva los certificados y conserva su estado en los volúmenes `caddy_data` y `caddy_config`. El proxy inverso maneja automáticamente el upgrade de WebSocket. El cliente se conecta a `wss://<DOMAIN>/ws` cuando configura la URL `https://<DOMAIN>`.
 
 La API configura CORS con reflejo del origen solicitado (`@fastify/cors`, `origin: true`) y no usa cookies de sesión. `SYNC_GAMES_API_KEY` es la credencial del dueño; los invitados reciben tokens de acceso firmados de una hora y refresh tokens rotativos de treinta días, que el cliente guarda en el llavero del sistema. `ACCESS_TOKEN_SECRET` debe ser un secreto aleatorio distinto de la API key. El WebSocket autentica en el handshake mediante headers, nunca con credenciales en la URL. TLS se termina en Caddy; Fastify confía en los headers reenviados solo desde `TRUSTED_PROXY_CIDRS`.
 
-En Docker, la API guarda las notificaciones de MinIO en una cola SQS compatible y responde al recibir la confirmación de almacenamiento de la cola. `s3-events-worker` reúne eventos concurrentes durante una ventana breve, procesa hasta diez por lote, actualiza DynamoDB e invalida las cachés de la API antes de confirmar los mensajes. Al iniciar, la API habilita el TTL configurado para las tablas de DynamoDB, también si ya existían: `ttl` para conexiones WebSocket y `expiresAtEpoch` para notificaciones, tokens compartidos, invitaciones/sesiones y sesiones temporales del inventario. La indexación sucede en segundo plano; una carga puede tardar unos instantes en aparecer en una lista. ElasticMQ persiste la cola y los mensajes en el volumen `elasticmq_data`; usa long polling para dormir cuando la cola está vacía. En AWS se conserva el flujo S3 → SQS → Lambda.
+En Docker, las notificaciones se guardan en PostgreSQL; las demás tablas continúan en DynamoDB Local. Las filas de notificaciones vencen después de 30 días: las lecturas las excluyen inmediatamente y `notifications-expiration-worker` las elimina en lotes cada seis horas. En AWS Serverless se conserva DynamoDB y su TTL. La API guarda las notificaciones de MinIO en una cola SQS compatible y responde al recibir la confirmación de almacenamiento de la cola. `s3-events-worker` reúne eventos concurrentes durante una ventana breve, procesa hasta diez por lote, actualiza DynamoDB e invalida las cachés de la API antes de confirmar los mensajes. ElasticMQ persiste la cola y los mensajes en `elasticmq_data` y usa long polling cuando la cola está vacía. En AWS se conserva el flujo S3 → SQS → Lambda.
 
 ## Requisitos del VPS
 
@@ -27,7 +28,7 @@ En Docker, la API guarda las notificaciones de MinIO en una cola SQS compatible 
 - Un dominio y acceso para crear registros DNS.
 - Puertos entrantes `80/tcp`, `443/tcp` y opcionalmente `443/udp` abiertos en el firewall del VPS y del proveedor. UDP 443 habilita HTTP/3; TCP 443 es suficiente para HTTPS.
 - Una licencia MinIO AIStor para esta instalación. AIStor Free es de un solo nodo y cada usuario debe obtener su propia licencia.
-- Espacio persistente para los volúmenes de datos de MinIO, DynamoDB y Caddy.
+- Espacio persistente para los volúmenes de datos de MinIO, PostgreSQL, DynamoDB y Caddy.
 
 ### Configurar la licencia de MinIO AIStor
 
@@ -40,7 +41,7 @@ La consola administrativa de MinIO está en `http://localhost:9001`. Inicia sesi
 - **Usuario / Access Key:** valor de `OBJECT_STORAGE_ACCESS_KEY`.
 - **Contraseña / Secret Key:** valor de `OBJECT_STORAGE_SECRET_KEY`.
 
-El asistente Docker genera estas credenciales si `.env` contiene valores de ejemplo. Usa los valores actuales de `.env`; no copies credenciales de ejemplo ni compartas la contraseña. En una instalación VPS, el puerto `9001` solo escucha en loopback del servidor. Para abrir la consola desde tu computadora, crea un túnel SSH y luego visita `http://localhost:9001`:
+El asistente Docker genera estas credenciales si `.env` contiene valores de ejemplo. También genera `DATABASE_PASSWORD` para PostgreSQL. Usa los valores actuales de `.env`; no copies credenciales de ejemplo ni compartas las contraseñas. En una instalación VPS, el puerto `9001` solo escucha en loopback del servidor. Para abrir la consola desde tu computadora, crea un túnel SSH y luego visita `http://localhost:9001`:
 
 ```bash
 ssh -L 9001:127.0.0.1:9001 usuario@IP_O_DOMINIO_DEL_VPS

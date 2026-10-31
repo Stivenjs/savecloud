@@ -1,155 +1,168 @@
-import { buildApp } from "@interfaces/http/app";
-import { FastifyWebSocketNotifier } from "@infrastructure/websocket/FastifyWebSocketNotifier";
-import { createS3Client, createPresignS3Client, getBucketName } from "@infrastructure/factories/storageFactory";
-import { createDynamoDbClient, ensureDynamoDbTablesExist } from "@infrastructure/factories/dynamoDbFactory";
+import type { ProcessS3EventInput } from "@application/use-cases/ProcessS3EventUseCase";
 import { createApiStores } from "@infrastructure/factories/apiStoresFactory";
-import { startBunServer } from "@infrastructure/websocket/BunWebSocketServer";
-import { validateRuntimeConfiguration } from "@interfaces/configuration/runtimeConfiguration";
+import { createDatabaseClient } from "@infrastructure/factories/databaseClientFactory";
+import {
+  createDynamoDbClient,
+  ensureDynamoDbTablesExist,
+  type DynamoDbTablesConfig,
+} from "@infrastructure/factories/dynamoDbFactory";
+import { createPresignS3Client, createS3Client, getBucketName } from "@infrastructure/factories/storageFactory";
 import { createS3EventQueueClient, enqueueS3Events, ensureS3EventQueue } from "@infrastructure/queue/s3EventQueue";
+import { FastifyWebSocketNotifier } from "@infrastructure/websocket/FastifyWebSocketNotifier";
+import { startBunServer } from "@infrastructure/websocket/BunWebSocketServer";
+import { ensurePostgresNotificationSchema } from "@infrastructure/persistence/PostgresNotificationStore";
+import { readDatabaseConfiguration } from "@interfaces/configuration/databaseConfiguration";
+import { validateRuntimeConfiguration } from "@interfaces/configuration/runtimeConfiguration";
+import { buildApp } from "@interfaces/http/app";
 
-/** Puerto por defecto para el servidor HTTP de Fastify */
+/** Puerto predeterminado de la API HTTP. */
 const DEFAULT_SERVER_PORT = 3000;
 
-/** Dirección de red por defecto para escuchar peticiones externas */
+/** Dirección de red donde escucha el servidor. */
 const DEFAULT_SERVER_HOST = "0.0.0.0";
 
-/** Nombres de las tablas por defecto en entorno local/docker */
-const DEFAULT_GAME_STATS_TABLE = "savecloud-game-stats";
-const DEFAULT_SAVE_FILES_INDEX_TABLE = "savecloud-save-files-index";
-const DEFAULT_CONNECTIONS_TABLE = "savecloud-connections";
-const DEFAULT_CLIPS_TABLE = "savecloud-clips";
-const DEFAULT_NOTIFICATIONS_TABLE = "savecloud-notifications";
-const DEFAULT_SHARE_TOKENS_TABLE = "savecloud-share-tokens";
-const DEFAULT_CLOUD_INVITES_TABLE = "savecloud-cloud-invites";
-const DEFAULT_GAME_INVENTORY_TABLE = "savecloud-game-inventory";
+/** Tamaño máximo aceptado por una solicitud de envío a SQS. */
 const SQS_MAX_BATCH_SIZE = 10;
 
-if (process.env.NODE_ENV === "production") {
-  if (!process.env.API_KEY?.trim()) {
-    throw new Error("[bootstrap] API_KEY es obligatoria en producción; la API no puede iniciar sin autenticación.");
-  }
-  if (!process.env.ACCESS_TOKEN_SECRET?.trim()) {
-    throw new Error("[bootstrap] ACCESS_TOKEN_SECRET es obligatoria en producción para firmar sesiones de invitados.");
-  }
+/** Nombres predeterminados de tablas usadas en DynamoDB Local. */
+const DEFAULT_TABLE_NAMES = {
+  gameStats: "savecloud-game-stats",
+  saveFilesIndex: "savecloud-save-files-index",
+  connections: "savecloud-connections",
+  clips: "savecloud-clips",
+  notifications: "savecloud-notifications",
+  shareTokens: "savecloud-share-tokens",
+  cloudInvites: "savecloud-cloud-invites",
+  gameInventory: "savecloud-game-inventory",
+} as const;
 
-  // Las instalaciones con DynamoDB local (por ejemplo, Docker) también deben
-  // proteger sus rutas. La validación completa solo aplica al despliegue sin
-  // endpoint local, donde se esperan las variables de producción de AWS.
-  if (!process.env.DYNAMODB_ENDPOINT?.trim()) validateRuntimeConfiguration("self-hosted");
+interface S3EventQueueConfiguration {
+  client: ReturnType<typeof createS3EventQueueClient> | undefined;
+  name: string | undefined;
+  url: string | undefined;
 }
 
-/**
- * Obtiene el valor de una variable de entorno de forma opcional, recortando espacios en blanco.
- *
- * @param name - Nombre de la variable de entorno.
- * @returns El valor limpio o `undefined` si no existe o está vacía.
- */
+/** Lee una variable opcional y elimina espacios en blanco laterales. */
 function optionalEnv(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
 }
 
-const bucketName = getBucketName();
-const gameStatsTable =
-  optionalEnv("GAME_STATS_TABLE") || (process.env.DYNAMODB_ENDPOINT ? DEFAULT_GAME_STATS_TABLE : undefined);
-const saveFilesIndexTable =
-  optionalEnv("SAVE_FILES_INDEX_TABLE") || (process.env.DYNAMODB_ENDPOINT ? DEFAULT_SAVE_FILES_INDEX_TABLE : undefined);
-const connectionsTable =
-  optionalEnv("CONNECTIONS_TABLE") || (process.env.DYNAMODB_ENDPOINT ? DEFAULT_CONNECTIONS_TABLE : undefined);
-const clipsTable = optionalEnv("CLIPS_TABLE") || (process.env.DYNAMODB_ENDPOINT ? DEFAULT_CLIPS_TABLE : undefined);
-const notificationsTable =
-  optionalEnv("NOTIFICATIONS_TABLE") || (process.env.DYNAMODB_ENDPOINT ? DEFAULT_NOTIFICATIONS_TABLE : undefined);
-const shareTokensTable =
-  optionalEnv("SHARE_TOKENS_TABLE") || (process.env.DYNAMODB_ENDPOINT ? DEFAULT_SHARE_TOKENS_TABLE : undefined);
-const cloudInvitesTable =
-  optionalEnv("CLOUD_INVITES_TABLE") || (process.env.DYNAMODB_ENDPOINT ? DEFAULT_CLOUD_INVITES_TABLE : undefined);
-const gameInventoryTable =
-  optionalEnv("GAME_INVENTORY_TABLE") || (process.env.DYNAMODB_ENDPOINT ? DEFAULT_GAME_INVENTORY_TABLE : undefined);
+/** Indica si la API está configurada para conectarse a DynamoDB Local. */
+function isDynamoDbLocal(): boolean {
+  return optionalEnv("DYNAMODB_ENDPOINT") !== undefined;
+}
 
-const s3 = createS3Client();
-const presignS3 = createPresignS3Client();
-const dynamoClient = createDynamoDbClient();
+/** Valida los secretos requeridos al ejecutar la API en modo de producción. */
+function validateProductionConfiguration(): void {
+  if (process.env.NODE_ENV !== "production") return;
 
-const stores = createApiStores({
-  s3,
-  dynamo: dynamoClient,
-  bucketName,
-  presignS3,
-  tables: {
-    gameStats: gameStatsTable,
-    saveFilesIndex: saveFilesIndexTable,
-    connections: connectionsTable,
-    clips: clipsTable,
-    notifications: notificationsTable,
-    shareTokens: shareTokensTable,
-    cloudInvites: cloudInvitesTable,
-    gameInventory: gameInventoryTable,
-  },
-});
-const { connectionRepository } = stores;
-
-const webSocketNotifier = new FastifyWebSocketNotifier(connectionRepository);
-const s3EventQueueName = optionalEnv("S3_EVENT_QUEUE_NAME");
-const s3EventQueueClient = s3EventQueueName ? createS3EventQueueClient() : undefined;
-const s3EventQueueUrl = optionalEnv("S3_EVENT_QUEUE_URL");
-
-/**
- * Función de arranque principal de la API HTTP de SaveCloud.
- *
- * Se encarga de:
- * 1. Inicializar y verificar las tablas en DynamoDB Local/AWS.
- * 2. Construir la aplicación Fastify con la inyección de dependencias necesaria.
- * 3. Iniciar el servidor de Bun o Fastify escuchando en el puerto configurado (`PORT` o 3000).
- */
-async function main(): Promise<void> {
-  console.log("[SaveCloud API] Starting server initialization...");
-
-  try {
-    if (s3EventQueueClient && s3EventQueueName) {
-      if (!s3EventQueueUrl)
-        throw new Error("S3_EVENT_QUEUE_URL es obligatorio cuando se configura S3_EVENT_QUEUE_NAME.");
-      await ensureS3EventQueue(s3EventQueueClient, s3EventQueueName);
-    }
-    await ensureDynamoDbTablesExist(dynamoClient, {
-      gameStatsTable,
-      saveFilesIndexTable,
-      connectionsTable,
-      clipsTable,
-      notificationsTable,
-      shareTokensTable,
-      cloudInvitesTable,
-      gameInventoryTable,
-    });
-    console.log("[SaveCloud API] DynamoDB tables verified.");
-  } catch (err: unknown) {
-    console.error("[SaveCloud API] Error verifying DynamoDB tables:", err);
-    throw err;
+  if (!optionalEnv("API_KEY")) {
+    throw new Error("[bootstrap] API_KEY es obligatoria en producción; la API no puede iniciar sin autenticación.");
+  }
+  if (!optionalEnv("ACCESS_TOKEN_SECRET")) {
+    throw new Error("[bootstrap] ACCESS_TOKEN_SECRET es obligatoria en producción para firmar sesiones de invitados.");
   }
 
-  const app = await buildApp({
-    ...stores,
-    connectionRepository,
-    webSocketNotifier,
-    getActiveWebSocketConnectionCount: () => webSocketNotifier.getActiveConnectionCount(),
-    processS3Events:
-      s3EventQueueClient && s3EventQueueName
-        ? async (events) => {
-            for (let offset = 0; offset < events.length; offset += SQS_MAX_BATCH_SIZE) {
-              await enqueueS3Events(
-                s3EventQueueClient,
-                s3EventQueueUrl!,
-                events.slice(offset, offset + SQS_MAX_BATCH_SIZE)
-              );
-            }
-          }
-        : undefined,
-  });
+  if (!isDynamoDbLocal()) validateRuntimeConfiguration("self-hosted");
+}
 
+/** Resuelve una tabla configurada explícitamente o su valor predeterminado local. */
+function resolveTableName(
+  environmentName: string,
+  localDefault: string,
+  useLocalDefaults: boolean
+): string | undefined {
+  const configuredName = optionalEnv(environmentName);
+  if (configuredName) return configuredName;
+  if (useLocalDefaults) return localDefault;
+  return undefined;
+}
+
+/** Lee todos los nombres de tablas necesarios para construir los repositorios de la API. */
+function readTableConfiguration(usePostgresForNotifications: boolean): DynamoDbTablesConfig {
+  const useLocalDefaults = isDynamoDbLocal();
+
+  return {
+    gameStatsTable: resolveTableName("GAME_STATS_TABLE", DEFAULT_TABLE_NAMES.gameStats, useLocalDefaults),
+    saveFilesIndexTable: resolveTableName(
+      "SAVE_FILES_INDEX_TABLE",
+      DEFAULT_TABLE_NAMES.saveFilesIndex,
+      useLocalDefaults
+    ),
+    connectionsTable: resolveTableName("CONNECTIONS_TABLE", DEFAULT_TABLE_NAMES.connections, useLocalDefaults),
+    clipsTable: resolveTableName("CLIPS_TABLE", DEFAULT_TABLE_NAMES.clips, useLocalDefaults),
+    notificationsTable: usePostgresForNotifications
+      ? undefined
+      : resolveTableName("NOTIFICATIONS_TABLE", DEFAULT_TABLE_NAMES.notifications, useLocalDefaults),
+    shareTokensTable: resolveTableName("SHARE_TOKENS_TABLE", DEFAULT_TABLE_NAMES.shareTokens, useLocalDefaults),
+    cloudInvitesTable: resolveTableName("CLOUD_INVITES_TABLE", DEFAULT_TABLE_NAMES.cloudInvites, useLocalDefaults),
+    gameInventoryTable: resolveTableName("GAME_INVENTORY_TABLE", DEFAULT_TABLE_NAMES.gameInventory, useLocalDefaults),
+  };
+}
+
+/** Crea el cliente de eventos S3 cuando se configuró una cola. */
+function createS3EventQueueConfiguration(): S3EventQueueConfiguration {
+  const name = optionalEnv("S3_EVENT_QUEUE_NAME");
+  const url = optionalEnv("S3_EVENT_QUEUE_URL");
+
+  if (name && !url) {
+    throw new Error("S3_EVENT_QUEUE_URL es obligatorio cuando se configura S3_EVENT_QUEUE_NAME.");
+  }
+
+  return {
+    client: name ? createS3EventQueueClient() : undefined,
+    name,
+    url,
+  };
+}
+
+/** Crea el procesador que publica eventos S3 en lotes dentro de la cola configurada. */
+function createS3EventProcessor(
+  queue: S3EventQueueConfiguration
+): ((events: ProcessS3EventInput[]) => Promise<void>) | undefined {
+  const { client, name, url } = queue;
+  if (!client || !name || !url) return undefined;
+
+  return async (events) => {
+    for (let offset = 0; offset < events.length; offset += SQS_MAX_BATCH_SIZE) {
+      const batch = events.slice(offset, offset + SQS_MAX_BATCH_SIZE);
+      await enqueueS3Events(client, url, batch);
+    }
+  };
+}
+
+/** Inicializa las dependencias y confirma que las tablas locales existan. */
+async function initializeStorage(
+  database: ReturnType<typeof createDatabaseClient> | undefined,
+  dynamoClient: ReturnType<typeof createDynamoDbClient>,
+  tableConfiguration: DynamoDbTablesConfig,
+  queue: S3EventQueueConfiguration
+): Promise<void> {
+  if (database) {
+    await ensurePostgresNotificationSchema(database);
+    console.log("[SaveCloud API] PostgreSQL notifications schema verified.");
+  }
+
+  if (queue.client && queue.name) {
+    await ensureS3EventQueue(queue.client, queue.name);
+  }
+
+  await ensureDynamoDbTablesExist(dynamoClient, tableConfiguration);
+  console.log("[SaveCloud API] DynamoDB tables verified.");
+}
+
+/** Inicia Fastify usando el servidor nativo de Bun o el listener de Fastify. */
+async function startServer(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  stores: ReturnType<typeof createApiStores>,
+  webSocketNotifier: FastifyWebSocketNotifier
+): Promise<void> {
   const port = Number(process.env.PORT) || DEFAULT_SERVER_PORT;
   const host = DEFAULT_SERVER_HOST;
+  const connectionRepository = stores.connectionRepository;
+  const bunRuntime = typeof Bun !== "undefined";
 
-  const isBun = typeof (globalThis as unknown as { Bun?: unknown }).Bun !== "undefined";
-
-  if (isBun) {
+  if (bunRuntime) {
     await startBunServer({
       port,
       host,
@@ -158,18 +171,74 @@ async function main(): Promise<void> {
       webSocketNotifier,
       accessSessionRepository: stores.accessSessionRepository,
     });
-  } else {
-    app.listen({ port, host }, (err, address) => {
-      if (err) {
-        console.error("[SaveCloud API] Error starting HTTP server:", err);
-        process.exit(1);
-      }
-      console.log(`[SaveCloud API] Server listening on ${address}`);
-    });
+    return;
   }
+
+  app.listen({ port, host }, (error, address) => {
+    if (error) {
+      console.error("[SaveCloud API] Error starting HTTP server:", error);
+      process.exit(1);
+    }
+    console.log(`[SaveCloud API] Server listening on ${address}`);
+  });
 }
 
-main().catch((err: unknown) => {
-  console.error("[SaveCloud API] Fatal initialization error:", err);
+/** Construye la aplicación, inicializa los almacenes y arranca el servidor HTTP. */
+async function main(): Promise<void> {
+  validateProductionConfiguration();
+  console.log("[SaveCloud API] Starting server initialization...");
+
+  const bucketName = getBucketName();
+  const databaseConfiguration = readDatabaseConfiguration();
+  const database = databaseConfiguration ? createDatabaseClient(databaseConfiguration) : undefined;
+  const localDynamoDb = isDynamoDbLocal();
+
+  if (process.env.NODE_ENV === "production" && localDynamoDb && !database) {
+    throw new Error("[bootstrap] DATABASE_URL o DATABASE_* son obligatorias para el almacenamiento SQL en Docker.");
+  }
+
+  const tableConfiguration = readTableConfiguration(database !== undefined);
+  const queue = createS3EventQueueConfiguration();
+  const dynamoClient = createDynamoDbClient();
+  const s3 = createS3Client();
+  const presignS3 = createPresignS3Client();
+  const stores = createApiStores({
+    s3,
+    dynamo: dynamoClient,
+    database,
+    bucketName,
+    presignS3,
+    tables: {
+      gameStats: tableConfiguration.gameStatsTable,
+      saveFilesIndex: tableConfiguration.saveFilesIndexTable,
+      connections: tableConfiguration.connectionsTable,
+      clips: tableConfiguration.clipsTable,
+      notifications: tableConfiguration.notificationsTable,
+      shareTokens: tableConfiguration.shareTokensTable,
+      cloudInvites: tableConfiguration.cloudInvitesTable,
+      gameInventory: tableConfiguration.gameInventoryTable,
+    },
+  });
+
+  try {
+    await initializeStorage(database, dynamoClient, tableConfiguration, queue);
+  } catch (error: unknown) {
+    console.error("[SaveCloud API] Error verifying storage dependencies:", error);
+    throw error;
+  }
+
+  const webSocketNotifier = new FastifyWebSocketNotifier(stores.connectionRepository);
+  const app = await buildApp({
+    ...stores,
+    getActiveWebSocketConnectionCount: () => webSocketNotifier.getActiveConnectionCount(),
+    webSocketNotifier,
+    processS3Events: createS3EventProcessor(queue),
+  });
+
+  await startServer(app, stores, webSocketNotifier);
+}
+
+main().catch((error: unknown) => {
+  console.error("[SaveCloud API] Fatal initialization error:", error);
   process.exit(1);
 });

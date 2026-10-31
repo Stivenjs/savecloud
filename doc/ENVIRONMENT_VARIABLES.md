@@ -149,7 +149,26 @@ Este documento especifica todas las variables de entorno de **SaveCloud**, organ
 
 ---
 
-## 5. Base de Datos (DynamoDB / DynamoDB Local)
+## 5. Bases de Datos (PostgreSQL y DynamoDB Local)
+
+### PostgreSQL de la API
+
+Docker Compose usa una conexión PostgreSQL compartida por la aplicación. Actualmente PostgreSQL almacena las notificaciones; las demás tablas locales continúan en DynamoDB. La conexión y sus opciones tienen nombres genéricos para que otros adaptadores puedan reutilizarla. El asistente `scripts/docker-setup` genera `DATABASE_PASSWORD` si falta o conserva el valor de ejemplo.
+
+| Variable                               |  Requerida  | Defecto              | Propósito                                                                             |
+| :------------------------------------- | :---------: | :------------------- | :------------------------------------------------------------------------------------ |
+| `DATABASE_URL`                         | Alternativa | —                    | URL `postgres://` o `postgresql://`; si se define, reemplaza los campos individuales. |
+| `DATABASE_HOST`                        |   Docker    | `postgres`           | Nombre DNS del servicio PostgreSQL.                                                   |
+| `DATABASE_PORT`                        |  Opcional   | `5432`               | Puerto TCP PostgreSQL.                                                                |
+| `DATABASE_USER`                        |  Opcional   | `savecloud`          | Usuario PostgreSQL.                                                                   |
+| `DATABASE_PASSWORD`                    |   Docker    | Sin defecto          | Contraseña PostgreSQL.                                                                |
+| `DATABASE_NAME`                        |  Opcional   | `savecloud`          | Base de datos PostgreSQL de la aplicación.                                            |
+| `DATABASE_POOL_SIZE`                   |  Opcional   | `10`                 | Máximo de conexiones por proceso API.                                                 |
+| `NOTIFICATIONS_EXPIRATION_INTERVAL_MS` |  Opcional   | `21600000` (6 horas) | Intervalo entre ciclos de limpieza de notificaciones vencidas.                        |
+
+Los registros expiran a los 30 días. La API deja de devolverlos al vencer y el worker dedicado los elimina por lotes.
+
+### DynamoDB Local
 
 ### `DYNAMODB_ENDPOINT`
 
@@ -165,18 +184,18 @@ Este documento especifica todas las variables de entorno de **SaveCloud**, organ
 
 ### Tablas de DynamoDB (Variables de Nombres)
 
-En Docker Compose estas variables toman nombres por defecto predecibles. En AWS Serverless se inyectan automáticamente desde `serverless.yml`:
+En Docker Compose las variables de las tablas que siguen toman nombres por defecto predecibles. Las notificaciones ya no usan DynamoDB en Docker; AWS Serverless continúa usando `NOTIFICATIONS_TABLE`. En AWS Serverless los nombres se inyectan desde `serverless.yml`:
 
-| Variable de Entorno          | Valor por Defecto en Docker  | Propósito                                                                               |
-| :--------------------------- | :--------------------------- | :-------------------------------------------------------------------------------------- |
-| **`CLOUD_INVITES_TABLE`**    | `savecloud-cloud-invites`    | Invitaciones, membresías de nubes compartidas y **sesiones revocables (`sc2`/`scr1`)**. |
-| **`SAVE_FILES_INDEX_TABLE`** | `savecloud-save-files-index` | Índice de archivos de save sincronizados, rutas y hashes de integridad.                 |
-| **`GAME_STATS_TABLE`**       | `savecloud-game-stats`       | Estadísticas por juego (horas jugadas, número de sincronizaciones, última actividad).   |
-| **`CONNECTIONS_TABLE`**      | `savecloud-connections`      | IDs de conexión de WebSockets para presencia e invitaciones activas.                    |
-| **`NOTIFICATIONS_TABLE`**    | `savecloud-notifications`    | Bandeja de notificaciones pendientes para los usuarios.                                 |
-| **`SHARE_TOKENS_TABLE`**     | `savecloud-share-tokens`     | Enlaces públicos temporales para compartir saves específicos con amigos.                |
-| **`GAME_INVENTORY_TABLE`**   | `savecloud-game-inventory`   | Catálogo de juegos detectados y sincronizados por cada usuario.                         |
-| **`CLIPS_TABLE`**            | `savecloud-clips`            | Metadatos de clips de video y capturas vinculadas a saves.                              |
+| Variable de Entorno          | Valor por Defecto en Docker  | Propósito                                                                                            |
+| :--------------------------- | :--------------------------- | :--------------------------------------------------------------------------------------------------- |
+| **`CLOUD_INVITES_TABLE`**    | `savecloud-cloud-invites`    | Invitaciones, membresías de nubes compartidas y **sesiones revocables (`sc2`/`scr1`)**.              |
+| **`SAVE_FILES_INDEX_TABLE`** | `savecloud-save-files-index` | Índice de archivos de save sincronizados, rutas y hashes de integridad.                              |
+| **`GAME_STATS_TABLE`**       | `savecloud-game-stats`       | Estadísticas por juego (horas jugadas, número de sincronizaciones, última actividad).                |
+| **`CONNECTIONS_TABLE`**      | `savecloud-connections`      | IDs de conexión de WebSockets para presencia e invitaciones activas.                                 |
+| **`NOTIFICATIONS_TABLE`**    | No se usa                    | Tabla de notificaciones en AWS Lambda y origen de datos para migrar instalaciones Docker existentes. |
+| **`SHARE_TOKENS_TABLE`**     | `savecloud-share-tokens`     | Enlaces públicos temporales para compartir saves específicos con amigos.                             |
+| **`GAME_INVENTORY_TABLE`**   | `savecloud-game-inventory`   | Catálogo de juegos detectados y sincronizados por cada usuario.                                      |
+| **`CLIPS_TABLE`**            | `savecloud-clips`            | Metadatos de clips de video y capturas vinculadas a saves.                                           |
 
 ---
 
@@ -276,6 +295,8 @@ Estas variables aplican al entorno de ejecución de la aplicación de escritorio
 | **`MINIO_LICENSE_PATH`**        | **Obligatoria** |       N/A       |    Opcional     | Licencia de MinIO AIStor.                          |
 | **`BUCKET_NAME`**               |   Automática    |   Automática    |   Automática    | Nombre del bucket para partidas y archivos.        |
 | **`DYNAMODB_ENDPOINT`**         |   Automática    |       N/A       |   Automática    | Endpoint local para auto-crear tablas DynamoDB.    |
+| **`DATABASE_PASSWORD`**         | **Obligatoria** |       N/A       |    Opcional     | Contraseña PostgreSQL del entorno Docker.          |
+| **`DATABASE_URL`**              |    Opcional     |       N/A       |    Opcional     | URL PostgreSQL alternativa a `DATABASE_*`.         |
 | **`API_PORT`**                  |    Opcional     |       N/A       |    Opcional     | Puerto de loopback en el host (`3000`).            |
 | **`LOG_LEVEL`**                 |    Opcional     |    Opcional     |    Opcional     | Nivel de logs (`warn`, `info`, `debug`).           |
 | **`HTTP_REQUEST_LOGS`**         |    Opcional     |    Opcional     |    Opcional     | Logs de duración y estado de cada solicitud HTTP.  |
