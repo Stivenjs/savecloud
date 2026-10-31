@@ -155,18 +155,19 @@ Este documento especifica todas las variables de entorno de **SaveCloud**, organ
 
 Docker Compose usa PostgreSQL para todas las tablas de persistencia de la API: notificaciones, índice de archivos, estadísticas, conexiones, metadatos de clips, invitaciones, membresías, permisos de juegos compartidos, sesiones, inventarios, transferencias y tokens compartidos. Los archivos binarios siguen en S3/MinIO. DynamoDB se conserva para los despliegues AWS Serverless y para entornos de desarrollo que lo configuren explícitamente; Docker Compose no inicia ni se conecta a DynamoDB. El worker de expiración elimina en lotes los datos vencidos. El asistente `scripts/docker-setup` genera `DATABASE_PASSWORD` si falta o conserva el valor de ejemplo.
 
-| Variable                               |  Requerida  | Defecto              | Propósito                                                                             |
-| :------------------------------------- | :---------: | :------------------- | :------------------------------------------------------------------------------------ |
-| `DATABASE_URL`                         | Alternativa | —                    | URL `postgres://` o `postgresql://`; si se define, reemplaza los campos individuales. |
-| `DATABASE_HOST`                        |   Docker    | `postgres`           | Nombre DNS del servicio PostgreSQL.                                                   |
-| `DATABASE_PORT`                        |  Opcional   | `5432`               | Puerto TCP PostgreSQL.                                                                |
-| `DATABASE_USER`                        |  Opcional   | `savecloud`          | Usuario PostgreSQL.                                                                   |
-| `DATABASE_PASSWORD`                    |   Docker    | Sin defecto          | Contraseña PostgreSQL.                                                                |
-| `DATABASE_NAME`                        |  Opcional   | `savecloud`          | Base de datos PostgreSQL de la aplicación.                                            |
-| `DATABASE_POOL_SIZE`                   |  Opcional   | `10`                 | Máximo de conexiones por proceso API.                                                 |
-| `NOTIFICATIONS_EXPIRATION_INTERVAL_MS` |  Opcional   | `21600000` (6 horas) | Intervalo entre ciclos de limpieza de notificaciones vencidas.                        |
+| Variable                          |  Requerida  | Defecto              | Propósito                                                                             |
+| :-------------------------------- | :---------: | :------------------- | :------------------------------------------------------------------------------------ |
+| `DATABASE_URL`                    | Alternativa | —                    | URL `postgres://` o `postgresql://`; si se define, reemplaza los campos individuales. |
+| `DATABASE_HOST`                   |   Docker    | `postgres`           | Nombre DNS del servicio PostgreSQL.                                                   |
+| `DATABASE_PORT`                   |  Opcional   | `5432`               | Puerto TCP PostgreSQL.                                                                |
+| `DATABASE_USER`                   |  Opcional   | `savecloud`          | Usuario PostgreSQL.                                                                   |
+| `DATABASE_PASSWORD`               |   Docker    | Sin defecto          | Contraseña PostgreSQL.                                                                |
+| `DATABASE_NAME`                   |  Opcional   | `savecloud`          | Base de datos PostgreSQL de la aplicación.                                            |
+| `DATABASE_POOL_SIZE`              |  Opcional   | `10`                 | Máximo de conexiones por proceso API.                                                 |
+| `POSTGRES_EXPIRATION_INTERVAL_MS` |  Opcional   | `21600000` (6 horas) | Intervalo entre ciclos de limpieza de registros PostgreSQL vencidos.                  |
+| `MEMBER_PURGE_INTERVAL_MS`        |  Opcional   | `3600000` (1 hora)   | Intervalo entre ciclos de eliminación definitiva de membresías vencidas y sus saves.  |
 
-Las notificaciones expiran a los 30 días. La API deja de devolverlas al vencer y el worker dedicado también elimina por lotes otros registros con vencimiento.
+Las notificaciones expiran a los 30 días. La API deja de devolverlas al vencer y el worker de mantenimiento las elimina por lotes junto con otros registros PostgreSQL vencidos. El mismo proceso purga las membresías cuyo período de gracia terminó, incluyendo sus saves en S3; cada tarea conserva su propio intervalo y manejo de errores.
 
 ### DynamoDB para AWS y desarrollo explícito
 

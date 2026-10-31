@@ -97,27 +97,11 @@ services:
       create-bucket:
         condition: service_completed_successfully
 
-  member-purge-worker:
+  postgres-expiration-worker:
     extends:
       service: savecloud-api
-    container_name: savecloud-member-purge-worker
-    command: ["bun", "dist/member-purge-worker.js"]
-    ports: !reset []
-    healthcheck:
-      disable: true
-    depends_on:
-      savecloud-api:
-        condition: service_healthy
-      create-bucket:
-        condition: service_completed_successfully
-    environment:
-      - MEMBER_PURGE_INTERVAL_MS=${MEMBER_PURGE_INTERVAL_MS:-3600000}
-
-  notifications-expiration-worker:
-    extends:
-      service: savecloud-api
-    container_name: savecloud-notifications-expiration-worker
-    command: ["bun", "dist/notification-expiration-worker.js"]
+    container_name: savecloud-postgres-expiration-worker
+    command: ["bun", "dist/postgres-expiration-worker.js"]
     ports: !reset []
     healthcheck:
       disable: true
@@ -127,7 +111,8 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - NOTIFICATIONS_EXPIRATION_INTERVAL_MS=${NOTIFICATIONS_EXPIRATION_INTERVAL_MS:-21600000}
+      - POSTGRES_EXPIRATION_INTERVAL_MS=${POSTGRES_EXPIRATION_INTERVAL_MS:-${NOTIFICATIONS_EXPIRATION_INTERVAL_MS:-21600000}}
+      - MEMBER_PURGE_INTERVAL_MS=${MEMBER_PURGE_INTERVAL_MS:-3600000}
 
   minio:
     image: quay.io/minio/aistor/minio:latest

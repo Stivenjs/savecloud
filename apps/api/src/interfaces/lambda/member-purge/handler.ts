@@ -38,7 +38,7 @@ function getPurgeUseCase(): PurgeSoftDeletedMembersUseCase {
  *
  * Invocado periódicamente vía EventBridge / Cron (p.ej. diario o cada pocas horas).
  * Busca todas las membresías cuyo período de gracia ha expirado y elimina
- * definitivamente sus saves en S3 y registros de DynamoDB.
+ * definitivamente sus saves en S3 y registros de persistencia.
  */
 export async function handler(_event?: unknown, _context?: Partial<Context>): Promise<Record<string, unknown>> {
   const startedAt = Date.now();

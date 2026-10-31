@@ -2,7 +2,10 @@
 set -eu
 
 docker compose up -d --build --remove-orphans
-docker image rm amazon/dynamodb-local:latest >/dev/null 2>&1 || true
+legacy_dynamo_image=$(docker image ls --quiet amazon/dynamodb-local:latest)
+if [ -n "$legacy_dynamo_image" ]; then
+  docker image rm amazon/dynamodb-local:latest >/dev/null
+fi
 
 deadline=$(( $(date +%s) + 120 ))
 ready=false

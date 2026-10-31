@@ -10,7 +10,16 @@ if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }
 
-& docker image rm amazon/dynamodb-local:latest 2>$null | Out-Null
+$legacyDynamoImage = & docker image ls --quiet amazon/dynamodb-local:latest
+if ($LASTEXITCODE -ne 0) {
+  exit $LASTEXITCODE
+}
+if ($legacyDynamoImage) {
+  & docker image rm amazon/dynamodb-local:latest | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+  }
+}
 
 function Get-ContainerInspectValue {
   param(
