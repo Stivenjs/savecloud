@@ -1,14 +1,21 @@
 import { createDynamoDbClient } from "@infrastructure/factories/dynamoDbFactory";
+import { createDatabaseClient } from "@infrastructure/factories/databaseClientFactory";
 import { DynamoDbGameStatRepository } from "@infrastructure/persistence/DynamoDbGameStatRepository";
 import { DynamoDbSaveFileIndexRepository } from "@infrastructure/persistence/DynamoDbSaveFileIndexRepository";
+import {
+  ensurePostgresSaveFileIndexSchema,
+  PostgresSaveFileIndexRepository,
+} from "@infrastructure/persistence/PostgresSaveFileIndexRepository";
+import { readDatabaseConfiguration } from "@interfaces/configuration/databaseConfiguration";
 import { ProcessS3EventUseCase, type ProcessS3EventInput } from "@application/use-cases/ProcessS3EventUseCase";
 import { deleteS3Events, createS3EventQueueClient, receiveS3Events } from "@infrastructure/queue/s3EventQueue";
 
 const queueUrl = process.env.S3_EVENT_QUEUE_URL?.trim();
 const statsTable = process.env.GAME_STATS_TABLE?.trim();
 const indexTable = process.env.SAVE_FILES_INDEX_TABLE?.trim();
-if (!queueUrl || !statsTable || !indexTable) {
-  throw new Error("S3_EVENT_QUEUE_URL, GAME_STATS_TABLE y SAVE_FILES_INDEX_TABLE son obligatorios para el worker.");
+const databaseConfiguration = readDatabaseConfiguration();
+if (!queueUrl || !statsTable || (!databaseConfiguration && !indexTable)) {
+  throw new Error("S3_EVENT_QUEUE_URL, GAME_STATS_TABLE y un almacén de índice son obligatorios para el worker.");
 }
 const activeQueueUrl = queueUrl;
 const apiUrl = process.env.API_INTERNAL_URL?.trim() || "http://savecloud-api:3000";
@@ -17,11 +24,18 @@ if (!apiKey) throw new Error("API_KEY es obligatorio para invalidar las cachés 
 const activeApiKey = apiKey;
 
 const dynamo = createDynamoDbClient();
+const database = databaseConfiguration ? createDatabaseClient(databaseConfiguration) : undefined;
 const queue = createS3EventQueueClient();
-const useCase = new ProcessS3EventUseCase(
-  new DynamoDbSaveFileIndexRepository(dynamo, indexTable),
-  new DynamoDbGameStatRepository(dynamo, statsTable)
-);
+let saveFileIndexRepository: PostgresSaveFileIndexRepository | DynamoDbSaveFileIndexRepository;
+if (database) {
+  saveFileIndexRepository = new PostgresSaveFileIndexRepository(database);
+} else if (indexTable) {
+  saveFileIndexRepository = new DynamoDbSaveFileIndexRepository(dynamo, indexTable);
+} else {
+  throw new Error("Falta DATABASE_* o SAVE_FILES_INDEX_TABLE para el almacén del índice de archivos.");
+}
+const gameStatRepository = new DynamoDbGameStatRepository(dynamo, statsTable);
+const useCase = new ProcessS3EventUseCase(saveFileIndexRepository, gameStatRepository);
 
 let stopping = false;
 process.on("SIGTERM", () => {
@@ -34,6 +48,7 @@ process.on("SIGINT", () => {
 /** Consume eventos durables y confirma el lote solo después de completar DynamoDB. */
 async function run(): Promise<void> {
   console.info("[worker-eventos-s3] Worker iniciado.");
+  if (database) await ensurePostgresSaveFileIndexSchema(database);
   while (!stopping) {
     try {
       const response = await receiveS3Events(queue, activeQueueUrl);
@@ -84,6 +99,7 @@ async function run(): Promise<void> {
   }
   queue.destroy();
   dynamo.destroy();
+  await database?.close();
 }
 
 function isProcessS3EventInput(value: unknown): value is ProcessS3EventInput & { eventTime?: Date | string } {
