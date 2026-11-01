@@ -1,11 +1,15 @@
 import type { FastifyRequest } from "fastify";
 import type { WebSocket, RawData } from "ws";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
+import type { WebSocketNotifier } from "@domain/ports/WebSocketNotifier";
 
 interface LocalSocketRegistry {
   registerSocket(connectionId: string, socket: WebSocket, userId?: string): void;
   unregisterSocket(connectionId: string): void;
 }
+
+/** Notificador que puede gestionar sockets locales cuando corre fuera de Lambda. */
+export type WebSocketConnectionNotifier = WebSocketNotifier & Partial<LocalSocketRegistry>;
 
 interface WsIncomingPayload {
   action?: string;
@@ -17,11 +21,12 @@ interface WsIncomingPayload {
 
 export interface WebSocketConnectionDependencies {
   connectionRepository?: ConnectionRepository;
-  webSocketNotifier?: LocalSocketRegistry;
+  webSocketNotifier?: WebSocketConnectionNotifier;
 }
 
 const CONNECTION_TTL_SECONDS = 24 * 60 * 60;
 
+/** Crea los callbacks de conexión usando el usuario validado por el hook global de Fastify. */
 export function createWebSocketConnectionHandler(deps: WebSocketConnectionDependencies) {
   return (socket: WebSocket, request: FastifyRequest) => {
     const connectionId = `ws_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -33,7 +38,7 @@ export function createWebSocketConnectionHandler(deps: WebSocketConnectionDepend
       `[SaveCloud WS] Handshake exitoso! connectionId=${connectionId}, userId=${userId || "anónimo"}, path=${request.url.split("?")[0]}`
     );
 
-    deps.webSocketNotifier?.registerSocket(connectionId, socket, userId);
+    deps.webSocketNotifier?.registerSocket?.(connectionId, socket, userId);
 
     if (deps.connectionRepository && userId) {
       const ttl = Math.floor(Date.now() / 1000) + CONNECTION_TTL_SECONDS;
@@ -58,14 +63,14 @@ export function createWebSocketConnectionHandler(deps: WebSocketConnectionDepend
             })
             .catch((err: unknown) => console.error("[SaveCloud WS] Error actualizando actividad de juego:", err));
         }
-      } catch {
-        // Los mensajes malformados se ignoran para mantener viva la conexión.
+      } catch (err: unknown) {
+        console.error("[SaveCloud WS] Error procesando mensaje del socket:", err);
       }
     });
 
     const cleanup = () => {
       console.log(`[SaveCloud WS] Conexión cerrada: connectionId=${connectionId}`);
-      deps.webSocketNotifier?.unregisterSocket(connectionId);
+      deps.webSocketNotifier?.unregisterSocket?.(connectionId);
       deps.connectionRepository?.deleteConnection(connectionId).catch((err: unknown) => {
         console.error("[SaveCloud WS] Error eliminando conexión en DynamoDB:", err);
       });

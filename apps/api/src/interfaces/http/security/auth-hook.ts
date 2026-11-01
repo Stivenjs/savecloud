@@ -1,8 +1,10 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { AccessSessionRepository } from "@domain/ports/AccessSessionRepository";
 import { ApplicationError } from "@application/errors/ApplicationError";
-import { verifyUserAccessToken } from "@shared/accessToken";
-import { safeCompareSecret } from "@shared/safeCompare";
+import {
+  authenticateRequestCredential,
+  extractRequestCredential,
+} from "@application/use-cases/AuthenticateRequestCredential";
 import { isPublicRoute } from "@interfaces/http/security/public-routes";
 
 declare module "fastify" {
@@ -46,38 +48,28 @@ export function registerApiKeyAuthHook(
     const handledLambda = await handleLambdaAuthorizer(request, accessSessionRepository);
     if (handledLambda) return;
 
-    const key = extractCredential(request);
-
-    if (expectedApiKey && safeCompareSecret(key ?? "", expectedApiKey)) {
-      const declaredUserId = request.headers["x-user-id"];
-      request.scAuthenticatedUserId = typeof declaredUserId === "string" ? declaredUserId.trim() : undefined;
-      request.scRateLimitUserId = request.scAuthenticatedUserId;
+    const identity = await authenticateRequestCredential({
+      credential: extractRequestCredential(
+        getStringHeader(request.headers["x-api-key"]),
+        getStringHeader(request.headers.authorization)
+      ),
+      declaredUserId: getStringHeader(request.headers["x-user-id"]),
+      expectedApiKey,
+      accessSessionRepository,
+    });
+    if (identity) {
+      request.scAuthenticatedUserId = identity.userId;
+      request.scRateLimitUserId = identity.rateLimitUserId;
       return;
-    }
-
-    if (typeof key === "string" && key.trim()) {
-      const handledUserSession = await handleUserSessionToken(request, key.trim(), accessSessionRepository);
-      if (handledUserSession) return;
     }
 
     throw new ApplicationError("UNAUTHENTICATED", "No autorizado.");
   });
 }
 
-/**
- * Extrae la credencial enviada en la solicitud HTTP.
- *
- * Inspecciona prioritariamente la cabecera `x-api-key`. Si no está presente,
- * extrae el valor tras el prefijo `Bearer ` de la cabecera `Authorization`.
- *
- * @param request - Solicitud HTTP de Fastify en curso.
- * @returns El token o clave extraída si está presente, o `undefined` en caso contrario.
- */
-function extractCredential(request: FastifyRequest): string | undefined {
-  const headerKey = request.headers["x-api-key"];
-  const authorization = request.headers.authorization;
-  const bearer = typeof authorization === "string" ? authorization.match(/^Bearer\s+(.+)$/i)?.[1] : undefined;
-  return typeof headerKey === "string" && headerKey.trim() ? headerKey.trim() : bearer?.trim();
+/** Devuelve un encabezado HTTP solo cuando tiene un único valor de texto. */
+function getStringHeader(value: string | string[] | undefined): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }
 
 /**
@@ -136,48 +128,5 @@ async function handleLambdaAuthorizer(
     request.scAuthenticatedUserId = typeof declaredUserId === "string" ? declaredUserId.trim() : undefined;
   }
 
-  return true;
-}
-
-/**
- * Valida un token de acceso criptográfico (JWT/HMAC) y confirma el estado activo de su sesión.
- *
- * Comprueba que la firma del token sea legítima, que el `x-user-id` declarado coincida con
- * el sujeto del token, y que la sesión vinculada permanezca activa y no haya vencido en el almacén de datos.
- *
- * @param request - Solicitud HTTP de Fastify en curso.
- * @param tokenString - Cadena de texto que contiene el token de acceso Bearer.
- * @param accessSessionRepository - Repositorio de sesiones de acceso.
- * @returns `true` si el token y la sesión fueron validados con éxito, `false` si el token o el usuario no coinciden.
- * @throws {ApplicationError} Si el token es sintácticamente válido pero su sesión fue revocada o expiró.
- */
-async function handleUserSessionToken(
-  request: FastifyRequest,
-  tokenString: string,
-  accessSessionRepository?: AccessSessionRepository
-): Promise<boolean> {
-  const token = verifyUserAccessToken(tokenString);
-  if (!token) return false;
-
-  const headerUserId = request.headers["x-user-id"];
-  const userId = typeof headerUserId === "string" ? headerUserId.trim() : "";
-
-  if (!userId || userId !== token.userId) {
-    return false;
-  }
-
-  const session = token.sessionId ? await accessSessionRepository?.get(token.sessionId) : null;
-  if (
-    !session ||
-    !session.active ||
-    session.userId !== token.userId ||
-    session.hostUserId !== token.hostUserId ||
-    session.expiresAtEpoch <= Math.floor(Date.now() / 1000)
-  ) {
-    throw new ApplicationError("UNAUTHENTICATED", "La sesión venció o fue revocada.");
-  }
-
-  request.scAuthenticatedUserId = token.userId;
-  request.scRateLimitUserId = token.userId;
   return true;
 }
