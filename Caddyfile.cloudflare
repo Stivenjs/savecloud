@@ -8,6 +8,8 @@
 
 http://{$DOMAIN} {
 	encode gzip zstd
+	# Registra el ID declarado por el cliente; la API valida la identidad con sus credenciales.
+	log_append declared_user_id {http.request.header.X-User-Id}
 
 	log {
 		output stdout
