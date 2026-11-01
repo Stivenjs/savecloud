@@ -13,6 +13,7 @@ import {
 import { readDatabaseConfiguration } from "@interfaces/configuration/databaseConfiguration";
 import { ProcessS3EventUseCase, type ProcessS3EventInput } from "@application/use-cases/ProcessS3EventUseCase";
 import { deleteS3Events, createS3EventQueueClient, receiveS3Events } from "@infrastructure/queue/s3EventQueue";
+import { startWorker, waitFor } from "./workerRuntime";
 
 const queueUrl = process.env.S3_EVENT_QUEUE_URL?.trim();
 const statsTable = process.env.GAME_STATS_TABLE?.trim();
@@ -52,16 +53,6 @@ const gameStatRepository = database
   : new DynamoDbGameStatRepository(dynamo!, statsTable!);
 
 const useCase = new ProcessS3EventUseCase(saveFileIndexRepository, gameStatRepository);
-
-let stopping = false;
-
-process.on("SIGTERM", () => {
-  stopping = true;
-});
-
-process.on("SIGINT", () => {
-  stopping = true;
-});
 
 /**
  * Analiza y valida un mensaje de evento S3 sin descartar silenciosamente
@@ -108,7 +99,7 @@ function parseS3EventMessage<TMessage extends { Body?: string; MessageId?: strin
  * Los mensajes solo se confirman después de completar correctamente
  * las operaciones de almacenamiento y la invalidación de caché.
  */
-async function run(): Promise<void> {
+async function run(signal: AbortSignal): Promise<void> {
   console.info("[worker-eventos-s3] Worker iniciado.");
 
   try {
@@ -118,7 +109,7 @@ async function run(): Promise<void> {
       console.info("[worker-eventos-s3] Esquemas de PostgreSQL verificados.");
     }
 
-    while (!stopping) {
+    while (!signal.aborted) {
       try {
         const response = await receiveS3Events(queue, activeQueueUrl);
         let messages = response.Messages ?? [];
@@ -128,7 +119,7 @@ async function run(): Promise<void> {
         }
 
         if (messages.length < 10) {
-          await new Promise<void>((resolve) => setTimeout(resolve, 50));
+          await waitFor(50, signal);
 
           const additional = await receiveS3Events(queue, activeQueueUrl, 10 - messages.length, 0);
 
@@ -193,7 +184,7 @@ async function run(): Promise<void> {
           error
         );
 
-        await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+        await waitFor(1000, signal);
       }
     }
 
@@ -240,7 +231,4 @@ function isProcessS3EventInput(value: unknown): value is ProcessS3EventInput & {
   return typeof event.eventTime === "string" && !Number.isNaN(Date.parse(event.eventTime));
 }
 
-run().catch((error: unknown) => {
-  console.error("[worker-eventos-s3] Error fatal.", error);
-  process.exitCode = 1;
-});
+startWorker("worker-eventos-s3", run);

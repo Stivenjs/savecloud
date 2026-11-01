@@ -15,6 +15,7 @@ const MAX_ATTEMPTS = 30;
 const RETRY_DELAY_MS = 2000;
 const CLIP_COVER_ASSET_KEY = "clips/assets/savecloud-clip-cover.png";
 
+/** Crea el bucket local y aplica las políticas, notificaciones y assets requeridos por SaveCloud. */
 async function main(): Promise<void> {
   const s3 = createS3Client();
   const bucketName = getBucketName();
@@ -90,6 +91,7 @@ async function main(): Promise<void> {
   );
 }
 
+/** Busca el icono fuente en las rutas disponibles del bundle y del repositorio. */
 function findProjectAppIcon(): Buffer | null {
   const candidatePaths = [
     resolve(__dirname, "assets/savecloud-clip-cover.png"),
@@ -108,6 +110,7 @@ function findProjectAppIcon(): Buffer | null {
   return null;
 }
 
+/** Sube el cover predeterminado para clips si el icono de la aplicación está disponible. */
 async function ensureAppClipCoverAsset(s3: ReturnType<typeof createS3Client>, bucketName: string): Promise<void> {
   try {
     const iconBuffer = findProjectAppIcon();
@@ -133,6 +136,7 @@ async function ensureAppClipCoverAsset(s3: ReturnType<typeof createS3Client>, bu
   }
 }
 
+/** Comprueba que el bucket exista y reintenta su creación mientras el servicio S3 inicia. */
 async function ensureBucketExists(s3: ReturnType<typeof createS3Client>, bucketName: string): Promise<void> {
   let lastError: unknown;
 
@@ -156,7 +160,17 @@ async function ensureBucketExists(s3: ReturnType<typeof createS3Client>, bucketN
   throw new Error(`[storage-bootstrap] No se pudo crear o acceder al bucket '${bucketName}'.`, { cause: lastError });
 }
 
-function lifecycleRule(id: string, prefix: string, days: number) {
+/** Construye una regla de expiración para objetos bajo un prefijo del bucket. */
+function lifecycleRule(
+  id: string,
+  prefix: string,
+  days: number
+): {
+  ID: string;
+  Filter: { Prefix: string };
+  Status: "Enabled";
+  Expiration: { Days: number };
+} {
   return {
     ID: id,
     Filter: { Prefix: prefix },
