@@ -28,6 +28,7 @@ import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { useProfileSession } from "@hooks/useProfileSession";
 import { useConfig } from "@hooks/useConfig";
 import { ProfileAvatar } from "@features/profile";
+import type { Config } from "@app-types/config";
 import { useTranslation } from "react-i18next";
 
 interface CloudMembersPanelProps {
@@ -197,27 +198,29 @@ export function CloudMembersPanel({
     return Array.from(uniqueIds).sort();
   }, [hostMemberships, memberMemberships, localUserId]);
 
-  const { data: memberAvatarByUser = new Map<string, string | null>() } = useQuery({
-    queryKey: ["cloud-members-avatars", activeProfile?.id ?? "no-profile", cloudPeerIds],
+  const { data: friendConfigByUser = new Map<string, Config | null>() } = useQuery({
+    queryKey: ["cloud-members-profiles", activeProfile?.id ?? "no-profile", cloudPeerIds],
     enabled: isOpen && cloudPeerIds.length > 0,
     queryFn: async () => {
       try {
         const configsMap = await getFriendsConfigs(cloudPeerIds);
-        const avatars = cloudPeerIds.map((userId) => {
-          const friendConfig = configsMap[userId];
-          const avatar =
-            friendConfig && friendConfig.shareVisualProfileWithHosts
-              ? (friendConfig.profileAvatar?.trim() ?? null)
-              : null;
-          return [userId, avatar] as const;
-        });
-
-        return new Map<string, string | null>(avatars);
+        return new Map<string, Config | null>(cloudPeerIds.map((userId) => [userId, configsMap[userId] ?? null]));
       } catch {
-        return new Map<string, string | null>(cloudPeerIds.map((userId) => [userId, null]));
+        return new Map<string, Config | null>(cloudPeerIds.map((userId) => [userId, null]));
       }
     },
   });
+
+  const memberAvatarByUser = useMemo(
+    () =>
+      new Map(
+        [...friendConfigByUser].map(([userId, friend]) => [
+          userId,
+          friend?.shareVisualProfileWithHosts ? friend.profileAvatar?.trim() || null : null,
+        ])
+      ),
+    [friendConfigByUser]
+  );
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -358,6 +361,7 @@ export function CloudMembersPanel({
                 memberships={hostMemberships}
                 presenceMap={presenceByUser}
                 avatarByUser={memberAvatarByUser}
+                friendConfigByUser={friendConfigByUser}
                 isHost={true}
                 loadingPresence={cloudPresenceLoading}
                 isActionLoading={isActionLoading}
@@ -375,6 +379,7 @@ export function CloudMembersPanel({
                 memberships={memberMemberships}
                 presenceMap={presenceByUser}
                 avatarByUser={memberAvatarByUser}
+                friendConfigByUser={friendConfigByUser}
                 isHost={false}
                 loadingPresence={cloudPresenceLoading}
                 isActionLoading={isActionLoading}

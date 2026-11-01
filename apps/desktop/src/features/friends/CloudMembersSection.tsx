@@ -3,12 +3,15 @@ import { ChevronDown } from "lucide-react";
 import type { CloudMembership, CloudPresenceItem } from "@services/tauri/invites.service";
 import { CloudMemberRow } from "@features/friends/CloudMemberRow";
 import { useTranslation } from "react-i18next";
+import type { Config } from "@app-types/config";
+import { findConfiguredGame } from "@utils/gameImage";
 
 interface CloudMembersSectionProps {
   title: string;
   memberships: CloudMembership[];
   presenceMap: Map<string, CloudPresenceItem>;
   avatarByUser?: Map<string, string | null>;
+  friendConfigByUser?: Map<string, Config | null>;
   isHost: boolean;
   loadingPresence: boolean;
   isActionLoading?: string | null;
@@ -27,6 +30,7 @@ export function CloudMembersSection({
   memberships,
   presenceMap,
   avatarByUser,
+  friendConfigByUser,
   isHost,
   loadingPresence,
   isActionLoading = null,
@@ -78,6 +82,10 @@ export function CloudMembersSection({
                       ? membership.hostUserId
                       : membership.memberUserId;
                   const presence = presenceMap.get(userId);
+                  const friendConfig = friendConfigByUser?.get(userId);
+                  const activeGame =
+                    findConfiguredGame(friendConfig?.games ?? [], presence?.gameId) ||
+                    findConfiguredGame(friendConfig?.games ?? [], presence?.gameName);
 
                   return (
                     <CloudMemberRow
@@ -89,6 +97,7 @@ export function CloudMembersSection({
                       status={presence?.status}
                       gameId={presence?.gameId}
                       gameName={presence?.gameName}
+                      gameImageUrl={activeGame?.imageUrl}
                       lastSeenAt={presence?.lastSeenAt}
                       loadingPresence={loadingPresence}
                       isActionLoading={isActionLoading === userId}

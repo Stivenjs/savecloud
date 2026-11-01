@@ -15,6 +15,7 @@ interface CloudMemberRowProps {
   status?: "offline" | "online" | "playing";
   gameId?: string | null;
   gameName?: string | null;
+  gameImageUrl?: string | null;
   lastSeenAt?: number | null;
   loadingPresence: boolean;
   isActionLoading?: boolean;
@@ -34,6 +35,7 @@ export function CloudMemberRow({
   status,
   gameId,
   gameName,
+  gameImageUrl,
   lastSeenAt,
   loadingPresence,
   isActionLoading = false,
@@ -97,7 +99,7 @@ export function CloudMemberRow({
             {isPlaying && (
               <div className="flex items-center gap-1.5 min-w-0">
                 <span className="text-[10px] text-default-400">·</span>
-                <PlayingGameThumbnail gameId={gameId} gameName={gameName} size="xs" />
+                <PlayingGameThumbnail gameId={gameId} gameName={gameName} imageUrl={gameImageUrl} size="xs" />
                 <span className="truncate text-[10px] font-medium text-emerald-500 dark:text-emerald-400">
                   {gameName || gameId}
                 </span>

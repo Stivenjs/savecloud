@@ -19,12 +19,14 @@ import {
   X,
 } from "lucide-react";
 import type { CloudInvite, CloudMembership, CloudPresenceItem } from "@services/tauri/invites.service";
+import type { Config } from "@app-types/config";
 import { listCloudPresence } from "@services/tauri/invites.service";
 import { PresenceStatusChip } from "@features/friends/PresenceStatusChip";
 import { PlayingGameThumbnail } from "@features/games/PlayingGameThumbnail";
 import { useGameSessionDuration } from "@store/GameSessionStore";
 import { getFriendsConfigs } from "@services/tauri";
 import { ProfileAvatar } from "@features/profile";
+import { findConfiguredGame } from "@utils/gameImage";
 import { useCloudPresenceRealtimeInvalidation } from "@hooks/useCloudPresenceRealtimeInvalidation";
 import { useProfileSession } from "@hooks/useProfileSession";
 import {
@@ -36,10 +38,12 @@ function FriendPresenceSubtitle({
   userId,
   roleLabel,
   presence,
+  friendConfig,
 }: {
   userId: string;
   roleLabel: string;
   presence?: CloudPresenceItem;
+  friendConfig?: Config | null;
 }) {
   const isPlaying = presence?.status === "playing" && Boolean(presence?.gameName || presence?.gameId);
   const { formattedDuration, sessionSeconds } = useGameSessionDuration({
@@ -55,7 +59,15 @@ function FriendPresenceSubtitle({
       {isPlaying && (
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-[10px] text-default-400">·</span>
-          <PlayingGameThumbnail gameId={presence?.gameId} gameName={presence?.gameName} size="xs" />
+          <PlayingGameThumbnail
+            gameId={presence?.gameId}
+            gameName={presence?.gameName}
+            imageUrl={
+              findConfiguredGame(friendConfig?.games ?? [], presence?.gameId)?.imageUrl ??
+              findConfiguredGame(friendConfig?.games ?? [], presence?.gameName)?.imageUrl
+            }
+            size="xs"
+          />
           <span className="truncate text-[10px] font-medium text-emerald-500 dark:text-emerald-400">
             {presence?.gameName || presence?.gameId}
           </span>
@@ -210,24 +222,15 @@ export function FriendsInvitesTab({
     return Array.from(uniqueIds).sort();
   }, [hostMemberships, memberMemberships, pendingInvites, localUserId]);
 
-  const { data: memberAvatarByUser = new Map<string, string | null>() } = useQuery({
-    queryKey: ["cloud-members-avatars", activeProfile?.id ?? "no-profile", peerUserIds],
+  const { data: friendConfigByUser = new Map<string, Config | null>() } = useQuery({
+    queryKey: ["cloud-members-profiles", activeProfile?.id ?? "no-profile", peerUserIds],
     enabled: peerUserIds.length > 0,
     queryFn: async () => {
       try {
         const configsMap = await getFriendsConfigs(peerUserIds);
-        const avatars = peerUserIds.map((userId) => {
-          const friendConfig = configsMap[userId];
-          const avatar =
-            friendConfig && friendConfig.shareVisualProfileWithHosts
-              ? (friendConfig.profileAvatar?.trim() ?? null)
-              : null;
-          return [userId, avatar] as const;
-        });
-
-        return new Map<string, string | null>(avatars);
+        return new Map<string, Config | null>(peerUserIds.map((userId) => [userId, configsMap[userId] ?? null]));
       } catch {
-        return new Map<string, string | null>(peerUserIds.map((userId) => [userId, null]));
+        return new Map<string, Config | null>(peerUserIds.map((userId) => [userId, null]));
       }
     },
   });
@@ -398,7 +401,11 @@ export function FriendsInvitesTab({
                       className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-default-200 bg-default-50 p-3">
                       <div className="flex items-center gap-3">
                         <ProfileAvatar
-                          rawAvatar={memberAvatarByUser.get(invite.hostUserId)}
+                          rawAvatar={
+                            friendConfigByUser.get(invite.hostUserId)?.shareVisualProfileWithHosts
+                              ? friendConfigByUser.get(invite.hostUserId)?.profileAvatar
+                              : null
+                          }
                           userId={invite.hostUserId}
                           size="sm"
                         />
@@ -487,7 +494,11 @@ export function FriendsInvitesTab({
                           className="flex flex-col gap-2 rounded-lg border border-default-200 bg-default-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex min-w-0 items-center gap-2">
                             <ProfileAvatar
-                              rawAvatar={memberAvatarByUser.get(m.hostUserId)}
+                              rawAvatar={
+                                friendConfigByUser.get(m.hostUserId)?.shareVisualProfileWithHosts
+                                  ? friendConfigByUser.get(m.hostUserId)?.profileAvatar
+                                  : null
+                              }
                               userId={m.hostUserId}
                               size="sm"
                             />
@@ -497,6 +508,7 @@ export function FriendsInvitesTab({
                                 userId={m.hostUserId}
                                 roleLabel={t("friends.invitesTab.host")}
                                 presence={getPresence(m.hostUserId)}
+                                friendConfig={friendConfigByUser.get(m.hostUserId)}
                               />
                             </div>
                           </div>
@@ -560,7 +572,11 @@ export function FriendsInvitesTab({
                           }`}>
                           <div className="flex min-w-0 items-center gap-2">
                             <ProfileAvatar
-                              rawAvatar={memberAvatarByUser.get(m.memberUserId)}
+                              rawAvatar={
+                                friendConfigByUser.get(m.memberUserId)?.shareVisualProfileWithHosts
+                                  ? friendConfigByUser.get(m.memberUserId)?.profileAvatar
+                                  : null
+                              }
                               userId={m.memberUserId}
                               size="sm"
                               className={isPendingDeletion ? "opacity-50" : undefined}
@@ -589,6 +605,7 @@ export function FriendsInvitesTab({
                                   userId={m.memberUserId}
                                   roleLabel={t("friends.invitesTab.member")}
                                   presence={getPresence(m.memberUserId)}
+                                  friendConfig={friendConfigByUser.get(m.memberUserId)}
                                 />
                               )}
                             </div>
