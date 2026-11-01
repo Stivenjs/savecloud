@@ -13,7 +13,8 @@ services:
     ports: !reset []
 
   minio:
-    ports: !reset []
+    ports: !override
+      - "127.0.0.1:9001:9001"
 
   cloudflared:
     image: cloudflare/cloudflared:latest

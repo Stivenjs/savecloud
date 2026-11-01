@@ -127,7 +127,8 @@ if ($domain -eq "localhost") {
   Write-Host "  Salud de la API:      https://$domain/health"
   Write-Host "  WebSocket seguro:     wss://$domain/ws"
   Write-Host "  S3 público/presigned: $s3PublicEndpoint"
-  Write-Host "No hay puertos publicados en el host para Caddy, API o MinIO."
+  Write-Host "Consola MinIO local:    http://127.0.0.1:9001"
+  Write-Host "Caddy, API y S3 no publican puertos en el host."
 } else {
   Write-Host "SaveCloud está listo. URLs públicas:"
   Write-Host "  API HTTPS:            https://$domain"

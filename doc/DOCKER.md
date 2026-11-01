@@ -4,15 +4,15 @@ Esta guía cubre el uso local y dos modalidades públicas de SaveCloud. El modo 
 
 ## Arquitectura y exposición de servicios
 
-| Servicio                            | Acceso desde contenedores | Acceso desde Internet                                            |
-| ----------------------------------- | ------------------------- | ---------------------------------------------------------------- |
-| Caddy                               | `caddy:80/443`            | Local: sin puertos; VPS: `80/443`; túnel: sin puertos publicados |
-| Cloudflare Tunnel                   | `caddy:80`                | Solo conexiones salientes; ningún puerto publicado               |
-| SaveCloud API y WebSocket           | `savecloud-api:3000`      | Por Caddy; loopback en local/VPS; sin puertos con túnel          |
-| MinIO S3                            | `minio:9000`              | Por Caddy; loopback en local/VPS; sin puertos con túnel          |
-| Consola MinIO                       | `minio:9001`              | `127.0.0.1:9001` en local/VPS; sin puerto con túnel              |
-| PostgreSQL (persistencia de la API) | `postgres:5432`           | Sin puerto publicado                                             |
-| Cola de eventos S3                  | `elasticmq:9324`          | Sin puertos publicados                                           |
+| Servicio                            | Acceso desde contenedores | Acceso desde Internet                                                     |
+| ----------------------------------- | ------------------------- | ------------------------------------------------------------------------- |
+| Caddy                               | `caddy:80/443`            | Local: sin puertos; VPS: `80/443`; túnel: sin puertos publicados          |
+| Cloudflare Tunnel                   | `caddy:80`                | Solo conexiones salientes; ningún puerto publicado                        |
+| SaveCloud API y WebSocket           | `savecloud-api:3000`      | Por Caddy; loopback en local/VPS; sin puertos con túnel                   |
+| MinIO S3                            | `minio:9000`              | Por Caddy; loopback en local/VPS; sin puertos con túnel                   |
+| Consola MinIO                       | `minio:9001`              | `127.0.0.1:9001` en todos los modos; nunca se expone por Caddy o el túnel |
+| PostgreSQL (persistencia de la API) | `postgres:5432`           | Sin puerto publicado                                                      |
+| Cola de eventos S3                  | `elasticmq:9324`          | Sin puertos publicados                                                    |
 
 Compose separa la red de entrada a Caddy de la red interna de datos. `cloudflared` solo comparte la red de entrada con Caddy; PostgreSQL y ElasticMQ viven en la red interna, y Caddy no puede acceder a ellos. Los workers que consultan Steam también tienen una red de salida separada para sus solicitudes externas. La API usa `minio:9000` y `postgres:5432`; no usa `localhost` para hablar con otros contenedores. Todas las tablas de persistencia de la API en Docker usan PostgreSQL. Caddy no necesita una dependencia de arranque respecto de la API: reintenta las conexiones al upstream cuando la API termina de iniciar.
 
@@ -120,7 +120,7 @@ docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml logs --tai
 
 Si aparece un `502`, confirma que el túnel figure como **Healthy**, que ambos Public Hostnames apunten a `http://caddy:80` y que el Host Header coincida con el hostname solicitado. Caddy admite WebSockets y conexiones persistentes. Si una carga S3 devuelve `413`, el límite de tamaño por solicitud de Cloudflare depende del plan; las cargas multipart de SaveCloud usan partes de 10 MiB. Para transferencias que superen el límite, aumenta el máximo permitido en Cloudflare o cambia al modo Caddy tradicional con DNS-only y puertos entrantes abiertos.
 
-El túnel no publica puertos del host para Caddy, API ni MinIO. PostgreSQL y ElasticMQ permanecen en la red interna `backend`; Caddy no puede conectarse a ellos. La red `tunnel_ingress` solo contiene `cloudflared` y Caddy. Los workers usan `worker_egress` para llegar a servicios externos sin entrar en la red de proxy. El acceso de administración de Docker aún debe protegerse, ya que un usuario con acceso al daemon puede inspeccionar contenedores y redes.
+El túnel no publica puertos del host para Caddy, API ni el endpoint S3. La consola administrativa de MinIO se enlaza únicamente a `127.0.0.1:9001`, para que se pueda abrir desde el propio servidor sin exponerla a la LAN ni a Internet. PostgreSQL y ElasticMQ permanecen en la red interna `backend`; Caddy no puede conectarse a ellos. La red `tunnel_ingress` solo contiene `cloudflared` y Caddy. Los workers usan `worker_egress` para llegar a servicios externos sin entrar en la red de proxy. El acceso de administración de Docker aún debe protegerse, ya que un usuario con acceso al daemon puede inspeccionar contenedores y redes.
 
 Para volver al modo local, detén la pila del túnel y levanta solo el Compose base:
 

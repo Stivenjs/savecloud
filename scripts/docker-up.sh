@@ -108,7 +108,8 @@ SaveCloud está listo mediante Cloudflare Tunnel. URLs públicas:
   Salud de la API:      https://${domain}/health
   WebSocket seguro:     wss://${domain}/ws
   S3 público/presigned: ${s3_public_endpoint}
-No hay puertos publicados en el host para Caddy, API o MinIO.
+Consola MinIO local:    http://127.0.0.1:9001
+Caddy, API y S3 no publican puertos en el host.
 
 Endpoints internos Docker:
   API:                  savecloud-api:3000
