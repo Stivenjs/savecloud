@@ -8,18 +8,21 @@
 
 http://{$DOMAIN} {
 	encode gzip zstd
-	# Registra el ID declarado por el cliente; la API valida la identidad con sus credenciales.
+	# Este es el ID enviado por el cliente (X-User-Id), no el user_id interno de Caddy.
 	log_append declared_user_id {http.request.header.X-User-Id}
 
 	log {
 		output stdout
 		format filter {
-			# Evita guardar credenciales, identificadores de usuario o parámetros de la solicitud.
+			# Evita guardar credenciales o parámetros de la solicitud.
 			# Las URL prefirmadas de S3 incluyen credenciales en la cadena de consulta.
 			request>headers delete
 			request>uri regexp `\?.*` ""
+			request>remote_port delete
+			request>proto delete
+			request>remote_ip delete
+			resp_headers delete
 			request>client_ip ip_mask 16 32
-			request>remote_ip ip_mask 16 32
 		}
 	}
 
