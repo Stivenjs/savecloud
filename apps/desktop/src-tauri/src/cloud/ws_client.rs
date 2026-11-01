@@ -510,6 +510,33 @@ async fn handle_incoming_text(
     }
 }
 
+/// Busca la portada y el App ID publicados en el perfil del amigo para el juego activo.
+async fn resolve_friend_game_artwork(
+    friend_user_id: &str,
+    game_id: &str,
+    game_name: &str,
+) -> (Option<String>, Option<String>) {
+    let Ok(profile) =
+        crate::config::config_cmds::get_friend_config(friend_user_id.to_string()).await
+    else {
+        return (None, None);
+    };
+
+    profile
+        .games
+        .into_iter()
+        .find(|game| {
+            game.id.eq_ignore_ascii_case(game_id)
+                || game.id.eq_ignore_ascii_case(game_name)
+                || game
+                    .steam_app_id
+                    .as_deref()
+                    .is_some_and(|steam_app_id| steam_app_id.eq_ignore_ascii_case(game_id))
+        })
+        .map(|game| (game.image_url, game.steam_app_id))
+        .unwrap_or_default()
+}
+
 /// Aplica la lógica de negocio secundaria para mensajes entrantes (notificaciones overlay, registro LAN, etc.).
 async fn process_incoming_payload(
     app_handle: &AppHandle,
@@ -545,6 +572,12 @@ async fn process_incoming_payload(
 
             if !already_notified && !data.game_id.is_empty() {
                 last_friend_game.insert(data.friend_user_id.clone(), data.game_id.clone());
+                let (image_url, steam_app_id) = resolve_friend_game_artwork(
+                    &data.friend_user_id,
+                    &data.game_id,
+                    &data.game_name,
+                )
+                .await;
 
                 if let Err(e) = crate::overlay::show_overlay_notification(
                     app_handle.clone(),
@@ -553,10 +586,10 @@ async fn process_incoming_payload(
                         "{} está jugando {}",
                         data.friend_user_id, data.game_name
                     )),
-                    None,
-                    None,
-                    None,
-                    None,
+                    Some(data.game_id.clone()),
+                    Some(data.game_name.clone()),
+                    image_url,
+                    steam_app_id,
                 )
                 .await
                 {

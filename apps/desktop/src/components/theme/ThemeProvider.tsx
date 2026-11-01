@@ -1,4 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
+import { emit, listen } from "@tauri-apps/api/event";
+
+const THEME_CHANGED_EVENT = "savecloud-theme-changed";
+const VALID_THEMES = new Set(["dark", "light", "system"]);
 
 /**
  * Propiedades del contexto de tema devuelto por `useTheme()`.
@@ -104,12 +108,49 @@ export function ThemeProvider({
     return () => media.removeEventListener("change", listener);
   }, [enableSystem]);
 
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    void listen<string>(THEME_CHANGED_EVENT, (event) => {
+      if (!VALID_THEMES.has(event.payload)) return;
+
+      setThemeState(event.payload);
+      try {
+        localStorage.setItem(storageKey, event.payload);
+      } catch {
+        // El tema sigue sincronizado en memoria aunque el almacenamiento no esté disponible.
+      }
+    })
+      .then((stopListening) => {
+        if (disposed) {
+          stopListening();
+          return;
+        }
+        unlisten = stopListening;
+      })
+      .catch((error: unknown) => {
+        console.warn("[Theme] No se pudo escuchar cambios de otras ventanas:", error);
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [storageKey]);
+
   const setTheme = useCallback(
     (newTheme: string) => {
+      if (!VALID_THEMES.has(newTheme)) return;
+
       setThemeState(newTheme);
       try {
         localStorage.setItem(storageKey, newTheme);
       } catch {}
+
+      void emit(THEME_CHANGED_EVENT, newTheme).catch((error: unknown) => {
+        console.warn("[Theme] No se pudo propagar el cambio a otras ventanas:", error);
+      });
     },
     [storageKey]
   );

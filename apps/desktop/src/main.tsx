@@ -2,7 +2,6 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "@lib/i18n";
 import i18n from "@lib/i18n";
-import { ThemeProvider } from "next-themes";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { HeroUIProvider } from "@heroui/react";
 import { SavecloudToaster } from "@components/toast/SavecloudToaster";
@@ -15,6 +14,7 @@ import { useShellUiStore } from "@store/ShellUiStore";
 import { useLowPerformanceMode } from "@hooks/useLowPerformanceMode";
 import { useDeveloperModeProtection } from "@hooks/useDeveloperModeProtection";
 import { useBackgroundPause } from "@hooks/Usebackgroundpause";
+import { ThemeProvider } from "@components/theme/ThemeProvider";
 import { useEffect } from "react";
 import { preloadHls } from "@utils/hls";
 import "@/styles/index.css";
@@ -84,9 +84,11 @@ function OverlayWrapper({ children }: { children: React.ReactNode }) {
   useDeveloperModeProtection();
   useBackgroundPause();
   return (
-    <QueryClientProvider client={queryClient}>
-      <HeroUIProvider>{children}</HeroUIProvider>
-    </QueryClientProvider>
+    <ThemeProvider {...THEME_CONFIG}>
+      <QueryClientProvider client={queryClient}>
+        <HeroUIProvider>{children}</HeroUIProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 

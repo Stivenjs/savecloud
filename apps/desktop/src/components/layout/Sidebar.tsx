@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useTheme } from "next-themes";
+import { useTheme } from "@components/theme/ThemeProvider";
 import { Button } from "@heroui/react";
 import { Gamepad2, Moon, Sun } from "lucide-react";
 import { useTranslation } from "react-i18next";

@@ -6,9 +6,11 @@
 
 import type { FastifyInstance, InjectOptions } from "fastify";
 import type { AccessSessionRepository } from "@domain/ports/AccessSessionRepository";
+import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 import type { FastifyWebSocketNotifier } from "@infrastructure/websocket/FastifyWebSocketNotifier";
 import { ApplicationError } from "@application/errors/ApplicationError";
+import { BroadcastActivityUseCase } from "@application/use-cases/BroadcastActivityUseCase";
 import {
   authenticateRequestCredential,
   extractRequestCredential,
@@ -60,16 +62,20 @@ export interface StartBunServerOptions {
   connectionRepository?: ConnectionRepository;
   /** Registro local usado para enviar notificaciones a sockets activos. */
   webSocketNotifier?: FastifyWebSocketNotifier;
+  /** Membresías de nube utilizadas para propagar actividad a los clientes locales. */
+  cloudInviteRepository?: CloudInviteRepository;
   /** Repositorio requerido para verificar tokens de sesión. */
   accessSessionRepository?: AccessSessionRepository;
 }
 
+/** Estado de juego que se persiste para que las consultas de presencia lo reflejen. */
 interface ConnectionActivity {
   lastActivityAt: number;
   activityGameId: string | null;
   activityGameName: string | null;
 }
 
+/** Última actividad pendiente de escritura para agrupar heartbeats cercanos. */
 interface PendingActivity {
   value: ConnectionActivity;
   timer: ReturnType<typeof setTimeout>;
@@ -93,6 +99,36 @@ function enqueueConnectionOperation(
     }
   );
   return current;
+}
+
+/**
+ * Difunde el inicio, cambio o fin de actividad a los miembros de la nube.
+ * La persistencia local actualiza presencia; esta notificación independiente
+ * es la que permite a los escritorios Docker mostrar el overlay de amistades.
+ *
+ * @param broadcaster Caso de uso disponible cuando están configurados sus tres adaptadores.
+ * @param userId Identidad autenticada del usuario que envió el mensaje.
+ * @param gameId Identificador del juego; vacío para indicar que dejó de jugar.
+ * @param gameName Nombre mostrado del juego, si está disponible.
+ */
+function broadcastActivity(
+  broadcaster: BroadcastActivityUseCase | null,
+  userId: string,
+  gameId: string,
+  gameName: string
+): void {
+  if (!broadcaster) return;
+
+  void broadcaster
+    .execute({
+      broadcasterUserId: userId,
+      presenceStatus: gameId ? "playing" : "online",
+      gameId: gameId || undefined,
+      gameName: gameId ? gameName || gameId : undefined,
+    })
+    .catch((error: unknown) => {
+      console.error("[SaveCloud WS Bun] Error propagando actividad:", error);
+    });
 }
 
 /** Valida la credencial compartida con el hook HTTP y requiere un usuario para el socket. */
@@ -155,9 +191,16 @@ async function handleHttpRoute(req: Request, url: URL, app: FastifyInstance): Pr
   });
 }
 
-/** Inicia Bun.serve para HTTP y WebSocket, compartiendo la autenticación con Fastify. */
+/**
+ * Inicia Bun.serve para HTTP y WebSocket, compartiendo la autenticación con Fastify.
+ * En despliegues Docker, los mensajes `broadcast` actualizan presencia y se
+ * difunden a los miembros conectados para activar sus notificaciones de overlay.
+ *
+ * @param options Puerto, adaptadores de persistencia, autenticación y notificación.
+ */
 export async function startBunServer(options: StartBunServerOptions): Promise<void> {
-  const { port, host, app, connectionRepository, webSocketNotifier, accessSessionRepository } = options;
+  const { port, host, app, connectionRepository, webSocketNotifier, cloudInviteRepository, accessSessionRepository } =
+    options;
   const bunApi = (globalThis as unknown as { Bun?: typeof import("bun") }).Bun;
   if (!bunApi) throw new Error("[BunWebSocketServer] Bun runtime no detectado en el entorno global.");
 
@@ -165,6 +208,10 @@ export async function startBunServer(options: StartBunServerOptions): Promise<vo
 
   const connectionOperations = new Map<string, Promise<void>>();
   const pendingActivities = new Map<string, PendingActivity>();
+  const activityBroadcaster =
+    connectionRepository && webSocketNotifier && cloudInviteRepository
+      ? new BroadcastActivityUseCase(cloudInviteRepository, connectionRepository, webSocketNotifier)
+      : null;
 
   const persistActivity = (connectionId: string, activity: ConnectionActivity): Promise<void> => {
     if (!connectionRepository) return Promise.resolve();
@@ -237,6 +284,7 @@ export async function startBunServer(options: StartBunServerOptions): Promise<vo
           activityGameName: gameId ? gameName || gameId : null,
         };
         const { connectionId } = socket.data;
+        broadcastActivity(activityBroadcaster, socket.data.userId, gameId, gameName);
         const pending = pendingActivities.get(connectionId);
         if (pending) {
           pending.value = activity;
