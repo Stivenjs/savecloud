@@ -58,7 +58,13 @@ if docker inspect --format '{{range $name, $config := .NetworkSettings.Networks}
 fi
 
 echo "Validando la configuración de Caddy..."
-docker compose "$@" run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+caddy_running=$(docker inspect --format '{{.State.Running}}' savecloud-caddy 2>/dev/null || true)
+if [ "$caddy_running" = true ]; then
+  # Reutiliza el contenedor activo para evitar duplicar sus IP fijas en las redes Docker.
+  docker exec savecloud-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+else
+  docker compose "$@" run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+fi
 docker compose "$@" up -d --build --remove-orphans
 legacy_dynamo_image=$(docker image ls --quiet amazon/dynamodb-local:latest)
 if [ -n "$legacy_dynamo_image" ]; then

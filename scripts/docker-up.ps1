@@ -60,7 +60,13 @@ if ($LASTEXITCODE -eq 0 -and $minioNetworksJson) {
 }
 
 Write-Host "Validando la configuración de Caddy..."
-& docker compose @composeArgs run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+$caddyRunning = & docker inspect --format '{{.State.Running}}' "savecloud-caddy" 2>$null
+if ($LASTEXITCODE -eq 0 -and $caddyRunning -eq "true") {
+  # Reutiliza el contenedor activo para evitar duplicar sus IP fijas en las redes Docker.
+  & docker exec "savecloud-caddy" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+} else {
+  & docker compose @composeArgs run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+}
 if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }
