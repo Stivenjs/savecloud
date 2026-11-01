@@ -137,7 +137,10 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       : undefined;
 
   await registerWebhookRoutes(app, { processS3EventUseCase, processS3Events: deps.processS3Events });
-  await registerWebSocketRoutes(app, { connectionRepository: deps.connectionRepository });
+  await registerWebSocketRoutes(app, {
+    connectionRepository: deps.connectionRepository,
+    webSocketNotifier: deps.webSocketNotifier,
+  });
   await registerTrashModule(app, deps.saveRepository);
 
   app.get(

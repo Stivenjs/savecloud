@@ -1,227 +1,279 @@
 /**
- * @file BunWebSocketServer.ts
- * @description Adaptador de infraestructura HTTP/WebSocket nativo para el runtime Bun.
- * Delega peticiones HTTP a la aplicación Fastify mediante `app.inject` y gestiona
- * el ciclo de vida de WebSockets con el motor nativo en C++ (`Bun.serve`).
+ * @file Servidor HTTP/WebSocket de Bun con Fastify como router HTTP.
+ * Las solicitudes HTTP se delegan a Fastify; Bun valida y actualiza los sockets
+ * WebSocket para conservar el transporte nativo.
  */
 
 import type { FastifyInstance, InjectOptions } from "fastify";
+import type { AccessSessionRepository } from "@domain/ports/AccessSessionRepository";
 import type { ConnectionRepository } from "@domain/ports/ConnectionRepository";
 import type { FastifyWebSocketNotifier } from "@infrastructure/websocket/FastifyWebSocketNotifier";
-import { verifyUserAccessToken } from "@shared/accessToken";
-import { safeCompareSecret } from "@shared/safeCompare";
-import type { AccessSessionRepository } from "@domain/ports/AccessSessionRepository";
+import { ApplicationError } from "@application/errors/ApplicationError";
+import {
+  authenticateRequestCredential,
+  extractRequestCredential,
+  type AuthenticatedRequestIdentity,
+} from "@application/use-cases/AuthenticateRequestCredential";
 
-/**
- * Datos asociados al contexto de cada conexión WebSocket en Bun.
- */
+/** Rutas que la API publica para conexiones WebSocket. */
+const WEBSOCKET_PATHS = new Set(["/", "/ws", "/dev", "/dev/ws"]);
+/** Duración de los registros de conexión en el repositorio. */
+const CONNECTION_TTL_SECONDS = 24 * 60 * 60;
+/** Agrupa los cambios frecuentes de actividad para reducir escrituras de presencia. */
+const ACTIVITY_FLUSH_INTERVAL_MS = 250;
+/** Respuesta reutilizada para los mensajes de ping de la aplicación. */
+const PONG_MESSAGE = '{"type":"PONG"}';
+
+/** Contexto persistente asociado a un socket WebSocket de Bun. */
 export interface BunWsSocketData {
-  /** Identificador único de la conexión activa */
+  /** Identificador único de esta conexión. */
   connectionId: string;
-  /** ID del usuario autenticado (si está presente) */
-  userId?: string;
-  /** ID del dispositivo emisor */
+  /** Usuario autenticado durante el handshake. */
+  userId: string;
+  /** Identificador opcional del dispositivo emisor. */
   deviceId?: string;
 }
 
-/**
- * Estructura de payload de mensajes JSON entrantes por WebSocket.
- */
+/** Campos reconocidos en los mensajes JSON de los clientes WebSocket. */
 export interface BunWsIncomingPayload {
-  /** Acción solicitada por el cliente (ej. "ping", "broadcast") */
+  /** Acción solicitada, como `ping` o `broadcast`. */
   action?: string;
-  /** Tipo de mensaje o evento */
+  /** Tipo de evento opcional. */
   type?: string;
-  /** Identificador del juego activo */
+  /** Identificador del juego activo. */
   gameId?: string;
-  /** Nombre descriptivo del juego activo */
+  /** Nombre del juego activo. */
   gameName?: string;
-  /** ID del usuario emisor del evento */
+  /** Usuario declarado como emisor del evento. */
   broadcasterUserId?: string;
 }
 
-/**
- * Opciones de configuración para el arranque del servidor nativo de Bun.
- */
+/** Dependencias necesarias para iniciar el servidor nativo de Bun. */
 export interface StartBunServerOptions {
-  /** Puerto de red en el que escuchará el servidor */
+  /** Puerto TCP de escucha. */
   port: number;
-  /** Dirección de red de escucha (ej. "0.0.0.0") */
+  /** Host de escucha, normalmente `0.0.0.0`. */
   host: string;
-  /** Instancia configurada de la aplicación Fastify */
+  /** Aplicación Fastify preparada para resolver solicitudes HTTP. */
   app: FastifyInstance;
-  /** Repositorio opcional de conexiones de presencia */
+  /** Repositorio opcional de presencia y actividad de conexiones. */
   connectionRepository?: ConnectionRepository;
-  /** Notificador WebSocket local en memoria */
+  /** Registro local usado para enviar notificaciones a sockets activos. */
   webSocketNotifier?: FastifyWebSocketNotifier;
+  /** Repositorio requerido para verificar tokens de sesión. */
   accessSessionRepository?: AccessSessionRepository;
 }
 
-/** Tiempo de vida predeterminado para registros de conexión en DynamoDB (24 horas) */
-const CONNECTION_TTL_SECONDS = 24 * 60 * 60;
+interface ConnectionActivity {
+  lastActivityAt: number;
+  activityGameId: string | null;
+  activityGameName: string | null;
+}
 
-async function getAuthorizedWebSocketIdentity(
+interface PendingActivity {
+  value: ConnectionActivity;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+/** Serializa las escrituras por conexión para que un cierre no adelante a su alta. */
+function enqueueConnectionOperation(
+  operations: Map<string, Promise<void>>,
+  connectionId: string,
+  operation: () => Promise<void>
+): Promise<void> {
+  const previous = operations.get(connectionId) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(operation);
+  operations.set(connectionId, current);
+  void current.then(
+    () => {
+      if (operations.get(connectionId) === current) operations.delete(connectionId);
+    },
+    () => {
+      if (operations.get(connectionId) === current) operations.delete(connectionId);
+    }
+  );
+  return current;
+}
+
+/** Valida la credencial compartida con el hook HTTP y requiere un usuario para el socket. */
+async function authenticateWebSocketUpgrade(
   request: Request,
   accessSessionRepository?: AccessSessionRepository
 ): Promise<{ userId: string; deviceId?: string } | null> {
-  const expectedApiKey = process.env.API_KEY?.trim();
-  const userId = request.headers.get("x-user-id")?.trim() ?? "";
-  const deviceId = request.headers.get("x-device-id")?.trim() || undefined;
-  const authorization = request.headers.get("authorization") ?? "";
-  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-  const credential = request.headers.get("x-api-key")?.trim() || bearer || "";
-
-  if (!userId || !credential) return null;
-  if (expectedApiKey && safeCompareSecret(credential, expectedApiKey)) return { userId, deviceId };
-
-  const accessToken = verifyUserAccessToken(credential);
-  if (!accessToken?.sessionId || !accessToken.hostUserId || userId !== accessToken.userId || !accessSessionRepository) {
-    return null;
+  const headers = request.headers;
+  let identity: AuthenticatedRequestIdentity | null;
+  try {
+    identity = await authenticateRequestCredential({
+      credential: extractRequestCredential(
+        headers.get("x-api-key") ?? undefined,
+        headers.get("authorization") ?? undefined
+      ),
+      declaredUserId: headers.get("x-user-id") ?? undefined,
+      expectedApiKey: process.env.API_KEY,
+      accessSessionRepository,
+    });
+  } catch (error) {
+    if (error instanceof ApplicationError && error.code === "UNAUTHENTICATED") return null;
+    throw error;
   }
-  const session = await accessSessionRepository.get(accessToken.sessionId);
-  if (
-    !session ||
-    !session.active ||
-    session.userId !== accessToken.userId ||
-    session.hostUserId !== accessToken.hostUserId ||
-    session.expiresAtEpoch <= Math.floor(Date.now() / 1000)
-  ) {
-    return null;
-  }
-  return { userId, deviceId };
+
+  if (!identity?.userId) return null;
+  return {
+    userId: identity.userId,
+    deviceId: headers.get("x-device-id")?.trim() || undefined,
+  };
 }
 
-/**
- * Delega una petición HTTP estándar a la instancia de Fastify vía `app.inject` de forma asíncrona.
- *
- * @param req - Objeto Request nativo de Bun.
- * @param url - Objeto URL parseado.
- * @param app - Instancia de Fastify.
- * @returns {Promise<Response>} Respuesta HTTP formateada.
- */
+/** Convierte una solicitud Fetch de Bun a la entrada de prueba HTTP de Fastify. */
 async function handleHttpRoute(req: Request, url: URL, app: FastifyInstance): Promise<Response> {
   const headers: Record<string, string> = {};
-  req.headers.forEach((val, key) => {
-    headers[key] = val;
+  req.headers.forEach((value, name) => {
+    headers[name] = value;
   });
 
-  const bodyBuffer = req.body ? Buffer.from(await req.arrayBuffer()) : undefined;
-
-  const res = await app.inject({
+  const body = req.body === null ? undefined : Buffer.from(await req.arrayBuffer());
+  const result = await app.inject({
     method: req.method as InjectOptions["method"],
     url: url.pathname + url.search,
     headers,
-    payload: bodyBuffer,
+    payload: body,
   });
 
   const responseHeaders = new Headers();
-  for (const [key, val] of Object.entries(res.headers)) {
-    if (val !== undefined) {
-      if (Array.isArray(val)) {
-        for (const v of val) responseHeaders.append(key, v);
-      } else {
-        responseHeaders.set(key, String(val));
-      }
+  for (const [name, value] of Object.entries(result.headers)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) responseHeaders.append(name, item);
+    } else {
+      responseHeaders.set(name, String(value));
     }
   }
 
-  return new Response(res.rawPayload as unknown as BodyInit, {
-    status: res.statusCode,
+  return new Response(result.rawPayload as unknown as BodyInit, {
+    status: result.statusCode,
     headers: responseHeaders,
   });
 }
 
-/**
- * Arranca un servidor nativo de Bun (`Bun.serve`) que delega las rutas HTTP a Fastify
- * y procesa las conexiones WebSocket de forma nativa mediante C++.
- *
- * @param options - Opciones de configuración e inyección de dependencias.
- * @returns {Promise<void>}
- */
+/** Inicia Bun.serve para HTTP y WebSocket, compartiendo la autenticación con Fastify. */
 export async function startBunServer(options: StartBunServerOptions): Promise<void> {
-  const { port, host, app, connectionRepository, webSocketNotifier } = options;
+  const { port, host, app, connectionRepository, webSocketNotifier, accessSessionRepository } = options;
+  const bunApi = (globalThis as unknown as { Bun?: typeof import("bun") }).Bun;
+  if (!bunApi) throw new Error("[BunWebSocketServer] Bun runtime no detectado en el entorno global.");
 
   await app.ready();
 
-  const bunApi = (globalThis as unknown as { Bun: typeof import("bun") }).Bun;
-  if (!bunApi) {
-    throw new Error("[BunWebSocketServer] Bun runtime no detectado en el entorno global.");
-  }
+  const connectionOperations = new Map<string, Promise<void>>();
+  const pendingActivities = new Map<string, PendingActivity>();
+
+  const persistActivity = (connectionId: string, activity: ConnectionActivity): Promise<void> => {
+    if (!connectionRepository) return Promise.resolve();
+    return enqueueConnectionOperation(connectionOperations, connectionId, () =>
+      connectionRepository.setConnectionActivity(connectionId, activity)
+    );
+  };
 
   bunApi.serve<BunWsSocketData>({
     port,
     hostname: host,
-    async fetch(req, server) {
-      const url = new URL(req.url);
+    async fetch(request, server) {
+      const url = new URL(request.url);
+      const isWebSocketUpgrade = request.headers.get("upgrade")?.toLowerCase() === "websocket";
 
-      const isWebSocket = req.headers.get("upgrade")?.toLowerCase() === "websocket";
-      const identity = isWebSocket ? await getAuthorizedWebSocketIdentity(req, options.accessSessionRepository) : null;
-      if (isWebSocket && !identity) return new Response("No autorizado.", { status: 401 });
+      if (isWebSocketUpgrade) {
+        if (!WEBSOCKET_PATHS.has(url.pathname)) {
+          return new Response("Not Found", { status: 404 });
+        }
 
-      const userId = identity?.userId;
-      const deviceId = identity?.deviceId;
-      const connectionId = `ws_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const identity = await authenticateWebSocketUpgrade(request, accessSessionRepository);
+        if (!identity) return new Response("No autorizado.", { status: 401 });
 
-      const upgraded = server.upgrade(req, {
-        data: { connectionId, userId, deviceId },
-      });
-
-      if (upgraded) {
-        return undefined;
+        const upgraded = server.upgrade(request, {
+          data: {
+            connectionId: crypto.randomUUID(),
+            ...identity,
+          },
+        });
+        return upgraded ? undefined : new Response("No se pudo actualizar la conexión.", { status: 400 });
       }
 
-      return handleHttpRoute(req, url, app);
+      return handleHttpRoute(request, url, app);
     },
     websocket: {
       perMessageDeflate: true,
-      open(ws) {
-        const { connectionId, userId, deviceId } = ws.data;
-        if (webSocketNotifier) {
-          webSocketNotifier.registerSocket(connectionId, ws, userId);
-        }
+      open(socket) {
+        const { connectionId, userId, deviceId } = socket.data;
+        webSocketNotifier?.registerSocket(connectionId, socket, userId);
 
-        if (connectionRepository && userId) {
-          const ttl = Math.floor(Date.now() / 1000) + CONNECTION_TTL_SECONDS;
-          connectionRepository.saveConnection(connectionId, userId, ttl, deviceId).catch((err: unknown) => {
-            console.error("[SaveCloud WS Bun] Error registrando conexión en DynamoDB:", err);
+        if (connectionRepository) {
+          const expiresAt = Math.floor(Date.now() / 1000) + CONNECTION_TTL_SECONDS;
+          void enqueueConnectionOperation(connectionOperations, connectionId, () =>
+            connectionRepository.saveConnection(connectionId, userId, expiresAt, deviceId)
+          ).catch((error: unknown) => {
+            console.error("[SaveCloud WS Bun] Error registrando conexión:", error);
           });
         }
       },
-      message(ws, message) {
+      message(socket, message) {
+        let payload: BunWsIncomingPayload;
         try {
-          const parsed = JSON.parse(message.toString()) as BunWsIncomingPayload;
-          if (parsed.action === "ping") {
-            ws.send(JSON.stringify({ type: "PONG" }));
-          } else if (parsed.action === "broadcast" && connectionRepository) {
-            const gameId = parsed.gameId?.trim() ?? "";
-            const gameName = parsed.gameName?.trim() ?? "";
-            connectionRepository
-              .setConnectionActivity(ws.data.connectionId, {
-                lastActivityAt: Date.now(),
-                activityGameId: gameId || null,
-                activityGameName: gameId ? gameName || gameId : null,
-              })
-              .catch((err: unknown) => {
-                console.error("[SaveCloud WS Bun] Error actualizando actividad:", err);
-              });
-          }
+          payload = JSON.parse(typeof message === "string" ? message : message.toString()) as BunWsIncomingPayload;
         } catch {
-          // Ignorar payloads JSON malformados
+          return;
         }
+        if (payload === null || typeof payload !== "object") return;
+
+        if (payload.action === "ping") {
+          socket.send(PONG_MESSAGE);
+          return;
+        }
+        if (payload.action !== "broadcast" || !connectionRepository) return;
+
+        const gameId = payload.gameId?.trim() ?? "";
+        const gameName = payload.gameName?.trim() ?? "";
+        const activity: ConnectionActivity = {
+          lastActivityAt: Date.now(),
+          activityGameId: gameId || null,
+          activityGameName: gameId ? gameName || gameId : null,
+        };
+        const { connectionId } = socket.data;
+        const pending = pendingActivities.get(connectionId);
+        if (pending) {
+          pending.value = activity;
+          return;
+        }
+
+        const timer = setTimeout(() => {
+          const latest = pendingActivities.get(connectionId);
+          if (!latest) return;
+          pendingActivities.delete(connectionId);
+          void persistActivity(connectionId, latest.value).catch((error: unknown) => {
+            console.error("[SaveCloud WS Bun] Error actualizando actividad:", error);
+          });
+        }, ACTIVITY_FLUSH_INTERVAL_MS);
+        pendingActivities.set(connectionId, { value: activity, timer });
       },
-      close(ws) {
-        const { connectionId } = ws.data;
-        if (webSocketNotifier) {
-          webSocketNotifier.unregisterSocket(connectionId);
+      close(socket) {
+        const { connectionId } = socket.data;
+        webSocketNotifier?.unregisterSocket(connectionId);
+        const pending = pendingActivities.get(connectionId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pendingActivities.delete(connectionId);
+          void persistActivity(connectionId, pending.value).catch((error: unknown) => {
+            console.error("[SaveCloud WS Bun] Error actualizando actividad al cerrar:", error);
+          });
         }
         if (connectionRepository) {
-          connectionRepository.deleteConnection(connectionId).catch((err: unknown) => {
-            console.error("[SaveCloud WS Bun] Error eliminando conexión:", err);
+          void enqueueConnectionOperation(connectionOperations, connectionId, () =>
+            connectionRepository.deleteConnection(connectionId)
+          ).catch((error: unknown) => {
+            console.error("[SaveCloud WS Bun] Error eliminando conexión:", error);
           });
         }
       },
     },
   });
 
-  console.log(`[SaveCloud API] Bun native HTTP/WS server listening on http://${host}:${port}`);
+  console.info(`[SaveCloud API] Bun HTTP/WS server listening on http://${host}:${port}`);
 }

@@ -1,7 +1,9 @@
 import type { SteamReviewSummary } from "@interfaces/lambda/steam-seed/types";
+import { retryAfterMs, waitForRequestSlot } from "@interfaces/lambda/steam-seed/request_gate";
 
 export type FetchSteamReviewsResult = {
   httpStatus: number;
+  retryAfterMs?: number | null;
   /** Verdadero cuando la API devolvió success:1 con un query_summary válido. */
   reviewsSuccess: boolean | null;
   summary?: SteamReviewSummary;
@@ -36,6 +38,10 @@ export async function fetchSteamReviews(appId: number, lang: string): Promise<Fe
     })
   );
 
+  const configuredInterval = Number.parseInt(process.env.REVIEWS_MIN_REQUEST_INTERVAL_MS ?? "", 10);
+  const minimumIntervalMs = Number.isFinite(configuredInterval) && configuredInterval > 0 ? configuredInterval : 3_000;
+  await waitForRequestSlot("api.steampowered.com", minimumIntervalMs);
+
   let res: Response;
   try {
     res = await fetch(url, { method: "GET", headers: { Accept: "application/json" } });
@@ -50,7 +56,12 @@ export async function fetchSteamReviews(appId: number, lang: string): Promise<Fe
   const status = res.status;
 
   if (status === 429) {
-    return { httpStatus: status, reviewsSuccess: null, error: "rate_limited" };
+    return {
+      httpStatus: status,
+      reviewsSuccess: null,
+      retryAfterMs: retryAfterMs(res.headers.get("retry-after")),
+      error: "rate_limited",
+    };
   }
 
   if (!res.ok) {
