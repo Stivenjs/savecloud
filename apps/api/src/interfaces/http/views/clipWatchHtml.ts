@@ -302,7 +302,8 @@ export function renderWatchHtml({ clip, cdnUrl, watchUrl, defaultCoverUrl }: Ren
     .center-play-btn svg {
       width: clamp(1.6rem, 5vw, 2rem);
       height: clamp(1.6rem, 5vw, 2rem);
-      transform: translateX(2px);
+      display: block;
+      transform: none;
     }
 
     .player-wrapper.is-playing .center-play-btn {
