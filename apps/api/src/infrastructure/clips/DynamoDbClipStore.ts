@@ -95,7 +95,8 @@ export class DynamoDbClipStore implements ClipRepository {
     const contentType = resolveContentType(ext, contentTypeOverride);
     const videoKey = `${CLIP_VIDEO_PREFIX}${userId.trim()}/${gameId.trim()}/${clipId}.${ext}`;
 
-    let resolvedPosterUrl = options?.posterUrl?.trim() || undefined;
+    const providedPosterUrl = options?.posterUrl?.trim();
+    let resolvedPosterUrl = providedPosterUrl ? resolvePublicUrl(providedPosterUrl) : undefined;
 
     if (options?.thumbnailBase64?.trim()) {
       try {
@@ -180,7 +181,7 @@ export class DynamoDbClipStore implements ClipRepository {
       if (item) {
         return {
           status: "ok",
-          clip: item,
+          clip: item.posterUrl ? { ...item, posterUrl: resolvePublicUrl(item.posterUrl) } : item,
           cdnUrl: this.buildCdnUrl(item.videoKey),
         };
       }
@@ -193,7 +194,7 @@ export class DynamoDbClipStore implements ClipRepository {
 
         return {
           status: "ok",
-          clip: s3Clip,
+          clip: s3Clip.posterUrl ? { ...s3Clip, posterUrl: resolvePublicUrl(s3Clip.posterUrl) } : s3Clip,
           cdnUrl: this.buildCdnUrl(s3Clip.videoKey),
         };
       }
@@ -248,6 +249,7 @@ export class DynamoDbClipStore implements ClipRepository {
 
       return items.map((clip) => ({
         ...clip,
+        ...(clip.posterUrl ? { posterUrl: resolvePublicUrl(clip.posterUrl) } : {}),
         cdnUrl: this.buildCdnUrl(clip.videoKey),
         watchUrl: baseUrl ? `${baseUrl}/v/${clip.clipId}` : `/v/${clip.clipId}`,
       }));

@@ -94,7 +94,8 @@ export class ClipStore implements ClipRepository {
     const contentType = resolveContentType(ext, contentTypeOverride);
     const videoKey = `${CLIP_VIDEO_PREFIX}${userId.trim()}/${gameId.trim()}/${clipId}.${ext}`;
 
-    let resolvedPosterUrl = options?.posterUrl?.trim() || undefined;
+    const providedPosterUrl = options?.posterUrl?.trim();
+    let resolvedPosterUrl = providedPosterUrl ? resolvePublicUrl(providedPosterUrl) : undefined;
 
     if (options?.thumbnailBase64?.trim()) {
       try {
@@ -184,7 +185,7 @@ export class ClipStore implements ClipRepository {
 
       return {
         status: "ok",
-        clip,
+        clip: clip.posterUrl ? { ...clip, posterUrl: resolvePublicUrl(clip.posterUrl) } : clip,
         cdnUrl,
       };
     } catch (err) {
@@ -244,6 +245,7 @@ export class ClipStore implements ClipRepository {
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .map((clip) => ({
           ...clip,
+          ...(clip.posterUrl ? { posterUrl: resolvePublicUrl(clip.posterUrl) } : {}),
           cdnUrl: this.buildCdnUrl(clip.videoKey),
           watchUrl: baseUrl ? `${baseUrl}/v/${clip.clipId}` : `/v/${clip.clipId}`,
         }));
