@@ -1,0 +1,71 @@
+{
+	admin off
+	servers {
+		trusted_proxies static {$CLOUDFLARED_PROXY_CIDR}
+		client_ip_headers CF-Connecting-IP
+	}
+}
+
+http://{$DOMAIN} {
+	encode gzip zstd
+	# Registra el ID declarado por el cliente; la API valida la identidad con sus credenciales.
+	log_append declared_user_id {http.request.header.X-User-Id}
+
+	log {
+		output stdout
+		format filter {
+			# Evita guardar credenciales, identificadores de usuario o parámetros de la solicitud.
+			# Las URL prefirmadas de S3 incluyen credenciales en la cadena de consulta.
+			request>headers delete
+			request>uri regexp `\?.*` ""
+			request>client_ip ip_mask 16 32
+			request>remote_ip ip_mask 16 32
+		}
+	}
+
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-XSS-Protection "1; mode=block"
+	}
+
+	handle /webhooks/* {
+		respond 403
+	}
+
+	reverse_proxy savecloud-api:3000 {
+		transport http {
+			dial_timeout 10s
+		}
+		header_up Host {http.request.host}
+		header_up X-Forwarded-For {client_ip}
+		header_up X-Forwarded-Proto https
+		header_up X-Real-IP {client_ip}
+	}
+}
+
+http://s3.{$DOMAIN} {
+	log {
+		output stdout
+		format filter {
+			# Las solicitudes S3 suelen usar parámetros prefirmados; omite toda la cadena de consulta.
+			request>headers delete
+			request>uri regexp `\?.*` ""
+			request>client_ip ip_mask 16 32
+			request>remote_ip ip_mask 16 32
+		}
+	}
+
+	reverse_proxy minio:9000 {
+		# Las subidas prefirmadas pueden ser de gran tamaño; transmitirlas en streaming a través de Caddy sin almacenamiento en búfer.
+		flush_interval -1
+		transport http {
+			dial_timeout 10s
+		}
+		header_up Host {http.request.host}
+		header_up X-Forwarded-For {client_ip}
+		header_up X-Forwarded-Proto https
+		header_up X-Real-IP {client_ip}
+	}
+}

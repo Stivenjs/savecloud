@@ -2,6 +2,7 @@ import type { SQL } from "bun";
 import type { S3Client } from "@aws-sdk/client-s3";
 import type { ClipDto, ClipMetadata, GetClipResult } from "@domain/entities/Clip";
 import { ClipStore } from "./ClipStore";
+import { resolvePublicUrl } from "@infrastructure/storage/publicUrl";
 
 interface ClipRow {
   clip_id: string;
@@ -51,7 +52,11 @@ export class PostgresClipStore extends ClipStore {
       `;
       if (rows[0]) {
         const clip = mapClip(rows[0]);
-        return { status: "ok", clip, cdnUrl: this.buildCdnUrl(clip.videoKey) };
+        return {
+          status: "ok",
+          clip: clip.posterUrl ? { ...clip, posterUrl: resolvePublicUrl(clip.posterUrl) } : clip,
+          cdnUrl: this.buildCdnUrl(clip.videoKey),
+        };
       }
 
       const fallback = await super.getClip(clipId);
@@ -149,6 +154,7 @@ function mapClip(row: ClipRow): ClipMetadata {
 function mapClipDto(clip: ClipMetadata, baseUrl: string, buildCdnUrl: (key: string) => string): ClipDto {
   return {
     ...clip,
+    ...(clip.posterUrl ? { posterUrl: resolvePublicUrl(clip.posterUrl) } : {}),
     cdnUrl: buildCdnUrl(clip.videoKey),
     watchUrl: baseUrl ? `${baseUrl}/v/${clip.clipId}` : `/v/${clip.clipId}`,
   };

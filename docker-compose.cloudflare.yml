@@ -1,0 +1,36 @@
+services:
+  caddy:
+    ports: !reset []
+    volumes:
+      - ./Caddyfile.cloudflare:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      proxy_upstreams:
+        ipv4_address: ${PROXY_API_CADDY_IP:-172.20.0.3}
+      proxy_s3: {}
+      tunnel_ingress:
+        ipv4_address: ${TUNNEL_CADDY_IP:-172.21.0.2}
+    environment:
+      - CLOUDFLARED_PROXY_CIDR=${TUNNEL_CLOUDFLARED_IP:-172.21.0.3}/32
+
+  savecloud-api:
+    ports: !reset []
+
+  minio:
+    ports: !override
+      - "127.0.0.1:9001:9001"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: savecloud-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in .env to enable Cloudflare Tunnel}
+    depends_on:
+      caddy:
+        condition: service_started
+    networks:
+      tunnel_ingress:
+        ipv4_address: ${TUNNEL_CLOUDFLARED_IP:-172.21.0.3}

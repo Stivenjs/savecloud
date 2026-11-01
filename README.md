@@ -28,7 +28,7 @@ Servidor de guardado en la nube para juegos (S3 + Lambda) y app de escritorio pa
 
 SaveCloud puede desplegarse en **AWS Cloud** o autohospedarse en tu propio servidor/NAS mediante **Docker Compose**:
 
-- 🐳 **[Guía de despliegue con Docker](./doc/DOCKER.md)** — Autohospedaje (Fastify + MinIO AIStor + DynamoDB Local), con instrucciones para obtener la licencia Free y mostrar las URLs locales al iniciar.
+- 🐳 **[Guía de despliegue con Docker](./doc/DOCKER.md)** — Autohospedaje con PostgreSQL y MinIO AIStor; elige instalación local, VPS tradicional o Cloudflare Tunnel. Incluye los pasos del asistente y la consola local de MinIO.
 - ☁️ **[Guía de despliegue en AWS Cloud](./doc/DEPLOYMENT.md)** — Despliegue en producción serverless con AWS Lambda, API Gateway y S3.
 
 ## Contenido del repositorio

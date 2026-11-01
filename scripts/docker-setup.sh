@@ -79,24 +79,72 @@ read_public_ipv4() {
   done
 }
 
+read_cloudflare_tunnel_token() {
+  tunnel_token=$(read_env CLOUDFLARE_TUNNEL_TOKEN)
+  case "$tunnel_token" in
+    ""|replace-with-*|YourCloudflareTunnelTokenHere)
+      printf 'Pega solo el token Cloudflare (oculto; no pegues el comando Docker): ' >&2
+      if [ -t 0 ]; then
+        stty -echo
+        if IFS= read -r tunnel_token; then
+          stty echo
+          printf '\n' >&2
+        else
+          stty echo
+          printf '\n' >&2
+          echo "No se pudo leer el token de Cloudflare Tunnel." >&2
+          return 1
+        fi
+      else
+        IFS= read -r tunnel_token || return 1
+      fi
+      if [ -z "$tunnel_token" ]; then
+        echo "El token de Cloudflare Tunnel es obligatorio para el modo túnel." >&2
+        return 1
+      fi
+
+      temp_file="${env_file}.setup-tmp"
+      : > "$temp_file"
+      found=false
+      while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+          CLOUDFLARE_TUNNEL_TOKEN=*)
+            printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "$tunnel_token" >> "$temp_file"
+            found=true
+            ;;
+          *) printf '%s\n' "$line" >> "$temp_file" ;;
+        esac
+      done < "$env_file"
+      if [ "$found" != true ]; then
+        printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "$tunnel_token" >> "$temp_file"
+      fi
+      chmod 600 "$temp_file"
+      mv "$temp_file" "$env_file"
+      ;;
+  esac
+}
+
 echo
 echo "Asistente de instalación Docker de SaveCloud"
-echo "  1. Desarrollo local (localhost)"
-echo "  2. VPS con dominio propio y HTTPS automático mediante Caddy"
-printf 'Elige 1 o 2: '
+echo "  1. Local: para probar en esta computadora; no requiere dominio."
+echo "  2. VPS: servidor con IP pública; requiere dominio y puertos TCP 80/443."
+echo "  3. Cloudflare Tunnel: publica sin abrir puertos entrantes; requiere dominio activo en Cloudflare."
+printf 'Elige 1, 2 o 3: '
 IFS= read -r choice
-while [ "$choice" != 1 ] && [ "$choice" != 2 ]; do
-  printf 'Opción inválida. Elige 1 o 2: '
+while [ "$choice" != 1 ] && [ "$choice" != 2 ] && [ "$choice" != 3 ]; do
+  printf 'Opción inválida. Elige 1, 2 o 3: '
   IFS= read -r choice
 done
 
 if [ "$choice" = 1 ]; then
+  deployment_mode=local
   domain=localhost
   s3_endpoint=http://localhost:9000
   log_level=info
   http_request_logs=true
   echo "Modo local: la API y S3 estarán disponibles solo en esta computadora."
-else
+elif [ "$choice" = 2 ]; then
+  deployment_mode=vps
   domain=$(read_domain)
   public_ipv4=$(read_public_ipv4)
   s3_endpoint="https://s3.$domain"
@@ -114,11 +162,33 @@ else
     s|S|si|SI|sí|Sí|y|Y|yes|YES) ;;
     *) echo "Puedes continuar, pero Caddy no obtendrá certificados hasta que DNS y firewall estén listos." ;;
   esac
+else
+  deployment_mode=cloudflare
+  domain=$(read_domain)
+  s3_endpoint="https://s3.$domain"
+  log_level=warn
+  http_request_logs=false
+  echo "Prepara Cloudflare antes de continuar:"
+  echo "  1. Comprueba que la zona $domain esté Activa en Cloudflare. Cambiar los nameservers basta; transferir el dominio es opcional."
+  echo "  2. En Conexión de red > Túneles, crea un túnel y agrega estas aplicaciones publicadas:"
+  echo "       $domain     -> http://caddy:80"
+  echo "       s3.$domain  -> http://caddy:80"
+  echo "     Conserva el Host Header público de cada hostname."
+  echo "  3. En las instrucciones Docker, copia solo el valor después de --token. No ejecutes docker run: este asistente inicia el túnel."
+  echo "No necesitas una IP pública fija ni abrir puertos entrantes."
+  printf '¿Ya creaste el túnel y configuraste los dos hostnames? (s/N): '
+  IFS= read -r routes_ready
+  case "$routes_ready" in
+    s|S|si|SI|sí|Sí|y|Y|yes|YES) ;;
+    *) echo "Puedes continuar; termina esas rutas en Cloudflare para que los hostnames sean accesibles." ;;
+  esac
+  read_cloudflare_tunnel_token
 fi
 
 api_port=$(read_env API_PORT)
 api_port=${api_port:-3000}
 set_env DOMAIN "$domain"
+set_env DEPLOYMENT_MODE "$deployment_mode"
 set_env S3_PUBLIC_ENDPOINT "$s3_endpoint"
 set_env API_PORT "$api_port"
 set_env LOG_LEVEL "$log_level"
@@ -127,6 +197,17 @@ set_env HTTP_REQUEST_LOGS "$http_request_logs"
 api_key=$(read_env SYNC_GAMES_API_KEY)
 case "$api_key" in
   ""|replace-with-*|sg_secret_key_12345) api_key="sc_$(new_hex_secret 32)"; set_env SYNC_GAMES_API_KEY "$api_key" ;;
+esac
+
+access_token_secret=$(read_env ACCESS_TOKEN_SECRET)
+case "$access_token_secret" in
+  ""|replace-with-*|"$api_key")
+    access_token_secret=$(new_hex_secret 32)
+    while [ "$access_token_secret" = "$api_key" ]; do
+      access_token_secret=$(new_hex_secret 32)
+    done
+    set_env ACCESS_TOKEN_SECRET "$access_token_secret"
+    ;;
 esac
 
 object_user=$(read_env OBJECT_STORAGE_ACCESS_KEY)
@@ -152,7 +233,8 @@ while :; do
     *) resolved_license_path="$(pwd)/$license_path" ;;
   esac
   if [ -f "$resolved_license_path" ]; then break; fi
-  echo "MinIO AIStor necesita su archivo de licencia minio.license."
+  echo "MinIO AIStor necesita una licencia para iniciar. Descárgala desde https://www.min.io/pricing."
+  echo "Escribe la ruta del archivo minio.license que descargaste."
   printf 'Escribe la ruta al archivo de licencia (Enter para ./minio.license): '
   IFS= read -r license_path
   license_path=${license_path:-./minio.license}
@@ -165,6 +247,7 @@ export API_PORT="$api_port"
 export LOG_LEVEL="$log_level"
 export HTTP_REQUEST_LOGS="$http_request_logs"
 export SYNC_GAMES_API_KEY="$api_key"
+export ACCESS_TOKEN_SECRET="$access_token_secret"
 export OBJECT_STORAGE_ACCESS_KEY="$object_user"
 export OBJECT_STORAGE_SECRET_KEY="$object_secret"
 export DATABASE_PASSWORD="$database_password"
@@ -173,8 +256,8 @@ export MINIO_LICENSE_PATH="$resolved_license_path"
 echo
 echo "Configuración guardada en .env. La clave de API para la aplicación SaveCloud es:"
 echo "$api_key"
-echo "Guárdala en Configuración → Conexión de servidor. No la compartas."
-if [ "$choice" = 2 ]; then
+echo "Cópiala ahora en Configuración → Conexión de servidor. No la pegues en chats ni compartas capturas que la muestren."
+if [ "$choice" = 2 ] || [ "$choice" = 3 ]; then
   echo
   echo "Dominio API: https://$domain"
   echo "Dominio S3:  $s3_endpoint"

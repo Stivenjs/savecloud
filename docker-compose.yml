@@ -13,6 +13,10 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      proxy_upstreams:
+        ipv4_address: ${PROXY_API_CADDY_IP:-172.20.0.3}
+      proxy_s3: {}
 
   savecloud-api:
     image: savecloud-api:local
@@ -22,7 +26,7 @@ services:
       dockerfile: Dockerfile
     container_name: savecloud-api
     restart: unless-stopped
-    # Loopback access preserves the local development URL without exposing the API publicly.
+    # El acceso por loopback conserva la URL local sin publicar la API en Internet.
     ports:
       - "127.0.0.1:${API_PORT:-3000}:3000"
     environment:
@@ -31,7 +35,7 @@ services:
       - HTTP_REQUEST_LOGS=${HTTP_REQUEST_LOGS:-false}
       - API_KEY=${SYNC_GAMES_API_KEY:?SYNC_GAMES_API_KEY must be set to a unique random secret}
       - ACCESS_TOKEN_SECRET=${ACCESS_TOKEN_SECRET:?ACCESS_TOKEN_SECRET must be set to a separate random secret}
-      - TRUSTED_PROXY_CIDRS=${TRUSTED_PROXY_CIDRS:-172.16.0.0/12}
+      - TRUSTED_PROXY_CIDRS=${PROXY_API_CADDY_IP:-172.20.0.3}/32
       - BUCKET_NAME=savecloud-saves
       - AWS_REGION=us-east-1
       - AWS_ACCESS_KEY_ID=${OBJECT_STORAGE_ACCESS_KEY:?Define OBJECT_STORAGE_ACCESS_KEY in .env}
@@ -49,6 +53,9 @@ services:
       - SQS_ENDPOINT=http://elasticmq:9324
       - S3_EVENT_QUEUE_NAME=savecloud-s3-events
       - S3_EVENT_QUEUE_URL=http://elasticmq:9324/000000000000/savecloud-s3-events
+    networks:
+      - proxy_upstreams
+      - backend
     depends_on:
       minio:
         condition: service_started
@@ -73,6 +80,9 @@ services:
     container_name: savecloud-steam-seed-worker
     command: ["bun", "dist/steam-seed-worker.js"]
     ports: !reset []
+    networks: !override
+      - backend
+      - worker_egress
     healthcheck:
       disable: true
     depends_on:
@@ -90,6 +100,9 @@ services:
     container_name: savecloud-s3-events-worker
     command: ["bun", "dist/s3-events-worker.js"]
     ports: !reset []
+    networks: !override
+      - backend
+      - worker_egress
     healthcheck:
       disable: true
     depends_on:
@@ -106,6 +119,9 @@ services:
     container_name: savecloud-postgres-expiration-worker
     command: ["bun", "dist/postgres-expiration-worker.js"]
     ports: !reset []
+    networks: !override
+      - backend
+      - worker_egress
     healthcheck:
       disable: true
     depends_on:
@@ -127,6 +143,7 @@ services:
     environment:
       - MINIO_ROOT_USER=${OBJECT_STORAGE_ACCESS_KEY:?Define OBJECT_STORAGE_ACCESS_KEY in .env}
       - MINIO_ROOT_PASSWORD=${OBJECT_STORAGE_SECRET_KEY:?Define OBJECT_STORAGE_SECRET_KEY in .env}
+      - MINIO_BROWSER_REDIRECT=off
       - MINIO_NOTIFY_WEBHOOK_ENABLE_primary=on
       - MINIO_NOTIFY_WEBHOOK_ENDPOINT_primary=http://savecloud-api:3000/webhooks/minio
       - MINIO_NOTIFY_WEBHOOK_AUTH_TOKEN_primary=${SYNC_GAMES_API_KEY}
@@ -136,6 +153,9 @@ services:
     volumes:
       - minio_data:/mnt/data
       - ${MINIO_LICENSE_PATH:?Define MINIO_LICENSE_PATH en .env con la ruta al archivo de licencia AIStor}:/minio.license:ro
+    networks:
+      - proxy_s3
+      - backend
 
   create-bucket:
     image: savecloud-api:local
@@ -154,6 +174,8 @@ services:
         condition: service_started
       savecloud-api:
         condition: service_healthy
+    networks:
+      - backend
 
   postgres:
     image: postgres:18-alpine
@@ -171,6 +193,8 @@ services:
       timeout: 3s
       retries: 12
       start_period: 10s
+    networks:
+      - backend
 
   elasticmq:
     image: softwaremill/elasticmq-native:1.7.1
@@ -179,6 +203,24 @@ services:
     volumes:
       - ./infra/elasticmq/elasticmq.conf:/opt/elasticmq.conf:ro
       - elasticmq_data:/data
+    networks:
+      - backend
+
+networks:
+  proxy_upstreams:
+    ipam:
+      config:
+        - subnet: ${PROXY_API_SUBNET:-172.20.0.0/16}
+  proxy_s3:
+  backend:
+    internal: true
+  worker_egress:
+    driver: bridge
+  tunnel_ingress:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${TUNNEL_INGRESS_SUBNET:-172.21.0.0/16}
 
 volumes:
   caddy_data:

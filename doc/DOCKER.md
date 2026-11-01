@@ -1,32 +1,70 @@
 # Autohospedaje de SaveCloud con Docker Compose
 
-Esta guía cubre el uso local y el despliegue de SaveCloud en un VPS. En el VPS, Caddy publica la API por HTTPS y sirve como proxy del endpoint S3 para que las URLs presignadas funcionen desde la aplicación de escritorio.
+Esta guía te ayuda a elegir una forma de instalar SaveCloud y seguir los pasos en orden. Si no sabes cuál elegir, usa el asistente: te hará las preguntas necesarias y preparará Docker.
+
+## Elige cómo vas a usar SaveCloud
+
+| Modo                  | Elígelo si…                                                                  | Necesitas                                                          | Qué queda accesible                                                           |
+| --------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| **Local**             | Solo quieres probarlo en esta computadora.                                   | Docker y una licencia de MinIO AIStor.                             | La API, S3 y la consola MinIO solo desde esta computadora.                    |
+| **VPS**               | Tienes un servidor con IP pública y quieres publicar SaveCloud directamente. | Dominio, IP pública y puertos TCP `80` y `443` abiertos.           | API y S3 a través de Caddy; la consola MinIO queda privada.                   |
+| **Cloudflare Tunnel** | Quieres publicar SaveCloud sin abrir puertos entrantes.                      | Dominio con la zona activa en Cloudflare y un túnel de Cloudflare. | API y S3 a través del túnel; la consola MinIO queda solo en `127.0.0.1:9001`. |
+
+Los tres modos usan el mismo asistente. En Windows, abre PowerShell en la carpeta del repositorio y ejecuta:
+
+```powershell
+.\scripts\docker-setup.ps1
+```
+
+En Linux/macOS:
+
+```bash
+bash scripts/docker-setup.sh
+```
+
+Elige **1 (local)**, **2 (VPS)** o **3 (Cloudflare Tunnel)**. Docker Compose descargará las imágenes necesarias y construirá SaveCloud; no tienes que usar `docker pull` ni ejecutar el comando `docker run` de Cloudflare por separado. Para los pasos de Cloudflare, ve a [Despliegue mediante Cloudflare Tunnel](#despliegue-mediante-cloudflare-tunnel).
+
+### Dominio: DNS y registrador son cosas distintas
+
+Para Tunnel, Cloudflare debe gestionar el DNS del dominio y mostrar la zona como **Active / Activa**. Si el dominio está en Name.com, eso se hace cambiando los nameservers por los que Cloudflare asignó. **No hace falta transferir el registro del dominio a Cloudflare Registrar**; esa transferencia es opcional y no es un requisito para Tunnel. Si registraste el dominio hace menos de 60 días, puede que tengas que esperar para transferirlo, pero puedes usar Cloudflare DNS y Tunnel mientras tanto.
+
+Cuando publiques las dos rutas del túnel, Cloudflare creará los registros DNS correspondientes. No agregues registros A apuntando a una IP para el modo Tunnel.
+
+### Requisitos comunes
+
+- Docker Desktop (Windows) o Docker Engine con Docker Compose v2.24 o posterior.
+- Una licencia de MinIO AIStor para esta instalación. Descarga `minio.license` desde [MinIO AIStor Pricing](https://www.min.io/pricing), guárdala en un lugar seguro y ten a mano su ruta. Cada persona debe obtener su propia licencia.
+- Para el modo **Cloudflare Tunnel**, también necesitas un túnel y sus dos aplicaciones publicadas, según la sección de Cloudflare más abajo.
 
 ## Arquitectura y exposición de servicios
 
-| Servicio                            | Acceso desde contenedores | Acceso desde Internet                                                   |
-| ----------------------------------- | ------------------------- | ----------------------------------------------------------------------- |
-| Caddy                               | `caddy:80/443`            | Puertos `80/tcp`, `443/tcp` y `443/udp`                                 |
-| SaveCloud API y WebSocket           | `savecloud-api:3000`      | Solo a través de Caddy; en el host, `127.0.0.1:3000` para desarrollo    |
-| MinIO S3                            | `minio:9000`              | Solo a través de `https://s3.<DOMAIN>` en Caddy; `127.0.0.1:9000` local |
-| Consola MinIO                       | `minio:9001`              | Solo `127.0.0.1:9001`                                                   |
-| PostgreSQL (persistencia de la API) | `postgres:5432`           | Sin puerto publicado                                                    |
-| Cola de eventos S3                  | `elasticmq:9324`          | Sin puertos publicados                                                  |
+<details>
+<summary>Ver detalles técnicos de redes, servicios y seguridad</summary>
 
-Compose crea una red privada y los servicios se encuentran por nombre DNS de servicio. La API usa `minio:9000` y `postgres:5432`; no usa `localhost` para hablar con otros contenedores. Todas las tablas de persistencia de la API en Docker usan PostgreSQL. Caddy no tiene una dependencia de arranque respecto de la API: reintenta las conexiones al upstream cuando la API termina de iniciar.
+| Servicio                            | Acceso desde contenedores | Acceso desde Internet                                                     |
+| ----------------------------------- | ------------------------- | ------------------------------------------------------------------------- |
+| Caddy                               | `caddy:80/443`            | Local: sin puertos; VPS: `80/443`; túnel: sin puertos publicados          |
+| Cloudflare Tunnel                   | `caddy:80`                | Solo conexiones salientes; ningún puerto publicado                        |
+| SaveCloud API y WebSocket           | `savecloud-api:3000`      | Por Caddy; loopback en local/VPS; sin puertos con túnel                   |
+| MinIO S3                            | `minio:9000`              | Por Caddy; loopback en local/VPS; sin puertos con túnel                   |
+| Consola MinIO                       | `minio:9001`              | `127.0.0.1:9001` en todos los modos; nunca se expone por Caddy o el túnel |
+| PostgreSQL (persistencia de la API) | `postgres:5432`           | Sin puerto publicado                                                      |
+| Cola de eventos S3                  | `elasticmq:9324`          | Sin puertos publicados                                                    |
 
-Caddy termina TLS para `DOMAIN` y `s3.DOMAIN`, renueva los certificados y conserva su estado en los volúmenes `caddy_data` y `caddy_config`. El proxy inverso maneja automáticamente el upgrade de WebSocket. El cliente se conecta a `wss://<DOMAIN>/ws` cuando configura la URL `https://<DOMAIN>`.
+Compose separa la red de Caddy hacia la API (`proxy_upstreams`) de la red hacia S3/MinIO (`proxy_s3`). La API y MinIO también se comunican por `backend`, una red interna que contiene PostgreSQL, ElasticMQ y los workers; Caddy no pertenece a `backend`. En modo Tunnel, `cloudflared` comparte `tunnel_ingress` únicamente con Caddy. Los workers usan `backend` y, cuando consultan servicios externos, `worker_egress`; no se conectan a las redes de Caddy. La API usa `minio:9000` y `postgres:5432`; no usa `localhost` para hablar con otros contenedores. Las redes de proxy tienen subredes e IP de Caddy configuradas para confiar únicamente en el proxy esperado. Si esos rangos ya están ocupados por otra red o VPN, cambia `PROXY_API_SUBNET` y `TUNNEL_INGRESS_SUBNET` en `.env`, y conserva las IP correspondientes dentro de cada subred. Todas las tablas de persistencia de la API en Docker usan PostgreSQL. Caddy no necesita una dependencia de arranque respecto de la API: reintenta las conexiones al upstream cuando la API termina de iniciar.
 
-La API configura CORS con reflejo del origen solicitado (`@fastify/cors`, `origin: true`) y no usa cookies de sesión. `SYNC_GAMES_API_KEY` es la credencial del dueño; los invitados reciben tokens de acceso firmados de una hora y refresh tokens rotativos de treinta días, que el cliente guarda en el llavero del sistema. `ACCESS_TOKEN_SECRET` debe ser un secreto aleatorio distinto de la API key. El WebSocket autentica en el handshake mediante headers, nunca con credenciales en la URL. TLS se termina en Caddy; Fastify confía en los headers reenviados solo desde `TRUSTED_PROXY_CIDRS`.
+En el modo VPS tradicional, Caddy termina TLS para `DOMAIN` y `s3.DOMAIN`, renueva los certificados y conserva su estado en `caddy_data` y `caddy_config`. En el modo Tunnel, Cloudflare termina TLS y reenvía a Caddy por HTTP dentro de la red privada de Docker. Caddy maneja el upgrade de WebSocket en ambos modos. El cliente se conecta a `wss://<DOMAIN>/ws` cuando configura la URL `https://<DOMAIN>`.
+
+La API configura CORS con reflejo del origen solicitado (`@fastify/cors`, `origin: true`) y no usa cookies de sesión. `SYNC_GAMES_API_KEY` es la credencial del dueño; los invitados reciben tokens de acceso firmados de una hora y refresh tokens rotativos de treinta días, que el cliente guarda en el llavero del sistema. `ACCESS_TOKEN_SECRET` debe ser un secreto aleatorio distinto de la API key. El WebSocket autentica en el handshake mediante headers, nunca con credenciales en la URL. Fastify confía por defecto solo en la IP fija de Caddy dentro de `proxy_upstreams`. En modo Tunnel, Caddy solo acepta cabeceras de IP reenviada desde la IP de `cloudflared` dentro de `tunnel_ingress`.
 
 En Docker, PostgreSQL almacena notificaciones, índice de archivos, estadísticas, conexiones, metadatos de clips, invitaciones y membresías, permisos de juegos compartidos, sesiones de acceso, inventarios de dispositivos, transferencias y tokens compartidos. Los archivos binarios de guardado y clips permanecen en S3/MinIO. El worker de expiración elimina en lotes notificaciones, invitaciones, sesiones, conexiones y tokens vencidos cada seis horas. `s3-events-worker` actualiza el índice y las estadísticas en PostgreSQL e invalida las cachés de la API antes de confirmar los mensajes. En AWS Serverless se mantienen los adaptadores DynamoDB y su TTL. ElasticMQ persiste la cola y los mensajes en `elasticmq_data` y usa long polling cuando la cola está vacía. En AWS se conserva el flujo S3 → SQS → Lambda.
 
-## Requisitos del VPS
+</details>
 
-- Docker Engine con Docker Compose v2.24 o posterior.
+## Requisitos adicionales para un VPS tradicional
+
 - Un dominio y acceso para crear registros DNS.
 - Puertos entrantes `80/tcp`, `443/tcp` y opcionalmente `443/udp` abiertos en el firewall del VPS y del proveedor. UDP 443 habilita HTTP/3; TCP 443 es suficiente para HTTPS.
-- Una licencia MinIO AIStor para esta instalación. AIStor Free es de un solo nodo y cada usuario debe obtener su propia licencia.
 - Espacio persistente para los volúmenes de datos de MinIO, PostgreSQL y Caddy.
 
 ### Configurar la licencia de MinIO AIStor
@@ -40,13 +78,15 @@ La consola administrativa de MinIO está en `http://localhost:9001`. Inicia sesi
 - **Usuario / Access Key:** valor de `OBJECT_STORAGE_ACCESS_KEY`.
 - **Contraseña / Secret Key:** valor de `OBJECT_STORAGE_SECRET_KEY`.
 
-El asistente Docker genera estas credenciales si `.env` contiene valores de ejemplo. También genera `DATABASE_PASSWORD` para PostgreSQL. Usa los valores actuales de `.env`; no copies credenciales de ejemplo ni compartas las contraseñas. En una instalación VPS, el puerto `9001` solo escucha en loopback del servidor. Para abrir la consola desde tu computadora, crea un túnel SSH y luego visita `http://localhost:9001`:
+El asistente Docker genera estas credenciales si `.env` contiene valores de ejemplo. También genera `DATABASE_PASSWORD` para PostgreSQL. Usa los valores actuales de `.env`; no copies credenciales de ejemplo ni compartas las contraseñas. En una instalación VPS o Cloudflare Tunnel, el puerto `9001` solo escucha en el servidor. Para abrir la consola desde tu computadora, crea un túnel SSH y luego visita `http://localhost:9001`:
 
 ```bash
 ssh -L 9001:127.0.0.1:9001 usuario@IP_O_DOMINIO_DEL_VPS
 ```
 
 ## Despliegue en VPS
+
+Esta sección describe el modo tradicional con DNS hacia la IP pública del VPS y puertos entrantes. Si vas a usar Cloudflare Tunnel, omite la configuración de IP/DNS/firewall y sigue la subsección **Despliegue mediante Cloudflare Tunnel**.
 
 ### Apuntar el dominio al VPS
 
@@ -65,49 +105,86 @@ En los ejemplos siguientes, reemplaza `savecloud.example.com` por el dominio que
    Algunos paneles usan el dominio completo en vez de `@`: en ese caso, escribe `savecloud.example.com` en el primer registro y `s3.savecloud.example.com` en el segundo. No escribas `https://`, puertos ni rutas en los campos DNS.
 
 3. Si el VPS tiene una dirección IPv6 pública y está configurada para recibir tráfico, añade también registros `AAAA` para `@` y `s3` con esa dirección. Si no tienes IPv6 configurado, no añadas registros `AAAA`: un AAAA incorrecto puede hacer que algunos clientes intenten conectarse a una IP equivocada.
-4. Para el primer arranque, si tu proveedor DNS ofrece proxy/CDN, configura estos dos registros como **DNS only / Solo DNS**. Caddy debe poder recibir directamente las solicitudes HTTP y HTTPS para obtener los certificados; después podrás habilitar un proxy si este permite WebSockets y las cargas S3 que necesitas.
-5. Guarda los registros y espera a que se actualice el DNS. Comprueba desde tu computadora que ambos nombres muestran la IP pública del VPS:
+4. Para el modo tradicional, deja los registros como **DNS only / Solo DNS** al emitir los certificados de Caddy. El modo Cloudflare Tunnel no requiere registros A/AAAA hacia la IP del VPS; sigue la subsección de túnel.
+5. Guarda los registros y espera a que se actualice el DNS. Comprueba desde tu computadora que ambos nombres resuelven:
 
    ```powershell
    nslookup savecloud.example.com
    nslookup s3.savecloud.example.com
    ```
 
-   En Linux/macOS también puedes usar `dig +short savecloud.example.com` y `dig +short s3.savecloud.example.com`. Si las respuestas todavía no muestran la IP del VPS, espera y vuelve a consultar antes de iniciar Caddy.
+   En Linux/macOS también puedes usar `dig +short savecloud.example.com` y `dig +short s3.savecloud.example.com`. En este modo tradicional, las respuestas deben mostrar la IP pública del VPS.
 
-6. En el firewall del proveedor y del VPS, permite tráfico entrante TCP por los puertos `80` y `443`. UDP `443` es opcional y solo habilita HTTP/3. Si algún servicio ya está ocupando TCP `80` o `443`, Caddy no podrá atender el dominio ni emitir sus certificados.
+### Despliegue mediante Cloudflare Tunnel
 
-### Iniciar SaveCloud con el asistente
+Este modo conecta Cloudflare con Caddy mediante una conexión saliente. No necesitas una IP pública fija ni abrir puertos de entrada en tu router o firewall. El frontend web del repositorio es un mock y no se despliega como servicio.
 
-1. Clona el repositorio en el VPS. Ten a mano la IP pública, el dominio y el archivo de licencia MinIO AIStor.
-2. Desde la raíz del repositorio, ejecuta el asistente según tu sistema:
+#### 1. Comprueba el dominio en Cloudflare
 
-Windows PowerShell:
+En Cloudflare, asegúrate de que `savecloud.example.com` (reemplázalo por tu dominio) aparece **Active / Activa**. Si aún no agregaste el dominio, elige **Conecta un dominio**, selecciona el plan gratuito y cambia en Name.com los nameservers por los dos que Cloudflare te asignó. No transfieras el registrador: no hace falta para este despliegue.
 
-```powershell
-.\scripts\docker-setup.ps1
-```
+#### 2. Crea el túnel y las dos rutas
 
-Linux/macOS:
+En el panel de Cloudflare, abre **Conexión de red / Networking → Túneles / Tunnels** y crea un túnel remoto. En **Rutas / Routes → Agregar ruta / Add route → Aplicación publicada / Published application**, crea estas dos rutas. En ambos casos, el servicio es `http://caddy:80` y el Host Header debe conservar el nombre público:
+
+| Hostname público           | HTTP Host Header de origen | Servicio          |
+| -------------------------- | -------------------------- | ----------------- |
+| `savecloud.example.com`    | `savecloud.example.com`    | `http://caddy:80` |
+| `s3.savecloud.example.com` | `s3.savecloud.example.com` | `http://caddy:80` |
+
+El Host Header público permite que Caddy distinga la API de S3. No pongas `localhost` como servicio: Caddy y `cloudflared` se conectan entre sí por la red interna de Docker.
+
+#### 3. Ejecuta el asistente
+
+1. En Cloudflare, abre las instrucciones **Docker** del túnel y localiza el argumento `--token` del comando que se muestra. Copia **solo el valor del token**. No ejecutes ese `docker run`: SaveCloud iniciará `cloudflared` por ti.
+2. Ejecuta el asistente de Windows o Linux/macOS indicado al inicio de esta guía y elige **3 (Cloudflare Tunnel)**.
+3. Escribe el dominio raíz, por ejemplo `savecloud.games` (sin `https://`, `www` ni rutas). Confirma que configuraste los dos hostnames y pega el token cuando el asistente lo solicite. La entrada del token queda oculta y se guarda en `.env`.
+4. Cuando el asistente termine, copia la clave API que muestra y configúrala en la app en **Configuración → Conexión de servidor**. Usa `https://<DOMAIN>` como URL.
+
+El asistente genera las demás credenciales, valida Caddy, descarga las imágenes necesarias y levanta los contenedores. Si respondiste **No** a la pregunta sobre las rutas, puedes continuar, pero las direcciones públicas no funcionarán hasta agregarlas en Cloudflare.
+
+**Prueba:** abre `https://<DOMAIN>/health`; debe responder correctamente. `https://s3.<DOMAIN>` es un endpoint S3 para la app, no una página web: abrir su raíz en el navegador puede mostrar `AccessDenied` y eso es normal. La consola administrativa de MinIO está en `http://127.0.0.1:9001` desde la misma computadora donde corre Docker; no se publica por Cloudflare ni para otros equipos de la red local.
+
+Para actualizar la instalación después de cambiar el código, ejecuta `git pull` y sigue las instrucciones de actualización de [Usar los scripts automatizados](#usar-los-scripts-automatizados). En modo túnel, mantén `docker-compose.cloudflare.yml` en todos los comandos Compose manuales.
+
+Comprueba el estado y los logs con los mismos archivos Compose:
 
 ```bash
-bash scripts/docker-setup.sh
+docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml ps
+docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml logs --tail=100 cloudflared caddy savecloud-api minio
 ```
 
-3. Elige **2 (VPS)** e introduce tu dominio y la IP pública del VPS. El asistente muestra los registros `A` que debes tener configurados. Responde `S` si ya apuntaste ambos registros y abriste los puertos; si todavía no, puedes continuar, pero Caddy no obtendrá los certificados hasta que lo hagas.
-4. Cuando lo pida, introduce la ruta al archivo `minio.license`. Si no existe `.env`, el asistente la crea desde `.env.docker.example`. Actualiza `DOMAIN` y `S3_PUBLIC_ENDPOINT` y conserva las credenciales personalizadas existentes; si detecta valores de ejemplo o credenciales predeterminadas, genera valores aleatorios seguros.
-5. El asistente inicia la pila, espera que la API, el bucket y el worker estén listos, y muestra la API HTTPS, WebSocket seguro y endpoint S3. También muestra la API key que debes guardar en **Configuración → Conexión de servidor** en la app.
+Si aparece un `502`, confirma que el túnel figure como **Healthy**, que las dos aplicaciones publicadas apunten a `http://caddy:80` y que cada Host Header conserve el hostname público. Si una carga S3 devuelve `413`, el límite de tamaño de Cloudflare depende del plan; las cargas multipart de SaveCloud usan partes de 10 MiB.
 
-`S3_PUBLIC_ENDPOINT` queda configurado como `https://s3.<DOMAIN>`. La API lo usa para firmar las URLs de cargas y descargas. Su endpoint interno sigue siendo `http://minio:9000`.
+El túnel no publica puertos del host para Caddy, API ni el endpoint S3. La consola administrativa de MinIO se enlaza únicamente a `127.0.0.1:9001`, para que se pueda abrir desde el propio servidor sin exponerla a la LAN ni a Internet. PostgreSQL y ElasticMQ permanecen en `backend`; Caddy no puede conectarse a ellos. Caddy tiene una red separada para API y otra para S3. `tunnel_ingress` solo conecta `cloudflared` con Caddy, y `worker_egress` permite a los workers llegar a servicios externos sin unirlos a las redes de proxy. El acceso de administración de Docker aún debe protegerse, ya que un usuario con acceso al daemon puede inspeccionar contenedores y redes.
+
+Para volver al modo local, detén la pila del túnel y levanta solo el Compose base:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml down
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build --remove-orphans
+```
+
+El override local conserva el acceso local por loopback y no publica Caddy. Si no quieres ofrecer el servicio público, elimina o desactiva los Public Hostnames del túnel en Cloudflare.
+
+### Qué prepara el asistente
+
+Ejecuta el asistente desde la carpeta raíz del repositorio con el comando del inicio de esta guía. Te pedirá el modo, los datos necesarios y la ubicación de `minio.license`. Si `.env` no existe, lo crea a partir de `.env.docker.example`. Completa el dominio y la dirección S3, genera credenciales si encuentra valores de ejemplo, selecciona el Compose correcto y espera a que la API, el almacenamiento y los workers estén listos. No tienes que editar `.env` ni descargar imágenes manualmente.
+
+Al terminar, copia la API key que aparece en la terminal y guárdala en **Configuración → Conexión de servidor** en la app. La clave también está en `.env`; no compartas capturas o registros que la muestren.
+
+`S3_PUBLIC_ENDPOINT` queda configurado según el modo: `http://localhost:9000` para local o `https://s3.<DOMAIN>` para VPS y Tunnel. La API lo usa para firmar las URLs de cargas y descargas. Dentro de Docker, la API siempre se conecta a `http://minio:9000`.
 
 > [!TIP]
 > Puedes revisar el desglose y propósito de cada variable en la [Guía de Variables de Entorno](ENVIRONMENT_VARIABLES.md).
 
 ### Usar los scripts automatizados
 
-Los scripts construyen e inician la pila con `docker compose up -d --build --remove-orphans`, eliminan el contenedor huérfano de DynamoDB Local y tratan de quitar su imagen, esperan hasta dos minutos a que la API esté saludable, a que termine la inicialización del bucket y a que arranquen los workers. Al finalizar imprimen las URLs apropiadas para el modo local o VPS y los endpoints internos de Docker. Leen `DOMAIN`, `S3_PUBLIC_ENDPOINT` y `API_PORT` del entorno o de `.env`.
+Los scripts validan primero el Caddyfile y después construyen e inician la pila. También eliminan el contenedor huérfano de DynamoDB Local y tratan de quitar su imagen, y esperan hasta dos minutos a que la API, el bucket y los workers estén listos. Leen `DEPLOYMENT_MODE`, `DOMAIN`, `S3_PUBLIC_ENDPOINT` y `API_PORT` de `.env`. El modo `local` aplica `docker-compose.local.yml`; el modo `cloudflare` aplica `docker-compose.cloudflare.yml` y espera a que `cloudflared` arranque; `vps` usa el Compose base.
 
-Si ya configuraste `.env` y no necesitas el asistente, ejecuta desde la raíz del repositorio `docker compose up -d --remove-orphans` o usa el script correspondiente. `--remove-orphans` retira los contenedores de servicios que Compose ya no configura.
+Si ya configuraste `.env` y no necesitas el asistente, usa el script correspondiente para que respete el modo guardado. También puedes ejecutar Compose directamente: local con `docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build --remove-orphans`, VPS tradicional con `docker compose up -d --build --remove-orphans`, o Tunnel con `docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build --remove-orphans`. `--remove-orphans` retira los contenedores del modo anterior.
+
+La primera actualización desde una versión anterior separa las redes y reinicia los contenedores. El script lo detecta, avisa y pide confirmación; conserva los volúmenes con los datos. Si ejecutas Compose directamente, detén y elimina primero los contenedores y redes del proyecto con `docker compose ... down --remove-orphans` (usa los mismos archivos `-f` de tu modo, sin `-v`) y luego ejecuta el comando `up` correspondiente.
 
 Windows PowerShell:
 
@@ -121,7 +198,7 @@ Linux/macOS:
 bash scripts/docker-up.sh
 ```
 
-En el VPS, la salida muestra `https://<DOMAIN>`, `wss://<DOMAIN>/ws` y el endpoint S3 configurado. En local muestra `http://localhost:<API_PORT>`, `ws://localhost:<API_PORT>/ws` y MinIO. Si un servicio no queda listo, el script muestra el estado de Compose y los últimos registros de Caddy, API, MinIO, inicializador y worker, y termina con error.
+En VPS y Tunnel, la salida muestra `https://<DOMAIN>`, `wss://<DOMAIN>/ws` y el endpoint S3; en local muestra `http://localhost:<API_PORT>`, `ws://localhost:<API_PORT>/ws` y MinIO. Si un servicio no queda listo, el script muestra el estado de Compose y los registros relevantes, incluyendo `cloudflared` en modo Tunnel, y termina con error.
 
 Comprueba el estado y los registros:
 
@@ -141,7 +218,7 @@ En la aplicación de escritorio, ve a **Configuración → Conexión de servidor
 
 ## Desarrollo local
 
-La API conserva `http://localhost:3000` y la S3 API local `http://localhost:9000`; esos puertos se enlazan solo a la interfaz loopback del host. Desde la raíz del repositorio, ejecuta el asistente y elige **1 (desarrollo local)**:
+La API conserva `http://localhost:3000` y la S3 API local `http://localhost:9000`; esos puertos se enlazan solo a la interfaz loopback del host. Caddy no publica puertos en modo local. Desde la raíz del repositorio, ejecuta el asistente y elige **1 (desarrollo local)**:
 
 ```powershell
 .\scripts\docker-setup.ps1
@@ -158,7 +235,7 @@ El asistente configura `DOMAIN=localhost`, `S3_PUBLIC_ENDPOINT=http://localhost:
 La consola MinIO sigue disponible en `http://localhost:9001`. Para iniciar localmente:
 
 ```bash
-docker compose up -d --remove-orphans
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --remove-orphans
 ```
 
 También puedes usar los scripts automatizados de la sección anterior. En Windows ejecuta `.\scripts\docker-up.ps1`; en Linux/macOS ejecuta `bash scripts/docker-up.sh`. La salida confirma cuándo la API, el bucket y el worker están listos y muestra las URLs locales.
