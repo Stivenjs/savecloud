@@ -41,6 +41,22 @@ elif [ "$deployment_mode" = local ]; then
   set -- "$@" -f docker-compose.local.yml
 fi
 
+if docker inspect --format '{{range $name, $config := .NetworkSettings.Networks}}{{println $name}}{{end}}' savecloud-minio 2>/dev/null | awk '/_proxy_upstreams$/ { found = 1 } END { exit !found }'; then
+  echo "Se detectó la topología anterior de Docker. Para separar las redes hay que recrear los contenedores." >&2
+  echo "La interrupción dura mientras reinicia SaveCloud. Los datos de los volúmenes se conservan; no se borran." >&2
+  if [ ! -t 0 ]; then
+    echo "Ejecuta este asistente en una terminal interactiva para confirmar la migración." >&2
+    exit 1
+  fi
+  printf '¿Continuar con la migración de red? (s/N): '
+  IFS= read -r confirm_network_migration
+  case "$confirm_network_migration" in
+    s|S|si|SI|sí|Sí|y|Y|yes|YES) ;;
+    *) echo "No se aplicaron cambios. Vuelve a ejecutar este comando cuando puedas reiniciar SaveCloud." >&2; exit 1 ;;
+  esac
+  docker compose "$@" down --remove-orphans
+fi
+
 echo "Validando la configuración de Caddy..."
 docker compose "$@" run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 docker compose "$@" up -d --build --remove-orphans

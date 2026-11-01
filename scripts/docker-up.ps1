@@ -41,6 +41,24 @@ if ($deploymentMode -eq "cloudflare") {
   $composeArgs += @("-f", "docker-compose.local.yml")
 }
 
+$minioNetworksJson = & docker inspect --format '{{json .NetworkSettings.Networks}}' "savecloud-minio" 2>$null
+if ($LASTEXITCODE -eq 0 -and $minioNetworksJson) {
+  $minioNetworks = $minioNetworksJson | ConvertFrom-Json
+  $legacyProxyNetwork = @($minioNetworks.PSObject.Properties.Name | Where-Object { $_ -match '(^|_)proxy_upstreams$' }).Count -gt 0
+  if ($legacyProxyNetwork) {
+    Write-Host "Se detectó la topología anterior de Docker. Para separar las redes hay que recrear los contenedores." -ForegroundColor Yellow
+    Write-Host "La interrupción dura mientras reinicia SaveCloud. Los datos de los volúmenes se conservan; no se borran."
+    $confirmNetworkMigration = (Read-Host "¿Continuar con la migración de red? (S/N)").Trim()
+    if ($confirmNetworkMigration -notmatch '^(s|si|sí|y|yes)$') {
+      Write-Host "No se aplicaron cambios. Vuelve a ejecutar este comando cuando puedas reiniciar SaveCloud." -ForegroundColor Yellow
+      exit 1
+    }
+
+    & docker compose @composeArgs down --remove-orphans
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  }
+}
+
 Write-Host "Validando la configuración de Caddy..."
 & docker compose @composeArgs run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 if ($LASTEXITCODE -ne 0) {

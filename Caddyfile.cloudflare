@@ -1,7 +1,7 @@
 {
 	admin off
 	servers {
-		trusted_proxies static private_ranges
+		trusted_proxies static {$CLOUDFLARED_PROXY_CIDR}
 		client_ip_headers CF-Connecting-IP
 	}
 }

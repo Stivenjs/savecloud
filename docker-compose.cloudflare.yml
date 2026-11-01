@@ -6,8 +6,13 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     networks:
-      - proxy_upstreams
-      - tunnel_ingress
+      proxy_upstreams:
+        ipv4_address: ${PROXY_API_CADDY_IP:-172.20.0.3}
+      proxy_s3: {}
+      tunnel_ingress:
+        ipv4_address: ${TUNNEL_CADDY_IP:-172.21.0.2}
+    environment:
+      - CLOUDFLARED_PROXY_CIDR=${TUNNEL_CLOUDFLARED_IP:-172.21.0.3}/32
 
   savecloud-api:
     ports: !reset []
@@ -27,4 +32,5 @@ services:
       caddy:
         condition: service_started
     networks:
-      - tunnel_ingress
+      tunnel_ingress:
+        ipv4_address: ${TUNNEL_CLOUDFLARED_IP:-172.21.0.3}

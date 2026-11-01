@@ -99,9 +99,21 @@ Usa el asistente Docker para configurar un servidor. No combines las plantillas:
 
 ### `TRUSTED_PROXY_CIDRS`
 
-- **Requerida en:** Docker Compose.
-- **Defecto:** `172.16.0.0/12`.
-- **Descripción:** Rangos CIDR de proxies inversos de confianza (como la red bridge de Docker donde opera Caddy). Fastify solo confía en las cabeceras `X-Forwarded-For` provenientes de estas IPs para identificar la IP real del cliente y aplicar los rate limits.
+- **Requerida en:** Configurada automáticamente por Docker Compose.
+- **Defecto:** La IP de Caddy en `proxy_upstreams`, limitada a `/32`.
+- **Descripción:** Compose la establece con la IP fija de Caddy. Fastify usa ese proxy para leer `X-Forwarded-For` y calcular la IP del cliente; no confía en todos los rangos privados.
+
+### Redes Docker de proxy
+
+Estas variables solo afectan los Compose de autohospedaje. Los valores predeterminados reservan dos subredes para aislar el proxy de API del proxy S3 y limitar qué proxy puede reenviar la IP del cliente. Si una red existente o una VPN ya usa esos rangos, cambia las subredes y sus IP asociadas en `.env` antes de iniciar los contenedores.
+
+| Variable                | Defecto         | Uso                                                      |
+| ----------------------- | --------------- | -------------------------------------------------------- |
+| `PROXY_API_SUBNET`      | `172.20.0.0/16` | Subred privada entre Caddy y la API (`proxy_upstreams`). |
+| `PROXY_API_CADDY_IP`    | `172.20.0.3`    | IP fija de Caddy; Fastify la confía por defecto.         |
+| `TUNNEL_INGRESS_SUBNET` | `172.21.0.0/16` | Subred privada entre Caddy y `cloudflared`.              |
+| `TUNNEL_CADDY_IP`       | `172.21.0.2`    | IP fija de Caddy dentro de la red del túnel.             |
+| `TUNNEL_CLOUDFLARED_IP` | `172.21.0.3`    | IP fija que Caddy confía para leer `CF-Connecting-IP`.   |
 
 ### `WS_BASE_URL` / `WS_ENDPOINT`
 
