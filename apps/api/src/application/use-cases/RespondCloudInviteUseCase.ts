@@ -2,16 +2,37 @@ import type { CloudInviteRepository } from "@domain/ports/CloudInviteRepository"
 import type { CloudInvite } from "@domain/entities/CloudInvite";
 import { ApplicationError } from "@application/errors/ApplicationError";
 
+/** Datos necesarios para aceptar o rechazar una invitación a una nube compartida. */
 export interface RespondCloudInviteInput {
+  /** Identificador del usuario que responde la invitación. */
   userId: string;
+  /** Identificador de la invitación; se usa cuando la respuesta no se hace con token. */
   inviteId?: string;
+  /** Token hexadecimal de invitación para aceptar mediante el flujo bootstrap. */
   token?: string;
+  /** Acción solicitada para la invitación. */
   action: "accept" | "reject";
 }
 
+/**
+ * Coordina la aceptación o el rechazo de invitaciones a nubes compartidas.
+ *
+ */
 export class RespondCloudInviteUseCase {
+  /**
+   * @param repository - Repositorio que consulta invitaciones y membresías y persiste sus cambios.
+   */
   constructor(private readonly repository: CloudInviteRepository) {}
 
+  /**
+   * Responde una invitación y valida que el usuario pueda realizar la acción solicitada.
+   * Si el usuario ya es miembro activo, solo permite recuperar el acceso con una invitación
+   * dirigida a su identificador; conserva intacta la membresía existente.
+   *
+   * @param input - Usuario, identificador o token de invitación y acción solicitada.
+   * @returns La invitación actualizada tras aceptar o rechazarla.
+   * @throws {ApplicationError} Si la invitación no existe, expiró o el usuario no puede responderla.
+   */
   async execute(input: RespondCloudInviteInput): Promise<CloudInvite> {
     const userId = input.userId.trim();
     if (input.token !== undefined && !/^[a-f0-9]{48}$/.test(input.token)) {
@@ -51,8 +72,6 @@ export class RespondCloudInviteUseCase {
       invite.inviteeUserId = invitedUserId || userId;
       await this.repository.updateInvite(invite);
 
-      // An active member may need to accept a fresh invite to restore local credentials.
-      // Leave the existing membership untouched so deletion scheduling and share state survive.
       if (!alreadyActiveMember) {
         await this.repository.upsertMembership({
           hostUserId: invite.hostUserId,
