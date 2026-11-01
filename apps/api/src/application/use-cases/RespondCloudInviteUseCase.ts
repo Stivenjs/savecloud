@@ -36,12 +36,8 @@ export class RespondCloudInviteUseCase {
       }
 
       const existingMembership = await this.repository.getMembership(invite.hostUserId, userId);
-      const alreadyActiveMember = existingMembership?.active === true;
-      if (alreadyActiveMember && invitedUserId !== userId) {
-        throw new ApplicationError(
-          "CONFLICT",
-          "Ya eres miembro activo. Para recuperar el acceso, pide al anfitrión una invitación dirigida a tu usuario."
-        );
+      if (existingMembership?.active) {
+        throw new ApplicationError("CONFLICT", "Ya eres un miembro activo de esta nube.");
       }
 
       const now = new Date().toISOString();
@@ -50,22 +46,17 @@ export class RespondCloudInviteUseCase {
       invite.updatedAt = now;
       invite.inviteeUserId = invitedUserId || userId;
       await this.repository.updateInvite(invite);
-
-      // An active member may need to accept a fresh invite to restore local credentials.
-      // Leave the existing membership untouched so deletion scheduling and share state survive.
-      if (!alreadyActiveMember) {
-        await this.repository.upsertMembership({
-          hostUserId: invite.hostUserId,
-          memberUserId: invite.inviteeUserId,
-          invitedById: invite.id,
-          wsUrl: invite.wsUrl,
-          createdAt: existingMembership?.createdAt ?? now,
-          updatedAt: now,
-          active: true,
-          scheduledDeletionAt: null,
-          scheduledDeletionBy: null,
-        });
-      }
+      await this.repository.upsertMembership({
+        hostUserId: invite.hostUserId,
+        memberUserId: invite.inviteeUserId,
+        invitedById: invite.id,
+        wsUrl: invite.wsUrl,
+        createdAt: existingMembership?.createdAt ?? now,
+        updatedAt: now,
+        active: true,
+        scheduledDeletionAt: null,
+        scheduledDeletionBy: null,
+      });
       return invite;
     }
 
