@@ -211,6 +211,7 @@ async function startServer(
       app,
       connectionRepository,
       webSocketNotifier,
+      cloudInviteRepository: stores.cloudInviteRepository,
       accessSessionRepository: stores.accessSessionRepository,
     });
     return;
