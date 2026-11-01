@@ -1,4 +1,4 @@
-import { useTheme } from "next-themes";
+import { useTheme } from "@components/theme/ThemeProvider";
 import { useEffect, useState } from "react";
 import { Toaster } from "sileo";
 

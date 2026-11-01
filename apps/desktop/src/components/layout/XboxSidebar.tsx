@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { Avatar, Button, Tooltip } from "@heroui/react";
 import { useTranslation } from "react-i18next";
-import { useTheme } from "next-themes";
+import { useTheme } from "@components/theme/ThemeProvider";
 import { Gamepad2, History, Library, MonitorPlay, Moon, Settings, Sun, Users } from "lucide-react";
 import { ProfileAvatarVisual } from "@features/profile/ProfileAvatarVisual";
 import { resolveProfileAsset } from "@utils/profileMedia";
