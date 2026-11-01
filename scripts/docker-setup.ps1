@@ -1,4 +1,7 @@
 ﻿$ErrorActionPreference = "Stop"
+$utf8Encoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = $utf8Encoding
+$OutputEncoding = $utf8Encoding
 $envPath = Join-Path (Get-Location) ".env"
 $examplePath = Join-Path (Get-Location) ".env.docker.example"
 
@@ -68,6 +71,26 @@ function Read-PublicIpv4 {
   }
 }
 
+function Read-CloudflareTunnelToken {
+  $token = Get-EnvValue "CLOUDFLARE_TUNNEL_TOKEN"
+  if ($token -and $token -notmatch '^(replace-with-|yourcloudflare)') { return $token }
+
+  $secureToken = Read-Host "Pega el token del túnel Cloudflare (entrada oculta)" -AsSecureString
+  if ($secureToken.Length -eq 0) { throw "El token de Cloudflare Tunnel es obligatorio para el modo túnel." }
+
+  $tokenPointer = [IntPtr]::Zero
+  try {
+    $tokenPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)
+    $token = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($tokenPointer)
+  } finally {
+    if ($tokenPointer -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($tokenPointer) }
+    $secureToken.Dispose()
+  }
+
+  Set-EnvValue "CLOUDFLARE_TUNNEL_TOKEN" $token
+  return $token
+}
+
 if (-not (Test-Path -LiteralPath $envPath)) {
   if (-not (Test-Path -LiteralPath $examplePath)) { throw "No se encontró .env.docker.example en la raíz del repositorio." }
   Copy-Item -LiteralPath $examplePath -Destination $envPath
@@ -77,12 +100,14 @@ if (-not (Test-Path -LiteralPath $envPath)) {
 Write-Host ""
 Write-Host "Asistente de instalación Docker de SaveCloud"
 Write-Host "  1. Desarrollo local (localhost)"
-Write-Host "  2. VPS con dominio propio y HTTPS automático mediante Caddy"
+Write-Host "  2. VPS tradicional con Caddy y puertos 80/443 abiertos"
+Write-Host "  3. Cloudflare Tunnel sin puertos entrantes"
 do {
-  $choice = (Read-Host "Elige 1 o 2").Trim()
-} while ($choice -notin @("1", "2"))
+  $choice = (Read-Host "Elige 1, 2 o 3").Trim()
+} while ($choice -notin @("1", "2", "3"))
 
 if ($choice -eq "1") {
+  $deploymentMode = "local"
   $domain = "localhost"
   $s3Endpoint = "http://localhost:9000"
   $logLevel = "info"
@@ -91,7 +116,8 @@ if ($choice -eq "1") {
   if (-not $apiPort) { $apiPort = "3000" }
   Write-Host ""
   Write-Host "Modo local: la API y S3 estarán disponibles solo en esta computadora."
-} else {
+} elseif ($choice -eq "2") {
+  $deploymentMode = "vps"
   $domain = Read-DomainName
   $publicIpv4 = Read-PublicIpv4
   $s3Endpoint = "https://s3.$domain"
@@ -110,8 +136,29 @@ if ($choice -eq "1") {
   if ($dnsReady -notmatch '^(s|si|sí|y|yes)$') {
     Write-Host "Puedes continuar, pero Caddy no obtendrá los certificados hasta que DNS y firewall estén listos." -ForegroundColor Yellow
   }
+} else {
+  $deploymentMode = "cloudflare"
+  $domain = Read-DomainName
+  $s3Endpoint = "https://s3.$domain"
+  $logLevel = "warn"
+  $httpRequestLogs = "false"
+  $apiPort = Get-EnvValue "API_PORT"
+  if (-not $apiPort) { $apiPort = "3000" }
+
+  Write-Host ""
+  Write-Host "Antes de continuar, crea un túnel remoto en Cloudflare Zero Trust → Networks → Tunnels."
+  Write-Host "Añade estos dos Public Hostnames; en ambos usa el origen http://caddy:80 y conserva el Host Header público:"
+  Write-Host "  $domain     → http://caddy:80 (Host Header: $domain)"
+  Write-Host "  s3.$domain  → http://caddy:80 (Host Header: s3.$domain)"
+  Write-Host "No necesitas una IP pública fija ni abrir puertos entrantes."
+  $routesReady = (Read-Host "¿Ya creaste el túnel y configuraste los dos hostnames? (S/N)").Trim()
+  if ($routesReady -notmatch '^(s|si|sí|y|yes)$') {
+    Write-Host "Puedes continuar; termina esas rutas en Cloudflare para que los hostnames sean accesibles." -ForegroundColor Yellow
+  }
+  [void](Read-CloudflareTunnelToken)
 }
 
+Set-EnvValue "DEPLOYMENT_MODE" $deploymentMode
 Set-EnvValue "DOMAIN" $domain
 Set-EnvValue "S3_PUBLIC_ENDPOINT" $s3Endpoint
 Set-EnvValue "API_PORT" $apiPort
@@ -162,6 +209,7 @@ $licensePath = $resolvedLicensePath.Replace('\', '/')
 Set-EnvValue "MINIO_LICENSE_PATH" $licensePath
 
 $env:DOMAIN = $domain
+$env:DEPLOYMENT_MODE = $deploymentMode
 $env:S3_PUBLIC_ENDPOINT = $s3Endpoint
 $env:API_PORT = $apiPort
 $env:LOG_LEVEL = $logLevel
@@ -179,7 +227,7 @@ Write-Host $apiKey -ForegroundColor Cyan
 Write-Host "Guárdala en Configuración → Conexión de servidor. No la compartas."
 Write-Host ""
 
-if ($choice -eq "2") {
+if ($choice -eq "2" -or $choice -eq "3") {
   Write-Host "Dominio API: https://$domain"
   Write-Host "Dominio S3:  $s3Endpoint"
   Write-Host ""

@@ -13,6 +13,8 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      - proxy_upstreams
 
   savecloud-api:
     image: savecloud-api:local
@@ -49,6 +51,9 @@ services:
       - SQS_ENDPOINT=http://elasticmq:9324
       - S3_EVENT_QUEUE_NAME=savecloud-s3-events
       - S3_EVENT_QUEUE_URL=http://elasticmq:9324/000000000000/savecloud-s3-events
+    networks:
+      - proxy_upstreams
+      - backend
     depends_on:
       minio:
         condition: service_started
@@ -73,6 +78,9 @@ services:
     container_name: savecloud-steam-seed-worker
     command: ["bun", "dist/steam-seed-worker.js"]
     ports: !reset []
+    networks:
+      - backend
+      - worker_egress
     healthcheck:
       disable: true
     depends_on:
@@ -90,6 +98,9 @@ services:
     container_name: savecloud-s3-events-worker
     command: ["bun", "dist/s3-events-worker.js"]
     ports: !reset []
+    networks:
+      - backend
+      - worker_egress
     healthcheck:
       disable: true
     depends_on:
@@ -106,6 +117,9 @@ services:
     container_name: savecloud-postgres-expiration-worker
     command: ["bun", "dist/postgres-expiration-worker.js"]
     ports: !reset []
+    networks:
+      - backend
+      - worker_egress
     healthcheck:
       disable: true
     depends_on:
@@ -127,6 +141,7 @@ services:
     environment:
       - MINIO_ROOT_USER=${OBJECT_STORAGE_ACCESS_KEY:?Define OBJECT_STORAGE_ACCESS_KEY in .env}
       - MINIO_ROOT_PASSWORD=${OBJECT_STORAGE_SECRET_KEY:?Define OBJECT_STORAGE_SECRET_KEY in .env}
+      - MINIO_BROWSER_REDIRECT=off
       - MINIO_NOTIFY_WEBHOOK_ENABLE_primary=on
       - MINIO_NOTIFY_WEBHOOK_ENDPOINT_primary=http://savecloud-api:3000/webhooks/minio
       - MINIO_NOTIFY_WEBHOOK_AUTH_TOKEN_primary=${SYNC_GAMES_API_KEY}
@@ -136,6 +151,9 @@ services:
     volumes:
       - minio_data:/mnt/data
       - ${MINIO_LICENSE_PATH:?Define MINIO_LICENSE_PATH en .env con la ruta al archivo de licencia AIStor}:/minio.license:ro
+    networks:
+      - proxy_upstreams
+      - backend
 
   create-bucket:
     image: savecloud-api:local
@@ -154,6 +172,8 @@ services:
         condition: service_started
       savecloud-api:
         condition: service_healthy
+    networks:
+      - backend
 
   postgres:
     image: postgres:18-alpine
@@ -171,6 +191,8 @@ services:
       timeout: 3s
       retries: 12
       start_period: 10s
+    networks:
+      - backend
 
   elasticmq:
     image: softwaremill/elasticmq-native:1.7.1
@@ -179,6 +201,17 @@ services:
     volumes:
       - ./infra/elasticmq/elasticmq.conf:/opt/elasticmq.conf:ro
       - elasticmq_data:/data
+    networks:
+      - backend
+
+networks:
+  proxy_upstreams:
+  backend:
+    internal: true
+  worker_egress:
+    driver: bridge
+  tunnel_ingress:
+    driver: bridge
 
 volumes:
   caddy_data:

@@ -79,24 +79,72 @@ read_public_ipv4() {
   done
 }
 
+read_cloudflare_tunnel_token() {
+  tunnel_token=$(read_env CLOUDFLARE_TUNNEL_TOKEN)
+  case "$tunnel_token" in
+    ""|replace-with-*|YourCloudflareTunnelTokenHere)
+      printf 'Pega el token del túnel Cloudflare (entrada oculta): ' >&2
+      if [ -t 0 ]; then
+        stty -echo
+        if IFS= read -r tunnel_token; then
+          stty echo
+          printf '\n' >&2
+        else
+          stty echo
+          printf '\n' >&2
+          echo "No se pudo leer el token de Cloudflare Tunnel." >&2
+          return 1
+        fi
+      else
+        IFS= read -r tunnel_token || return 1
+      fi
+      if [ -z "$tunnel_token" ]; then
+        echo "El token de Cloudflare Tunnel es obligatorio para el modo túnel." >&2
+        return 1
+      fi
+
+      temp_file="${env_file}.setup-tmp"
+      : > "$temp_file"
+      found=false
+      while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+          CLOUDFLARE_TUNNEL_TOKEN=*)
+            printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "$tunnel_token" >> "$temp_file"
+            found=true
+            ;;
+          *) printf '%s\n' "$line" >> "$temp_file" ;;
+        esac
+      done < "$env_file"
+      if [ "$found" != true ]; then
+        printf 'CLOUDFLARE_TUNNEL_TOKEN=%s\n' "$tunnel_token" >> "$temp_file"
+      fi
+      chmod 600 "$temp_file"
+      mv "$temp_file" "$env_file"
+      ;;
+  esac
+}
+
 echo
 echo "Asistente de instalación Docker de SaveCloud"
 echo "  1. Desarrollo local (localhost)"
-echo "  2. VPS con dominio propio y HTTPS automático mediante Caddy"
-printf 'Elige 1 o 2: '
+echo "  2. VPS tradicional con Caddy y puertos 80/443 abiertos"
+echo "  3. Cloudflare Tunnel sin puertos entrantes"
+printf 'Elige 1, 2 o 3: '
 IFS= read -r choice
-while [ "$choice" != 1 ] && [ "$choice" != 2 ]; do
-  printf 'Opción inválida. Elige 1 o 2: '
+while [ "$choice" != 1 ] && [ "$choice" != 2 ] && [ "$choice" != 3 ]; do
+  printf 'Opción inválida. Elige 1, 2 o 3: '
   IFS= read -r choice
 done
 
 if [ "$choice" = 1 ]; then
+  deployment_mode=local
   domain=localhost
   s3_endpoint=http://localhost:9000
   log_level=info
   http_request_logs=true
   echo "Modo local: la API y S3 estarán disponibles solo en esta computadora."
-else
+elif [ "$choice" = 2 ]; then
+  deployment_mode=vps
   domain=$(read_domain)
   public_ipv4=$(read_public_ipv4)
   s3_endpoint="https://s3.$domain"
@@ -114,11 +162,30 @@ else
     s|S|si|SI|sí|Sí|y|Y|yes|YES) ;;
     *) echo "Puedes continuar, pero Caddy no obtendrá certificados hasta que DNS y firewall estén listos." ;;
   esac
+else
+  deployment_mode=cloudflare
+  domain=$(read_domain)
+  s3_endpoint="https://s3.$domain"
+  log_level=warn
+  http_request_logs=false
+  echo "Antes de continuar, crea un túnel remoto en Cloudflare Zero Trust > Networks > Tunnels."
+  echo "Añade estos dos Public Hostnames; en ambos usa el origen http://caddy:80 y conserva el Host Header público:"
+  echo "  $domain     -> http://caddy:80 (Host Header: $domain)"
+  echo "  s3.$domain  -> http://caddy:80 (Host Header: s3.$domain)"
+  echo "No necesitas una IP pública fija ni abrir puertos entrantes."
+  printf '¿Ya creaste el túnel y configuraste los dos hostnames? (s/N): '
+  IFS= read -r routes_ready
+  case "$routes_ready" in
+    s|S|si|SI|sí|Sí|y|Y|yes|YES) ;;
+    *) echo "Puedes continuar; termina esas rutas en Cloudflare para que los hostnames sean accesibles." ;;
+  esac
+  read_cloudflare_tunnel_token
 fi
 
 api_port=$(read_env API_PORT)
 api_port=${api_port:-3000}
 set_env DOMAIN "$domain"
+set_env DEPLOYMENT_MODE "$deployment_mode"
 set_env S3_PUBLIC_ENDPOINT "$s3_endpoint"
 set_env API_PORT "$api_port"
 set_env LOG_LEVEL "$log_level"
@@ -174,7 +241,7 @@ echo
 echo "Configuración guardada en .env. La clave de API para la aplicación SaveCloud es:"
 echo "$api_key"
 echo "Guárdala en Configuración → Conexión de servidor. No la compartas."
-if [ "$choice" = 2 ]; then
+if [ "$choice" = 2 ] || [ "$choice" = 3 ]; then
   echo
   echo "Dominio API: https://$domain"
   echo "Dominio S3:  $s3_endpoint"
