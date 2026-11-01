@@ -110,6 +110,7 @@ SaveCloud está listo mediante Cloudflare Tunnel. URLs públicas:
   S3 público/presigned: ${s3_public_endpoint}
 Consola MinIO local:    http://127.0.0.1:9001
 Caddy, API y S3 no publican puertos en el host.
+S3 es para la app, no una página web; abrir su raíz en el navegador puede mostrar AccessDenied.
 
 Endpoints internos Docker:
   API:                  savecloud-api:3000

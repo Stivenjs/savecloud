@@ -75,7 +75,7 @@ function Read-CloudflareTunnelToken {
   $token = Get-EnvValue "CLOUDFLARE_TUNNEL_TOKEN"
   if ($token -and $token -notmatch '^(replace-with-|yourcloudflare)') { return $token }
 
-  $secureToken = Read-Host "Pega el token del túnel Cloudflare (entrada oculta)" -AsSecureString
+  $secureToken = Read-Host "Pega solo el valor del token de Cloudflare (entrada oculta; no pegues el comando Docker)" -AsSecureString
   if ($secureToken.Length -eq 0) { throw "El token de Cloudflare Tunnel es obligatorio para el modo túnel." }
 
   $tokenPointer = [IntPtr]::Zero
@@ -99,9 +99,9 @@ if (-not (Test-Path -LiteralPath $envPath)) {
 
 Write-Host ""
 Write-Host "Asistente de instalación Docker de SaveCloud"
-Write-Host "  1. Desarrollo local (localhost)"
-Write-Host "  2. VPS tradicional con Caddy y puertos 80/443 abiertos"
-Write-Host "  3. Cloudflare Tunnel sin puertos entrantes"
+Write-Host "  1. Local: para probar en esta computadora. No requiere dominio."
+Write-Host "  2. VPS: para publicar en un servidor con IP pública; requiere dominio y puertos TCP 80/443."
+Write-Host "  3. Cloudflare Tunnel: para publicar sin abrir puertos entrantes. Requiere un dominio activo en Cloudflare."
 do {
   $choice = (Read-Host "Elige 1, 2 o 3").Trim()
 } while ($choice -notin @("1", "2", "3"))
@@ -146,10 +146,13 @@ if ($choice -eq "1") {
   if (-not $apiPort) { $apiPort = "3000" }
 
   Write-Host ""
-  Write-Host "Antes de continuar, crea un túnel remoto en Cloudflare Zero Trust → Networks → Tunnels."
-  Write-Host "Añade estos dos Public Hostnames; en ambos usa el origen http://caddy:80 y conserva el Host Header público:"
-  Write-Host "  $domain     → http://caddy:80 (Host Header: $domain)"
-  Write-Host "  s3.$domain  → http://caddy:80 (Host Header: s3.$domain)"
+  Write-Host "Prepara Cloudflare antes de continuar:"
+  Write-Host "  1. Comprueba que la zona $domain esté Activa en Cloudflare. Cambiar los nameservers basta; transferir el dominio es opcional."
+  Write-Host "  2. En Conexión de red → Túneles, crea un túnel y agrega estas aplicaciones publicadas:"
+  Write-Host "       $domain     → http://caddy:80"
+  Write-Host "       s3.$domain  → http://caddy:80"
+  Write-Host "     Conserva el Host Header público de cada hostname."
+  Write-Host "  3. En las instrucciones Docker, copia solo el valor después de --token. No ejecutes el comando docker run: este asistente inicia el túnel."
   Write-Host "No necesitas una IP pública fija ni abrir puertos entrantes."
   $routesReady = (Read-Host "¿Ya creaste el túnel y configuraste los dos hostnames? (S/N)").Trim()
   if ($routesReady -notmatch '^(s|si|sí|y|yes)$') {
@@ -200,7 +203,8 @@ $licensePath = Get-EnvValue "MINIO_LICENSE_PATH"
 if (-not $licensePath) { $licensePath = "./minio.license" }
 $resolvedLicensePath = if ([System.IO.Path]::IsPathRooted($licensePath)) { $licensePath } else { Join-Path (Get-Location) $licensePath }
 while (-not (Test-Path -LiteralPath $resolvedLicensePath -PathType Leaf)) {
-  Write-Host "MinIO AIStor necesita su archivo de licencia minio.license." -ForegroundColor Yellow
+  Write-Host "MinIO AIStor necesita una licencia para iniciar. Descárgala desde https://www.min.io/pricing." -ForegroundColor Yellow
+  Write-Host "Escribe la ruta del archivo minio.license que descargaste."
   $licensePath = (Read-Host "Escribe la ruta al archivo de licencia (Enter para ./minio.license)").Trim()
   if (-not $licensePath) { $licensePath = "./minio.license" }
   $resolvedLicensePath = if ([System.IO.Path]::IsPathRooted($licensePath)) { $licensePath } else { Join-Path (Get-Location) $licensePath }
@@ -224,7 +228,7 @@ $env:MINIO_LICENSE_PATH = $licensePath
 Write-Host ""
 Write-Host "Configuración guardada en .env. La clave de API para la aplicación SaveCloud es:"
 Write-Host $apiKey -ForegroundColor Cyan
-Write-Host "Guárdala en Configuración → Conexión de servidor. No la compartas."
+Write-Host "Cópiala ahora en Configuración → Conexión de servidor. No la pegues en chats ni compartas capturas que la muestren."
 Write-Host ""
 
 if ($choice -eq "2" -or $choice -eq "3") {

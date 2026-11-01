@@ -24,7 +24,7 @@ services:
       dockerfile: Dockerfile
     container_name: savecloud-api
     restart: unless-stopped
-    # Loopback access preserves the local development URL without exposing the API publicly.
+    # El acceso por loopback conserva la URL local sin publicar la API en Internet.
     ports:
       - "127.0.0.1:${API_PORT:-3000}:3000"
     environment:

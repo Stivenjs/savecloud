@@ -1,6 +1,6 @@
 # Guía Completa de Variables de Entorno: SaveCloud
 
-Este documento especifica todas las variables de entorno de **SaveCloud**, organizadas por propósito, contexto de despliegue (**Docker VPS**, **AWS Serverless**, **Desarrollo Local**, **Testing/K6**) y nivel de obligatoriedad.
+Este documento explica las variables de entorno de **SaveCloud** por propósito y uso: **Docker local**, **VPS**, **Cloudflare Tunnel**, **AWS Serverless**, desarrollo y pruebas con k6.
 
 ---
 
@@ -21,12 +21,14 @@ Este documento especifica todas las variables de entorno de **SaveCloud**, organ
 
 ## 1. Archivos de Ejemplo en el Proyecto
 
-| Archivo                   | Propósito Principal                                                                                                              |
-| :------------------------ | :------------------------------------------------------------------------------------------------------------------------------- |
-| **`.env.example`**        | Plantilla general para desarrollo local y configuración básica de AWS/Docker.                                                    |
-| **`.env.docker.example`** | Plantilla recomendada para despliegue autohospedado con **Docker Compose + Caddy + MinIO**, con modo Cloudflare Tunnel opcional. |
-| **`.env.k6`**             | Generado automáticamente por `bun run load:setup` para pruebas de estrés y rendimiento con k6.                                   |
-| **`.env`**                | Archivo activo en local (ignorado por git). Contiene los secretos reales de tu instalación.                                      |
+| Archivo                   | Propósito Principal                                                                                             |
+| :------------------------ | :-------------------------------------------------------------------------------------------------------------- |
+| **`.env.example`**        | Plantilla para desarrollo, despliegues en AWS y herramientas como la CLI. No es la plantilla de Docker.         |
+| **`.env.docker.example`** | Plantilla para los tres modos de autohospedaje: local, VPS y Cloudflare Tunnel. El asistente la copia a `.env`. |
+| **`.env.k6`**             | Generado por `bun run load:setup`; contiene identidades de prueba para k6.                                      |
+| **`.env`**                | Configuración privada activa. El asistente la crea y guarda allí los secretos; está excluida de Git.            |
+
+Usa el asistente Docker para configurar un servidor. No combines las plantillas: cada archivo corresponde a un uso distinto. Ambas usan nombres y comentarios en español; la plantilla Docker agrupa las variables por credenciales, modo, direcciones, almacenamiento y ajustes opcionales.
 
 ---
 
@@ -34,14 +36,14 @@ Este documento especifica todas las variables de entorno de **SaveCloud**, organ
 
 ### `SYNC_GAMES_API_KEY` / `API_KEY`
 
-- **Requerida en:** Docker VPS, AWS Lambda, CLI y Desktop.
+- **Requerida en:** Docker, AWS Lambda, CLI y Desktop.
 - **Tipo:** String (secreto de alta entropía, p. ej. `sg_live_...` o UUID/hex de 64 caracteres).
 - **Descripción:** Clave API maestra del anfitrión (dueño de la nube). Otorga privilegios administrativos absolutos a todos los endpoints de la API. Se envía en el header `x-api-key` o en `Authorization: Bearer <key>`.
 - **Generación:** `bun run api-key` (para dev) o `bun run api-key:live` (para producción).
 
 ### `ACCESS_TOKEN_SECRET`
 
-- **Requerida en:** Docker VPS y AWS Lambda.
+- **Requerida en:** Todos los modos Docker y AWS Lambda.
 - **Tipo:** String (mínimo 32 caracteres aleatorios en formato Base64URL o hexadecimal).
 - **Descripción:** Secreto criptográfico HMAC-SHA256 utilizado exclusivamente para firmar y validar tokens de acceso temporales (`sc2`) de invitados a nubes compartidas.
 - **⚠️ Seguridad crítica:** **Debe ser completamente diferente e independiente de `SYNC_GAMES_API_KEY`**. Si se compromete el token secret, solo se comprometen sesiones de invitados, mientras que la API key maestra permanece a salvo.
@@ -64,7 +66,7 @@ Este documento especifica todas las variables de entorno de **SaveCloud**, organ
 
 ### `DOMAIN`
 
-- **Requerida en:** Docker Compose (VPS).
+- **Requerida en:** Docker Compose para VPS y Cloudflare Tunnel.
 - **Tipo:** FQDN (ejemplo: `savecloud.tudominio.com`).
 - **Defecto en local:** `localhost`.
 - **Descripción:** Hostname base de SaveCloud. En el modo tradicional, Caddy obtiene certificados para `DOMAIN` y `s3.DOMAIN`; con Cloudflare Tunnel, Cloudflare termina HTTPS y Caddy enruta internamente esos mismos hostnames.
@@ -77,7 +79,7 @@ Este documento especifica todas las variables de entorno de **SaveCloud**, organ
 
 ### `S3_PUBLIC_ENDPOINT` / `PUBLIC_S3_ENDPOINT`
 
-- **Requerida en:** Docker Compose (VPS y local con MinIO).
+- **Requerida en:** Todos los modos Docker; local usa `http://localhost:9000`.
 - **Tipo:** URL absoluta con protocolo (ejemplo: `https://s3.savecloud.tudominio.com` en VPS o `http://localhost:9000` en local).
 - **Descripción:** URL pública con la que el servidor genera las URLs presignadas (PUT/GET) que entrega a los clientes de escritorio para subir/descargar partidas. Debe ser accesible desde la máquina del usuario final.
 
@@ -126,8 +128,7 @@ Este documento especifica todas las variables de entorno de **SaveCloud**, organ
 ### `OBJECT_STORAGE_ACCESS_KEY` & `OBJECT_STORAGE_SECRET_KEY`
 
 - **Requerida en:** Docker Compose (MinIO).
-- **Defecto en local:** `minioadmin`.
-- **Descripción:** Credenciales administrativas raíz para el contenedor MinIO. En producción VPS deben reemplazarse por contraseñas seguras y aleatorias.
+- **Descripción:** Credenciales administrativas para MinIO. El asistente genera valores aleatorios cuando encuentra los valores de ejemplo.
 
 ### `MINIO_LICENSE_PATH`
 
@@ -309,21 +310,21 @@ Estas variables aplican al entorno de ejecución de la aplicación de escritorio
 
 ## 10. Tabla Resumen por Entorno
 
-| Variable                        |   Docker VPS    | AWS Serverless  |    Dev Local    | Descripción Rápida                                            |
-| :------------------------------ | :-------------: | :-------------: | :-------------: | :------------------------------------------------------------ |
-| **`SYNC_GAMES_API_KEY`**        | **Obligatoria** | **Obligatoria** | **Obligatoria** | API Key maestra del dueño de la nube.                         |
-| **`ACCESS_TOKEN_SECRET`**       | **Obligatoria** | **Obligatoria** | **Obligatoria** | Secreto para firmar tokens `sc2` de invitados.                |
-| **`DEPLOYMENT_MODE`**           |    Opcional     |       N/A       |    Opcional     | Modo elegido por el asistente (`local`, `vps`, `cloudflare`). |
-| **`DOMAIN`**                    | **Obligatoria** |       N/A       |    Opcional     | Hostname de API; Caddy TLS tradicional o Cloudflare Tunnel.   |
-| **`CLOUDFLARE_TUNNEL_TOKEN`**   | Solo modo túnel |       N/A       |       N/A       | Token privado para el contenedor `cloudflared`.               |
-| **`S3_PUBLIC_ENDPOINT`**        | **Obligatoria** |       N/A       |    Opcional     | Endpoint S3 público entregado en URLs presignadas.            |
-| **`OBJECT_STORAGE_ACCESS_KEY`** | **Obligatoria** |       N/A       |    Opcional     | Usuario de MinIO.                                             |
-| **`OBJECT_STORAGE_SECRET_KEY`** | **Obligatoria** |       N/A       |    Opcional     | Contraseña de MinIO.                                          |
-| **`MINIO_LICENSE_PATH`**        | **Obligatoria** |       N/A       |    Opcional     | Licencia de MinIO AIStor.                                     |
-| **`BUCKET_NAME`**               |   Automática    |   Automática    |   Automática    | Nombre del bucket para partidas y archivos.                   |
-| **`DYNAMODB_ENDPOINT`**         |       N/A       |       N/A       |    Opcional     | Endpoint DynamoDB para desarrollo local explícito.            |
-| **`DATABASE_PASSWORD`**         | **Obligatoria** |       N/A       |    Opcional     | Contraseña PostgreSQL del entorno Docker.                     |
-| **`DATABASE_URL`**              |    Opcional     |       N/A       |    Opcional     | URL PostgreSQL alternativa a `DATABASE_*`.                    |
-| **`API_PORT`**                  |    Opcional     |       N/A       |    Opcional     | Puerto de loopback; no se publica en modo túnel.              |
-| **`LOG_LEVEL`**                 |    Opcional     |    Opcional     |    Opcional     | Nivel de logs (`warn`, `info`, `debug`).                      |
-| **`HTTP_REQUEST_LOGS`**         |    Opcional     |    Opcional     |    Opcional     | Logs de duración y estado de cada solicitud HTTP.             |
+| Variable                        | Docker autohospedado | AWS Serverless  |    Dev Local    | Descripción Rápida                                            |
+| :------------------------------ | :------------------: | :-------------: | :-------------: | :------------------------------------------------------------ |
+| **`SYNC_GAMES_API_KEY`**        |   **Obligatoria**    | **Obligatoria** | **Obligatoria** | API Key maestra del dueño de la nube.                         |
+| **`ACCESS_TOKEN_SECRET`**       |   **Obligatoria**    | **Obligatoria** | **Obligatoria** | Secreto para firmar tokens `sc2` de invitados.                |
+| **`DEPLOYMENT_MODE`**           |       Opcional       |       N/A       |    Opcional     | Modo elegido por el asistente (`local`, `vps`, `cloudflare`). |
+| **`DOMAIN`**                    |   **Obligatoria**    |       N/A       |    Opcional     | Hostname de API; Caddy TLS tradicional o Cloudflare Tunnel.   |
+| **`CLOUDFLARE_TUNNEL_TOKEN`**   |   Solo modo túnel    |       N/A       |       N/A       | Token privado para el contenedor `cloudflared`.               |
+| **`S3_PUBLIC_ENDPOINT`**        |   **Obligatoria**    |       N/A       |    Opcional     | Endpoint S3 público entregado en URLs presignadas.            |
+| **`OBJECT_STORAGE_ACCESS_KEY`** |   **Obligatoria**    |       N/A       |    Opcional     | Usuario de MinIO.                                             |
+| **`OBJECT_STORAGE_SECRET_KEY`** |   **Obligatoria**    |       N/A       |    Opcional     | Contraseña de MinIO.                                          |
+| **`MINIO_LICENSE_PATH`**        |   **Obligatoria**    |       N/A       |    Opcional     | Licencia de MinIO AIStor.                                     |
+| **`BUCKET_NAME`**               |      Automática      |   Automática    |   Automática    | Nombre del bucket para partidas y archivos.                   |
+| **`DYNAMODB_ENDPOINT`**         |         N/A          |       N/A       |    Opcional     | Endpoint DynamoDB para desarrollo local explícito.            |
+| **`DATABASE_PASSWORD`**         |   **Obligatoria**    |       N/A       |    Opcional     | Contraseña PostgreSQL del entorno Docker.                     |
+| **`DATABASE_URL`**              |       Opcional       |       N/A       |    Opcional     | URL PostgreSQL alternativa a `DATABASE_*`.                    |
+| **`API_PORT`**                  |       Opcional       |       N/A       |    Opcional     | Puerto de loopback; no se publica en modo túnel.              |
+| **`LOG_LEVEL`**                 |       Opcional       |    Opcional     |    Opcional     | Nivel de logs (`warn`, `info`, `debug`).                      |
+| **`HTTP_REQUEST_LOGS`**         |       Opcional       |    Opcional     |    Opcional     | Logs de duración y estado de cada solicitud HTTP.             |

@@ -83,7 +83,7 @@ read_cloudflare_tunnel_token() {
   tunnel_token=$(read_env CLOUDFLARE_TUNNEL_TOKEN)
   case "$tunnel_token" in
     ""|replace-with-*|YourCloudflareTunnelTokenHere)
-      printf 'Pega el token del túnel Cloudflare (entrada oculta): ' >&2
+      printf 'Pega solo el token Cloudflare (oculto; no pegues el comando Docker): ' >&2
       if [ -t 0 ]; then
         stty -echo
         if IFS= read -r tunnel_token; then
@@ -126,9 +126,9 @@ read_cloudflare_tunnel_token() {
 
 echo
 echo "Asistente de instalación Docker de SaveCloud"
-echo "  1. Desarrollo local (localhost)"
-echo "  2. VPS tradicional con Caddy y puertos 80/443 abiertos"
-echo "  3. Cloudflare Tunnel sin puertos entrantes"
+echo "  1. Local: para probar en esta computadora; no requiere dominio."
+echo "  2. VPS: servidor con IP pública; requiere dominio y puertos TCP 80/443."
+echo "  3. Cloudflare Tunnel: publica sin abrir puertos entrantes; requiere dominio activo en Cloudflare."
 printf 'Elige 1, 2 o 3: '
 IFS= read -r choice
 while [ "$choice" != 1 ] && [ "$choice" != 2 ] && [ "$choice" != 3 ]; do
@@ -168,10 +168,13 @@ else
   s3_endpoint="https://s3.$domain"
   log_level=warn
   http_request_logs=false
-  echo "Antes de continuar, crea un túnel remoto en Cloudflare Zero Trust > Networks > Tunnels."
-  echo "Añade estos dos Public Hostnames; en ambos usa el origen http://caddy:80 y conserva el Host Header público:"
-  echo "  $domain     -> http://caddy:80 (Host Header: $domain)"
-  echo "  s3.$domain  -> http://caddy:80 (Host Header: s3.$domain)"
+  echo "Prepara Cloudflare antes de continuar:"
+  echo "  1. Comprueba que la zona $domain esté Activa en Cloudflare. Cambiar los nameservers basta; transferir el dominio es opcional."
+  echo "  2. En Conexión de red > Túneles, crea un túnel y agrega estas aplicaciones publicadas:"
+  echo "       $domain     -> http://caddy:80"
+  echo "       s3.$domain  -> http://caddy:80"
+  echo "     Conserva el Host Header público de cada hostname."
+  echo "  3. En las instrucciones Docker, copia solo el valor después de --token. No ejecutes docker run: este asistente inicia el túnel."
   echo "No necesitas una IP pública fija ni abrir puertos entrantes."
   printf '¿Ya creaste el túnel y configuraste los dos hostnames? (s/N): '
   IFS= read -r routes_ready
@@ -194,6 +197,17 @@ set_env HTTP_REQUEST_LOGS "$http_request_logs"
 api_key=$(read_env SYNC_GAMES_API_KEY)
 case "$api_key" in
   ""|replace-with-*|sg_secret_key_12345) api_key="sc_$(new_hex_secret 32)"; set_env SYNC_GAMES_API_KEY "$api_key" ;;
+esac
+
+access_token_secret=$(read_env ACCESS_TOKEN_SECRET)
+case "$access_token_secret" in
+  ""|replace-with-*|"$api_key")
+    access_token_secret=$(new_hex_secret 32)
+    while [ "$access_token_secret" = "$api_key" ]; do
+      access_token_secret=$(new_hex_secret 32)
+    done
+    set_env ACCESS_TOKEN_SECRET "$access_token_secret"
+    ;;
 esac
 
 object_user=$(read_env OBJECT_STORAGE_ACCESS_KEY)
@@ -219,7 +233,8 @@ while :; do
     *) resolved_license_path="$(pwd)/$license_path" ;;
   esac
   if [ -f "$resolved_license_path" ]; then break; fi
-  echo "MinIO AIStor necesita su archivo de licencia minio.license."
+  echo "MinIO AIStor necesita una licencia para iniciar. Descárgala desde https://www.min.io/pricing."
+  echo "Escribe la ruta del archivo minio.license que descargaste."
   printf 'Escribe la ruta al archivo de licencia (Enter para ./minio.license): '
   IFS= read -r license_path
   license_path=${license_path:-./minio.license}
@@ -232,6 +247,7 @@ export API_PORT="$api_port"
 export LOG_LEVEL="$log_level"
 export HTTP_REQUEST_LOGS="$http_request_logs"
 export SYNC_GAMES_API_KEY="$api_key"
+export ACCESS_TOKEN_SECRET="$access_token_secret"
 export OBJECT_STORAGE_ACCESS_KEY="$object_user"
 export OBJECT_STORAGE_SECRET_KEY="$object_secret"
 export DATABASE_PASSWORD="$database_password"
@@ -240,7 +256,7 @@ export MINIO_LICENSE_PATH="$resolved_license_path"
 echo
 echo "Configuración guardada en .env. La clave de API para la aplicación SaveCloud es:"
 echo "$api_key"
-echo "Guárdala en Configuración → Conexión de servidor. No la compartas."
+echo "Cópiala ahora en Configuración → Conexión de servidor. No la pegues en chats ni compartas capturas que la muestren."
 if [ "$choice" = 2 ] || [ "$choice" = 3 ]; then
   echo
   echo "Dominio API: https://$domain"

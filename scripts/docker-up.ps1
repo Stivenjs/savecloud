@@ -129,6 +129,7 @@ if ($domain -eq "localhost") {
   Write-Host "  S3 público/presigned: $s3PublicEndpoint"
   Write-Host "Consola MinIO local:    http://127.0.0.1:9001"
   Write-Host "Caddy, API y S3 no publican puertos en el host."
+  Write-Host "S3 es para la app, no una página web; abrir su raíz en el navegador puede mostrar AccessDenied."
 } else {
   Write-Host "SaveCloud está listo. URLs públicas:"
   Write-Host "  API HTTPS:            https://$domain"
