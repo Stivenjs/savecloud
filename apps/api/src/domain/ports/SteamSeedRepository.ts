@@ -1,5 +1,7 @@
 /** Define el acceso al catálogo Steam sembrado en almacenamiento de objetos. */
 export interface SteamSeedRepository {
+  /** Lista los propietarios que tienen manifiestos de catálogo disponibles. */
+  listCatalogOwnerIds(): Promise<string[]>;
   getManifestUploadUrl(ownerId: string, partIndex: number): Promise<{ uploadUrl: string; key: string }>;
   getPriorityUploadUrl(ownerId: string): Promise<{ uploadUrl: string; key: string }>;
   getPriorityDownloadUrl(ownerId: string): Promise<string>;

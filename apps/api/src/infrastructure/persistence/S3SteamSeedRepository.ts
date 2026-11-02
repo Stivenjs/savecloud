@@ -3,6 +3,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import pLimit from "p-limit";
 import { batchKey, reviewsBatchKey } from "@shared/steam-seed-layout";
 import { PRESIGN_EXPIRES_IN_SECONDS } from "@infrastructure/storage/presign";
+import { listSteamSeedOwnerIdsWithManifest } from "@infrastructure/storage/steam-seed-owners";
 import type { SteamSeedRepository as SteamSeedRepositoryPort } from "@domain/ports/SteamSeedRepository";
 
 function isNoSuchKey(err: unknown): boolean {
@@ -100,7 +101,11 @@ function defaultState(): SeedState {
 const PRESIGN_CONCURRENCY = 64;
 
 export class S3SteamSeedRepository implements SteamSeedRepositoryPort {
+  private static readonly CATALOG_OWNER_CACHE_TTL_MS = 5_000;
+
   private readonly presignS3: S3Client;
+  private catalogOwnerIdsCache: string[] | undefined;
+  private catalogOwnerIdsCacheExpiresAt = 0;
 
   constructor(
     private readonly s3: S3Client,
@@ -108,6 +113,19 @@ export class S3SteamSeedRepository implements SteamSeedRepositoryPort {
     presignS3?: S3Client
   ) {
     this.presignS3 = presignS3 ?? s3;
+  }
+
+  /** Lista los propietarios que publicaron un manifiesto del catálogo. */
+  async listCatalogOwnerIds(): Promise<string[]> {
+    if (this.catalogOwnerIdsCache && Date.now() < this.catalogOwnerIdsCacheExpiresAt) {
+      return this.catalogOwnerIdsCache;
+    }
+
+    const basePrefix = (process.env.STEAM_SEED_PREFIX ?? "steam-seed").replace(/^\/+|\/+$/g, "");
+    const ownerIds = await listSteamSeedOwnerIdsWithManifest(this.s3, this.bucketName, basePrefix);
+    this.catalogOwnerIdsCache = ownerIds;
+    this.catalogOwnerIdsCacheExpiresAt = Date.now() + S3SteamSeedRepository.CATALOG_OWNER_CACHE_TTL_MS;
+    return ownerIds;
   }
 
   /**

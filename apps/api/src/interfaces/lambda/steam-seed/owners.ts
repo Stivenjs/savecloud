@@ -1,10 +1,10 @@
 import type { S3Client } from "@aws-sdk/client-s3";
 import { listObjects, putJson, getObjectText, isNoSuchKey } from "@interfaces/lambda/steam-seed/s3";
-import { STEAM_SEED_MANIFEST_PREFIX, STEAM_SEED_MANIFEST_SUFFIX } from "@shared/steam-seed-layout";
+import { listSteamSeedOwnerIdsWithManifest as listOwnerIdsWithManifest } from "@infrastructure/storage/steam-seed-owners";
 
 type OwnersStateV1 = {
   version: 1;
-  /** Índice round-robin (0..owners.length-1) */
+  /** Índice de rotación (0..cantidad de propietarios - 1). */
   cursor: number;
 };
 
@@ -29,42 +29,22 @@ async function saveOwnersState(s3: S3Client, bucket: string, key: string, state:
 }
 
 /**
- * Devuelve owners que tienen al menos un shard de manifest.
- */
-export async function listOwnerIdsWithManifest(s3: S3Client, bucket: string, basePrefix: string): Promise<string[]> {
-  const owners: string[] = [];
-  let token: string | undefined;
-  const prefix = `${basePrefix}/`;
-  do {
-    const out = await listObjects(s3, bucket, { prefix, delimiter: "/", continuationToken: token, maxKeys: 1000 });
-    for (const p of out.commonPrefixes) {
-      const rest = p.startsWith(prefix) ? p.slice(prefix.length) : "";
-      const ownerId = rest.endsWith("/") ? rest.slice(0, -1) : rest;
-      if (ownerId) owners.push(ownerId);
-    }
-    token = out.nextContinuationToken;
-  } while (token);
-
-  const valid: string[] = [];
-  for (const ownerId of owners.sort()) {
-    const probePrefix = `${basePrefix}/${ownerId}/${STEAM_SEED_MANIFEST_PREFIX}`;
-    const probe = await listObjects(s3, bucket, { prefix: probePrefix, maxKeys: 1 });
-    if (probe.keys.some((k) => k.endsWith(STEAM_SEED_MANIFEST_SUFFIX))) valid.push(ownerId);
-  }
-  return valid;
-}
-
-/**
- * Selecciona un owner automáticamente para ejecuciones programadas (round-robin).
+ * Selecciona automáticamente un propietario para las ejecuciones programadas.
  *
- * - Si hay owners con manifest, rota entre ellos usando `steam-seed/_owners_state.json`.
- * - Si no hay, devuelve `null` (caller puede caer a modo legacy `steam-seed/manifest/`).
+ * - Si hay propietarios con manifiestos, los recorre usando `steam-seed/_owners_state.json`.
+ * - `task` opcional mantiene cursores independientes para detalles y reseñas.
+ * - Si no hay propietarios, devuelve `null` para que el llamador use el modo anterior.
  */
-export async function pickOwnerIdAuto(s3: S3Client, bucket: string, basePrefix: string): Promise<string | null> {
+export async function pickOwnerIdAuto(
+  s3: S3Client,
+  bucket: string,
+  basePrefix: string,
+  task?: "details" | "reviews"
+): Promise<string | null> {
   const owners = await listOwnerIdsWithManifest(s3, bucket, basePrefix);
   if (owners.length === 0) return null;
 
-  const ownersStateKey = `${basePrefix}/_owners_state.json`;
+  const ownersStateKey = `${basePrefix}/_owners_state${task ? `_${task}` : ""}.json`;
   const st = await loadOwnersState(s3, bucket, ownersStateKey);
   const idx = st.cursor % owners.length;
   const chosen = owners[idx] ?? owners[0]!;
