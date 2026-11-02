@@ -8,21 +8,20 @@
 //! - **Windows** — Hooks de bajo nivel (`WH_MOUSE_LL`) + polling `GetAsyncKeyState`.
 //! - **macOS / Linux** — Librería `rdev` con escucha global de eventos.
 
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, Ordering};
 #[cfg(target_os = "windows")]
 use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicIsize, Ordering};
 use std::sync::{Condvar, Mutex};
 #[cfg(target_os = "windows")]
 use std::time::Duration;
 
 use tauri::{Window, WindowEvent};
 
-use super::input_relay::{
-    relay_keyboard_event, relay_mouse_button, relay_mouse_position,
-    relay_scroll, MouseButton,
-};
 #[cfg(target_os = "windows")]
 use super::input_relay::relay_mouse_move;
+use super::input_relay::{
+    relay_keyboard_event, relay_mouse_button, relay_mouse_position, relay_scroll, MouseButton,
+};
 
 /// Intervalo de polling para lectura de teclado/ratón en Windows durante streaming activo (250 Hz).
 #[cfg(target_os = "windows")]
@@ -430,7 +429,8 @@ pub mod windows_listener {
                     if let Ok(mut state) = lock.lock() {
                         while !*state
                             && IS_LISTENER_RUNNING.load(Ordering::Relaxed)
-                            && (!STREAMING_WINDOW.is_focused() || crate::streaming::is_mirror_mode())
+                            && (!STREAMING_WINDOW.is_focused()
+                                || crate::streaming::is_mirror_mode())
                         {
                             match cvar.wait_timeout(state, Duration::from_millis(500)) {
                                 Ok((new_state, _)) => state = new_state,

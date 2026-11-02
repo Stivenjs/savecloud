@@ -26,4 +26,3 @@ pub fn reset_steam_catalog_sync(app: AppHandle, db: State<'_, AppDb>) -> Result<
     let _ = tauri::Emitter::emit(&app, "steam-catalog-updated", ());
     Ok(())
 }
-

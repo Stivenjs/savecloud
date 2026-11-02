@@ -6,9 +6,9 @@
 
 use super::error::{StreamingError, StreamingResult};
 use std::fmt::Debug;
-use std::path::PathBuf;
 #[cfg(target_os = "windows")]
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
@@ -102,25 +102,28 @@ impl SunshineHost {
             let url = format!(
                 "https://github.com/LizardByte/Sunshine/releases/download/{SUNSHINE_VERSION}/sunshine-windows-portable.zip"
             );
-            let response = reqwest::get(&url)
-                .await
-                .map_err(|err| StreamingError::Host(format!("Fallo al descargar Sunshine: {err}")))?;
+            let response = reqwest::get(&url).await.map_err(|err| {
+                StreamingError::Host(format!("Fallo al descargar Sunshine: {err}"))
+            })?;
 
             let bytes = response.bytes().await.map_err(|err| {
                 StreamingError::Host(format!("Error leyendo bytes de la descarga: {err}"))
             })?;
 
-            std::fs::write(&zip_path, &bytes)
-                .map_err(|err| StreamingError::Host(format!("Fallo al guardar el archivo zip: {err}")))?;
+            std::fs::write(&zip_path, &bytes).map_err(|err| {
+                StreamingError::Host(format!("Fallo al guardar el archivo zip: {err}"))
+            })?;
 
             let bin_dir_clone = self.bin_dir.clone();
             let zip_path_clone = zip_path.clone();
 
-            
-            tokio::task::spawn_blocking(move || extract_zip_archive(&zip_path_clone, &bin_dir_clone))
-                .await
-                .map_err(|err| StreamingError::Host(format!("Error en tarea de extracción: {err}")))?
-                ?;
+            tokio::task::spawn_blocking(move || {
+                extract_zip_archive(&zip_path_clone, &bin_dir_clone)
+            })
+            .await
+            .map_err(|err| {
+                StreamingError::Host(format!("Error en tarea de extracción: {err}"))
+            })??;
 
             let _ = std::fs::remove_file(zip_path);
 
@@ -268,7 +271,9 @@ impl SunshineHost {
         if let Some(parent) = state_path.parent() {
             if !parent.exists() {
                 std::fs::create_dir_all(parent).map_err(|err| {
-                    StreamingError::Config(format!("Fallo al crear directorio de configuración: {err}"))
+                    StreamingError::Config(format!(
+                        "Fallo al crear directorio de configuración: {err}"
+                    ))
                 })?;
             }
         }
@@ -374,8 +379,9 @@ impl SunshineHost {
     fn generate_config(&self) -> StreamingResult<()> {
         let config_dir = self.bin_dir.join("Sunshine").join("config");
         if !config_dir.exists() {
-            std::fs::create_dir_all(&config_dir)
-                .map_err(|err| StreamingError::Config(format!("Fallo al crear directorio de configuración: {err}")))?;
+            std::fs::create_dir_all(&config_dir).map_err(|err| {
+                StreamingError::Config(format!("Fallo al crear directorio de configuración: {err}"))
+            })?;
         }
 
         let conf_path = config_dir.join("sunshine.conf");
@@ -460,9 +466,9 @@ fn extract_zip_archive(zip_path: &Path, bin_dir: &Path) -> StreamingResult<()> {
         .map_err(|err| StreamingError::Host(format!("Formato ZIP inválido: {err}")))?;
 
     for i in 0..archive.len() {
-        let mut entry = archive.by_index(i).map_err(|err| {
-            StreamingError::Host(format!("Error leyendo entrada ZIP: {err}"))
-        })?;
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|err| StreamingError::Host(format!("Error leyendo entrada ZIP: {err}")))?;
         let outpath = match entry.enclosed_name() {
             Some(path) => bin_dir.join(path),
             None => continue,
@@ -538,18 +544,25 @@ fn process_sunshine_log_line(
 
     if is_connected || is_disconnected {
         if let Ok(mut session) = session_state.lock() {
-            if let HostState::Hosting { ref mut clients, .. } = *session {
+            if let HostState::Hosting {
+                ref mut clients, ..
+            } = *session
+            {
                 let updated = if is_connected {
                     if clients.is_empty() {
                         clients.push("Cliente Conectado".to_string());
-                        log::info!("[SunshineHost] Evento en tiempo real: Cliente conectado al stream");
+                        log::info!(
+                            "[SunshineHost] Evento en tiempo real: Cliente conectado al stream"
+                        );
                         true
                     } else {
                         false
                     }
                 } else if !clients.is_empty() {
                     clients.clear();
-                    log::info!("[SunshineHost] Evento en tiempo real: Cliente desconectado del stream");
+                    log::info!(
+                        "[SunshineHost] Evento en tiempo real: Cliente desconectado del stream"
+                    );
                     true
                 } else {
                     false
@@ -568,7 +581,9 @@ fn process_sunshine_log_line(
 fn is_current_process_elevated() -> bool {
     use std::mem::MaybeUninit;
     use windows_sys::Win32::Foundation::HANDLE;
-    use windows_sys::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
+    use windows_sys::Win32::Security::{
+        GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+    };
     use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
     unsafe {
@@ -592,5 +607,3 @@ fn is_current_process_elevated() -> bool {
     }
     false
 }
-
-

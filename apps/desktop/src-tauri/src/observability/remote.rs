@@ -19,14 +19,19 @@ use crate::cloud::cloud_api;
 ///
 /// Devuelve `Err(String)` si ocurre un fallo irrecuperable al procesar la respuesta.
 #[command]
-pub async fn get_remote_observability_summary(window: Option<String>) -> Result<Option<Value>, String> {
+pub async fn get_remote_observability_summary(
+    window: Option<String>,
+) -> Result<Option<Value>, String> {
     let w = window
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or("15m");
 
-    let path = format!("/observability/desktop/summary?window={}", urlencoding::encode(w));
+    let path = format!(
+        "/observability/desktop/summary?window={}",
+        urlencoding::encode(w)
+    );
 
     let response = match cloud_api(reqwest::Method::GET, &path).send().await {
         Ok(res) => res,

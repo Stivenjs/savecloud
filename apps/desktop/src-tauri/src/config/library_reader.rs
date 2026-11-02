@@ -16,7 +16,9 @@ impl<'de> DeserializeSeed<'de> for LibrarySeed<'_> {
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_map(LibraryVisitor { game_id: self.game_id })
+        deserializer.deserialize_map(LibraryVisitor {
+            game_id: self.game_id,
+        })
     }
 }
 
@@ -38,7 +40,9 @@ impl<'de> Visitor<'de> for LibraryVisitor<'_> {
         let mut game = None;
         while let Some(key) = map.next_key::<String>()? {
             if key == "games" {
-                game = map.next_value_seed(GamesSeed { game_id: self.game_id })?;
+                game = map.next_value_seed(GamesSeed {
+                    game_id: self.game_id,
+                })?;
             } else {
                 map.next_value::<IgnoredAny>()?;
             }
@@ -58,7 +62,9 @@ impl<'de> DeserializeSeed<'de> for GamesSeed<'_> {
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_seq(GamesVisitor { game_id: self.game_id })
+        deserializer.deserialize_seq(GamesVisitor {
+            game_id: self.game_id,
+        })
     }
 }
 

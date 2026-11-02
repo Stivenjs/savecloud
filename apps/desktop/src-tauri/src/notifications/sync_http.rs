@@ -3,10 +3,10 @@
 //! Utiliza [`crate::cloud::client::cloud_api`] para garantizar resolución transparente
 //! de credenciales, auto-renovación de sesiones de invitado y reintentos con jitter.
 
-use crate::cloud::api_error;
 use super::models::{
     NotificationAckBody, NotificationBatchBody, NotificationListResponse, NotificationRecordDto,
 };
+use crate::cloud::api_error;
 
 /// Envía un lote de notificaciones locales para sincronizar con la nube.
 ///

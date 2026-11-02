@@ -406,12 +406,15 @@ pub async fn list_pending_cloud_invites() -> AppResult<Vec<CloudInviteDto>> {
 #[command]
 pub async fn respond_cloud_invite(invite_id: String, action: String) -> AppResult<()> {
     let payload = serde_json::json!({ "action": action.trim() });
-    let response = cloud_api(reqwest::Method::POST, &format!("/invites/{}/respond", invite_id.trim()))
-        .json(&payload)
-        .map_err(|e| AppError::new("SERIALIZATION_ERROR", e))?
-        .send()
-        .await
-        .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
+    let response = cloud_api(
+        reqwest::Method::POST,
+        &format!("/invites/{}/respond", invite_id.trim()),
+    )
+    .json(&payload)
+    .map_err(|e| AppError::new("SERIALIZATION_ERROR", e))?
+    .send()
+    .await
+    .map_err(|e| AppError::new("NETWORK_ERROR", e))?;
     ensure_success(response).await?;
     Ok(())
 }

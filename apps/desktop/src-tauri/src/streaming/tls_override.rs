@@ -71,7 +71,10 @@ impl ResolvesClientCert for AlwaysResolvesClientCert {
         let scheme = self.certified_key.key.choose_scheme(_sigschemes);
         log::info!("TLS: El esquema elegido por la key es: {:?}", scheme);
         if let Some(cert) = self.certified_key.cert.first() {
-            log::info!("TLS: Enviando certificado DER de tamaño: {} bytes", cert.as_ref().len());
+            log::info!(
+                "TLS: Enviando certificado DER de tamaño: {} bytes",
+                cert.as_ref().len()
+            );
         }
         Some(self.certified_key.clone())
     }

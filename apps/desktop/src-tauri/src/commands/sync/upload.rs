@@ -635,9 +635,13 @@ pub(crate) async fn sync_upload_game_impl(
         super::api::invalidate_remote_saves_cache(user_id, Some(&game_id));
     }
 
-    let _ =
-        crate::config::append_operation_log("upload", &game_id, result.ok_count, result.err_count, result.errors.clone());
-
+    let _ = crate::config::append_operation_log(
+        "upload",
+        &game_id,
+        result.ok_count,
+        result.err_count,
+        result.errors.clone(),
+    );
 
     if let Some(pm) = app.try_state::<crate::plugins::AppPluginManager>() {
         let pm = pm.lock().await;

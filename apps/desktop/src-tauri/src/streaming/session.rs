@@ -3,7 +3,6 @@
 //! Este módulo define los tipos y estructuras compartidas para la gestión del estado
 //! de la sesión de game streaming (Sunshine Host y Moonlight Client).
 
-
 use super::client::MoonlightClient;
 use super::host::SunshineHost;
 use std::fmt::Debug;
@@ -226,7 +225,9 @@ impl Drop for SunshineShutdownGuard {
     ///
     /// Solicita de forma asíncrona y no bloqueante la detención del proceso Sunshine Host.
     fn drop(&mut self) {
-        log::info!("[SunshineShutdownGuard] Apagando Sunshine debido al cierre de la aplicación...");
+        log::info!(
+            "[SunshineShutdownGuard] Apagando Sunshine debido al cierre de la aplicación..."
+        );
         let host = self.host.clone();
 
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
@@ -240,5 +241,3 @@ impl Drop for SunshineShutdownGuard {
         }
     }
 }
-
-

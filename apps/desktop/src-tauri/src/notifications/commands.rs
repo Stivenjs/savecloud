@@ -173,7 +173,11 @@ pub async fn sync_notifications_pull(
     sync_notifications_pull_internal(&app, &db, true).await
 }
 
-async fn sync_notifications_pull_internal(app: &AppHandle, db: &AppDb, emit: bool) -> Result<usize, String> {
+async fn sync_notifications_pull_internal(
+    app: &AppHandle,
+    db: &AppDb,
+    emit: bool,
+) -> Result<usize, String> {
     let user_id = config::load_settings()
         .user_id
         .filter(|s| !s.trim().is_empty())
@@ -199,7 +203,11 @@ async fn sync_notifications_pull_internal(app: &AppHandle, db: &AppDb, emit: boo
             response
                 .items
                 .iter()
-                .map(|item| item.server_updated_at.as_deref().unwrap_or(&item.updated_at))
+                .map(|item| {
+                    item.server_updated_at
+                        .as_deref()
+                        .unwrap_or(&item.updated_at)
+                })
                 .max()
                 .map(str::to_owned)
         });
@@ -252,17 +260,20 @@ pub async fn sync_notifications_full(
         .filter(|s| !s.trim().is_empty())
         .ok_or("Configura tu usuario en Configuración")?;
 
-    let items = db.with_conn(|conn| {
-        db::list_notifications(
-            conn,
-            &user_id,
-            params.limit.clamp(1, 200),
-            params.offset.max(0),
-            params.unread_only,
-        )
-    }).map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
+    let items = db
+        .with_conn(|conn| {
+            db::list_notifications(
+                conn,
+                &user_id,
+                params.limit.clamp(1, 200),
+                params.offset.max(0),
+                params.unread_only,
+            )
+        })
+        .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
 
-    let unread_count = db.with_conn(|conn| db::unread_count(conn, &user_id))
+    let unread_count = db
+        .with_conn(|conn| db::unread_count(conn, &user_id))
         .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
 
     Ok(super::models::NotificationSyncFullResponse {

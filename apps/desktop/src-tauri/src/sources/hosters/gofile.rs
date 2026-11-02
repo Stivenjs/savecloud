@@ -476,7 +476,9 @@ pub async fn resolve(
     on_event: Option<crate::sources::commands::fetch::CrawlerEventCallback>,
 ) -> Result<(String, String), HosterError> {
     if let Some(app) = app {
-        log::info!("gofile: ejecutando Scrapling crawler para resolver enlace y sesión de descarga");
+        log::info!(
+            "gofile: ejecutando Scrapling crawler para resolver enlace y sesión de descarga"
+        );
         if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch_with_progress(
             app,
             url,

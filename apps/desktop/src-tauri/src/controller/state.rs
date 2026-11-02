@@ -22,7 +22,9 @@ impl InputState {
 
     pub fn press(&mut self, player: usize, action: SemanticAction) -> bool {
         // Retorna true si es la primera pulsación
-        if let std::collections::hash_map::Entry::Vacant(e) = self.active_actions.entry((player, action)) {
+        if let std::collections::hash_map::Entry::Vacant(e) =
+            self.active_actions.entry((player, action))
+        {
             e.insert(Instant::now() + REPEAT_DELAY);
             true
         } else {

@@ -622,7 +622,9 @@ pub unsafe extern "C" fn dr_submit_decode_unit(decodeUnit: *mut DECODE_UNIT) -> 
         if let Some(sender) = guard.as_ref() {
             if let Err(mpsc::error::TrySendError::Full(data)) = sender.try_send(payload) {
                 if is_idr {
-                    log::warn!("[Video] Canal lleno al recibir IDR Keyframe. Forzando envío de IDR.");
+                    log::warn!(
+                        "[Video] Canal lleno al recibir IDR Keyframe. Forzando envío de IDR."
+                    );
                     let _ = sender.try_send(data);
                 } else {
                     log::warn!("[Video] Canal lleno al enviar P-frame. Solicitando nuevo IDR Keyframe a Sunshine para evitar corrupción.");
@@ -661,4 +663,3 @@ mod tests {
         assert_eq!(config.clientRefreshRateX100, 12000);
     }
 }
-

@@ -12,13 +12,12 @@ static DOWNLOAD_SELECTORS: LazyLock<Vec<Selector>> = LazyLock::new(|| {
     ]
 });
 
-static INPUT_SELECTOR: LazyLock<Selector> = LazyLock::new(|| {
-    Selector::parse("input").expect("selector input")
-});
+static INPUT_SELECTOR: LazyLock<Selector> =
+    LazyLock::new(|| Selector::parse("input").expect("selector input"));
 
 const ASSET_EXTENSIONS: &[&str] = &[
-    ".css", ".js", ".mjs", ".map", ".png", ".jpg", ".jpeg", ".gif", ".webp",
-    ".svg", ".ico", ".woff", ".woff2", ".ttf", ".otf",
+    ".css", ".js", ".mjs", ".map", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
+    ".woff", ".woff2", ".ttf", ".otf",
 ];
 
 fn normalized_host(url: &Url) -> String {
@@ -170,7 +169,9 @@ pub fn extract_download_link(
             let lowered_text = text.to_ascii_lowercase();
             let lowered_raw = raw.to_ascii_lowercase();
             let has_any_download_indicator = has_path_hint(&candidate)
-                || text_markers.iter().any(|marker| lowered_text.contains(marker))
+                || text_markers
+                    .iter()
+                    .any(|marker| lowered_text.contains(marker))
                 || lowered_raw.contains("download")
                 || lowered_raw.contains("dl")
                 || value.attr("download").is_some();
@@ -197,7 +198,11 @@ pub fn extract_download_link(
 pub fn is_url_on_marked_host(url: &str, host_markers: &[&str]) -> bool {
     Url::parse(url)
         .ok()
-        .and_then(|parsed| parsed.host_str().map(|host| host.trim_start_matches("www.").to_ascii_lowercase()))
+        .and_then(|parsed| {
+            parsed
+                .host_str()
+                .map(|host| host.trim_start_matches("www.").to_ascii_lowercase())
+        })
         .map(|host| host_markers.iter().any(|marker| host.contains(marker)))
         .unwrap_or(false)
 }

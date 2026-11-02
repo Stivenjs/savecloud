@@ -48,7 +48,6 @@ pub struct RemoteSourceConfig {
     pub sync: SourceSyncMetadata,
 }
 
-
 /// Entrada individual normalizada de un catálogo.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

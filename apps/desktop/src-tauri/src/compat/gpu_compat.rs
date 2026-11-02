@@ -1,9 +1,8 @@
 use regex::Regex;
 use std::sync::LazyLock;
 
-static VRAM_TAIL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\s*(?:with|con)\s+\d+\s*gb\s*vram\s*").expect("vram tail")
-});
+static VRAM_TAIL: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\s*(?:with|con)\s+\d+\s*gb\s*vram\s*").expect("vram tail"));
 
 static SPACES: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\s+").expect("spaces"));
 

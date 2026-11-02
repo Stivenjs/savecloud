@@ -90,10 +90,7 @@ pub async fn post_cloud_heartbeat(device_id: &str) -> Result<(), String> {
 }
 
 pub async fn delete_cloud_inventory(device_id: &str) -> Result<(), String> {
-    let path = format!(
-        "/inventory/devices/{}",
-        urlencoding::encode(device_id)
-    );
+    let path = format!("/inventory/devices/{}", urlencoding::encode(device_id));
     let res = cloud_api(reqwest::Method::DELETE, &path)
         .send()
         .await

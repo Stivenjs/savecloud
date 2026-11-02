@@ -2,8 +2,7 @@
 pub fn primary_gpu_name() -> Option<String> {
     use std::collections::HashSet;
 
-    let mut names: Vec<String> = wmi_video_controller_names()
-        .unwrap_or_default();
+    let mut names: Vec<String> = wmi_video_controller_names().unwrap_or_default();
     names.extend(registry_display_driver_descs());
 
     let mut seen: HashSet<String> = HashSet::new();
@@ -92,7 +91,8 @@ fn registry_display_driver_descs() -> Vec<String> {
     use winreg::enums::HKEY_LOCAL_MACHINE;
     use winreg::RegKey;
 
-    const CLASS: &str = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
+    const CLASS: &str =
+        r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
     let key = match RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey(CLASS) {
         Ok(k) => k,
         Err(_) => return Vec::new(),

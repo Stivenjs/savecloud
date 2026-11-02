@@ -40,13 +40,11 @@ pub(crate) fn resolve_api_context() -> Result<ApiContext, String> {
         let host_api_key = crate::config::get_secure_api_key_for_cloud_host(active_host).ok_or(
             "La nube compartida activa no tiene credenciales guardadas. Reacepta la invitación.",
         )?;
-        let host_ws_base_url = settings
-            .cloud_host_ws_base_urls
-            .get(active_host)
-            .cloned();
+        let host_ws_base_url = settings.cloud_host_ws_base_urls.get(active_host).cloned();
         return Ok(ApiContext {
             base_url: crate::commands::share::invites::normalize_base_url(host_base_url),
-            ws_base_url: host_ws_base_url.map(|u| crate::commands::share::invites::normalize_ws_url(&u)),
+            ws_base_url: host_ws_base_url
+                .map(|u| crate::commands::share::invites::normalize_ws_url(&u)),
             user_id,
             api_key: host_api_key,
         });

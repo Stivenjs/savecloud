@@ -3,6 +3,4 @@ mod metrics;
 pub mod remote;
 pub mod snapshot;
 
-pub use metrics::{
-    record_error, record_saves_api_timing,
-};
+pub use metrics::{record_error, record_saves_api_timing};

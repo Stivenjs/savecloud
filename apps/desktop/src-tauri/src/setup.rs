@@ -310,7 +310,6 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
         log::warn!("[config_backup] No se pudo iniciar el watcher de configuración: {error}");
     }
 
-
     cloud::session_refresh::start_session_refresh_task(app.handle().clone());
 
     Ok(())

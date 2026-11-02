@@ -159,4 +159,3 @@ pub async fn install_verified_sources(
         })
     }
 }
-

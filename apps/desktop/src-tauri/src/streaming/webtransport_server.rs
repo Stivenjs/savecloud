@@ -69,15 +69,25 @@ impl WebTransportServer {
     ///
     /// # Errors
     /// Retorna [`StreamingError::WebSocket`] o [`StreamingError::Io`] si falla la configuración de `wtransport`.
-    pub async fn start(&self, bcast_tx: broadcast::Sender<Vec<u8>>) -> StreamingResult<WebTransportServerInfo> {
+    pub async fn start(
+        &self,
+        bcast_tx: broadcast::Sender<Vec<u8>>,
+    ) -> StreamingResult<WebTransportServerInfo> {
         let _ = self.stop_tx.send(false);
 
         // Generación de identidad TLS 1.3 autofirmada efímera para WebTransport
-        let identity = Identity::self_signed(["localhost", "127.0.0.1", "localhost:0"])
-            .map_err(|err| StreamingError::WebSocket(format!("Fallo al generar certificado TLS para WebTransport: {err}")))?;
+        let identity =
+            Identity::self_signed(["localhost", "127.0.0.1", "localhost:0"]).map_err(|err| {
+                StreamingError::WebSocket(format!(
+                    "Fallo al generar certificado TLS para WebTransport: {err}"
+                ))
+            })?;
 
         // Extracción de la huella digital SHA-256 del certificado TLS para la validación en el cliente W3C WebTransport API
-        let cert_hash = identity.certificate_chain().as_slice()[0].hash().as_ref().to_vec();
+        let cert_hash = identity.certificate_chain().as_slice()[0]
+            .hash()
+            .as_ref()
+            .to_vec();
         let cert_hash_hex = hex::encode(&cert_hash);
 
         // Configuración del servidor WebTransport QUIC
@@ -86,12 +96,13 @@ impl WebTransportServer {
             .with_identity(identity)
             .build();
 
-        let endpoint = Endpoint::server(config)
-            .map_err(|err| StreamingError::WebSocket(format!("Fallo al crear Endpoint WebTransport QUIC: {err}")))?;
+        let endpoint = Endpoint::server(config).map_err(|err| {
+            StreamingError::WebSocket(format!("Fallo al crear Endpoint WebTransport QUIC: {err}"))
+        })?;
 
-        let local_addr = endpoint
-            .local_addr()
-            .map_err(|err| StreamingError::WebSocket(format!("Fallo al consultar dirección local UDP: {err}")))?;
+        let local_addr = endpoint.local_addr().map_err(|err| {
+            StreamingError::WebSocket(format!("Fallo al consultar dirección local UDP: {err}"))
+        })?;
 
         let port = local_addr.port();
 
@@ -117,7 +128,9 @@ impl WebTransportServer {
     /// Envía una señal de parada al servidor WebTransport.
     pub fn stop(&self) {
         if let Err(err) = self.stop_tx.send(true) {
-            log::warn!("[WebTransportServer] No se pudo enviar señal de parada (canal cerrado): {err}");
+            log::warn!(
+                "[WebTransportServer] No se pudo enviar señal de parada (canal cerrado): {err}"
+            );
         } else {
             log::info!("[WebTransportServer] Señal de parada enviada exitosamente");
         }
@@ -163,7 +176,11 @@ fn send_chunked_frame(
     for chunk_idx in 0..total_chunks {
         let start = chunk_idx * CHUNK_PAYLOAD_SIZE;
         let end = (start + CHUNK_PAYLOAD_SIZE).min(payload.len());
-        let chunk_data = if payload.is_empty() { &[] } else { &payload[start..end] };
+        let chunk_data = if payload.is_empty() {
+            &[]
+        } else {
+            &payload[start..end]
+        };
 
         // Encabezado de 5 bytes: [msgType, seq_hi, seq_lo, chunkIdx, totalChunks]
         let mut packet = Vec::with_capacity(5 + chunk_data.len());

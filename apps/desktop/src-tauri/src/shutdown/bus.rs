@@ -80,7 +80,10 @@ impl ShutdownBus {
     /// Puede invocarse desde cualquier contexto async.
     pub async fn trigger(&self) {
         // Evitar doble disparo usando compare-and-swap atómico.
-        let already = self.0.triggered.swap(true, std::sync::atomic::Ordering::SeqCst);
+        let already = self
+            .0
+            .triggered
+            .swap(true, std::sync::atomic::Ordering::SeqCst);
         if already {
             return;
         }

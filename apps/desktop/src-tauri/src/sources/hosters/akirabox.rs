@@ -15,10 +15,7 @@ fn normalize_page_url(url: &str) -> Result<String, HosterError> {
     Ok(parsed.to_string())
 }
 
-async fn resolve_native(
-    client: &reqwest::Client,
-    page_url: &str,
-) -> Result<String, HosterError> {
+async fn resolve_native(client: &reqwest::Client, page_url: &str) -> Result<String, HosterError> {
     let response = get(
         client,
         page_url,
@@ -40,9 +37,7 @@ async fn resolve_native(
             return Ok(direct);
         }
 
-        log::info!(
-            "akirabox: ignoring external download candidate from page markup: {direct}"
-        );
+        log::info!("akirabox: ignoring external download candidate from page markup: {direct}");
     }
 
     Err(HosterError::ResolutionFailed(

@@ -192,7 +192,6 @@ where
     }
 }
 
-
 /// Extrae el timestamp de expiración (`exp`) de un access token `sc2.*.*`.
 /// Devuelve `None` si el token no es sc2 o tiene un payload malformado.
 fn access_token_expiry(token: &str) -> Option<u64> {
@@ -213,7 +212,6 @@ fn unix_now() -> u64 {
         .map(|d| d.as_secs())
         .unwrap_or_default()
 }
-
 
 async fn refresh_session(host: &str, base_url: &str, refresh_token: &str) -> Result<(), String> {
     let response = API_CLIENT
@@ -241,7 +239,11 @@ async fn refresh_session(host: &str, base_url: &str, refresh_token: &str) -> Res
     persist_tokens(host, tokens)
 }
 
-async fn upgrade_legacy_session(host: &str, base_url: &str, legacy_token: &str) -> Result<(), String> {
+async fn upgrade_legacy_session(
+    host: &str,
+    base_url: &str,
+    legacy_token: &str,
+) -> Result<(), String> {
     let user_id = config::load_settings()
         .user_id
         .filter(|id| !id.trim().is_empty())

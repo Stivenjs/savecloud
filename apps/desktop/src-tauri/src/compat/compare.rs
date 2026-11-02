@@ -23,7 +23,8 @@ pub fn build_report(
     factors.push(CompatibilityFactor {
         id: "directx".to_string(),
         status: FactorStatus::Unknown,
-        summary: "DirectX en el equipo no se contrasta aquí con el requisito del juego.".to_string(),
+        summary: "DirectX en el equipo no se contrasta aquí con el requisito del juego."
+            .to_string(),
     });
 
     let storage = factor_storage(minimum.storage_gb);
@@ -90,18 +91,25 @@ fn factor_memory_recommended(host_mb: u64, rec_mb: Option<u64>) -> Compatibility
 
 fn factor_gpu_minimum(host: &HostSpecs, req: &ParsedRequirements) -> CompatibilityFactor {
     let user = host.gpu_name.as_deref().unwrap_or("").trim();
-    let Some(txt) = req.gpu_text.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+    let Some(txt) = req
+        .gpu_text
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    else {
         return CompatibilityFactor {
             id: "gpu_minimum".to_string(),
             status: FactorStatus::Unknown,
-            summary: "No se encontró la línea Gráficos/Graphics en el texto de requisitos mínimos.".to_string(),
+            summary: "No se encontró la línea Gráficos/Graphics en el texto de requisitos mínimos."
+                .to_string(),
         };
     };
     if user.is_empty() {
         return CompatibilityFactor {
             id: "gpu_minimum".to_string(),
             status: FactorStatus::Unknown,
-            summary: "No se detectó la GPU en este equipo; no se puede comparar con la ficha.".to_string(),
+            summary: "No se detectó la GPU en este equipo; no se puede comparar con la ficha."
+                .to_string(),
         };
     }
     if user_gpu_matches_listing(user, txt) {
@@ -124,7 +132,12 @@ fn factor_gpu_minimum(host: &HostSpecs, req: &ParsedRequirements) -> Compatibili
 
 fn factor_gpu_recommended(host: &HostSpecs, req: &ParsedRequirements) -> CompatibilityFactor {
     let user = host.gpu_name.as_deref().unwrap_or("").trim();
-    let Some(txt) = req.gpu_text.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+    let Some(txt) = req
+        .gpu_text
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    else {
         return CompatibilityFactor {
             id: "gpu_recommended".to_string(),
             status: FactorStatus::Unknown,
@@ -161,12 +174,16 @@ fn factor_storage(required_gb: Option<u64>) -> CompatibilityFactor {
         None => CompatibilityFactor {
             id: "storage".to_string(),
             status: FactorStatus::Unknown,
-            summary: "Espacio en disco del requisito no parseado o no comparado con discos locales.".to_string(),
+            summary:
+                "Espacio en disco del requisito no parseado o no comparado con discos locales."
+                    .to_string(),
         },
         Some(_gb) => CompatibilityFactor {
             id: "storage".to_string(),
             status: FactorStatus::Unknown,
-            summary: "El espacio libre por unidad no se evalúa aún; comprueba el disco de instalación.".to_string(),
+            summary:
+                "El espacio libre por unidad no se evalúa aún; comprueba el disco de instalación."
+                    .to_string(),
         },
     }
 }
@@ -179,7 +196,9 @@ fn resolve_overall(
         return CompatibilityLevel::Unlikely;
     }
 
-    let has_fail = factors.iter().any(|f| matches!(f.status, FactorStatus::Fail));
+    let has_fail = factors
+        .iter()
+        .any(|f| matches!(f.status, FactorStatus::Fail));
     if has_fail {
         return CompatibilityLevel::Unlikely;
     }

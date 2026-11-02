@@ -71,8 +71,7 @@ pub async fn list_steam_catalog_page(
     .map_err(|e| e.to_string())
 }
 
-static FACETS_CACHE: Lazy<RwLock<Option<CatalogFilterFacets>>> =
-    Lazy::new(|| RwLock::new(None));
+static FACETS_CACHE: Lazy<RwLock<Option<CatalogFilterFacets>>> = Lazy::new(|| RwLock::new(None));
 
 /// Pre-carga las facetas de filtro en memoria en segundo plano al iniciar la aplicación.
 pub fn preload_facets_background(db: AppDb) {

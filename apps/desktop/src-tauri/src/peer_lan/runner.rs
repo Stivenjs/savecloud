@@ -377,7 +377,10 @@ async fn consume_transfer_session(session_id: &str) {
         "/inventory/transfer-sessions/{}/consume",
         urlencoding::encode(session_id)
     );
-    match crate::cloud::cloud_api(reqwest::Method::POST, &path).send().await {
+    match crate::cloud::cloud_api(reqwest::Method::POST, &path)
+        .send()
+        .await
+    {
         Ok(response) if response.status().is_success() || response.status().as_u16() == 404 => {}
         Ok(response) => log::warn!(
             "No se pudo limpiar la sesión de transferencia: HTTP {}",

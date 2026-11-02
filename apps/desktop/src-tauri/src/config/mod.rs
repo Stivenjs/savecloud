@@ -4,14 +4,14 @@
 //! utilizados para la configuración de entorno, biblioteca local y registros
 //! de sincronización.
 
-pub mod config_cmds;
 pub mod backup_snapshot;
 pub mod cloud_backup;
+pub mod config_cmds;
 pub mod encrypted_export;
 pub mod gamification;
 pub mod io;
-pub mod local_backup;
 mod library_reader;
+pub mod local_backup;
 pub mod models;
 pub mod paths;
 pub mod profile_cmds;

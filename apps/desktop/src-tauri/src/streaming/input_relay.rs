@@ -19,10 +19,10 @@ use gilrs::{Axis, Button, EventType};
 use crate::streaming::bindings::send_mouse_move_event;
 use crate::streaming::bindings::{
     send_controller_arrival_event, send_keyboard_event, send_mouse_button_event,
-    send_mouse_position_event, send_scroll_event, LiSendHighResScrollEvent,
-    BUTTON_ACTION_PRESS, BUTTON_ACTION_RELEASE, KEY_ACTION_DOWN, KEY_ACTION_UP,
-    LI_CCAP_ANALOG_TRIGGERS, LI_CCAP_RUMBLE, LI_CTYPE_XBOX, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_MIDDLE,
-    MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_X1, MOUSE_BUTTON_X2,
+    send_mouse_position_event, send_scroll_event, LiSendHighResScrollEvent, BUTTON_ACTION_PRESS,
+    BUTTON_ACTION_RELEASE, KEY_ACTION_DOWN, KEY_ACTION_UP, LI_CCAP_ANALOG_TRIGGERS, LI_CCAP_RUMBLE,
+    LI_CTYPE_XBOX, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_X1,
+    MOUSE_BUTTON_X2,
 };
 
 // Constantes XInput (NV_CONTROLLER_STATE flags)
@@ -337,7 +337,6 @@ pub fn release_all_keyboard_keys() {
     log::info!("[InputRelay] Teclas modificadoras liberadas en el Host Sunshine");
 }
 
-
 /// Transmite un movimiento relativo de ratón (esencial para juegos DirectInput/RawInput como League of Legends o FPS).
 #[inline]
 #[cfg(target_os = "windows")]
@@ -405,4 +404,3 @@ pub fn relay_high_res_scroll(amount: i16) {
         LiSendHighResScrollEvent(amount);
     }
 }
-

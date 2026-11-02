@@ -3,8 +3,8 @@
 //! Soporta especificaciones RFC 5987 y RFC 6266 (`Content-Disposition: filename*=UTF-8''...`),
 //! decodificación percent-encoding y resolución de nombres únicos con slugify.
 
-use std::path::Path;
 use reqwest::header::HeaderMap;
+use std::path::Path;
 
 use crate::sources::parser::slugify;
 
