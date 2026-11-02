@@ -9,9 +9,9 @@
 //!
 //! ## Orden de prioridad en el listado
 //!
-//! 1. **Tendencias** (`steam_catalog_trending`): siempre al frente, ordenadas por `rank ASC`.
-//! 2. **Resto del catálogo enriquecido**: `catalog_rank_score DESC` → `enriched_at DESC` → `app_id DESC`.
-//! 3. **Sin enriquecer** (`details_json IS NULL`, `score = 0`): al final, por `app_id DESC`.
+//! 1. **Catálogo enriquecido**: `catalog_rank_score DESC` → `enriched_at DESC` → `app_id DESC`.
+//! 2. **Sin enriquecer** (`catalog_rank_score IS NULL`): al final, por `app_id DESC`.
+//! Las tendencias se muestran en el hero; no desplazan el ranking de calidad del catálogo.
 //!
 //! ## Paginación estable
 //!
@@ -115,7 +115,8 @@ pub fn count_catalog_filtered(
     }
 
     let mut sql = "SELECT COUNT(*) FROM (\
-           SELECT 1 FROM steam_catalog_apps WHERE 1=1".to_string();
+           SELECT 1 FROM steam_catalog_apps WHERE 1=1"
+        .to_string();
     let mut params: Vec<String> = Vec::new();
     append_genre_filter(&mut sql, &mut params, genres, "steam_catalog_apps");
     append_tag_filter(&mut sql, &mut params, tags, "steam_catalog_apps");
@@ -129,17 +130,8 @@ pub fn count_catalog_filtered(
     Ok(count as u64)
 }
 
-/// Listado paginado usando split queries para máximo rendimiento.
-///
-/// # Algoritmo
-///
-/// 1. **Tendencias** — se extraen completas (pocos registros), se aplica el slice de paginación.
-/// 2. **Catálogo general** — ordenado por `catalog_rank_score DESC, enriched_at DESC, app_id DESC`.
-///    Este orden coincide con el índice `idx_catalog_rank_sort` definido en la migración,
-///    por lo que SQLite responde con un B-Tree scan sin `filesort`.
-///
-/// El resultado compuesto preserva calidad en todas las páginas: la página 100 tendrá
-/// juegos con score similar a la página 2, en lugar de mostrar apps sin metadatos.
+/// Lista todo el catálogo por puntuación persistida, manteniendo el mismo orden entre páginas.
+/// Las tendencias aparecen en el hero y no reciben prioridad absoluta en este listado.
 pub fn list_catalog_page_filtered(
     conn: &Connection,
     offset: u32,
@@ -147,74 +139,20 @@ pub fn list_catalog_page_filtered(
     genres: &[String],
     tags: &[String],
 ) -> Result<Vec<CatalogListItem>, rusqlite::Error> {
-    let mut results = Vec::new();
+    let mut sql = String::from("SELECT a.app_id, a.name FROM steam_catalog_apps a WHERE 1=1");
+    let mut params: Vec<String> = Vec::new();
+    append_genre_filter(&mut sql, &mut params, genres, "a");
+    append_tag_filter(&mut sql, &mut params, tags, "a");
+    sql.push_str(" ORDER BY a.catalog_rank_score DESC, a.enriched_at DESC, a.app_id DESC");
+    sql.push_str(&format!(" LIMIT {limit} OFFSET {offset}"));
 
-    let mut t_sql = String::from(
-        "SELECT a.app_id, a.name \
-         FROM steam_catalog_trending tr \
-         JOIN steam_catalog_apps a ON a.app_id = tr.app_id \
-         WHERE 1=1",
-    );
-    let mut t_params: Vec<String> = Vec::new();
-    append_genre_filter(&mut t_sql, &mut t_params, genres, "a");
-    append_tag_filter(&mut t_sql, &mut t_params, tags, "a");
-    t_sql.push_str(" ORDER BY tr.rank ASC");
-
-    let mut stmt_t = conn.prepare(&t_sql)?;
-    let trending_items: Vec<CatalogListItem> = if t_params.is_empty() {
-        stmt_t
-            .query_map([], map_catalog_row)?
-            .filter_map(Result::ok)
-            .collect()
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = if params.is_empty() {
+        stmt.query_map([], map_catalog_row)?
     } else {
-        stmt_t
-            .query_map(params_from_iter(t_params.iter()), map_catalog_row)?
-            .filter_map(Result::ok)
-            .collect()
+        stmt.query_map(params_from_iter(params.iter()), map_catalog_row)?
     };
-
-    let t_count = trending_items.len() as u32;
-
-    if offset < t_count {
-        let take = std::cmp::min(limit, t_count - offset);
-        results.extend(
-            trending_items
-                .into_iter()
-                .skip(offset as usize)
-                .take(take as usize),
-        );
-    }
-
-    if results.len() < limit as usize {
-        let remaining_limit = limit - results.len() as u32;
-        let normal_offset = offset.saturating_sub(t_count);
-
-        let mut n_sql = String::from(
-            "SELECT a.app_id, a.name \
-             FROM steam_catalog_apps a \
-             WHERE NOT EXISTS \
-               (SELECT 1 FROM steam_catalog_trending WHERE app_id = a.app_id)",
-        );
-        let mut n_params: Vec<String> = Vec::new();
-        append_genre_filter(&mut n_sql, &mut n_params, genres, "a");
-        append_tag_filter(&mut n_sql, &mut n_params, tags, "a");
-
-        n_sql.push_str(" ORDER BY a.catalog_rank_score DESC, a.enriched_at DESC, a.app_id DESC");
-        n_sql.push_str(&format!(" LIMIT {remaining_limit} OFFSET {normal_offset}"));
-
-        let mut stmt_n = conn.prepare(&n_sql)?;
-        let normal_items = if n_params.is_empty() {
-            stmt_n.query_map([], map_catalog_row)?
-        } else {
-            stmt_n.query_map(params_from_iter(n_params.iter()), map_catalog_row)?
-        };
-
-        for item in normal_items {
-            results.push(item?);
-        }
-    }
-
-    Ok(results)
+    rows.collect()
 }
 
 /// Página completa: total acotado + items.
@@ -346,12 +284,12 @@ pub fn filter_facets(conn: &Connection) -> Result<CatalogFilterFacets, rusqlite:
 }
 
 /// Nombre del listado local (`steam_catalog_apps.name`), distinto del título localizado de Store API.
-pub fn get_catalog_listing_name(conn: &Connection, app_id: u32) -> Result<Option<String>, rusqlite::Error> {
+pub fn get_catalog_listing_name(
+    conn: &Connection,
+    app_id: u32,
+) -> Result<Option<String>, rusqlite::Error> {
     let mut stmt = conn.prepare_cached("SELECT name FROM steam_catalog_apps WHERE app_id = ?1")?;
-    match stmt.query_row(
-        [app_id],
-        |row| row.get::<_, String>(0),
-    ) {
+    match stmt.query_row([app_id], |row| row.get::<_, String>(0)) {
         Ok(name) => Ok(Some(name)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(e),

@@ -24,11 +24,17 @@ export interface SteamSeedRepository {
   }>;
   getWorkerControl(ownerId: string): Promise<{ paused: boolean; updatedAt: string | null }>;
   setWorkerPaused(ownerId: string, paused: boolean): Promise<{ paused: boolean; updatedAt: string | null }>;
-  listBatchKeys(ownerId: string, maxKeys?: number, cursor?: string): Promise<{ keys: string[]; nextCursor?: string }>;
+  listBatchKeys(
+    ownerId: string,
+    maxKeys?: number,
+    cursor?: string,
+    startAfter?: string
+  ): Promise<{ keys: string[]; nextCursor?: string }>;
   listReviewBatchKeys(
     ownerId: string,
     maxKeys?: number,
-    cursor?: string
+    cursor?: string,
+    startAfter?: string
   ): Promise<{
     keys: string[];
     nextCursor?: string;

@@ -1,35 +1,32 @@
+use super::request::seed_api_request;
+use super::request::validate_presigned_url;
 use super::types::*;
 use crate::cloud::api_error;
-use crate::commands::sync::api::api_request;
-use crate::commands::sync::context::ApiContext;
-use crate::network::API_CLIENT;
+use crate::network::DATA_CLIENT;
 use crate::sqlite::AppDb;
 use crate::steam_catalog::trending::replace_trending_app_ids;
 use std::collections::HashMap;
 
 /// Obtiene una página del listado de batches S3.
 pub async fn list_batch_page(
-    ctx: &ApiContext,
     list_cursor: Option<&str>,
+    start_after: Option<&str>,
 ) -> Result<SteamSeedBatchesResponse, String> {
-    let path = match list_cursor {
-        Some(c) => format!(
+    let path = match (list_cursor, start_after) {
+        (Some(c), _) => format!(
             "/steam-seed/batches?maxKeys=200&cursor={}",
             urlencoding::encode(c)
         ),
-        None => "/steam-seed/batches?maxKeys=200".to_string(),
+        (None, Some(key)) => format!(
+            "/steam-seed/batches?maxKeys=200&startAfter={}",
+            urlencoding::encode(key)
+        ),
+        (None, None) => "/steam-seed/batches?maxKeys=200".to_string(),
     };
 
-    let list_res = api_request(
-        &ctx.base_url,
-        &ctx.user_id,
-        &ctx.api_key,
-        "GET",
-        &path,
-        None,
-    )
-    .await
-    .map_err(|e| format!("steam-seed/batches: {}", e))?;
+    let list_res = seed_api_request(reqwest::Method::GET, &path, None)
+        .await
+        .map_err(|e| format!("steam-seed/batches: {}", e))?;
 
     if !list_res.status().is_success() {
         return Err(api_error::response_message(list_res).await);
@@ -39,27 +36,24 @@ pub async fn list_batch_page(
 
 /// Obtiene una página del listado de batches de reviews S3.
 pub async fn list_reviews_batch_page(
-    ctx: &ApiContext,
     list_cursor: Option<&str>,
+    start_after: Option<&str>,
 ) -> Result<SteamSeedBatchesResponse, String> {
-    let path = match list_cursor {
-        Some(c) => format!(
+    let path = match (list_cursor, start_after) {
+        (Some(c), _) => format!(
             "/steam-seed/reviews/batches?maxKeys=200&cursor={}",
             urlencoding::encode(c)
         ),
-        None => "/steam-seed/reviews/batches?maxKeys=200".to_string(),
+        (None, Some(key)) => format!(
+            "/steam-seed/reviews/batches?maxKeys=200&startAfter={}",
+            urlencoding::encode(key)
+        ),
+        (None, None) => "/steam-seed/reviews/batches?maxKeys=200".to_string(),
     };
 
-    let list_res = api_request(
-        &ctx.base_url,
-        &ctx.user_id,
-        &ctx.api_key,
-        "GET",
-        &path,
-        None,
-    )
-    .await
-    .map_err(|e| format!("steam-seed/reviews/batches: {}", e))?;
+    let list_res = seed_api_request(reqwest::Method::GET, &path, None)
+        .await
+        .map_err(|e| format!("steam-seed/reviews/batches: {}", e))?;
 
     if !list_res.status().is_success() {
         return Err(api_error::response_message(list_res).await);
@@ -69,7 +63,6 @@ pub async fn list_reviews_batch_page(
 
 /// Recopila claves de batch en orden lexicográfico ascendente desde el cursor actual.
 pub async fn collect_cursor_keys(
-    ctx: &ApiContext,
     last_key: Option<&str>,
     max_batches: u32,
 ) -> Result<Vec<String>, String> {
@@ -77,9 +70,13 @@ pub async fn collect_cursor_keys(
     let mut list_cursor: Option<String> = None;
 
     'pages: loop {
-        let page = list_batch_page(ctx, list_cursor.as_deref()).await?;
+        let page = list_batch_page(
+            list_cursor.as_deref(),
+            list_cursor.is_none().then_some(last_key).flatten(),
+        )
+        .await?;
         for k in page.keys {
-            if last_key.is_some_and(|lk| k.as_str() <= lk) {
+            if list_cursor.is_none() && last_key.is_some_and(|lk| k.as_str() <= lk) {
                 continue;
             }
             collected.push(k);
@@ -97,7 +94,6 @@ pub async fn collect_cursor_keys(
 
 /// Recopila claves de batch de reviews en orden lexicográfico ascendente.
 pub async fn collect_cursor_review_keys(
-    ctx: &ApiContext,
     last_key: Option<&str>,
     max_batches: u32,
 ) -> Result<Vec<String>, String> {
@@ -105,9 +101,13 @@ pub async fn collect_cursor_review_keys(
     let mut list_cursor: Option<String> = None;
 
     'pages: loop {
-        let page = list_reviews_batch_page(ctx, list_cursor.as_deref()).await?;
+        let page = list_reviews_batch_page(
+            list_cursor.as_deref(),
+            list_cursor.is_none().then_some(last_key).flatten(),
+        )
+        .await?;
         for k in page.keys {
-            if last_key.is_some_and(|lk| k.as_str() <= lk) {
+            if list_cursor.is_none() && last_key.is_some_and(|lk| k.as_str() <= lk) {
                 continue;
             }
             collected.push(k);
@@ -124,11 +124,11 @@ pub async fn collect_cursor_review_keys(
 }
 
 /// Obtiene la lista completa de claves de batch disponibles en la nube.
-pub async fn fetch_all_batch_keys(ctx: &ApiContext) -> Result<Vec<String>, String> {
+pub async fn fetch_all_batch_keys() -> Result<Vec<String>, String> {
     let mut all = Vec::new();
     let mut list_cursor: Option<String> = None;
     loop {
-        let page = list_batch_page(ctx, list_cursor.as_deref()).await?;
+        let page = list_batch_page(list_cursor.as_deref(), None).await?;
         all.extend(page.keys);
         match page.next_cursor {
             Some(c) => list_cursor = Some(c),
@@ -139,11 +139,11 @@ pub async fn fetch_all_batch_keys(ctx: &ApiContext) -> Result<Vec<String>, Strin
 }
 
 /// Obtiene todas las claves de batch de reviews disponibles en la nube.
-pub async fn fetch_all_review_batch_keys(ctx: &ApiContext) -> Result<Vec<String>, String> {
+pub async fn fetch_all_review_batch_keys() -> Result<Vec<String>, String> {
     let mut all = Vec::new();
     let mut list_cursor: Option<String> = None;
     loop {
-        let page = list_reviews_batch_page(ctx, list_cursor.as_deref()).await?;
+        let page = list_reviews_batch_page(list_cursor.as_deref(), None).await?;
         all.extend(page.keys);
         match page.next_cursor {
             Some(c) => list_cursor = Some(c),
@@ -155,11 +155,10 @@ pub async fn fetch_all_review_batch_keys(ctx: &ApiContext) -> Result<Vec<String>
 
 /// Recopila claves de batch priorizando las más recientes.
 pub async fn collect_newest_first_keys(
-    ctx: &ApiContext,
     watermark: Option<&str>,
     max_batches: u32,
 ) -> Result<Vec<String>, String> {
-    let mut all = fetch_all_batch_keys(ctx).await?;
+    let mut all = fetch_all_batch_keys().await?;
     all.sort_unstable_by(|a, b| b.cmp(a));
     if let Some(w) = watermark {
         all.retain(|k| k.as_str() < w);
@@ -170,11 +169,10 @@ pub async fn collect_newest_first_keys(
 
 /// Recopila claves de batch de reviews priorizando las más recientes.
 pub async fn collect_newest_first_review_keys(
-    ctx: &ApiContext,
     watermark: Option<&str>,
     max_batches: u32,
 ) -> Result<Vec<String>, String> {
-    let mut all = fetch_all_review_batch_keys(ctx).await?;
+    let mut all = fetch_all_review_batch_keys().await?;
     all.sort_unstable_by(|a, b| b.cmp(a));
     if let Some(w) = watermark {
         all.retain(|k| k.as_str() < w);
@@ -186,7 +184,6 @@ pub async fn collect_newest_first_review_keys(
 /// Resuelve las URLs de descarga pre-firmadas para un conjunto de claves en una
 /// sola llamada al API (bulk).
 pub async fn resolve_batch_download_urls(
-    ctx: &ApiContext,
     keys: &[String],
 ) -> Result<HashMap<String, String>, String> {
     if keys.is_empty() {
@@ -194,11 +191,8 @@ pub async fn resolve_batch_download_urls(
     }
 
     let body = serde_json::json!({ "keys": keys }).to_string();
-    let res = api_request(
-        &ctx.base_url,
-        &ctx.user_id,
-        &ctx.api_key,
-        "POST",
+    let res = seed_api_request(
+        reqwest::Method::POST,
         "/steam-seed/batch/download-url",
         Some(body.as_bytes()),
     )
@@ -220,7 +214,6 @@ pub async fn resolve_batch_download_urls(
 
 /// Resuelve URLs pre-firmadas para batches de reviews.
 pub async fn resolve_reviews_batch_download_urls(
-    ctx: &ApiContext,
     keys: &[String],
 ) -> Result<HashMap<String, String>, String> {
     if keys.is_empty() {
@@ -228,11 +221,8 @@ pub async fn resolve_reviews_batch_download_urls(
     }
 
     let body = serde_json::json!({ "keys": keys }).to_string();
-    let res = api_request(
-        &ctx.base_url,
-        &ctx.user_id,
-        &ctx.api_key,
-        "POST",
+    let res = seed_api_request(
+        reqwest::Method::POST,
         "/steam-seed/reviews/batch/download-url",
         Some(body.as_bytes()),
     )
@@ -254,15 +244,9 @@ pub async fn resolve_reviews_batch_download_urls(
 
 /// Descarga `priority_appids.jsonl` desde la nube y reemplaza
 /// `steam_catalog_trending` en SQLite.
-pub async fn sync_apply_cloud_priority_trending(
-    db: &AppDb,
-    ctx: &ApiContext,
-) -> Result<usize, String> {
-    let url_res = api_request(
-        &ctx.base_url,
-        &ctx.user_id,
-        &ctx.api_key,
-        "POST",
+pub async fn sync_apply_cloud_priority_trending(db: &AppDb) -> Result<usize, String> {
+    let url_res = seed_api_request(
+        reqwest::Method::POST,
         "/steam-seed/priority/download-url",
         None,
     )
@@ -276,7 +260,9 @@ pub async fn sync_apply_cloud_priority_trending(
     let dl: SteamSeedPriorityDownloadUrlResponse =
         url_res.json().await.map_err(|e| e.to_string())?;
 
-    let content = API_CLIENT
+    validate_presigned_url(&dl.download_url)?;
+
+    let content = DATA_CLIENT
         .get(&dl.download_url)
         .send()
         .await

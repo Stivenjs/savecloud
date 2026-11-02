@@ -1,6 +1,7 @@
 use super::db::apply_seed_updates;
+use super::request::validate_presigned_url;
 use super::types::{SteamReviewsBatchLine, SteamSeedBatchLine};
-use crate::network::API_CLIENT;
+use crate::network::DATA_CLIENT;
 use crate::sqlite::AppDb;
 use futures_util::StreamExt;
 use std::sync::Arc;
@@ -30,6 +31,7 @@ pub async fn stream_import_batch(
     write_lock: Arc<Mutex<()>>,
 ) -> Result<u32, String> {
     let chunk_size = chunk_size.unwrap_or(DEFAULT_CHUNK_SIZE);
+    validate_presigned_url(download_url_str)?;
 
     if let (Some(a), Some(c)) = (app, ctx) {
         let _ = a.emit(
@@ -47,7 +49,7 @@ pub async fn stream_import_batch(
         );
     }
 
-    let response = API_CLIENT
+    let response = DATA_CLIENT
         .get(download_url_str)
         .send()
         .await
@@ -69,7 +71,11 @@ pub async fn stream_import_batch(
     let worker_count = num_cpus::get().clamp(2, 8);
 
     let mut raw_lines: Vec<String> = Vec::with_capacity(4096);
-    while let Ok(Some(line)) = lines_reader.next_line().await {
+    while let Some(line) = lines_reader
+        .next_line()
+        .await
+        .map_err(|e| format!("Error leyendo batch {batch_key}: {e}"))?
+    {
         let trimmed = line.trim().to_string();
         if !trimmed.is_empty() {
             raw_lines.push(trimmed);
@@ -92,18 +98,20 @@ pub async fn stream_import_batch(
 
     let mut parse_handles = Vec::with_capacity(chunks.len());
     for chunk in chunks {
+        let parse_batch_key = batch_key.to_string();
         parse_handles.push(tokio::task::spawn_blocking(move || {
             let mut out: Vec<(u32, serde_json::Value)> = Vec::with_capacity(chunk.len());
             for line in &chunk {
-                if let Ok(parsed) = serde_json::from_str::<SteamSeedBatchLine>(line) {
-                    if parsed.steam_success == Some(true) {
-                        if let Some(data) = parsed.data {
-                            out.push((parsed.app_id, data));
-                        }
+                let Ok(parsed) = serde_json::from_str::<SteamSeedBatchLine>(line) else {
+                    return Err(format!("Línea JSON inválida en batch {parse_batch_key}"));
+                };
+                if parsed.steam_success == Some(true) {
+                    if let Some(data) = parsed.data {
+                        out.push((parsed.app_id, data));
                     }
                 }
             }
-            out
+            Ok::<_, String>(out)
         }));
     }
 
@@ -111,8 +119,9 @@ pub async fn stream_import_batch(
     let mut all_updates: Vec<(u32, serde_json::Value)> = Vec::with_capacity(total_lines);
     for handle in parse_handles {
         match handle.await {
-            Ok(partial) => all_updates.extend(partial),
-            Err(e) => eprintln!("[steam-seed] Worker de parseo falló: {}", e),
+            Ok(Ok(partial)) => all_updates.extend(partial),
+            Ok(Err(e)) => return Err(e),
+            Err(e) => return Err(format!("Worker de parseo falló en batch {batch_key}: {e}")),
         }
     }
 
@@ -179,6 +188,8 @@ pub async fn stream_import_reviews_batch(
     download_url_str: &str,
     write_lock: Arc<Mutex<()>>,
 ) -> Result<u32, String> {
+    validate_presigned_url(download_url_str)?;
+
     if let (Some(a), Some(c)) = (app, ctx) {
         let _ = a.emit(
             "steam-seed-import-progress",
@@ -195,7 +206,7 @@ pub async fn stream_import_reviews_batch(
         );
     }
 
-    let response = API_CLIENT
+    let response = DATA_CLIENT
         .get(download_url_str)
         .send()
         .await
@@ -215,17 +226,21 @@ pub async fn stream_import_reviews_batch(
     let mut lines_reader = BufReader::new(stream_reader).lines();
 
     let mut updates: Vec<(u32, super::types::SteamReviewSummary)> = Vec::with_capacity(4096);
-    while let Ok(Some(line)) = lines_reader.next_line().await {
+    while let Some(line) = lines_reader
+        .next_line()
+        .await
+        .map_err(|e| format!("Error leyendo batch de reviews {batch_key}: {e}"))?
+    {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
 
-        if let Ok(parsed) = serde_json::from_str::<SteamReviewsBatchLine>(trimmed) {
-            if parsed.reviews_success == Some(true) {
-                if let Some(summary) = parsed.summary {
-                    updates.push((parsed.app_id, summary));
-                }
+        let parsed = serde_json::from_str::<SteamReviewsBatchLine>(trimmed)
+            .map_err(|e| format!("Línea JSON inválida en batch de reviews {batch_key}: {e}"))?;
+        if parsed.reviews_success == Some(true) {
+            if let Some(summary) = parsed.summary {
+                updates.push((parsed.app_id, summary));
             }
         }
     }

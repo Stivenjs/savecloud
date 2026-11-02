@@ -141,7 +141,12 @@ export async function registerSteamSeedRoutes(
         deps.resolveCloudStorageScopeUseCase
       );
       const maxKeys = request.query.maxKeys ?? 200;
-      const out = await deps.steamSeedRepository.listBatchKeys(ownerId, maxKeys, request.query.cursor);
+      const out = await deps.steamSeedRepository.listBatchKeys(
+        ownerId,
+        maxKeys,
+        request.query.cursor,
+        request.query.startAfter
+      );
       return reply.send(out);
     }
   );
@@ -157,7 +162,12 @@ export async function registerSteamSeedRoutes(
         deps.resolveCloudStorageScopeUseCase
       );
       const maxKeys = request.query.maxKeys ?? 200;
-      const out = await deps.steamSeedRepository.listReviewBatchKeys(ownerId, maxKeys, request.query.cursor);
+      const out = await deps.steamSeedRepository.listReviewBatchKeys(
+        ownerId,
+        maxKeys,
+        request.query.cursor,
+        request.query.startAfter
+      );
       return reply.send(out);
     }
   );

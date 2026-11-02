@@ -60,6 +60,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("sql/025_download_jobs.sql"),
     include_str!("sql/026_catalog_relationships.sql"),
     include_str!("sql/027_fix_facets_deduplication.sql"),
+    include_str!("sql/028_retry_steam_seed_import.sql"),
 ];
 
 /// Ejecuta todas las migraciones pendientes.

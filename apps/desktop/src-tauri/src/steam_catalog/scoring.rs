@@ -31,13 +31,13 @@ use rayon::prelude::*;
 
 pub const MAX_SCORE: i64 = 1_000_000;
 
-const WEIGHT_COMMUNITY: i64 = 450_000;
-const WEIGHT_CRITICAL: i64 = 200_000;
-const WEIGHT_VIP_STUDIO: i64 = 250_000;
-const WEIGHT_QUALITY: i64 = 100_000;
-const WEIGHT_MEDIA: i64 = 50_000;
-const WEIGHT_RECENCY: i64 = 50_000;
-const WEIGHT_REVIEWS: i64 = 150_000;
+const WEIGHT_COMMUNITY: i64 = 350_000;
+const WEIGHT_CRITICAL: i64 = 100_000;
+const WEIGHT_VIP_STUDIO: i64 = 25_000;
+const WEIGHT_QUALITY: i64 = 25_000;
+const WEIGHT_MEDIA: i64 = 25_000;
+const WEIGHT_RECENCY: i64 = 25_000;
+const WEIGHT_REVIEWS: i64 = 450_000;
 
 static VIP_STUDIOS: OnceLock<Vec<String>> = OnceLock::new();
 
@@ -138,11 +138,13 @@ fn media_score(data: &serde_json::Value) -> i64 {
 }
 
 fn recency_score(data: &serde_json::Value, current_year: i32) -> i64 {
-    let year = data["release_date"]["date"]
+    let Some(year) = data["release_date"]["date"]
         .as_str()
         .and_then(|s| s.split_whitespace().last())
         .and_then(|y| y.parse::<i32>().ok())
-        .unwrap_or(current_year);
+    else {
+        return 0;
+    };
 
     let age = (current_year - year).max(0) as i64;
     (WEIGHT_RECENCY - age * 5_000).max(0)

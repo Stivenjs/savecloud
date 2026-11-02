@@ -1,17 +1,78 @@
 pub mod api;
 pub mod commands;
 pub mod db;
+mod request;
 pub mod streaming;
 pub mod types;
 
 use tauri::Emitter;
 
-use crate::commands::sync::context::ApiContext;
 use crate::sqlite::AppDb;
+use std::collections::HashMap;
 use types::*;
 
 /// Límite de rondas por ejecución para prevenir bucles infinitos.
 pub const STEAM_SEED_IMPORT_MAX_ROUNDS: u32 = 5000;
+
+async fn checkpoint_import_before_failure(
+    db: &AppDb,
+    state: &mut SteamSeedImportState,
+    strategy: &str,
+    keys: &[String],
+    failed_index: usize,
+) -> Result<(), String> {
+    if failed_index > 0 {
+        let previous_key = keys[failed_index - 1].clone();
+        match strategy {
+            "cursor" => state.cursor_last_key = Some(previous_key),
+            "newest_first" => state.newest_watermark = Some(previous_key),
+            _ => return Err("estrategia de import no soportada".to_string()),
+        }
+    }
+    state.strategy = strategy.to_string();
+
+    let db_save = db.clone();
+    let state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        db_save.with_conn(|conn| {
+            db::save_import_state(conn, &state)?;
+            Ok(())
+        })
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(|error: crate::sqlite::error::SqliteError| error.to_string())
+}
+
+async fn checkpoint_reviews_before_failure(
+    db: &AppDb,
+    state: &mut SteamSeedReviewsImportState,
+    strategy: &str,
+    keys: &[String],
+    failed_index: usize,
+) -> Result<(), String> {
+    if failed_index > 0 {
+        let previous_key = keys[failed_index - 1].clone();
+        match strategy {
+            "cursor" => state.cursor_last_key = Some(previous_key),
+            "newest_first" => state.newest_watermark = Some(previous_key),
+            _ => return Err("estrategia de import de reviews no soportada".to_string()),
+        }
+    }
+    state.strategy = strategy.to_string();
+
+    let db_save = db.clone();
+    let state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        db_save.with_conn(|conn| {
+            db::save_reviews_import_state(conn, &state)?;
+            Ok(())
+        })
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(|error: crate::sqlite::error::SqliteError| error.to_string())
+}
 
 /// Devuelve la clave de batch local más avanzada conocida.
 pub fn effective_local_max_imported(state: &SteamSeedImportState) -> Option<String> {
@@ -80,7 +141,6 @@ pub fn parse_import_strategy(s: Option<&str>) -> Result<String, String> {
 pub async fn import_cloud_seed_one_round(
     app: Option<&tauri::AppHandle>,
     db: &AppDb,
-    ctx: &ApiContext,
     max_batches: u32,
     requested_strategy: &str,
     concurrency: usize,
@@ -119,16 +179,11 @@ pub async fn import_cloud_seed_one_round(
 
     let to_process = match requested_strategy {
         "cursor" => {
-            api::collect_cursor_keys(ctx, import_state.cursor_last_key.as_deref(), max_batches)
-                .await?
+            api::collect_cursor_keys(import_state.cursor_last_key.as_deref(), max_batches).await?
         }
         "newest_first" => {
-            api::collect_newest_first_keys(
-                ctx,
-                import_state.newest_watermark.as_deref(),
-                max_batches,
-            )
-            .await?
+            api::collect_newest_first_keys(import_state.newest_watermark.as_deref(), max_batches)
+                .await?
         }
         _ => return Err("estrategia de import no soportada".to_string()),
     };
@@ -141,7 +196,7 @@ pub async fn import_cloud_seed_one_round(
     }
 
     // Resolvemos las URLs en bloque para ahorrar latencia
-    let url_map = api::resolve_batch_download_urls(ctx, &to_process).await?;
+    let url_map = api::resolve_batch_download_urls(&to_process).await?;
 
     let total_to_process = to_process.len() as u32;
 
@@ -155,7 +210,7 @@ pub async fn import_cloud_seed_one_round(
     // Candado compartido para serializar las escrituras a SQLite
     let db_write_lock = Arc::new(Mutex::new(()));
 
-    stream::iter(
+    let outcomes = stream::iter(
         to_process
             .iter()
             .enumerate()
@@ -170,15 +225,23 @@ pub async fn import_cloud_seed_one_round(
         let write_lock = Arc::clone(&db_write_lock);
 
         async move {
-            if let Some(url) = url {
-                let progress_ctx = streaming::StreamProgressContext {
-                    iteration,
-                    total_batches_this_round: total_to_process,
-                    global_total_batches: total_batches_history.saturating_add(idx as u32),
-                    global_total_rows: total_rows_history
-                        .saturating_add(rows_updated.load(Ordering::Relaxed)),
-                };
+            let Some(url) = url else {
+                return (
+                    key.clone(),
+                    Err(format!("No se obtuvo URL de descarga para el batch {key}")),
+                );
+            };
 
+            let progress_ctx = streaming::StreamProgressContext {
+                iteration,
+                total_batches_this_round: total_to_process,
+                global_total_batches: total_batches_history.saturating_add(idx as u32),
+                global_total_rows: total_rows_history
+                    .saturating_add(rows_updated.load(Ordering::Relaxed)),
+            };
+
+            let mut attempt = 0_u32;
+            loop {
                 match streaming::stream_import_batch(
                     app.as_ref(),
                     Some(&progress_ctx),
@@ -186,23 +249,56 @@ pub async fn import_cloud_seed_one_round(
                     &db,
                     &url,
                     None,
-                    write_lock,
+                    Arc::clone(&write_lock),
                 )
                 .await
                 {
                     Ok(n) => {
                         rows_updated.fetch_add(n, Ordering::Relaxed);
+                        return (key, Ok(()));
                     }
-                    Err(e) => {
-                        eprintln!("[steam-seed] Error en batch {}: {}", key, e);
+                    Err(error) if attempt < 2 => {
+                        log::warn!(
+                            "[steam-seed] Reintento {} para batch {}: {}",
+                            attempt + 1,
+                            key,
+                            error
+                        );
+                        tokio::time::sleep(std::time::Duration::from_millis(500 << attempt)).await;
+                        attempt += 1;
+                    }
+                    Err(error) => {
+                        return (key.clone(), Err(format!("Error en batch {key}: {error}")))
                     }
                 }
             }
         }
     })
     .buffer_unordered(concurrency)
-    .collect::<()>()
+    .collect::<Vec<_>>()
     .await;
+
+    let failed_batches: HashMap<String, String> = outcomes
+        .into_iter()
+        .filter_map(|(key, result)| result.err().map(|error| (key, error)))
+        .collect();
+    if let Some((failed_index, error)) = to_process
+        .iter()
+        .enumerate()
+        .find_map(|(index, key)| failed_batches.get(key).map(|error| (index, error.clone())))
+    {
+        checkpoint_import_before_failure(
+            db,
+            &mut import_state,
+            requested_strategy,
+            &to_process,
+            failed_index,
+        )
+        .await?;
+        return Err(format!(
+            "{error}. El progreso correcto quedó guardado; vuelve a intentar."
+        ));
+    }
 
     let rows_updated = rows_updated.load(Ordering::Relaxed);
 
@@ -242,7 +338,6 @@ pub async fn import_cloud_seed_one_round(
     let reviews_result = import_cloud_seed_reviews_one_round(
         app,
         db,
-        ctx,
         max_batches,
         requested_strategy,
         concurrency,
@@ -266,7 +361,6 @@ pub async fn import_cloud_seed_one_round(
 async fn import_cloud_seed_reviews_one_round(
     app: Option<&tauri::AppHandle>,
     db: &AppDb,
-    ctx: &ApiContext,
     max_batches: u32,
     requested_strategy: &str,
     concurrency: usize,
@@ -290,16 +384,11 @@ async fn import_cloud_seed_reviews_one_round(
 
     let to_process = match requested_strategy {
         "cursor" => {
-            api::collect_cursor_review_keys(
-                ctx,
-                import_state.cursor_last_key.as_deref(),
-                max_batches,
-            )
-            .await?
+            api::collect_cursor_review_keys(import_state.cursor_last_key.as_deref(), max_batches)
+                .await?
         }
         "newest_first" => {
             api::collect_newest_first_review_keys(
-                ctx,
                 import_state.newest_watermark.as_deref(),
                 max_batches,
             )
@@ -315,7 +404,7 @@ async fn import_cloud_seed_reviews_one_round(
         });
     }
 
-    let url_map = api::resolve_reviews_batch_download_urls(ctx, &to_process).await?;
+    let url_map = api::resolve_reviews_batch_download_urls(&to_process).await?;
     let total_to_process = to_process.len() as u32;
 
     use futures_util::stream::{self, StreamExt};
@@ -326,7 +415,7 @@ async fn import_cloud_seed_reviews_one_round(
     let rows_updated = Arc::new(AtomicU32::new(0));
     let db_write_lock = Arc::new(Mutex::new(()));
 
-    stream::iter(
+    let outcomes = stream::iter(
         to_process
             .iter()
             .enumerate()
@@ -341,38 +430,84 @@ async fn import_cloud_seed_reviews_one_round(
         let write_lock = Arc::clone(&db_write_lock);
 
         async move {
-            if let Some(url) = url {
-                let progress_ctx = streaming::StreamProgressContext {
-                    iteration,
-                    total_batches_this_round: total_to_process,
-                    global_total_batches: total_batches_history.saturating_add(idx as u32),
-                    global_total_rows: total_rows_history
-                        .saturating_add(rows_updated.load(Ordering::Relaxed)),
-                };
+            let Some(url) = url else {
+                return (
+                    key.clone(),
+                    Err(format!(
+                        "No se obtuvo URL de descarga para el batch de reviews {key}"
+                    )),
+                );
+            };
 
+            let progress_ctx = streaming::StreamProgressContext {
+                iteration,
+                total_batches_this_round: total_to_process,
+                global_total_batches: total_batches_history.saturating_add(idx as u32),
+                global_total_rows: total_rows_history
+                    .saturating_add(rows_updated.load(Ordering::Relaxed)),
+            };
+
+            let mut attempt = 0_u32;
+            loop {
                 match streaming::stream_import_reviews_batch(
                     app.as_ref(),
                     Some(&progress_ctx),
                     &key,
                     &db,
                     &url,
-                    write_lock,
+                    Arc::clone(&write_lock),
                 )
                 .await
                 {
                     Ok(n) => {
                         rows_updated.fetch_add(n, Ordering::Relaxed);
+                        return (key, Ok(()));
                     }
-                    Err(e) => {
-                        eprintln!("[steam-seed] Error en reviews batch {}: {}", key, e);
+                    Err(error) if attempt < 2 => {
+                        log::warn!(
+                            "[steam-seed] Reintento {} para batch de reviews {}: {}",
+                            attempt + 1,
+                            key,
+                            error
+                        );
+                        tokio::time::sleep(std::time::Duration::from_millis(500 << attempt)).await;
+                        attempt += 1;
+                    }
+                    Err(error) => {
+                        return (
+                            key.clone(),
+                            Err(format!("Error en reviews batch {key}: {error}")),
+                        );
                     }
                 }
             }
         }
     })
     .buffer_unordered(concurrency)
-    .collect::<()>()
+    .collect::<Vec<_>>()
     .await;
+
+    let failed_batches: HashMap<String, String> = outcomes
+        .into_iter()
+        .filter_map(|(key, result)| result.err().map(|error| (key, error)))
+        .collect();
+    if let Some((failed_index, error)) = to_process
+        .iter()
+        .enumerate()
+        .find_map(|(index, key)| failed_batches.get(key).map(|error| (index, error.clone())))
+    {
+        checkpoint_reviews_before_failure(
+            db,
+            &mut import_state,
+            requested_strategy,
+            &to_process,
+            failed_index,
+        )
+        .await?;
+        return Err(format!(
+            "{error}. El progreso correcto quedó guardado; vuelve a intentar."
+        ));
+    }
 
     let rows_updated = rows_updated.load(Ordering::Relaxed);
 

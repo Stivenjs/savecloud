@@ -237,7 +237,8 @@ export class S3SteamSeedRepository implements SteamSeedRepositoryPort {
     ownerId: string,
     suffixPrefix: string,
     maxKeys: number = 200,
-    continuationToken?: string
+    continuationToken?: string,
+    startAfter?: string
   ): Promise<{ keys: string[]; nextCursor?: string }> {
     const prefix = `${this.basePrefix(ownerId)}${suffixPrefix}`;
     const out = await this.s3.send(
@@ -246,6 +247,7 @@ export class S3SteamSeedRepository implements SteamSeedRepositoryPort {
         Prefix: prefix,
         MaxKeys: Math.max(1, Math.min(1000, maxKeys)),
         ContinuationToken: continuationToken,
+        StartAfter: continuationToken ? undefined : startAfter,
       })
     );
     const keys = (out.Contents ?? []).map((x) => x.Key).filter((k): k is string => !!k);
@@ -469,9 +471,10 @@ export class S3SteamSeedRepository implements SteamSeedRepositoryPort {
   async listBatchKeys(
     ownerId: string,
     maxKeys: number = 200,
-    continuationToken?: string
+    continuationToken?: string,
+    startAfter?: string
   ): Promise<{ keys: string[]; nextCursor?: string }> {
-    return this.listSeedKeysByPrefix(ownerId, "batches/", maxKeys, continuationToken);
+    return this.listSeedKeysByPrefix(ownerId, "batches/", maxKeys, continuationToken, startAfter);
   }
 
   /**
@@ -480,9 +483,10 @@ export class S3SteamSeedRepository implements SteamSeedRepositoryPort {
   async listReviewBatchKeys(
     ownerId: string,
     maxKeys: number = 200,
-    continuationToken?: string
+    continuationToken?: string,
+    startAfter?: string
   ): Promise<{ keys: string[]; nextCursor?: string }> {
-    return this.listSeedKeysByPrefix(ownerId, "reviews/batches/", maxKeys, continuationToken);
+    return this.listSeedKeysByPrefix(ownerId, "reviews/batches/", maxKeys, continuationToken, startAfter);
   }
 
   /**
