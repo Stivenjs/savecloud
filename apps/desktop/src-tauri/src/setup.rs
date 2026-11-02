@@ -81,12 +81,8 @@ pub fn init_states_and_background_tasks(app: &mut App) -> Result<(), Box<dyn std
     // Pre-cargar la sincronización de tendencias de la tienda en segundo plano
     let db_trending = db.clone();
     tauri::async_runtime::spawn(async move {
-        log::info!("[TrendingPreload] Sincronizando tendencias de Steam en segundo plano...");
         match sync_store_trending(&db_trending).await {
-            Ok(count) => log::info!(
-                "[TrendingPreload] Tendencias sincronizadas con éxito ({} juegos)",
-                count
-            ),
+            Ok(_) => {}
             Err(e) => log::warn!(
                 "[TrendingPreload] Falló la sincronización de tendencias: {}",
                 e

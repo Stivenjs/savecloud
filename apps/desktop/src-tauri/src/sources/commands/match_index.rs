@@ -106,12 +106,9 @@ fn get_or_build_index() -> Result<Arc<MatchIndex>, String> {
 
 /// Pre-carga el índice de coincidencia de fuentes en memoria de manera asíncrona para acelerar la primera request.
 pub fn preload_index_background() {
-    tauri::async_runtime::spawn_blocking(|| {
-        log::info!("[MatchIndex] Preloading match index in background...");
-        match get_or_build_index() {
-            Ok(_) => log::info!("[MatchIndex] Match index preloaded successfully on startup"),
-            Err(e) => log::warn!("[MatchIndex] Failed to preload match index: {}", e),
-        }
+    tauri::async_runtime::spawn_blocking(|| match get_or_build_index() {
+        Ok(_) => {}
+        Err(e) => log::warn!("[MatchIndex] Failed to preload match index: {}", e),
     });
 }
 

@@ -147,12 +147,14 @@ export function useSteamCatalogQueries() {
     let cancelled = false;
     void (async () => {
       await syncSteamTrendingIfStale();
-      if (!cancelled) setTrendingReady(true);
+      if (cancelled) return;
+      setTrendingReady(true);
+      await queryClient.invalidateQueries({ queryKey: ["steamCatalog", "trendingHero"] });
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [queryClient]);
 
   /** Cachea el total de la primera página para reutizarlo al paginar (mismos filtros). */
   const browseCountCache = useRef<{ key: string; total: number } | null>(null);

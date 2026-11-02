@@ -76,13 +76,11 @@ static FACETS_CACHE: Lazy<RwLock<Option<CatalogFilterFacets>>> = Lazy::new(|| Rw
 /// Pre-carga las facetas de filtro en memoria en segundo plano al iniciar la aplicación.
 pub fn preload_facets_background(db: AppDb) {
     tauri::async_runtime::spawn_blocking(move || {
-        log::info!("[FacetsPreload] Preloading filter facets in background...");
         match db.with_conn(catalog_query::filter_facets) {
             Ok(facets) => {
                 if let Ok(mut guard) = FACETS_CACHE.write() {
                     *guard = Some(facets);
                 }
-                log::info!("[FacetsPreload] Filter facets preloaded successfully");
             }
             Err(e) => {
                 log::warn!("[FacetsPreload] Failed to preload filter facets: {}", e);
@@ -95,7 +93,6 @@ pub fn preload_facets_background(db: AppDb) {
 pub fn invalidate_facets_cache() {
     if let Ok(mut guard) = FACETS_CACHE.write() {
         *guard = None;
-        log::info!("[FacetsPreload] Filter facets cache invalidated");
     }
 }
 

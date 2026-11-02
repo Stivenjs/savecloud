@@ -9,9 +9,9 @@
 //!
 //! ## Orden de prioridad en el listado
 //!
-//! 1. **Catálogo enriquecido**: `catalog_rank_score DESC` → `enriched_at DESC` → `app_id DESC`.
-//! 2. **Sin enriquecer** (`catalog_rank_score IS NULL`): al final, por `app_id DESC`.
-//! Las tendencias se muestran en el hero; no desplazan el ranking de calidad del catálogo.
+//! 1. **Tendencias** (`steam_catalog_trending`): siempre al frente, ordenadas por `rank ASC`.
+//! 2. **Resto del catálogo enriquecido**: `catalog_rank_score DESC` → `enriched_at DESC` → `app_id DESC`.
+//! 3. **Sin enriquecer** (`details_json IS NULL`, `score = 0`): al final, por `app_id DESC`.
 //!
 //! ## Paginación estable
 //!
@@ -130,8 +130,8 @@ pub fn count_catalog_filtered(
     Ok(count as u64)
 }
 
-/// Lista todo el catálogo por puntuación persistida, manteniendo el mismo orden entre páginas.
-/// Las tendencias aparecen en el hero y no reciben prioridad absoluta en este listado.
+/// Lista el catálogo colocando primero las tendencias y completando cada página
+/// con el resto de las aplicaciones ordenadas por puntuación.
 pub fn list_catalog_page_filtered(
     conn: &Connection,
     offset: u32,
@@ -139,20 +139,64 @@ pub fn list_catalog_page_filtered(
     genres: &[String],
     tags: &[String],
 ) -> Result<Vec<CatalogListItem>, rusqlite::Error> {
-    let mut sql = String::from("SELECT a.app_id, a.name FROM steam_catalog_apps a WHERE 1=1");
-    let mut params: Vec<String> = Vec::new();
-    append_genre_filter(&mut sql, &mut params, genres, "a");
-    append_tag_filter(&mut sql, &mut params, tags, "a");
-    sql.push_str(" ORDER BY a.catalog_rank_score DESC, a.enriched_at DESC, a.app_id DESC");
-    sql.push_str(&format!(" LIMIT {limit} OFFSET {offset}"));
+    let mut results = Vec::with_capacity(limit as usize);
 
-    let mut stmt = conn.prepare(&sql)?;
-    let rows = if params.is_empty() {
-        stmt.query_map([], map_catalog_row)?
+    let mut trending_sql = String::from(
+        "SELECT a.app_id, a.name \
+         FROM steam_catalog_trending tr \
+         JOIN steam_catalog_apps a ON a.app_id = tr.app_id \
+         WHERE 1=1",
+    );
+    let mut trending_params: Vec<String> = Vec::new();
+    append_genre_filter(&mut trending_sql, &mut trending_params, genres, "a");
+    append_tag_filter(&mut trending_sql, &mut trending_params, tags, "a");
+    trending_sql.push_str(" ORDER BY tr.rank ASC");
+
+    let mut trending_stmt = conn.prepare(&trending_sql)?;
+    let trending_rows = if trending_params.is_empty() {
+        trending_stmt.query_map([], map_catalog_row)?
     } else {
-        stmt.query_map(params_from_iter(params.iter()), map_catalog_row)?
+        trending_stmt.query_map(params_from_iter(trending_params.iter()), map_catalog_row)?
     };
-    rows.collect()
+    let trending_items: Vec<CatalogListItem> = trending_rows.collect::<Result<_, _>>()?;
+    let trending_count = trending_items.len() as u32;
+
+    if offset < trending_count {
+        results.extend(
+            trending_items
+                .iter()
+                .skip(offset as usize)
+                .take(limit as usize)
+                .cloned(),
+        );
+    }
+
+    if results.len() < limit as usize {
+        let remaining_limit = limit.saturating_sub(results.len() as u32);
+        let normal_offset = offset.saturating_sub(trending_count);
+        let mut normal_sql = String::from(
+            "SELECT a.app_id, a.name \
+             FROM steam_catalog_apps a \
+             WHERE NOT EXISTS \
+               (SELECT 1 FROM steam_catalog_trending WHERE app_id = a.app_id)",
+        );
+        let mut normal_params: Vec<String> = Vec::new();
+        append_genre_filter(&mut normal_sql, &mut normal_params, genres, "a");
+        append_tag_filter(&mut normal_sql, &mut normal_params, tags, "a");
+        normal_sql
+            .push_str(" ORDER BY a.catalog_rank_score DESC, a.enriched_at DESC, a.app_id DESC");
+        normal_sql.push_str(&format!(" LIMIT {remaining_limit} OFFSET {normal_offset}"));
+
+        let mut normal_stmt = conn.prepare(&normal_sql)?;
+        let normal_rows = if normal_params.is_empty() {
+            normal_stmt.query_map([], map_catalog_row)?
+        } else {
+            normal_stmt.query_map(params_from_iter(normal_params.iter()), map_catalog_row)?
+        };
+        results.extend(normal_rows.collect::<Result<Vec<_>, _>>()?);
+    }
+
+    Ok(results)
 }
 
 /// Página completa: total acotado + items.
