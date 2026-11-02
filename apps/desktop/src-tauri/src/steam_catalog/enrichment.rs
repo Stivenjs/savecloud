@@ -30,10 +30,15 @@ fn load_details_json(conn: &Connection, app_id: u32) -> Result<Option<String>, r
 }
 
 fn save_details_json(conn: &Connection, app_id: u32, json: &str) -> Result<(), rusqlite::Error> {
-    conn.execute(
-        "UPDATE steam_catalog_apps SET details_json = ?1, enriched_at = unixepoch() WHERE app_id = ?2",
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "UPDATE steam_catalog_apps
+         SET details_json = ?1, enriched_at = unixepoch()
+         WHERE app_id = ?2",
         rusqlite::params![json, app_id],
     )?;
+    crate::steam_catalog::scoring::recompute_scores_for_app_ids_in_transaction(&tx, &[app_id])?;
+    tx.commit()?;
     Ok(())
 }
 

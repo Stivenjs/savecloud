@@ -24,7 +24,7 @@
 //! - DB-bound → batch + prepared statements
 //! - Cache global para VIP studios
 
-use rusqlite::Connection;
+use rusqlite::{Connection, Transaction};
 use std::sync::OnceLock;
 
 use rayon::prelude::*;
@@ -171,14 +171,9 @@ fn type_adjustment_score(data: &serde_json::Value) -> i64 {
     }
 }
 
-fn reviews_score(summary: Option<&serde_json::Value>) -> i64 {
-    let Some(summary) = summary else {
-        return 0;
-    };
-
-    let total_reviews = summary["total_reviews"].as_f64().unwrap_or(0.0).max(0.0);
-    let total_positive = summary["total_positive"].as_f64().unwrap_or(0.0).max(0.0);
-    let review_score = summary["review_score"].as_f64().unwrap_or(0.0);
+fn reviews_score_from_values(total_reviews: f64, total_positive: f64, review_score: f64) -> i64 {
+    let total_reviews = total_reviews.max(0.0);
+    let total_positive = total_positive.max(0.0);
 
     if total_reviews <= 0.0 {
         return 0;
@@ -218,6 +213,21 @@ pub fn compute_rank_score_from_value_with_reviews(
     root: &serde_json::Value,
     reviews_summary: Option<&serde_json::Value>,
 ) -> i64 {
+    let review_values = reviews_summary.map(|summary| {
+        (
+            summary["total_reviews"].as_f64().unwrap_or(0.0),
+            summary["total_positive"].as_f64().unwrap_or(0.0),
+            summary["review_score"].as_f64().unwrap_or(0.0),
+        )
+    });
+
+    compute_rank_score_from_value_with_review_values(root, review_values)
+}
+
+pub(crate) fn compute_rank_score_from_value_with_review_values(
+    root: &serde_json::Value,
+    review_values: Option<(f64, f64, f64)>,
+) -> i64 {
     let data = root.get("data").unwrap_or(root);
     let year = current_year();
 
@@ -228,9 +238,17 @@ pub fn compute_rank_score_from_value_with_reviews(
         + media_score(data)
         + recency_score(data, year)
         + type_adjustment_score(data)
-        + reviews_score(reviews_summary);
+        + reviews_score_from_values_or_zero(review_values);
 
     score.min(MAX_SCORE)
+}
+
+fn reviews_score_from_values_or_zero(values: Option<(f64, f64, f64)>) -> i64 {
+    let Some((total_reviews, total_positive, review_score)) = values else {
+        return 0;
+    };
+
+    reviews_score_from_values(total_reviews, total_positive, review_score)
 }
 
 fn current_year() -> i32 {
@@ -242,6 +260,47 @@ fn current_year() -> i32 {
         .unwrap_or(0);
 
     1970 + (secs as f64 / (365.2425 * 86400.0)) as i32
+}
+
+/// Recalcula el score de apps concretas dentro de una transacción existente.
+pub(crate) fn recompute_scores_for_app_ids_in_transaction(
+    tx: &Transaction<'_>,
+    app_ids: &[u32],
+) -> Result<u32, rusqlite::Error> {
+    if app_ids.is_empty() {
+        return Ok(0);
+    }
+
+    let mut affected = 0u32;
+    let mut select = tx.prepare_cached(
+        "SELECT details_json, reviews_summary_json
+         FROM steam_catalog_apps
+         WHERE app_id = ?1
+           AND details_json IS NOT NULL",
+    )?;
+    let mut update = tx.prepare_cached(
+        "UPDATE steam_catalog_apps
+         SET catalog_rank_score = ?1
+         WHERE app_id = ?2",
+    )?;
+
+    for app_id in app_ids {
+        let row = select.query_row(rusqlite::params![app_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        });
+
+        match row {
+            Ok((details_json, reviews_json)) => {
+                let score = compute_rank_score_with_reviews(&details_json, reviews_json.as_deref());
+                affected = affected
+                    .saturating_add(update.execute(rusqlite::params![score, app_id])? as u32);
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => {}
+            Err(error) => return Err(error),
+        }
+    }
+
+    Ok(affected)
 }
 
 /// Crea índice para acelerar queries por ranking
@@ -339,47 +398,6 @@ pub fn update_missing_scores(conn: &Connection) -> Result<u32, rusqlite::Error> 
     }
 
     Ok(total_computed)
-}
-
-/// Recalcula score para un subconjunto de `app_id` ya enriquecidos.
-pub fn recompute_scores_for_app_ids(
-    conn: &Connection,
-    app_ids: &[u32],
-) -> Result<u32, rusqlite::Error> {
-    if app_ids.is_empty() {
-        return Ok(0);
-    }
-
-    let tx = conn.unchecked_transaction()?;
-    let mut affected: u32 = 0;
-    {
-        let mut sel = tx.prepare_cached(
-            "SELECT details_json, reviews_summary_json
-             FROM steam_catalog_apps
-             WHERE app_id = ?1
-               AND details_json IS NOT NULL",
-        )?;
-        let mut upd = tx.prepare_cached(
-            "UPDATE steam_catalog_apps
-             SET catalog_rank_score = ?1
-             WHERE app_id = ?2",
-        )?;
-
-        for app_id in app_ids {
-            let row = sel.query_row(rusqlite::params![*app_id], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
-            });
-
-            if let Ok((details_json, reviews_json)) = row {
-                let score = compute_rank_score_with_reviews(&details_json, reviews_json.as_deref());
-                let n = upd.execute(rusqlite::params![score, *app_id])?;
-                affected = affected.saturating_add(n as u32);
-            }
-        }
-    }
-
-    tx.commit()?;
-    Ok(affected)
 }
 
 #[cfg(test)]

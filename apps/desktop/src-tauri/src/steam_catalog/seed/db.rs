@@ -1,5 +1,6 @@
 use super::types::{SteamReviewSummary, SteamSeedImportState, SteamSeedReviewsImportState};
 use rusqlite::Connection;
+use std::collections::HashMap;
 
 /// Lee todos los `app_id` del catálogo Steam en orden ascendente.
 pub fn list_all_catalog_app_ids(conn: &Connection) -> Result<Vec<u32>, rusqlite::Error> {
@@ -140,6 +141,27 @@ pub fn apply_seed_updates(
          DELETE FROM _seed_batch_ids;",
     )?;
 
+    {
+        let mut track =
+            tx.prepare_cached("INSERT OR IGNORE INTO _seed_batch_ids (app_id) VALUES (?1)")?;
+        for (app_id, _) in updates {
+            track.execute(rusqlite::params![app_id])?;
+        }
+    }
+
+    let existing_reviews = {
+        let mut stmt = tx.prepare(
+            "SELECT a.app_id, a.reviews_summary_json
+             FROM steam_catalog_apps a
+             JOIN _seed_batch_ids b ON b.app_id = a.app_id
+             WHERE a.reviews_summary_json IS NOT NULL",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, u32>(0)?, row.get::<_, String>(1)?))
+        })?;
+        rows.collect::<Result<HashMap<_, _>, _>>()?
+    };
+
     let mut updated: u32 = 0;
 
     {
@@ -167,25 +189,31 @@ pub fn apply_seed_updates(
                                   END",
         )?;
 
-        let mut track =
-            tx.prepare_cached("INSERT OR IGNORE INTO _seed_batch_ids (app_id) VALUES (?1)")?;
-
-        let mut changed_ids: Vec<u32> = Vec::with_capacity(updates.len());
-
         for (app_id, data) in updates {
-            let json = serde_json::to_string(data).unwrap_or_default();
+            let json = serde_json::to_string(data)
+                .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
             let name =
                 infer_name_from_details_json(data).unwrap_or_else(|| format!("App {}", app_id));
             let name_norm = crate::steam_catalog::normalize::normalize_catalog_name(&name);
+            let reviews_values = existing_reviews
+                .get(app_id)
+                .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+                .map(|summary| {
+                    (
+                        summary["total_reviews"].as_f64().unwrap_or(0.0),
+                        summary["total_positive"].as_f64().unwrap_or(0.0),
+                        summary["review_score"].as_f64().unwrap_or(0.0),
+                    )
+                });
+            let score =
+                crate::steam_catalog::scoring::compute_rank_score_from_value_with_review_values(
+                    data,
+                    reviews_values,
+                );
 
-            let n = upsert.execute(rusqlite::params![app_id, name, name_norm, json, 0])?;
+            let n = upsert.execute(rusqlite::params![app_id, name, name_norm, json, score])?;
             updated = updated.saturating_add(n as u32);
-            track.execute(rusqlite::params![app_id])?;
-            changed_ids.push(*app_id);
         }
-
-        // Recalcular score usando details + reviews locales existentes.
-        let _ = crate::steam_catalog::scoring::recompute_scores_for_app_ids(&tx, &changed_ids);
     }
 
     tx.execute_batch(
@@ -270,25 +298,65 @@ pub fn apply_reviews_updates(
 
     let tx = conn.unchecked_transaction()?;
     let mut updated: u32 = 0;
-    let mut changed_ids: Vec<u32> = Vec::with_capacity(updates.len());
+    tx.execute_batch(
+        "CREATE TEMP TABLE IF NOT EXISTS _seed_batch_ids (
+             app_id INTEGER PRIMARY KEY
+         ) WITHOUT ROWID;
+         DELETE FROM _seed_batch_ids;",
+    )?;
+
+    {
+        let mut track =
+            tx.prepare_cached("INSERT OR IGNORE INTO _seed_batch_ids (app_id) VALUES (?1)")?;
+        for (app_id, _) in updates {
+            track.execute(rusqlite::params![app_id])?;
+        }
+    }
+
+    let details_json_by_app = {
+        let mut stmt = tx.prepare(
+            "SELECT a.app_id, a.details_json
+             FROM steam_catalog_apps a
+             JOIN _seed_batch_ids b ON b.app_id = a.app_id
+             WHERE a.details_json IS NOT NULL",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, u32>(0)?, row.get::<_, String>(1)?))
+        })?;
+        rows.collect::<Result<HashMap<_, _>, _>>()?
+    };
+
     {
         let mut upsert = tx.prepare_cached(
             "UPDATE steam_catalog_apps
              SET reviews_summary_json = ?1,
-                 reviews_updated_at = unixepoch()
+                 reviews_updated_at = unixepoch(),
+                 catalog_rank_score = COALESCE(?3, catalog_rank_score)
              WHERE app_id = ?2",
         )?;
 
         for (app_id, summary) in updates {
-            let summary_json = serde_json::to_string(summary).unwrap_or_default();
-            let n = upsert.execute(rusqlite::params![summary_json, app_id])?;
+            let summary_json = serde_json::to_string(summary)
+                .map_err(|error| rusqlite::Error::ToSqlConversionFailure(Box::new(error)))?;
+            let score = details_json_by_app
+                .get(app_id)
+                .and_then(|details_json| {
+                    serde_json::from_str::<serde_json::Value>(details_json).ok()
+                })
+                .map(|details| {
+                    crate::steam_catalog::scoring::compute_rank_score_from_value_with_review_values(
+                        &details,
+                        Some((
+                            summary.total_reviews as f64,
+                            summary.total_positive as f64,
+                            summary.review_score as f64,
+                        )),
+                    )
+                });
+            let n = upsert.execute(rusqlite::params![summary_json, app_id, score])?;
             updated = updated.saturating_add(n as u32);
-            changed_ids.push(*app_id);
         }
     }
-
-    // Recalcula score solo para apps afectadas por reviews.
-    let _ = crate::steam_catalog::scoring::recompute_scores_for_app_ids(&tx, &changed_ids);
 
     tx.commit()?;
     Ok(updated)
