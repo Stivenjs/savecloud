@@ -97,9 +97,9 @@ pub async fn streaming_connect_lan(
         // Loopback connections must use the active local listener. Values from
         // discovery/UI state can be stale after the LAN server restarts.
         let (local_port, local_tls_fingerprint) =
-            crate::peer_lan::server::ensure_lan_http_server_with_fingerprint(
-                Some(state.host.clone()),
-            )
+            crate::peer_lan::server::ensure_lan_http_server_with_fingerprint(Some(
+                state.host.clone(),
+            ))
             .await?;
         savecloud_port = local_port;
         tls_fingerprint = local_tls_fingerprint;

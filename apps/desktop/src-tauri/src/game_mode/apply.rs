@@ -186,10 +186,7 @@ async fn throttle_savecloud_off(app: &AppHandle, sess: &mut GameModeSessionFile)
             let app_clone = app.clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = crate::commands::sync::upload::sync_upload_resume(app_clone).await {
-                    log::warn!(
-                        "[GameMode] multipart no reanudado automático: {}",
-                        e
-                    );
+                    log::warn!("[GameMode] multipart no reanudado automático: {}", e);
                 }
             });
         }

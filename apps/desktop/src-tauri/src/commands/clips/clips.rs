@@ -6,10 +6,10 @@
 //! - Eliminar clips existentes tanto de S3 como de la base de datos de metadatos.
 
 use crate::cloud::api_error::ensure_success;
+use crate::cloud::cloud_api;
 use crate::commands::sync::events::{
     emit_sync_terminal, emit_sync_upload_done, emit_sync_upload_progress,
 };
-use crate::cloud::cloud_api;
 use crate::commands::sync::models::{
     SyncOperationState, SyncOperationStrategy, SyncProgressPayload,
 };

@@ -58,10 +58,9 @@ async fn check_availability(client: &reqwest::Client, id: &str) -> Result<(), Ho
         )));
     }
 
-    let info: PixeldrainInfoResponse = response
-        .json()
-        .await
-        .map_err(|e| HosterError::ResolutionFailed(format!("pixeldrain: respuesta inválida: {e}")))?;
+    let info: PixeldrainInfoResponse = response.json().await.map_err(|e| {
+        HosterError::ResolutionFailed(format!("pixeldrain: respuesta inválida: {e}"))
+    })?;
 
     if !info.success && info.value.as_deref() == Some("not_found") {
         return Err(HosterError::ResolutionFailed(
@@ -71,16 +70,18 @@ async fn check_availability(client: &reqwest::Client, id: &str) -> Result<(), Ho
 
     let availability = info.availability.as_deref().unwrap_or("");
     if availability.contains("captcha_required") {
-        let reason = info.availability_message.unwrap_or_else(|| {
-            "Límite de ancho de banda alcanzado en este archivo".into()
-        });
+        let reason = info
+            .availability_message
+            .unwrap_or_else(|| "Límite de ancho de banda alcanzado en este archivo".into());
         return Err(HosterError::ResolutionFailed(format!(
             "pixeldrain: requiere reCAPTCHA manual de Google ({reason}). Usa un hoster alternativo (DataNodes o FileKeeper) o descarga manualmente desde el navegador."
         )));
     }
 
     if info.can_download == Some(false) {
-        let msg = info.message.unwrap_or_else(|| "Descarga no permitida".into());
+        let msg = info
+            .message
+            .unwrap_or_else(|| "Descarga no permitida".into());
         return Err(HosterError::ResolutionFailed(format!(
             "pixeldrain: no se puede descargar ({msg})"
         )));

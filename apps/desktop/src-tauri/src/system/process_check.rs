@@ -253,7 +253,10 @@ fn scan_games_running_with_index(
     let mut games_by_exe: HashMap<String, Vec<String>> = HashMap::new();
     for (game_id, names) in &names_by_game {
         for name in names {
-            games_by_exe.entry(name.clone()).or_default().push(game_id.clone());
+            games_by_exe
+                .entry(name.clone())
+                .or_default()
+                .push(game_id.clone());
         }
     }
 
@@ -434,10 +437,7 @@ pub async fn run_watcher_loop_with_token(app: &AppHandle, token: CancellationTok
                 .games
                 .iter()
                 .map(|game| {
-                    TrackedGameExecutables::from_game(
-                        &game.id,
-                        game.executable_names.as_deref(),
-                    )
+                    TrackedGameExecutables::from_game(&game.id, game.executable_names.as_deref())
                 })
                 .collect();
         }

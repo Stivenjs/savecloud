@@ -122,7 +122,6 @@ fn insert_catalog_in_tx(
     )
     .map_err(|e| e.to_string())?;
 
-
     let mut existing_stmt = tx
         .prepare_cached(
             "SELECT item_id, title, uris_json, upload_date, file_size FROM source_items WHERE source_id = ?1",
@@ -215,7 +214,10 @@ fn insert_catalog_in_tx(
         }
     }
 
-    let unchanged_count = catalog.downloads.len().saturating_sub(inserted_count + updated_count);
+    let unchanged_count = catalog
+        .downloads
+        .len()
+        .saturating_sub(inserted_count + updated_count);
     log::info!(
         "[sources] Delta sync para '{}': {} nuevos, {} modificados, {} eliminados, {} sin cambios (total: {})",
         catalog.name,
@@ -235,9 +237,7 @@ pub fn catalog_exists_for_url(url: &str) -> Result<bool, String> {
     let db = get_db()?;
     db.with_conn(|conn| {
         auto_migrate_legacy_json_if_needed(conn).map_err(|e| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
-                e,
-            )))
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(e)))
         })?;
 
         conn.query_row(
@@ -354,9 +354,7 @@ pub fn load_sources_summary() -> Result<Vec<SourceCatalogSummary>, String> {
     let db = get_db()?;
     db.with_conn(|conn| {
         auto_migrate_legacy_json_if_needed(conn).map_err(|e| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
-                e,
-            )))
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(e)))
         })?;
 
         let mut stmt = conn.prepare(
@@ -396,9 +394,7 @@ pub fn load_source_items_page(
     let db = get_db()?;
     db.with_conn(|conn| {
         auto_migrate_legacy_json_if_needed(conn).map_err(|e| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
-                e,
-            )))
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(e)))
         })?;
 
         let exists: bool = conn.query_row(
@@ -471,9 +467,7 @@ pub fn save_sources(sources: &[SourceCatalog]) -> Result<(), String> {
     let db = get_db()?;
     db.with_conn(|conn| {
         save_sources_to_conn(conn, sources).map_err(|e| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
-                e,
-            )))
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(e)))
         })
     })
     .map_err(|e| e.to_string())
@@ -486,10 +480,9 @@ fn read_sources_file(path: &Path) -> Result<Vec<SourceCatalog>, String> {
 
 /// Carga la configuración de fuentes remotas registradas.
 pub fn load_remote_sources() -> Result<Vec<RemoteSourceConfig>, String> {
-    let path = crate::config::profile_storage::scoped_or_legacy_path(
-        paths::REMOTE_SOURCES_FILE_NAME,
-    )
-    .ok_or_else(|| "No se pudo resolver remote_sources_path".to_string())?;
+    let path =
+        crate::config::profile_storage::scoped_or_legacy_path(paths::REMOTE_SOURCES_FILE_NAME)
+            .ok_or_else(|| "No se pudo resolver remote_sources_path".to_string())?;
     if !path.exists() {
         return Ok(Vec::new());
     }
@@ -532,9 +525,7 @@ pub fn upsert_catalog(
     let db = get_db()?;
     db.with_conn(|conn| {
         auto_migrate_legacy_json_if_needed(conn).map_err(|e| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
-                e,
-            )))
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(e)))
         })?;
 
         let tx = conn.unchecked_transaction()?;
@@ -561,9 +552,7 @@ pub fn upsert_catalog(
         }
 
         insert_catalog_in_tx(&tx, &catalog).map_err(|e| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
-                e,
-            )))
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(e)))
         })?;
 
         tx.commit()?;
@@ -632,7 +621,10 @@ pub fn delete_job(job_id: &str) -> Result<(), String> {
     let db = get_db()?;
     db.with_conn(|conn| {
         auto_migrate_legacy_jobs_if_needed(conn).map_err(to_sqlite_error)?;
-        conn.execute("DELETE FROM download_jobs WHERE job_id = ?1", rusqlite::params![job_id])
+        conn.execute(
+            "DELETE FROM download_jobs WHERE job_id = ?1",
+            rusqlite::params![job_id],
+        )
     })
     .map(|_| ())
     .map_err(|e| e.to_string())
@@ -647,11 +639,13 @@ fn to_sqlite_error(error: String) -> rusqlite::Error {
 fn enum_json<T: serde::Serialize>(value: &T) -> Result<String, rusqlite::Error> {
     serde_json::to_value(value)
         .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
-        .and_then(|value| value.as_str().map(str::to_owned).ok_or_else(|| {
-            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
-                "enum job invalido",
-            )))
-        }))
+        .and_then(|value| {
+            value.as_str().map(str::to_owned).ok_or_else(|| {
+                rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(
+                    "enum job invalido",
+                )))
+            })
+        })
 }
 
 fn upsert_job_in_tx(
@@ -672,17 +666,35 @@ fn upsert_job_in_tx(
 fn map_job(row: &rusqlite::Row<'_>) -> Result<SourceDownloadJob, rusqlite::Error> {
     let protocol: String = row.get(6)?;
     let status: String = row.get(7)?;
-    let protocol = serde_json::from_value(serde_json::Value::String(protocol))
-        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(6, rusqlite::types::Type::Text, Box::new(e)))?;
-    let status = serde_json::from_value(serde_json::Value::String(status))
-        .map_err(|e| rusqlite::Error::FromSqlConversionFailure(7, rusqlite::types::Type::Text, Box::new(e)))?;
+    let protocol = serde_json::from_value(serde_json::Value::String(protocol)).map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(6, rusqlite::types::Type::Text, Box::new(e))
+    })?;
+    let status = serde_json::from_value(serde_json::Value::String(status)).map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(7, rusqlite::types::Type::Text, Box::new(e))
+    })?;
     let loaded: i64 = row.get(8)?;
     let total: i64 = row.get(9)?;
     let download_speed_bytes: i64 = row.get(10)?;
     let eta_seconds: Option<i64> = row.get(11)?;
     Ok(SourceDownloadJob {
-        job_id: row.get(0)?, source_id: row.get(1)?, item_id: row.get(2)?, title: row.get(3)?, destination_dir: row.get(4)?, selected_uri: row.get(5)?, protocol, status,
-        loaded: loaded.max(0) as u64, total: total.max(0) as u64, download_speed_bytes: download_speed_bytes.max(0) as u64, eta_seconds: eta_seconds.map(|value| value.max(0) as u64), error: row.get(12)?, external_id: row.get(13)?, output_file_name: row.get(14)?, status_detail: row.get(15)?, created_at: row.get(16)?, updated_at: row.get(17)?,
+        job_id: row.get(0)?,
+        source_id: row.get(1)?,
+        item_id: row.get(2)?,
+        title: row.get(3)?,
+        destination_dir: row.get(4)?,
+        selected_uri: row.get(5)?,
+        protocol,
+        status,
+        loaded: loaded.max(0) as u64,
+        total: total.max(0) as u64,
+        download_speed_bytes: download_speed_bytes.max(0) as u64,
+        eta_seconds: eta_seconds.map(|value| value.max(0) as u64),
+        error: row.get(12)?,
+        external_id: row.get(13)?,
+        output_file_name: row.get(14)?,
+        status_detail: row.get(15)?,
+        created_at: row.get(16)?,
+        updated_at: row.get(17)?,
     })
 }
 

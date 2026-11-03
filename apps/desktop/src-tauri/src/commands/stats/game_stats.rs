@@ -174,8 +174,8 @@ fn build_edge(source: &str, target: &str, relation: &str, animated: bool) -> Sav
 }
 
 async fn build_game_save_graph(game_id: &str) -> Result<GameSaveGraphDto, String> {
-    let game = config::load_game(game_id)?
-        .ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
+    let game =
+        config::load_game(game_id)?.ok_or_else(|| format!("Juego no encontrado: {}", game_id))?;
 
     let history = config::load_history();
     let mut operations: Vec<OperationLogEntry> = history

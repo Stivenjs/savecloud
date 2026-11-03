@@ -30,7 +30,9 @@ pub async fn complete_torrent_shutdown_guard_if_idle(app: &AppHandle) {
         return;
     }
 
-    log::debug!("[Shutdown][Torrent] Sin descargas activas; completando guard de sesión al instante.");
+    log::debug!(
+        "[Shutdown][Torrent] Sin descargas activas; completando guard de sesión al instante."
+    );
 
     let Some(guard_state) = app.try_state::<TorrentShutdownGuard>() else {
         return;

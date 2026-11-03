@@ -3,9 +3,7 @@ use std::fs;
 
 #[tokio::test]
 async fn test_launch() -> Result<(), Box<dyn std::error::Error>> {
-    let data_dir = dirs::data_dir()
-        .unwrap()
-        .join("SaveCloud");
+    let data_dir = dirs::data_dir().unwrap().join("SaveCloud");
     let cert_pem = fs::read_to_string(data_dir.join("moonlight_client.pem"))?;
     let key_pem = fs::read_to_string(data_dir.join("moonlight_client.key"))?;
 

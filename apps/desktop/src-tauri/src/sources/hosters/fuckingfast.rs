@@ -52,9 +52,7 @@ pub async fn resolve(client: &reqwest::Client, url: &str) -> Result<(String, Str
         .and_then(|c| c.get(1))
         .map(|m| m.as_str().to_string())
         .ok_or_else(|| {
-            HosterError::ResolutionFailed(
-                "fuckingfast: no se pudo extraer el enlace".into(),
-            )
+            HosterError::ResolutionFailed("fuckingfast: no se pudo extraer el enlace".into())
         })?;
 
     Ok((direct, page_url))

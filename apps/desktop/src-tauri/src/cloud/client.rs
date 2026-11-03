@@ -3,10 +3,10 @@
 //! Centraliza la comunicación con la API remota gestionando resolución de credenciales,
 //! validación preventiva de sesiones de invitado y reintentos exponenciales con jitter.
 
-use std::time::{Duration, Instant};
-use reqwest::header::{HeaderMap, RETRY_AFTER};
 use crate::network::API_CLIENT;
 use crate::observability;
+use reqwest::header::{HeaderMap, RETRY_AFTER};
+use std::time::{Duration, Instant};
 
 const BASE_RETRY_DELAY: Duration = Duration::from_millis(500);
 const MAX_BACKOFF: Duration = Duration::from_secs(8);
@@ -31,7 +31,8 @@ fn calculate_retry_delay(retry_index: u32, headers: Option<&HeaderMap>) -> Durat
         .saturating_mul(1_u32 << exponent)
         .min(MAX_BACKOFF);
 
-    let random_jitter = Duration::from_millis(rand::random::<u64>() % (backoff_cap.as_millis() as u64 + 1));
+    let random_jitter =
+        Duration::from_millis(rand::random::<u64>() % (backoff_cap.as_millis() as u64 + 1));
     let server_delay = headers.and_then(parse_retry_after).unwrap_or_default();
 
     if server_delay.is_zero() {
@@ -197,7 +198,8 @@ impl<'a> CloudRequest<'a> {
     ///
     /// Devuelve un error descriptivo si serde no puede serializar la estructura dada.
     pub fn json<T: serde::Serialize>(mut self, value: &T) -> Result<Self, String> {
-        let bytes = serde_json::to_vec(value).map_err(|e| format!("Error al serializar cuerpo JSON: {e}"))?;
+        let bytes = serde_json::to_vec(value)
+            .map_err(|e| format!("Error al serializar cuerpo JSON: {e}"))?;
         self.body = Some(bytes);
         Ok(self)
     }
@@ -271,7 +273,8 @@ impl<'a> CloudRequest<'a> {
             let base_url = crate::commands::share::invites::normalize_base_url(host_base_raw);
 
             // Validar de forma single-flight y atómica el token para este host específico
-            crate::cloud::session_refresh::refresh_guest_session_single_flight(host, &base_url, 15).await?;
+            crate::cloud::session_refresh::refresh_guest_session_single_flight(host, &base_url, 15)
+                .await?;
 
             let host_api_key = crate::config::get_secure_api_key_for_cloud_host(host)
                 .ok_or_else(|| format!("No hay credenciales guardadas para la nube de {host}."))?;
@@ -358,10 +361,7 @@ impl<'a> CloudRequest<'a> {
                 }
             };
 
-            if retry_safe
-                && attempt + 1 < max_attempts
-                && is_retryable_status(response.status())
-            {
+            if retry_safe && attempt + 1 < max_attempts && is_retryable_status(response.status()) {
                 let delay = calculate_retry_delay(attempt, Some(response.headers()));
                 tokio::time::sleep(delay).await;
                 continue;

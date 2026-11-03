@@ -14,22 +14,22 @@
 //! - `renderer` — Decodificación + renderizado de video (Fase 4)
 //! - `input_relay` — Inyección de inputs del gamepad (Fase 3)
 
+pub mod audio;
+pub mod bindings;
+pub mod client;
+pub mod commands;
+pub mod crypto;
+pub mod discovery;
+pub mod error;
+pub mod host;
+pub mod input_listener;
+pub mod input_relay;
+pub mod session;
 #[cfg(test)]
 mod test_launch;
-pub mod bindings;
-pub mod host;
-pub mod discovery;
-pub mod session;
-pub mod client;
-pub mod input_relay;
-pub mod commands;
-pub mod audio;
-pub mod crypto;
-pub mod error;
 pub mod tls_override;
 pub mod video_server;
 pub mod webtransport_server;
-pub mod input_listener;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -44,7 +44,10 @@ static IS_MIRROR_MODE: AtomicBool = AtomicBool::new(false);
 pub fn set_mirror_mode(active: bool) {
     let prev = IS_MIRROR_MODE.swap(active, Ordering::Relaxed);
     if prev != active {
-        log::info!("[Streaming] Estado de Modo Espejo (Prueba Local): {}", active);
+        log::info!(
+            "[Streaming] Estado de Modo Espejo (Prueba Local): {}",
+            active
+        );
     }
 }
 
@@ -53,4 +56,3 @@ pub fn set_mirror_mode(active: bool) {
 pub fn is_mirror_mode() -> bool {
     IS_MIRROR_MODE.load(Ordering::Relaxed)
 }
-

@@ -252,7 +252,9 @@ pub async fn resolve(
     }
 
     if let Some(app) = app {
-        log::info!("vikingfile: ejecutando Scrapling crawler para resolver Turnstile y enlace directo");
+        log::info!(
+            "vikingfile: ejecutando Scrapling crawler para resolver Turnstile y enlace directo"
+        );
         if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch_with_progress(
             app,
             url,

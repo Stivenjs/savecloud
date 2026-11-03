@@ -1,7 +1,5 @@
 //! Comandos de catálogo local: listado, importación y eliminación.
 
-use super::fetch::{fetch_catalog_for_import, sync_metadata_from_fetch};
-use super::match_index::invalidate_index;
 use super::super::domain::{
     BatchImportItemResult, BatchImportResult, ImportMode, SourceCatalogSummary, SourceItemsPage,
 };
@@ -9,6 +7,8 @@ use super::super::events::emit_catalog_updated;
 use super::super::parser::parse_catalog_from_reader;
 use super::super::queue::now_iso;
 use super::super::store;
+use super::fetch::{fetch_catalog_for_import, sync_metadata_from_fetch};
+use super::match_index::invalidate_index;
 
 /// Lista todas las fuentes de catálogos completas almacenadas localmente.
 #[tauri::command]
@@ -200,5 +200,3 @@ pub async fn export_source_to_json(
     let path = store::export_source_to_file(&source_id, destination_path.as_deref())?;
     Ok(path.to_string_lossy().to_string())
 }
-
-

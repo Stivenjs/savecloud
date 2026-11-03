@@ -64,10 +64,7 @@ fn extract_download_form(
     None
 }
 
-async fn resolve_native(
-    client: &reqwest::Client,
-    page_url: &str,
-) -> Result<String, HosterError> {
+async fn resolve_native(client: &reqwest::Client, page_url: &str) -> Result<String, HosterError> {
     let response = get(
         client,
         page_url,
@@ -153,10 +150,12 @@ pub async fn resolve(
         ) {
             let trimmed = scraped.trim();
             if (trimmed.starts_with("http://") || trimmed.starts_with("https://"))
-                && !trimmed.contains("freedownloadmanager.org") && !trimmed.ends_with("/download") {
-                    log::info!("filekeeper: Scrapling resolvió URL directa: {trimmed}");
-                    return Ok((trimmed.to_string(), page_url));
-                }
+                && !trimmed.contains("freedownloadmanager.org")
+                && !trimmed.ends_with("/download")
+            {
+                log::info!("filekeeper: Scrapling resolvió URL directa: {trimmed}");
+                return Ok((trimmed.to_string(), page_url));
+            }
         }
     }
 

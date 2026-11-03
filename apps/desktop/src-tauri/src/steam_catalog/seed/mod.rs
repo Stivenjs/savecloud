@@ -1,17 +1,115 @@
 pub mod api;
+mod batching;
 pub mod commands;
 pub mod db;
+mod pipeline;
+mod request;
 pub mod streaming;
 pub mod types;
 
+use std::sync::Arc;
 use tauri::Emitter;
+use tokio::sync::Mutex;
 
-use crate::commands::sync::context::ApiContext;
 use crate::sqlite::AppDb;
 use types::*;
 
 /// Límite de rondas por ejecución para prevenir bucles infinitos.
 pub const STEAM_SEED_IMPORT_MAX_ROUNDS: u32 = 5000;
+const DETAILS_GROUP_ROWS: usize = 5_000;
+const REVIEWS_GROUP_ROWS: usize = 2_000;
+
+fn invalidate_details_cache(app_ids: &[u32]) {
+    crate::steam_cache::steam_api_cache().invalidate_many(app_ids);
+}
+
+fn emit_persist_progress(
+    app: Option<&tauri::AppHandle>,
+    iteration: u32,
+    batches_this_round: u32,
+    total_batches: u32,
+    total_rows_updated: u32,
+    rows_this_round: u32,
+    status_text: &str,
+) {
+    let Some(app) = app else {
+        return;
+    };
+
+    let _ = app.emit(
+        "steam-seed-import-progress",
+        SteamSeedImportProgressPayload {
+            iteration,
+            batches_this_round,
+            rows_this_round,
+            total_batches,
+            total_rows_updated,
+            status_text: Some(status_text.to_string()),
+            current_batch: None,
+            done: false,
+        },
+    );
+}
+
+async fn checkpoint_import_before_failure(
+    db: &AppDb,
+    state: &mut SteamSeedImportState,
+    strategy: &str,
+    keys: &[String],
+    failed_index: usize,
+) -> Result<(), String> {
+    if failed_index > 0 {
+        let previous_key = keys[failed_index - 1].clone();
+        match strategy {
+            "cursor" => state.cursor_last_key = Some(previous_key),
+            "newest_first" => state.newest_watermark = Some(previous_key),
+            _ => return Err("estrategia de import no soportada".to_string()),
+        }
+    }
+    state.strategy = strategy.to_string();
+
+    let db_save = db.clone();
+    let state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        db_save.with_conn(|conn| {
+            db::save_import_state(conn, &state)?;
+            Ok(())
+        })
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(|error: crate::sqlite::error::SqliteError| error.to_string())
+}
+
+async fn checkpoint_reviews_before_failure(
+    db: &AppDb,
+    state: &mut SteamSeedReviewsImportState,
+    strategy: &str,
+    keys: &[String],
+    failed_index: usize,
+) -> Result<(), String> {
+    if failed_index > 0 {
+        let previous_key = keys[failed_index - 1].clone();
+        match strategy {
+            "cursor" => state.cursor_last_key = Some(previous_key),
+            "newest_first" => state.newest_watermark = Some(previous_key),
+            _ => return Err("estrategia de import de reviews no soportada".to_string()),
+        }
+    }
+    state.strategy = strategy.to_string();
+
+    let db_save = db.clone();
+    let state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        db_save.with_conn(|conn| {
+            db::save_reviews_import_state(conn, &state)?;
+            Ok(())
+        })
+    })
+    .await
+    .map_err(|error| error.to_string())?
+    .map_err(|error: crate::sqlite::error::SqliteError| error.to_string())
+}
 
 /// Devuelve la clave de batch local más avanzada conocida.
 pub fn effective_local_max_imported(state: &SteamSeedImportState) -> Option<String> {
@@ -80,7 +178,6 @@ pub fn parse_import_strategy(s: Option<&str>) -> Result<String, String> {
 pub async fn import_cloud_seed_one_round(
     app: Option<&tauri::AppHandle>,
     db: &AppDb,
-    ctx: &ApiContext,
     max_batches: u32,
     requested_strategy: &str,
     concurrency: usize,
@@ -119,16 +216,11 @@ pub async fn import_cloud_seed_one_round(
 
     let to_process = match requested_strategy {
         "cursor" => {
-            api::collect_cursor_keys(ctx, import_state.cursor_last_key.as_deref(), max_batches)
-                .await?
+            api::collect_cursor_keys(import_state.cursor_last_key.as_deref(), max_batches).await?
         }
         "newest_first" => {
-            api::collect_newest_first_keys(
-                ctx,
-                import_state.newest_watermark.as_deref(),
-                max_batches,
-            )
-            .await?
+            api::collect_newest_first_keys(import_state.newest_watermark.as_deref(), max_batches)
+                .await?
         }
         _ => return Err("estrategia de import no soportada".to_string()),
     };
@@ -141,70 +233,117 @@ pub async fn import_cloud_seed_one_round(
     }
 
     // Resolvemos las URLs en bloque para ahorrar latencia
-    let url_map = api::resolve_batch_download_urls(ctx, &to_process).await?;
+    let url_map = api::resolve_batch_download_urls(&to_process).await?;
 
     let total_to_process = to_process.len() as u32;
-
-    use futures_util::stream::{self, StreamExt};
-    use std::sync::atomic::{AtomicU32, Ordering};
-    use std::sync::Arc;
-    use tokio::sync::Mutex;
-
-    let rows_updated = Arc::new(AtomicU32::new(0));
 
     // Candado compartido para serializar las escrituras a SQLite
     let db_write_lock = Arc::new(Mutex::new(()));
 
-    stream::iter(
-        to_process
-            .iter()
-            .enumerate()
-            .map(|(i, k)| (i, k.clone()))
-            .collect::<Vec<_>>(),
-    )
-    .map(|(idx, key)| {
-        let url = url_map.get(&key).cloned();
-        let db = db.clone();
-        let app = app.cloned();
-        let rows_updated = Arc::clone(&rows_updated);
-        let write_lock = Arc::clone(&db_write_lock);
-
-        async move {
-            if let Some(url) = url {
+    let app_for_download = app.cloned();
+    let url_map_for_download = url_map;
+    let keys_for_download = to_process.clone();
+    let (mut downloads, producer) =
+        pipeline::start_download_pipeline(keys_for_download, concurrency, move |idx, key| {
+            let url = url_map_for_download.get(&key).cloned();
+            let app = app_for_download.clone();
+            async move {
                 let progress_ctx = streaming::StreamProgressContext {
                     iteration,
                     total_batches_this_round: total_to_process,
                     global_total_batches: total_batches_history.saturating_add(idx as u32),
-                    global_total_rows: total_rows_history
-                        .saturating_add(rows_updated.load(Ordering::Relaxed)),
+                    global_total_rows: total_rows_history,
                 };
 
-                match streaming::stream_import_batch(
-                    app.as_ref(),
-                    Some(&progress_ctx),
-                    &key,
-                    &db,
-                    &url,
-                    None,
-                    write_lock,
-                )
+                pipeline::download_with_retries(idx, key, url, "batch", |key, url| {
+                    let app = app.clone();
+                    let progress_ctx = progress_ctx.clone();
+                    async move {
+                        streaming::download_seed_batch(
+                            app.as_ref(),
+                            Some(&progress_ctx),
+                            &key,
+                            &url,
+                        )
+                        .await
+                    }
+                })
                 .await
-                {
-                    Ok(n) => {
-                        rows_updated.fetch_add(n, Ordering::Relaxed);
-                    }
-                    Err(e) => {
-                        eprintln!("[steam-seed] Error en batch {}: {}", key, e);
-                    }
-                }
             }
-        }
-    })
-    .buffer_unordered(concurrency)
-    .collect::<()>()
-    .await;
+        });
 
-    let rows_updated = rows_updated.load(Ordering::Relaxed);
+    let mut first_failure: Option<(usize, String)> = None;
+    let mut rows_updated = 0u32;
+    let mut completed_batches = 0u32;
+    let mut group = batching::BatchAccumulator::new(DETAILS_GROUP_ROWS, 20);
+    while let Some((index, _key, result)) = downloads.recv().await {
+        let updates = match result {
+            Ok(updates) => updates,
+            Err(error) => {
+                if first_failure
+                    .as_ref()
+                    .is_none_or(|(first_index, _)| index < *first_index)
+                {
+                    first_failure = Some((index, error));
+                }
+                continue;
+            }
+        };
+
+        completed_batches = completed_batches.saturating_add(1);
+        group.push_batch(updates);
+        if group.should_flush() {
+            let updates = group.take();
+            let app_ids: Vec<u32> = updates.iter().map(|(app_id, _)| *app_id).collect();
+            rows_updated = rows_updated
+                .saturating_add(streaming::persist_seed_group(db, updates, &db_write_lock).await?);
+            invalidate_details_cache(&app_ids);
+            emit_persist_progress(
+                app,
+                iteration,
+                total_to_process,
+                total_batches_history.saturating_add(completed_batches),
+                total_rows_history.saturating_add(rows_updated),
+                rows_updated,
+                "Guardando detalles del catálogo...",
+            );
+        }
+    }
+
+    if !group.is_empty() {
+        let updates = group.take();
+        let app_ids: Vec<u32> = updates.iter().map(|(app_id, _)| *app_id).collect();
+        rows_updated = rows_updated
+            .saturating_add(streaming::persist_seed_group(db, updates, &db_write_lock).await?);
+        invalidate_details_cache(&app_ids);
+        emit_persist_progress(
+            app,
+            iteration,
+            total_to_process,
+            total_batches_history.saturating_add(completed_batches),
+            total_rows_history.saturating_add(rows_updated),
+            rows_updated,
+            "Guardando detalles del catálogo...",
+        );
+    }
+
+    producer
+        .await
+        .map_err(|error| format!("Worker de descargas falló: {error}"))?;
+
+    if let Some((failed_index, error)) = first_failure {
+        checkpoint_import_before_failure(
+            db,
+            &mut import_state,
+            requested_strategy,
+            &to_process,
+            failed_index,
+        )
+        .await?;
+        return Err(format!(
+            "{error}. El progreso correcto quedó guardado; vuelve a intentar."
+        ));
+    }
 
     match requested_strategy {
         "cursor" => {
@@ -242,7 +381,6 @@ pub async fn import_cloud_seed_one_round(
     let reviews_result = import_cloud_seed_reviews_one_round(
         app,
         db,
-        ctx,
         max_batches,
         requested_strategy,
         concurrency,
@@ -266,7 +404,6 @@ pub async fn import_cloud_seed_one_round(
 async fn import_cloud_seed_reviews_one_round(
     app: Option<&tauri::AppHandle>,
     db: &AppDb,
-    ctx: &ApiContext,
     max_batches: u32,
     requested_strategy: &str,
     concurrency: usize,
@@ -290,16 +427,11 @@ async fn import_cloud_seed_reviews_one_round(
 
     let to_process = match requested_strategy {
         "cursor" => {
-            api::collect_cursor_review_keys(
-                ctx,
-                import_state.cursor_last_key.as_deref(),
-                max_batches,
-            )
-            .await?
+            api::collect_cursor_review_keys(import_state.cursor_last_key.as_deref(), max_batches)
+                .await?
         }
         "newest_first" => {
             api::collect_newest_first_review_keys(
-                ctx,
                 import_state.newest_watermark.as_deref(),
                 max_batches,
             )
@@ -315,66 +447,114 @@ async fn import_cloud_seed_reviews_one_round(
         });
     }
 
-    let url_map = api::resolve_reviews_batch_download_urls(ctx, &to_process).await?;
+    let url_map = api::resolve_reviews_batch_download_urls(&to_process).await?;
     let total_to_process = to_process.len() as u32;
 
-    use futures_util::stream::{self, StreamExt};
-    use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
-    let rows_updated = Arc::new(AtomicU32::new(0));
     let db_write_lock = Arc::new(Mutex::new(()));
 
-    stream::iter(
-        to_process
-            .iter()
-            .enumerate()
-            .map(|(i, k)| (i, k.clone()))
-            .collect::<Vec<_>>(),
-    )
-    .map(|(idx, key)| {
-        let url = url_map.get(&key).cloned();
-        let db = db.clone();
-        let app = app.cloned();
-        let rows_updated = Arc::clone(&rows_updated);
-        let write_lock = Arc::clone(&db_write_lock);
-
-        async move {
-            if let Some(url) = url {
+    let app_for_download = app.cloned();
+    let url_map_for_download = url_map;
+    let keys_for_download = to_process.clone();
+    let (mut downloads, producer) =
+        pipeline::start_download_pipeline(keys_for_download, concurrency, move |idx, key| {
+            let url = url_map_for_download.get(&key).cloned();
+            let app = app_for_download.clone();
+            async move {
                 let progress_ctx = streaming::StreamProgressContext {
                     iteration,
                     total_batches_this_round: total_to_process,
                     global_total_batches: total_batches_history.saturating_add(idx as u32),
-                    global_total_rows: total_rows_history
-                        .saturating_add(rows_updated.load(Ordering::Relaxed)),
+                    global_total_rows: total_rows_history,
                 };
 
-                match streaming::stream_import_reviews_batch(
-                    app.as_ref(),
-                    Some(&progress_ctx),
-                    &key,
-                    &db,
-                    &url,
-                    write_lock,
-                )
+                pipeline::download_with_retries(idx, key, url, "batch de reviews", |key, url| {
+                    let app = app.clone();
+                    let progress_ctx = progress_ctx.clone();
+                    async move {
+                        streaming::download_reviews_batch(
+                            app.as_ref(),
+                            Some(&progress_ctx),
+                            &key,
+                            &url,
+                        )
+                        .await
+                    }
+                })
                 .await
-                {
-                    Ok(n) => {
-                        rows_updated.fetch_add(n, Ordering::Relaxed);
-                    }
-                    Err(e) => {
-                        eprintln!("[steam-seed] Error en reviews batch {}: {}", key, e);
-                    }
-                }
             }
-        }
-    })
-    .buffer_unordered(concurrency)
-    .collect::<()>()
-    .await;
+        });
 
-    let rows_updated = rows_updated.load(Ordering::Relaxed);
+    let mut first_failure: Option<(usize, String)> = None;
+    let mut rows_updated = 0u32;
+    let mut completed_batches = 0u32;
+    let mut group = batching::BatchAccumulator::new(REVIEWS_GROUP_ROWS, 20);
+    while let Some((index, _key, result)) = downloads.recv().await {
+        let updates = match result {
+            Ok(updates) => updates,
+            Err(error) => {
+                if first_failure
+                    .as_ref()
+                    .is_none_or(|(first_index, _)| index < *first_index)
+                {
+                    first_failure = Some((index, error));
+                }
+                continue;
+            }
+        };
+
+        completed_batches = completed_batches.saturating_add(1);
+        group.push_batch(updates);
+        if group.should_flush() {
+            rows_updated = rows_updated.saturating_add(
+                streaming::persist_reviews_group(db, group.take(), &db_write_lock).await?,
+            );
+            emit_persist_progress(
+                app,
+                iteration,
+                total_to_process,
+                total_batches_history.saturating_add(completed_batches),
+                total_rows_history.saturating_add(rows_updated),
+                rows_updated,
+                "Guardando reseñas del catálogo...",
+            );
+        }
+    }
+
+    if !group.is_empty() {
+        rows_updated = rows_updated.saturating_add(
+            streaming::persist_reviews_group(db, group.take(), &db_write_lock).await?,
+        );
+        emit_persist_progress(
+            app,
+            iteration,
+            total_to_process,
+            total_batches_history.saturating_add(completed_batches),
+            total_rows_history.saturating_add(rows_updated),
+            rows_updated,
+            "Guardando reseñas del catálogo...",
+        );
+    }
+
+    producer
+        .await
+        .map_err(|error| format!("Worker de descargas de reviews falló: {error}"))?;
+
+    if let Some((failed_index, error)) = first_failure {
+        checkpoint_reviews_before_failure(
+            db,
+            &mut import_state,
+            requested_strategy,
+            &to_process,
+            failed_index,
+        )
+        .await?;
+        return Err(format!(
+            "{error}. El progreso correcto quedó guardado; vuelve a intentar."
+        ));
+    }
 
     match requested_strategy {
         "cursor" => {

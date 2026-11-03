@@ -1,17 +1,70 @@
 use super::db::apply_seed_updates;
+use super::request::validate_presigned_url;
 use super::types::{SteamReviewsBatchLine, SteamSeedBatchLine};
-use crate::network::API_CLIENT;
+use crate::network::DATA_CLIENT;
 use crate::sqlite::AppDb;
 use futures_util::StreamExt;
-use std::sync::Arc;
 use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Mutex;
 use tokio_util::io::StreamReader;
 
-const DEFAULT_CHUNK_SIZE: usize = 50_000;
+async fn parse_seed_lines(
+    lines: Vec<String>,
+    batch_key: &str,
+) -> Result<Vec<(u32, serde_json::Value)>, String> {
+    let parse_batch_key = batch_key.to_string();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut updates = Vec::with_capacity(lines.len());
+        for line in lines {
+            let parsed = serde_json::from_str::<SteamSeedBatchLine>(&line)
+                .map_err(|_| format!("Línea JSON inválida en batch {parse_batch_key}"))?;
+            if parsed.steam_success == Some(true) {
+                if let Some(data) = parsed.data {
+                    updates.push((parsed.app_id, data));
+                }
+            }
+        }
+        Ok(updates)
+    })
+    .await
+    .map_err(|error| format!("Worker de parseo falló en batch {batch_key}: {error}"))?;
+
+    result
+}
+
+pub async fn persist_seed_group(
+    db: &AppDb,
+    updates: Vec<(u32, serde_json::Value)>,
+    write_lock: &Mutex<()>,
+) -> Result<u32, String> {
+    let _guard = write_lock.lock().await;
+    let db_clone = db.clone();
+    tokio::task::spawn_blocking(move || {
+        db_clone.with_conn(|conn| apply_seed_updates(conn, &updates))
+    })
+    .await
+    .map_err(|error| format!("spawn_blocking falló: {error}"))?
+    .map_err(|error| format!("Error en batch insert: {error}"))
+}
+
+pub async fn persist_reviews_group(
+    db: &AppDb,
+    updates: Vec<(u32, super::types::SteamReviewSummary)>,
+    write_lock: &Mutex<()>,
+) -> Result<u32, String> {
+    let _guard = write_lock.lock().await;
+    let db_clone = db.clone();
+    tokio::task::spawn_blocking(move || {
+        db_clone.with_conn(|conn| super::db::apply_reviews_updates(conn, &updates))
+    })
+    .await
+    .map_err(|error| format!("spawn_blocking reviews falló: {error}"))?
+    .map_err(|error| format!("Error en persistencia de reviews: {error}"))
+}
 
 /// Contexto de progreso para la emisión de eventos durante el streaming.
+#[derive(Clone)]
 pub struct StreamProgressContext {
     pub iteration: u32,
     pub total_batches_this_round: u32,
@@ -19,17 +72,14 @@ pub struct StreamProgressContext {
     pub global_total_rows: u32,
 }
 
-/// Importa un batch de semillas Steam utilizando streaming HTTP + parsing paralelo.
-pub async fn stream_import_batch(
+/// Descarga y parsea un batch de detalles sin competir por el escritor SQLite.
+pub async fn download_seed_batch(
     app: Option<&tauri::AppHandle>,
     ctx: Option<&StreamProgressContext>,
     batch_key: &str,
-    db: &AppDb,
     download_url_str: &str,
-    chunk_size: Option<usize>,
-    write_lock: Arc<Mutex<()>>,
-) -> Result<u32, String> {
-    let chunk_size = chunk_size.unwrap_or(DEFAULT_CHUNK_SIZE);
+) -> Result<Vec<(u32, serde_json::Value)>, String> {
+    validate_presigned_url(download_url_str)?;
 
     if let (Some(a), Some(c)) = (app, ctx) {
         let _ = a.emit(
@@ -47,7 +97,7 @@ pub async fn stream_import_batch(
         );
     }
 
-    let response = API_CLIENT
+    let response = DATA_CLIENT
         .get(download_url_str)
         .send()
         .await
@@ -65,120 +115,32 @@ pub async fn stream_import_batch(
         .map(|r| r.map_err(std::io::Error::other));
     let stream_reader = StreamReader::new(bytes_stream);
     let mut lines_reader = BufReader::new(stream_reader).lines();
-
-    let worker_count = num_cpus::get().clamp(2, 8);
-
-    let mut raw_lines: Vec<String> = Vec::with_capacity(4096);
-    while let Ok(Some(line)) = lines_reader.next_line().await {
-        let trimmed = line.trim().to_string();
-        if !trimmed.is_empty() {
-            raw_lines.push(trimmed);
-        }
-    }
-
-    if raw_lines.is_empty() {
-        return Ok(0);
-    }
-
-    // Dividimos las líneas en chunks iguales, uno por worker.
-    // Cada worker tiene su propio subvector → cero contención.
-    let total_lines = raw_lines.len();
-    let chunk_per_worker = total_lines.div_ceil(worker_count);
-
-    let chunks: Vec<Vec<String>> = raw_lines
-        .chunks(chunk_per_worker)
-        .map(|c| c.to_vec())
-        .collect();
-
-    let mut parse_handles = Vec::with_capacity(chunks.len());
-    for chunk in chunks {
-        parse_handles.push(tokio::task::spawn_blocking(move || {
-            let mut out: Vec<(u32, serde_json::Value)> = Vec::with_capacity(chunk.len());
-            for line in &chunk {
-                if let Ok(parsed) = serde_json::from_str::<SteamSeedBatchLine>(line) {
-                    if parsed.steam_success == Some(true) {
-                        if let Some(data) = parsed.data {
-                            out.push((parsed.app_id, data));
-                        }
-                    }
-                }
-            }
-            out
-        }));
-    }
-
-    // Recolectamos todos los resultados
-    let mut all_updates: Vec<(u32, serde_json::Value)> = Vec::with_capacity(total_lines);
-    for handle in parse_handles {
-        match handle.await {
-            Ok(partial) => all_updates.extend(partial),
-            Err(e) => eprintln!("[steam-seed] Worker de parseo falló: {}", e),
-        }
-    }
-
-    if all_updates.is_empty() {
-        return Ok(0);
-    }
-
-    // Procesamos en chunks del tamaño configurado.
-    let db_clone = db.clone();
-    let batch_key_owned = batch_key.to_string();
-    let mut total_updated = 0u32;
-
-    for (i, write_chunk) in all_updates.chunks(chunk_size).enumerate() {
-        let chunk_vec = write_chunk.to_vec();
-        if i > 0 {
-            if let (Some(a), Some(c)) = (app, ctx) {
-                let _ = a.emit(
-                    "steam-seed-import-progress",
-                    super::types::SteamSeedImportProgressPayload {
-                        iteration: c.iteration,
-                        batches_this_round: c.total_batches_this_round,
-                        rows_this_round: total_updated,
-                        total_batches: c.global_total_batches,
-                        total_rows_updated: c.global_total_rows.saturating_add(total_updated),
-                        status_text: Some(format!(
-                            "Guardando chunk {} de {}...",
-                            i + 1,
-                            batch_key_owned
-                        )),
-                        current_batch: Some(batch_key_owned.clone()),
-                        done: false,
-                    },
-                );
-            }
-        }
-
-        let db_write = db_clone.clone();
-
-        let _guard = write_lock.lock().await;
-
-        let n = tokio::task::spawn_blocking(move || {
-            db_write.with_conn(|conn| apply_seed_updates(conn, &chunk_vec))
-        })
+    let mut raw_lines = Vec::with_capacity(4096);
+    while let Some(line) = lines_reader
+        .next_line()
         .await
-        .map_err(|e| format!("spawn_blocking falló: {}", e))?
-        .map_err(|e| format!("Error en batch insert: {}", e))?;
-
-        total_updated = total_updated.saturating_add(n);
+        .map_err(|e| format!("Error leyendo batch {batch_key}: {e}"))?
+    {
+        if line.trim().is_empty() {
+            continue;
+        }
+        raw_lines.push(line);
     }
 
-    for (app_id, _) in &all_updates {
-        crate::steam_cache::steam_api_cache().invalidate(&app_id.to_string());
-    }
+    let updates = parse_seed_lines(raw_lines, batch_key).await?;
 
-    Ok(total_updated)
+    Ok(updates)
 }
 
-/// Importa un batch NDJSON de reviews Steam y persiste resúmenes en SQLite.
-pub async fn stream_import_reviews_batch(
+/// Descarga y parsea un batch de reviews sin competir por el escritor SQLite.
+pub async fn download_reviews_batch(
     app: Option<&tauri::AppHandle>,
     ctx: Option<&StreamProgressContext>,
     batch_key: &str,
-    db: &AppDb,
     download_url_str: &str,
-    write_lock: Arc<Mutex<()>>,
-) -> Result<u32, String> {
+) -> Result<Vec<(u32, super::types::SteamReviewSummary)>, String> {
+    validate_presigned_url(download_url_str)?;
+
     if let (Some(a), Some(c)) = (app, ctx) {
         let _ = a.emit(
             "steam-seed-import-progress",
@@ -195,7 +157,7 @@ pub async fn stream_import_reviews_batch(
         );
     }
 
-    let response = API_CLIENT
+    let response = DATA_CLIENT
         .get(download_url_str)
         .send()
         .await
@@ -213,35 +175,25 @@ pub async fn stream_import_reviews_batch(
         .map(|r| r.map_err(std::io::Error::other));
     let stream_reader = StreamReader::new(bytes_stream);
     let mut lines_reader = BufReader::new(stream_reader).lines();
-
-    let mut updates: Vec<(u32, super::types::SteamReviewSummary)> = Vec::with_capacity(4096);
-    while let Ok(Some(line)) = lines_reader.next_line().await {
+    let mut updates = Vec::with_capacity(4096);
+    while let Some(line) = lines_reader
+        .next_line()
+        .await
+        .map_err(|e| format!("Error leyendo batch de reviews {batch_key}: {e}"))?
+    {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
 
-        if let Ok(parsed) = serde_json::from_str::<SteamReviewsBatchLine>(trimmed) {
-            if parsed.reviews_success == Some(true) {
-                if let Some(summary) = parsed.summary {
-                    updates.push((parsed.app_id, summary));
-                }
+        let parsed = serde_json::from_str::<SteamReviewsBatchLine>(trimmed)
+            .map_err(|e| format!("Línea JSON inválida en batch de reviews {batch_key}: {e}"))?;
+        if parsed.reviews_success == Some(true) {
+            if let Some(summary) = parsed.summary {
+                updates.push((parsed.app_id, summary));
             }
         }
     }
 
-    if updates.is_empty() {
-        return Ok(0);
-    }
-
-    let db_clone = db.clone();
-    let _guard = write_lock.lock().await;
-    let updated = tokio::task::spawn_blocking(move || {
-        db_clone.with_conn(|conn| super::db::apply_reviews_updates(conn, &updates))
-    })
-    .await
-    .map_err(|e| format!("spawn_blocking reviews falló: {}", e))?
-    .map_err(|e| format!("Error en persistencia de reviews: {}", e))?;
-
-    Ok(updated)
+    Ok(updates)
 }

@@ -51,7 +51,8 @@ export async function handler(_event: unknown, _context?: Partial<Context>): Pro
         ? (_event as { ownerId: string }).ownerId.trim()
         : "";
 
-    const ownerIdAuto = ownerIdFromEvent ? "" : (await pickOwnerIdAuto(s3, bucket, basePrefix)) || "";
+    const ownerCursorTask = task === "details" || task === "reviews" ? task : undefined;
+    const ownerIdAuto = ownerIdFromEvent ? "" : (await pickOwnerIdAuto(s3, bucket, basePrefix, ownerCursorTask)) || "";
     const ownerId = ownerIdFromEvent || ownerIdAuto;
 
     // Prefijo por owner si existe, o prefijo base para modo legacy.

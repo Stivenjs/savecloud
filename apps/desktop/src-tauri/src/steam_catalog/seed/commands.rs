@@ -1,9 +1,9 @@
 use super::api::*;
 use super::db::*;
+use super::request::{seed_api_request, validate_presigned_url};
 use super::types::*;
 use crate::cloud::api_error;
-use crate::commands::sync::context::resolve_api_context;
-use crate::network::API_CLIENT;
+use crate::network::DATA_CLIENT;
 use crate::sqlite::AppDb;
 use crate::steam_catalog::trending::sync_store_trending;
 use tauri::{AppHandle, Emitter, State};
@@ -13,7 +13,6 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
     db: State<'_, AppDb>,
     part_size: Option<u32>,
 ) -> Result<SteamSeedExportResultDto, String> {
-    let ctx = resolve_api_context()?;
     let db_ref = db.inner().clone();
 
     let _ = sync_store_trending(&db_ref).await;
@@ -38,11 +37,8 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
 
     for (part_index, chunk) in app_ids.chunks(size).enumerate() {
         let body = serde_json::json!({ "partIndex": part_index as u32 }).to_string();
-        let res = crate::commands::sync::api::api_request(
-            &ctx.base_url,
-            &ctx.user_id,
-            &ctx.api_key,
-            "POST",
+        let res = seed_api_request(
+            reqwest::Method::POST,
             "/steam-seed/manifest/upload-url",
             Some(body.as_bytes()),
         )
@@ -54,6 +50,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
         }
 
         let upload: SteamSeedUploadUrlResponse = res.json().await.map_err(|e| e.to_string())?;
+        validate_presigned_url(&upload.upload_url)?;
         let mut payload = chunk
             .iter()
             .map(|id| id.to_string())
@@ -61,7 +58,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
             .join("\n");
         payload.push('\n');
 
-        let put = API_CLIENT
+        let put = DATA_CLIENT
             .put(&upload.upload_url)
             .header("Content-Type", "text/plain; charset=utf-8")
             .body(payload)
@@ -86,23 +83,12 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
             .map_err(|e| e.to_string())?
             .map_err(|e: crate::sqlite::error::SqliteError| e.to_string())?;
 
-    let library = crate::config::load_library();
-    let mut priority_ids = trending_ids;
-    for g in library.games {
-        if let Some(ref sa_id) = g.steam_app_id {
-            if let Ok(id) = sa_id.trim().parse::<u32>() {
-                if id > 0 && !priority_ids.contains(&id) {
-                    priority_ids.push(id);
-                }
-            }
-        }
-    }
+    // El seed compartido debe contener popularidad global de Steam, no la biblioteca
+    // privada del usuario que exporta el manifiesto.
+    let priority_ids = trending_ids;
 
-    let priority_url_res = crate::commands::sync::api::api_request(
-        &ctx.base_url,
-        &ctx.user_id,
-        &ctx.api_key,
-        "POST",
+    let priority_url_res = seed_api_request(
+        reqwest::Method::POST,
         "/steam-seed/priority/upload-url",
         None,
     )
@@ -115,6 +101,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
 
     let priority_upload: SteamSeedUploadUrlResponse =
         priority_url_res.json().await.map_err(|e| e.to_string())?;
+    validate_presigned_url(&priority_upload.upload_url)?;
 
     let priority_payload = if priority_ids.is_empty() {
         String::new()
@@ -128,7 +115,7 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
         s
     };
 
-    let put_priority = API_CLIENT
+    let put_priority = DATA_CLIENT
         .put(&priority_upload.upload_url)
         .header("Content-Type", "text/plain; charset=utf-8")
         .body(priority_payload)
@@ -152,17 +139,9 @@ pub async fn sync_export_steam_manifest_to_cloud_seed(
 
 #[tauri::command]
 pub async fn sync_reset_cloud_seed_state() -> Result<(), String> {
-    let ctx = resolve_api_context()?;
-    let res = crate::commands::sync::api::api_request(
-        &ctx.base_url,
-        &ctx.user_id,
-        &ctx.api_key,
-        "POST",
-        "/steam-seed/reset",
-        None,
-    )
-    .await
-    .map_err(|e| format!("steam-seed/reset: {}", e))?;
+    let res = seed_api_request(reqwest::Method::POST, "/steam-seed/reset", None)
+        .await
+        .map_err(|e| format!("steam-seed/reset: {}", e))?;
 
     if !res.status().is_success() && res.status().as_u16() != 204 {
         return Err(api_error::response_message(res).await);
@@ -178,15 +157,13 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
     strategy: Option<String>,
     concurrency: Option<u32>,
 ) -> Result<SteamSeedImportResultDto, String> {
-    let ctx = resolve_api_context()?;
     let max_batches = max_batches.unwrap_or(500).clamp(1, 2000);
-    let concurrency = concurrency.unwrap_or(32).clamp(1, 128) as usize;
+    let concurrency = concurrency.unwrap_or(12).clamp(1, 128) as usize;
     let requested_strategy = super::parse_import_strategy(strategy.as_deref())?;
 
     super::import_cloud_seed_one_round(
         Some(&app),
         db.inner(),
-        &ctx,
         max_batches,
         &requested_strategy,
         concurrency,
@@ -205,9 +182,8 @@ pub async fn sync_import_cloud_seed_run_until_done(
     strategy: Option<String>,
     concurrency: Option<u32>,
 ) -> Result<SteamSeedImportRunResultDto, String> {
-    let ctx = resolve_api_context()?;
     let max_batches = max_batches.unwrap_or(500).clamp(1, 2000);
-    let concurrency = concurrency.unwrap_or(32).clamp(1, 128) as usize;
+    let concurrency = concurrency.unwrap_or(8).clamp(1, 128) as usize;
     let requested_strategy = super::parse_import_strategy(strategy.as_deref())?;
 
     let mut total_batches = 0u32;
@@ -225,7 +201,6 @@ pub async fn sync_import_cloud_seed_run_until_done(
         let r = super::import_cloud_seed_one_round(
             Some(&app),
             db.inner(),
-            &ctx,
             max_batches,
             &requested_strategy,
             concurrency,
@@ -299,7 +274,7 @@ pub async fn sync_import_cloud_seed_run_until_done(
         },
     );
 
-    let trending_priority_entries = sync_apply_cloud_priority_trending(db.inner(), &ctx)
+    let trending_priority_entries = sync_apply_cloud_priority_trending(db.inner())
         .await
         .unwrap_or(0);
 
@@ -318,18 +293,6 @@ pub async fn sync_import_cloud_seed_run_until_done(
 pub async fn sync_get_steam_seed_freshness(
     db: State<'_, AppDb>,
 ) -> Result<SteamSeedFreshnessDto, String> {
-    let ctx = match resolve_api_context() {
-        Ok(c) => c,
-        Err(e) => {
-            return Ok(SteamSeedFreshnessDto {
-                status: "unknown".to_string(),
-                cloud_last_batch_key: None,
-                local_max_batch_key: None,
-                error: Some(e),
-            });
-        }
-    };
-
     let db_load = db.inner().clone();
     let local_max = match tokio::task::spawn_blocking(move || {
         db_load.with_conn(|conn| {
@@ -358,16 +321,7 @@ pub async fn sync_get_steam_seed_freshness(
         }
     };
 
-    let list_res = match crate::commands::sync::api::api_request(
-        &ctx.base_url,
-        &ctx.user_id,
-        &ctx.api_key,
-        "GET",
-        "/steam-seed/status",
-        None,
-    )
-    .await
-    {
+    let list_res = match seed_api_request(reqwest::Method::GET, "/steam-seed/status", None).await {
         Ok(r) => r,
         Err(e) => {
             return Ok(SteamSeedFreshnessDto {
@@ -419,17 +373,9 @@ pub async fn sync_get_steam_seed_freshness(
 #[tauri::command]
 pub async fn sync_get_steam_seed_worker_control(
 ) -> Result<Option<SteamSeedWorkerControlDto>, String> {
-    let ctx = resolve_api_context()?;
-    let response = crate::commands::sync::api::api_request(
-        &ctx.base_url,
-        &ctx.user_id,
-        &ctx.api_key,
-        "GET",
-        "/steam-seed/control",
-        None,
-    )
-    .await
-    .map_err(|error| format!("steam-seed/control: {error}"))?;
+    let response = seed_api_request(reqwest::Method::GET, "/steam-seed/control", None)
+        .await
+        .map_err(|error| format!("steam-seed/control: {error}"))?;
 
     if response.status() == reqwest::StatusCode::FORBIDDEN {
         return Ok(None);
@@ -449,13 +395,9 @@ pub async fn sync_get_steam_seed_worker_control(
 pub async fn sync_set_steam_seed_worker_paused(
     paused: bool,
 ) -> Result<SteamSeedWorkerControlDto, String> {
-    let ctx = resolve_api_context()?;
     let body = serde_json::json!({ "paused": paused }).to_string();
-    let response = crate::commands::sync::api::api_request(
-        &ctx.base_url,
-        &ctx.user_id,
-        &ctx.api_key,
-        "PUT",
+    let response = seed_api_request(
+        reqwest::Method::PUT,
         "/steam-seed/control",
         Some(body.as_bytes()),
     )

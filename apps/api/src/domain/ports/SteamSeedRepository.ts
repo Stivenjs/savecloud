@@ -1,5 +1,7 @@
 /** Define el acceso al catálogo Steam sembrado en almacenamiento de objetos. */
 export interface SteamSeedRepository {
+  /** Lista los propietarios que tienen manifiestos de catálogo disponibles. */
+  listCatalogOwnerIds(): Promise<string[]>;
   getManifestUploadUrl(ownerId: string, partIndex: number): Promise<{ uploadUrl: string; key: string }>;
   getPriorityUploadUrl(ownerId: string): Promise<{ uploadUrl: string; key: string }>;
   getPriorityDownloadUrl(ownerId: string): Promise<string>;
@@ -22,11 +24,17 @@ export interface SteamSeedRepository {
   }>;
   getWorkerControl(ownerId: string): Promise<{ paused: boolean; updatedAt: string | null }>;
   setWorkerPaused(ownerId: string, paused: boolean): Promise<{ paused: boolean; updatedAt: string | null }>;
-  listBatchKeys(ownerId: string, maxKeys?: number, cursor?: string): Promise<{ keys: string[]; nextCursor?: string }>;
+  listBatchKeys(
+    ownerId: string,
+    maxKeys?: number,
+    cursor?: string,
+    startAfter?: string
+  ): Promise<{ keys: string[]; nextCursor?: string }>;
   listReviewBatchKeys(
     ownerId: string,
     maxKeys?: number,
-    cursor?: string
+    cursor?: string,
+    startAfter?: string
   ): Promise<{
     keys: string[];
     nextCursor?: string;

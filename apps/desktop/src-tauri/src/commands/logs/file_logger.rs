@@ -101,9 +101,4 @@ pub fn init_logging() {
     .format_timestamp_millis()
     .target(env_logger::Target::Pipe(Box::new(writer)))
     .try_init();
-
-    log::info!(
-        "Sistema de logging inicializado. Archivo de logs en: {}",
-        log_file_path.display()
-    );
 }

@@ -615,14 +615,12 @@ async fn run_incremental_sync(
         let _ = a.emit("steam-catalog-updated", ());
     }
 
-
     Ok(CatalogSyncStats {
         mode: mode.to_string(),
         apps_upserted: total,
         batches: last_batch_num,
     })
 }
-
 
 /// Fuerza un sync completo en la próxima ejecución borrando los metadatos
 /// de progreso. No elimina las filas ya insertadas en `steam_catalog_apps`.

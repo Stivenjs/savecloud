@@ -73,13 +73,13 @@ impl VideoServer {
         // Resetear la señal de parada a false para permitir múltiples inicios si se reutiliza la instancia.
         let _ = self.stop_tx.send(false);
 
-        let listener = TcpListener::bind("127.0.0.1:0")
-            .await
-            .map_err(|err| StreamingError::WebSocket(format!("Fallo al vincular socket TCP local: {err}")))?;
+        let listener = TcpListener::bind("127.0.0.1:0").await.map_err(|err| {
+            StreamingError::WebSocket(format!("Fallo al vincular socket TCP local: {err}"))
+        })?;
 
-        let local_addr = listener
-            .local_addr()
-            .map_err(|err| StreamingError::WebSocket(format!("Fallo al obtener puerto local: {err}")))?;
+        let local_addr = listener.local_addr().map_err(|err| {
+            StreamingError::WebSocket(format!("Fallo al obtener puerto local: {err}"))
+        })?;
 
         let port = local_addr.port();
 
@@ -316,4 +316,3 @@ async fn handle_client_stream(
         }
     }
 }
-

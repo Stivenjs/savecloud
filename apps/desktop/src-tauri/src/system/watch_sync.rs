@@ -118,7 +118,10 @@ pub fn spawn_watcher(app: AppHandle, tray_state: Arc<crate::tray::tray_state::Tr
         .api_base_url
         .as_ref()
         .is_none_or(|s| s.trim().is_empty())
-        || settings.user_id.as_ref().is_none_or(|s| s.trim().is_empty())
+        || settings
+            .user_id
+            .as_ref()
+            .is_none_or(|s| s.trim().is_empty())
     {
         return;
     }

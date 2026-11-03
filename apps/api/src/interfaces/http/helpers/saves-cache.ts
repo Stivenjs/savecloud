@@ -3,6 +3,10 @@ import type { ProcessS3EventInput } from "@application/use-cases/ProcessS3EventU
 import { invalidateListSavesByGameCache } from "@application/use-cases/ListSavesUseCase";
 import { TtlCache } from "@shared/ttlCache";
 import type { SummaryEtagItem } from "@shared/etag";
+import {
+  invalidateSteamSeedCatalogOwnerCache,
+  isSteamSeedCatalogKey,
+} from "@interfaces/http/helpers/steam-seed-catalog";
 
 const savesSummaryCache = new TtlCache<string, SummaryEtagItem[]>({ ttlMs: 2_000, maxEntries: 200 });
 const backupsListCache = new TtlCache<string, ListBackupsOutput>({ ttlMs: 10_000, maxEntries: 300 });
@@ -53,6 +57,11 @@ export function invalidateBackupsCache(storageUserId: string, gameId: string): v
 /** Invalida las listas afectadas tras completar el procesamiento de los eventos. */
 export function invalidateEventCaches(events: ProcessS3EventInput[]): void {
   for (const event of events) {
+    if (isSteamSeedCatalogKey(event.s3Key)) {
+      invalidateSteamSeedCatalogOwnerCache();
+      continue;
+    }
+
     const [userId, gameId] = event.s3Key.split("/");
     if (userId && gameId) invalidateSavesCaches(userId, gameId);
   }

@@ -64,7 +64,11 @@ pub(crate) fn read_linux_power_profile() -> Option<String> {
     if !out.status.success() {
         return None;
     }
-    let line = String::from_utf8_lossy(&out.stdout).lines().next()?.trim().to_string();
+    let line = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .next()?
+        .trim()
+        .to_string();
     if line.is_empty() {
         None
     } else {

@@ -193,12 +193,14 @@ pub async fn resolve(
 
             if let Some(app) = app {
                 log::info!("1fichier: intento nativo falló ({native_err:?}), intentando Scrapling fallback");
-                if let Ok(scraped) = crate::sources::commands::fetch::run_scrapling_fetch_with_progress(
-                    app,
-                    &page_url,
-                    cancel_flag,
-                    on_event,
-                ) {
+                if let Ok(scraped) =
+                    crate::sources::commands::fetch::run_scrapling_fetch_with_progress(
+                        app,
+                        &page_url,
+                        cancel_flag,
+                        on_event,
+                    )
+                {
                     let trimmed = scraped.trim();
                     if (trimmed.starts_with("http://") || trimmed.starts_with("https://"))
                         && is_direct_1fichier_cdn_url(trimmed)
