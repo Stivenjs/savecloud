@@ -124,20 +124,37 @@ impl SteamApiCache {
 
     /// Descarta los metadatos y medios cacheados en memoria y en SQLite para un juego.
     pub fn invalidate(&self, app_id: &str) {
-        self.media.invalidate(app_id);
-        self.details.invalidate(app_id);
+        let Ok(app_id) = app_id.trim().parse::<u32>() else {
+            return;
+        };
+        self.invalidate_many(std::slice::from_ref(&app_id));
+    }
+
+    /// Descarta varios juegos en memoria y en SQLite con una sola transacción.
+    pub fn invalidate_many(&self, app_ids: &[u32]) {
+        if app_ids.is_empty() {
+            return;
+        }
+
+        for app_id in app_ids {
+            let key = app_id.to_string();
+            self.media.invalidate(&key);
+            self.details.invalidate(&key);
+        }
 
         if let Some(db) = SQLITE_DB.get() {
-            if let Ok(pid) = app_id.trim().parse::<i64>() {
-                let db = db.clone();
-                let _ = db.with_conn(move |conn| {
-                    conn.execute(
-                        "DELETE FROM steam_appdetails_media_cache WHERE app_id = ?1",
-                        [pid],
-                    )?;
-                    Ok(())
-                });
-            }
+            let ids = app_ids.to_vec();
+            let db = db.clone();
+            let _ = db.with_conn(move |conn| {
+                let tx = conn.unchecked_transaction()?;
+                let mut delete = tx
+                    .prepare_cached("DELETE FROM steam_appdetails_media_cache WHERE app_id = ?1")?;
+                for app_id in ids {
+                    delete.execute([app_id])?;
+                }
+                drop(delete);
+                tx.commit()
+            });
         }
     }
 }

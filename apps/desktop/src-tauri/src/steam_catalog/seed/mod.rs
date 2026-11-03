@@ -1,18 +1,55 @@
 pub mod api;
+mod batching;
 pub mod commands;
 pub mod db;
+mod pipeline;
 mod request;
 pub mod streaming;
 pub mod types;
 
+use std::sync::Arc;
 use tauri::Emitter;
+use tokio::sync::Mutex;
 
 use crate::sqlite::AppDb;
-use std::collections::HashMap;
 use types::*;
 
 /// Límite de rondas por ejecución para prevenir bucles infinitos.
 pub const STEAM_SEED_IMPORT_MAX_ROUNDS: u32 = 5000;
+const DETAILS_GROUP_ROWS: usize = 5_000;
+const REVIEWS_GROUP_ROWS: usize = 2_000;
+
+fn invalidate_details_cache(app_ids: &[u32]) {
+    crate::steam_cache::steam_api_cache().invalidate_many(app_ids);
+}
+
+fn emit_persist_progress(
+    app: Option<&tauri::AppHandle>,
+    iteration: u32,
+    batches_this_round: u32,
+    total_batches: u32,
+    total_rows_updated: u32,
+    rows_this_round: u32,
+    status_text: &str,
+) {
+    let Some(app) = app else {
+        return;
+    };
+
+    let _ = app.emit(
+        "steam-seed-import-progress",
+        SteamSeedImportProgressPayload {
+            iteration,
+            batches_this_round,
+            rows_this_round,
+            total_batches,
+            total_rows_updated,
+            status_text: Some(status_text.to_string()),
+            current_batch: None,
+            done: false,
+        },
+    );
+}
 
 async fn checkpoint_import_before_failure(
     db: &AppDb,
@@ -200,93 +237,101 @@ pub async fn import_cloud_seed_one_round(
 
     let total_to_process = to_process.len() as u32;
 
-    use futures_util::stream::{self, StreamExt};
-    use std::sync::atomic::{AtomicU32, Ordering};
-    use std::sync::Arc;
-    use tokio::sync::Mutex;
-
-    let rows_updated = Arc::new(AtomicU32::new(0));
-
     // Candado compartido para serializar las escrituras a SQLite
     let db_write_lock = Arc::new(Mutex::new(()));
 
-    let outcomes = stream::iter(
-        to_process
-            .iter()
-            .enumerate()
-            .map(|(i, k)| (i, k.clone()))
-            .collect::<Vec<_>>(),
-    )
-    .map(|(idx, key)| {
-        let url = url_map.get(&key).cloned();
-        let db = db.clone();
-        let app = app.cloned();
-        let rows_updated = Arc::clone(&rows_updated);
-        let write_lock = Arc::clone(&db_write_lock);
+    let app_for_download = app.cloned();
+    let url_map_for_download = url_map;
+    let keys_for_download = to_process.clone();
+    let (mut downloads, producer) =
+        pipeline::start_download_pipeline(keys_for_download, concurrency, move |idx, key| {
+            let url = url_map_for_download.get(&key).cloned();
+            let app = app_for_download.clone();
+            async move {
+                let progress_ctx = streaming::StreamProgressContext {
+                    iteration,
+                    total_batches_this_round: total_to_process,
+                    global_total_batches: total_batches_history.saturating_add(idx as u32),
+                    global_total_rows: total_rows_history,
+                };
 
-        async move {
-            let Some(url) = url else {
-                return (
-                    key.clone(),
-                    Err(format!("No se obtuvo URL de descarga para el batch {key}")),
-                );
-            };
-
-            let progress_ctx = streaming::StreamProgressContext {
-                iteration,
-                total_batches_this_round: total_to_process,
-                global_total_batches: total_batches_history.saturating_add(idx as u32),
-                global_total_rows: total_rows_history
-                    .saturating_add(rows_updated.load(Ordering::Relaxed)),
-            };
-
-            let mut attempt = 0_u32;
-            loop {
-                match streaming::stream_import_batch(
-                    app.as_ref(),
-                    Some(&progress_ctx),
-                    &key,
-                    &db,
-                    &url,
-                    None,
-                    Arc::clone(&write_lock),
-                )
+                pipeline::download_with_retries(idx, key, url, "batch", |key, url| {
+                    let app = app.clone();
+                    let progress_ctx = progress_ctx.clone();
+                    async move {
+                        streaming::download_seed_batch(
+                            app.as_ref(),
+                            Some(&progress_ctx),
+                            &key,
+                            &url,
+                        )
+                        .await
+                    }
+                })
                 .await
-                {
-                    Ok(n) => {
-                        rows_updated.fetch_add(n, Ordering::Relaxed);
-                        return (key, Ok(()));
-                    }
-                    Err(error) if attempt < 2 => {
-                        log::warn!(
-                            "[steam-seed] Reintento {} para batch {}: {}",
-                            attempt + 1,
-                            key,
-                            error
-                        );
-                        tokio::time::sleep(std::time::Duration::from_millis(500 << attempt)).await;
-                        attempt += 1;
-                    }
-                    Err(error) => {
-                        return (key.clone(), Err(format!("Error en batch {key}: {error}")))
-                    }
-                }
             }
-        }
-    })
-    .buffer_unordered(concurrency)
-    .collect::<Vec<_>>()
-    .await;
+        });
 
-    let failed_batches: HashMap<String, String> = outcomes
-        .into_iter()
-        .filter_map(|(key, result)| result.err().map(|error| (key, error)))
-        .collect();
-    if let Some((failed_index, error)) = to_process
-        .iter()
-        .enumerate()
-        .find_map(|(index, key)| failed_batches.get(key).map(|error| (index, error.clone())))
-    {
+    let mut first_failure: Option<(usize, String)> = None;
+    let mut rows_updated = 0u32;
+    let mut completed_batches = 0u32;
+    let mut group = batching::BatchAccumulator::new(DETAILS_GROUP_ROWS, 20);
+    while let Some((index, _key, result)) = downloads.recv().await {
+        let updates = match result {
+            Ok(updates) => updates,
+            Err(error) => {
+                if first_failure
+                    .as_ref()
+                    .is_none_or(|(first_index, _)| index < *first_index)
+                {
+                    first_failure = Some((index, error));
+                }
+                continue;
+            }
+        };
+
+        completed_batches = completed_batches.saturating_add(1);
+        group.push_batch(updates);
+        if group.should_flush() {
+            let updates = group.take();
+            let app_ids: Vec<u32> = updates.iter().map(|(app_id, _)| *app_id).collect();
+            rows_updated = rows_updated
+                .saturating_add(streaming::persist_seed_group(db, updates, &db_write_lock).await?);
+            invalidate_details_cache(&app_ids);
+            emit_persist_progress(
+                app,
+                iteration,
+                total_to_process,
+                total_batches_history.saturating_add(completed_batches),
+                total_rows_history.saturating_add(rows_updated),
+                rows_updated,
+                "Guardando detalles del catálogo...",
+            );
+        }
+    }
+
+    if !group.is_empty() {
+        let updates = group.take();
+        let app_ids: Vec<u32> = updates.iter().map(|(app_id, _)| *app_id).collect();
+        rows_updated = rows_updated
+            .saturating_add(streaming::persist_seed_group(db, updates, &db_write_lock).await?);
+        invalidate_details_cache(&app_ids);
+        emit_persist_progress(
+            app,
+            iteration,
+            total_to_process,
+            total_batches_history.saturating_add(completed_batches),
+            total_rows_history.saturating_add(rows_updated),
+            rows_updated,
+            "Guardando detalles del catálogo...",
+        );
+    }
+
+    producer
+        .await
+        .map_err(|error| format!("Worker de descargas falló: {error}"))?;
+
+    if let Some((failed_index, error)) = first_failure {
         checkpoint_import_before_failure(
             db,
             &mut import_state,
@@ -299,8 +344,6 @@ pub async fn import_cloud_seed_one_round(
             "{error}. El progreso correcto quedó guardado; vuelve a intentar."
         ));
     }
-
-    let rows_updated = rows_updated.load(Ordering::Relaxed);
 
     match requested_strategy {
         "cursor" => {
@@ -407,95 +450,99 @@ async fn import_cloud_seed_reviews_one_round(
     let url_map = api::resolve_reviews_batch_download_urls(&to_process).await?;
     let total_to_process = to_process.len() as u32;
 
-    use futures_util::stream::{self, StreamExt};
-    use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
-    let rows_updated = Arc::new(AtomicU32::new(0));
     let db_write_lock = Arc::new(Mutex::new(()));
 
-    let outcomes = stream::iter(
-        to_process
-            .iter()
-            .enumerate()
-            .map(|(i, k)| (i, k.clone()))
-            .collect::<Vec<_>>(),
-    )
-    .map(|(idx, key)| {
-        let url = url_map.get(&key).cloned();
-        let db = db.clone();
-        let app = app.cloned();
-        let rows_updated = Arc::clone(&rows_updated);
-        let write_lock = Arc::clone(&db_write_lock);
+    let app_for_download = app.cloned();
+    let url_map_for_download = url_map;
+    let keys_for_download = to_process.clone();
+    let (mut downloads, producer) =
+        pipeline::start_download_pipeline(keys_for_download, concurrency, move |idx, key| {
+            let url = url_map_for_download.get(&key).cloned();
+            let app = app_for_download.clone();
+            async move {
+                let progress_ctx = streaming::StreamProgressContext {
+                    iteration,
+                    total_batches_this_round: total_to_process,
+                    global_total_batches: total_batches_history.saturating_add(idx as u32),
+                    global_total_rows: total_rows_history,
+                };
 
-        async move {
-            let Some(url) = url else {
-                return (
-                    key.clone(),
-                    Err(format!(
-                        "No se obtuvo URL de descarga para el batch de reviews {key}"
-                    )),
-                );
-            };
-
-            let progress_ctx = streaming::StreamProgressContext {
-                iteration,
-                total_batches_this_round: total_to_process,
-                global_total_batches: total_batches_history.saturating_add(idx as u32),
-                global_total_rows: total_rows_history
-                    .saturating_add(rows_updated.load(Ordering::Relaxed)),
-            };
-
-            let mut attempt = 0_u32;
-            loop {
-                match streaming::stream_import_reviews_batch(
-                    app.as_ref(),
-                    Some(&progress_ctx),
-                    &key,
-                    &db,
-                    &url,
-                    Arc::clone(&write_lock),
-                )
+                pipeline::download_with_retries(idx, key, url, "batch de reviews", |key, url| {
+                    let app = app.clone();
+                    let progress_ctx = progress_ctx.clone();
+                    async move {
+                        streaming::download_reviews_batch(
+                            app.as_ref(),
+                            Some(&progress_ctx),
+                            &key,
+                            &url,
+                        )
+                        .await
+                    }
+                })
                 .await
-                {
-                    Ok(n) => {
-                        rows_updated.fetch_add(n, Ordering::Relaxed);
-                        return (key, Ok(()));
-                    }
-                    Err(error) if attempt < 2 => {
-                        log::warn!(
-                            "[steam-seed] Reintento {} para batch de reviews {}: {}",
-                            attempt + 1,
-                            key,
-                            error
-                        );
-                        tokio::time::sleep(std::time::Duration::from_millis(500 << attempt)).await;
-                        attempt += 1;
-                    }
-                    Err(error) => {
-                        return (
-                            key.clone(),
-                            Err(format!("Error en reviews batch {key}: {error}")),
-                        );
-                    }
-                }
             }
-        }
-    })
-    .buffer_unordered(concurrency)
-    .collect::<Vec<_>>()
-    .await;
+        });
 
-    let failed_batches: HashMap<String, String> = outcomes
-        .into_iter()
-        .filter_map(|(key, result)| result.err().map(|error| (key, error)))
-        .collect();
-    if let Some((failed_index, error)) = to_process
-        .iter()
-        .enumerate()
-        .find_map(|(index, key)| failed_batches.get(key).map(|error| (index, error.clone())))
-    {
+    let mut first_failure: Option<(usize, String)> = None;
+    let mut rows_updated = 0u32;
+    let mut completed_batches = 0u32;
+    let mut group = batching::BatchAccumulator::new(REVIEWS_GROUP_ROWS, 20);
+    while let Some((index, _key, result)) = downloads.recv().await {
+        let updates = match result {
+            Ok(updates) => updates,
+            Err(error) => {
+                if first_failure
+                    .as_ref()
+                    .is_none_or(|(first_index, _)| index < *first_index)
+                {
+                    first_failure = Some((index, error));
+                }
+                continue;
+            }
+        };
+
+        completed_batches = completed_batches.saturating_add(1);
+        group.push_batch(updates);
+        if group.should_flush() {
+            rows_updated = rows_updated.saturating_add(
+                streaming::persist_reviews_group(db, group.take(), &db_write_lock).await?,
+            );
+            emit_persist_progress(
+                app,
+                iteration,
+                total_to_process,
+                total_batches_history.saturating_add(completed_batches),
+                total_rows_history.saturating_add(rows_updated),
+                rows_updated,
+                "Guardando reseñas del catálogo...",
+            );
+        }
+    }
+
+    if !group.is_empty() {
+        rows_updated = rows_updated.saturating_add(
+            streaming::persist_reviews_group(db, group.take(), &db_write_lock).await?,
+        );
+        emit_persist_progress(
+            app,
+            iteration,
+            total_to_process,
+            total_batches_history.saturating_add(completed_batches),
+            total_rows_history.saturating_add(rows_updated),
+            rows_updated,
+            "Guardando reseñas del catálogo...",
+        );
+    }
+
+    producer
+        .await
+        .map_err(|error| format!("Worker de descargas de reviews falló: {error}"))?;
+
+    if let Some((failed_index, error)) = first_failure {
         checkpoint_reviews_before_failure(
             db,
             &mut import_state,
@@ -508,8 +555,6 @@ async fn import_cloud_seed_reviews_one_round(
             "{error}. El progreso correcto quedó guardado; vuelve a intentar."
         ));
     }
-
-    let rows_updated = rows_updated.load(Ordering::Relaxed);
 
     match requested_strategy {
         "cursor" => {

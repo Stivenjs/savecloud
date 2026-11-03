@@ -4,20 +4,17 @@ use super::types::{SteamReviewsBatchLine, SteamSeedBatchLine};
 use crate::network::DATA_CLIENT;
 use crate::sqlite::AppDb;
 use futures_util::StreamExt;
-use std::sync::Arc;
 use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Mutex;
 use tokio_util::io::StreamReader;
-
-const DEFAULT_CHUNK_SIZE: usize = 50_000;
 
 async fn parse_seed_lines(
     lines: Vec<String>,
     batch_key: &str,
 ) -> Result<Vec<(u32, serde_json::Value)>, String> {
     let parse_batch_key = batch_key.to_string();
-    tokio::task::spawn_blocking(move || {
+    let result = tokio::task::spawn_blocking(move || {
         let mut updates = Vec::with_capacity(lines.len());
         for line in lines {
             let parsed = serde_json::from_str::<SteamSeedBatchLine>(&line)
@@ -31,10 +28,12 @@ async fn parse_seed_lines(
         Ok(updates)
     })
     .await
-    .map_err(|error| format!("Worker de parseo falló en batch {batch_key}: {error}"))?
+    .map_err(|error| format!("Worker de parseo falló en batch {batch_key}: {error}"))?;
+
+    result
 }
 
-async fn persist_seed_chunk(
+pub async fn persist_seed_group(
     db: &AppDb,
     updates: Vec<(u32, serde_json::Value)>,
     write_lock: &Mutex<()>,
@@ -49,7 +48,7 @@ async fn persist_seed_chunk(
     .map_err(|error| format!("Error en batch insert: {error}"))
 }
 
-async fn persist_reviews_chunk(
+pub async fn persist_reviews_group(
     db: &AppDb,
     updates: Vec<(u32, super::types::SteamReviewSummary)>,
     write_lock: &Mutex<()>,
@@ -65,6 +64,7 @@ async fn persist_reviews_chunk(
 }
 
 /// Contexto de progreso para la emisión de eventos durante el streaming.
+#[derive(Clone)]
 pub struct StreamProgressContext {
     pub iteration: u32,
     pub total_batches_this_round: u32,
@@ -72,17 +72,13 @@ pub struct StreamProgressContext {
     pub global_total_rows: u32,
 }
 
-/// Importa un batch de semillas Steam procesando y persistiendo cada chunk en streaming.
-pub async fn stream_import_batch(
+/// Descarga y parsea un batch de detalles sin competir por el escritor SQLite.
+pub async fn download_seed_batch(
     app: Option<&tauri::AppHandle>,
     ctx: Option<&StreamProgressContext>,
     batch_key: &str,
-    db: &AppDb,
     download_url_str: &str,
-    chunk_size: Option<usize>,
-    write_lock: Arc<Mutex<()>>,
-) -> Result<u32, String> {
-    let chunk_size = chunk_size.unwrap_or(DEFAULT_CHUNK_SIZE).max(1);
+) -> Result<Vec<(u32, serde_json::Value)>, String> {
     validate_presigned_url(download_url_str)?;
 
     if let (Some(a), Some(c)) = (app, ctx) {
@@ -119,10 +115,7 @@ pub async fn stream_import_batch(
         .map(|r| r.map_err(std::io::Error::other));
     let stream_reader = StreamReader::new(bytes_stream);
     let mut lines_reader = BufReader::new(stream_reader).lines();
-
-    let mut pending_lines = Vec::with_capacity(chunk_size.min(4096));
-    let mut total_updated = 0u32;
-    let mut chunk_index = 0usize;
+    let mut raw_lines = Vec::with_capacity(4096);
     while let Some(line) = lines_reader
         .next_line()
         .await
@@ -131,70 +124,21 @@ pub async fn stream_import_batch(
         if line.trim().is_empty() {
             continue;
         }
-        pending_lines.push(line);
-        if pending_lines.len() < chunk_size {
-            continue;
-        }
-
-        chunk_index += 1;
-        let lines = std::mem::take(&mut pending_lines);
-        let updates = parse_seed_lines(lines, batch_key).await?;
-        if updates.is_empty() {
-            continue;
-        }
-        if chunk_index > 1 {
-            if let (Some(a), Some(c)) = (app, ctx) {
-                let _ = a.emit(
-                    "steam-seed-import-progress",
-                    super::types::SteamSeedImportProgressPayload {
-                        iteration: c.iteration,
-                        batches_this_round: c.total_batches_this_round,
-                        rows_this_round: total_updated,
-                        total_batches: c.global_total_batches,
-                        total_rows_updated: c.global_total_rows.saturating_add(total_updated),
-                        status_text: Some(format!(
-                            "Guardando chunk {} de {}...",
-                            chunk_index, batch_key
-                        )),
-                        current_batch: Some(batch_key.to_string()),
-                        done: false,
-                    },
-                );
-            }
-        }
-        let app_ids: Vec<u32> = updates.iter().map(|(app_id, _)| *app_id).collect();
-        total_updated =
-            total_updated.saturating_add(persist_seed_chunk(db, updates, &write_lock).await?);
-        for app_id in app_ids {
-            crate::steam_cache::steam_api_cache().invalidate(&app_id.to_string());
-        }
+        raw_lines.push(line);
     }
 
-    if !pending_lines.is_empty() {
-        let lines = std::mem::take(&mut pending_lines);
-        let updates = parse_seed_lines(lines, batch_key).await?;
-        if !updates.is_empty() {
-            let app_ids: Vec<u32> = updates.iter().map(|(app_id, _)| *app_id).collect();
-            total_updated =
-                total_updated.saturating_add(persist_seed_chunk(db, updates, &write_lock).await?);
-            for app_id in app_ids {
-                crate::steam_cache::steam_api_cache().invalidate(&app_id.to_string());
-            }
-        }
-    }
+    let updates = parse_seed_lines(raw_lines, batch_key).await?;
 
-    Ok(total_updated)
+    Ok(updates)
 }
 
-/// Importa un batch NDJSON de reviews Steam y persiste resúmenes en SQLite.
-pub async fn stream_import_reviews_batch(
+/// Descarga y parsea un batch de reviews sin competir por el escritor SQLite.
+pub async fn download_reviews_batch(
     app: Option<&tauri::AppHandle>,
     ctx: Option<&StreamProgressContext>,
     batch_key: &str,
-    db: &AppDb,
     download_url_str: &str,
-    write_lock: Arc<Mutex<()>>,
-) -> Result<u32, String> {
+) -> Result<Vec<(u32, super::types::SteamReviewSummary)>, String> {
     validate_presigned_url(download_url_str)?;
 
     if let (Some(a), Some(c)) = (app, ctx) {
@@ -231,9 +175,7 @@ pub async fn stream_import_reviews_batch(
         .map(|r| r.map_err(std::io::Error::other));
     let stream_reader = StreamReader::new(bytes_stream);
     let mut lines_reader = BufReader::new(stream_reader).lines();
-
-    let mut pending_updates = Vec::with_capacity(DEFAULT_CHUNK_SIZE.min(4096));
-    let mut total_updated = 0u32;
+    let mut updates = Vec::with_capacity(4096);
     while let Some(line) = lines_reader
         .next_line()
         .await
@@ -248,21 +190,10 @@ pub async fn stream_import_reviews_batch(
             .map_err(|e| format!("Línea JSON inválida en batch de reviews {batch_key}: {e}"))?;
         if parsed.reviews_success == Some(true) {
             if let Some(summary) = parsed.summary {
-                pending_updates.push((parsed.app_id, summary));
+                updates.push((parsed.app_id, summary));
             }
         }
-
-        if pending_updates.len() >= DEFAULT_CHUNK_SIZE {
-            let updates = std::mem::take(&mut pending_updates);
-            total_updated = total_updated
-                .saturating_add(persist_reviews_chunk(db, updates, &write_lock).await?);
-        }
     }
 
-    if !pending_updates.is_empty() {
-        total_updated = total_updated
-            .saturating_add(persist_reviews_chunk(db, pending_updates, &write_lock).await?);
-    }
-
-    Ok(total_updated)
+    Ok(updates)
 }

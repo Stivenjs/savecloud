@@ -215,74 +215,6 @@ pub fn apply_seed_updates(
             updated = updated.saturating_add(n as u32);
         }
     }
-
-    tx.execute_batch(
-        "
-        DELETE FROM steam_app_genres
-        WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
-
-        INSERT OR IGNORE INTO steam_app_genres (app_id, label)
-        SELECT
-            a.app_id,
-            CASE
-                WHEN json_valid(g.value) AND json_type(g.value) = 'object'
-                THEN COALESCE(NULLIF(json_extract(g.value, '$.description'), ''), g.value)
-                ELSE g.value
-            END AS genre_label
-        FROM steam_catalog_apps a,
-             json_each(
-                 CASE
-                     WHEN json_valid(a.details_json)
-                       AND json_type(json_extract(a.details_json, '$.genres')) = 'array'
-                     THEN json_extract(a.details_json, '$.genres')
-                     ELSE '[]'
-                 END
-             ) AS g
-        WHERE a.app_id IN (SELECT app_id FROM _seed_batch_ids)
-          AND a.details_json IS NOT NULL
-          AND length(trim(a.details_json)) > 0
-          AND genre_label IS NOT NULL
-          AND trim(genre_label) != ''
-        GROUP BY a.app_id, genre_label COLLATE NOCASE;
-
-        DELETE FROM steam_app_tags
-        WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
-
-        INSERT OR IGNORE INTO steam_app_tags (app_id, label)
-        SELECT
-            a.app_id,
-            CASE
-                WHEN json_valid(t.value) AND json_type(t.value) = 'object'
-                THEN COALESCE(NULLIF(json_extract(t.value, '$.description'), ''), t.value)
-                ELSE t.value
-            END AS tag_label
-        FROM steam_catalog_apps a,
-             json_each(
-                 CASE
-                     WHEN json_valid(a.details_json)
-                       AND json_type(json_extract(a.details_json, '$.categories')) = 'array'
-                     THEN json_extract(a.details_json, '$.categories')
-                     ELSE '[]'
-                 END
-             ) AS t
-        WHERE a.app_id IN (SELECT app_id FROM _seed_batch_ids)
-          AND a.details_json IS NOT NULL
-          AND length(trim(a.details_json)) > 0
-          AND tag_label IS NOT NULL
-          AND trim(tag_label) != ''
-        GROUP BY a.app_id, tag_label COLLATE NOCASE;
-
-        DELETE FROM steam_catalog_search
-        WHERE app_id IN (SELECT app_id FROM _seed_batch_ids);
-
-        INSERT INTO steam_catalog_search (app_id, name_normalized)
-        SELECT app_id, name_normalized
-        FROM steam_catalog_apps
-        WHERE app_id IN (SELECT app_id FROM _seed_batch_ids)
-          AND name_normalized IS NOT NULL;
-        ",
-    )?;
-
     tx.commit()?;
     Ok(updated)
 }
@@ -357,7 +289,6 @@ pub fn apply_reviews_updates(
             updated = updated.saturating_add(n as u32);
         }
     }
-
     tx.commit()?;
     Ok(updated)
 }

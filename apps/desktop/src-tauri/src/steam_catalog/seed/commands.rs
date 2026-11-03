@@ -158,7 +158,7 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
     concurrency: Option<u32>,
 ) -> Result<SteamSeedImportResultDto, String> {
     let max_batches = max_batches.unwrap_or(500).clamp(1, 2000);
-    let concurrency = concurrency.unwrap_or(8).clamp(1, 128) as usize;
+    let concurrency = concurrency.unwrap_or(12).clamp(1, 128) as usize;
     let requested_strategy = super::parse_import_strategy(strategy.as_deref())?;
 
     super::import_cloud_seed_one_round(
