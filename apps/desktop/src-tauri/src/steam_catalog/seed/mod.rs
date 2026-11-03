@@ -20,6 +20,11 @@ use types::*;
 pub const STEAM_SEED_IMPORT_MAX_ROUNDS: u32 = 5000;
 const DETAILS_GROUP_ROWS: usize = 5_000;
 const REVIEWS_GROUP_ROWS: usize = 2_000;
+const ETA_BATCH_UNIT_BYTES: u64 = 1024 * 1024;
+
+fn eta_progress_units(batches: u32) -> u64 {
+    u64::from(batches).saturating_mul(ETA_BATCH_UNIT_BYTES)
+}
 
 fn invalidate_details_cache(app_ids: &[u32]) {
     crate::steam_cache::steam_api_cache().invalidate_many(app_ids);
@@ -291,6 +296,11 @@ pub async fn import_cloud_seed_one_round(
             rows_updated = rows_updated
                 .saturating_add(streaming::persist_seed_group(db, updates, &db_write_lock).await?);
             invalidate_details_cache(&app_ids);
+            let sample = speed_tracker.record(
+                eta_progress_units(completed_batches),
+                eta_progress_units(total_to_process),
+                Instant::now(),
+            );
             emit_persist_progress(
                 app,
                 iteration,
@@ -300,9 +310,7 @@ pub async fn import_cloud_seed_one_round(
                 rows_updated,
                 "Guardando detalles del catálogo...",
                 started_at,
-                speed_tracker
-                    .record(completed_batches as u64, total_to_process as u64, Instant::now())
-                    .eta_seconds,
+                sample.eta_seconds,
             );
         }
     }
@@ -313,6 +321,11 @@ pub async fn import_cloud_seed_one_round(
         rows_updated = rows_updated
             .saturating_add(streaming::persist_seed_group(db, updates, &db_write_lock).await?);
         invalidate_details_cache(&app_ids);
+        let sample = speed_tracker.record_final(
+            eta_progress_units(completed_batches),
+            eta_progress_units(total_to_process),
+            Instant::now(),
+        );
         emit_persist_progress(
             app,
             iteration,
@@ -322,9 +335,7 @@ pub async fn import_cloud_seed_one_round(
             rows_updated,
             "Guardando detalles del catálogo...",
             started_at,
-            speed_tracker
-                .record_final(completed_batches as u64, total_to_process as u64, Instant::now())
-                .eta_seconds,
+            sample.eta_seconds,
         );
     }
 
@@ -508,7 +519,11 @@ async fn import_cloud_seed_reviews_one_round(
                 "Guardando reseñas del catálogo...",
                 started_at,
                 speed_tracker
-                    .record(completed_batches as u64, total_to_process as u64, Instant::now())
+                    .record(
+                        eta_progress_units(completed_batches),
+                        eta_progress_units(total_to_process),
+                        Instant::now(),
+                    )
                     .eta_seconds,
             );
         }
@@ -528,7 +543,11 @@ async fn import_cloud_seed_reviews_one_round(
             "Guardando reseñas del catálogo...",
             started_at,
             speed_tracker
-                .record_final(completed_batches as u64, total_to_process as u64, Instant::now())
+                .record_final(
+                    eta_progress_units(completed_batches),
+                    eta_progress_units(total_to_process),
+                    Instant::now(),
+                )
                 .eta_seconds,
         );
     }
