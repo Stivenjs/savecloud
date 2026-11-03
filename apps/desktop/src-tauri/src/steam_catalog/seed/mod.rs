@@ -21,6 +21,10 @@ pub const STEAM_SEED_IMPORT_MAX_ROUNDS: u32 = 5000;
 const DETAILS_GROUP_ROWS: usize = 5_000;
 const REVIEWS_GROUP_ROWS: usize = 2_000;
 const ETA_BATCH_UNIT_BYTES: u64 = 1024 * 1024;
+/// Concurrencia de descargas de detalles, limitada para no saturar el pool HTTP.
+pub const DEFAULT_DETAILS_DOWNLOAD_CONCURRENCY: usize = 16;
+/// Concurrencia de descargas de reseñas, independientes de las escrituras SQLite.
+pub const DEFAULT_REVIEWS_DOWNLOAD_CONCURRENCY: usize = 24;
 
 fn eta_progress_units(batches: u32) -> u64 {
     u64::from(batches).saturating_mul(ETA_BATCH_UNIT_BYTES)
@@ -181,7 +185,8 @@ pub fn parse_import_strategy(s: Option<&str>) -> Result<String, String> {
 }
 
 /// Ejecuta una única ronda de importación de batches del seed en la nube.
-/// Los batches se descargan y procesan en paralelo según `concurrency`.
+/// Las descargas de detalles y reseñas usan concurrencias independientes.
+/// La persistencia permanece serializada por un único lock de escritura.
 #[expect(
     clippy::too_many_arguments,
     reason = "Parámetros requeridos para sincronización incremental por lotes de catálogo"
@@ -191,7 +196,8 @@ pub async fn import_cloud_seed_one_round(
     db: &AppDb,
     max_batches: u32,
     requested_strategy: &str,
-    concurrency: usize,
+    details_concurrency: usize,
+    reviews_concurrency: usize,
     iteration: u32,
     total_batches_history: u32,
     total_rows_history: u32,
@@ -257,7 +263,7 @@ pub async fn import_cloud_seed_one_round(
     let url_map_for_download = url_map;
     let keys_for_download = to_process.clone();
     let (mut downloads, producer) =
-        pipeline::start_download_pipeline(keys_for_download, concurrency, move |idx, key| {
+        pipeline::start_download_pipeline(keys_for_download, details_concurrency, move |idx, key| {
             let url = url_map_for_download.get(&key).cloned();
             async move {
                 pipeline::download_with_retries(idx, key, url, "batch", |key, url| {
@@ -395,7 +401,7 @@ pub async fn import_cloud_seed_one_round(
         db,
         max_batches,
         requested_strategy,
-        concurrency,
+        reviews_concurrency,
         iteration,
         total_batches_history.saturating_add(to_process.len() as u32),
         total_rows_history.saturating_add(rows_updated),
@@ -419,7 +425,7 @@ async fn import_cloud_seed_reviews_one_round(
     db: &AppDb,
     max_batches: u32,
     requested_strategy: &str,
-    concurrency: usize,
+    reviews_concurrency: usize,
     iteration: u32,
     total_batches_history: u32,
     total_rows_history: u32,
@@ -472,7 +478,7 @@ async fn import_cloud_seed_reviews_one_round(
     let url_map_for_download = url_map;
     let keys_for_download = to_process.clone();
     let (mut downloads, producer) =
-        pipeline::start_download_pipeline(keys_for_download, concurrency, move |idx, key| {
+        pipeline::start_download_pipeline(keys_for_download, reviews_concurrency, move |idx, key| {
             let url = url_map_for_download.get(&key).cloned();
             async move {
                 pipeline::download_with_retries(idx, key, url, "batch de reviews", |key, url| {

@@ -159,7 +159,7 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
     concurrency: Option<u32>,
 ) -> Result<SteamSeedImportResultDto, String> {
     let max_batches = max_batches.unwrap_or(500).clamp(1, 2000);
-    let concurrency = concurrency.unwrap_or(12).clamp(1, 128) as usize;
+    let (details_concurrency, reviews_concurrency) = resolve_download_concurrency(concurrency);
     let requested_strategy = super::parse_import_strategy(strategy.as_deref())?;
     let started_at = Instant::now();
 
@@ -168,7 +168,8 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
         db.inner(),
         max_batches,
         &requested_strategy,
-        concurrency,
+        details_concurrency,
+        reviews_concurrency,
         1,
         0,
         0,
@@ -186,7 +187,7 @@ pub async fn sync_import_cloud_seed_run_until_done(
     concurrency: Option<u32>,
 ) -> Result<SteamSeedImportRunResultDto, String> {
     let max_batches = max_batches.unwrap_or(500).clamp(1, 2000);
-    let concurrency = concurrency.unwrap_or(8).clamp(1, 128) as usize;
+    let (details_concurrency, reviews_concurrency) = resolve_download_concurrency(concurrency);
     let requested_strategy = super::parse_import_strategy(strategy.as_deref())?;
 
     let mut total_batches = 0u32;
@@ -207,7 +208,8 @@ pub async fn sync_import_cloud_seed_run_until_done(
             db.inner(),
             max_batches,
             &requested_strategy,
-            concurrency,
+            details_concurrency,
+            reviews_concurrency,
             round,
             total_batches,
             total_rows,
@@ -221,6 +223,7 @@ pub async fn sync_import_cloud_seed_run_until_done(
         if r.batches_processed == 0 {
             break;
         }
+
     }
 
     let _ = app.emit(
@@ -279,6 +282,20 @@ pub async fn sync_import_cloud_seed_run_until_done(
         rows_updated: total_rows,
         trending_priority_entries: trending_priority_entries as u32,
     })
+}
+
+/// Resuelve la concurrencia de cada fase sin romper el parámetro legado común.
+fn resolve_download_concurrency(concurrency: Option<u32>) -> (usize, usize) {
+    match concurrency {
+        Some(value) => {
+            let value = value.clamp(1, 128) as usize;
+            (value, value)
+        }
+        None => (
+            super::DEFAULT_DETAILS_DOWNLOAD_CONCURRENCY,
+            super::DEFAULT_REVIEWS_DOWNLOAD_CONCURRENCY,
+        ),
+    }
 }
 
 #[tauri::command]
