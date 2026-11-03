@@ -1563,6 +1563,7 @@
       "seedProgressAria": "Progreso de descarga de información desde la nube",
       "seedFinishing": "Finalizando…",
       "seedPass": "Pasada {{iteration}} · {{batches}} lotes · {{count}} juegos actualizados",
+      "seedEta": "ETA {{eta}}",
       "seedPreparing": "Preparando descarga…",
       "localFilesEyebrow": "Copia portable",
       "localFilesTitle": "Mover configuración entre equipos",

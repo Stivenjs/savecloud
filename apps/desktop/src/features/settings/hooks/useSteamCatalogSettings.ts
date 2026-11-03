@@ -143,7 +143,10 @@ export function useSteamCatalogSettings() {
     let unlisten: (() => void) | undefined;
     try {
       unlisten = await listen<SteamSeedImportProgressPayload>("steam-seed-import-progress", (ev) => {
-        setSteamSeedImportProgress(ev.payload);
+        setSteamSeedImportProgress((previous) => {
+          const etaSeconds = ev.payload.etaSeconds ?? previous?.etaSeconds ?? null;
+          return { ...ev.payload, etaSeconds };
+        });
       });
       const result = await importCloudSeedRunUntilDone();
       const trending =

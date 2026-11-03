@@ -6,6 +6,7 @@ use crate::cloud::api_error;
 use crate::network::DATA_CLIENT;
 use crate::sqlite::AppDb;
 use crate::steam_catalog::trending::sync_store_trending;
+use std::time::Instant;
 use tauri::{AppHandle, Emitter, State};
 
 #[tauri::command]
@@ -158,18 +159,21 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
     concurrency: Option<u32>,
 ) -> Result<SteamSeedImportResultDto, String> {
     let max_batches = max_batches.unwrap_or(500).clamp(1, 2000);
-    let concurrency = concurrency.unwrap_or(12).clamp(1, 128) as usize;
+    let (details_concurrency, reviews_concurrency) = resolve_download_concurrency(concurrency);
     let requested_strategy = super::parse_import_strategy(strategy.as_deref())?;
+    let started_at = Instant::now();
 
     super::import_cloud_seed_one_round(
         Some(&app),
         db.inner(),
         max_batches,
         &requested_strategy,
-        concurrency,
+        details_concurrency,
+        reviews_concurrency,
         1,
         0,
         0,
+        started_at,
     )
     .await
 }
@@ -183,12 +187,13 @@ pub async fn sync_import_cloud_seed_run_until_done(
     concurrency: Option<u32>,
 ) -> Result<SteamSeedImportRunResultDto, String> {
     let max_batches = max_batches.unwrap_or(500).clamp(1, 2000);
-    let concurrency = concurrency.unwrap_or(8).clamp(1, 128) as usize;
+    let (details_concurrency, reviews_concurrency) = resolve_download_concurrency(concurrency);
     let requested_strategy = super::parse_import_strategy(strategy.as_deref())?;
 
     let mut total_batches = 0u32;
     let mut total_rows = 0u32;
     let mut round = 0u32;
+    let started_at = Instant::now();
 
     loop {
         round += 1;
@@ -203,36 +208,22 @@ pub async fn sync_import_cloud_seed_run_until_done(
             db.inner(),
             max_batches,
             &requested_strategy,
-            concurrency,
+            details_concurrency,
+            reviews_concurrency,
             round,
             total_batches,
             total_rows,
+            started_at,
         )
         .await?;
 
         total_batches = total_batches.saturating_add(r.batches_processed);
         total_rows = total_rows.saturating_add(r.rows_updated);
 
-        let _ = app.emit(
-            "steam-seed-import-progress",
-            SteamSeedImportProgressPayload {
-                iteration: round,
-                batches_this_round: r.batches_processed,
-                rows_this_round: r.rows_updated,
-                total_batches,
-                total_rows_updated: total_rows,
-                status_text: Some(format!(
-                    "Ronda {} · {} lotes · {} filas",
-                    round, total_batches, total_rows
-                )),
-                current_batch: None,
-                done: false,
-            },
-        );
-
         if r.batches_processed == 0 {
             break;
         }
+
     }
 
     let _ = app.emit(
@@ -246,6 +237,8 @@ pub async fn sync_import_cloud_seed_run_until_done(
             status_text: Some("Optimizando motor de búsqueda...".to_string()),
             current_batch: None,
             done: false,
+            elapsed_seconds: started_at.elapsed().as_secs(),
+            eta_seconds: None,
         },
     );
 
@@ -271,6 +264,8 @@ pub async fn sync_import_cloud_seed_run_until_done(
             status_text: Some("Sincronización de catálogo finalizada.".to_string()),
             current_batch: None,
             done: true,
+            elapsed_seconds: started_at.elapsed().as_secs(),
+            eta_seconds: Some(0),
         },
     );
 
@@ -287,6 +282,20 @@ pub async fn sync_import_cloud_seed_run_until_done(
         rows_updated: total_rows,
         trending_priority_entries: trending_priority_entries as u32,
     })
+}
+
+/// Resuelve la concurrencia de cada fase sin romper el parámetro legado común.
+fn resolve_download_concurrency(concurrency: Option<u32>) -> (usize, usize) {
+    match concurrency {
+        Some(value) => {
+            let value = value.clamp(1, 128) as usize;
+            (value, value)
+        }
+        None => (
+            super::DEFAULT_DETAILS_DOWNLOAD_CONCURRENCY,
+            super::DEFAULT_REVIEWS_DOWNLOAD_CONCURRENCY,
+        ),
+    }
 }
 
 #[tauri::command]

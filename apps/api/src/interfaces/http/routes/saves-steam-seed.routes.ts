@@ -17,6 +17,7 @@ import {
 } from "@interfaces/http/helpers/steam-seed-catalog";
 import { ApplicationError } from "@application/errors/ApplicationError";
 import { assertSteamSeedRepository } from "@interfaces/http/helpers/steam-seed";
+import { getUserId } from "@interfaces/http/helpers/request-context";
 
 export async function registerSteamSeedRoutes(
   app: FastifyInstance,
@@ -108,7 +109,12 @@ export async function registerSteamSeedRoutes(
       deps.steamSeedRepository.getSteamSeedStatus(ownerId),
       deps.steamSeedRepository.getSteamReviewsSeedStatus(ownerId),
     ]);
-    return reply.send({ ...worker, ...progress, reviews });
+    return reply.send({
+      ...worker,
+      ...progress,
+      reviews,
+      canManage: getUserId(request) === ownerId,
+    });
   });
 
   app.put<{ Body: SteamSeedWorkerControlBody }>(

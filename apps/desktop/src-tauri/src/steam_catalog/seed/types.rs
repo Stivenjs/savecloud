@@ -108,6 +108,8 @@ pub struct SteamSeedImportProgressPayload {
     pub status_text: Option<String>,
     pub current_batch: Option<String>,
     pub done: bool,
+    pub elapsed_seconds: u64,
+    pub eta_seconds: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -144,6 +146,7 @@ pub struct SteamSeedWorkerReviewsDto {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SteamSeedWorkerControlDto {
+    pub can_manage: bool,
     pub paused: bool,
     pub updated_at: Option<String>,
     pub last_batch_key: Option<String>,

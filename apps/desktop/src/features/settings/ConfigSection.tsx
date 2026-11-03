@@ -1,6 +1,7 @@
 import { Button, Card, CardBody, Divider, Progress, Skeleton, Tab, Tabs } from "@heroui/react";
 import { SteamSeedFreshnessBanner } from "@features/steam-catalog/components/SteamSeedFreshnessBanner";
 import { SteamSeedWorkerControls } from "@features/settings/SteamSeedWorkerControls";
+import { useSteamSeedWorkerControl } from "@features/settings/hooks/useSteamSeedWorkerControl";
 import { FileJson, Cloud, HardDrive, FolderOpen, Link2, Library, Zap } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import type { SteamCatalogSyncProgressPayload, SteamSeedImportProgressPayload } from "@services/tauri";
@@ -55,6 +56,13 @@ const labelClass = "text-xs font-semibold uppercase tracking-[0.08em] text-defau
 const sectionShellClass = sectionClass;
 const sectionInnerClass = "space-y-4";
 const actionButtonClass = buttonClass;
+
+function formatEta(totalSeconds: number): string {
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds === 0 ? `${minutes} min` : `${minutes} min ${seconds}s`;
+}
 
 interface SectionHeaderProps {
   id: string;
@@ -125,7 +133,9 @@ export function ConfigSection({
   onOpenResetCloudSeedModal,
 }: ConfigSectionProps) {
   const { t } = useTranslation();
+  const steamSeedControlQuery = useSteamSeedWorkerControl();
   const showS3TransferBlock = isLoadingData || (s3TransferEndpointType != null && s3TransferEndpointType !== "unknown");
+  const canManageSteamSeed = steamSeedControlQuery.data?.canManage === true;
 
   return (
     <Card className="border border-default-200/70 shadow-sm dark:border-default-100/15">
@@ -317,16 +327,18 @@ export function ConfigSection({
                   <SteamSeedFreshnessBanner />
                   <SteamSeedWorkerControls />
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="flat"
-                      color="primary"
-                      isDisabled={steamSeedBusy}
-                      isLoading={steamSeedBusy}
-                      onPress={() => onExportSteamSeedManifest?.()}
-                      className={actionButtonClass}>
-                      {t("settings.configSection.sendGameList")}
-                    </Button>
+                    {canManageSteamSeed ? (
+                      <Button
+                        size="sm"
+                        variant="flat"
+                        color="primary"
+                        isDisabled={steamSeedBusy}
+                        isLoading={steamSeedBusy}
+                        onPress={() => onExportSteamSeedManifest?.()}
+                        className={actionButtonClass}>
+                        {t("settings.configSection.sendGameList")}
+                      </Button>
+                    ) : null}
                     <Button
                       size="sm"
                       variant="flat"
@@ -336,15 +348,17 @@ export function ConfigSection({
                       className={actionButtonClass}>
                       {t("settings.configSection.downloadDetailedInfo")}
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="light"
-                      color="warning"
-                      isDisabled={steamSeedBusy}
-                      onPress={() => onOpenResetCloudSeedModal?.()}
-                      className={actionButtonClass}>
-                      {t("settings.configSection.resetCloudSeed")}
-                    </Button>
+                    {canManageSteamSeed ? (
+                      <Button
+                        size="sm"
+                        variant="light"
+                        color="warning"
+                        isDisabled={steamSeedBusy}
+                        onPress={() => onOpenResetCloudSeedModal?.()}
+                        className={actionButtonClass}>
+                        {t("settings.configSection.resetCloudSeed")}
+                      </Button>
+                    ) : null}
                   </div>
                   {steamSeedBusy ? (
                     <ProgressStatus
@@ -353,11 +367,11 @@ export function ConfigSection({
                         steamSeedImportProgress
                           ? steamSeedImportProgress.done
                             ? t("settings.configSection.seedFinishing")
-                            : t("settings.configSection.seedPass", {
+                            : `${t("settings.configSection.seedPass", {
                                 iteration: steamSeedImportProgress.iteration,
                                 batches: steamSeedImportProgress.totalBatches,
                                 count: steamSeedImportProgress.totalRowsUpdated.toLocaleString(),
-                              })
+                              })}${steamSeedImportProgress.etaSeconds != null ? ` · ${t("settings.configSection.seedEta", { eta: formatEta(steamSeedImportProgress.etaSeconds) })}` : ""}`
                           : t("settings.configSection.seedPreparing")
                       }
                     />

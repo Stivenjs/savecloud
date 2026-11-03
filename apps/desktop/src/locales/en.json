@@ -1563,6 +1563,7 @@
       "seedProgressAria": "Cloud info download progress",
       "seedFinishing": "Finishing…",
       "seedPass": "Pass {{iteration}} · {{batches}} batches · {{count}} games updated",
+      "seedEta": "ETA {{eta}}",
       "seedPreparing": "Preparing download…",
       "localFilesEyebrow": "Portable copy",
       "localFilesTitle": "Move settings between devices",
