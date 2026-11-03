@@ -6,6 +6,7 @@ use crate::cloud::api_error;
 use crate::network::DATA_CLIENT;
 use crate::sqlite::AppDb;
 use crate::steam_catalog::trending::sync_store_trending;
+use std::time::Instant;
 use tauri::{AppHandle, Emitter, State};
 
 #[tauri::command]
@@ -160,6 +161,7 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
     let max_batches = max_batches.unwrap_or(500).clamp(1, 2000);
     let concurrency = concurrency.unwrap_or(12).clamp(1, 128) as usize;
     let requested_strategy = super::parse_import_strategy(strategy.as_deref())?;
+    let started_at = Instant::now();
 
     super::import_cloud_seed_one_round(
         Some(&app),
@@ -170,6 +172,7 @@ pub async fn sync_import_cloud_seed_batches_to_sqlite(
         1,
         0,
         0,
+        started_at,
     )
     .await
 }
@@ -189,6 +192,7 @@ pub async fn sync_import_cloud_seed_run_until_done(
     let mut total_batches = 0u32;
     let mut total_rows = 0u32;
     let mut round = 0u32;
+    let started_at = Instant::now();
 
     loop {
         round += 1;
@@ -207,28 +211,12 @@ pub async fn sync_import_cloud_seed_run_until_done(
             round,
             total_batches,
             total_rows,
+            started_at,
         )
         .await?;
 
         total_batches = total_batches.saturating_add(r.batches_processed);
         total_rows = total_rows.saturating_add(r.rows_updated);
-
-        let _ = app.emit(
-            "steam-seed-import-progress",
-            SteamSeedImportProgressPayload {
-                iteration: round,
-                batches_this_round: r.batches_processed,
-                rows_this_round: r.rows_updated,
-                total_batches,
-                total_rows_updated: total_rows,
-                status_text: Some(format!(
-                    "Ronda {} · {} lotes · {} filas",
-                    round, total_batches, total_rows
-                )),
-                current_batch: None,
-                done: false,
-            },
-        );
 
         if r.batches_processed == 0 {
             break;
@@ -246,6 +234,8 @@ pub async fn sync_import_cloud_seed_run_until_done(
             status_text: Some("Optimizando motor de búsqueda...".to_string()),
             current_batch: None,
             done: false,
+            elapsed_seconds: started_at.elapsed().as_secs(),
+            eta_seconds: None,
         },
     );
 
@@ -271,6 +261,8 @@ pub async fn sync_import_cloud_seed_run_until_done(
             status_text: Some("Sincronización de catálogo finalizada.".to_string()),
             current_batch: None,
             done: true,
+            elapsed_seconds: started_at.elapsed().as_secs(),
+            eta_seconds: Some(0),
         },
     );
 

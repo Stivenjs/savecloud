@@ -57,6 +57,13 @@ const sectionShellClass = sectionClass;
 const sectionInnerClass = "space-y-4";
 const actionButtonClass = buttonClass;
 
+function formatEta(totalSeconds: number): string {
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds === 0 ? `${minutes} min` : `${minutes} min ${seconds}s`;
+}
+
 interface SectionHeaderProps {
   id: string;
   icon: ReactNode;
@@ -360,11 +367,11 @@ export function ConfigSection({
                         steamSeedImportProgress
                           ? steamSeedImportProgress.done
                             ? t("settings.configSection.seedFinishing")
-                            : t("settings.configSection.seedPass", {
+                            : `${t("settings.configSection.seedPass", {
                                 iteration: steamSeedImportProgress.iteration,
                                 batches: steamSeedImportProgress.totalBatches,
                                 count: steamSeedImportProgress.totalRowsUpdated.toLocaleString(),
-                              })
+                              })}${steamSeedImportProgress.etaSeconds != null ? ` · ${t("settings.configSection.seedEta", { eta: formatEta(steamSeedImportProgress.etaSeconds) })}` : ""}`
                           : t("settings.configSection.seedPreparing")
                       }
                     />

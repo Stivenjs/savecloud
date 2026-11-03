@@ -4,7 +4,6 @@ use super::types::{SteamReviewsBatchLine, SteamSeedBatchLine};
 use crate::network::DATA_CLIENT;
 use crate::sqlite::AppDb;
 use futures_util::StreamExt;
-use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Mutex;
 use tokio_util::io::StreamReader;
@@ -63,39 +62,12 @@ pub async fn persist_reviews_group(
     .map_err(|error| format!("Error en persistencia de reviews: {error}"))
 }
 
-/// Contexto de progreso para la emisión de eventos durante el streaming.
-#[derive(Clone)]
-pub struct StreamProgressContext {
-    pub iteration: u32,
-    pub total_batches_this_round: u32,
-    pub global_total_batches: u32,
-    pub global_total_rows: u32,
-}
-
 /// Descarga y parsea un batch de detalles sin competir por el escritor SQLite.
 pub async fn download_seed_batch(
-    app: Option<&tauri::AppHandle>,
-    ctx: Option<&StreamProgressContext>,
     batch_key: &str,
     download_url_str: &str,
 ) -> Result<Vec<(u32, serde_json::Value)>, String> {
     validate_presigned_url(download_url_str)?;
-
-    if let (Some(a), Some(c)) = (app, ctx) {
-        let _ = a.emit(
-            "steam-seed-import-progress",
-            super::types::SteamSeedImportProgressPayload {
-                iteration: c.iteration,
-                batches_this_round: c.total_batches_this_round,
-                rows_this_round: 0,
-                total_batches: c.global_total_batches,
-                total_rows_updated: c.global_total_rows,
-                status_text: Some(format!("Descargando batch {}...", batch_key)),
-                current_batch: Some(batch_key.to_string()),
-                done: false,
-            },
-        );
-    }
 
     let response = DATA_CLIENT
         .get(download_url_str)
@@ -134,28 +106,10 @@ pub async fn download_seed_batch(
 
 /// Descarga y parsea un batch de reviews sin competir por el escritor SQLite.
 pub async fn download_reviews_batch(
-    app: Option<&tauri::AppHandle>,
-    ctx: Option<&StreamProgressContext>,
     batch_key: &str,
     download_url_str: &str,
 ) -> Result<Vec<(u32, super::types::SteamReviewSummary)>, String> {
     validate_presigned_url(download_url_str)?;
-
-    if let (Some(a), Some(c)) = (app, ctx) {
-        let _ = a.emit(
-            "steam-seed-import-progress",
-            super::types::SteamSeedImportProgressPayload {
-                iteration: c.iteration,
-                batches_this_round: c.total_batches_this_round,
-                rows_this_round: 0,
-                total_batches: c.global_total_batches,
-                total_rows_updated: c.global_total_rows,
-                status_text: Some(format!("Descargando reviews {}...", batch_key)),
-                current_batch: Some(batch_key.to_string()),
-                done: false,
-            },
-        );
-    }
 
     let response = DATA_CLIENT
         .get(download_url_str)

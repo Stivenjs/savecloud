@@ -8,10 +8,12 @@ pub mod streaming;
 pub mod types;
 
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::Emitter;
 use tokio::sync::Mutex;
 
 use crate::sqlite::AppDb;
+use crate::utils::transfer_metrics::TransferSpeedTracker;
 use types::*;
 
 /// Límite de rondas por ejecución para prevenir bucles infinitos.
@@ -31,6 +33,8 @@ fn emit_persist_progress(
     total_rows_updated: u32,
     rows_this_round: u32,
     status_text: &str,
+    started_at: Instant,
+    eta_seconds: Option<u64>,
 ) {
     let Some(app) = app else {
         return;
@@ -47,6 +51,8 @@ fn emit_persist_progress(
             status_text: Some(status_text.to_string()),
             current_batch: None,
             done: false,
+            elapsed_seconds: started_at.elapsed().as_secs(),
+            eta_seconds,
         },
     );
 }
@@ -184,6 +190,7 @@ pub async fn import_cloud_seed_one_round(
     iteration: u32,
     total_batches_history: u32,
     total_rows_history: u32,
+    started_at: Instant,
 ) -> Result<SteamSeedResultDto, String> {
     let db_load = db.clone();
     let mut import_state =
@@ -210,6 +217,8 @@ pub async fn import_cloud_seed_one_round(
                 status_text: Some("Calculando lista de batches pendientes...".to_string()),
                 current_batch: None,
                 done: false,
+                elapsed_seconds: started_at.elapsed().as_secs(),
+                eta_seconds: None,
             },
         );
     }
@@ -240,32 +249,15 @@ pub async fn import_cloud_seed_one_round(
     // Candado compartido para serializar las escrituras a SQLite
     let db_write_lock = Arc::new(Mutex::new(()));
 
-    let app_for_download = app.cloned();
     let url_map_for_download = url_map;
     let keys_for_download = to_process.clone();
     let (mut downloads, producer) =
         pipeline::start_download_pipeline(keys_for_download, concurrency, move |idx, key| {
             let url = url_map_for_download.get(&key).cloned();
-            let app = app_for_download.clone();
             async move {
-                let progress_ctx = streaming::StreamProgressContext {
-                    iteration,
-                    total_batches_this_round: total_to_process,
-                    global_total_batches: total_batches_history.saturating_add(idx as u32),
-                    global_total_rows: total_rows_history,
-                };
-
                 pipeline::download_with_retries(idx, key, url, "batch", |key, url| {
-                    let app = app.clone();
-                    let progress_ctx = progress_ctx.clone();
                     async move {
-                        streaming::download_seed_batch(
-                            app.as_ref(),
-                            Some(&progress_ctx),
-                            &key,
-                            &url,
-                        )
-                        .await
+                        streaming::download_seed_batch(&key, &url).await
                     }
                 })
                 .await
@@ -275,6 +267,7 @@ pub async fn import_cloud_seed_one_round(
     let mut first_failure: Option<(usize, String)> = None;
     let mut rows_updated = 0u32;
     let mut completed_batches = 0u32;
+    let mut speed_tracker = TransferSpeedTracker::new();
     let mut group = batching::BatchAccumulator::new(DETAILS_GROUP_ROWS, 20);
     while let Some((index, _key, result)) = downloads.recv().await {
         let updates = match result {
@@ -306,6 +299,10 @@ pub async fn import_cloud_seed_one_round(
                 total_rows_history.saturating_add(rows_updated),
                 rows_updated,
                 "Guardando detalles del catálogo...",
+                started_at,
+                speed_tracker
+                    .record(completed_batches as u64, total_to_process as u64, Instant::now())
+                    .eta_seconds,
             );
         }
     }
@@ -324,6 +321,10 @@ pub async fn import_cloud_seed_one_round(
             total_rows_history.saturating_add(rows_updated),
             rows_updated,
             "Guardando detalles del catálogo...",
+            started_at,
+            speed_tracker
+                .record_final(completed_batches as u64, total_to_process as u64, Instant::now())
+                .eta_seconds,
         );
     }
 
@@ -387,6 +388,7 @@ pub async fn import_cloud_seed_one_round(
         iteration,
         total_batches_history.saturating_add(to_process.len() as u32),
         total_rows_history.saturating_add(rows_updated),
+        started_at,
     )
     .await?;
 
@@ -410,6 +412,7 @@ async fn import_cloud_seed_reviews_one_round(
     iteration: u32,
     total_batches_history: u32,
     total_rows_history: u32,
+    started_at: Instant,
 ) -> Result<SteamSeedImportResultDto, String> {
     let db_load = db.clone();
     let mut import_state = tokio::task::spawn_blocking(move || {
@@ -455,32 +458,15 @@ async fn import_cloud_seed_reviews_one_round(
 
     let db_write_lock = Arc::new(Mutex::new(()));
 
-    let app_for_download = app.cloned();
     let url_map_for_download = url_map;
     let keys_for_download = to_process.clone();
     let (mut downloads, producer) =
         pipeline::start_download_pipeline(keys_for_download, concurrency, move |idx, key| {
             let url = url_map_for_download.get(&key).cloned();
-            let app = app_for_download.clone();
             async move {
-                let progress_ctx = streaming::StreamProgressContext {
-                    iteration,
-                    total_batches_this_round: total_to_process,
-                    global_total_batches: total_batches_history.saturating_add(idx as u32),
-                    global_total_rows: total_rows_history,
-                };
-
                 pipeline::download_with_retries(idx, key, url, "batch de reviews", |key, url| {
-                    let app = app.clone();
-                    let progress_ctx = progress_ctx.clone();
                     async move {
-                        streaming::download_reviews_batch(
-                            app.as_ref(),
-                            Some(&progress_ctx),
-                            &key,
-                            &url,
-                        )
-                        .await
+                        streaming::download_reviews_batch(&key, &url).await
                     }
                 })
                 .await
@@ -490,6 +476,7 @@ async fn import_cloud_seed_reviews_one_round(
     let mut first_failure: Option<(usize, String)> = None;
     let mut rows_updated = 0u32;
     let mut completed_batches = 0u32;
+    let mut speed_tracker = TransferSpeedTracker::new();
     let mut group = batching::BatchAccumulator::new(REVIEWS_GROUP_ROWS, 20);
     while let Some((index, _key, result)) = downloads.recv().await {
         let updates = match result {
@@ -519,6 +506,10 @@ async fn import_cloud_seed_reviews_one_round(
                 total_rows_history.saturating_add(rows_updated),
                 rows_updated,
                 "Guardando reseñas del catálogo...",
+                started_at,
+                speed_tracker
+                    .record(completed_batches as u64, total_to_process as u64, Instant::now())
+                    .eta_seconds,
             );
         }
     }
@@ -535,6 +526,10 @@ async fn import_cloud_seed_reviews_one_round(
             total_rows_history.saturating_add(rows_updated),
             rows_updated,
             "Guardando reseñas del catálogo...",
+            started_at,
+            speed_tracker
+                .record_final(completed_batches as u64, total_to_process as u64, Instant::now())
+                .eta_seconds,
         );
     }
 

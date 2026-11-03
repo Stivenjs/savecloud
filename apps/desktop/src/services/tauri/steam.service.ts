@@ -61,6 +61,8 @@ export interface SteamSeedImportProgressPayload {
   totalBatches: number;
   totalRowsUpdated: number;
   done: boolean;
+  elapsedSeconds: number;
+  etaSeconds: number | null;
 }
 
 export interface SteamCatalogSyncProgressPayload {
