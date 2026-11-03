@@ -132,7 +132,12 @@ export async function registerSteamSeedRoutes(
         deps.steamSeedRepository.getSteamSeedStatus(ownerId),
         deps.steamSeedRepository.getSteamReviewsSeedStatus(ownerId),
       ]);
-      return reply.send({ ...control, ...progress, reviews });
+      return reply.send({
+        ...control,
+        ...progress,
+        reviews,
+        canManage: true,
+      });
     }
   );
 
