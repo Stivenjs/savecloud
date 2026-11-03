@@ -1,26 +1,22 @@
 import { Button, Card, CardBody, Chip } from "@heroui/react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pause, Play } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { getSteamSeedWorkerControl, setSteamSeedWorkerPaused } from "@services/tauri";
+import { setSteamSeedWorkerPaused } from "@services/tauri";
 import { toastError, toastSuccess } from "@utils/toast";
-
-const workerControlQueryKey = ["steam-seed-worker-control"] as const;
+import {
+  STEAM_SEED_WORKER_CONTROL_QUERY_KEY,
+  useSteamSeedWorkerControl,
+} from "@features/settings/hooks/useSteamSeedWorkerControl";
 
 export function SteamSeedWorkerControls() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const controlQuery = useQuery({
-    queryKey: workerControlQueryKey,
-    queryFn: getSteamSeedWorkerControl,
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
-    retry: false,
-  });
+  const controlQuery = useSteamSeedWorkerControl();
   const controlMutation = useMutation({
     mutationFn: setSteamSeedWorkerPaused,
     onSuccess: (control) => {
-      queryClient.setQueryData(workerControlQueryKey, control);
+      queryClient.setQueryData(STEAM_SEED_WORKER_CONTROL_QUERY_KEY, control);
       toastSuccess(
         control.paused ? t("settings.configSection.workerPaused") : t("settings.configSection.workerResumed")
       );
@@ -31,7 +27,7 @@ export function SteamSeedWorkerControls() {
   });
 
   if (!controlQuery.data && !controlQuery.isError) return null;
-  if (controlQuery.data === null) return null;
+  if (controlQuery.data === null || controlQuery.data?.canManage !== true) return null;
 
   const control = controlQuery.data;
   if (!control) {

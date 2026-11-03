@@ -78,6 +78,7 @@ export interface SteamSeedFreshness {
 }
 
 export interface SteamSeedWorkerControl {
+  canManage: boolean;
   paused: boolean;
   updatedAt: string | null;
   lastBatchKey: string | null;

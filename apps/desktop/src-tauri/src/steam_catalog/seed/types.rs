@@ -144,6 +144,7 @@ pub struct SteamSeedWorkerReviewsDto {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SteamSeedWorkerControlDto {
+    pub can_manage: bool,
     pub paused: bool,
     pub updated_at: Option<String>,
     pub last_batch_key: Option<String>,
